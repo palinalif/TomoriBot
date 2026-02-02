@@ -33,6 +33,28 @@ const USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const REQUEST_TIMEOUT = 15000; // 15 seconds
 
+/**
+ * Language code mapping: Standard ISO 639-1 codes to Brave API codes
+ * Brave uses non-standard codes for some languages (e.g., "jp" instead of "ja")
+ */
+const BRAVE_LANGUAGE_CODE_MAP: Record<string, string> = {
+	ja: "jp", // Japanese: ISO 639-1 "ja" → Brave "jp"
+	// Add more mappings here if Brave uses other non-standard codes
+};
+
+/**
+ * Normalize language code to Brave API format
+ * @param langCode - Standard ISO 639-1 language code or Brave-specific code
+ * @returns Brave API-compatible language code
+ */
+function normalizeBraveLangCode(langCode: string | undefined): string | undefined {
+	if (!langCode) return undefined;
+
+	// Check if we have a mapping for this code
+	const normalizedCode = BRAVE_LANGUAGE_CODE_MAP[langCode.toLowerCase()];
+	return normalizedCode || langCode;
+}
+
 // =============================================
 // Types for Internal Use
 // =============================================
@@ -417,7 +439,7 @@ export async function braveWebSearch(
 	const searchParams = {
 		q: params.q,
 		country: params.country || "US",
-		search_lang: params.search_lang || "en",
+		search_lang: normalizeBraveLangCode(params.search_lang) || "en",
 		ui_lang: params.ui_lang || "en-US",
 		count: 20, // Always 20 for optimal performance
 		offset: Math.min(Number(params.offset) || 0, 9),
@@ -452,7 +474,7 @@ export async function braveImageSearch(
 	const searchParams = {
 		q: params.q,
 		country: params.country || "US",
-		search_lang: params.search_lang || "en",
+		search_lang: normalizeBraveLangCode(params.search_lang) || "en",
 		count: Math.min(Number(params.count) || 3, 10), // Max 10 for images, default 3
 		safesearch: params.safesearch || "off", // Default to "off" if not specified
 		spellcheck: params.spellcheck !== false,
@@ -478,7 +500,7 @@ export async function braveVideoSearch(
 	const searchParams = {
 		q: params.q,
 		country: params.country || "US",
-		search_lang: params.search_lang || "en",
+		search_lang: normalizeBraveLangCode(params.search_lang) || "en",
 		ui_lang: params.ui_lang || "en-US",
 		count: Math.min(Number(params.count) || 5, 10), // Max 10 for videos, default 5
 		offset: Math.min(Number(params.offset) || 0, 9),
@@ -509,7 +531,7 @@ export async function braveNewsSearch(
 	const searchParams = {
 		q: params.q,
 		country: params.country || "US",
-		search_lang: params.search_lang || "en",
+		search_lang: normalizeBraveLangCode(params.search_lang) || "en",
 		ui_lang: params.ui_lang || "en-US",
 		count: Math.min(Number(params.count) || 10, 20), // Max 20 for news, default 10
 		offset: Math.min(Number(params.offset) || 0, 9),

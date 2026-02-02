@@ -77,7 +77,7 @@ export function getMemoryLimits(): MemoryLimits {
 		10,
 	);
 	const maxMemoryLength = Number.parseInt(
-		process.env.MAX_MEMORY_LENGTH || "256",
+		process.env.MAX_MEMORY_LENGTH || "1000",
 		10,
 	);
 	const maxSampleDialogueLength = Number.parseInt(
@@ -93,7 +93,7 @@ export function getMemoryLimits(): MemoryLimits {
 		10,
 	);
 	const maxSampleDialogues = Number.parseInt(
-		process.env.MAX_SAMPLE_DIALOGUES || "10",
+		process.env.MAX_SAMPLE_DIALOGUES || "15",
 		10,
 	);
 	const maxAttributes = Number.parseInt(process.env.MAX_ATTRIBUTES || "10", 10);
@@ -193,12 +193,12 @@ export function getMemoryLimits(): MemoryLimits {
 		maxMemoryLength > 2000
 	) {
 		log.warn(
-			`Invalid MAX_MEMORY_LENGTH value: ${process.env.MAX_MEMORY_LENGTH}. Using default: 500`,
+			`Invalid MAX_MEMORY_LENGTH value: ${process.env.MAX_MEMORY_LENGTH}. Using default: 1000`,
 		);
 		return {
 			maxPersonalMemories,
 			maxServerMemories,
-			maxMemoryLength: 500,
+			maxMemoryLength: 1000,
 			maxSampleDialogueLength,
 			maxAttributeLength,
 			maxTriggerWords,
@@ -305,7 +305,7 @@ export function getMemoryLimits(): MemoryLimits {
 		maxSampleDialogues > 100
 	) {
 		log.warn(
-			`Invalid MAX_SAMPLE_DIALOGUES value: ${process.env.MAX_SAMPLE_DIALOGUES}. Using default: 10`,
+			`Invalid MAX_SAMPLE_DIALOGUES value: ${process.env.MAX_SAMPLE_DIALOGUES}. Using default: 15`,
 		);
 		return {
 			maxPersonalMemories,
@@ -314,7 +314,7 @@ export function getMemoryLimits(): MemoryLimits {
 			maxSampleDialogueLength,
 			maxAttributeLength,
 			maxTriggerWords,
-			maxSampleDialogues: 10,
+			maxSampleDialogues: 15,
 			maxAttributes,
 			maxPersonasPerServer,
 			maxDocumentSizeMB,
