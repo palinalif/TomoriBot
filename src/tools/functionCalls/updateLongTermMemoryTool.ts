@@ -214,9 +214,10 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 				`;
 
 				if (updatedServerMemory) {
-					const triggererRow = await loadUserRow(
-						context.message?.author?.id || context.userId || "",
-					);
+					const resolvedTriggererUserId = context.message?.author?.id || context.userId;
+					const triggererRow = resolvedTriggererUserId
+						? await loadUserRow(resolvedTriggererUserId)
+						: null;
 					const processedMemoryContent = await convertMentions(
 						newContent,
 						context.client,
@@ -318,8 +319,8 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 				}
 			} else {
 				const triggererDiscId =
-					context.message?.author?.id || context.userId || "";
-				if (triggererDiscId !== targetUserDiscordId) {
+					context.message?.author?.id || context.userId;
+				if (!triggererDiscId || triggererDiscId !== targetUserDiscordId) {
 					return {
 						success: false,
 						error: "Personal memory owner is not in this conversation",

@@ -2490,8 +2490,13 @@ You can change this anytime using \`/personal privacy\`.`,
 
 		// Recurring task setup (self reminders)
 		recurring_task_set_title: `🔁 Recurrent Task Setup Successfully`,
-		recurring_task_set_description: `I’ll run "**{reminder_purpose}**" starting at \`{reminder_time}\`, then repeat every {repetition_interval_hours} hour(s).`,
+		recurring_task_set_description: `I'll run "**{reminder_purpose}**" starting at \`{reminder_time}\`, then repeat every {repetition_interval_hours} hour(s).`,
 		recurring_task_set_footer: `You can delete reminders using \`/forget reminder\`.`,
+
+		// One-time task setup (self reminders, non-recurring)
+		task_set_title: `✅ Task Setup Successfully`,
+		task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
+		task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/forget reminder\`.`,
 
 		// Error embed when reminder delivery fails (only user-facing embed during execution)
 		reminder_error_title: `Reminder Delivery Failed`,

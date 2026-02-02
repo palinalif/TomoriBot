@@ -31,7 +31,7 @@ import {
 } from "../../utils/cache/userCache";
 import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
 import { storeShortTermMemory } from "../../utils/cache/shortTermMemoryCache";
-import { incrementTomoriCounter } from "@/utils/db/dbWrite";
+import { incrementTomoriCounter, registerUser } from "@/utils/db/dbWrite";
 import {
 	createStandardEmbed,
 	sendStandardEmbed,
@@ -1223,7 +1223,20 @@ export default async function tomoriChat(
 			const fallbackPersona =
 				mainPersona ?? (allPersonas.length > 0 ? allPersonas[0] : null);
 			let tomoriState = earlyLoadAttempted ? earlyTomoriState : fallbackPersona;
-			const userRow = await getCachedUserRow(userDiscId);
+			let userRow = await getCachedUserRow(userDiscId);
+
+			// Register user if they don't exist yet (first message interaction)
+			if (!userRow) {
+				const registrationLocale = message.guild?.preferredLocale.startsWith("ja")
+					? "ja"
+					: "en-US";
+				userRow = await registerUser(
+					userDiscId,
+					message.author.username,
+					registrationLocale,
+				);
+			}
+
 			locale = userRow?.language_pref ?? "en-US"; // Set locale based on user pref
 
 			// Determine triggererName based on blacklist and personalization settings

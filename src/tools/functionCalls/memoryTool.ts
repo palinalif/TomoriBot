@@ -139,18 +139,28 @@ export class MemoryTool extends BaseTool {
 
 		// Critical state validation (from tomoriChat.ts:1078-1104)
 		const tomoriState = context.tomoriState;
-		const userRow = await loadUserRow(
-			context.message?.author?.id || context.userId || "",
-		);
+		const resolvedUserId = context.message?.author?.id || context.userId;
+		const userRow = resolvedUserId
+			? await loadUserRow(resolvedUserId)
+			: null;
 
 		if (
 			!tomoriState ||
 			!userRow ||
 			!userRow.user_id ||
-			!tomoriState.server_id
+			!tomoriState.server_id ||
+			!resolvedUserId
 		) {
+			// Log which specific value is missing for diagnostics
+			const missing = [
+				!tomoriState && "tomoriState",
+				!userRow && "userRow",
+				userRow && !userRow.user_id && "userRow.user_id",
+				tomoriState && !tomoriState.server_id && "tomoriState.server_id",
+				!resolvedUserId && "resolvedUserId",
+			].filter(Boolean);
 			log.error(
-				"Critical state missing (tomoriState, userRow, or their IDs) before handling remember_this_fact",
+				`Critical state missing before handling remember_this_fact: [${missing.join(", ")}]`,
 			);
 			return {
 				success: false,

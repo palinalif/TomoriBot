@@ -1074,8 +1074,14 @@ export function cleanLLMOutput(
 		.replace(/\*\*<(.*?)>\*\*/g, "<$1>") // Bold **<emoji>**
 		.replace(/\*<(.*?)>\*/g, "<$1>") // Italic *<emoji>*
 		.replace(/<([a-zA-Z0-9_]+)>[\s\S]*?<\/\1>/g, "")
-		// Remove bot name prefix (plain or bolded) from start of text — e.g. "Tomori:" or "**Tomori**:"
-		.replace(new RegExp(`^(\\*\\*)?${escapeRegExp(botName || "Tomori")}\\1:\\s*`, "i"), "")
+		// Remove bot name prefix (plain or bolded) from start of text — e.g. "Tomori:", "**Tomori**:", or "**Tomori:**"
+		.replace(
+			new RegExp(
+				`^(\\*\\*${escapeRegExp(botName || "Tomori")}:\\*\\*|\\*\\*${escapeRegExp(botName || "Tomori")}\\*\\*:|${escapeRegExp(botName || "Tomori")}:)\\s*`,
+				"i",
+			),
+			"",
+		)
 		.trim();
 
 	// 2. Emoji handling, only if we have a list of valid emojis
@@ -1182,9 +1188,13 @@ export function cleanLLMOutput(
 		);
 	}
 
-	// 3. Remove bot name prefix if present (plain or bolded, e.g. "Name:" or "**Name**:")
+	// 3. Remove bot name prefix if present (plain or bolded, e.g. "Name:", "**Name**:", or "**Name:**")
 	if (botName) {
-		const prefixPattern = new RegExp(`^(\\*\\*)?${escapeRegExp(botName)}\\1:\\s*`, "i");
+		const escapedName = escapeRegExp(botName);
+		const prefixPattern = new RegExp(
+			`^(\\*\\*${escapedName}:\\*\\*|\\*\\*${escapedName}\\*\\*:|${escapedName}:)\\s*`,
+			"i",
+		);
 		cleanedText = cleanedText.replace(prefixPattern, "");
 	}
 

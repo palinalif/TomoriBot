@@ -154,7 +154,7 @@ Before running TomoriBot, ensure you have the following installed:
   **Note:** The database schema (including required extensions like `pgcrypto`) is automatically initialized when you first run TomoriBot.
 
   **pgvector (Optional for RAG/document memory):**
-  - If you want RAG features locally, install pgvector then run:
+  - If you want RAG features locally, install [pgvector](https://github.com/pgvector/pgvector) then run:
   ```sql
   CREATE EXTENSION vector;
   ```

@@ -24,9 +24,9 @@ import {
  * Tool for setting user reminders that will trigger messages at specific times
  */
 export class ReminderTool extends BaseTool {
-	name = "set_reminder_for_user";
+	name = "set_channel_task_or_reminder";
 	description =
-		"Set a reminder for a Discord user. TomoriBot will mention the user in the selected channel at the specified time with the reminder purpose. Use 'self_reminder' for reminders that are tasks for Tomori to execute (especially for recurring tasks like daily summaries) — in that case the reminder targets Tomori herself and does not mention a user. You can specify time in two ways: (1) Use relative time parameters like 'minutes_from_now', 'hours_from_now', 'days_from_now', 'months_from_now' - these are much easier for natural requests like 'remind me in 2 hours' or 'remind me tomorrow' (1 day from now). Multiple relative parameters add up. (2) Use absolute 'reminder_time' in YYYY-MM-DD_HH:MM format using the server's configured timezone (set via /config timezone) for specific dates/times. If both are provided, absolute time takes priority. You must provide either absolute time OR at least one relative time parameter.";
+		"Set a reminder for a Discord user or a TASK for yourself. You will mention the user or execute the task in the selected channel at the specified time with the reminder purpose. IMPORTANT: Always set 'repetition_interval_hours' - use 0 for one-time reminders/tasks, or 1+ for recurring (e.g., 24 for daily tasks). Use 'self_reminder' for tasks you need to do (these can be recurring tasks like daily summaries or one-time tasks such as sending messages in a different channel). You can specify time in two ways: (1) Use relative time parameters like 'minutes_from_now', 'hours_from_now', 'days_from_now', 'months_from_now' - these are much easier for natural requests like 'remind me in 2 hours' or 'remind me tomorrow' (1 day from now). Multiple relative parameters add up. (2) Use absolute 'reminder_time' in YYYY-MM-DD_HH:MM format using the server's configured timezone (set via /config timezone) for specific dates/times. If both are provided, absolute time takes priority. If you omit all time parameters, the reminder defaults to 1 minute from now (useful for immediate tasks/messages).";
 	category = "utility" as const;
 
 	parameters: ToolParameterSchema = {
@@ -35,63 +35,64 @@ export class ReminderTool extends BaseTool {
 			reminder_purpose: {
 				type: "string",
 				description:
-					'What the reminder is for. IMPORTANT: Be very descriptive and detailed (2-4 sentences) because you might not remember the context after a long time. Include WHAT they want to be reminded about, WHY it was set, and any relevant details from the conversation. Bad example: "dinner" or "meeting". Good example: "User wants to be reminded to have dinner with their family at the new Italian restaurant they mentioned. They made a reservation for 7pm and need to leave home by 6:30pm to arrive on time." The more context you provide now, the more helpful the reminder will be later. Do NOT include user/channel IDs or any meta information in your reminder purpose content.',
+					"What the reminder or task is for. IMPORTANT: Be very descriptive and detailed (2-4 sentences) because you might not remember the context after a long time. Include WHAT the task or the reminder is about, WHY it was set, and any relevant details from the conversation. The more context you provide now, the more helpful the reminder will be later, but do NOT include user/channel IDs or any meta information in your reminder or task purpose content.",
 			},
 			target_user_nickname: {
 				type: "string",
 				description:
-					"Nickname of the Discord user the reminder is for, as you see them in the current conversation or their user profile information.",
+					"Nickname of the Discord user the reminder or task is for, as you see them in the current conversation or their user profile information.",
 			},
 			target_user_discord_id: {
 				type: "string",
 				description:
-					"Discord ID of the user the reminder is for (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
+					"Discord ID of the user the reminder or task is for (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
 			},
 			reminder_time: {
 				type: "string",
 				description:
-					"OPTIONAL: Absolute time to remind the user in YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_15:30') using the server's configured timezone. Times are interpreted using the server's timezone setting from /config timezone. Use this for specific dates/times. If provided, this takes priority over 'from now' parameters.",
+					"OPTIONAL: Absolute time to remind the user or to execute the task in YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_15:30') using the server's configured timezone. Times are interpreted using the server's timezone setting from /config timezone. Use this for specific dates/times. If provided, this takes priority over 'from now' parameters.",
 			},
 			minutes_from_now: {
 				type: "number",
 				description:
-					"OPTIONAL: Minutes from the current time to set the reminder. Can be combined with other 'from now' parameters.",
+					"OPTIONAL: Minutes from the current time to set the reminder or task. Can be combined with other 'from now' parameters.",
 			},
 			hours_from_now: {
 				type: "number",
 				description:
-					"OPTIONAL: Hours from the current time to set the reminder. Can be combined with other 'from now' parameters.",
+					"OPTIONAL: Hours from the current time to set the reminder or task. Can be combined with other 'from now' parameters.",
 			},
 			days_from_now: {
 				type: "number",
 				description:
-					"OPTIONAL: Days from the current time to set the reminder. Can be combined with other 'from now' parameters.",
+					"OPTIONAL: Days from the current time to set the reminder or task. Can be combined with other 'from now' parameters.",
 			},
 			months_from_now: {
 				type: "number",
 				description:
-					"OPTIONAL: Months from the current time to set the reminder. Can be combined with other 'from now' parameters. Uses calendar months (30.44 days average).",
+					"OPTIONAL: Months from the current time to set the reminder or task. Can be combined with other 'from now' parameters. Uses calendar months (30.44 days average).",
 			},
 			repetition_interval_hours: {
 				type: "number",
 				description:
-					"OPTIONAL: If provided, the reminder becomes recurring after the first trigger and repeats every X hours. Minimum 1 hour.",
+					"REQUIRED: Set to 0 for one-time reminders/tasks. Set to 1 or higher to make the reminder/task recurring (repeats every X hours after the first trigger). Example: 24 for daily tasks, 168 for weekly tasks.",
 			},
 			self_reminder: {
 				type: "boolean",
 				description:
-					"OPTIONAL: Set to true when the reminder is a task for Tomori to execute herself. This disables user mentions and focuses the prompt on the task.",
+					"OPTIONAL: Set to true when the reminder is a task for you to execute yourself. This disables user mentions and focuses the prompt on the task.",
 			},
 			channel_id: {
 				type: "string",
 				description:
-					"OPTIONAL: Discord channel ID to send the reminder in. The channel must exist in the current server. If omitted, the current channel is used.",
+					"OPTIONAL: Discord channel ID to send the reminder or to execute the task in. Useful for executing cross text channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
 			},
 		},
 		required: [
 			"reminder_purpose",
 			"target_user_nickname",
 			"target_user_discord_id",
+			"repetition_interval_hours",
 		],
 	};
 
@@ -153,19 +154,31 @@ export class ReminderTool extends BaseTool {
 
 		// Get server and user context
 		const tomoriState = context.tomoriState;
-		const requestingUserRow = await loadUserRow(
-			context.message?.author?.id || context.userId || "",
-		);
+		const resolvedUserId = context.message?.author?.id || context.userId;
+		const requestingUserRow = resolvedUserId
+			? await loadUserRow(resolvedUserId)
+			: null;
 		const channelId = context.channel.id;
 
 		if (
 			!tomoriState ||
 			!requestingUserRow ||
 			!requestingUserRow.user_id ||
-			!tomoriState.server_id
+			!tomoriState.server_id ||
+			!resolvedUserId
 		) {
+			// Log which specific value is missing for diagnostics
+			const missing = [
+				!tomoriState && "tomoriState",
+				!requestingUserRow && "requestingUserRow",
+				requestingUserRow &&
+					!requestingUserRow.user_id &&
+					"requestingUserRow.user_id",
+				tomoriState && !tomoriState.server_id && "tomoriState.server_id",
+				!resolvedUserId && "resolvedUserId",
+			].filter(Boolean);
 			log.error(
-				"Critical state missing (tomoriState, requestingUserRow, or their IDs) before handling set_reminder_for_user",
+				`Critical state missing before handling set_reminder_or_task: [${missing.join(", ")}]`,
 			);
 			return {
 				success: false,
@@ -243,25 +256,26 @@ export class ReminderTool extends BaseTool {
 			};
 		}
 
-		// Validate repetition interval (recurring reminders)
+		// Validate repetition interval (0 = one-time, 1+ = recurring)
 		let repetitionIntervalHours: number | null = null;
 		if (typeof repetitionIntervalHoursArg === "number") {
 			if (
 				!Number.isFinite(repetitionIntervalHoursArg) ||
 				!Number.isInteger(repetitionIntervalHoursArg) ||
-				repetitionIntervalHoursArg < 1
+				repetitionIntervalHoursArg < 0
 			) {
 				return {
 					success: false,
 					error:
-						"The 'repetition_interval_hours' must be an integer number of hours and at least 1",
+						"The 'repetition_interval_hours' must be 0 (for one-time) or an integer >= 1 (for recurring)",
 					data: {
 						status: "reminder_creation_failed_invalid_repeat_interval",
-						reason: "The 'repetition_interval_hours' must be an integer >= 1.",
+						reason: "The 'repetition_interval_hours' must be 0 or an integer >= 1.",
 					},
 				};
 			}
-			repetitionIntervalHours = repetitionIntervalHoursArg;
+			// Only set repetitionIntervalHours if it's > 0 (recurring)
+			repetitionIntervalHours = repetitionIntervalHoursArg > 0 ? repetitionIntervalHoursArg : null;
 		}
 
 		// Resolve and validate target channel (optional override)
@@ -376,17 +390,13 @@ export class ReminderTool extends BaseTool {
 				(typeof daysFromNowArg === "number" && daysFromNowArg > 0) ||
 				(typeof monthsFromNowArg === "number" && monthsFromNowArg > 0);
 
+			// Default to 1 minute if no time parameters provided (immediate message use case)
+			let effectiveMinutesFromNow = minutesFromNowArg;
 			if (!hasRelativeParams) {
-				return {
-					success: false,
-					error:
-						"You must provide either a 'reminder_time' OR at least one positive 'from now' parameter (minutes_from_now, hours_from_now, days_from_now, months_from_now).",
-					data: {
-						status: "reminder_creation_failed_no_time_specified",
-						reason:
-							"Neither absolute time nor relative time parameters were provided.",
-					},
-				};
+				effectiveMinutesFromNow = 1;
+				log.info(
+					"No time parameters provided for reminder - defaulting to 1 minute from now",
+				);
 			}
 
 			// Calculate relative time by adding all "from now" parameters
@@ -395,8 +405,11 @@ export class ReminderTool extends BaseTool {
 			let totalMilliseconds = 0;
 
 			// Add each time component (convert to milliseconds)
-			if (typeof minutesFromNowArg === "number" && minutesFromNowArg > 0) {
-				totalMilliseconds += minutesFromNowArg * 60 * 1000;
+			if (
+				typeof effectiveMinutesFromNow === "number" &&
+				effectiveMinutesFromNow > 0
+			) {
+				totalMilliseconds += effectiveMinutesFromNow * 60 * 1000;
 			}
 			if (typeof hoursFromNowArg === "number" && hoursFromNowArg > 0) {
 				totalMilliseconds += hoursFromNowArg * 60 * 60 * 1000;
@@ -550,6 +563,8 @@ export class ReminderTool extends BaseTool {
 
 				const useRecurringTaskEmbed =
 					isSelfReminder && repetitionIntervalHours !== null;
+				const useOneTimeTaskEmbed =
+					isSelfReminder && repetitionIntervalHours === null;
 				const reminderPurposeText =
 					reminderPurpose.length > 200
 						? `${reminderPurpose.substring(0, 197)}...`
@@ -574,16 +589,22 @@ export class ReminderTool extends BaseTool {
 						color: useRecurringTaskEmbed ? ColorCode.INFO : ColorCode.SUCCESS,
 						titleKey: useRecurringTaskEmbed
 							? "reminders.recurring_task_set_title"
-							: "reminders.reminder_set_title",
+							: useOneTimeTaskEmbed
+								? "reminders.task_set_title"
+								: "reminders.reminder_set_title",
 						descriptionKey: useRecurringTaskEmbed
 							? "reminders.recurring_task_set_description"
-							: "reminders.reminder_set_description",
+							: useOneTimeTaskEmbed
+								? "reminders.task_set_description"
+								: "reminders.reminder_set_description",
 						descriptionVars,
 						footerKey: useRecurringTaskEmbed
 							? "reminders.recurring_task_set_footer"
 							: repetitionIntervalHours
 								? "reminders.reminder_set_footer_recurring"
-								: "reminders.reminder_set_footer",
+								: useOneTimeTaskEmbed
+									? "reminders.task_set_footer"
+									: "reminders.reminder_set_footer",
 						footerVars: repetitionIntervalHours
 							? {
 									time_remaining: timeRemainingStr,

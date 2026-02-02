@@ -19,7 +19,8 @@ if (!process.env.DATABASE_URL) {
 		process.exit(1);
 	}
 
-	process.env.DATABASE_URL = `postgresql://${user}:${password}@${host}:${port}/${database}`;
+	// URL-encode the password to safely handle special characters (@, /, #, etc.)
+	process.env.DATABASE_URL = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
 	log.info(`Constructed DATABASE_URL for connection`);
 }
 
@@ -51,42 +52,9 @@ async function backupDatabase(): Promise<void> {
 	const backupFilename = `tomoribot_backup_${timestamp}.sql`;
 	const backupPath = join(backupsDir, backupFilename);
 
-	// 3. Parse database connection from environment
-	let dbUrl = process.env.DATABASE_URL;
-
-	// If DATABASE_URL not found, construct from individual Postgres variables
-	if (!dbUrl) {
-		const {
-			POSTGRES_HOST,
-			POSTGRES_PORT,
-			POSTGRES_USER,
-			POSTGRES_PASSWORD,
-			POSTGRES_DB,
-		} = process.env;
-
-		if (
-			!POSTGRES_HOST ||
-			!POSTGRES_PORT ||
-			!POSTGRES_USER ||
-			!POSTGRES_PASSWORD ||
-			!POSTGRES_DB
-		) {
-			log.error("Database connection not configured!");
-			log.info("Please ensure your .env file contains either:");
-			log.info(
-				"  1. DATABASE_URL (e.g., postgresql://user:pass@host:port/dbname)",
-			);
-			log.info("  OR");
-			log.info(
-				"  2. Individual variables: POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB",
-			);
-			process.exit(1);
-		}
-
-		// Construct DATABASE_URL from individual variables
-		dbUrl = `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}`;
-		log.info("Constructed DATABASE_URL from individual Postgres variables");
-	}
+	// 3. Retrieve DATABASE_URL (guaranteed to exist from top-level initialization)
+	// biome-ignore lint/style/noNonNullAssertion: DATABASE_URL is assumed to be defined from .env vars
+	const dbUrl = process.env.DATABASE_URL!;
 
 	log.info(`Backup will be saved to: ${backupPath}`);
 	log.info("Starting pg_dump...");
