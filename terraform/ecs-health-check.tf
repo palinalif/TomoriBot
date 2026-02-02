@@ -105,10 +105,18 @@ resource "aws_ecs_service" "tomoribot" {
   scheduling_strategy           = "REPLICA"
   availability_zone_rebalancing = "ENABLED"
 
+  # Primary: Prefer FARGATE_SPOT (cheapest option)
   capacity_provider_strategy {
-    capacity_provider = var.ecs_capacity_provider
-    base              = var.ecs_capacity_provider_base
-    weight            = var.ecs_capacity_provider_weight
+    capacity_provider = "FARGATE_SPOT"
+    base              = 0
+    weight            = 4  # 80% preference for Spot
+  }
+
+  # Fallback: Use FARGATE when SPOT unavailable
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    base              = 1  # Ensures at least 1 task can always run
+    weight            = 1  # 20% weight (backup only)
   }
 
   deployment_circuit_breaker {
