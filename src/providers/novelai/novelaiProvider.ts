@@ -4,7 +4,7 @@
  *
  * NovelAI is a roleplay-focused provider that:
  * - Uses flat text prompts (no structured messages)
- * - Does not support function calling
+ * - Supports prompt-based tool calling for GLM-4.6 via manual parsing
  * - Does not support images or videos
  * - Specializes in creative storytelling and roleplay
  */
@@ -30,6 +30,10 @@ import type { TomoriState } from "@/types/db/schema";
 import type { StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import {
+	getAvailableToolsWithMCP,
+	type ToolStateForContext,
+} from "@/tools/toolRegistry";
+import {
 	BaseLLMProvider,
 	type FunctionCall,
 	type LLMProvider,
@@ -43,7 +47,8 @@ import {
 	loadDefaultModelForProvider,
 	loadAvailableModelsForProvider,
 } from "@/utils/db/dbRead";
-import { validateNovelAIApiKey } from "./novelaiService";
+import { getNovelaiToolAdapter } from "./novelaiToolAdapter";
+import { usesOpenAIEndpoint, validateNovelAIApiKey } from "./novelaiService";
 
 /**
  * Gets the default NovelAI model with a robust fallback chain:
@@ -129,7 +134,7 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 			supportedModels: [], // Models are loaded dynamically from database
 			requiresApiKey: true,
 			supportsStreaming: true,
-			supportsFunctionCalling: false, // NovelAI doesn't support function calling
+			supportsFunctionCalling: true, // Prompt-based tool calling supported for GLM-4.6
 			supportsImages: false, // NovelAI is text-only
 			supportsVideos: false, // NovelAI is text-only
 		};
@@ -179,20 +184,102 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 
 	/**
 	 * Get available tools/functions based on Tomori's configuration
-	 * NovelAI doesn't support function calling, so this always returns an empty array
-	 * @param _tomoriState - The current Tomori state (unused)
-	 * @param _streamingContext - Optional streaming context (unused)
-	 * @returns Promise<Array<Record<string, unknown>>> - Empty array
+	 * Prompt-based tool calling is supported for GLM-4.6 via manual parsing.
+	 * Returns empty array when tools are disabled or the model doesn't support them.
+	 * @param tomoriState - The current Tomori state
+	 * @param streamingContext - Optional streaming context for context-aware tool availability
+	 * @returns Promise<Array<Record<string, unknown>>> - Array of tool configs
 	 */
 	async getTools(
-		_tomoriState: TomoriState,
-		_streamingContext?: StreamingContext,
+		tomoriState: TomoriState,
+		streamingContext?: StreamingContext,
 	): Promise<Array<Record<string, unknown>>> {
-		// NovelAI doesn't support function calling
-		log.info(
-			"NovelAI provider: No tools available (function calling not supported)",
-		);
-		return [];
+		if (streamingContext?.disableAllTools) {
+			log.info(
+				"NovelAI provider: Tools disabled via streaming context (disableAllTools)",
+			);
+			return [];
+		}
+
+		// Only enable tools when the model supports them and uses the OpenAI endpoint
+		if (!tomoriState.llm.has_tools) {
+			log.info(
+				"NovelAI provider: Model does not support tools (db flag has_tools=false)",
+			);
+			return [];
+		}
+
+		if (!usesOpenAIEndpoint(tomoriState.llm.llm_codename)) {
+			log.info(
+				"NovelAI provider: Tool calling is only supported on GLM-4.6 (OpenAI endpoint models)",
+			);
+			return [];
+		}
+
+		try {
+			const toolStateForContext: ToolStateForContext = {
+				server_id: tomoriState.server_id.toString(),
+				config: {
+					sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
+					web_search_enabled: tomoriState.config.web_search_enabled,
+					self_teaching_enabled: tomoriState.config.self_teaching_enabled,
+					pin_message_enabled: tomoriState.config.pin_message_enabled,
+					imagegen_enabled: tomoriState.config.imagegen_enabled,
+				},
+			};
+
+			const {
+				builtInTools: availableBuiltInTools,
+				mcpFunctionNames,
+				totalCount,
+			} = await getAvailableToolsWithMCP("novelai", toolStateForContext);
+
+			let finalBuiltInTools = availableBuiltInTools;
+			if (streamingContext) {
+				const minimalContext = {
+					streamContext: streamingContext,
+					provider: "novelai" as const,
+					channel: {} as BaseGuildTextChannel,
+					client: {} as Client,
+					tomoriState: tomoriState,
+					locale: "en-US",
+				};
+
+				finalBuiltInTools = availableBuiltInTools.filter((tool) => {
+					const isContextAvailable =
+						"isAvailableForContext" in tool &&
+						typeof tool.isAvailableForContext === "function"
+							? tool.isAvailableForContext("novelai", minimalContext)
+							: true;
+
+					return isContextAvailable;
+				});
+
+				log.info(
+					`Applied streaming context filtering: ${availableBuiltInTools.length} → ${finalBuiltInTools.length} built-in tools`,
+				);
+			}
+
+			const novelaiAdapter = getNovelaiToolAdapter();
+			const allToolsConfig =
+				await novelaiAdapter.getAllToolsInProviderFormat(
+					finalBuiltInTools,
+					tomoriState.server_id,
+					mcpFunctionNames,
+				);
+
+			log.info(
+				`NovelAI provider tools loaded: ${finalBuiltInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools`,
+			);
+
+			return allToolsConfig;
+		} catch (error) {
+			log.error(
+				`Failed to get tools for NovelAI provider: ${tomoriState.llm.llm_codename}`,
+				error as Error,
+			);
+			return [];
+		}
 	}
 
 	/**
@@ -214,12 +301,14 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 		tomoriState: TomoriState,
 		apiKey: string,
 	): Promise<NovelaiProviderConfig> {
+		const tools = await this.getTools(tomoriState);
+
 		return {
 			model: tomoriState.llm.llm_codename,
 			apiKey: apiKey,
 			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 2048, // NovelAI's typical max length
-			tools: [], // No tools for NovelAI
+			tools: tools,
 		};
 	}
 
@@ -274,6 +363,18 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 				humanizerDegree: tomoriState.config.humanizer_degree,
 				emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
 			};
+
+			// Override tools with context-aware tools when streaming context is provided
+			if (streamingContext) {
+				log.info(
+					"NovelAIProvider: Reloading tools with streaming context for context-aware availability",
+				);
+				const contextAwareTools = await this.getTools(
+					tomoriState,
+					streamingContext,
+				);
+				streamConfig.tools = contextAwareTools;
+			}
 
 			// Create streaming context
 			const streamContext: StreamContext = {

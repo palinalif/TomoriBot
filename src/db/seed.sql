@@ -27,7 +27,7 @@ VALUES
   ('google', 'gemini-3-pro-preview', false, false, true, false, false, true, true, true, true, false, true, 'Preview model focused on advanced reasoning and analysis', '高度な推論と分析に特化したプレビューモデル'),
   ('google', 'gemma-3-27b-it', false, false, false, true, true, false, true, true, true, false, true, 'Lightweight instruction-tuned model', '軽量な指示調整済みのモデル'),
   -- NovelAI Models (text-only, no vision or structured output capabilities)
-  ('novelai', 'glm-4-6', true, true, false, false, false, false, false, false, false, false, false, 'Latest NovelAI roleplay model with enhanced creativity and character consistency', '創造性とキャラクター一貫性を強化した最新のNovelAIロールプレイモデル'),
+  ('novelai', 'glm-4-6', true, true, false, false, false, true, false, false, false, false, false, 'Latest NovelAI roleplay model with enhanced creativity and character consistency', '創造性とキャラクター一貫性を強化した最新のNovelAIロールプレイモデル'),
   ('novelai', 'kayra-v1', false, false, false, false, false, false, false, false, false, false, false, 'Legacy Kayra model for storytelling and roleplay', 'ストーリーテリングとロールプレイ向けのレガシーKayraモデル'),
   -- OpenRouter Models (structured output support varies by model, user configures manually)
   ('openrouter', 'stepfun-ai/step3', false, false, false, false, false, true, true, false, false, false, true, 'General-use model that can see images and is also great in role-play', '画像を見ることができ、ロールプレイにも優れた汎用モデル'),
