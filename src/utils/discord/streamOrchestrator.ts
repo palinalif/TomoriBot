@@ -883,6 +883,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			.sendTyping()
 			.catch((e) => log.warn("Stream Seg: sendTyping failed", e));
 
+		const leadingWhitespaceMatch = segment.match(/^\s+/);
+		const leadingWhitespace = leadingWhitespaceMatch?.[0] ?? "";
+
 		// Filter duplicate custom emojis BEFORE transformation (while still in :name: format)
 		const filteredSegment = filterDuplicateCustomEmojis(
 			segment,
@@ -903,11 +906,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			},
 		);
 
-		const resolvedSegment = await this.resolveGuildMentions(
+		let resolvedSegment = await this.resolveGuildMentions(
 			cleanedSegment,
 			context,
 			textConfig,
 		);
+
+		if (
+			leadingWhitespace &&
+			resolvedSegment.length > 0 &&
+			!resolvedSegment.startsWith(leadingWhitespace)
+		) {
+			resolvedSegment = leadingWhitespace + resolvedSegment;
+		}
 
 		const strippedSegment = this.stripPrefillFromSegment(resolvedSegment, state);
 		const prefixedSegment = this.applyPrefillToSegment(

@@ -112,7 +112,7 @@ const handler = async (client: Client): Promise<void> => {
 			// 5. Build normal status options with current server count
 			const normalStatus: ActivityOptions[] = [
 				{
-					name: `Multi-Persona Update! /help updates`,
+					name: `Multi-Persona Update! /updates`,
 					type: ActivityType.Playing,
 				},
 				{
