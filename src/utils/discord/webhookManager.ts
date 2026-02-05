@@ -1,4 +1,5 @@
 import type {
+	BaseGuildTextChannel,
 	TextChannel,
 	Webhook,
 	Message,
@@ -168,29 +169,45 @@ async function resolvePersonaWebhookAvatar(
  * @returns Webhook object, or null if missing permissions
  */
 export async function getOrCreateWebhook(
-	channel: TextChannel,
+	channel: TextChannel | BaseGuildTextChannel,
 ): Promise<WebhookCreateResult> {
-	try {
-		const channelId = channel.id;
+		try {
+			const channelId = channel.id;
 
-		// 1. Check in-memory cache
-		const cachedWebhook = webhookCache.get(channelId);
-		if (cachedWebhook) {
-			// Verify cached webhook still has a valid token (not deleted)
-			if (!cachedWebhook.token) {
-				log.warn(
-					`[Webhook Manager] Cached webhook for channel ${channelId} has no token (likely deleted), invalidating cache`,
-				);
-				webhookCache.delete(channelId);
-				// Continue to fetch/create a new webhook
-			} else {
-				// Return cached webhook
-				log.info(
-					`[Webhook Manager] Cache HIT for channel ${channelId} (${channel.name})`,
-				);
-				return { webhook: cachedWebhook };
+			// 1. Check in-memory cache
+			const cachedWebhook = webhookCache.get(channelId);
+			if (cachedWebhook) {
+				// Verify cached webhook still has a valid token (not deleted)
+				if (!cachedWebhook.token) {
+					log.warn(
+						`[Webhook Manager] Cached webhook for channel ${channelId} has no token (likely deleted), invalidating cache`,
+					);
+					webhookCache.delete(channelId);
+					// Continue to fetch/create a new webhook
+				} else {
+					try {
+						// Verify webhook still exists remotely; cached objects may survive manual deletes.
+						const liveWebhooks = await channel.fetchWebhooks();
+						if (liveWebhooks.has(cachedWebhook.id)) {
+							log.info(
+								`[Webhook Manager] Cache HIT for channel ${channelId} (${channel.name})`,
+							);
+							return { webhook: cachedWebhook };
+						}
+						log.warn(
+							`[Webhook Manager] Cached webhook missing in channel ${channelId}, invalidating cache`,
+						);
+						webhookCache.delete(channelId);
+					} catch (fetchError) {
+						log.warn(
+							`[Webhook Manager] Cached webhook fetch failed for channel ${channelId}, invalidating cache`,
+							fetchError,
+						);
+						webhookCache.delete(channelId);
+						// Continue to fetch/create a new webhook
+					}
+				}
 			}
-		}
 
 		// 2. Fetch existing webhook by name
 		log.info(
@@ -243,7 +260,7 @@ export async function getOrCreateWebhook(
  * Used in non-production to avoid external avatar hosting.
  */
 export async function getOrCreatePersonaWebhook(
-	channel: TextChannel,
+	channel: TextChannel | BaseGuildTextChannel,
 	persona: TomoriState,
 ): Promise<WebhookCreateResult> {
 	try {
@@ -254,23 +271,39 @@ export async function getOrCreatePersonaWebhook(
 			return { webhook: null, errorReason: "unknown" };
 		}
 
-		const channelId = channel.id;
-		const cacheKey = getPersonaWebhookCacheKey(channelId, persona.tomori_id);
+			const channelId = channel.id;
+			const cacheKey = getPersonaWebhookCacheKey(channelId, persona.tomori_id);
 
-		const cachedWebhook = personaWebhookCache.get(cacheKey);
-		if (cachedWebhook) {
-			if (!cachedWebhook.token) {
-				log.warn(
-					`[Webhook Manager] Cached persona webhook for channel ${channelId} has no token (likely deleted), invalidating cache`,
-				);
-				personaWebhookCache.delete(cacheKey);
-			} else {
-				log.info(
-					`[Webhook Manager] Persona cache HIT for channel ${channelId} (persona ${persona.tomori_id})`,
-				);
-				return { webhook: cachedWebhook };
+			const cachedWebhook = personaWebhookCache.get(cacheKey);
+			if (cachedWebhook) {
+				if (!cachedWebhook.token) {
+					log.warn(
+						`[Webhook Manager] Cached persona webhook for channel ${channelId} has no token (likely deleted), invalidating cache`,
+					);
+					personaWebhookCache.delete(cacheKey);
+				} else {
+					try {
+						// Verify webhook still exists remotely; cached objects may survive manual deletes.
+						const liveWebhooks = await channel.fetchWebhooks();
+						if (liveWebhooks.has(cachedWebhook.id)) {
+							log.info(
+								`[Webhook Manager] Persona cache HIT for channel ${channelId} (persona ${persona.tomori_id})`,
+							);
+							return { webhook: cachedWebhook };
+						}
+						log.warn(
+							`[Webhook Manager] Cached persona webhook missing in channel ${channelId}, invalidating cache`,
+						);
+						personaWebhookCache.delete(cacheKey);
+					} catch (fetchError) {
+						log.warn(
+							`[Webhook Manager] Cached persona webhook fetch failed for channel ${channelId}, invalidating cache`,
+							fetchError,
+						);
+						personaWebhookCache.delete(cacheKey);
+					}
+				}
 			}
-		}
 
 		log.info(
 			`[Webhook Manager] Persona cache MISS for channel ${channelId}, fetching webhooks`,
@@ -503,6 +536,17 @@ export async function sendAsPersona(
 		);
 		return message;
 	} catch (error) {
+		const code = (error as { code?: number | string })?.code;
+		if (
+			(code === 10015 ||
+				code === "10015" ||
+				code === 50027 ||
+				code === "50027") &&
+			webhook.channelId
+		) {
+			invalidateWebhookCache(webhook.channelId);
+		}
+
 		log.error(
 			`[Webhook Manager] Failed to send message as persona ${persona.tomori_nickname}:`,
 			{

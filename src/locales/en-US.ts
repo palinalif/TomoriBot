@@ -125,7 +125,7 @@ export default {
 		error_memory_critical_description: `I'm currently experiencing high memory usage, preventing file uploads. Please try again in a moment.`,
 
 		error_quota_exceeded_title: `🔴 Daily Limit Reached`,
-		error_quota_exceeded_description: `You've reached the daily limit for this command. Your quota resets at **{reset_time}**.\n\nPlease try again after the reset time.`,
+		error_quota_exceeded_description: `You've reached the daily limit for this command. Your quota resets at **{reset_time}**. Please try again after the reset time.`,
 	},
 
 	genai: {
@@ -313,7 +313,7 @@ export default {
 
 			// 404 Privacy Policy Error
 			"404_privacy_policy_error":
-				"**Privacy Policy Restriction**\n\n" +
+				"**Privacy Policy Restriction**\n" +
 				"The selected model requires allowing data for paid model training, but your OpenRouter account privacy settings currently block this.\n\n" +
 				"**To fix this:**\n" +
 				"1. Visit https://openrouter.ai/settings/privacy\n" +
@@ -671,13 +671,13 @@ export default {
 				avatar_update_rate_limited: `🟡 Server avatar was not updated due to Discord rate limits. Please change it manually instead.`,
 				avatar_update_failed: `🟡 Server avatar could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
 				alter_success_title: `🟢 Alter Persona Imported Successfully`,
-				alter_success_description: `Successfully imported alter persona **{nickname}**!\nUnique Trigger Words: {trigger_count}\n\nTriggers: {triggers}\n\nThis persona will respond when these triggers appear in messages.`,
+				alter_success_description: `Successfully imported alter persona **{nickname}**!\nUnique Trigger Words: {trigger_count}\nTriggers: {triggers}\n\nThis persona will respond when these triggers appear in messages.`,
 				alter_success_confirmation: `Successfully imported alter persona **{nickname}** with {trigger_count} unique trigger words! The detailed import information has been posted in the channel.`,
 				alter_avatar_warning: `⚠️ Do not delete the avatar image embed above, or the alter persona avatar will be lost.`,
 				alter_dm_not_allowed_title: `🔴 Alter Personas Not Allowed in DMs`,
 				alter_dm_not_allowed_description: `Alter personas can only be imported in servers, not in Direct Messages. Please run this command in a server.`,
 				alter_no_triggers_error_title: `🔴 No Unique Triggers`,
-				alter_no_triggers_error_description: `All trigger words in this persona already exist in other personas.\n\nOverlapping triggers: {overlap}\n\nPlease edit the PNG file to add unique trigger words, or remove conflicting personas using \`/persona remove\`.`,
+				alter_no_triggers_error_description: `All trigger words in this persona already exist in other personas.\nOverlapping triggers: {overlap}\n\nPlease edit the PNG file to add unique trigger words, or remove conflicting personas using \`/persona remove\`.`,
 				alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/server trigger add\`.`,
 				alter_name_conflict_title: `🔴 Persona Name Already Exists`,
 				alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.\n\nPlease edit the PNG file to use a different name, or remove the existing persona using \`/persona remove\`.`,
@@ -829,7 +829,7 @@ export default {
 				metadata_embed_failed_description: `Failed to embed personality data in the image. Please try again.`,
 				// Success
 				success_title: `🟢 {character_name} Generated Successfully!`,
-				success_description: `I've generated a persona for **{character_name}**!\n\n**Attributes Preview:**\n{attribute_preview}\n\n**Sample Dialogues:**\n{dialogue_preview}`,
+				success_description: `I've generated a persona for **{character_name}**!\n**Attributes Preview:**\n{attribute_preview}\n**Sample Dialogues:**\n{dialogue_preview}`,
 				success_next_steps_title: `Next Steps`,
 				success_next_steps_description: `1. Download the attached PNG file\n2. Use \`/persona import\` with the PNG to import this character\n3. Run \`/tool refresh\` on ongoing conversations to apply my new personality\n4. (Optional) Use \`/server avatar\` to change the avatar if desired`,
 				avatar_update_skipped_dm: `Please note that avatar and nickname updates are not available to import in Direct Messages.`,
@@ -883,7 +883,7 @@ export default {
 				metadata_embed_failed_description: `Failed to embed personality data in the image. Please try again.`,
 				// Success
 				success_title: `🟢 {character_name} Created Successfully!`,
-				success_description: `Persona has been created for **{character_name}**!\n\n**Description:**\n{character_description}`,
+				success_description: `Persona has been created for **{character_name}**!\n**Description:**\n{character_description}`,
 				success_dialogue_title: `Sample Dialogue`,
 				success_next_steps_title: `Next Steps`,
 				success_next_steps_description: `1. Download the attached PNG file\n2. Use \`/persona import\` with the PNG to import this character\n3. Run \`/tool refresh\` on ongoing conversations to apply my new personality\n4. (Optional) Use \`/server avatar\` to change the avatar if desired`,
@@ -1559,7 +1559,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				model_name_placeholder: `e.g., gemma3:latest`,
 				// Capabilities modal
 				modal_capabilities_title: `Configure Model Capabilities`,
-				capabilities_prompt: `Please configure the capabilities for your custom model.\n\nSelect what your model supports, then click **Confirm**:`,
+				capabilities_prompt: `Please configure the capabilities for your custom model.\nSelect what your model supports, then click **Confirm**:`,
 				capability_tools_label: `Function Calling (Tools)?`,
 				capability_tools_yes: `Supports Function Calling`,
 				capability_tools_no: `No Function Calling`,
@@ -1906,7 +1906,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					selection_label: `Choose a preset`,
 					selection_placeholder: `Pick a preset prompt style...`,
 					success_title: `✓ Preset Applied`,
-					success_description: `System prompt preset applied: **{presetName}**\n\nPreview:\n\`\`\`\n{preview}...\n\`\`\``,
+					success_description: `System prompt preset applied: **{presetName}**\nPreview:\n\`\`\`\n{preview}...\n\`\`\``,
 					no_presets_title: `No Presets Available`,
 					no_presets_description: `No system prompt presets found. Please contact the bot administrator.`,
 					invalid_preset_title: `Invalid Preset`,

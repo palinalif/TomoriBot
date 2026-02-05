@@ -16,6 +16,7 @@ import {
 } from "discord.js";
 import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
+import { invalidateWebhookCache } from "./webhookManager";
 import type {
 	StandardEmbedOptions,
 	SummaryEmbedOptions,
@@ -39,6 +40,16 @@ export type WebhookEmbedContext = {
 	personaUsername?: string;
 	personaAvatarUrl?: string;
 };
+
+function isInvalidWebhookError(error: unknown): boolean {
+	const code = (error as { code?: number | string })?.code;
+	return (
+		code === 10015 || // Unknown Webhook
+		code === "10015" ||
+		code === 50027 || // Invalid Webhook Token
+		code === "50027"
+	);
+}
 
 /**
  * Truncates a field value to Discord's maximum allowed length.
@@ -204,21 +215,31 @@ export async function sendStandardEmbed(
 			channel.isThread()
 				? channel.id
 				: undefined;
-		try {
-			await webhookContext.webhook.send({
-				embeds: [embed],
-				username: webhookContext.personaUsername,
-				avatarURL: webhookContext.personaAvatarUrl,
-				...(threadId ? { threadId } : {}),
-			});
-			return;
-		} catch (error) {
-			log.warn(
-				"Failed to send embed via webhook, falling back to bot message",
-				error as Error,
-			);
+			try {
+				await webhookContext.webhook.send({
+					embeds: [embed],
+					username: webhookContext.personaUsername,
+					avatarURL: webhookContext.personaAvatarUrl,
+					...(threadId ? { threadId } : {}),
+				});
+				return;
+			} catch (error) {
+				if (isInvalidWebhookError(error)) {
+					const cacheChannelId =
+						"isThread" in channel &&
+						typeof channel.isThread === "function" &&
+						channel.isThread() &&
+						channel.parent
+							? channel.parent.id
+							: channel.id;
+					invalidateWebhookCache(cacheChannelId);
+				}
+				log.warn(
+					"Failed to send embed via webhook, falling back to bot message",
+					error as Error,
+				);
+			}
 		}
-	}
 
 	await channel.send({ embeds: [embed] });
 }

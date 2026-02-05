@@ -20,12 +20,18 @@ import {
 	type Message,
 	type Client,
 	type ColorResolvable,
+	type BaseGuildTextChannel,
 } from "discord.js";
 import { HumanizerDegree } from "../../types/db/schema";
 import { sendStandardEmbed } from "./embedHelper";
 import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { STREAMING_LIMITS } from "../security/rateLimiter";
+import {
+	getOrCreatePersonaWebhook,
+	getOrCreateWebhook,
+	invalidateWebhookCache,
+} from "./webhookManager";
 import {
 	chunkMessage,
 	cleanLLMOutput,
@@ -61,6 +67,43 @@ import {
 } from "../../types/stream/types";
 
 // Empty response handling is now done at the tomoriChat level for fresh context
+
+function isInvalidWebhookError(error: unknown): boolean {
+	const code = (error as { code?: number | string })?.code;
+	return (
+		code === 10015 || // Unknown Webhook
+		code === "10015" ||
+		code === 50027 || // Invalid Webhook Token
+		code === "50027"
+	);
+}
+
+function resolveWebhookTargetChannel(
+	channel: StreamContext["channel"],
+): BaseGuildTextChannel | null {
+	const isThread =
+		"isThread" in channel &&
+		typeof channel.isThread === "function" &&
+		channel.isThread();
+	if (isThread) {
+		return channel.parent && "fetchWebhooks" in channel.parent
+			? (channel.parent as BaseGuildTextChannel)
+			: null;
+	}
+	return "fetchWebhooks" in channel && "createWebhook" in channel
+		? (channel as BaseGuildTextChannel)
+		: null;
+}
+
+function resolveWebhookThreadId(channel: StreamContext["channel"]):
+	| string
+	| undefined {
+	return "isThread" in channel &&
+		typeof channel.isThread === "function" &&
+		channel.isThread()
+		? channel.id
+		: undefined;
+}
 
 /**
  * Universal Discord streaming orchestrator implementation
@@ -1380,114 +1423,172 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			return;
 		}
 
-		try {
-			// 1. Use webhook for alter personas (if webhook and persona info provided)
-			// Only require webhook and username - avatarUrl is optional
-			if (context.webhook && context.personaUsername) {
-				log.info(
-					`Stream Send: Using webhook for persona "${context.personaUsername}"${context.personaAvatarUrl ? " with custom avatar" : " (default avatar)"}`,
-				);
+			try {
+				const threadId = resolveWebhookThreadId(context.channel);
+				// 1. Use webhook for alter personas (if webhook and persona info provided)
+				// Only require webhook and username - avatarUrl is optional
+				if (context.webhook && context.personaUsername) {
+					log.info(
+						`Stream Send: Using webhook for persona "${context.personaUsername}"${context.personaAvatarUrl ? " with custom avatar" : " (default avatar)"}`,
+					);
 
-				// Webhooks cannot reply to messages, so always send as new message
-				await context.webhook.send({
-					content,
-					username: context.personaUsername,
-					avatarURL: context.personaAvatarUrl, // Can be undefined - Discord handles this
-					allowedMentions: { parse: ["users", "roles"], repliedUser: false },
-				});
-
-				// Mark as replied since webhook messages can't reply to the original
-				state.hasRepliedToOriginalMessage = true;
-			}
-			// 2. Regular bot message for main persona or fallback
-			else {
-				// Check if we need to reply or send normally
-				if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
-					await context.replyToMessage.reply({
+					// Webhooks cannot reply to messages, so always send as new message
+					await context.webhook.send({
 						content,
-						allowedMentions: { repliedUser: false },
+						username: context.personaUsername,
+						avatarURL: context.personaAvatarUrl, // Can be undefined - Discord handles this
+						allowedMentions: { parse: ["users", "roles"], repliedUser: false },
+						...(threadId ? { threadId } : {}),
 					});
+
+					// Mark as replied since webhook messages can't reply to the original
 					state.hasRepliedToOriginalMessage = true;
-				} else {
-					await context.channel.send({ content });
 				}
-			}
-
-			state.messageSentCount++;
-			state.accumulatedText += content; // Track all sent text for short-term memory
-			log.info(
-				`Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
-			);
-		} catch (discordError) {
-			// If webhook send fails, try fallback to regular bot message (only on first message)
-			if (
-				context.webhook &&
-				context.personaUsername &&
-				!state.hasRepliedToOriginalMessage
-			) {
-				log.warn(
-					"Stream Send: Webhook send failed, falling back to regular bot message",
-					discordError,
-				);
-
-				try {
-					// Try fallback to regular message
-					if (context.replyToMessage) {
+				// 2. Regular bot message for main persona or fallback
+				else {
+					// Check if we need to reply or send normally
+					if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
 						await context.replyToMessage.reply({
 							content,
 							allowedMentions: { repliedUser: false },
 						});
+						state.hasRepliedToOriginalMessage = true;
 					} else {
 						await context.channel.send({ content });
 					}
-
-					state.hasRepliedToOriginalMessage = true;
-					state.messageSentCount++;
-					state.accumulatedText += content; // Track fallback sent text too
-
-					log.info(
-						"Stream Send: Successfully sent message via fallback after webhook failure",
-					);
-					return;
-				} catch (fallbackError) {
-					// Log both errors
-					log.error(
-						"Stream Send: Both webhook and fallback failed",
-						fallbackError,
-						{
-							serverId: context.tomoriState?.server_id,
-							errorType: "StreamOrchestrator",
-							metadata: {
-								channelId: context.channel.id,
-								webhookError: String(discordError),
-								fallbackError: String(fallbackError),
-							},
-						},
-					);
 				}
-			}
 
-			// Original error logging and re-throw
-			log.error(
-				"Stream Send: Discord API error when sending message",
-				discordError,
-				{
-					serverId: context.tomoriState?.server_id,
-					errorType: "StreamOrchestrator",
-					metadata: {
-						channelId: context.channel.id,
-						contentLength: content.length,
-						contentPreview: content.substring(0, 200),
-						usingWebhook: !!context.webhook,
+				state.messageSentCount++;
+				state.accumulatedText += content; // Track all sent text for short-term memory
+				log.info(
+					`Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
+				);
+			} catch (discordError) {
+				// If webhook send fails, try fallback to regular bot message (only on first message)
+				if (
+					context.webhook &&
+					context.personaUsername &&
+					!state.hasRepliedToOriginalMessage
+				) {
+					// Recover stale/deleted webhook caches for alter personas before fallback.
+					const shouldRecoverWebhook =
+						context.tomoriState.is_alter &&
+						context.personaUsername === context.tomoriState.tomori_nickname &&
+						isInvalidWebhookError(discordError);
+
+					if (shouldRecoverWebhook) {
+						const webhookTargetChannel = resolveWebhookTargetChannel(
+							context.channel,
+						);
+
+						if (webhookTargetChannel) {
+							try {
+								invalidateWebhookCache(webhookTargetChannel.id);
+								const usePersonaWebhooks = process.env.RUN_ENV !== "production";
+								const recreatedWebhookResult = usePersonaWebhooks
+									? await getOrCreatePersonaWebhook(
+											webhookTargetChannel,
+											context.tomoriState,
+										)
+									: await getOrCreateWebhook(webhookTargetChannel);
+								const recreatedWebhook = recreatedWebhookResult.webhook;
+
+								if (recreatedWebhook) {
+									const recoveredThreadId = resolveWebhookThreadId(
+										context.channel,
+									);
+									await recreatedWebhook.send({
+										content,
+										username: context.personaUsername,
+										avatarURL: context.personaAvatarUrl,
+										allowedMentions: {
+											parse: ["users", "roles"],
+											repliedUser: false,
+										},
+										...(recoveredThreadId ? { threadId: recoveredThreadId } : {}),
+									});
+
+									context.webhook = recreatedWebhook;
+									state.hasRepliedToOriginalMessage = true;
+									state.messageSentCount++;
+									state.accumulatedText += content;
+									log.info(
+										"Stream Send: Recreated webhook after invalid webhook error and resumed persona sending",
+									);
+									return;
+								}
+							} catch (recoveryError) {
+								log.warn(
+									"Stream Send: Webhook recovery attempt failed, falling back to regular bot message",
+									recoveryError as Error,
+								);
+							}
+						}
+					}
+
+					log.warn(
+						"Stream Send: Webhook send failed, falling back to regular bot message",
+						discordError,
+					);
+
+					try {
+						// Try fallback to regular message
+						if (context.replyToMessage) {
+							await context.replyToMessage.reply({
+								content,
+								allowedMentions: { repliedUser: false },
+							});
+						} else {
+							await context.channel.send({ content });
+						}
+
+						state.hasRepliedToOriginalMessage = true;
+						state.messageSentCount++;
+						state.accumulatedText += content; // Track fallback sent text too
+
+						log.info(
+							"Stream Send: Successfully sent message via fallback after webhook failure",
+						);
+						return;
+					} catch (fallbackError) {
+						// Log both errors
+						log.error(
+							"Stream Send: Both webhook and fallback failed",
+							fallbackError,
+							{
+								serverId: context.tomoriState?.server_id,
+								errorType: "StreamOrchestrator",
+								metadata: {
+									channelId: context.channel.id,
+									webhookError: String(discordError),
+									fallbackError: String(fallbackError),
+								},
+							},
+						);
+					}
+				}
+
+				// Original error logging and re-throw
+				log.error(
+					"Stream Send: Discord API error when sending message",
+					discordError,
+					{
+						serverId: context.tomoriState?.server_id,
+						errorType: "StreamOrchestrator",
+						metadata: {
+							channelId: context.channel.id,
+							contentLength: content.length,
+							contentPreview: content.substring(0, 200),
+							usingWebhook: !!context.webhook,
+						},
 					},
-				},
-			);
+				);
 
-			// Re-throw to let the overall error handling deal with it
-			throw new Error(
-				`Discord send failed: ${discordError instanceof Error ? discordError.message : String(discordError)}`,
-			);
-		}
+				// Re-throw to let the overall error handling deal with it
+				throw new Error(
+					`Discord send failed: ${discordError instanceof Error ? discordError.message : String(discordError)}`,
+				);
+			}
 	}
 
 	/**

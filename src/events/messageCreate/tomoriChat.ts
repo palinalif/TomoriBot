@@ -1986,9 +1986,26 @@ export default async function tomoriChat(
 				channel.type === ChannelType.PublicThread ||
 				channel.type === ChannelType.PrivateThread ||
 				channel.type === ChannelType.AnnouncementThread;
+			const isWebhookThread =
+				"isThread" in channel &&
+				typeof channel.isThread === "function" &&
+				channel.isThread();
+			const webhookTargetChannel =
+				isWebhookThread && channel.parent ? channel.parent : channel;
+			const hasWebhookMethods =
+				!!webhookTargetChannel &&
+				"fetchWebhooks" in webhookTargetChannel &&
+				"createWebhook" in webhookTargetChannel;
 
-			if (hasAlters && supportsWebhooks && !usePersonaWebhooks) {
-				const webhookResult = await getOrCreateWebhook(channel as TextChannel);
+			if (
+				hasAlters &&
+				supportsWebhooks &&
+				!usePersonaWebhooks &&
+				hasWebhookMethods
+			) {
+				const webhookResult = await getOrCreateWebhook(
+					webhookTargetChannel as BaseGuildTextChannel,
+				);
 				channelWebhook = webhookResult.webhook;
 				webhookErrorReason = webhookResult.errorReason;
 
@@ -3314,10 +3331,11 @@ export default async function tomoriChat(
 					if (
 						usePersonaWebhooks &&
 						supportsWebhooks &&
-						currentPersona.is_alter
+						currentPersona.is_alter &&
+						hasWebhookMethods
 					) {
 						const webhookResult = await getOrCreatePersonaWebhook(
-							channel as TextChannel,
+							webhookTargetChannel as BaseGuildTextChannel,
 							currentPersona,
 						);
 						personaWebhook = webhookResult.webhook;
@@ -3834,13 +3852,16 @@ export default async function tomoriChat(
 										const currentLockEntry = channelLocks.get(channel.id);
 										if (currentLockEntry) {
 											// Queue the original stop message as a "passport" for stop response
-											currentLockEntry.messageQueue.unshift({
-												message: stopContext.originalStopMessage,
-												isManuallyTriggered: true, // This bypasses normal trigger logic
-												forceReason: false,
-												llmOverrideCodename,
-												isStopResponse: true, // This response cannot be stopped
-											});
+												currentLockEntry.messageQueue.unshift({
+													message: stopContext.originalStopMessage,
+													isManuallyTriggered: true, // This bypasses normal trigger logic
+													forceReason: false,
+													llmOverrideCodename,
+													isStopResponse: true, // This response cannot be stopped
+													// Keep stop follow-up persona aligned with the interrupted stream.
+													selectedPersonaId:
+														currentPersona.tomori_id ?? undefined,
+												});
 
 											log.info(
 												`Stop response queued after stream completion for channel ${channel.id}. Queue size: ${currentLockEntry.messageQueue.length}`,
