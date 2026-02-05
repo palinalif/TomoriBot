@@ -1,458 +1,193 @@
 # 10. Streaming & Response System
 
-This document explains how TomoriBot streams AI responses in real-time to Discord.
+This document explains the current streaming architecture for TomoriBot and how model output is transformed into Discord messages.
+
+> This file is the high-level guide.  
+> For low-level flush/chunk edge cases and exact boundary rules, see `docs/20_TextFlushingAndChunking.md`.
 
 ## Overview
 
-TomoriBot streams AI responses incrementally, creating a natural "typing" experience where users see the message build up word-by-word.
-
-**Key Component:** `StreamOrchestrator`
-
-**Location:** `src/utils/discord/StreamOrchestrator.ts`
-
-## Why Streaming?
+TomoriBot uses a modular streaming pipeline:
 
-### Non-Streaming (Bad UX)
-```
-User: "Tell me a story about a cat"
-Bot: *typing indicator for 15 seconds*
-Bot: "Once upon a time, there was a curious cat named Whiskers..."
-```
+1. Provider stream adapters normalize raw provider chunks.
+2. `StreamOrchestrator` manages buffering, boundaries, tool-call interruption, and Discord sending.
+3. Text utilities clean, chunk, and optionally humanize content before sending.
 
-### Streaming (Good UX)
-```
-User: "Tell me a story about a cat"
-Bot: "Once upon a time"
-Bot: "Once upon a time, there was a curious"
-Bot: "Once upon a time, there was a curious cat named Whiskers..."
-Bot: "Once upon a time, there was a curious cat named Whiskers. She loved to explore..."
-```
-
-**Result:** User sees progress immediately, feels more interactive.
-
-## Architecture
+Important: TomoriBot now sends **discrete messages**, not "edit the same message every 500ms".
 
-```
-AI Provider → Stream Adapter → StreamOrchestrator → Discord Message
-     ↓              ↓                   ↓                    ↓
-  Chunks      Normalize chunks    Buffer & format      Edit message
-                                   every ~500ms         incrementally
-```
-
-## StreamOrchestrator
+## Main Components
 
-### Responsibilities
+| Component | File | Responsibility |
+|---|---|---|
+| Universal orchestrator | `src/utils/discord/streamOrchestrator.ts` | Buffering, flush decisions, send pipeline, timeout/stop handling |
+| Stream interfaces | `src/types/stream/interfaces.ts` | Provider/orchestrator contracts and stream context |
+| Stream constants/types | `src/types/stream/types.ts` | Message length, flush thresholds, typing settings |
+| Provider stream adapters | `src/providers/*/*StreamAdapter.ts` | Convert provider-native events into normalized chunks |
+| Text processing | `src/utils/text/stringHelper.ts` | `cleanLLMOutput`, `chunkMessage`, `humanizeString` |
+| Emoji dedup controls | `src/utils/text/emojiPenalty.ts` | Duplicate custom-emoji filtering with safety guards |
 
-1. **Buffering**: Accumulate text chunks
-2. **Code Block Detection**: Don't break formatting mid-block
-3. **Rate Limiting**: Discord allows ~5 edits/second
-4. **Typing Simulation**: Show "Bot is typing..." indicator
-5. **Timeout Handling**: Stop if AI stalls
-6. **Tool Call Handling**: Pause streaming for function execution
+## Runtime Flow
 
-### Key Properties
+### 1) Provider entry
 
-```typescript
-class StreamOrchestrator {
-  private buffer: string = "";              // Accumulated text
-  private lastUpdateTime: number = 0;       // For rate limiting
-  private isCodeBlockOpen: boolean = false; // Code block tracking
-  private updateIntervalMs: number = 500;   // Edit every 500ms
-  private inactivityTimeoutMs: number = 120000; // 2 min timeout
-  private typingIntervalId: NodeJS.Timeout | null = null;
-}
-```
-
-## Streaming Flow
-
-### 1. Initialize Stream
-
-```typescript
-const orchestrator = new StreamOrchestrator({
-  channel: message.channel,
-  initialMessage: "Thinking...",
-  humanizer: config.humanizer_degree,
-});
+`tomoriChat` calls provider `streamToDiscord(...)`.  
+Provider builds `StreamConfig` and delegates to `StreamOrchestrator.streamToDiscord(...)`.
 
-await orchestrator.start();
-```
+### 2) Stream initialization
 
-### 2. Process Chunks
-
-```typescript
-for await (const chunk of providerStream) {
-  if (chunk.type === "text") {
-    await orchestrator.addChunk(chunk.content);
-  } else if (chunk.type === "function_call") {
-    // Pause streaming, execute tool
-    await orchestrator.flush(); // Send current buffer
-    const result = await executeTool(chunk.name, chunk.args, context);
-    // Resume streaming with tool result
-  }
-}
-```
-
-### 3. Finalize
-
-```typescript
-await orchestrator.finalize();
-```
-
-## Chunk Buffering
-
-### Why Buffer?
-
-Discord API has rate limits:
-- **5 message edits per second** per channel
-- **10 edits per 10 seconds** per message
+`StreamOrchestrator`:
+- creates stream state/metrics
+- builds `TextProcessingConfig`
+- builds typing config from `humanizerDegree`
+- sends initial typing indicator
+- prepares optional output prefill
 
-Buffering prevents hitting limits.
+### 3) Per-chunk loop
 
-### How It Works
-
-```typescript
-async addChunk(text: string): Promise<void> {
-  this.buffer += text;
-  this.resetInactivityTimer();
-
-  const now = Date.now();
-  const timeSinceLastUpdate = now - this.lastUpdateTime;
-
-  // Only update if enough time passed
-  if (timeSinceLastUpdate >= this.updateIntervalMs) {
-    await this.sendUpdate();
-    this.lastUpdateTime = now;
-  }
-}
-```
+For each provider raw chunk:
+- stop-request check
+- inactivity timeout check
+- reset inactivity timer
+- provider `processChunk(...)` to normalized type
+- handle normalized chunk (`text`, `function_call`, `error`, `done`)
 
-**Result:** Text accumulates in memory, sent every 500ms (configurable).
+### 4) Text chunk handling
 
-## Code Block Detection
+For `text` chunks:
+- append to buffer
+- run boundary detection
+- flush eligible segment(s)
+- apply regular overflow fallback when needed
 
-### Problem
+### 5) Segment pipeline before send
 
-If you edit a message mid-code block:
-````
-```typescript
-function hello() {
-  console.log("Hello
-````
+Each flushed segment goes through:
+1. `filterDuplicateCustomEmojis(...)`
+2. `cleanLLMOutput(...)`
+3. mention resolution
+4. prefix strip/prefill handling
+5. `sendSegment(...)`
 
-Discord breaks the formatting!
+### 6) Message chunking and sending
 
-### Solution
-
-Track code block state:
+`sendSegment(...)`:
+- splits text with `chunkMessage(...)` (Discord-safe lengths)
+- applies `humanizeString(...)` only for degree 3 (`HEAVY`)
+- sends chunks with typing simulation (`>= MEDIUM`) or immediate mode
 
-```typescript
-private updateCodeBlockState(text: string): void {
-  const codeBlockDelimiters = text.match(/```/g);
-  if (codeBlockDelimiters) {
-    const count = codeBlockDelimiters.length;
-    // Each ``` toggles the state
-    for (let i = 0; i < count; i++) {
-      this.isCodeBlockOpen = !this.isCodeBlockOpen;
-    }
-  }
-}
+### 7) Completion
 
-async sendUpdate(): Promise<void> {
-  // Don't send if code block is open
-  if (this.isCodeBlockOpen) {
-    return; // Wait for closing ```
-  }
-
-  await this.currentMessage.edit(this.buffer);
-}
-```
-
-**Result:** Only edits when code blocks are complete.
-
-## Typing Indicator
-
-Shows "Bot is typing..." while streaming.
-
-```typescript
-private startTypingIndicator(): void {
-  this.typingIntervalId = setInterval(() => {
-    this.channel.sendTyping();
-  }, 5000); // Refresh every 5 seconds
-}
-
-private stopTypingIndicator(): void {
-  if (this.typingIntervalId) {
-    clearInterval(this.typingIntervalId);
-    this.typingIntervalId = null;
-  }
-}
-```
-
-**Discord Requirement:** Typing indicator expires after 10 seconds, must be refreshed.
-
-## Inactivity Timeout
-
-If AI stalls (network issue, infinite loop), stop streaming after 2 minutes.
-
-```typescript
-private resetInactivityTimer(): void {
-  if (this.inactivityTimer) {
-    clearTimeout(this.inactivityTimer);
-  }
-
-  this.inactivityTimer = setTimeout(() => {
-    this.handleTimeout();
-  }, this.inactivityTimeoutMs);
-}
-
-private async handleTimeout(): Promise<void> {
-  await this.sendUpdate(); // Send whatever we have
-  await this.currentMessage.edit(
-    this.buffer + "\n\n*[Response timed out]*"
-  );
-  this.stopTypingIndicator();
-}
-```
-
-## Humanization
-
-Applies post-processing to make responses more human-like.
-
-**Location:** `src/utils/text/humanizer.ts`
-
-### Humanizer Degrees
-
-| Degree | Effect |
-|--------|--------|
-| **0** | No humanization (raw AI) |
-| **1** | Light (remove excess emojis) |
-| **2** | Moderate (shorten responses, casual tone) |
-| **3** | Heavy (very casual, lots of emojis, short) |
-
-### Example
-
-**Degree 0 (Raw AI):**
-```
-I would be absolutely delighted to help you with that! 😊 Let me explain in detail...
-[500 word response]
-```
-
-**Degree 3 (Heavy Humanization):**
-```
-Sure! Here's the deal:
-[100 word response with emojis]
-```
-
-### Implementation
-
-```typescript
-async function humanize(text: string, degree: number): Promise<string> {
-  if (degree === 0) return text;
-
-  let result = text;
-
-  if (degree >= 1) {
-    // Remove excessive emojis (keep 1-2 max)
-    result = limitEmojis(result, 2);
-  }
-
-  if (degree >= 2) {
-    // Shorten overly long responses
-    result = truncateIfTooLong(result, 800);
-    // Make more casual
-    result = result.replace(/I would be/g, "I'd be");
-  }
-
-  if (degree >= 3) {
-    // Very aggressive shortening
-    result = truncateIfTooLong(result, 400);
-    // Add casual language
-    result = makeCasual(result);
-  }
-
-  return result;
-}
-```
+When stream ends:
+- final buffer flush
+- metrics finalization
+- accumulated output returned for short-term memory storage
+
+## Buffering and Flush Boundaries
+
+Primary flush triggers:
+- code block open/close boundaries
+- newline boundaries
+- period-based sentence boundaries when humanizer degree is `HEAVY` (3)
+
+Safety guards:
+- newline/period flush blocked when semantic markers are incomplete
+- newline at end-of-buffer waits for more input
+- punctuation carry after newline keeps sentence punctuation attached
+- colon (`:`) is intentionally excluded from newline punctuation carry to avoid splitting `:emoji:` tokens
+
+Overflow fallback:
+- if regular buffer becomes too large, orchestrator flushes at a **safe breakpoint**
+- prefers nearby sentence/newline boundaries, then whitespace, then hard fallback
+- loops until oversized buffer is drained
+
+## Message Sending Behavior
+
+### Main persona
+- first send may reply to the source message
+- subsequent sends use `channel.send(...)`
+
+### Alter persona
+- sends via webhook with persona username/avatar
+- attempts webhook recovery on invalid webhook errors
+- falls back to regular bot message if webhook path fails
+
+### Flood protection
+- `STREAMING_LIMITS.MAX_FLUSH_COUNT` caps messages per stream session in production
+- if limit is reached, stream requests a graceful stop and warns user
+
+## Humanizer Behavior
+
+Humanizer degree controls both pacing and text treatment:
+
+| Degree | Behavior |
+|---|---|
+| `0` (`NONE`) | No humanization |
+| `1` (`LIGHT`) | Light processing |
+| `2` (`MEDIUM`) | Typing simulation enabled |
+| `3` (`HEAVY`) | Period flush boundary + post-chunk humanization |
+
+Key order for degree 3:
+1. Flush boundary decision
+2. Segment cleanup
+3. `chunkMessage(...)`
+4. `humanizeString(...)` on each chunk
 
 ## Tool Call Integration
 
-When AI calls a function mid-stream:
+When model emits `function_call`:
+- orchestrator flushes pending buffer first
+- returns status `function_call`
+- caller executes tool and continues next stream iteration with updated context
 
-```typescript
-async handleFunctionCall(
-  functionCall: FunctionCall,
-  context: ToolContext
-): Promise<string> {
-  // 1. Flush current buffer to Discord
-  await this.flush();
+Loop control and max iterations are managed by `tomoriChat` (function-call safety loop).
 
-  // 2. Execute tool
-  const result = await ToolRegistry.executeTool(
-    functionCall.name,
-    functionCall.args,
-    context
-  );
+## Error, Timeout, and Stop Handling
 
-  // 3. Return result (will be sent back to AI)
-  return result.success
-    ? result.result
-    : `Error: ${result.error}`;
-}
-```
+### Provider errors
+- pending text is flushed first (when available)
+- provider-specific error messaging is used when possible
+- fallback embed path handles generic errors
 
-**Flow:**
-```
-AI: "Let me search for that... "
-  → Flush: "Let me search for that..."
-  → Execute: brave_search(query="weather Tokyo")
-  → Tool returns: "Tokyo weather: 22°C, sunny"
-  → AI continues: "According to my search, Tokyo is 22°C and sunny!"
-```
+### Inactivity timeout
+- inactivity timer resets on each chunk
+- timeout threshold defaults from stream constants
 
-## Message Splitting
+### Stop requests
+- stop requests are tracked by channel
+- checked before processing/sending to avoid duplicate or late sends
+- special handling avoids duplicate flush-limit embeds
 
-Discord has a 2000 character limit per message.
+### Final flush auto-close
+- if final buffer still has incomplete semantic markers, orchestrator auto-closes markers before sending to avoid text loss
 
-```typescript
-private async sendUpdate(): Promise<void> {
-  const text = this.buffer;
+## Key Tuning Knobs
 
-  if (text.length <= 2000) {
-    await this.currentMessage.edit(text);
-  } else {
-    // Split into multiple messages
-    const chunks = splitIntoChunks(text, 2000);
+| Setting | Location | Current Role |
+|---|---|---|
+| `MAX_SINGLE_MESSAGE_LENGTH` | `src/types/stream/types.ts` | Per-message chunk cap (below Discord hard limit) |
+| `FLUSH_BUFFER_SIZE_REGULAR` | `src/types/stream/types.ts` | Regular overflow threshold |
+| `FLUSH_BUFFER_SIZE_CODE_BLOCK` | `src/types/stream/types.ts` | Code-block overflow threshold |
+| `INACTIVITY_TIMEOUT_MS` | `src/types/stream/types.ts` | Stream inactivity timeout |
+| `MAX_FLUSH_COUNT` | `src/utils/security/rateLimiter.ts` | Max messages sent per stream session |
+| `humanizer_degree` | `tomori_configs` | Controls pacing and degree-dependent flush/humanization |
 
-    await this.currentMessage.edit(chunks[0]);
+## Debugging Checklist
 
-    for (let i = 1; i < chunks.length; i++) {
-      await this.channel.send(chunks[i]);
-    }
-  }
-}
-```
+Useful logs when diagnosing output shape:
+- `Stream API: Raw chunk received: ...`
+- `Stream Seg: Flushing oversized regular buffer at safe breakpoint ...`
+- `Stream Send: Humanized (D3) from ... to ...`
+- `Stream Send: Sent message (N): ...`
+- `[Unique Emoji] ...` lines from emoji dedup
 
-## Error Handling
+If output looks wrong:
+1. Confirm where the split happened (buffer flush vs `chunkMessage`).
+2. Check emoji dedup logs for removals.
+3. Verify active humanizer degree.
+4. Check for incomplete semantic markers delaying flush.
 
-### Streaming Errors
+## Related Docs
 
-```typescript
-try {
-  for await (const chunk of stream) {
-    await orchestrator.addChunk(chunk.content);
-  }
-} catch (error) {
-  await orchestrator.sendUpdate(); // Save what we have
-  await orchestrator.currentMessage.edit(
-    orchestrator.buffer + "\n\n*[An error occurred]*"
-  );
-  log.error("Stream error", error);
-}
-```
-
-### Discord API Errors
-
-```typescript
-async sendUpdate(): Promise<void> {
-  try {
-    await this.currentMessage.edit(this.buffer);
-  } catch (error) {
-    if (error.code === 50013) {
-      // Missing permissions
-      log.warn("Cannot edit message: Missing permissions");
-    } else if (error.code === 10008) {
-      // Message deleted
-      log.warn("Message was deleted");
-    } else {
-      throw error; // Re-throw unknown errors
-    }
-  }
-}
-```
-
-## Performance Optimization
-
-### 1. Debouncing
-
-Only update Discord when buffer is "stable":
-
-```typescript
-private debounceTimer: NodeJS.Timeout | null = null;
-
-async addChunk(text: string): Promise<void> {
-  this.buffer += text;
-
-  if (this.debounceTimer) {
-    clearTimeout(this.debounceTimer);
-  }
-
-  this.debounceTimer = setTimeout(async () => {
-    await this.sendUpdate();
-  }, 200); // Wait 200ms for more chunks
-}
-```
-
-### 2. Batch Updates
-
-Accumulate small chunks before sending:
-
-```typescript
-if (this.buffer.length - this.lastSentLength < 50) {
-  return; // Not enough new content yet
-}
-```
-
-## Testing Streaming
-
-### Manual Test
-
-```typescript
-const orchestrator = new StreamOrchestrator({
-  channel: testChannel,
-  initialMessage: "Testing...",
-});
-
-await orchestrator.start();
-
-// Simulate AI chunks
-await orchestrator.addChunk("Hello ");
-await new Promise(r => setTimeout(r, 500));
-await orchestrator.addChunk("world! ");
-await new Promise(r => setTimeout(r, 500));
-await orchestrator.addChunk("How are you?");
-
-await orchestrator.finalize();
-```
-
-### Expected Behavior
-
-```
-t=0ms    : "Testing..."
-t=500ms  : "Hello "
-t=1000ms : "Hello world! "
-t=1500ms : "Hello world! How are you?"
-```
-
-## Common Issues
-
-### Issue: Messages Not Updating
-
-**Cause:** Bot lacks "Manage Messages" permission
-
-**Fix:** Grant permission in Discord server settings
-
-### Issue: Code Blocks Breaking
-
-**Cause:** Not tracking code block state
-
-**Fix:** Ensure `isCodeBlockOpen` logic is working
-
-### Issue: "Typing" Indicator Stuck
-
-**Cause:** Not calling `stopTypingIndicator()`
-
-**Fix:** Call in `finalize()` and error handlers
-
-## Next Steps
-
-Read document 11 (Utils & Helpers) to learn about utility functions used throughout TomoriBot!
+- `docs/20_TextFlushingAndChunking.md` (low-level flush/chunk internals)
+- `docs/15_ExpressionHandling.md` (emoji/sticker conversion and metadata)
+- `docs/8_AIProviders.md` (provider architecture)

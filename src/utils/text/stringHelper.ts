@@ -734,7 +734,52 @@ export function chunkMessage(
 		}
 	}
 
-	return chunkedMessages;
+	return mergeStandalonePunctuationChunks(chunkedMessages, chunkLength);
+}
+
+function isStandalonePunctuationChunk(text: string): boolean {
+	const trimmed = text.trim();
+	if (!trimmed) return false;
+	return /^[.,!?;:。！？、，]+$/.test(trimmed);
+}
+
+function mergeStandalonePunctuationChunks(
+	chunks: string[],
+	chunkLength: number,
+): string[] {
+	if (chunks.length <= 1) return chunks;
+
+	const normalized: string[] = [];
+
+	for (let i = 0; i < chunks.length; i++) {
+		const chunk = chunks[i];
+
+		if (!isStandalonePunctuationChunk(chunk)) {
+			normalized.push(chunk);
+			continue;
+		}
+
+		const punct = chunk.trim();
+
+		// Prefer attaching punctuation to previous chunk for natural reading.
+		if (normalized.length > 0) {
+			const previous = normalized[normalized.length - 1];
+			if (previous.length + punct.length <= chunkLength) {
+				normalized[normalized.length - 1] = `${previous}${punct}`;
+				continue;
+			}
+		}
+
+		// Fallback: prefix the next chunk when previous cannot absorb punctuation.
+		if (i + 1 < chunks.length) {
+			chunks[i + 1] = `${punct}${chunks[i + 1]}`;
+			continue;
+		}
+
+		normalized.push(punct);
+	}
+
+	return normalized;
 }
 
 /**

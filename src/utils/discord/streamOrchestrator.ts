@@ -561,24 +561,76 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		);
 
 		// Handle oversized regular buffer (not in code block and no semantic markers)
-		if (
+		while (
 			!state.isInsideCodeBlock &&
 			!state.hasSemanticMarkers &&
 			state.buffer.length >=
 				DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR
 		) {
-			log.info(
-				`Stream Seg: Flushing oversized regular buffer: ${state.buffer.length} chars`,
-			);
-			await this.sendBufferSegment(
+			const flushIndex = this.findRegularOverflowFlushIndex(
 				state.buffer,
+				DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
+			);
+			const segmentToFlush = state.buffer.substring(0, flushIndex);
+			const updatedBuffer = state.buffer.substring(flushIndex);
+
+			log.info(
+				`Stream Seg: Flushing oversized regular buffer at safe breakpoint (total: ${state.buffer.length}, flush: ${segmentToFlush.length}, retain: ${updatedBuffer.length})`,
+			);
+
+			await this.sendBufferSegment(
+				segmentToFlush,
 				textConfig,
 				typingConfig,
 				context,
 				state,
 			);
-			state.buffer = "";
+			state.buffer = updatedBuffer;
 		}
+	}
+
+	private findRegularOverflowFlushIndex(
+		buffer: string,
+		targetLength: number,
+	): number {
+		if (!buffer) return 0;
+
+		const target = Math.min(Math.max(1, targetLength), buffer.length);
+		const backwardWindowStart = Math.max(0, target - 300);
+		const forwardWindowEnd = Math.min(buffer.length, target + 200);
+
+		const isSentenceBoundary = (index: number): boolean => {
+			const ch = buffer[index];
+			if (!ch) return false;
+
+			if (ch === "\n") return true;
+			if (!/[.!?。！？]/.test(ch)) return false;
+
+			const nextChar = buffer[index + 1];
+			return nextChar === undefined || /\s/.test(nextChar);
+		};
+
+		// 1) Prefer a nearby forward sentence/newline boundary to avoid cutting
+		// just before the end of a sentence.
+		for (let i = target; i < forwardWindowEnd; i++) {
+			if (isSentenceBoundary(i)) return i + 1;
+		}
+
+		// 2) Otherwise prefer a nearby backward sentence/newline boundary.
+		for (let i = target - 1; i >= backwardWindowStart; i--) {
+			if (isSentenceBoundary(i)) return i + 1;
+		}
+
+		// 3) Fall back to whitespace boundaries.
+		for (let i = target - 1; i >= backwardWindowStart; i--) {
+			if (/\s/.test(buffer[i])) return i + 1;
+		}
+		for (let i = target; i < forwardWindowEnd; i++) {
+			if (/\s/.test(buffer[i])) return i + 1;
+		}
+
+		// 4) Hard fallback.
+		return target;
 	}
 
 	/**
@@ -869,16 +921,35 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				} else if (breakType === "newline" && !state.hasSemanticMarkers) {
 					// Only flush on newlines if no incomplete semantic markers
 					// Additional safety: ensure the segment to flush doesn't contain incomplete markers
-					const segmentToFlush = state.buffer.substring(
-						0,
-						earliestBreakIndex + 1,
-					);
+					// If newline is currently the last buffered char, wait for more input.
+					// This avoids sending punctuation-only follow-up chunks like "." or ",".
+					const nextCharIndex = earliestBreakIndex + 1;
+					if (nextCharIndex >= state.buffer.length) {
+						return {
+							shouldFlush: false,
+							updatedBuffer: state.buffer,
+							newCodeBlockState: false,
+						};
+					}
+
+					// If sentence punctuation immediately follows the newline, include it in
+					// the same flush so punctuation stays attached to the prior sentence.
+					// Intentionally excludes ":" so we don't split :emoji: tokens.
+					let flushEndIndex = nextCharIndex;
+					const punctuationCarry = state.buffer
+						.substring(nextCharIndex)
+						.match(/^\s*[.,!?;。！？、，]+/);
+					if (punctuationCarry) {
+						flushEndIndex += punctuationCarry[0].length;
+					}
+
+					const segmentToFlush = state.buffer.substring(0, flushEndIndex);
 
 					if (!this.hasIncompleteSemanticMarkers(segmentToFlush)) {
 						return {
 							shouldFlush: true,
 							segmentToFlush,
-							updatedBuffer: state.buffer.substring(earliestBreakIndex + 1),
+							updatedBuffer: state.buffer.substring(flushEndIndex),
 							newCodeBlockState: false,
 							breakType,
 						};

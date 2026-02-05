@@ -76,7 +76,7 @@ const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const ENABLE_LOCAL_RAG = process.env.ACTIVATE_LOCAL_RAG === "true";
 
 export const DEFAULT_SYSTEM_PROMPT =
-	"\n{bot} limits themselves to only 0 to 2 emojis per response ({bot} prefers to use available server emojis than normal emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
+	"\n{bot} limits themselves to only 0 to 1 emojis per response ({bot} prefers to use available server emojis than normal emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
 
 /**
  * Simplified message structure received from tomoriChat.ts.
@@ -1785,9 +1785,15 @@ export async function buildContext({
 			let processedContent: string;
 			if (normalizedContent.startsWith("[System:")) {
 				const replyBoundaryIndex = normalizedContent.indexOf("]\n");
-				if (replyBoundaryIndex !== -1 && replyBoundaryIndex + 2 < normalizedContent.length) {
+				if (
+					replyBoundaryIndex !== -1 &&
+					replyBoundaryIndex + 2 < normalizedContent.length
+				) {
 					// Reply reference: insert author prefix after the [System: ...] block
-					const systemBlock = normalizedContent.slice(0, replyBoundaryIndex + 2);
+					const systemBlock = normalizedContent.slice(
+						0,
+						replyBoundaryIndex + 2,
+					);
 					const userContent = normalizedContent.slice(replyBoundaryIndex + 2);
 					processedContent = `${systemBlock}${msg.authorName}: ${userContent}`;
 				} else {

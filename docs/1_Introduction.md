@@ -120,6 +120,12 @@ This documentation follows a progressive learning path:
 12. **Localization** - Multi-language support
 13. **Security & Privacy** - Encryption and user protection
 14. **Development Tasks** - Practical guides for common changes
+15. **Expression Handling** - Emoji/sticker syncing and conversion pipeline
+16. **Caching** - Cache layers and invalidation behavior
+17. **Multi Persona** - Main/alter persona runtime behavior
+18. **RAG** - Document chunking, embeddings, and retrieval
+19. **Cooldown System** - Trigger cooldown architecture
+20. **Text Flushing & Chunking** - Low-level streaming flush/chunk behavior
 
 ## What Makes TomoriBot Special?
 

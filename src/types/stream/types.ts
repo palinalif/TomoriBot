@@ -17,7 +17,7 @@ export const DISCORD_STREAMING_CONSTANTS = {
 	MAX_SINGLE_MESSAGE_LENGTH: 1950,
 
 	// Buffer flush sizes
-	FLUSH_BUFFER_SIZE_REGULAR: 500, // For normal text
+	FLUSH_BUFFER_SIZE_REGULAR: 1000, // For normal text
 	FLUSH_BUFFER_SIZE_CODE_BLOCK: 15000, // For code blocks (much larger)
 
 	// Typing simulation timing

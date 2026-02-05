@@ -1058,3 +1058,890 @@ TomoriBot's cooldown system provides:
 ✅ **Thread-Safe:** UPSERT operations prevent race conditions
 
 The architecture elegantly reuses a single table with creative key strategies, avoiding schema proliferation while supporting multiple scoping levels and future extensibility.
+
+---
+
+## Future Roadmap
+
+This section documents planned improvements to the cooldown and quota systems. Once implemented, content will be moved to the appropriate sections above and this roadmap will be updated.
+
+### 🚧 Phase 1: Cooldown Schema Refactor
+
+**Status:** 📋 Planned
+
+**Goal:** Replace "creative key mapping" with explicit columns for improved maintainability and clarity.
+
+**Motivation:**
+- Eliminate magic strings (`__msg_trigger__*`)
+- Self-documenting schema
+- Enable proper constraints and foreign keys
+- Easier debugging and analytics
+
+**New Schema:**
+```sql
+CREATE UNLOGGED TABLE IF NOT EXISTS cooldowns (
+	-- Explicit cooldown metadata
+	cooldown_id SERIAL,
+	cooldown_type INT NOT NULL,                -- CooldownType enum (1-4)
+	server_disc_id TEXT NOT NULL,              -- Always the server/guild ID
+
+	-- Scope-specific identifiers (nullable based on type)
+	user_disc_id TEXT,                         -- User ID (populated for PER_USER)
+	channel_disc_id TEXT,                      -- Channel ID (populated for PER_CHANNEL)
+
+	-- Expiry tracking
+	expiry_time BIGINT NOT NULL,               -- Unix timestamp in milliseconds
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+	-- Composite unique constraint for UPSERT operations
+	CONSTRAINT uq_cooldown_scope UNIQUE (
+		cooldown_type,
+		server_disc_id,
+		COALESCE(user_disc_id, ''),
+		COALESCE(channel_disc_id, '')
+	)
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_cooldowns_expiry
+	ON cooldowns(expiry_time)
+	WHERE expiry_time > EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
+
+CREATE INDEX IF NOT EXISTS idx_cooldowns_user
+	ON cooldowns(user_disc_id, server_disc_id)
+	WHERE user_disc_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_cooldowns_channel
+	ON cooldowns(channel_disc_id)
+	WHERE channel_disc_id IS NOT NULL;
+```
+
+**Implementation Checklist:**
+
+- [ ] **Schema Migration**
+  - [ ] Create migration script with Option 1 (Zero-Downtime Truncate)
+  - [ ] Test migration in development environment
+  - [ ] Schedule production migration (< 1 minute downtime)
+
+- [ ] **Code Refactoring**
+  - [ ] Delete `getCooldownKeyPair()` function (`src/utils/db/messageCooldown.ts:35-68`)
+  - [ ] Update `checkMessageTriggerCooldown()` to use explicit columns
+  - [ ] Update `setMessageTriggerCooldown()` to use explicit columns
+  - [ ] Update all SQL queries to use new schema
+
+- [ ] **Testing**
+  - [ ] Verify PER_USER cooldowns work
+  - [ ] Verify PER_CHANNEL cooldowns work
+  - [ ] Verify SERVER_WIDE cooldowns work
+  - [ ] Verify STRICT_SERVER_WIDE cooldowns work
+  - [ ] Verify manager exemptions still work
+  - [ ] Verify channel whitelist overrides still work
+  - [ ] Verify concurrent messages don't cause race conditions
+
+- [ ] **Documentation**
+  - [ ] Update this doc to reflect new schema
+  - [ ] Move "Proposed Schema Refactor" content to main sections
+  - [ ] Update code comments in cooldown utilities
+
+**Migration Strategy:** Zero-Downtime Truncate (recommended)
+- Cooldowns are short-lived (5-60s), so data loss is acceptable
+- Users experience cooldown resets, but they regenerate within seconds
+- Total downtime: < 1 minute
+
+---
+
+### 🚧 Phase 2: Command Reorganization
+
+**Status:** 📋 Planned (depends on Phase 1 completion)
+
+**Goal:** Reorganize cooldown commands for better discoverability and logical grouping.
+
+**Changes:**
+
+#### 2.1: Move `/config cooldown` → `/server cooldown triggers`
+
+**Rationale:**
+- Cooldowns are server-level settings, not persona configuration
+- Groups with other server management commands (`/server trigger`, `/server whitelist`)
+- More intuitive for server administrators
+
+**Current:**
+```
+/config cooldown <type> <length>
+```
+
+**New:**
+```
+/server cooldown triggers <type> <length>
+```
+
+**File Changes:**
+- Move: `src/commands/config/cooldown.ts` → `src/commands/serverconfig/cooldown/triggers.ts`
+- Update locale keys: `config.cooldown.*` → `server.cooldown.triggers.*`
+- Command registry automatically picks up new location
+
+**Locale Key Updates:**
+```typescript
+// Before
+"config.cooldown.title": "⏱️ Cooldown Settings Updated",
+"config.cooldown.description": "...",
+
+// After
+"server.cooldown.triggers.title": "⏱️ Message Trigger Cooldown Updated",
+"server.cooldown.triggers.description": "...",
+```
+
+#### 2.2: Extend Cooldowns to `/bot` Commands
+
+**Rationale:**
+- `/bot` commands (e.g., `/bot respond`) elicit bot responses, same as message triggers
+- Should share the same cooldown pool to prevent abuse
+- Maintains consistent rate limiting across all interaction types
+
+**Implementation:**
+
+1. **Extract cooldown logic into shared utilities:**
+```typescript
+// src/utils/db/cooldownManager.ts (NEW FILE)
+
+/**
+ * Check if a cooldown is active for the given scope.
+ * Works for both message triggers and slash commands.
+ */
+export async function checkCooldown(
+	cooldownType: CooldownType,
+	serverId: string,
+	userId: string,
+	channelId: string
+): Promise<CooldownCheckResult> {
+	// Use new explicit schema to query cooldowns table
+	const [result] = await sql`
+		SELECT * FROM cooldowns
+		WHERE cooldown_type = ${cooldownType}
+		AND server_disc_id = ${serverId}
+		AND (${userId}::TEXT IS NULL OR user_disc_id = ${userId})
+		AND (${channelId}::TEXT IS NULL OR channel_disc_id = ${channelId})
+		AND expiry_time > ${Date.now()}
+	`;
+
+	if (result) {
+		const remainingMs = result.expiry_time - Date.now();
+		return {
+			isOnCooldown: true,
+			remainingSeconds: Math.ceil(remainingMs / 1000),
+			cooldownType,
+		};
+	}
+
+	return {
+		isOnCooldown: false,
+		remainingSeconds: 0,
+		cooldownType,
+	};
+}
+
+/**
+ * Set a cooldown for the given scope.
+ * Works for both message triggers and slash commands.
+ */
+export async function setCooldown(
+	cooldownType: CooldownType,
+	serverId: string,
+	userId: string,
+	channelId: string,
+	cooldownLength: number
+): Promise<void> {
+	const expiryTime = Date.now() + cooldownLength * 1000;
+
+	await sql`
+		INSERT INTO cooldowns (
+			cooldown_type,
+			server_disc_id,
+			user_disc_id,
+			channel_disc_id,
+			expiry_time
+		)
+		VALUES (
+			${cooldownType},
+			${serverId},
+			${cooldownType === CooldownType.PER_USER ? userId : null},
+			${cooldownType === CooldownType.PER_CHANNEL ? channelId : null},
+			${expiryTime}
+		)
+		ON CONFLICT ON CONSTRAINT uq_cooldown_scope
+		DO UPDATE SET expiry_time = ${expiryTime}
+	`;
+}
+```
+
+2. **Update message trigger handler:**
+```typescript
+// src/events/messageCreate/tomoriChat.ts
+
+import { checkCooldown, setCooldown } from "@/utils/db/cooldownManager";
+
+// Pre-queue cooldown check
+const cooldownResult = await checkCooldown(
+	tomoriState.config.cooldown_type,
+	serverId,
+	message.author.id,
+	message.channel.id
+);
+
+if (cooldownResult.isOnCooldown) {
+	// Show cooldown warning
+	return;
+}
+
+// ... generate response ...
+
+// Set cooldown after successful response
+await setCooldown(
+	tomoriState.config.cooldown_type,
+	serverId,
+	message.author.id,
+	message.channel.id,
+	tomoriState.config.cooldown_length
+);
+```
+
+3. **Update `/bot` commands:**
+```typescript
+// src/commands/bot/respond.ts
+
+import { checkCooldown, setCooldown } from "@/utils/db/cooldownManager";
+
+// Check cooldown before responding
+const cooldownResult = await checkCooldown(
+	tomoriState.config.cooldown_type,
+	interaction.guild.id,
+	interaction.user.id,
+	interaction.channel.id
+);
+
+if (cooldownResult.isOnCooldown) {
+	await replyInfoEmbed(interaction, locale, {
+		titleKey: "general.message_cooldown_title",
+		descriptionKey: "general.bot_command_cooldown",
+		descriptionVars: {
+			seconds: cooldownResult.remainingSeconds.toString(),
+			botName: tomoriState.tomori_nickname,
+		},
+		footerKey: getCooldownTypeFooterKey(cooldownResult.cooldownType),
+	});
+	return;
+}
+
+// ... generate response ...
+
+// Set cooldown after successful response
+await setCooldown(
+	tomoriState.config.cooldown_type,
+	interaction.guild.id,
+	interaction.user.id,
+	interaction.channel.id,
+	tomoriState.config.cooldown_length
+);
+```
+
+**Behavior:**
+- Message trigger and `/bot respond` **share the same cooldown**
+- If user triggers bot via message, `/bot respond` is also on cooldown (and vice versa)
+- Manager exemptions apply to both (except STRICT_SERVER_WIDE mode)
+- Channel whitelist rules apply to both
+
+**Implementation Checklist:**
+
+- [ ] **Create Shared Utilities**
+  - [ ] Create `src/utils/db/cooldownManager.ts`
+  - [ ] Implement `checkCooldown()` with new schema
+  - [ ] Implement `setCooldown()` with new schema
+  - [ ] Add JSDoc comments explaining shared usage
+
+- [ ] **Refactor Message Trigger Handler**
+  - [ ] Update `src/events/messageCreate/tomoriChat.ts` to use `cooldownManager`
+  - [ ] Remove old `checkMessageTriggerCooldown()` calls
+  - [ ] Remove old `setMessageTriggerCooldown()` calls
+  - [ ] Test message trigger cooldowns still work
+
+- [ ] **Update `/bot` Commands**
+  - [ ] Add cooldown check to `src/commands/bot/respond.ts`
+  - [ ] Add cooldown set to `src/commands/bot/respond.ts`
+  - [ ] Update locale keys for bot command cooldown messages
+  - [ ] Test `/bot respond` cooldowns work
+
+- [ ] **Command File Migration**
+  - [ ] Move `src/commands/config/cooldown.ts` → `src/commands/serverconfig/cooldown/triggers.ts`
+  - [ ] Update locale keys in all locales (`en-US.ts`, `ja.ts`)
+  - [ ] Update command registration (automatic via folder structure)
+  - [ ] Test new command path works
+
+- [ ] **Deprecation**
+  - [ ] Delete old `src/utils/db/messageCooldown.ts` (after migration)
+  - [ ] Clean up unused imports
+
+- [ ] **Testing**
+  - [ ] Verify message trigger cooldowns work after refactor
+  - [ ] Verify `/bot respond` cooldowns work
+  - [ ] Verify shared cooldown pool (trigger message → `/bot respond` blocked)
+  - [ ] Verify manager exemptions apply to both
+  - [ ] Verify whitelist rules apply to both
+
+---
+
+### 🚧 Phase 3: Image Generation Quota System
+
+**Status:** 📋 Planned (independent of Phases 1-2, can be implemented in parallel)
+
+**Goal:** Add usage-based quotas for image generation with per-user and server-wide limits.
+
+**Motivation:**
+- Image generation is expensive (API costs, compute resources)
+- Need to prevent abuse and manage costs
+- Quotas provide fairer long-term limits than short cooldowns
+- Rolling window reset is more flexible than fixed schedules
+
+**System Design:**
+
+#### 3.1: Quota vs Cooldown Distinction
+
+| Feature | Cooldowns | Quotas |
+|---------|-----------|--------|
+| **Type** | Time-based rate limiting | Usage-based limiting |
+| **Duration** | Short-lived (5-60 seconds) | Long-lived (days/weeks) |
+| **Reset** | Automatic expiry | Scheduled reset on timer |
+| **Use Case** | Spam prevention | Resource management |
+| **Table Type** | UNLOGGED (ephemeral) | Logged (persistent) |
+
+**Quotas are fundamentally different from cooldowns and require separate infrastructure.**
+
+#### 3.2: Database Schema
+
+**Image Quota Tracking Table:**
+```sql
+CREATE TABLE IF NOT EXISTS image_quotas (
+	quota_id SERIAL PRIMARY KEY,
+	server_disc_id TEXT NOT NULL,
+	user_disc_id TEXT,                        -- NULL for server-wide quotas
+	usage_count INT NOT NULL DEFAULT 0,
+	first_usage_timestamp BIGINT,            -- When first image generated (starts timer)
+	last_reset_timestamp BIGINT,             -- When quota last reset
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+	CONSTRAINT uq_image_quota_scope UNIQUE (server_disc_id, user_disc_id)
+);
+
+-- Index for cleanup queries
+CREATE INDEX IF NOT EXISTS idx_image_quotas_reset
+	ON image_quotas(first_usage_timestamp)
+	WHERE first_usage_timestamp IS NOT NULL;
+```
+
+**Image Quota Configuration Table:**
+```sql
+CREATE TABLE IF NOT EXISTS image_quota_configs (
+	server_disc_id TEXT PRIMARY KEY,
+	per_user_quota INT NOT NULL,              -- Max images per user per period
+	per_user_reset_days INT NOT NULL,         -- Days before user quota resets
+	server_quota INT NOT NULL,                -- Max images for entire server per period
+	server_reset_days INT NOT NULL,           -- Days before server quota resets
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+	FOREIGN KEY (server_disc_id) REFERENCES servers(server_disc_id) ON DELETE CASCADE
+);
+```
+
+**Example Data:**
+```sql
+-- Server 999888777 config: 10 images/user/week, 100 images/server/month
+INSERT INTO image_quota_configs (server_disc_id, per_user_quota, per_user_reset_days, server_quota, server_reset_days)
+VALUES ('999888777', 10, 7, 100, 30);
+
+-- User 123456789 usage tracking
+INSERT INTO image_quotas (server_disc_id, user_disc_id, usage_count, first_usage_timestamp)
+VALUES ('999888777', '123456789', 3, 1738800000000);  -- 3 images used, timer started
+
+-- Server-wide usage tracking (user_disc_id = NULL)
+INSERT INTO image_quotas (server_disc_id, user_disc_id, usage_count, first_usage_timestamp)
+VALUES ('999888777', NULL, 45, 1738600000000);  -- 45 images used server-wide
+```
+
+#### 3.3: Rolling Window Reset Logic
+
+**Reset Behavior:**
+- Timer starts on **first usage** (not when quota is configured)
+- Quota resets **N days after first usage**
+- After reset, timer restarts on next usage (rolling window)
+
+**Example Flow (7-day reset):**
+```
+Day 1, 10:00 AM: User generates first image
+  - first_usage_timestamp = Day 1, 10:00 AM
+  - usage_count = 1
+  - Reset scheduled for Day 8, 10:00 AM
+
+Day 3, 2:00 PM: User generates 5 more images
+  - usage_count = 6
+  - Reset still scheduled for Day 8, 10:00 AM
+
+Day 8, 10:00 AM: Quota resets (via cleanup job)
+  - usage_count = 0
+  - first_usage_timestamp = NULL
+  - last_reset_timestamp = Day 8, 10:00 AM
+
+Day 10, 5:00 PM: User generates image
+  - first_usage_timestamp = Day 10, 5:00 PM (NEW timer)
+  - usage_count = 1
+  - Reset scheduled for Day 17, 5:00 PM
+```
+
+**Advantages:**
+- Fair for all users (timer starts on their first usage)
+- No quota hoarding (can't wait until reset to use all at once)
+- More forgiving than fixed schedules
+
+#### 3.4: Quota Check & Update Logic
+
+**Check Quota Before Image Generation:**
+```typescript
+// src/utils/quota/imageQuotaManager.ts (NEW FILE)
+
+/**
+ * Check if user and server have remaining image quota.
+ * Returns { allowed: boolean, reason?: string }
+ */
+export async function checkImageQuota(
+	serverId: string,
+	userId: string
+): Promise<QuotaCheckResult> {
+	// Load config
+	const [config] = await sql`
+		SELECT * FROM image_quota_configs
+		WHERE server_disc_id = ${serverId}
+	`;
+
+	if (!config) {
+		// No quota configured, allow unlimited
+		return { allowed: true };
+	}
+
+	// Check user quota
+	const [userQuota] = await sql`
+		SELECT * FROM image_quotas
+		WHERE server_disc_id = ${serverId}
+		AND user_disc_id = ${userId}
+	`;
+
+	if (userQuota && userQuota.usage_count >= config.per_user_quota) {
+		// User quota exceeded
+		const resetTime = userQuota.first_usage_timestamp + (config.per_user_reset_days * 24 * 60 * 60 * 1000);
+		const remainingMs = resetTime - Date.now();
+		const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+
+		return {
+			allowed: false,
+			reason: 'user_quota_exceeded',
+			remainingDays,
+			quotaLimit: config.per_user_quota,
+		};
+	}
+
+	// Check server quota
+	const [serverQuota] = await sql`
+		SELECT * FROM image_quotas
+		WHERE server_disc_id = ${serverId}
+		AND user_disc_id IS NULL
+	`;
+
+	if (serverQuota && serverQuota.usage_count >= config.server_quota) {
+		// Server quota exceeded
+		const resetTime = serverQuota.first_usage_timestamp + (config.server_reset_days * 24 * 60 * 60 * 1000);
+		const remainingMs = resetTime - Date.now();
+		const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+
+		return {
+			allowed: false,
+			reason: 'server_quota_exceeded',
+			remainingDays,
+			quotaLimit: config.server_quota,
+		};
+	}
+
+	return { allowed: true };
+}
+```
+
+**Increment Quota After Image Generation:**
+```typescript
+/**
+ * Increment usage count for user and server quotas.
+ * Uses atomic increment to prevent race conditions.
+ */
+export async function incrementImageQuota(
+	serverId: string,
+	userId: string
+): Promise<void> {
+	const now = Date.now();
+
+	// Increment user quota (with UPSERT)
+	await sql`
+		INSERT INTO image_quotas (server_disc_id, user_disc_id, usage_count, first_usage_timestamp)
+		VALUES (${serverId}, ${userId}, 1, ${now})
+		ON CONFLICT (server_disc_id, user_disc_id)
+		DO UPDATE SET
+			usage_count = image_quotas.usage_count + 1,
+			first_usage_timestamp = COALESCE(image_quotas.first_usage_timestamp, ${now}),
+			updated_at = CURRENT_TIMESTAMP
+	`;
+
+	// Increment server quota (atomic, prevents race conditions)
+	await sql`
+		INSERT INTO image_quotas (server_disc_id, user_disc_id, usage_count, first_usage_timestamp)
+		VALUES (${serverId}, NULL, 1, ${now})
+		ON CONFLICT (server_disc_id, user_disc_id)
+		DO UPDATE SET
+			usage_count = image_quotas.usage_count + 1,
+			first_usage_timestamp = COALESCE(image_quotas.first_usage_timestamp, ${now}),
+			updated_at = CURRENT_TIMESTAMP
+	`;
+}
+```
+
+**Concurrency Safety:**
+- `ON CONFLICT DO UPDATE SET usage_count = usage_count + 1` is atomic
+- Multiple concurrent image generations won't cause race conditions
+- `COALESCE(first_usage_timestamp, ${now})` ensures timer only set once
+
+#### 3.5: Quota Reset Cleanup Job
+
+**Function:**
+```sql
+CREATE OR REPLACE FUNCTION cleanup_expired_image_quotas()
+RETURNS INTEGER AS $$
+DECLARE
+	deleted_count INTEGER := 0;
+	reset_count INTEGER := 0;
+BEGIN
+	-- Reset user quotas where reset period has passed
+	UPDATE image_quotas uq
+	SET
+		usage_count = 0,
+		first_usage_timestamp = NULL,
+		last_reset_timestamp = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000,
+		updated_at = CURRENT_TIMESTAMP
+	FROM image_quota_configs cfg
+	WHERE uq.server_disc_id = cfg.server_disc_id
+	AND uq.user_disc_id IS NOT NULL
+	AND uq.first_usage_timestamp IS NOT NULL
+	AND uq.first_usage_timestamp + (cfg.per_user_reset_days * 24 * 60 * 60 * 1000) < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
+
+	GET DIAGNOSTICS reset_count = ROW_COUNT;
+
+	-- Reset server quotas where reset period has passed
+	UPDATE image_quotas uq
+	SET
+		usage_count = 0,
+		first_usage_timestamp = NULL,
+		last_reset_timestamp = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000,
+		updated_at = CURRENT_TIMESTAMP
+	FROM image_quota_configs cfg
+	WHERE uq.server_disc_id = cfg.server_disc_id
+	AND uq.user_disc_id IS NULL
+	AND uq.first_usage_timestamp IS NOT NULL
+	AND uq.first_usage_timestamp + (cfg.server_reset_days * 24 * 60 * 60 * 1000) < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
+
+	GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+	RETURN reset_count + deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**pg_cron Schedule:**
+```sql
+-- Run daily at midnight
+INSERT INTO cron.job (jobname, schedule, command, nodename, nodeport, database, username)
+VALUES (
+	'tomoribot_image_quota_reset',
+	'0 0 * * *',  -- Daily at midnight
+	'SELECT cleanup_expired_image_quotas();',
+	'localhost',
+	5432,
+	current_database(),
+	current_user
+)
+ON CONFLICT (jobname) DO UPDATE SET schedule = EXCLUDED.schedule;
+```
+
+#### 3.6: New Command: `/server quota imagegen`
+
+**Command Definition:**
+```typescript
+// src/commands/serverconfig/quota/imagegen.ts
+
+{
+	name: "imagegen",
+	description: "Configure image generation quotas",
+	options: [
+		{
+			name: "per_user_quota",
+			description: "Maximum images per user per period (1-1000)",
+			type: ApplicationCommandOptionType.Integer,
+			required: true,
+			min_value: 1,
+			max_value: 1000,
+		},
+		{
+			name: "per_user_reset_days",
+			description: "Days before user quota resets (1-365)",
+			type: ApplicationCommandOptionType.Integer,
+			required: true,
+			min_value: 1,
+			max_value: 365,
+		},
+		{
+			name: "server_quota",
+			description: "Maximum images for entire server per period (1-10000)",
+			type: ApplicationCommandOptionType.Integer,
+			required: true,
+			min_value: 1,
+			max_value: 10000,
+		},
+		{
+			name: "server_reset_days",
+			description: "Days before server quota resets (1-365)",
+			type: ApplicationCommandOptionType.Integer,
+			required: true,
+			min_value: 1,
+			max_value: 365,
+		},
+	],
+}
+```
+
+**Execution:**
+```typescript
+export async function execute(interaction: ChatInputCommandInteraction) {
+	const serverId = interaction.guild?.id;
+	if (!serverId) return;
+
+	const perUserQuota = interaction.options.getInteger("per_user_quota", true);
+	const perUserResetDays = interaction.options.getInteger("per_user_reset_days", true);
+	const serverQuota = interaction.options.getInteger("server_quota", true);
+	const serverResetDays = interaction.options.getInteger("server_reset_days", true);
+
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+	// Upsert configuration
+	await sql`
+		INSERT INTO image_quota_configs (
+			server_disc_id,
+			per_user_quota,
+			per_user_reset_days,
+			server_quota,
+			server_reset_days
+		)
+		VALUES (${serverId}, ${perUserQuota}, ${perUserResetDays}, ${serverQuota}, ${serverResetDays})
+		ON CONFLICT (server_disc_id)
+		DO UPDATE SET
+			per_user_quota = ${perUserQuota},
+			per_user_reset_days = ${perUserResetDays},
+			server_quota = ${serverQuota},
+			server_reset_days = ${serverResetDays},
+			updated_at = CURRENT_TIMESTAMP
+	`;
+
+	await replyInfoEmbed(interaction, locale, {
+		titleKey: "server.quota.imagegen.title",
+		descriptionKey: "server.quota.imagegen.success",
+		descriptionVars: {
+			perUserQuota: perUserQuota.toString(),
+			perUserResetDays: perUserResetDays.toString(),
+			serverQuota: serverQuota.toString(),
+			serverResetDays: serverResetDays.toString(),
+		},
+	});
+}
+```
+
+#### 3.7: Quota Status Command (Optional)
+
+**Command:** `/status imagequota`
+
+Shows current quota usage and remaining quota:
+```
+📊 Image Generation Quota Status
+
+👤 Your Usage: 3 / 10 images
+⏱️ Resets in: 4 days
+
+🌐 Server Usage: 45 / 100 images
+⏱️ Resets in: 12 days
+```
+
+#### 3.8: Integration with Image Generation
+
+**Update Image Generation Tool:**
+```typescript
+// src/tools/functionCalls/imageGenerationTool.ts
+
+import { checkImageQuota, incrementImageQuota } from "@/utils/quota/imageQuotaManager";
+
+export async function execute(...) {
+	// Check quota before generating
+	const quotaCheck = await checkImageQuota(serverId, userId);
+
+	if (!quotaCheck.allowed) {
+		if (quotaCheck.reason === 'user_quota_exceeded') {
+			return {
+				error: `You've reached your image generation quota (${quotaCheck.quotaLimit} images). Quota resets in ${quotaCheck.remainingDays} days.`,
+			};
+		}
+
+		if (quotaCheck.reason === 'server_quota_exceeded') {
+			return {
+				error: `This server has reached its image generation quota (${quotaCheck.quotaLimit} images). Quota resets in ${quotaCheck.remainingDays} days.`,
+			};
+		}
+	}
+
+	// Generate image
+	const imageUrl = await generateImage(prompt);
+
+	// Increment quota after success
+	await incrementImageQuota(serverId, userId);
+
+	return { imageUrl };
+}
+```
+
+**Update `/generate image` Command:**
+```typescript
+// src/commands/bot/generate.ts
+
+export async function execute(interaction: ChatInputCommandInteraction) {
+	// Same quota check as tool
+	const quotaCheck = await checkImageQuota(serverId, userId);
+
+	if (!quotaCheck.allowed) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "bot.generate.quota_exceeded_title",
+			descriptionKey: quotaCheck.reason === 'user_quota_exceeded'
+				? "bot.generate.user_quota_exceeded"
+				: "bot.generate.server_quota_exceeded",
+			descriptionVars: {
+				limit: quotaCheck.quotaLimit.toString(),
+				days: quotaCheck.remainingDays.toString(),
+			},
+		});
+		return;
+	}
+
+	// ... generate image ...
+
+	await incrementImageQuota(serverId, userId);
+}
+```
+
+#### 3.9: Implementation Checklist
+
+- [ ] **Database Schema**
+  - [ ] Create `image_quotas` table
+  - [ ] Create `image_quota_configs` table
+  - [ ] Create `cleanup_expired_image_quotas()` function
+  - [ ] Add pg_cron job for daily cleanup
+  - [ ] Test schema in development environment
+
+- [ ] **Quota Manager Utility**
+  - [ ] Create `src/utils/quota/imageQuotaManager.ts`
+  - [ ] Implement `checkImageQuota()`
+  - [ ] Implement `incrementImageQuota()`
+  - [ ] Add JSDoc comments
+  - [ ] Add unit tests for atomic increment
+
+- [ ] **Configuration Command**
+  - [ ] Create `src/commands/serverconfig/quota/imagegen.ts`
+  - [ ] Add locale keys for all languages
+  - [ ] Add validation for quota values
+  - [ ] Test command in development
+
+- [ ] **Status Command (Optional)**
+  - [ ] Create `src/commands/status/imagequota.ts`
+  - [ ] Add locale keys for all languages
+  - [ ] Show user and server usage
+  - [ ] Show remaining time until reset
+
+- [ ] **Image Generation Integration**
+  - [ ] Update `src/tools/functionCalls/imageGenerationTool.ts` to check quotas
+  - [ ] Update `src/commands/bot/generate.ts` to check quotas
+  - [ ] Add quota increment after successful generation
+  - [ ] Add user-facing error messages for quota exceeded
+
+- [ ] **Localization**
+  - [ ] Add quota configuration keys (`server.quota.imagegen.*`)
+  - [ ] Add quota exceeded error keys (`bot.generate.quota_exceeded_*`)
+  - [ ] Add quota status keys (`status.imagequota.*`)
+  - [ ] Translate to all supported languages
+
+- [ ] **Testing**
+  - [ ] Configure quota via `/server quota imagegen`
+  - [ ] Generate images up to user quota limit
+  - [ ] Verify user quota exceeded message
+  - [ ] Generate images up to server quota limit
+  - [ ] Verify server quota exceeded message
+  - [ ] Wait for reset period (or manually reset in DB)
+  - [ ] Verify quotas reset correctly
+  - [ ] Test concurrent image generation (race condition test)
+  - [ ] Verify atomic increment works correctly
+
+- [ ] **Documentation**
+  - [ ] Move this roadmap content to main documentation sections
+  - [ ] Document quota system in `19_CooldownSystem.md` (or create `20_QuotaSystem.md`)
+  - [ ] Add quota configuration to `.env.example` (if any env vars needed)
+  - [ ] Update README with quota command examples
+
+#### 3.10: Design Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Separate Table** | ✅ Yes | Quotas are persistent, cooldowns are ephemeral |
+| **Reset Logic** | Rolling window | Fairer, prevents quota hoarding |
+| **Concurrency** | Atomic increment | Prevents race conditions with multiple concurrent generations |
+| **Cleanup Frequency** | Daily at midnight | Sufficient for day-based reset periods |
+| **Quota Defaults** | No defaults | Require explicit configuration per server |
+| **Status Command** | Optional | Nice-to-have for user transparency |
+
+---
+
+### 🎯 Implementation Priority
+
+**Recommended Order:**
+
+1. **Phase 1: Cooldown Schema Refactor** (foundation for Phase 2)
+   - Simplifies code for future changes
+   - Relatively low risk (cooldowns regenerate quickly)
+   - Estimated time: 2-3 hours
+
+2. **Phase 2: Command Reorganization** (depends on Phase 1)
+   - Improves command discoverability
+   - Extends cooldowns to `/bot` commands
+   - Estimated time: 3-4 hours
+
+3. **Phase 3: Image Quota System** (independent, can be parallel)
+   - Adds new functionality
+   - More complex (quota tracking, reset logic)
+   - Estimated time: 6-8 hours
+
+**Total Estimated Time:** 11-15 hours
+
+---
+
+### 📝 Notes for Implementers
+
+- **Cache Invalidation:** After Phase 2 command reorganization, update cache invalidation calls to match new command structure
+- **Locale Key Migration:** Use search/replace for locale key updates (e.g., `config.cooldown.` → `server.cooldown.triggers.`)
+- **Testing Strategy:** Test each phase independently before moving to next
+- **Rollback Plan:** Phase 1 can be rolled back by restoring old schema (cooldowns regenerate). Phases 2-3 have no rollback risk (additive changes)
+- **User Communication:** Announce quota system introduction to server admins before enabling (manage expectations on image generation limits)
