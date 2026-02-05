@@ -656,6 +656,7 @@ export default {
 				description: `Import a personality from a PNG file`,
 				file_description: `PNG file containing persona data`,
 				type_description: `Import as main persona or alter persona`,
+				triggers_description: `Optional extra triggers, comma-separated ("," or "、")`,
 				type_choice_main: `Main Persona (replaces current persona)`,
 				type_choice_alter: `Alter Persona`,
 				confirmation_description: `WARNING: This will REPLACE your current personality settings. Continue?`,
@@ -771,7 +772,8 @@ export default {
 				modal: {
 					title: `Generate AI Personality`,
 					character_name_label: `Character Name`,
-					character_name_placeholder: `Name of the character`,
+					character_name_description: `Comma-separated names ("," or "、"): all become trigger words; first becomes display name.`,
+					character_name_placeholder: `e.g. Hatsune Miku, Miku, 初音ミク`,
 					character_info_label: `Character Info & Speech Examples`,
 					character_info_description: `Describe the character and how they speak`,
 					character_info_placeholder: `Personality, backstory, speech style, example phrases, etc.`,
@@ -838,8 +840,8 @@ export default {
 				modal: {
 					title: `Create Persona`,
 					character_name_label: `Character Name`,
-					character_name_description: `Tip: Use /persona generate instead for better results`,
-					character_name_placeholder: `Enter character name`,
+					character_name_description: `Comma-separated names ("," or "、"): all become trigger words; first becomes display name.`,
+					character_name_placeholder: `e.g. Hatsune Miku, Miku, 初音ミク`,
 					character_desc_label: `Character Description`,
 					character_desc_placeholder: `Describe your character (personality, appearance, backstory, etc.)`,
 					example_user_label: `Example User Message`,

@@ -37,6 +37,29 @@ import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
  */
 const MAX_FILE_SIZE = IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB * 1024 * 1024;
 
+function parseCommaSeparatedTriggers(input: string): string[] {
+	const parsedTriggers = input
+		.split(/[,\u3001]/)
+		.map((trigger) => trigger.trim())
+		.filter((trigger) => trigger.length > 0);
+
+	return dedupeTriggers(parsedTriggers);
+}
+
+function dedupeTriggers(triggers: string[]): string[] {
+	const uniqueTriggers: string[] = [];
+	const seenTriggers = new Set<string>();
+	for (const trigger of triggers) {
+		const normalizedTrigger = trigger.toLowerCase();
+		if (!seenTriggers.has(normalizedTrigger)) {
+			seenTriggers.add(normalizedTrigger);
+			uniqueTriggers.push(trigger);
+		}
+	}
+
+	return uniqueTriggers;
+}
+
 /**
  * Helper function to localize error messages from utility functions
  * Handles both simple locale keys and keys with pipe-separated variables
@@ -161,6 +184,14 @@ export const configureSubcommand = (
 						value: "alter",
 					},
 				),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("triggers")
+				.setDescription(
+					localizer("en-US", "commands.persona.import.triggers_description"),
+				)
+				.setRequired(false),
 		);
 
 /**
@@ -180,6 +211,7 @@ export async function execute(
 	try {
 		// 1. Get import type (main or alter)
 		const importType = interaction.options.getString("type", true);
+		const additionalTriggersInput = interaction.options.getString("triggers");
 
 		// Alter personas can only be imported in guilds (not DMs)
 		if (importType === "alter" && !interaction.guild) {
@@ -428,16 +460,23 @@ export async function execute(
 			return;
 		}
 
+		const presetDataFromFile = validation.data as PresetExportData;
+		const additionalTriggers = additionalTriggersInput
+			? parseCommaSeparatedTriggers(additionalTriggersInput)
+			: [];
+		presetDataFromFile.trigger_words = dedupeTriggers(
+			[...presetDataFromFile.trigger_words, ...additionalTriggers].map((trigger) =>
+				trigger.trim(),
+			),
+		);
+
 		// 11. Branch logic based on import type
 		const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 		const isDM = !interaction.guild;
 
 		if (importType === "main") {
 			// Main persona import: replace existing main persona
-			const importResult = await importPresetData(
-				serverDiscId,
-				validation.data as PresetExportData,
-			);
+			const importResult = await importPresetData(serverDiscId, presetDataFromFile);
 
 			if (!importResult.success) {
 				await interaction.editReply({
@@ -692,7 +731,7 @@ export async function execute(
 			);
 		} else {
 			// Alter persona import: add new alter persona
-			const presetData = validation.data as PresetExportData;
+			const presetData = presetDataFromFile;
 
 			// 11a. Load all existing personas and collect their trigger words
 			const allPersonas = await loadAllPersonasForServer(serverDiscId);

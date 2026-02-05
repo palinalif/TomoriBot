@@ -23,6 +23,7 @@ import {
 	loadTomoriState,
 	loadUniqueProviders,
 	loadPresetOptionsByLocale,
+	loadDefaultModelForProvider,
 } from "@/utils/db/dbRead";
 import { getCachedPresetAvatar } from "@/utils/image/avatarHelper";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
@@ -713,6 +714,13 @@ export async function execute(
 				localizer(locale, "commands.config.setup.humanizer_option_heavy_label"),
 			];
 			const humanizerLabel = humanizerLabels[humanizerDegree] || "Unknown";
+			let configuredModelName = customCapabilitiesResult?.modelName || null;
+			if (!configuredModelName) {
+				const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
+				if (defaultModel) {
+					configuredModelName = defaultModel.llm_codename;
+				}
+			}
 
 			const successFields = [
 				{
@@ -749,6 +757,9 @@ export async function execute(
 				descriptionKey: isDMChannel
 					? "commands.config.setup.success_desc_dm"
 					: "commands.config.setup.success_desc",
+				descriptionVars: configuredModelName
+					? { model_name: configuredModelName }
+					: undefined,
 				color:
 					avatarUpdateFailed || isDMChannel
 						? ColorCode.WARN

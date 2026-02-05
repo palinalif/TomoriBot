@@ -734,7 +734,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		const parts: string[] = [];
 		for (const [name, schema] of Object.entries(parameters.properties)) {
-			let typeLabel = schema.type || "string";
+			let typeLabel: string = schema.type || "string";
 			if (typeLabel === "array" && schema.items?.type) {
 				typeLabel = `array<${schema.items.type}>`;
 			}

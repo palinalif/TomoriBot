@@ -52,6 +52,25 @@ const EXAMPLE_USER_ID = "example_user";
 const EXAMPLE_BOT_ID = "example_bot";
 const FILE_UPLOAD_ID = "avatar_image";
 
+function parsePersonaNameInput(input: string): string[] {
+	const parsedNames = input
+		.split(/[,\u3001]/)
+		.map((name) => name.trim())
+		.filter((name) => name.length > 0);
+
+	const uniqueNames: string[] = [];
+	const seenNames = new Set<string>();
+	for (const name of parsedNames) {
+		const normalizedName = name.toLowerCase();
+		if (!seenNames.has(normalizedName)) {
+			seenNames.add(normalizedName);
+			uniqueNames.push(name);
+		}
+	}
+
+	return uniqueNames;
+}
+
 /**
  * Configure the 'create' subcommand
  */
@@ -155,16 +174,28 @@ export async function execute(
 		}
 
 		const modalSubmitInteraction = modalResult.interaction;
-		const characterName = modalResult.values?.[CHARACTER_NAME_ID];
+		const characterNameInput = modalResult.values?.[CHARACTER_NAME_ID];
 		const characterDesc = modalResult.values?.[CHARACTER_DESC_ID];
 		const exampleUser = modalResult.values?.[EXAMPLE_USER_ID];
 		const exampleBot = modalResult.values?.[EXAMPLE_BOT_ID];
 
 		// Safety checks (only character name and description are required)
-		if (!modalSubmitInteraction || !characterName || !characterDesc) {
+		if (!modalSubmitInteraction || !characterNameInput || !characterDesc) {
 			log.error("Modal result unexpectedly missing required values");
 			return;
 		}
+
+		const parsedNames = parsePersonaNameInput(characterNameInput);
+		if (parsedNames.length === 0) {
+			log.error("Character name input did not contain any valid name values");
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		const characterName = parsedNames[0];
 
 		// 5. Validate content lengths (server-side validation, modal maxLength can be bypassed)
 		const descValidation = validateAttribute(characterDesc);
@@ -301,7 +332,7 @@ export async function execute(
 							locale,
 							"commands.persona.create.field_character_name",
 						),
-						value: characterName.substring(0, 1024) || "N/A",
+						value: characterNameInput.substring(0, 1024) || "N/A",
 						inline: false,
 					},
 					{
@@ -410,7 +441,7 @@ export async function execute(
 			sample_dialogues_in: hasSampleDialogue ? [exampleUser!] : [],
 			// biome-ignore lint/style/noNonNullAssertion: Both or neither has to exist
 			sample_dialogues_out: hasSampleDialogue ? [exampleBot!] : [],
-			trigger_words: [],
+			trigger_words: parsedNames,
 		};
 
 		// 7. Validate preset data against schema

@@ -657,6 +657,7 @@ export default {
 				description: `PNGファイルから人格をインポートする`,
 				file_description: `ペルソナデータを含むPNGファイル`,
 				type_description: `メインペルソナまたはオルタペルソナとしてインポート`,
+				triggers_description: `任意の追加トリガー（カンマ区切り: "," または "、"）`,
 				type_choice_main: `メインペルソナ（現在の人格を置き換え）`,
 				type_choice_alter: `オルタペルソナ`,
 				confirmation_description: `警告：現在の人格設定が置き換えられます。続行しますか？`,
@@ -772,7 +773,8 @@ export default {
 				modal: {
 					title: `AI人格生成`,
 					character_name_label: `キャラクター名`,
-					character_name_placeholder: `キャラクターの名前`,
+					character_name_description: `名前をカンマ（"," または "、"）区切りで入力してください。すべてトリガーワードとして追加され、先頭の名前が表示名になります。`,
+					character_name_placeholder: `例: 初音ミク, ミク, Hatsune Miku`,
 					character_info_label: `キャラクター情報と話し方の例`,
 					character_info_description: `キャラクターとその話し方を説明してください`,
 					character_info_placeholder: `性格、背景、話し方、例示のフレーズなど`,
@@ -838,8 +840,8 @@ export default {
 				modal: {
 					title: `ペルソナ作成`,
 					character_name_label: `キャラクター名`,
-					character_name_description: `ヒント: より良い結果を得るには、/persona generate を使用してください`,
-					character_name_placeholder: `キャラクター名を入力`,
+					character_name_description: `名前をカンマ（"," または "、"）区切りで入力してください。すべてトリガーワードとして追加され、先頭の名前が表示名になります。`,
+					character_name_placeholder: `例: 初音ミク, ミク, Hatsune Miku`,
 					character_desc_label: `キャラクター説明`,
 					character_desc_placeholder: `キャラクターを説明してください（性格、外見、背景など）`,
 					example_user_label: `ユーザーメッセージの例`,

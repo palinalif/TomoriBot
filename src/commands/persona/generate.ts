@@ -53,6 +53,25 @@ const WEB_SEARCH_ID = "web_search";
 const ADDITIONAL_INST_ID = "additional_inst";
 const FILE_UPLOAD_ID = "avatar_image";
 
+function parsePersonaNameInput(input: string): string[] {
+	const parsedNames = input
+		.split(/[,\u3001]/)
+		.map((name) => name.trim())
+		.filter((name) => name.length > 0);
+
+	const uniqueNames: string[] = [];
+	const seenNames = new Set<string>();
+	for (const name of parsedNames) {
+		const normalizedName = name.toLowerCase();
+		if (!seenNames.has(normalizedName)) {
+			seenNames.add(normalizedName);
+			uniqueNames.push(name);
+		}
+	}
+
+	return uniqueNames;
+}
+
 /**
  * Configure the 'generate' subcommand
  */
@@ -243,6 +262,8 @@ export async function execute(
 			{
 				customId: CHARACTER_NAME_ID,
 				labelKey: "commands.persona.generate.modal.character_name_label",
+				descriptionKey:
+					"commands.persona.generate.modal.character_name_description",
 				placeholder:
 					"commands.persona.generate.modal.character_name_placeholder",
 				required: true,
@@ -322,7 +343,7 @@ export async function execute(
 		}
 
 		const modalSubmitInteraction = modalResult.interaction;
-		const characterName = modalResult.values?.[CHARACTER_NAME_ID];
+		const characterNameInput = modalResult.values?.[CHARACTER_NAME_ID];
 		const characterInfo = modalResult.values?.[CHARACTER_INFO_ID];
 		const webSearch = modalResult.values?.[WEB_SEARCH_ID];
 		const additionalInst = modalResult.values?.[ADDITIONAL_INST_ID];
@@ -330,13 +351,24 @@ export async function execute(
 		// Safety checks
 		if (
 			!modalSubmitInteraction ||
-			!characterName ||
+			!characterNameInput ||
 			!characterInfo ||
 			!webSearch
 		) {
 			log.error("Modal result unexpectedly missing values");
 			return;
 		}
+		const parsedNames = parsePersonaNameInput(characterNameInput);
+		if (parsedNames.length === 0) {
+			log.error("Character name input did not contain any valid name values");
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		const characterName = parsedNames[0];
 
 		// 8. Capture optional image attachment and prep snapshot attachment
 		const imageAttachment = modalResult.attachments?.[FILE_UPLOAD_ID];
@@ -346,7 +378,7 @@ export async function execute(
 
 		const getInputAttachment = () =>
 			buildGenerationInputAttachment({
-				characterName,
+				characterName: characterNameInput,
 				characterInfo,
 				webSearch,
 				additionalInstructions: additionalInst,
@@ -404,7 +436,7 @@ export async function execute(
 							locale,
 							"commands.persona.generate.field_character_name",
 						),
-						value: characterName.substring(0, 1024) || "N/A",
+						value: characterNameInput.substring(0, 1024) || "N/A",
 						inline: false,
 					},
 					{
@@ -727,6 +759,9 @@ export async function execute(
 			});
 			return;
 		}
+
+		genResult.preset.tomori_nickname = characterName;
+		genResult.preset.trigger_words = parsedNames;
 
 		// 14. Validate generated data against schema
 		const validationResult = presetExportDataSchema.safeParse(genResult.preset);
