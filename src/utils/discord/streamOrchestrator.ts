@@ -1534,15 +1534,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				log.info(
 					`Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
 				);
-			} catch (discordError) {
-				// If webhook send fails, try fallback to regular bot message (only on first message)
-				if (
-					context.webhook &&
-					context.personaUsername &&
-					!state.hasRepliedToOriginalMessage
-				) {
-					// Recover stale/deleted webhook caches for alter personas before fallback.
+				} catch (discordError) {
+					// Recover stale/deleted webhook caches for alter personas.
+					// This applies to both first-send and mid-stream sends.
 					const shouldRecoverWebhook =
+						context.webhook &&
+						context.personaUsername &&
 						context.tomoriState.is_alter &&
 						context.personaUsername === context.tomoriState.tomori_nickname &&
 						isInvalidWebhookError(discordError);
@@ -1565,9 +1562,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 								const recreatedWebhook = recreatedWebhookResult.webhook;
 
 								if (recreatedWebhook) {
-									const recoveredThreadId = resolveWebhookThreadId(
-										context.channel,
-									);
+									const recoveredThreadId = resolveWebhookThreadId(context.channel);
 									await recreatedWebhook.send({
 										content,
 										username: context.personaUsername,
@@ -1597,47 +1592,53 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						}
 					}
 
-					log.warn(
-						"Stream Send: Webhook send failed, falling back to regular bot message",
-						discordError,
-					);
-
-					try {
-						// Try fallback to regular message
-						if (context.replyToMessage) {
-							await context.replyToMessage.reply({
-								content,
-								allowedMentions: { repliedUser: false },
-							});
-						} else {
-							await context.channel.send({ content });
-						}
-
-						state.hasRepliedToOriginalMessage = true;
-						state.messageSentCount++;
-						state.accumulatedText += content; // Track fallback sent text too
-
-						log.info(
-							"Stream Send: Successfully sent message via fallback after webhook failure",
+					// If webhook send fails, try fallback to regular bot message (only on first message)
+					if (
+						context.webhook &&
+						context.personaUsername &&
+						!state.hasRepliedToOriginalMessage
+					) {
+						log.warn(
+							"Stream Send: Webhook send failed, falling back to regular bot message",
+							discordError,
 						);
-						return;
-					} catch (fallbackError) {
-						// Log both errors
-						log.error(
-							"Stream Send: Both webhook and fallback failed",
-							fallbackError,
-							{
-								serverId: context.tomoriState?.server_id,
-								errorType: "StreamOrchestrator",
-								metadata: {
-									channelId: context.channel.id,
-									webhookError: String(discordError),
-									fallbackError: String(fallbackError),
+
+						try {
+							// Try fallback to regular message
+							if (context.replyToMessage) {
+								await context.replyToMessage.reply({
+									content,
+									allowedMentions: { repliedUser: false },
+								});
+							} else {
+								await context.channel.send({ content });
+							}
+
+							state.hasRepliedToOriginalMessage = true;
+							state.messageSentCount++;
+							state.accumulatedText += content; // Track fallback sent text too
+
+							log.info(
+								"Stream Send: Successfully sent message via fallback after webhook failure",
+							);
+							return;
+						} catch (fallbackError) {
+							// Log both errors
+							log.error(
+								"Stream Send: Both webhook and fallback failed",
+								fallbackError,
+								{
+									serverId: context.tomoriState?.server_id,
+									errorType: "StreamOrchestrator",
+									metadata: {
+										channelId: context.channel.id,
+										webhookError: String(discordError),
+										fallbackError: String(fallbackError),
+									},
 								},
-							},
-						);
+							);
+						}
 					}
-				}
 
 				// Original error logging and re-throw
 				log.error(

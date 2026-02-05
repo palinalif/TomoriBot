@@ -30,21 +30,21 @@ const COOLDOWN_TYPE_MAX = 4;
 const COOLDOWN_TYPE_DEFAULT = CooldownType.OFF;
 
 /**
- * Configure the subcommand for /config cooldown.
+ * Configure the subcommand for /server cooldown triggers.
  */
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("cooldown")
-		.setDescription(localizer("en-US", "commands.config.cooldown.description"))
+		.setName("triggers")
+		.setDescription(localizer("en-US", "commands.server.cooldown.triggers.description"))
 		.addIntegerOption((option) =>
 			option
 				.setName("cooldown_type")
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.cooldown.cooldown_type_description",
+						"commands.server.cooldown.triggers.cooldown_type_description",
 					),
 				)
 				.setRequired(true)
@@ -52,35 +52,35 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.cooldown.type.choice_off",
+							"commands.server.cooldown.triggers.type.choice_off",
 						),
 						value: CooldownType.OFF,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.cooldown.type.choice_per_user",
+							"commands.server.cooldown.triggers.type.choice_per_user",
 						),
 						value: CooldownType.PER_USER,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.cooldown.type.choice_per_channel",
+							"commands.server.cooldown.triggers.type.choice_per_channel",
 						),
 						value: CooldownType.PER_CHANNEL,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.cooldown.type.choice_server_wide",
+							"commands.server.cooldown.triggers.type.choice_server_wide",
 						),
 						value: CooldownType.SERVER_WIDE,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.cooldown.type.choice_strict_server_wide",
+							"commands.server.cooldown.triggers.type.choice_strict_server_wide",
 						),
 						value: CooldownType.STRICT_SERVER_WIDE,
 					},
@@ -92,7 +92,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.cooldown.cooldown_length_description",
+						"commands.server.cooldown.triggers.cooldown_length_description",
 					),
 				)
 				.setMinValue(MIN_LENGTH)
@@ -101,7 +101,7 @@ export const configureSubcommand = (
 		);
 
 /**
- * Configure cooldown type and length for message triggers in a single command.
+ * Configure cooldown type and length for message triggers and /bot commands.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -143,8 +143,8 @@ export async function execute(
 			cooldownTypeValue > COOLDOWN_TYPE_MAX
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.cooldown.invalid_type_title",
-				descriptionKey: "commands.config.cooldown.invalid_type_description",
+				titleKey: "commands.server.cooldown.triggers.invalid_type_title",
+				descriptionKey: "commands.server.cooldown.triggers.invalid_type_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -153,8 +153,8 @@ export async function execute(
 		// 4. Validate cooldown length
 		if (cooldownLength < MIN_LENGTH || cooldownLength > MAX_LENGTH) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.cooldown.invalid_length_title",
-				descriptionKey: "commands.config.cooldown.invalid_length_description",
+				titleKey: "commands.server.cooldown.triggers.invalid_length_title",
+				descriptionKey: "commands.server.cooldown.triggers.invalid_length_description",
 				descriptionVars: {
 					min: MIN_LENGTH.toString(),
 					max: MAX_LENGTH.toString(),
@@ -185,8 +185,8 @@ export async function execute(
 			cooldownLength === currentCooldownLength
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.cooldown.already_set_title",
-				descriptionKey: "commands.config.cooldown.already_set_description",
+				titleKey: "commands.server.cooldown.triggers.already_set_title",
+				descriptionKey: "commands.server.cooldown.triggers.already_set_description",
 				descriptionVars: {
 					type: getCooldownTypeLabel(locale, cooldownTypeValue),
 					length: cooldownLength.toString(),
@@ -212,7 +212,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config cooldown",
+					command: "server cooldown triggers",
 					cooldownTypeValue,
 					cooldownLength,
 					targetTable: "tomori_configs",
@@ -240,7 +240,7 @@ export async function execute(
 				serverId: tomoriState.server_id,
 				errorType: "SchemaValidationError",
 				metadata: {
-					command: "config cooldown",
+					command: "server cooldown triggers",
 					validationErrors: validatedConfig.error.flatten(),
 				},
 			};
@@ -265,11 +265,11 @@ export async function execute(
 		const isEnabled = cooldownTypeValue !== CooldownType.OFF;
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: isEnabled
-				? "commands.config.cooldown.success_title"
-				: "commands.config.cooldown.success_disabled_title",
+				? "commands.server.cooldown.triggers.success_title"
+				: "commands.server.cooldown.triggers.success_disabled_title",
 			descriptionKey: isEnabled
-				? "commands.config.cooldown.success_description"
-				: "commands.config.cooldown.success_disabled_description",
+				? "commands.server.cooldown.triggers.success_description"
+				: "commands.server.cooldown.triggers.success_disabled_description",
 			descriptionVars: {
 				type: getCooldownTypeLabel(locale, cooldownTypeValue),
 				length: cooldownLength.toString(),
@@ -284,12 +284,12 @@ export async function execute(
 			serverId: (await getCachedTomoriState(interaction.guild.id))?.server_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config cooldown",
+				command: "server cooldown triggers",
 				options: interaction.options?.data,
 			},
 		};
 		await log.error(
-			"Error in /config cooldown command",
+			"Error in /server cooldown triggers command",
 			error as Error,
 			context,
 		);
@@ -311,28 +311,28 @@ export async function execute(
 function getCooldownTypeLabel(locale: string, value: number): string {
 	switch (value) {
 		case CooldownType.OFF:
-			return localizer(locale, "commands.config.cooldown.type.choice_off");
+			return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
 		case CooldownType.PER_USER:
-			return localizer(locale, "commands.config.cooldown.type.choice_per_user");
+			return localizer(locale, "commands.server.cooldown.triggers.type.choice_per_user");
 		case CooldownType.PER_CHANNEL:
 			return localizer(
 				locale,
-				"commands.config.cooldown.type.choice_per_channel",
+				"commands.server.cooldown.triggers.type.choice_per_channel",
 			);
 		case CooldownType.SERVER_WIDE:
 			return localizer(
 				locale,
-				"commands.config.cooldown.type.choice_server_wide",
+				"commands.server.cooldown.triggers.type.choice_server_wide",
 			);
 		case CooldownType.STRICT_SERVER_WIDE:
 			return localizer(
 				locale,
-				"commands.config.cooldown.type.choice_strict_server_wide",
+				"commands.server.cooldown.triggers.type.choice_strict_server_wide",
 			);
 		default:
 			log.warn(
 				`Unexpected cooldown type value encountered in getCooldownTypeLabel: ${value}`,
 			);
-			return localizer(locale, "commands.config.cooldown.type.choice_off");
+			return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
 	}
 }

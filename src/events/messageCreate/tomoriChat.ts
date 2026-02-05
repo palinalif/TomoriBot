@@ -86,10 +86,10 @@ import {
 	checkServerRateLimit,
 } from "@/utils/security/rateLimiter";
 import {
-	checkMessageTriggerCooldown,
-	setMessageTriggerCooldown,
-	getCooldownTypeFooterKey,
-} from "@/utils/db/messageCooldown";
+	checkMessageTriggerCooldownWithWhitelist,
+	setMessageTriggerCooldownWithWhitelist,
+} from "@/utils/db/cooldownManager";
+import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { CooldownType } from "@/types/db/schema";
 
 // Constants
@@ -1076,9 +1076,12 @@ export default async function tomoriChat(
 						}
 
 						// Continue with cooldown check
-						const preQueueCooldownResult = await checkMessageTriggerCooldown(
-							message,
-							earlyTomoriState.config,
+						const preQueueCooldownResult = await checkMessageTriggerCooldownWithWhitelist(
+							guild?.id ?? message.author.id,
+							message.author.id,
+							message.channelId,
+							earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
+							message.member,
 						);
 						if (preQueueCooldownResult.isOnCooldown) {
 							// Show cooldown warning and don't queue
@@ -1811,9 +1814,12 @@ export default async function tomoriChat(
 
 			// 7. Check message trigger cooldown (skip for manual triggers and stop responses)
 			if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
-				const cooldownResult = await checkMessageTriggerCooldown(
-					message,
-					tomoriState.config,
+				const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
+					guild?.id ?? message.author.id,
+					message.author.id,
+					message.channelId,
+					tomoriState.config.cooldown_type ?? CooldownType.OFF,
+					message.member,
 				);
 				if (cooldownResult.isOnCooldown) {
 					// Send cooldown warning embed
@@ -1848,7 +1854,13 @@ export default async function tomoriChat(
 			// 8. Set message trigger cooldown (skip for manual triggers and stop responses)
 			// Set early to prevent race conditions with concurrent triggers
 			if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
-				await setMessageTriggerCooldown(message, tomoriState.config);
+				await setMessageTriggerCooldownWithWhitelist(
+					guild?.id ?? message.author.id,
+					message.author.id,
+					message.channelId,
+					tomoriState.config.cooldown_type ?? CooldownType.OFF,
+					tomoriState.config.cooldown_length ?? 5,
+				);
 			}
 
 			// 8.5. Multi-Persona: Determine which personas should respond

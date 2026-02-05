@@ -712,26 +712,71 @@ CREATE TABLE IF NOT EXISTS error_logs (
 -- Removed updated_at trigger for error_logs table (error logging disabled, table no longer actively used)
 DROP TRIGGER IF EXISTS update_error_logs_timestamp ON error_logs;
 
--- Unlogged table for command cooldowns
+-- ============================================================================
+-- COOLDOWNS TABLE MIGRATION
+-- Migrates from "creative key mapping" to explicit columns
+-- Safe to run repeatedly (idempotent)
+-- ============================================================================
+
+-- Drop old cooldowns table if it has the old schema (check for command_category column)
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_name = 'cooldowns'
+		AND column_name = 'command_category'
+	) THEN
+		DROP TABLE IF EXISTS cooldowns CASCADE;
+		RAISE NOTICE 'Dropped old cooldowns table (migration to explicit schema)';
+	END IF;
+END $$;
+
+-- Create new cooldowns table with explicit columns
 CREATE UNLOGGED TABLE IF NOT EXISTS cooldowns (
-    user_disc_id TEXT NOT NULL,
-    command_category TEXT NOT NULL,
-    expiry_time BIGINT NOT NULL,
-    PRIMARY KEY (user_disc_id, command_category)
+	cooldown_id SERIAL,
+	cooldown_type INT NOT NULL,                -- CooldownType enum (1-4)
+	server_disc_id TEXT NOT NULL,              -- Always the server/guild ID
+	user_disc_id TEXT,                         -- User ID (populated for PER_USER)
+	channel_disc_id TEXT,                      -- Channel ID (populated for PER_CHANNEL)
+	expiry_time BIGINT NOT NULL,               -- Unix timestamp in milliseconds
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Unique index for UPSERT operations (handles NULLs properly)
+-- This ensures one cooldown entry per unique combination of type + scope
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cooldown_scope
+	ON cooldowns (
+		cooldown_type,
+		server_disc_id,
+		COALESCE(user_disc_id, ''),
+		COALESCE(channel_disc_id, '')
+	);
+
+-- Performance indexes for cooldown queries
+CREATE INDEX IF NOT EXISTS idx_cooldowns_expiry
+	ON cooldowns(expiry_time);
+
+CREATE INDEX IF NOT EXISTS idx_cooldowns_user
+	ON cooldowns(user_disc_id, server_disc_id)
+	WHERE user_disc_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_cooldowns_channel
+	ON cooldowns(channel_disc_id)
+	WHERE channel_disc_id IS NOT NULL;
 
 -- Function to periodically clean up expired cooldowns
 CREATE OR REPLACE FUNCTION cleanup_expired_cooldowns()
 RETURNS INTEGER AS $$
 DECLARE
-    deleted_count INTEGER;
+	deleted_count INTEGER;
 BEGIN
-    DELETE FROM cooldowns
-    WHERE expiry_time < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
-    
-    GET DIAGNOSTICS deleted_count = ROW_COUNT;
-    
-    RETURN deleted_count;
+	DELETE FROM cooldowns
+	WHERE expiry_time < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
+
+	GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+	RETURN deleted_count;
 END;
 $$ LANGUAGE plpgsql;
 

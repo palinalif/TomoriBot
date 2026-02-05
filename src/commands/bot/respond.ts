@@ -16,6 +16,12 @@ import {
 	loadSmartestModel,
 	loadTomoriState,
 } from "../../utils/db/dbRead";
+import {
+	checkCooldown,
+	setCooldown,
+} from "../../utils/db/cooldownManager";
+import { CooldownType } from "../../types/db/schema";
+import { getCooldownTypeFooterKey } from "../../utils/db/messageCooldown";
 
 /**
  * Configure the respond subcommand
@@ -96,6 +102,35 @@ export async function execute(
 			titleKey: "general.errors.unknown_error_title",
 			descriptionKey: "general.errors.unknown_error_description",
 			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// 3.5. Check cooldown (shares cooldown pool with message triggers)
+	const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
+	const cooldownLength = tomoriState.config.cooldown_length ?? 5;
+
+	const cooldownResult = await checkCooldown(
+		interaction.guild.id,
+		interaction.user.id,
+		interaction.channel.id,
+		cooldownType,
+		interaction.member as import("discord.js").GuildMember | null,
+	);
+
+	if (cooldownResult.isOnCooldown) {
+		// Show cooldown warning embed
+		const footerKey = getCooldownTypeFooterKey(cooldownResult.cooldownType);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.message_cooldown_title",
+			descriptionKey: "commands.bot.respond.cooldown_active",
+			descriptionVars: {
+				seconds: cooldownResult.remainingSeconds.toString(),
+				botName: tomoriState.tomori_nickname,
+			},
+			footerKey: footerKey,
+			color: ColorCode.WARN,
+			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
@@ -311,6 +346,15 @@ export async function execute(
 			undefined, // impersonatedUserId
 			manualPrompt || undefined, // manualSystemPrompt
 			manualPrefill, // manualPrefill
+		);
+
+		// 7. Set cooldown after successful response (shares cooldown pool with message triggers)
+		await setCooldown(
+			interaction.guild.id,
+			interaction.user.id,
+			interaction.channel.id,
+			cooldownType,
+			cooldownLength,
 		);
 	} catch (error) {
 		log.error("Error in bot respond command:", error, {

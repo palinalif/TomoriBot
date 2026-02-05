@@ -5,66 +5,12 @@ import { log } from "@/utils/misc/logger";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 
 /**
- * Cooldown category prefixes for message triggers.
- * Uses existing cooldowns table with creative key strategy:
- * - Per-User: user_disc_id = actual user, category = __msg_trigger__{server_id}
- * - Per-Channel: user_disc_id = channel_id, category = __msg_trigger_channel__
- * - Server-Wide: user_disc_id = server_id, category = __msg_trigger_server__
- */
-const MSG_TRIGGER_USER_PREFIX = "__msg_trigger__";
-const MSG_TRIGGER_CHANNEL_CATEGORY = "__msg_trigger_channel__";
-const MSG_TRIGGER_SERVER_CATEGORY = "__msg_trigger_server__";
-
-/**
  * Result of a cooldown check operation
  */
 export interface CooldownCheckResult {
 	isOnCooldown: boolean;
 	remainingSeconds: number;
 	cooldownType: CooldownType;
-}
-
-/**
- * Generates the appropriate cooldown key pair based on cooldown type.
- * @param cooldownType - The type of cooldown configured
- * @param userDiscId - Discord user ID
- * @param channelDiscId - Discord channel ID
- * @param serverDiscId - Discord server/guild ID
- * @returns Object with entityId (maps to user_disc_id) and category (maps to command_category)
- */
-function getCooldownKeyPair(
-	cooldownType: CooldownType,
-	userDiscId: string,
-	channelDiscId: string,
-	serverDiscId: string,
-): { entityId: string; category: string } {
-	switch (cooldownType) {
-		case CooldownType.PER_USER:
-			// Per-user: track by user, scoped to server
-			return {
-				entityId: userDiscId,
-				category: `${MSG_TRIGGER_USER_PREFIX}${serverDiscId}`,
-			};
-		case CooldownType.PER_CHANNEL:
-			// Per-channel: track by channel
-			return {
-				entityId: channelDiscId,
-				category: MSG_TRIGGER_CHANNEL_CATEGORY,
-			};
-		case CooldownType.SERVER_WIDE:
-		case CooldownType.STRICT_SERVER_WIDE:
-			// Server-wide: track by server
-			return {
-				entityId: serverDiscId,
-				category: MSG_TRIGGER_SERVER_CATEGORY,
-			};
-		default:
-			// OFF or unknown - should never reach here if properly guarded
-			return {
-				entityId: userDiscId,
-				category: `${MSG_TRIGGER_USER_PREFIX}${serverDiscId}`,
-			};
-	}
 }
 
 /**
@@ -178,33 +124,31 @@ export async function checkMessageTriggerCooldown(
 		`[Cooldown Check] User ${message.author.id} is NOT exempt - proceeding to database check`,
 	);
 
-	// Get the appropriate keys for this cooldown type
-	const { entityId, category } = getCooldownKeyPair(
-		cooldownType,
-		message.author.id,
-		message.channelId,
-		serverDiscId,
-	);
+	// Determine which identifiers to populate based on cooldown type
+	const userDiscIdParam = cooldownType === CooldownType.PER_USER ? message.author.id : null;
+	const channelDiscIdParam = cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
 
 	try {
 		// Check if cooldown exists and is still active
 		const now = Date.now();
 
 		log.info(
-			`[Cooldown Check] Querying database - entityId: ${entityId}, category: ${category}, now: ${now}`,
+			`[Cooldown Check] Querying database - type: ${cooldownType}, server: ${serverDiscId}, user: ${userDiscIdParam}, channel: ${channelDiscIdParam}, now: ${now}`,
 		);
 
 		const [cooldown] = await sql`
 			SELECT expiry_time
 			FROM cooldowns
-			WHERE user_disc_id = ${entityId}
-			AND command_category = ${category}
+			WHERE cooldown_type = ${cooldownType}
+			AND server_disc_id = ${serverDiscId}
+			AND (${userDiscIdParam}::TEXT IS NULL OR user_disc_id = ${userDiscIdParam})
+			AND (${channelDiscIdParam}::TEXT IS NULL OR channel_disc_id = ${channelDiscIdParam})
 			AND expiry_time > ${now}
 		`;
 
 		if (!cooldown) {
 			log.info(
-				`[Cooldown Check] No active cooldown found for ${entityId} in ${category}`,
+				`[Cooldown Check] No active cooldown found for type ${cooldownType} in server ${serverDiscId}`,
 			);
 			return {
 				isOnCooldown: false,
@@ -217,7 +161,7 @@ export async function checkMessageTriggerCooldown(
 		const remainingSeconds = Math.ceil(remainingMs / 1000);
 
 		log.info(
-			`[Cooldown Check] FOUND active cooldown for ${entityId} - ${remainingSeconds}s remaining (expires: ${cooldown.expiry_time})`,
+			`[Cooldown Check] FOUND active cooldown - ${remainingSeconds}s remaining (expires: ${cooldown.expiry_time})`,
 		);
 
 		return {
@@ -228,9 +172,10 @@ export async function checkMessageTriggerCooldown(
 	} catch (error) {
 		// Log error but fail-open to prevent blocking legitimate users
 		log.warn("Failed to check message trigger cooldown", {
-			entityId,
-			category,
 			cooldownType,
+			serverDiscId,
+			userDiscId: userDiscIdParam,
+			channelDiscId: channelDiscIdParam,
 			error: error instanceof Error ? error.message : "Unknown error",
 		});
 		return {
@@ -279,34 +224,43 @@ export async function setMessageTriggerCooldown(
 
 	// Get cooldown duration in milliseconds
 	const cooldownDurationMs = cooldownLengthSeconds * 1000;
-
-	// Get the appropriate keys for this cooldown type
-	const { entityId, category } = getCooldownKeyPair(
-		cooldownType,
-		message.author.id,
-		message.channelId,
-		serverDiscId,
-	);
-
 	const expiryTime = Date.now() + cooldownDurationMs;
+
+	// Determine which identifiers to populate based on cooldown type
+	const userDiscIdParam = cooldownType === CooldownType.PER_USER ? message.author.id : null;
+	const channelDiscIdParam = cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
 
 	try {
 		await sql`
-			INSERT INTO cooldowns (user_disc_id, command_category, expiry_time)
-			VALUES (${entityId}, ${category}, ${expiryTime})
-			ON CONFLICT (user_disc_id, command_category) DO UPDATE
-			SET expiry_time = ${expiryTime}
+			INSERT INTO cooldowns (
+				cooldown_type,
+				server_disc_id,
+				user_disc_id,
+				channel_disc_id,
+				expiry_time
+			)
+			VALUES (
+				${cooldownType},
+				${serverDiscId},
+				${userDiscIdParam},
+				${channelDiscIdParam},
+				${expiryTime}
+			)
+			ON CONFLICT (cooldown_type, server_disc_id, COALESCE(user_disc_id, ''), COALESCE(channel_disc_id, ''))
+			DO UPDATE SET expiry_time = ${expiryTime}
 		`;
 
 		log.info(
-			`[Cooldown Set] Successfully set cooldown for ${entityId} in category ${category}, expires in ${cooldownLengthSeconds}s (type: ${cooldownType}, expiryTime: ${expiryTime})`,
+			`[Cooldown Set] Successfully set cooldown - type: ${cooldownType}, server: ${serverDiscId}, user: ${userDiscIdParam}, channel: ${channelDiscIdParam}, expires in ${cooldownLengthSeconds}s (expiryTime: ${expiryTime})`,
 		);
 
 		// Verify the cooldown was written by reading it back
 		const [verification] = await sql`
 			SELECT expiry_time FROM cooldowns
-			WHERE user_disc_id = ${entityId}
-			AND command_category = ${category}
+			WHERE cooldown_type = ${cooldownType}
+			AND server_disc_id = ${serverDiscId}
+			AND (${userDiscIdParam}::TEXT IS NULL OR user_disc_id = ${userDiscIdParam})
+			AND (${channelDiscIdParam}::TEXT IS NULL OR channel_disc_id = ${channelDiscIdParam})
 		`;
 
 		if (verification) {
@@ -321,9 +275,10 @@ export async function setMessageTriggerCooldown(
 	} catch (error) {
 		// Log but don't throw - cooldown failures shouldn't break message handling
 		log.warn("Failed to set message trigger cooldown", {
-			entityId,
-			category,
 			cooldownType,
+			serverDiscId,
+			userDiscId: userDiscIdParam,
+			channelDiscId: channelDiscIdParam,
 			error: error instanceof Error ? error.message : "Unknown error",
 		});
 	}
