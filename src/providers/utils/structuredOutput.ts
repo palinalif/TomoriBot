@@ -60,12 +60,15 @@ export type ExpressionBatchResult = z.infer<
 /**
  * Build JSON schema object for structured output (shared across providers)
  */
-function buildExpressionResponseSchema() {
+function buildExpressionResponseSchema(expectedExpressionCount?: number) {
 	return {
 		type: "object" as const,
 		properties: {
 			expressions: {
 				type: "array" as const,
+				...(typeof expectedExpressionCount === "number"
+					? { maxItems: expectedExpressionCount }
+					: {}),
 				items: {
 					type: "object" as const,
 					properties: {
@@ -81,6 +84,8 @@ function buildExpressionResponseSchema() {
 						},
 						description: {
 							type: "string" as const,
+							minLength: 10,
+							maxLength: 200,
 							description: "One concise sentence describing the visual appearance",
 						},
 					},
@@ -217,7 +222,7 @@ export async function callGoogleStructuredOutput(
 
 		// 4. Build JSON schema object for structured output
 		// Google's responseSchema expects a plain object (not Zod)
-		const responseSchema = buildExpressionResponseSchema();
+		const responseSchema = buildExpressionResponseSchema(request.images.length);
 
 		// 5. Build generation config with structured output
 		const generationConfig: GenerateContentConfig = {
@@ -242,10 +247,53 @@ export async function callGoogleStructuredOutput(
 		});
 
 		// 8. Extract response text
-		const responseText = result.text ?? "";
+		const responseText = result.text?.trim() ?? "";
+
+		if (!responseText) {
+			log.error(
+				"Google structured output returned empty response",
+				new Error("Empty response"),
+				{
+					errorType: "GoogleStructuredOutputEmptyResponse",
+					metadata: {
+						model: request.model,
+						imageCount: request.images.length,
+						finishReason: result.candidates?.[0]?.finishReason,
+						finishMessage: result.candidates?.[0]?.finishMessage,
+					},
+				},
+			);
+			return {
+				success: false,
+				error: "Google returned an empty structured output response.",
+			};
+		}
 
 		// 9. Parse JSON response
-		const parsed = JSON.parse(responseText);
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(responseText);
+		} catch (parseError) {
+			const finishReason = result.candidates?.[0]?.finishReason;
+			log.error("Google structured output JSON parse failed", parseError as Error, {
+				errorType: "GoogleStructuredOutputParseError",
+				metadata: {
+					model: request.model,
+					imageCount: request.images.length,
+					finishReason,
+					finishMessage: result.candidates?.[0]?.finishMessage,
+					responseLength: responseText.length,
+					responsePreview: responseText.slice(0, 1000),
+				},
+			});
+			return {
+				success: false,
+				error:
+					finishReason === "MAX_TOKENS"
+						? "Google returned truncated JSON (MAX_TOKENS). Please retry with a smaller batch."
+						: "Invalid JSON response from Google.",
+			};
+		}
 
 		// 10. Validate with Zod schema
 		const validationResult = ExpressionBatchResultSchema.safeParse(parsed);
@@ -361,7 +409,7 @@ export async function callOpenrouterStructuredOutput(
 		];
 
 		// 5. Build JSON schema object for structured output
-		const responseSchema = buildExpressionResponseSchema();
+		const responseSchema = buildExpressionResponseSchema(request.images.length);
 
 		const responseFormat = {
 			type: "json_schema" as const,

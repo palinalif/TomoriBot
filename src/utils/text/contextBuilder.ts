@@ -404,10 +404,10 @@ async function buildShortTermMemoryContext(
 	client: Client,
 ): Promise<{
 	memoryItems: StructuredContextItem[];
-	createPrompt?: StructuredContextItem;
+	createPromptText?: string;
 }> {
 	const memoryItems: StructuredContextItem[] = [];
-	let createPrompt: StructuredContextItem | undefined;
+	let createPromptText: string | undefined;
 
 	try {
 		// 1. Check if user has cross-server opt-in enabled
@@ -525,7 +525,7 @@ async function buildShortTermMemoryContext(
 				});
 
 				// Add the HINT immediately after the summary (not at the end)
-				const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information BEFORE you respond if the conversation has greatly changed its topic]`;
+				const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic]`;
 
 				memoryItems.push({
 					role: "user",
@@ -549,30 +549,22 @@ async function buildShortTermMemoryContext(
 				sameChannelMemory.messages.length >= MIN_MESSAGES_FOR_SUMMARY
 			) {
 				// NO SUMMARY but enough messages - Create prompt at end
-				const createText = `[System: You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic BEFORE you respond in order to help you cross-reference this in different channels]`;
+				const createText =
+					"You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels.";
 
-				createPrompt = {
-					role: "user",
-					parts: [
-						{
-							type: "text",
-							text: await convertMentions(
-								createText,
-								client,
-								currentServerId,
-								triggererName,
-								botName,
-								personalMemoriesEnabled,
-							),
-						},
-					],
-					metadataTag: ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY,
-				};
+				createPromptText = await convertMentions(
+					createText,
+					client,
+					currentServerId,
+					triggererName,
+					botName,
+					personalMemoriesEnabled,
+				);
 			}
 			// If less than MIN_MESSAGES_FOR_SUMMARY, don't show any prompt (conversation too short)
 		}
 
-		return { memoryItems, createPrompt };
+		return { memoryItems, createPromptText };
 	} catch (error) {
 		await log.error(
 			`[buildShortTermMemoryContext] Failed to build short-term memory context - triggeringUserId=${triggeringUserId}, currentChannelId=${currentChannelId}`,
@@ -582,7 +574,7 @@ async function buildShortTermMemoryContext(
 				metadata: { userDiscId: triggeringUserId, currentChannelId },
 			},
 		);
-		return { memoryItems: [], createPrompt: undefined };
+		return { memoryItems: [], createPromptText: undefined };
 	}
 }
 
@@ -632,8 +624,15 @@ export async function buildContext({
 	isUserImpersonation?: boolean; // Added February 2026 - Flag for user impersonation mode
 	impersonatedUserId?: string; // Added February 2026 - User ID being impersonated
 	impersonatedUserNickname?: string; // Added February 2026 - Database nickname for impersonated user (optional)
-}): Promise<StructuredContextItem[]> {
+}): Promise<{
+	contextItems: StructuredContextItem[];
+	tailDirectives: string[];
+	uncensorDirective?: string;
+}> {
 	const contextItems: StructuredContextItem[] = [];
+	const tailDirectives: string[] = [];
+	let sameChannelMemoryDirective: string | undefined;
+	let uncensorDirective: string | undefined;
 	const botName = tomoriNickname;
 	let missingEmojiMetadataCount = 0;
 	let missingStickerMetadataCount = 0;
@@ -1496,7 +1495,6 @@ export async function buildContext({
 	// Load recent conversations from other channels (other-channel awareness)
 	// and current channel summary (same-channel working memory)
 	// Store same-channel prompt separately to be added at the very end
-	let sameChannelMemoryPrompt: StructuredContextItem | undefined;
 	try {
 		// Determine the triggering user ID (impersonation takes precedence)
 		const actualTriggeringUserId =
@@ -1507,23 +1505,24 @@ export async function buildContext({
 
 		// Only build short-term memory context if we have a valid user ID
 		if (actualTriggeringUserId) {
-			const { memoryItems, createPrompt } = await buildShortTermMemoryContext(
-				actualTriggeringUserId,
-				channelId,
-				guildId,
-				tomoriState,
-				actualLocale,
-				triggererName,
-				botName,
-				tomoriConfig.personal_memories_enabled,
-				client,
-			);
+			const { memoryItems, createPromptText } =
+				await buildShortTermMemoryContext(
+					actualTriggeringUserId,
+					channelId,
+					guildId,
+					tomoriState,
+					actualLocale,
+					triggererName,
+					botName,
+					tomoriConfig.personal_memories_enabled,
+					client,
+				);
 			// Push memory items now (goes in middle of context)
 			// Includes: other-channel memories + same-channel summary (if exists)
 			contextItems.push(...memoryItems);
 			// Store create prompt for later (goes at very end)
 			// This is the HINT or "create summary" instruction
-			sameChannelMemoryPrompt = createPrompt;
+			sameChannelMemoryDirective = createPromptText;
 		}
 	} catch (error) {
 		// Don't fail context building if short-term memory loading fails
@@ -1866,41 +1865,36 @@ export async function buildContext({
 			nameToUse = member?.displayName || member?.user.displayName || "User";
 		}
 
-		contextItems.push({
-			role: "user",
-			parts: [
-				{
-					type: "text",
-					text: `[System: Imitate ${nameToUse}, start your message with ${nameToUse}:]`,
-				},
-			],
-			metadataTag: ContextItemTag.DIALOGUE_HISTORY,
-		});
+		tailDirectives.push(
+			`Imitate ${nameToUse}, start your message with ${nameToUse}:`,
+		);
 	}
 
 	// Add same-channel memory prompt at the very end (if it exists)
 	// This ensures the prompt is the last thing the model sees before responding
-	if (sameChannelMemoryPrompt) {
-		contextItems.push(sameChannelMemoryPrompt);
+	if (sameChannelMemoryDirective) {
+		tailDirectives.push(sameChannelMemoryDirective);
 	}
 
-	// Add optional uncensor prompt injection as the final context item (if enabled)
+	// Capture optional uncensor prompt injection as the final tail directive (if enabled)
 	const uncensorInjectionText = buildUncensorInjectionText({
 		injectionEnabled: tomoriConfig.uncensor_injection_enabled,
 		unicodeSpacesEnabled: tomoriConfig.uncensor_unicode_space_enabled,
 	});
 	if (uncensorInjectionText) {
-		contextItems.push({
-			role: "user",
-			parts: [{ type: "text", text: uncensorInjectionText }],
-			metadataTag: ContextItemTag.DIALOGUE_HISTORY,
-		});
+		const strippedText = uncensorInjectionText
+			.replace(/^\[System:\s*/i, "")
+			.replace(/\]\s*$/, "")
+			.trim();
+		if (strippedText) {
+			uncensorDirective = strippedText;
+		}
 	}
 
 	log.info(
 		`Built ${contextItems.length} structured context items for guild ${guildId}.`,
 	);
-	return contextItems;
+	return { contextItems, tailDirectives, uncensorDirective };
 }
 
 /**

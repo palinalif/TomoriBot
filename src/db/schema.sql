@@ -952,6 +952,14 @@ CREATE TABLE IF NOT EXISTS image_quota_configs (
 	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
 
+-- Migration: Add updated_at column if it doesn't exist (for existing databases)
+SELECT add_column_if_not_exists(
+	'image_quota_configs',
+	'updated_at',
+	'TIMESTAMP',
+	'CURRENT_TIMESTAMP'
+);
+
 -- Create updated_at trigger for image_quota_configs table
 DROP TRIGGER IF EXISTS update_image_quota_configs_timestamp ON image_quota_configs;
 CREATE TRIGGER update_image_quota_configs_timestamp
@@ -985,9 +993,24 @@ CREATE TABLE IF NOT EXISTS serverwide_quotas (
 	usage_count INT NOT NULL DEFAULT 0,                      -- Total images generated this period
 	quota_period_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	quota_period_end TIMESTAMP NOT NULL,                     -- Calculated from period_start + resets_in days
-	last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
+
+-- Migration: Rename last_updated to updated_at if needed (for existing databases)
+DO $$
+BEGIN
+    -- Check if last_updated column exists and updated_at doesn't
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'serverwide_quotas' AND column_name = 'last_updated'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'serverwide_quotas' AND column_name = 'updated_at'
+    ) THEN
+        ALTER TABLE serverwide_quotas RENAME COLUMN last_updated TO updated_at;
+    END IF;
+END $$;
 
 -- Create updated_at trigger for serverwide_quotas table
 DROP TRIGGER IF EXISTS update_serverwide_quotas_timestamp ON serverwide_quotas;

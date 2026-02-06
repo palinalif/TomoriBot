@@ -46,7 +46,7 @@ import {
 } from "../../utils/discord/webhookManager";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { buildContext } from "../../utils/text/contextBuilder";
-import { applyEmojiPenaltyIfNeeded } from "../../utils/text/emojiPenalty";
+import { getEmojiPenaltyDirective } from "../../utils/text/emojiPenalty";
 import {
 	removeYouTubeUrls,
 	extractYouTubeVideoIds,
@@ -133,6 +133,36 @@ function shouldSendWebhookError(channelId: string): boolean {
 
 	webhookErrorCooldowns.set(channelId, now);
 	return true;
+}
+
+function normalizeTailDirective(text: string): string {
+	let trimmed = text.trim();
+	if (!trimmed) return "";
+	if (/^\[System:/i.test(trimmed)) {
+		trimmed = trimmed.replace(/^\[System:\s*/i, "");
+		if (trimmed.endsWith("]")) {
+			trimmed = trimmed.slice(0, -1).trim();
+		}
+	}
+	if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+		trimmed = trimmed.slice(1, -1).trim();
+	}
+	return trimmed;
+}
+
+function buildCombinedTailDirectiveMessage(
+	directives: string[],
+): StructuredContextItem | null {
+	const normalized = directives
+		.map((directive) => normalizeTailDirective(directive))
+		.filter((directive) => directive.length > 0);
+	if (normalized.length === 0) return null;
+
+	return {
+		role: "user",
+		parts: [{ type: "text", text: `[System: ${normalized.join("\n\n")}]` }],
+		metadataTag: ContextItemTag.DIALOGUE_HISTORY,
+	};
 }
 
 /**
@@ -433,6 +463,19 @@ interface ChannelLockEntry {
 	}>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
+
+/**
+ * Check whether a channel is currently processing a message.
+ * Treat stale locks as inactive so manual stop commands don't set stale stop requests.
+ */
+export function isChannelProcessingLocked(channelId: string): boolean {
+	const lockEntry = channelLocks.get(channelId);
+	if (!lockEntry?.isLocked) return false;
+	if (Date.now() - lockEntry.lockedAt > CHANNEL_LOCK_TIMEOUT_MS) {
+		return false;
+	}
+	return true;
+}
 
 interface SelfReplyChainState {
 	depth: number; // Number of self replies already generated in this chain
@@ -2977,6 +3020,8 @@ export default async function tomoriChat(
 						);
 					}
 
+					let manualContinuationDirective: string | null = null;
+
 					// Inject continuation prompt for manual triggers when the selected persona is the last speaker
 					// This fixes the UX issue where manual /bot respond commands
 					// don't work if the selected persona was the last one to speak in the conversation
@@ -3030,32 +3075,18 @@ export default async function tomoriChat(
 								tomoriState?.tomori_nickname ??
 								process.env.DEFAULT_BOTNAME ??
 								"Tomori";
-							const continuationText = trimmedPrefill
-								? isFromSelectedPersona && !isEmbedMessage
-									? `[Continue your last message. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
-									: `[Begin your next reply with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
-								: "[Continue your last message]";
+						const continuationText = trimmedPrefill
+							? isFromSelectedPersona && !isEmbedMessage
+								? `[Continue your last message. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
+								: `[Begin your next reply with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
+							: "[Continue your last message]";
 
-							// Create a fake user message prompting the persona to continue
-							// Use "0" as authorId to ensure it's not the bot's ID (will be labeled as "user" role)
-							const continuationPrompt: SimplifiedMessageForContext = {
-								id: `synthetic-continuation-${Date.now()}`, // Synthetic ID for system-generated continuation
-								authorId: "0", // Placeholder ID that's definitely not the bot's ID
-								authorName: "System",
-								authorType: "user",
-								personaName: null,
-								content: continuationText,
-								imageAttachments: [],
-								videoAttachments: [],
-							};
-
-							// Add the continuation prompt to the conversation history
-							simplifiedMessages.push(continuationPrompt);
-							log.info(
-								`Injected continuation prompt as System user to allow ${selectedPersona?.tomori_nickname} to respond`,
-							);
-						}
+						manualContinuationDirective = continuationText;
+						log.info(
+							`Captured continuation directive for ${selectedPersona?.tomori_nickname} response`,
+						);
 					}
+				}
 
 					// 11. Build Context
 					// The `buildContext` function will be refactored in a subsequent step to accept
@@ -3073,7 +3104,7 @@ export default async function tomoriChat(
 						// NOTE: The `buildContext` call signature will change.
 						// It will take `simplifiedMessageHistory: simplifiedMessages` instead of `conversationHistory`.
 						// It will also need `tomoriNickname`, `tomoriAttributes`, and `tomoriConfig` to build system instructions.
-						contextSegments = await buildContext({
+						const contextBuild = await buildContext({
 							guildId: serverDiscId,
 							serverName,
 							serverDescription: serverDescription ?? null,
@@ -3101,100 +3132,85 @@ export default async function tomoriChat(
 							impersonatedUserId, // Pass impersonated user ID (February 2026)
 							impersonatedUserNickname, // Pass database nickname for context (February 2026)
 						});
+						contextSegments = contextBuild.contextItems;
+						const tailDirectives: string[] = [...contextBuild.tailDirectives];
+						const uncensorDirective = contextBuild.uncensorDirective;
+						if (manualContinuationDirective) {
+							tailDirectives.push(manualContinuationDirective);
+						}
 
 						// Apply emoji repetition penalty if bot has been using too many emojis
-						contextSegments = applyEmojiPenaltyIfNeeded(
+						const emojiPenaltyDirective = getEmojiPenaltyDirective(
 							contextSegments,
 							tomoriState?.tomori_nickname ??
 								process.env.DEFAULT_BOTNAME ??
 								"Tomori",
 						);
+						if (emojiPenaltyDirective) {
+							tailDirectives.push(emojiPenaltyDirective);
+						}
 
 						// Inject system context for stop responses
 						if (isStopResponse) {
-							// Find the last user message in context and replace/supplement it with system context
-							let lastUserContextIndex = -1;
+							// Find the last user message in context for reference
+							let lastUserContext: StructuredContextItem | undefined;
 							for (let i = contextSegments.length - 1; i >= 0; i--) {
 								if (contextSegments[i].role === "user") {
-									lastUserContextIndex = i;
+									lastUserContext = contextSegments[i];
 									break;
 								}
 							}
 
-							if (lastUserContextIndex !== -1) {
-								// Replace the last user message content with system context
-								const lastUserContext = contextSegments[lastUserContextIndex];
+							if (lastUserContext) {
 								const originalContent = lastUserContext.parts
 									.filter((part) => part.type === "text")
 									.map((part) => (part as { type: "text"; text: string }).text)
 									.join(" ");
-
-								// Replace text parts with system context, preserve other parts (images, etc.)
-								const nonTextParts = lastUserContext.parts.filter(
-									(part) => part.type !== "text",
+								tailDirectives.push(
+									`The user has requested you to stop your current generation. Original message: "${originalContent}"`,
 								);
-								lastUserContext.parts = [
-									{
-										type: "text",
-										text: `[System: The user has requested you to stop your current generation. Original message: "${originalContent}"]`,
-									},
-									...nonTextParts,
-								];
-
 								log.info(
-									`Replaced last user message with system stop context. Original content: "${originalContent}"`,
+									`Captured stop response context. Original content: "${originalContent}"`,
 								);
 							} else {
-								// Fallback: add as new context item if no user message found
-								const systemStopContext: StructuredContextItem = {
-									role: "user",
-									parts: [
-										{
-											type: "text",
-											text: "[System: The user has requested you to stop your current generation]",
-										},
-									],
-									metadataTag: ContextItemTag.DIALOGUE_HISTORY,
-								};
-								contextSegments.push(systemStopContext);
+								tailDirectives.push(
+									"The user has requested you to stop your current generation.",
+								);
 								log.info(
-									"Added system stop context as new message (no user context found)",
+									"Captured stop response context (no user context found)",
 								);
 							}
 						}
 
 						// Inject reasoning query as user message in dialogue if provided
 						if (reasoningQuery) {
-							// Add reasoning query as a user message in the conversation dialogue
-							const reasoningUserMessage: StructuredContextItem = {
-								role: "user",
-								parts: [
-									{
-										type: "text",
-										text: `[System: The user has activated reasoning mode with the following query: "${reasoningQuery}". Please provide a thoughtful, well-reasoned response to this query.]`,
-									},
-								],
-								metadataTag: ContextItemTag.DIALOGUE_HISTORY,
-							};
-							contextSegments.push(reasoningUserMessage);
+							tailDirectives.push(
+								`The user has activated reasoning mode with the following query: "${reasoningQuery}". Please provide a thoughtful, well-reasoned response to this query.`,
+							);
 							log.info(
-								`Injected reasoning query as user message in dialogue: "${reasoningQuery}"`,
+								`Captured reasoning query for tail directives: "${reasoningQuery}"`,
 							);
 						}
 
 						// Inject manual system prompt at the end (for manual commands)
 						if (manualSystemPrompt?.trim()) {
 							const trimmedPrompt = manualSystemPrompt.trim();
-							const systemText = trimmedPrompt.startsWith("[System:")
-								? trimmedPrompt
-								: `[System: ${trimmedPrompt}]`;
-							const manualPromptMessage: StructuredContextItem = {
-								role: "user",
-								parts: [{ type: "text", text: systemText }],
-								metadataTag: ContextItemTag.DIALOGUE_HISTORY,
-							};
-							contextSegments.push(manualPromptMessage);
+							const directiveText = normalizeTailDirective(trimmedPrompt);
+							if (directiveText) {
+								tailDirectives.push(directiveText);
+							}
 							log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
+						}
+
+						// Ensure uncensor directive is always last in the tail block
+						if (uncensorDirective) {
+							tailDirectives.push(uncensorDirective);
+						}
+
+						const combinedTailMessage =
+							buildCombinedTailDirectiveMessage(tailDirectives);
+						if (combinedTailMessage) {
+							contextSegments.push(combinedTailMessage);
 						}
 
 						// Inject assistant prefill as the final context item (for manual commands)
@@ -4284,7 +4300,7 @@ export default async function tomoriChat(
 
 											// Rebuild context with expanded media window
 											// This uses the same simplifiedMessages array that's already been mushed
-											contextSegments = await buildContext({
+											const contextBuild = await buildContext({
 												guildId: serverDiscId,
 												serverName,
 												serverDescription: serverDescription ?? null,
@@ -4313,18 +4329,98 @@ export default async function tomoriChat(
 												isUserImpersonation, // Pass user impersonation flag (February 2026)
 												impersonatedUserId, // Pass impersonated user ID (February 2026)
 											});
+											contextSegments = contextBuild.contextItems;
+											const tailDirectives: string[] = [
+												...contextBuild.tailDirectives,
+											];
+											const uncensorDirective = contextBuild.uncensorDirective;
+											if (manualContinuationDirective) {
+												tailDirectives.push(manualContinuationDirective);
+											}
 
 											log.success(
 												`Rebuilt context with expanded media window (${newWindow} messages). Total context items: ${contextSegments.length}`,
 											);
 
 											// Apply emoji repetition penalty after rebuilding context
-											contextSegments = applyEmojiPenaltyIfNeeded(
+											const emojiPenaltyDirective = getEmojiPenaltyDirective(
 												contextSegments,
 												tomoriState?.tomori_nickname ??
 													process.env.DEFAULT_BOTNAME ??
 													"Tomori",
 											);
+											if (emojiPenaltyDirective) {
+												tailDirectives.push(emojiPenaltyDirective);
+											}
+
+											// Inject system context for stop responses (if applicable)
+											if (isStopResponse) {
+												let lastUserContext: StructuredContextItem | undefined;
+												for (let j = contextSegments.length - 1; j >= 0; j--) {
+													if (contextSegments[j].role === "user") {
+														lastUserContext = contextSegments[j];
+														break;
+													}
+												}
+
+												if (lastUserContext) {
+													const originalContent = lastUserContext.parts
+														.filter((part) => part.type === "text")
+														.map(
+															(part) =>
+																(part as { type: "text"; text: string })
+																	.text,
+														)
+														.join(" ");
+													tailDirectives.push(
+														`The user has requested you to stop your current generation. Original message: "${originalContent}"`,
+													);
+													log.info(
+														`Captured stop response context. Original content: "${originalContent}"`,
+													);
+												} else {
+													tailDirectives.push(
+														"The user has requested you to stop your current generation.",
+													);
+													log.info(
+														"Captured stop response context (no user context found)",
+													);
+												}
+											}
+
+											// Inject reasoning query as user message in dialogue if provided
+											if (reasoningQuery) {
+												tailDirectives.push(
+													`The user has activated reasoning mode with the following query: "${reasoningQuery}". Please provide a thoughtful, well-reasoned response to this query.`,
+												);
+												log.info(
+													`Captured reasoning query for tail directives: "${reasoningQuery}"`,
+												);
+											}
+
+											// Inject manual system prompt at the end (for manual commands)
+											if (manualSystemPrompt?.trim()) {
+												const trimmedPrompt = manualSystemPrompt.trim();
+												const directiveText =
+													normalizeTailDirective(trimmedPrompt);
+												if (directiveText) {
+													tailDirectives.push(directiveText);
+												}
+												log.info(
+													`Injected manual system prompt: "${trimmedPrompt}"`,
+												);
+											}
+
+											// Ensure uncensor directive is always last in the tail block
+											if (uncensorDirective) {
+												tailDirectives.push(uncensorDirective);
+											}
+
+											const combinedTailMessage =
+												buildCombinedTailDirectiveMessage(tailDirectives);
+											if (combinedTailMessage) {
+												contextSegments.push(combinedTailMessage);
+											}
 											// Continue to next iteration WITHOUT adding to function interaction history
 											// This will restart the streaming with enhanced context
 											continue;

@@ -145,12 +145,16 @@ export function shouldApplyEmojiPenalty(
  * @param botName - The bot's current nickname
  * @returns A StructuredContextItem to append to context
  */
+function buildEmojiPenaltyText(botName: string): string {
+	return `${botName} has been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.`;
+}
+
 export function generateEmojiPenaltyMessage(
 	botName: string,
 ): StructuredContextItem {
 	// Create a natural-sounding reminder message
 	// It appears as a user message to be close to generation point
-	const penaltyText = `[System: ${botName} has been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.]`;
+	const penaltyText = `[System: ${buildEmojiPenaltyText(botName)}]`;
 
 	return {
 		role: "user",
@@ -162,6 +166,17 @@ export function generateEmojiPenaltyMessage(
 		],
 		metadataTag: ContextItemTag.DIALOGUE_HISTORY, // Tag as dialogue to keep it close to generation
 	};
+}
+
+export function getEmojiPenaltyDirective(
+	contextItems: StructuredContextItem[],
+	botName: string,
+): string | null {
+	if (!shouldApplyEmojiPenalty(contextItems)) {
+		return null;
+	}
+
+	return buildEmojiPenaltyText(botName);
 }
 
 /**

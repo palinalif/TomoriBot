@@ -372,7 +372,8 @@ export async function execute(
 		// Different providers have different token limits and cost constraints
 		// User should re-run the command to process remaining expressions
 		const provider = tomoriState.llm.llm_provider.toLowerCase();
-		const GEMINI_BATCH_SIZE = 50;
+		// Gemini responses can truncate at larger multimodal batches, causing invalid JSON.
+		const GEMINI_BATCH_SIZE = 30;
 		const OPENROUTER_BATCH_SIZE = 50;
 		let isBatchLimited = false;
 		let batchSize = images.length;

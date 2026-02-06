@@ -111,6 +111,7 @@ function resolveWebhookThreadId(channel: StreamContext["channel"]):
  */
 export class StreamOrchestrator implements IStreamOrchestrator {
 	// Static stop request management system
+	private static readonly PREFILL_WHITESPACE_SENTINEL = "\uE000";
 	private static activeStopRequests = new Map<
 		string,
 		{
@@ -992,6 +993,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		state: StreamState,
 	): Promise<void> {
 		if (!segment.trim()) return;
+		const wasPrefillInjected = state.prefillInjected;
 
 		await context.channel
 			.sendTyping()
@@ -999,6 +1001,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 		const leadingWhitespaceMatch = segment.match(/^\s+/);
 		const leadingWhitespace = leadingWhitespaceMatch?.[0] ?? "";
+		const normalizedLeadingWhitespace = textConfig.uncensorUnicodeSpacesEnabled
+			? leadingWhitespace.replace(/\u2800/g, " ")
+			: leadingWhitespace;
 
 		// Filter duplicate custom emojis BEFORE transformation (while still in :name: format)
 		const filteredSegment = filterDuplicateCustomEmojis(
@@ -1027,11 +1032,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		);
 
 		if (
-			leadingWhitespace &&
+			normalizedLeadingWhitespace &&
 			resolvedSegment.length > 0 &&
-			!resolvedSegment.startsWith(leadingWhitespace)
+			!resolvedSegment.startsWith(normalizedLeadingWhitespace)
 		) {
-			resolvedSegment = leadingWhitespace + resolvedSegment;
+			resolvedSegment = normalizedLeadingWhitespace + resolvedSegment;
 		}
 
 		const strippedSegment = this.stripPrefillFromSegment(resolvedSegment, state);
@@ -1040,11 +1045,20 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			state,
 			context,
 		);
-		if (!prefixedSegment.trim()) return;
+		let segmentToSend = prefixedSegment;
+		const injectedPrefillThisSegment = !wasPrefillInjected && state.prefillInjected;
+		if (
+			injectedPrefillThisSegment &&
+			state.prefillTarget &&
+			/^\s+/.test(strippedSegment)
+		) {
+			segmentToSend = `${state.prefillTarget}${StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL}${strippedSegment}`;
+		}
+		if (!segmentToSend.trim()) return;
 
 		// Send the processed segment
 		await this.sendSegment(
-			prefixedSegment,
+			segmentToSend,
 			textConfig,
 			typingConfig,
 			context,
@@ -1311,6 +1325,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			segment,
 			textConfig.humanizerDegree,
 			textConfig.maxMessageLength,
+		).map((chunk) =>
+			chunk.replaceAll(StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL, ""),
 		);
 		if (!rawMessageChunks.length) return;
 

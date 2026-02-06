@@ -1378,6 +1378,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config apikey set\`.`,
 				cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot respond\` again. This cooldown is shared with message triggers.`,
 			},
+			kill: {
+				description: `Immediately stop the current stream without a follow-up response.`,
+				success_title: `Stream Stopped`,
+				success_description: `Stopped the active response stream with no follow-up reply.`,
+				nothing_to_stop_title: `No Active Stream`,
+				nothing_to_stop_description: `There is no active response stream to stop in this channel.`,
+			},
 			impersonate: {
 				description: `Impersonate personas, users, or inject system prompts.`,
 				target_description: `Choose who or what to impersonate.`,
