@@ -210,7 +210,7 @@ export async function setCooldown(
 				${channelDiscIdParam},
 				${expiryTime}
 			)
-			ON CONFLICT (cooldown_type, server_disc_id, COALESCE(user_disc_id, ''), COALESCE(channel_disc_id, ''))
+			ON CONFLICT (cooldown_type, COALESCE(server_disc_id, ''), COALESCE(user_disc_id, ''), COALESCE(channel_disc_id, ''), COALESCE(command_category, ''))
 			DO UPDATE SET expiry_time = ${expiryTime}
 		`;
 

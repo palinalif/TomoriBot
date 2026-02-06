@@ -24,7 +24,7 @@ import { getBraveApiKeyStatus } from "../../utils/db/dbRead";
 export class ReviewCapabilitiesTool extends BaseTool {
 	name = "review_capabilities";
 	description =
-		"Use this function when you need to check what you can or cannot do, or when a user asks about your capabilities or available commands. This helps you provide accurate information about your features and prevents claiming you cannot do things you actually can do (like seeing images or videos). You can check either your chat capabilities (vision, search, memory, etc.) or available slash commands.";
+		"Use this function when you need to check what you can or cannot do, or when a user asks about your capabilities or available commands. This helps you provide accurate information about your features, current model, and prevents claiming you cannot do things you actually can do (like seeing images or videos). You can check either your chat capabilities (vision, search, memory, etc.) or available slash commands.";
 	category = "utility" as const;
 
 	parameters: ToolParameterSchema = {
@@ -137,7 +137,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
 			const hasTools = llm.has_tools ?? false;
 			const isReasoning = llm.is_reasoning ?? false;
 			const isUncensored = llm.is_uncensored ?? false;
-			const supportsImageGen = provider === "google" || provider === "openrouter";
+			const supportsImageGen =
+				provider === "google" || provider === "openrouter";
 
 			// 2. Build dynamic capabilities markdown with model information
 			let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";
@@ -234,7 +235,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
 			// 5c. Image Generation section (conditional on provider and configuration)
 			capabilitiesContent += "## Image Generation\n\n";
-			if (supportsImageGen && config.imagegen_enabled && config.diffusion_model_id) {
+			if (
+				supportsImageGen &&
+				config.imagegen_enabled &&
+				config.diffusion_model_id
+			) {
 				capabilitiesContent += "You CAN generate images:\n";
 				capabilitiesContent +=
 					"- **Text-to-Image**: Generate images from detailed text prompts\n";
@@ -248,7 +253,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
 					"- Users can ask you to generate an image (triggers the generate_image tool), or use `/generate image` directly\n";
 				capabilitiesContent +=
 					"- When generating, describe in detail: style, composition, colors, mood, and important details\n\n";
-			} else if (supportsImageGen && config.imagegen_enabled && !config.diffusion_model_id) {
+			} else if (
+				supportsImageGen &&
+				config.imagegen_enabled &&
+				!config.diffusion_model_id
+			) {
 				capabilitiesContent +=
 					"Image generation is enabled but no diffusion model is configured. An admin needs to set one with `/config model image`.\n\n";
 			} else if (supportsImageGen && !config.imagegen_enabled) {
@@ -662,12 +671,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
 			settingsContent += "## System Prompt\n\n";
 			if (config.system_prompt) {
 				settingsContent += `A custom system prompt is active (${config.system_prompt.length} characters).\n`;
-				settingsContent +=
-					"- Modify with `/config prompt change`\n";
+				settingsContent += "- Modify with `/config prompt change`\n";
 				settingsContent +=
 					"- Switch to a preset with `/config prompt preset`\n";
-				settingsContent +=
-					"- Reset to default with `/config prompt clear`\n\n";
+				settingsContent += "- Reset to default with `/config prompt clear`\n\n";
 			} else {
 				settingsContent +=
 					"No custom system prompt is set. Using the default built-in prompt.\n";

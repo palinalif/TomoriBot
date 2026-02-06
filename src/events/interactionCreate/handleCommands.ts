@@ -3,6 +3,7 @@ import { sql } from "@/utils/db/client";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import {
+	CooldownType,
 	userSchema,
 	type UserRow,
 	type ErrorContext,
@@ -43,9 +44,10 @@ async function checkCooldown(
 ): Promise<boolean> {
 	const now = Date.now();
 	const [cooldown] = await sql`
-    SELECT expiry_time 
-    FROM cooldowns 
-    WHERE user_disc_id = ${userId} 
+    SELECT expiry_time
+    FROM cooldowns
+    WHERE cooldown_type = ${CooldownType.COMMAND_CATEGORY}
+    AND user_disc_id = ${userId}
     AND command_category = ${category}
     AND expiry_time > ${now}
   `;
@@ -65,9 +67,10 @@ async function getRemainingCooldown(
 ): Promise<number> {
 	const now = Date.now();
 	const [cooldown] = await sql`
-    SELECT expiry_time 
-    FROM cooldowns 
-    WHERE user_disc_id = ${userId} 
+    SELECT expiry_time
+    FROM cooldowns
+    WHERE cooldown_type = ${CooldownType.COMMAND_CATEGORY}
+    AND user_disc_id = ${userId}
     AND command_category = ${category}
     AND expiry_time > ${now}
   `;
@@ -90,10 +93,20 @@ async function setCooldown(
 	const expiryTime = Date.now() + duration;
 
 	await sql`
-    INSERT INTO cooldowns (user_disc_id, command_category, expiry_time)
-    VALUES (${userId}, ${category}, ${expiryTime})
-    ON CONFLICT (user_disc_id, command_category) DO UPDATE
-    SET expiry_time = ${expiryTime}
+    INSERT INTO cooldowns (
+      cooldown_type,
+      user_disc_id,
+      command_category,
+      expiry_time
+    )
+    VALUES (
+      ${CooldownType.COMMAND_CATEGORY},
+      ${userId},
+      ${category},
+      ${expiryTime}
+    )
+    ON CONFLICT (cooldown_type, COALESCE(server_disc_id, ''), COALESCE(user_disc_id, ''), COALESCE(channel_disc_id, ''), COALESCE(command_category, ''))
+    DO UPDATE SET expiry_time = ${expiryTime}
   `;
 }
 

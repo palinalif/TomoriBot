@@ -735,22 +735,57 @@ END $$;
 -- Create new cooldowns table with explicit columns
 CREATE UNLOGGED TABLE IF NOT EXISTS cooldowns (
 	cooldown_id SERIAL,
-	cooldown_type INT NOT NULL,                -- CooldownType enum (1-4)
-	server_disc_id TEXT NOT NULL,              -- Always the server/guild ID
-	user_disc_id TEXT,                         -- User ID (populated for PER_USER)
+	cooldown_type INT NOT NULL,                -- CooldownType enum (1-5)
+	server_disc_id TEXT,                       -- Server/guild ID (for types 1-4)
+	user_disc_id TEXT,                         -- User ID (populated for PER_USER and COMMAND_CATEGORY)
 	channel_disc_id TEXT,                      -- Channel ID (populated for PER_CHANNEL)
+	command_category TEXT,                     -- Command category (populated for COMMAND_CATEGORY type 5)
 	expiry_time BIGINT NOT NULL,               -- Unix timestamp in milliseconds
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add command_category column to existing tables (migration for Phase 1 users)
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_name = 'cooldowns'
+		AND column_name = 'command_category'
+	) THEN
+		ALTER TABLE cooldowns ADD COLUMN command_category TEXT;
+		RAISE NOTICE 'Added command_category column to cooldowns table';
+	END IF;
+END $$;
+
+-- Make server_disc_id nullable for existing tables (migration for Phase 1 users)
+DO $$
+BEGIN
+	-- Check if server_disc_id is currently NOT NULL
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_name = 'cooldowns'
+		AND column_name = 'server_disc_id'
+		AND is_nullable = 'NO'
+	) THEN
+		ALTER TABLE cooldowns ALTER COLUMN server_disc_id DROP NOT NULL;
+		RAISE NOTICE 'Made server_disc_id nullable in cooldowns table';
+	END IF;
+END $$;
+
+-- Drop old unique index if it exists (before recreating with new columns)
+DROP INDEX IF EXISTS uq_cooldown_scope;
+
 -- Unique index for UPSERT operations (handles NULLs properly)
 -- This ensures one cooldown entry per unique combination of type + scope
-CREATE UNIQUE INDEX IF NOT EXISTS uq_cooldown_scope
+CREATE UNIQUE INDEX uq_cooldown_scope
 	ON cooldowns (
 		cooldown_type,
-		server_disc_id,
+		COALESCE(server_disc_id, ''),
 		COALESCE(user_disc_id, ''),
-		COALESCE(channel_disc_id, '')
+		COALESCE(channel_disc_id, ''),
+		COALESCE(command_category, '')
 	);
 
 -- Performance indexes for cooldown queries

@@ -61,10 +61,11 @@ export const configureSubcommand = (
 						name: localizer("en-US", "commands.config.cooldown.type.choice_server_wide"),
 						value: CooldownType.SERVER_WIDE,
 					},
-					{
-						name: localizer("en-US", "commands.config.cooldown.type.choice_strict_server_wide"),
-						value: CooldownType.STRICT_SERVER_WIDE,
-					},
+					// Strict Server-Wide removed: doesn't make sense for per-channel whitelist overrides
+					// {
+					// 	name: localizer("en-US", "commands.config.cooldown.type.choice_strict_server_wide"),
+					// 	value: CooldownType.STRICT_SERVER_WIDE,
+					// },
 				),
 		)
 		.addIntegerOption((option) =>
@@ -137,8 +138,8 @@ export async function execute(
 			return;
 		}
 
-		// 5. Validate cooldown type (0-4)
-		if (cooldownType < 0 || cooldownType > 4) {
+		// 5. Validate cooldown type (0-3)
+		if (cooldownType < 0 || cooldownType > 3) {
 			await replyInfoEmbed(interaction, locale, {
 				color: ColorCode.ERROR,
 				titleKey: "commands.server.whitelist.add.invalid_type_title",
@@ -265,8 +266,8 @@ function getCooldownTypeKey(cooldownType: CooldownType): string {
 			return "per_channel";
 		case CooldownType.SERVER_WIDE:
 			return "server_wide";
-		case CooldownType.STRICT_SERVER_WIDE:
-			return "strict_server_wide";
+		// case CooldownType.STRICT_SERVER_WIDE:
+		// 	return "strict_server_wide";
 		default:
 			return "off";
 	}

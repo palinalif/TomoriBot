@@ -26,7 +26,7 @@ const DEFAULT_LENGTH = 5;
 
 // Cooldown type limits
 const COOLDOWN_TYPE_MIN = 0;
-const COOLDOWN_TYPE_MAX = 4;
+const COOLDOWN_TYPE_MAX = 3; // Disabled type 4 (STRICT_SERVER_WIDE) - users found it redundant
 const COOLDOWN_TYPE_DEFAULT = CooldownType.OFF;
 
 /**
@@ -55,6 +55,9 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_off",
 						),
 						value: CooldownType.OFF,
+						name_localizations: {
+							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_off"),
+						},
 					},
 					{
 						name: localizer(
@@ -62,6 +65,9 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_per_user",
 						),
 						value: CooldownType.PER_USER,
+						name_localizations: {
+							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_per_user"),
+						},
 					},
 					{
 						name: localizer(
@@ -69,6 +75,9 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_per_channel",
 						),
 						value: CooldownType.PER_CHANNEL,
+						name_localizations: {
+							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_per_channel"),
+						},
 					},
 					{
 						name: localizer(
@@ -76,14 +85,22 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_server_wide",
 						),
 						value: CooldownType.SERVER_WIDE,
+						name_localizations: {
+							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_server_wide"),
+						},
 					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.server.cooldown.triggers.type.choice_strict_server_wide",
-						),
-						value: CooldownType.STRICT_SERVER_WIDE,
-					},
+					// Disabled: Users found STRICT_SERVER_WIDE redundant (no manager exemption)
+					// Servers already using type 4 will continue to work - just can't be newly selected
+					// {
+					// 	name: localizer(
+					// 		"en-US",
+					// 		"commands.server.cooldown.triggers.type.choice_strict_server_wide",
+					// 	),
+					// 	value: CooldownType.STRICT_SERVER_WIDE,
+					// 	name_localizations: {
+					// 		ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_strict_server_wide"),
+					// 	},
+					// },
 				),
 		)
 		.addIntegerOption((option) =>

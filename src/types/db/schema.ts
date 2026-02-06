@@ -20,6 +20,7 @@ export enum CooldownType {
 	PER_CHANNEL = 2, // Each channel has its own cooldown
 	SERVER_WIDE = 3, // Everyone waits (server managers exempt)
 	STRICT_SERVER_WIDE = 4, // Everyone waits (no exceptions)
+	COMMAND_CATEGORY = 5, // Command category cooldowns (per-user, global across servers)
 }
 
 export const userSchema = z.object({
@@ -305,9 +306,14 @@ export interface ErrorContext {
 }
 
 export const cooldownSchema = z.object({
-	user_disc_id: z.string(),
-	command_category: z.string(),
+	cooldown_id: z.number().optional(),
+	cooldown_type: z.number(),
+	server_disc_id: z.string().nullable(),
+	user_disc_id: z.string().nullable(),
+	channel_disc_id: z.string().nullable(),
+	command_category: z.string().nullable(),
 	expiry_time: z.number(),
+	created_at: z.string().optional(),
 });
 export type CooldownRow = z.infer<typeof cooldownSchema>;
 

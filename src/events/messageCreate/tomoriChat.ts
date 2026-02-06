@@ -36,6 +36,7 @@ import {
 	createStandardEmbed,
 	sendStandardEmbed,
 } from "../../utils/discord/embedHelper";
+import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
 	getOrCreateWebhook,
@@ -728,6 +729,12 @@ export default async function tomoriChat(
 		updateSelfReplyChainState(channel.id, false);
 	}
 
+	// Early return for bot messages in DMs (prevent self-triggering from cooldown DMs)
+	if (channel.type === ChannelType.DM && isBotAuthor && !isManuallyTriggered) {
+		updateSelfReplyChainState(channel.id, false);
+		return;
+	}
+
 	// Early return for non-self bot messages and interaction responses
 	if (isBotAuthor && !isManuallyTriggered) {
 		if (isInteractionResponse) {
@@ -1084,23 +1091,24 @@ export default async function tomoriChat(
 							message.member,
 						);
 						if (preQueueCooldownResult.isOnCooldown) {
-							// Show cooldown warning and don't queue
+							// Show cooldown warning via DM and don't queue
 							const footerKey = getCooldownTypeFooterKey(
 								preQueueCooldownResult.cooldownType,
 							);
 							const tempUserRow = await getCachedUserRow(userDiscId);
 							const cooldownLocale =
 								tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
-							await sendStandardEmbed(channel, cooldownLocale, {
-								color: ColorCode.WARN,
-								titleKey: "general.message_cooldown_title",
-								descriptionKey: "general.message_cooldown",
-								descriptionVars: {
+							await sendCooldownDM(
+								message.author,
+								cooldownLocale,
+								"general.message_cooldown_title",
+								"general.message_cooldown",
+								{
 									seconds: preQueueCooldownResult.remainingSeconds.toString(),
 									botName: earlyTomoriState.tomori_nickname,
 								},
-								footerKey: footerKey,
-							});
+								footerKey,
+							);
 							log.info(
 								`Message ${message.id} rejected before queuing due to cooldown. ${preQueueCooldownResult.remainingSeconds}s remaining.`,
 							);
@@ -1822,20 +1830,21 @@ export default async function tomoriChat(
 					message.member,
 				);
 				if (cooldownResult.isOnCooldown) {
-					// Send cooldown warning embed
+					// Send cooldown warning via DM
 					const footerKey = getCooldownTypeFooterKey(
 						cooldownResult.cooldownType,
 					);
-					await sendStandardEmbed(channel, locale, {
-						color: ColorCode.WARN,
-						titleKey: "general.message_cooldown_title",
-						descriptionKey: "general.message_cooldown",
-						descriptionVars: {
+					await sendCooldownDM(
+						message.author,
+						locale,
+						"general.message_cooldown_title",
+						"general.message_cooldown",
+						{
 							seconds: cooldownResult.remainingSeconds.toString(),
 							botName: tomoriState.tomori_nickname,
 						},
-						footerKey: footerKey,
-					});
+						footerKey,
+					);
 					log.info(
 						`Message trigger cooldown active for ${
 							cooldownResult.cooldownType === CooldownType.PER_USER

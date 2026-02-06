@@ -6,6 +6,7 @@ import {
 	replyInfoEmbed,
 	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
+import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import type { UserRow } from "../../types/db/schema";
@@ -119,19 +120,21 @@ export async function execute(
 	);
 
 	if (cooldownResult.isOnCooldown) {
-		// Show cooldown warning embed
+		// Show cooldown warning via DM (with ephemeral fallback)
 		const footerKey = getCooldownTypeFooterKey(cooldownResult.cooldownType);
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.message_cooldown_title",
-			descriptionKey: "commands.bot.respond.cooldown_active",
-			descriptionVars: {
+		await sendCooldownDM(
+			interaction.user,
+			locale,
+			"general.message_cooldown_title",
+			"commands.bot.respond.cooldown_active",
+			{
 				seconds: cooldownResult.remainingSeconds.toString(),
 				botName: tomoriState.tomori_nickname,
 			},
-			footerKey: footerKey,
-			color: ColorCode.WARN,
-			flags: MessageFlags.Ephemeral,
-		});
+			footerKey,
+			interaction,
+			MessageFlags.Ephemeral,
+		);
 		return;
 	}
 
