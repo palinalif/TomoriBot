@@ -397,6 +397,48 @@ export const apiKeyRotationSchema = z.object({
 export type ApiKeyRotationRow = z.infer<typeof apiKeyRotationSchema>;
 
 /**
+ * Schema for image quota configuration (per-server settings)
+ * Controls daily user quotas and server-wide quota pools
+ */
+export const imageQuotaConfigSchema = z.object({
+	server_id: z.number(), // Foreign key to servers table
+	daily_user_quota: z.number().int().min(0).max(100).default(10), // Per-user daily limit (0 = unlimited)
+	serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
+	serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
+	enabled: z.boolean().default(true), // Master toggle for quota system
+	created_at: z.date().optional(), // Handled by DB default
+	updated_at: z.date().optional(), // Handled by DB default/trigger
+});
+export type ImageQuotaConfigRow = z.infer<typeof imageQuotaConfigSchema>;
+
+/**
+ * Schema for per-user daily image quota tracking
+ * Resets daily at midnight (server timezone)
+ */
+export const imageQuotaSchema = z.object({
+	quota_id: z.number().optional(), // Primary key, auto-generated
+	server_id: z.number(), // Foreign key to servers table
+	user_disc_id: z.string(), // User's Discord ID
+	usage_count: z.number().int().min(0).default(0), // Images generated today
+	quota_date: z.date(), // Date this quota is for (YYYY-MM-DD)
+	last_reset: z.date().optional(), // Handled by DB default
+});
+export type ImageQuotaRow = z.infer<typeof imageQuotaSchema>;
+
+/**
+ * Schema for server-wide image quota tracking
+ * Resets based on serverwide_quota_resets_in configuration
+ */
+export const serverwideQuotaSchema = z.object({
+	server_id: z.number(), // Primary key, foreign key to servers table
+	usage_count: z.number().int().min(0).default(0), // Total images generated this period
+	quota_period_start: z.date(), // When this quota period started
+	quota_period_end: z.date(), // When this quota period ends (calculated from config)
+	last_updated: z.date().optional(), // Handled by DB default
+});
+export type ServerwideQuotaRow = z.infer<typeof serverwideQuotaSchema>;
+
+/**
  * Tomori's combined state (base config + LLM settings + LLM info)
  */
 export type TomoriState = TomoriRow & {

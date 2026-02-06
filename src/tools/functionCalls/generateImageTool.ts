@@ -16,6 +16,10 @@ import {
 } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
+import {
+	checkImageQuota,
+	incrementImageQuota,
+} from "../../utils/quota/imageQuotaManager";
 
 /**
  * Tool for generating images using Gemini Imagen API
@@ -543,6 +547,74 @@ export class GenerateImageTool extends BaseTool {
 			};
 		}
 
+		// Check image generation quota BEFORE generating
+		const userDiscId = context.userId || context.message?.author.id || "";
+		if (!userDiscId) {
+			return {
+				success: false,
+				error: "Unable to identify user for quota checking",
+			};
+		}
+
+		const quotaCheck = await checkImageQuota(
+			context.tomoriState.server_id,
+			userDiscId,
+		);
+
+		if (!quotaCheck.allowed) {
+			// Build user-friendly error message based on quota type
+			let errorMessage = "";
+			let resetInfo = "";
+
+			if (quotaCheck.resetTime) {
+				const now = new Date();
+				const resetTime = quotaCheck.resetTime;
+				const hoursUntilReset = Math.ceil(
+					(resetTime.getTime() - now.getTime()) / (1000 * 60 * 60),
+				);
+
+				if (hoursUntilReset < 24) {
+					resetInfo = localizer(
+						context.locale,
+						"tools.generate_image.quota_resets_in_hours",
+						{ hours: hoursUntilReset.toString() },
+					);
+				} else {
+					const daysUntilReset = Math.ceil(hoursUntilReset / 24);
+					resetInfo = localizer(
+						context.locale,
+						"tools.generate_image.quota_resets_in_days",
+						{ days: daysUntilReset.toString() },
+					);
+				}
+			}
+
+			if (quotaCheck.reason === "user_quota_exceeded") {
+				errorMessage = localizer(
+					context.locale,
+					"tools.generate_image.user_quota_exceeded",
+					{ reset_info: resetInfo },
+				);
+			} else if (quotaCheck.reason === "serverwide_quota_exceeded") {
+				errorMessage = localizer(
+					context.locale,
+					"tools.generate_image.serverwide_quota_exceeded",
+					{ reset_info: resetInfo },
+				);
+			} else {
+				errorMessage = localizer(
+					context.locale,
+					"tools.generate_image.quota_exceeded_generic",
+				);
+			}
+
+			return {
+				success: false,
+				error: "Image generation quota exceeded",
+				message: errorMessage,
+			};
+		}
+
 		// Extract arguments
 		const prompt = args.prompt as string;
 		const messageId = args.message_id as string | undefined;
@@ -722,17 +794,32 @@ export class GenerateImageTool extends BaseTool {
 
 			log.success("Successfully generated and sent image to Discord");
 
+			// Increment quota after successful generation
+			await incrementImageQuota(context.tomoriState.server_id, userDiscId);
+
 			// Note: We intentionally DO NOT include imageMetadata for generated images
 			// because Discord CDN URLs are protected and cannot be fetched by external
 			// servers (like OpenRouter). The model doesn't need to see its own generated
 			// output - it just needs confirmation that the generation succeeded.
 			// The text message includes the Discord message ID for reference.
 
+			// Build success message with remaining quota info (if quota is enabled)
+			let successMessage = `Successfully generated and sent image to Discord (message ID: ${sentMessage.id}). The image has been created based on your prompt${
+				referenceImages.length > 0 ? " and the reference image(s)" : ""
+			}.`;
+
+			if (quotaCheck.userRemaining !== undefined) {
+				const remainingText = localizer(
+					context.locale,
+					"tools.generate_image.quota_remaining",
+					{ remaining: quotaCheck.userRemaining.toString() },
+				);
+				successMessage += ` ${remainingText}`;
+			}
+
 			return {
 				success: true,
-				message: `Successfully generated and sent image to Discord (message ID: ${sentMessage.id}). The image has been created based on your prompt${
-					referenceImages.length > 0 ? " and the reference image(s)" : ""
-				}.`,
+				message: successMessage,
 				// imageMetadata intentionally omitted to avoid 403 errors when OpenRouter tries to fetch Discord CDN URLs
 			};
 		} catch (error) {

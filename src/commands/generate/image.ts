@@ -25,6 +25,10 @@ import {
 	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
+import {
+	checkImageQuota,
+	incrementImageQuota,
+} from "../../utils/quota/imageQuotaManager";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
@@ -353,6 +357,60 @@ export async function execute(
 		return;
 	}
 
+	// 9. Check image generation quota BEFORE showing modal (prevent user frustration)
+	const quotaCheck = await checkImageQuota(
+		tomoriState.server_id,
+		interaction.user.id,
+	);
+
+	if (!quotaCheck.allowed) {
+		// Build user-friendly error message based on quota type
+		const errorTitleKey = "commands.generate.image.quota_exceeded_title";
+		let errorDescriptionKey =
+			"commands.generate.image.quota_exceeded_description";
+		const descriptionVars: Record<string, string> = {};
+
+		if (quotaCheck.resetTime) {
+			const now = new Date();
+			const resetTime = quotaCheck.resetTime;
+			const hoursUntilReset = Math.ceil(
+				(resetTime.getTime() - now.getTime()) / (1000 * 60 * 60),
+			);
+
+			if (hoursUntilReset < 24) {
+				descriptionVars.reset_info = localizer(
+					locale,
+					"commands.generate.image.quota_resets_in_hours",
+					{ hours: hoursUntilReset.toString() },
+				);
+			} else {
+				const daysUntilReset = Math.ceil(hoursUntilReset / 24);
+				descriptionVars.reset_info = localizer(
+					locale,
+					"commands.generate.image.quota_resets_in_days",
+					{ days: daysUntilReset.toString() },
+				);
+			}
+		}
+
+		if (quotaCheck.reason === "user_quota_exceeded") {
+			errorDescriptionKey =
+				"commands.generate.image.user_quota_exceeded_description";
+		} else if (quotaCheck.reason === "serverwide_quota_exceeded") {
+			errorDescriptionKey =
+				"commands.generate.image.serverwide_quota_exceeded_description";
+		}
+
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: errorTitleKey,
+			descriptionKey: errorDescriptionKey,
+			descriptionVars,
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
 	// Track modal submit interaction for error handling in catch block
 	let modalSubmitInteraction:
 		| import("discord.js").ModalSubmitInteraction
@@ -589,6 +647,9 @@ export async function execute(
 
 		const filename = `generated_${Date.now()}.${extension}`;
 		const attachment = new AttachmentBuilder(imageBuffer, { name: filename });
+
+		// 19.5. Increment quota after successful generation
+		await incrementImageQuota(tomoriState.server_id, interaction.user.id);
 
 		// 20. Build success embed
 		const successEmbed = new EmbedBuilder()

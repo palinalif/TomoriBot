@@ -16,16 +16,40 @@ import {
 } from "../../utils/discord/commandLoader";
 
 // Define constants at the top (Rule #20)
-const DEFAULT_COOLDOWN = 1600; // 1.6 second default cooldown for all commands
+const DEFAULT_COOLDOWN = Number.parseInt(
+	process.env.DEFAULT_COMMAND_COOLDOWN || "1600",
+	10,
+); // Default cooldown for all commands in milliseconds
 
 const COOLDOWN_MAP = new Map<string, number>([
-	["config", 3000],
-	["teach", 3000],
-	["data", 3000],
-	["forget", 3000],
-	["persona", 10000],
-	["server", 3000],
-	["personal", 3000],
+	[
+		"config",
+		Number.parseInt(process.env.COOLDOWN_CONFIG || "3000", 10),
+	],
+	[
+		"teach",
+		Number.parseInt(process.env.COOLDOWN_TEACH || "3000", 10),
+	],
+	[
+		"data",
+		Number.parseInt(process.env.COOLDOWN_DATA || "3000", 10),
+	],
+	[
+		"forget",
+		Number.parseInt(process.env.COOLDOWN_FORGET || "3000", 10),
+	],
+	[
+		"persona",
+		Number.parseInt(process.env.COOLDOWN_PERSONA || "10000", 10),
+	],
+	[
+		"server",
+		Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10),
+	],
+	[
+		"personal",
+		Number.parseInt(process.env.COOLDOWN_PERSONAL || "3000", 10),
+	],
 ]);
 
 // Cache for command execution maps - stored at module level

@@ -80,6 +80,12 @@ export default {
 			unexpected_description: `An unexpected error occurred: {error}`,
 			invalid_option_title: `Invalid Option`,
 			invalid_option_description: `The selected option is invalid. Please choose a valid option.`,
+			permission_denied_title: `Permission Denied`,
+			permission_denied_description: `You don't have permission to use this command. Only members with \`Manage Server\` permissions can use this command.`,
+			server_not_found_title: `Server Not Found`,
+			server_not_found_description: `Server information could not be found in the database. Please try again or contact support if the issue persists.`,
+			generic_error_title: `Error`,
+			generic_error_description: `An error occurred while processing your request. Please try again later.`,
 			brave_api: {
 				missing_key: {
 					title: `Brave API Key Missing`,
@@ -2066,6 +2072,25 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					},
 				},
 			},
+			quota: {
+				description: `Manage image generation quotas`,
+				imagegen: {
+					description: `Configure daily image generation quotas for this server.`,
+					unlimited: `Unlimited`,
+					daily_user_quota_description: `Set the daily image generation limit per user.`,
+					daily_user_quota_limit_description: `Daily images per user (0 = unlimited, 1-100).`,
+					daily_user_quota_success_title: `User Quota Updated`,
+					daily_user_quota_success_description: `Daily user quota set to **{limit}** images per day.`,
+					serverwide_quota_description: `Set the total server-wide image generation limit.`,
+					serverwide_quota_limit_description: `Total server images (0 = unlimited, 1-99999).`,
+					serverwide_quota_success_title: `Server-wide Quota Updated`,
+					serverwide_quota_success_description: `Server-wide quota set to **{limit}** images per period.`,
+					serverwide_quota_resets_in_description: `Set how many days before server-wide quota resets.`,
+					serverwide_quota_resets_in_days_description: `Days before reset (1-365).`,
+					serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
+					serverwide_quota_resets_in_success_description: `Server-wide quota will now reset every **{days}** days.`,
+				},
+			},
 			memberpermissions: {
 				description: `Configure what non-admin members can teach me.`,
 				option_description: `The type of memory members can teach.`,
@@ -2486,6 +2511,18 @@ You can change this anytime using \`/personal privacy\`.`,
 				invalid_image_title: "🔴 Invalid Image",
 				invalid_image_description:
 					"Please upload valid image files (PNG, JPG, etc.).",
+				// Quota errors
+				quota_exceeded_title: "🔴 Image Quota Exceeded",
+				quota_exceeded_description:
+					"You have reached your image generation quota. {reset_info}",
+				user_quota_exceeded_description:
+					"You have reached your daily image generation quota. {reset_info}",
+				serverwide_quota_exceeded_description:
+					"This server has reached its image generation quota for this period. {reset_info}",
+				quota_resets_in_hours:
+					"Quota resets in {hours} hour(s).",
+				quota_resets_in_days:
+					"Quota resets in {days} day(s).",
 			},
 		},
 	},
@@ -2530,5 +2567,18 @@ You can change this anytime using \`/personal privacy\`.`,
 		reminder_error_title: `Reminder Delivery Failed`,
 		reminder_error_description: `{user_mention}'s reminder for "**{reminder_purpose}**" encountered an issue: {error_reason}. {lateness}.`,
 		reminder_error_footer: `The reminder has been delivered manually instead because of a technical issue.`,
+	},
+
+	// Tool messages
+	tools: {
+		generate_image: {
+			// Quota error messages
+			quota_exceeded_generic: `Image generation quota has been exceeded.`,
+			user_quota_exceeded: `You have reached your daily image generation quota. {reset_info}`,
+			serverwide_quota_exceeded: `This server has reached its image generation quota for this period. {reset_info}`,
+			quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
+			quota_resets_in_days: `Quota resets in {days} day(s).`,
+			quota_remaining: `You have {remaining} image(s) remaining for today.`,
+		},
 	},
 };

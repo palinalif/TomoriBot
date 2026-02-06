@@ -935,6 +935,86 @@ BEFORE UPDATE ON api_key_rotation
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
+-- ============================================================================
+-- IMAGE QUOTA SYSTEM (Phase 3)
+-- Prevents image generation abuse with per-user daily and server-wide quotas
+-- ============================================================================
+
+-- Server-level quota configuration
+CREATE TABLE IF NOT EXISTS image_quota_configs (
+	server_id INT PRIMARY KEY,
+	daily_user_quota INT NOT NULL DEFAULT 10,                -- Per-user daily limit (0 = unlimited)
+	serverwide_quota INT NOT NULL DEFAULT 0,                 -- Total server quota (0 = unlimited)
+	serverwide_quota_resets_in INT NOT NULL DEFAULT 365,     -- Days before server quota resets (1-365)
+	enabled BOOLEAN NOT NULL DEFAULT true,                   -- Master toggle for quota system
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for image_quota_configs table
+DROP TRIGGER IF EXISTS update_image_quota_configs_timestamp ON image_quota_configs;
+CREATE TRIGGER update_image_quota_configs_timestamp
+BEFORE UPDATE ON image_quota_configs
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- User quota usage tracking (resets daily at midnight server timezone)
+CREATE TABLE IF NOT EXISTS image_quotas (
+	quota_id SERIAL PRIMARY KEY,
+	server_id INT NOT NULL,
+	user_disc_id TEXT NOT NULL,                              -- User's Discord ID
+	usage_count INT NOT NULL DEFAULT 0,                      -- Images generated today
+	quota_date DATE NOT NULL,                                -- Date this quota is for (YYYY-MM-DD)
+	last_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(server_id, user_disc_id, quota_date),
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Index for efficient quota lookups
+CREATE INDEX IF NOT EXISTS idx_image_quotas_lookup
+	ON image_quotas(server_id, user_disc_id, quota_date);
+
+-- Index for cleanup queries (find old quota records)
+CREATE INDEX IF NOT EXISTS idx_image_quotas_date
+	ON image_quotas(quota_date);
+
+-- Server-wide quota tracking (resets based on serverwide_quota_resets_in)
+CREATE TABLE IF NOT EXISTS serverwide_quotas (
+	server_id INT PRIMARY KEY,
+	usage_count INT NOT NULL DEFAULT 0,                      -- Total images generated this period
+	quota_period_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	quota_period_end TIMESTAMP NOT NULL,                     -- Calculated from period_start + resets_in days
+	last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for serverwide_quotas table
+DROP TRIGGER IF EXISTS update_serverwide_quotas_timestamp ON serverwide_quotas;
+CREATE TRIGGER update_serverwide_quotas_timestamp
+BEFORE UPDATE ON serverwide_quotas
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Index for cleanup queries (find expired quota periods)
+CREATE INDEX IF NOT EXISTS idx_serverwide_quotas_period_end
+	ON serverwide_quotas(quota_period_end);
+
+-- Function to clean up old user quota records (older than 7 days)
+CREATE OR REPLACE FUNCTION cleanup_old_image_quotas()
+RETURNS INTEGER AS $$
+DECLARE
+	deleted_count INTEGER;
+BEGIN
+	DELETE FROM image_quotas
+	WHERE quota_date < CURRENT_DATE - INTERVAL '7 days';
+
+	GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+	RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Example usage - This shows how to add columns to existing tables
 -- You can add these calls whenever you need to introduce schema changes
 -- SELECT add_column_if_not_exists('tomori_configs', 'new_feature_flag', 'BOOLEAN', 'false');

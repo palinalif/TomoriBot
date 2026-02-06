@@ -27,10 +27,10 @@ export const MESSAGE_RATE_LIMITS = {
 	/**
 	 * Maximum concurrent messages a single server can have active (processing + queued)
 	 * across ALL channels. Prevents a single server from monopolizing bot resources.
-	 * @default 5 in production, Infinity in development
+	 * @default 10 in production, Infinity in development
 	 */
 	MAX_SERVER_ACTIVE_MESSAGES: GUARDS_ENABLED
-		? Number.parseInt(process.env.MAX_SERVER_ACTIVE_MESSAGES || "5", 10)
+		? Number.parseInt(process.env.MAX_SERVER_ACTIVE_MESSAGES || "10", 10)
 		: Number.POSITIVE_INFINITY,
 } as const;
 

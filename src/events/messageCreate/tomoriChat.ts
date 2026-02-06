@@ -624,6 +624,73 @@ async function sendServerRateLimitEmbed(
 	}
 }
 
+async function enforceGlobalRateLimit(params: {
+	userDiscId: string;
+	serverDiscId: string;
+	channel:
+		| TextChannel
+		| DMChannel
+		| BaseGuildTextChannel
+		| AnyThreadChannel
+		| BaseGuildVoiceChannel;
+	guild: Guild | null;
+	client: Client;
+	messageId: string;
+	userActiveCountAdjustment?: number;
+	serverActiveCountAdjustment?: number;
+}): Promise<boolean> {
+	const {
+		userDiscId,
+		serverDiscId,
+		channel,
+		guild,
+		client,
+		messageId,
+		userActiveCountAdjustment = 0,
+		serverActiveCountAdjustment = 0,
+	} = params;
+
+	const userActiveCount = Math.max(
+		getUserActiveMessageCount(userDiscId) + userActiveCountAdjustment,
+		0,
+	);
+	const userRateCheck = checkUserRateLimit(userActiveCount);
+	if (!userRateCheck.allowed) {
+		const currentCount = userRateCheck.currentCount ?? userActiveCount;
+		log.warn(
+			`User ${userDiscId} exceeded rate limit (${currentCount}/${userRateCheck.maxLimit} active messages). Dropping message ${messageId}.`,
+		);
+
+		const tempUserRow = await getCachedUserRow(userDiscId);
+		const userLocale =
+			tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
+
+		await sendUserRateLimitDM(userDiscId, client, userLocale, currentCount);
+
+		return false;
+	}
+
+	const serverActiveCount = Math.max(
+		getServerActiveMessageCount(serverDiscId) + serverActiveCountAdjustment,
+		0,
+	);
+	const serverRateCheck = checkServerRateLimit(serverActiveCount);
+	if (!serverRateCheck.allowed) {
+		const currentCount = serverRateCheck.currentCount ?? serverActiveCount;
+		log.warn(
+			`Server ${serverDiscId} exceeded rate limit (${currentCount}/${serverRateCheck.maxLimit} active messages). Dropping message ${messageId}.`,
+		);
+
+		const serverLocale = guild?.preferredLocale ?? "en-US";
+
+		await sendServerRateLimitEmbed(channel, serverLocale, currentCount);
+
+		return false;
+	}
+
+	return true;
+}
+
 /**
  * Handles incoming messages to potentially generate a response using genai.
  * @param client - The Discord client instance.
@@ -994,48 +1061,6 @@ export default async function tomoriChat(
 			return;
 		}
 
-		// Global rate limit guard (applies before both immediate processing and enqueueing)
-		if (!isStopResponse && !isPersonaJob) {
-			const userActiveCount = getUserActiveMessageCount(userDiscId);
-			const userRateCheck = checkUserRateLimit(userActiveCount);
-			if (!userRateCheck.allowed) {
-				log.warn(
-					`User ${userDiscId} exceeded rate limit (${userRateCheck.currentCount}/${userRateCheck.maxLimit} active messages). Dropping message ${message.id}.`,
-				);
-
-				const tempUserRow = await getCachedUserRow(userDiscId);
-				const userLocale =
-					tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
-
-				await sendUserRateLimitDM(
-					userDiscId,
-					client,
-					userLocale,
-					userActiveCount,
-				);
-
-				return; // Drop message
-			}
-
-			const serverActiveCount = getServerActiveMessageCount(serverDiscId);
-			const serverRateCheck = checkServerRateLimit(serverActiveCount);
-			if (!serverRateCheck.allowed) {
-				log.warn(
-					`Server ${serverDiscId} exceeded rate limit (${serverRateCheck.currentCount}/${serverRateCheck.maxLimit} active messages). Dropping message ${message.id}.`,
-				);
-
-				const serverLocale = guild?.preferredLocale ?? "en-US";
-
-				await sendServerRateLimitEmbed(
-					channel,
-					serverLocale,
-					serverActiveCount,
-				);
-
-				return; // Drop message
-			}
-		}
-
 		// MODIFIED: Check if locked AND if Tomori would reply
 		if (lockEntry.isLocked) {
 			// Only enqueue and send "busy" message if Tomori is set up and would have replied.
@@ -1058,6 +1083,20 @@ export default async function tomoriChat(
 						earlyAllPersonas,
 					)
 				) {
+					if (!isStopResponse && !isPersonaJob) {
+						const rateLimitAllowed = await enforceGlobalRateLimit({
+							userDiscId,
+							serverDiscId,
+							channel,
+							guild,
+							client,
+							messageId: message.id,
+						});
+						if (!rateLimitAllowed) {
+							return;
+						}
+					}
+
 					// 2a. Check cooldown BEFORE queuing (skip for manual triggers)
 					if (
 						!isManuallyTriggered &&
@@ -1799,6 +1838,27 @@ export default async function tomoriChat(
 				!shouldBotReply(message, tomoriState, allPersonas)
 			) {
 				return;
+			}
+
+			if (!skipLock && !isStopResponse && !isPersonaJob) {
+				const shouldExcludeCurrent =
+					lockEntry?.currentMessageId === message.id &&
+					lockEntry?.userDiscId === userDiscId &&
+					!lockEntry?.currentIsPersonaJob;
+				const adjustment = shouldExcludeCurrent ? -1 : 0;
+				const rateLimitAllowed = await enforceGlobalRateLimit({
+					userDiscId,
+					serverDiscId,
+					channel,
+					guild,
+					client,
+					messageId: message.id,
+					userActiveCountAdjustment: adjustment,
+					serverActiveCountAdjustment: adjustment,
+				});
+				if (!rateLimitAllowed) {
+					return;
+				}
 			}
 
 			// 6.5. Check whitelist status (skip for manual triggers, stop responses, and self messages)
