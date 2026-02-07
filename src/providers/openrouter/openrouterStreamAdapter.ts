@@ -1392,6 +1392,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 				// Convert to OpenAI message format
 				const role = item.role === "user" ? "user" : "assistant";
+				const roleSupportsImageParts = role === "user";
 				const contentParts: Array<Record<string, unknown>> = [];
 
 				// Process parts array
@@ -1402,6 +1403,19 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 							text: part.text,
 						});
 					} else if (part.type === "image") {
+						// OpenRouter chat input expects image parts on user/tool-context turns.
+						// Historical assistant turns can contain images in our local context, but
+						// those must be represented as text hints to avoid payload schema rejection.
+						if (!roleSupportsImageParts) {
+							contentParts.push({
+								type: "text",
+								text: item.messageId
+									? `[System: Assistant previously sent an image (message ID: ${item.messageId}).]`
+									: "[System: Assistant previously sent an image.]",
+							});
+							continue;
+						}
+
 						// Only process images if the model supports them
 						if (!seesImages) {
 							log.info(
@@ -1455,7 +1469,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 										// Convert inlineData to OpenAI format
 										contentParts.push({
 											type: "image_url",
-											imageUrl: {
+											image_url: {
 												url: `data:${inlineData.mimeType};base64,${inlineData.data}`,
 											},
 										});
@@ -1568,7 +1582,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 								// Add image as OpenAI format
 								contentParts.push({
 									type: "image_url",
-									imageUrl: {
+									image_url: {
 										url: `data:${finalMimeType};base64,${base64ImageData}`,
 									},
 								});
@@ -1587,7 +1601,25 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 				// Add message
 				if (contentParts.length > 0) {
-					// For single text-only messages, use string content; otherwise use array
+					// OpenRouter compatibility: historical assistant turns are safest as plain text.
+					if (role === "assistant") {
+						const assistantText = contentParts
+							.filter((part) => part.type === "text")
+							.map((part) => (part as { type: "text"; text: string }).text)
+							.join("\n");
+
+						if (!assistantText) {
+							continue;
+						}
+
+						messages.push({
+							role,
+							content: assistantText,
+						});
+						continue;
+					}
+
+					// For single text-only user messages, use string content; otherwise use array
 					const content =
 						contentParts.length === 1 && contentParts[0].type === "text"
 							? contentParts[0].text
@@ -1632,6 +1664,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				};
 
 				// Include thought_signature if present (required for Gemini models)
+				const hasThoughtSignature = Boolean(
+					interaction.functionCall.thoughtSignature,
+				);
 				if (interaction.functionCall.thoughtSignature) {
 					toolCallObject.thought_signature =
 						interaction.functionCall.thoughtSignature;
@@ -1646,15 +1681,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 				const assistantMessage: Record<string, unknown> = {
 					role: "assistant",
-					content: "",
+					content: null,
 					tool_calls: [toolCallObject],
-					// Provide camelCase alias for SDK validation compatibility
-					toolCalls: [toolCallObject],
 				};
 
 				// Preserve reasoning_details if present (critical for Gemini models)
 				// See: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens#preserving-reasoning-blocks
 				if (
+					hasThoughtSignature &&
 					interaction.functionCall.reasoning_details &&
 					interaction.functionCall.reasoning_details.length > 0
 				) {
@@ -1662,6 +1696,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 						interaction.functionCall.reasoning_details;
 					log.info(
 						`OpenRouter: Preserving ${interaction.functionCall.reasoning_details.length} reasoning_details in assistant message for tool '${interaction.functionCall.name}'`,
+					);
+				} else if (
+					!hasThoughtSignature &&
+					interaction.functionCall.reasoning_details &&
+					interaction.functionCall.reasoning_details.length > 0
+				) {
+					log.info(
+						`OpenRouter: Skipping ${interaction.functionCall.reasoning_details.length} reasoning_details for tool '${interaction.functionCall.name}' because thought_signature is missing`,
 					);
 				}
 
@@ -1672,7 +1714,6 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				messages.push({
 					role: "tool",
 					tool_call_id: toolCallId,
-					toolCallId: toolCallId, // CamelCase alias for SDK validator
 					content: JSON.stringify(interaction.functionResponse),
 				});
 
@@ -1707,7 +1748,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 						// Prefer direct URL; fall back to data URL if already provided
 						responseParts.push({
 							type: "image_url",
-							imageUrl: {
+							image_url: {
 								url: sourceUrl,
 								// OpenRouter allows URLs or data URLs; mimeType not required here
 							},
@@ -1771,12 +1812,12 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 					content: msg.content.map((part: Record<string, unknown>) => {
 						if (part.type === "image_url") {
 							const imageUrlField =
-								(part as { imageUrl?: { url?: string } }).imageUrl ||
-								(part as { image_url?: { url?: string } }).image_url;
+								(part as { image_url?: { url?: string } }).image_url ||
+								(part as { imageUrl?: { url?: string } }).imageUrl;
 							if (imageUrlField?.url?.startsWith("data:")) {
 								return {
 									type: "image_url",
-									imageUrl: {
+									image_url: {
 										...imageUrlField,
 										url: "[BASE64_HIDDEN]",
 									},

@@ -23,6 +23,15 @@ import { formatTimeWithOffset, formatUTCOffset } from "../../utils/text/timezone
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_reminder_modal";
 const REMINDER_SELECT_ID = "reminder_select";
+type ReminderSelectionRow = {
+	reminder_id: number;
+	reminder_purpose: string;
+	reminder_time: Date;
+	repetition_interval_hours: number | null;
+	channel_disc_id: string;
+	created_by_user_id: number | null;
+	created_by_nickname: string | null;
+};
 
 /**
  * Helper function to perform reminder removal from database
@@ -114,13 +123,30 @@ export async function execute(
 			return;
 		}
 
-		const reminders = await sql`
-			SELECT reminder_id, reminder_purpose, reminder_time, repetition_interval_hours, channel_disc_id
-			FROM reminders
-			WHERE created_by_user_id = ${userData.user_id}
-			AND server_id = ${tomoriState.server_id}
-			ORDER BY reminder_time ASC
+		const hasManagePermission =
+			interaction.memberPermissions?.has("ManageGuild") ?? false;
+
+		let remindersQuery = sql<ReminderSelectionRow[]>`
+			SELECT
+				r.reminder_id,
+				r.reminder_purpose,
+				r.reminder_time,
+				r.repetition_interval_hours,
+				r.channel_disc_id,
+				r.created_by_user_id,
+				u.user_nickname AS created_by_nickname
+			FROM reminders r
+			LEFT JOIN users u
+				ON r.created_by_user_id = u.user_id
+			WHERE r.server_id = ${tomoriState.server_id}
 		`;
+
+		if (!hasManagePermission) {
+			remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
+		}
+
+		remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
+		const reminders = await remindersQuery;
 
 		if (!reminders || reminders.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
@@ -134,15 +160,7 @@ export async function execute(
 
 		const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
 		const reminderSelectOptions: SelectOption[] = reminders.map(
-			(
-				reminder: {
-					reminder_purpose: string;
-					reminder_time: Date;
-					repetition_interval_hours: number | null;
-					channel_disc_id: string;
-				},
-				index: number,
-			) => {
+			(reminder: ReminderSelectionRow, index: number) => {
 				const formattedTime = formatTimeWithOffset(
 					new Date(reminder.reminder_time),
 					timezoneOffset,
@@ -163,7 +181,17 @@ export async function execute(
 					reminder.repetition_interval_hours >= 1
 						? ` | repeats every ${reminder.repetition_interval_hours}h`
 						: "";
-				const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}`;
+				const creatorName =
+					reminder.created_by_nickname ??
+					(reminder.created_by_user_id
+						? `user #${reminder.created_by_user_id}`
+						: "unknown");
+				const managerCreatedByText =
+					hasManagePermission &&
+					reminder.created_by_user_id !== userData.user_id
+						? ` | created by ${creatorName}`
+						: "";
+				const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}${managerCreatedByText}`;
 
 				return {
 					label: safeSelectOptionText(reminder.reminder_purpose, 40),
