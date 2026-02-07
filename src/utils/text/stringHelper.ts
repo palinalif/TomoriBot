@@ -107,13 +107,29 @@ export function replaceTemplateVariables(
 	variables: Record<string, string | undefined>,
 ): string {
 	let result = text;
+	const normalizedVariables: Record<string, string | undefined> = {
+		...variables,
+		char: variables.char ?? variables.bot,
+	};
 
-	// Process each variable replacement
-	for (const [placeholder, value] of Object.entries(variables)) {
-		if (value) {
-			const regex = new RegExp(`{${placeholder}}`, "g");
-			result = result.replace(regex, value);
+	// Process each variable replacement.
+	// Support both {user}/{bot}/{char} and {{user}}/{{char}}/{{bot}} syntaxes.
+	for (const [placeholder, value] of Object.entries(normalizedVariables)) {
+		if (!value) {
+			continue;
 		}
+
+		const escapedPlaceholder = escapeRegExp(placeholder);
+		const doubleBraceRegex = new RegExp(
+			`\\{\\{\\s*${escapedPlaceholder}\\s*\\}\\}`,
+			"gi",
+		);
+		const singleBraceRegex = new RegExp(
+			`\\{\\s*${escapedPlaceholder}\\s*\\}`,
+			"gi",
+		);
+		result = result.replace(doubleBraceRegex, value);
+		result = result.replace(singleBraceRegex, value);
 	}
 
 	return result;

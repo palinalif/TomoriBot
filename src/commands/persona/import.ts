@@ -25,7 +25,11 @@ import {
 	importPresetData,
 } from "../../utils/db/presetImport";
 import type { PresetExportData } from "../../types/preset/presetExport";
-import { extractMetadataFromPNG } from "../../utils/image/pngMetadata";
+import { convertSillyTavernMetadataToPresetData } from "../../utils/db/sillyTavernImport";
+import {
+	extractMetadataFromPNG,
+	extractSillyTavernMetadataFromPNG,
+} from "../../utils/image/pngMetadata";
 import { validatePNGBuffer } from "../../utils/image/avatarHelper";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
@@ -40,6 +44,53 @@ import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
  * Maximum file size for imports (uses centralized constant)
  */
 const MAX_FILE_SIZE = IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB * 1024 * 1024;
+const MAX_SILLY_TAVERN_DEBUG_BYTES = 1_000_000;
+
+function truncateBufferForAttachment(
+	buffer: Buffer,
+	maxBytes: number,
+	noticeText: string,
+): Buffer {
+	if (buffer.length <= maxBytes) {
+		return buffer;
+	}
+
+	const notice = Buffer.from(noticeText, "utf8");
+	const safeMax = Math.max(maxBytes - notice.length, 0);
+	return Buffer.concat([buffer.subarray(0, safeMax), notice]);
+}
+
+function buildSillyTavernDebugText(
+	sillyTavernData: ReturnType<typeof extractSillyTavernMetadataFromPNG>,
+	conversionError?: string,
+): string {
+	if (!sillyTavernData) {
+		return "";
+	}
+
+	const parsedPretty = JSON.stringify(sillyTavernData.parsedJson, null, 2);
+	const parsedRootKeys =
+		sillyTavernData.parsedJson &&
+		typeof sillyTavernData.parsedJson === "object" &&
+		!Array.isArray(sillyTavernData.parsedJson)
+			? Object.keys(sillyTavernData.parsedJson as Record<string, unknown>)
+			: [];
+
+	return [
+		"TomoriBot Persona Import - SillyTavern Debug Decode",
+		`Detected metadata key: ${sillyTavernData.metadataKey}`,
+		`Decoded from base64: ${sillyTavernData.decodedFromBase64 ? "yes" : "no"}`,
+		...(conversionError
+			? [`Conversion error: ${conversionError}`]
+			: ["Conversion error: (none - decode only mode)"]),
+		`Raw metadata length: ${sillyTavernData.rawValue.length}`,
+		`Decoded text length: ${sillyTavernData.decodedValue.length}`,
+		`Parsed root keys: ${parsedRootKeys.length > 0 ? parsedRootKeys.join(", ") : "(none/object not detected)"}`,
+		"",
+		"=== Parsed JSON ===",
+		parsedPretty,
+	].join("\n");
+}
 
 function parseCommaSeparatedTriggers(input: string): string[] {
 	const parsedTriggers = input
@@ -420,19 +471,100 @@ export async function execute(
 
 		// 9. Extract metadata from PNG
 		const metadata = extractMetadataFromPNG(pngBuffer);
+		let presetDataFromFile: PresetExportData | null = null;
 
-		if (!metadata) {
+		if (metadata) {
+			// 10. Validate Tomori preset file structure
+			const validation = validatePresetFile(metadata);
+
+			if (!validation.valid || !validation.data) {
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(
+								localizer(locale, "commands.persona.import.invalid_file_title"),
+							)
+							.setDescription(
+								validation.error
+									? localizeError(locale, validation.error)
+									: localizer(
+											locale,
+											"commands.persona.import.invalid_file_description",
+										),
+							)
+							.setColor(ColorCode.ERROR),
+					],
+				});
+				return;
+			}
+
+			presetDataFromFile = validation.data as PresetExportData;
+		} else {
+			// 10b. Fallback: parse SillyTavern card data from `chara` metadata.
+			const sillyTavernData = extractSillyTavernMetadataFromPNG(pngBuffer);
+			if (!sillyTavernData) {
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(
+								localizer(locale, "commands.persona.import.no_metadata_title"),
+							)
+							.setDescription(
+								localizer(
+									locale,
+									"commands.persona.import.no_metadata_description",
+								),
+							)
+							.setColor(ColorCode.ERROR),
+					],
+				});
+				return;
+			}
+
+			const conversion =
+				convertSillyTavernMetadataToPresetData(sillyTavernData);
+			if (!conversion.success) {
+				const debugText = buildSillyTavernDebugText(
+					sillyTavernData,
+					conversion.error,
+				);
+				const debugBuffer = truncateBufferForAttachment(
+					Buffer.from(debugText, "utf8"),
+					MAX_SILLY_TAVERN_DEBUG_BYTES,
+					"\n\n[Truncated: decoded payload exceeded attachment size budget.]",
+				);
+				const debugFilename = `sillytavern-decode-${Date.now()}.txt`;
+				const debugAttachment = new AttachmentBuilder(debugBuffer, {
+					name: debugFilename,
+				});
+
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle("SillyTavern card detected (conversion failed)")
+							.setDescription(
+								"SillyTavern-style `chara` metadata was decoded, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
+							)
+							.setColor(ColorCode.WARN),
+					],
+					files: [debugAttachment],
+				});
+				return;
+			}
+
+			presetDataFromFile = conversion.data;
+			log.info(
+				`[Persona Import] Converted SillyTavern card to preset format for "${presetDataFromFile.tomori_nickname}"`,
+			);
+		}
+
+		if (!presetDataFromFile) {
 			await interaction.editReply({
 				embeds: [
 					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "commands.persona.import.no_metadata_title"),
-						)
+						.setTitle(localizer(locale, "general.errors.unknown_error_title"))
 						.setDescription(
-							localizer(
-								locale,
-								"commands.persona.import.no_metadata_description",
-							),
+							localizer(locale, "general.errors.unknown_error_description"),
 						)
 						.setColor(ColorCode.ERROR),
 				],
@@ -440,31 +572,6 @@ export async function execute(
 			return;
 		}
 
-		// 10. Validate preset file structure
-		const validation = validatePresetFile(metadata);
-
-		if (!validation.valid || !validation.data) {
-			await interaction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "commands.persona.import.invalid_file_title"),
-						)
-						.setDescription(
-							validation.error
-								? localizeError(locale, validation.error)
-								: localizer(
-										locale,
-										"commands.persona.import.invalid_file_description",
-									),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
-
-		const presetDataFromFile = validation.data as PresetExportData;
 		const additionalTriggers = additionalTriggersInput
 			? parseCommaSeparatedTriggers(additionalTriggersInput)
 			: [];

@@ -18,6 +18,12 @@ import {
 export const PRESET_EXPORT_VERSION = "1.0.0";
 
 /**
+ * Internal marker used for model-only sample dialogues (no paired user turn).
+ * Context builder detects this value and skips injecting a user example turn.
+ */
+export const UNPAIRED_SAMPLE_DIALOGUE_SENTINEL = "__UNPAIRED_SAMPLE_DIALOGUE__";
+
+/**
  * Maximum array sizes for validation (prevent DoS attacks)
  * These use the absolute maximum values to ensure cross-server compatibility
  * and prevent token waste from AI-generated presets that slightly exceed defaults

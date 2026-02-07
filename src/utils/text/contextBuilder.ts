@@ -37,6 +37,7 @@ import {
 	type ServerEmojiRow,
 	type ServerStickerRow,
 } from "@/types/db/schema";
+import { UNPAIRED_SAMPLE_DIALOGUE_SENTINEL } from "@/types/preset/presetExport";
 import { memoryGuard, MEDIA_LIMITS } from "../security/rateLimiter";
 import { decryptApiKey } from "../security/crypto";
 import {
@@ -114,8 +115,11 @@ type SimplifiedMessageForContext = {
  */
 function needsConversion(text: string): boolean {
 	// Check for Discord mentions: <@userid>, <#channelid>, <@&roleid>
-	// Check for template variables: {bot}, {user}
-	return /<[@#][!&]?\d{17,19}>/.test(text) || /\{(?:bot|user)\}/i.test(text);
+	// Check for template variables: {bot}, {user}, {char}, {{user}}, {{char}}, {{bot}}
+	return (
+		/<[@#][!&]?\d{17,19}>/.test(text) ||
+		/(?:\{\{(?:bot|char|user)\}\}|\{(?:bot|char|user)\})/i.test(text)
+	);
 }
 
 /**
@@ -1552,35 +1556,43 @@ export async function buildContext({
 			metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
 		});*/
 
+		let hasUnpairedSampleDialogues = false;
+
 		// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 		for (let i = 0; i < tomoriState!.sample_dialogues_in.length; i++) {
 			// 8.a. User's part of the sample dialogue
 			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 			let userSampleText = tomoriState!.sample_dialogues_in[i];
-			// No username prefix - prevents associating examples with the triggerer
-			if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY) {
-				userSampleText = humanizeString(userSampleText);
-			}
-			contextItems.push({
-				role: "user",
-				parts: [
-					{
-						type: "text",
-						text: applyUncensorInputTransforms(
-							await convertMentions(
-								userSampleText,
-								client,
-								guildId,
-								triggererName, // triggererName for {user} if it appears in sample
-								botName,
-								tomoriConfig.personal_memories_enabled,
+			const isUnpairedSample =
+				userSampleText === UNPAIRED_SAMPLE_DIALOGUE_SENTINEL;
+			if (isUnpairedSample) {
+				hasUnpairedSampleDialogues = true;
+			} else {
+				// No username prefix - prevents associating examples with the triggerer
+				if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY) {
+					userSampleText = humanizeString(userSampleText);
+				}
+				contextItems.push({
+					role: "user",
+					parts: [
+						{
+							type: "text",
+							text: applyUncensorInputTransforms(
+								await convertMentions(
+									userSampleText,
+									client,
+									guildId,
+									triggererName, // triggererName for {user} if it appears in sample
+									botName,
+									tomoriConfig.personal_memories_enabled,
+								),
+								uncensorInputOptions,
 							),
-							uncensorInputOptions,
-						),
-					},
-				],
-				metadataTag: ContextItemTag.DIALOGUE_SAMPLE, // Tagging
-			});
+						},
+					],
+					metadataTag: ContextItemTag.DIALOGUE_SAMPLE, // Tagging
+				});
+			}
 
 			// 8.b. Bot's part of the sample dialogue
 			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
@@ -1608,6 +1620,30 @@ export async function buildContext({
 					},
 				],
 				metadataTag: ContextItemTag.DIALOGUE_SAMPLE, // Tagging
+			});
+		}
+
+		if (hasUnpairedSampleDialogues) {
+			const spacerText = `[System: Above are only examples of how {{char}} acts and talks. Use them as reference for a completely new scene that starts now.]`;
+			contextItems.push({
+				role: "user",
+				parts: [
+					{
+						type: "text",
+						text: applyUncensorInputTransforms(
+							await convertMentions(
+								spacerText,
+								client,
+								guildId,
+								triggererName,
+								botName,
+								tomoriConfig.personal_memories_enabled,
+							),
+							uncensorInputOptions,
+						),
+					},
+				],
+				metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
 			});
 		}
 
