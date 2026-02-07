@@ -123,37 +123,36 @@ function applySubcommandLocalizations(
 					option.choices.length > 0
 				) {
 					for (const choice of option.choices) {
-						if (choice.value) {
-							// Build localization key for choice name
-							const choiceLocalizationKey = `commands.${categoryName}.${subcommandPath}.${option.name}_choice_${choice.value}`;
-							const choiceLocalizationsMap: { [key: string]: string } = {};
+						if (choice.value === undefined || choice.value === null) continue;
 
-							for (const locale of availableLocales) {
-								let localizedChoice = localizer(locale, choiceLocalizationKey);
-								const commonChoiceKey = `commands.choices.${choice.value}`;
+						const choiceValue = String(choice.value);
+						const choiceLocalizationKeys = [
+							`commands.${categoryName}.${subcommandPath}.${option.name}_choice_${choiceValue}`,
+							`commands.${categoryName}.${subcommandPath}.${choiceValue}_option`,
+							`commands.${categoryName}.${subcommandPath}.${option.name}_${choiceValue}`,
+							`commands.choices.${choiceValue}`,
+						];
+						const choiceLocalizationsMap: { [key: string]: string } = {};
 
-								// Fallback to common choice localization for reusable choices
-								if (
-									!localizedChoice ||
-									localizedChoice === choiceLocalizationKey
-								) {
-									localizedChoice = localizer(locale, commonChoiceKey);
-								}
+						for (const locale of availableLocales) {
+							let localizedChoice: string | null = null;
 
-								// Apply if valid translation found (not the key itself)
-								if (
-									localizedChoice &&
-									localizedChoice !== choiceLocalizationKey &&
-									localizedChoice !== commonChoiceKey
-								) {
-									choiceLocalizationsMap[locale] = localizedChoice;
+							for (const localizationKey of choiceLocalizationKeys) {
+								const candidate = localizer(locale, localizationKey);
+								if (candidate && candidate !== localizationKey) {
+									localizedChoice = candidate;
+									break;
 								}
 							}
 
-							// Apply choice name localizations if we have any
-							if (Object.keys(choiceLocalizationsMap).length > 0) {
-								choice.name_localizations = choiceLocalizationsMap;
+							if (localizedChoice) {
+								choiceLocalizationsMap[locale] = localizedChoice;
 							}
+						}
+
+						// Apply choice name localizations if we have any
+						if (Object.keys(choiceLocalizationsMap).length > 0) {
+							choice.name_localizations = choiceLocalizationsMap;
 						}
 					}
 				}

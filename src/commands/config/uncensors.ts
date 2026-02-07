@@ -35,9 +35,6 @@ export const configureSubcommand = (
 							"commands.config.uncensors.injection_option",
 						),
 						value: "injection",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.uncensors.injection_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -45,12 +42,6 @@ export const configureSubcommand = (
 							"commands.config.uncensors.unicode_spaces_option",
 						),
 						value: "unicode_spaces",
-						name_localizations: {
-							ja: localizer(
-								"ja",
-								"commands.config.uncensors.unicode_spaces_option",
-							),
-						},
 					},
 					{
 						name: localizer(
@@ -58,9 +49,6 @@ export const configureSubcommand = (
 							"commands.config.uncensors.sanitize_option",
 						),
 						value: "sanitize",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.uncensors.sanitize_option"),
-						},
 					},
 				),
 		)

@@ -55,9 +55,6 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_off",
 						),
 						value: CooldownType.OFF,
-						name_localizations: {
-							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_off"),
-						},
 					},
 					{
 						name: localizer(
@@ -65,9 +62,6 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_per_user",
 						),
 						value: CooldownType.PER_USER,
-						name_localizations: {
-							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_per_user"),
-						},
 					},
 					{
 						name: localizer(
@@ -75,9 +69,6 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_per_channel",
 						),
 						value: CooldownType.PER_CHANNEL,
-						name_localizations: {
-							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_per_channel"),
-						},
 					},
 					{
 						name: localizer(
@@ -85,9 +76,6 @@ export const configureSubcommand = (
 							"commands.server.cooldown.triggers.type.choice_server_wide",
 						),
 						value: CooldownType.SERVER_WIDE,
-						name_localizations: {
-							ja: localizer("ja", "commands.server.cooldown.triggers.type.choice_server_wide"),
-						},
 					},
 					// Disabled: Users found STRICT_SERVER_WIDE redundant (no manager exemption)
 					// Servers already using type 4 will continue to work - just can't be newly selected

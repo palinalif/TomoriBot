@@ -47,12 +47,6 @@ export const configureSubcommand = (
 							"commands.personal.cache.crossserver_option",
 						),
 						value: "crossserver",
-						name_localizations: {
-							ja: localizer(
-								"ja",
-								"commands.personal.cache.crossserver_option",
-							),
-						},
 					},
 					{
 						name: localizer(
@@ -60,12 +54,6 @@ export const configureSubcommand = (
 							"commands.personal.cache.clear_option",
 						),
 						value: "clear",
-						name_localizations: {
-							ja: localizer(
-								"ja",
-								"commands.personal.cache.clear_option",
-							),
-						},
 					},
 				),
 		);

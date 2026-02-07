@@ -47,23 +47,14 @@ export const configureSubcommand = (
 					{
 						name: localizer("en-US", "commands.bot.impersonate.target_persona"),
 						value: "persona",
-						name_localizations: {
-							ja: localizer("ja", "commands.bot.impersonate.target_persona"),
-						},
 					},
 					{
 						name: localizer("en-US", "commands.bot.impersonate.target_me"),
 						value: "me",
-						name_localizations: {
-							ja: localizer("ja", "commands.bot.impersonate.target_me"),
-						},
 					},
 					{
 						name: localizer("en-US", "commands.bot.impersonate.target_system"),
 						value: "system",
-						name_localizations: {
-							ja: localizer("ja", "commands.bot.impersonate.target_system"),
-						},
 					},
 				),
 		);

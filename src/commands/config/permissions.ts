@@ -37,9 +37,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.selfteaching_option",
 						),
 						value: "selfteaching",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.selfteaching_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -47,9 +44,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.personalization_option",
 						),
 						value: "personalization",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.personalization_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -57,9 +51,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.emojiusage_option",
 						),
 						value: "emojiusage",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.emojiusage_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -67,9 +58,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.stickerusage_option",
 						),
 						value: "stickerusage",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.stickerusage_option"),
-						},
 					},
 					// New: Added Google Search permission choice
 					{
@@ -78,9 +66,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.websearch_option",
 						),
 						value: "websearch",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.websearch_option"),
-						},
 					},
 					// New: Added Pin Message permission choice
 					{
@@ -89,9 +74,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.pinmessage_option",
 						),
 						value: "pinmessage",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.pinmessage_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -99,9 +81,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.imagegen_option",
 						),
 						value: "imagegen",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.imagegen_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -109,9 +88,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.hiderespondembed_option",
 						),
 						value: "hiderespondembed",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.hiderespondembed_option"),
-						},
 					},
 					{
 						name: localizer(
@@ -119,9 +95,6 @@ export const configureSubcommand = (
 							"commands.config.permissions.hideimpersonationembeds_option",
 						),
 						value: "hideimpersonationembeds",
-						name_localizations: {
-							ja: localizer("ja", "commands.config.permissions.hideimpersonationembeds_option"),
-						},
 					},
 				),
 		)
