@@ -107,8 +107,127 @@ function isValidHttpUrl(url: string): boolean {
 	}
 }
 
+/**
+ * Attempts to recover persona avatar by scanning guild for surviving webhooks.
+ * Used when the stored webhook_avatar_url fails to download (Edge Case 2: last webhook deleted).
+ *
+ * @param guild - Guild to scan for surviving webhooks
+ * @param personaId - Persona ID to recover avatar for
+ * @returns Avatar data URI and recovered URL, or null if no recovery possible
+ */
+async function attemptWebhookAvatarRecovery(
+	guild: Guild,
+	personaId: number,
+): Promise<{ dataUri: string; url: string } | null> {
+	const personaWebhookName = getPersonaWebhookName(personaId);
+
+	log.info(
+		`[Webhook Manager] Attempting avatar recovery for persona ${personaId} by scanning guild ${guild.id}`,
+	);
+
+	// Scan all text channels in guild for surviving webhooks
+	for (const channel of guild.channels.cache.values()) {
+		// Skip non-text channels
+		if (!channel.isTextBased()) {
+			continue;
+		}
+
+		// Skip channels without webhook support
+		if (!("fetchWebhooks" in channel)) {
+			continue;
+		}
+
+		try {
+			const webhooks = await (channel as TextChannel).fetchWebhooks();
+			const matching = webhooks.find((wh) => wh.name === personaWebhookName);
+
+			// Found a surviving webhook for this persona!
+			if (matching?.avatar) {
+				const avatarUrl = matching.avatarURL({ extension: "png", size: 256 });
+				if (!avatarUrl) {
+					continue;
+				}
+
+				log.info(
+					`[Webhook Manager] Found surviving webhook in channel ${channel.id}, attempting to download avatar`,
+				);
+
+				// Download avatar from surviving webhook
+				const downloadResult = await safeDownload(avatarUrl, {
+					maxSizeMB: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB,
+				});
+
+				if (!downloadResult.success || !downloadResult.buffer) {
+					log.warn(
+						`[Webhook Manager] Failed to download from surviving webhook, continuing scan`,
+					);
+					continue;
+				}
+
+				let buffer = downloadResult.buffer;
+				if (buffer.length > MAX_AVATAR_SIZE_BYTES) {
+					log.warn(
+						`[Webhook Manager] Surviving webhook avatar exceeds max size, continuing scan`,
+					);
+					continue;
+				}
+
+				// Convert to PNG
+				try {
+					buffer = await convertToPNG(buffer);
+				} catch (error) {
+					log.warn(
+						`[Webhook Manager] Failed to convert surviving webhook avatar to PNG, continuing scan`,
+						error,
+					);
+					continue;
+				}
+
+				// Success! Update database with recovered URL
+				try {
+					await sql`
+						UPDATE tomoris
+						SET webhook_avatar_url = ${avatarUrl}
+						WHERE tomori_id = ${personaId}
+					`;
+
+					// Invalidate cache so updated URL is used immediately
+					invalidateTomoriStateCache(guild.id);
+
+					log.success(
+						`[Webhook Manager] Successfully recovered avatar from surviving webhook in channel ${channel.id}`,
+					);
+				} catch (dbError) {
+					log.warn(
+						`[Webhook Manager] Failed to update database with recovered URL, but will use avatar anyway`,
+						dbError,
+					);
+				}
+
+				// Return recovered avatar as data URI
+				const base64 = buffer.toString("base64");
+				return {
+					dataUri: `data:image/png;base64,${base64}`,
+					url: avatarUrl,
+				};
+			}
+		} catch (error) {
+			log.warn(
+				`[Webhook Manager] Error scanning channel ${channel.id} for recovery, continuing`,
+				error,
+			);
+		}
+	}
+
+	log.warn(
+		`[Webhook Manager] Avatar recovery failed: no surviving webhooks found for persona ${personaId}`,
+	);
+	return null;
+}
+
 async function resolvePersonaWebhookAvatar(
 	persona: TomoriState,
+	guild?: Guild,
 ): Promise<string | undefined> {
 	if (!persona.webhook_avatar_url) {
 		return undefined;
@@ -129,6 +248,30 @@ async function resolvePersonaWebhookAvatar(
 		log.warn(
 			`[Webhook Manager] Failed to download avatar for persona ${persona.tomori_nickname}: ${downloadResult.error ?? "unknown error"}`,
 		);
+
+		// 🆕 AUTO-RECOVERY: Attempt to recover from surviving webhooks (non-production only)
+		if (!IS_PRODUCTION && guild && persona.tomori_id) {
+			log.info(
+				`[Webhook Manager] Attempting auto-recovery for persona ${persona.tomori_id}`,
+			);
+
+			const recoveredAvatar = await attemptWebhookAvatarRecovery(
+				guild,
+				persona.tomori_id,
+			);
+
+			if (recoveredAvatar) {
+				log.success(
+					`[Webhook Manager] Auto-recovery successful for persona ${persona.tomori_id}`,
+				);
+				return recoveredAvatar.dataUri;
+			}
+
+			log.warn(
+				`[Webhook Manager] Auto-recovery failed for persona ${persona.tomori_id}, webhook will be created without avatar`,
+			);
+		}
+
 		return undefined;
 	}
 
@@ -322,7 +465,7 @@ export async function getOrCreatePersonaWebhook(
 		}
 
 		if (!webhook) {
-			const avatar = await resolvePersonaWebhookAvatar(persona);
+			const avatar = await resolvePersonaWebhookAvatar(persona, channel.guild);
 			log.info(
 				`[Webhook Manager] No persona webhook found for channel ${channelId}, creating new one`,
 			);
