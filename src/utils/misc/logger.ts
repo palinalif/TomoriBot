@@ -67,6 +67,34 @@ const colors = {
 	brightYellow: "\x1b[93m",
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null;
+
+const toLoggableError = (err: unknown): Error | Record<string, unknown> => {
+	if (err instanceof Error) return err;
+	if (isRecord(err)) return err;
+	return { message: String(err) };
+};
+
+const toErrorMessage = (err: unknown): string => {
+	if (err instanceof Error) return err.message;
+	if (isRecord(err)) {
+		if (typeof err.message === "string") return err.message;
+		try {
+			return JSON.stringify(err);
+		} catch {
+			return "[unserializable object]";
+		}
+	}
+	return String(err);
+};
+
+const toErrorStack = (err: unknown): string | null => {
+	if (err instanceof Error) return err.stack ?? null;
+	if (isRecord(err) && typeof err.stack === "string") return err.stack;
+	return null;
+};
+
 /**
  * Logging utility for formatted info, success, error, warning, and section messages.
  * Uses Pino for structured logging with custom levels and pretty printing in development.
@@ -105,7 +133,7 @@ export const log = {
 			: `${colors.yellow}${msg}${colors.reset}`;
 		if (err) {
 			pinoLogger.warn(
-				{ err: err instanceof Error ? err : { message: String(err) } },
+				{ err: toLoggableError(err) },
 				coloredMsg,
 			);
 		} else {
@@ -153,7 +181,7 @@ export const log = {
 		if (err) {
 			pinoLogger.error(
 				{
-					err: err instanceof Error ? err : { message: String(err) },
+					err: toLoggableError(err),
 					context,
 				},
 				coloredMsg,
@@ -168,8 +196,8 @@ export const log = {
 		}
 
 		// 3. Prepare data for database insertion
-		const errorMessage = err instanceof Error ? err.message : String(err);
-		const stackTrace = err instanceof Error ? err.stack : null;
+		const errorMessage = toErrorMessage(err);
+		const stackTrace = toErrorStack(err);
 
 		const dbPayload = {
 			tomori_id: context?.tomoriId ?? null,

@@ -268,13 +268,23 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 			if (!response.ok) {
 				const errorText = await response.text();
-				let errorMessage = response.statusText;
+				let errorMessage = errorText || response.statusText;
+				let errorCode: string | undefined;
 				try {
 					const errorData = JSON.parse(errorText) as {
-						error?: { message?: string };
+						error?: {
+							message?: string;
+							code?: string | number;
+							metadata?: { raw?: string };
+						};
 						message?: string;
 					};
+					errorCode =
+						errorData?.error?.code !== undefined
+							? String(errorData.error.code)
+							: undefined;
 					errorMessage =
+						errorData?.error?.metadata?.raw ||
 						errorData?.error?.message ||
 						errorData?.message ||
 						errorText ||
@@ -283,7 +293,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 					errorMessage = errorText || response.statusText;
 				}
 
-				throw new Error(`HTTP ${response.status}: ${errorMessage}`);
+				const statusLabel = errorCode
+					? `HTTP ${response.status} (${errorCode})`
+					: `HTTP ${response.status}`;
+				throw new Error(`${statusLabel}: ${errorMessage}`);
 			}
 
 			if (!response.body) {
@@ -1058,10 +1071,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		// Log the full error object for debugging
 		log.error("OpenRouter error details:", error);
 		if (error && typeof error === "object") {
-			log.error(
-				"OpenRouter error stringified:",
-				JSON.stringify(error, null, 2),
-			);
+			try {
+				log.error(
+					"OpenRouter error stringified:",
+					JSON.stringify(error, null, 2),
+				);
+			} catch {
+				log.error("OpenRouter error stringified: [unserializable object]");
+			}
 		}
 
 		const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1103,9 +1120,25 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			// Try to parse body field
 			if (errorObj.body && typeof errorObj.body === "string") {
 				try {
-					const bodyParsed = JSON.parse(errorObj.body);
+					const bodyParsed = JSON.parse(errorObj.body) as {
+						error?: {
+							code?: string | number;
+							message?: string;
+							metadata?: { raw?: string };
+						};
+						message?: string;
+					};
+					if (!errorCode && bodyParsed.error?.code !== undefined) {
+						errorCode = String(bodyParsed.error.code);
+					}
 					if (!extractedMessage && bodyParsed.error?.metadata?.raw) {
 						extractedMessage = bodyParsed.error.metadata.raw;
+					}
+					if (!extractedMessage && bodyParsed.error?.message) {
+						extractedMessage = bodyParsed.error.message;
+					}
+					if (!extractedMessage && bodyParsed.message) {
+						extractedMessage = bodyParsed.message;
 					}
 				} catch {
 					// Ignore body parsing errors
