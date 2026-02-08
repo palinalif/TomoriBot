@@ -16,7 +16,11 @@ import {
 } from "@/utils/discord/interactionHelper";
 import type { UserRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
-import { loadTomoriState, loadAllPersonasForServer } from "@/utils/db/dbRead";
+import {
+	loadTomoriState,
+	loadAllPersonasForServer,
+	loadPersonalMemoriesForUserLineage,
+} from "@/utils/db/dbRead";
 import { decryptApiKey } from "@/utils/security/crypto";
 import {
 	getCachedUserRow,
@@ -470,11 +474,7 @@ async function buildSupplementaryContext(params: {
 			if (userPrivacyLevel !== PrivacyLevel.MINIMAL) continue;
 
 			const userRow = await getCachedUserRow(userId);
-			if (
-				!userRow ||
-				!userRow.personal_memories ||
-				userRow.personal_memories.length === 0
-			) {
+			if (!userRow || !userRow.user_id) {
 				continue;
 			}
 
@@ -485,9 +485,20 @@ async function buildSupplementaryContext(params: {
 			if (isBlacklisted) continue;
 			if (!personalizationEnabled) continue;
 
+			const lineageId = tomoriState.persona_lineage_id ?? 0;
+			const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
+				userRow.user_id,
+				lineageId,
+				true,
+			);
+			if (personalMemoryRows.length === 0) {
+				continue;
+			}
+
 			const userDisplayName = userRow.user_nickname || userId;
+			const memoryList = personalMemoryRows.map((row) => row.content);
 			userMemoryLines.push(
-				`${userDisplayName}: ${userRow.personal_memories.join("; ")}`,
+				`${userDisplayName}: ${memoryList.join("; ")}`,
 			);
 		}
 

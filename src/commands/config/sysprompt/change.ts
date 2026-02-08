@@ -1,5 +1,5 @@
 /**
- * Command: /config prompt change
+ * Command: /config sysprompt change
  * Allows users to set a custom system prompt up to 8000 characters
  * using a 4-part modal (2000 chars each, first part required)
  */
@@ -42,7 +42,7 @@ export function configureSubcommand(): SlashCommandSubcommandBuilder {
 }
 
 /**
- * Execute the /config prompt change command
+ * Execute the /config sysprompt change command
  * @param _client - Discord client (unused)
  * @param interaction - Chat input command interaction
  * @param userData - User data from database

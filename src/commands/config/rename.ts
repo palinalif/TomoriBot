@@ -12,7 +12,7 @@ import {
 	type UserRow,
 	type ErrorContext,
 	tomoriSchema,
-	tomoriConfigSchema,
+	personaConfigSchema,
 } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
@@ -164,7 +164,7 @@ export async function execute(
 		}
 
 		// 10. Add new nickname to trigger words if not already present
-		const currentTriggers = tomoriState.config.trigger_words ?? [];
+		const currentTriggers = tomoriState.trigger_words ?? [];
 		let triggerUpdateNeeded = false;
 		const updatedTriggers = [...currentTriggers]; // Create a mutable copy
 
@@ -189,14 +189,15 @@ export async function execute(
 		if (triggerUpdateNeeded) {
 			// Construct properly escaped PostgreSQL array literal (Rule #23)
 			const [updatedConfigRow] = await sql`
-            UPDATE tomori_configs
-            SET trigger_words = array_append(trigger_words, ${newNickname})
-            WHERE server_id = ${tomoriState.server_id}
-            RETURNING *
-        `;
+				INSERT INTO persona_configs (tomori_id, trigger_words)
+				VALUES (${tomoriState.tomori_id}, ARRAY[${newNickname}]::text[])
+				ON CONFLICT (tomori_id) DO UPDATE
+				SET trigger_words = array_append(persona_configs.trigger_words, ${newNickname})
+				RETURNING *
+			`;
 
 			// 12. Validate the returned `tomori_configs` data (Rules #3, #5)
-			const validatedConfig = tomoriConfigSchema.safeParse(updatedConfigRow);
+			const validatedConfig = personaConfigSchema.safeParse(updatedConfigRow);
 
 			if (!validatedConfig.success || !updatedConfigRow) {
 				// Log error specific to tomori_configs update failure
@@ -207,7 +208,7 @@ export async function execute(
 					errorType: "DatabaseUpdateError",
 					metadata: {
 						command: "config nickname",
-						table: "tomori_configs",
+						table: "persona_configs",
 						column: "trigger_words",
 						guildId: interaction.guild?.id ?? interaction.user.id,
 						newNickname,
@@ -220,7 +221,7 @@ export async function execute(
 				// Log this as a warning since the primary nickname update succeeded,
 				// but inform the user of the partial failure.
 				await log.error(
-					"Failed to update or validate trigger_words in tomori_configs table",
+					"Failed to update or validate trigger_words in persona_configs table",
 					validatedConfig.success
 						? new Error("Database update returned no rows or unexpected data")
 						: new Error("Updated config data failed validation"),

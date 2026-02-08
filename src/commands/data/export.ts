@@ -13,6 +13,7 @@ import {
 	exportServerData,
 	exportPersonalityData,
 } from "../../utils/db/dataExport";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 /**
  * Configure the 'export' subcommand
@@ -50,6 +51,14 @@ export const configureSubcommand = (
 						value: "personality",
 					},
 				),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("persona")
+				.setDescription(
+					"Target persona nickname for memory export (defaults to active main persona)",
+				)
+				.setRequired(false),
 		);
 
 /**
@@ -68,8 +77,49 @@ export async function execute(
 ): Promise<void> {
 	// 1. Get the export type option
 	const exportType = interaction.options.getString("type", true);
+	const personaNameInput = interaction.options.getString("persona");
+	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 
 	try {
+		// 1.5 Resolve target persona for memory exports/imports
+		let targetTomoriId: number | undefined;
+		let targetPersonaLineageId = 0;
+		let targetPersonaNickname: string | null = null;
+		if (exportType === "personal" || exportType === "server") {
+			const personas = await loadAllPersonasForServer(serverDiscId);
+			if (personas.length > 0) {
+				const selectedPersona = personaNameInput
+					? personas.find(
+							(persona) =>
+								persona.tomori_nickname.toLowerCase() ===
+								personaNameInput.toLowerCase(),
+						)
+					: personas.find((persona) => !persona.is_alter) ?? personas[0];
+
+				if (!selectedPersona) {
+					await replyInfoEmbed(interaction, locale, {
+						titleKey: "general.errors.invalid_option_title",
+						description: `Unknown persona "${personaNameInput}".`,
+						color: ColorCode.ERROR,
+						flags: MessageFlags.Ephemeral,
+					});
+					return;
+				}
+
+				targetTomoriId = selectedPersona.tomori_id;
+				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+				targetPersonaNickname = selectedPersona.tomori_nickname;
+			} else if (personaNameInput) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					description: `Unknown persona "${personaNameInput}".`,
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+		}
+
 		// 2. Check permissions for server and personality exports (only in guilds)
 		if (exportType === "server" || exportType === "personality") {
 			// In guilds, require Manage Server permission
@@ -94,7 +144,6 @@ export async function execute(
 
 		// 4. Handle personality export separately (returns text instead of JSON)
 		if (exportType === "personality") {
-			const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 			const personalityResult = await exportPersonalityData(serverDiscId);
 
 			if (!personalityResult.success || !personalityResult.text) {
@@ -197,12 +246,21 @@ export async function execute(
 		let filename: string;
 
 		if (exportType === "personal") {
-			exportResult = await exportPersonalData(interaction.user.id);
-			filename = `tomori-personal-${interaction.user.id}-${Date.now()}.json`;
+			exportResult = await exportPersonalData(
+				interaction.user.id,
+				targetPersonaLineageId,
+				true,
+			);
+			const personaSlug = (targetPersonaNickname ?? "persona")
+				.replace(/[^a-zA-Z0-9-_]/g, "_")
+				.slice(0, 32);
+			filename = `tomori-personal-${personaSlug}-${interaction.user.id}-${Date.now()}.json`;
 		} else if (exportType === "server") {
-			const serverDiscId = interaction.guild?.id ?? interaction.user.id;
-			exportResult = await exportServerData(serverDiscId);
-			filename = `tomori-server-${serverDiscId}-${Date.now()}.json`;
+			exportResult = await exportServerData(serverDiscId, targetTomoriId);
+			const personaSlug = (targetPersonaNickname ?? "persona")
+				.replace(/[^a-zA-Z0-9-_]/g, "_")
+				.slice(0, 32);
+			filename = `tomori-server-${personaSlug}-${serverDiscId}-${Date.now()}.json`;
 		} else {
 			await interaction.editReply({
 				embeds: [

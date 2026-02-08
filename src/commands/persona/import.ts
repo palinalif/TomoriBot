@@ -247,6 +247,24 @@ export const configureSubcommand = (
 					localizer("en-US", "commands.persona.import.triggers_description"),
 				)
 				.setRequired(false),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("identity_mode")
+				.setDescription(
+					"Lineage mode for personal memories: preserve reuses imported lineage memories; fork starts a fresh lineage memory namespace",
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: "Preserve lineage memories (Recommended)",
+						value: "preserve",
+					},
+					{
+						name: "Fork new lineage (no inherited lineage memories)",
+						value: "fork",
+					},
+				),
 		);
 
 /**
@@ -267,6 +285,11 @@ export async function execute(
 		// 1. Get import type (main or alter)
 		const importType = interaction.options.getString("type", true);
 		const additionalTriggersInput = interaction.options.getString("triggers");
+		const identityMode =
+			(interaction.options.getString("identity_mode") as
+				| "preserve"
+				| "fork"
+				| null) ?? "preserve";
 
 		// Alter personas can only be imported in guilds (not DMs)
 		if (importType === "alter" && !interaction.guild) {
@@ -587,7 +610,11 @@ export async function execute(
 
 		if (importType === "main") {
 			// Main persona import: replace existing main persona
-			const importResult = await importPresetData(serverDiscId, presetDataFromFile);
+			const importResult = await importPresetData(
+				serverDiscId,
+				presetDataFromFile,
+				identityMode,
+			);
 
 			if (!importResult.success) {
 				await interaction.editReply({
@@ -902,19 +929,11 @@ export async function execute(
 				return;
 			}
 
-			// 11c. Collect all trigger words (main persona uses config.trigger_words, alters use alter_triggers)
+			// 11c. Collect all trigger words from persona-scoped config
 			const allTriggerWords = new Set<string>();
 			for (const persona of allPersonas) {
-				if (persona.is_alter) {
-					// Alter personas store triggers in alter_triggers
-					for (const trigger of persona.alter_triggers ?? []) {
-						allTriggerWords.add(trigger.toLowerCase());
-					}
-				} else {
-					// Main persona stores triggers in config.trigger_words
-					for (const trigger of persona.config.trigger_words ?? []) {
-						allTriggerWords.add(trigger.toLowerCase());
-					}
+				for (const trigger of persona.trigger_words ?? []) {
+					allTriggerWords.add(trigger.toLowerCase());
 				}
 			}
 
@@ -965,27 +984,48 @@ export async function execute(
 				.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
 				.join(",")}}`;
 
-			// 11h. Insert new tomoris row with is_alter=true
-			const [newAlterRow] = await sql`
-				INSERT INTO tomoris (
-					server_id,
-					tomori_nickname,
-					attribute_list,
-					sample_dialogues_in,
-					sample_dialogues_out,
-					is_alter,
-					alter_triggers
-				) VALUES (
-					${mainPersona.server_id},
-					${presetData.tomori_nickname},
-					${attributeArrayLiteral}::text[],
-					${dialoguesInArrayLiteral}::text[],
-					${dialoguesOutArrayLiteral}::text[],
-					true,
-					${alterTriggersArrayLiteral}::text[]
-				)
-				RETURNING tomori_id
-			`;
+			// 11h. Insert new alter persona row with lineage mode behavior
+			const importedLineageId = presetData.persona_lineage_id ?? null;
+			const [newAlterRow] =
+				identityMode === "preserve" && importedLineageId !== null
+					? await sql`
+						INSERT INTO tomoris (
+							server_id,
+							tomori_nickname,
+							attribute_list,
+							sample_dialogues_in,
+							sample_dialogues_out,
+							is_alter,
+							persona_lineage_id
+						) VALUES (
+							${mainPersona.server_id},
+							${presetData.tomori_nickname},
+							${attributeArrayLiteral}::text[],
+							${dialoguesInArrayLiteral}::text[],
+							${dialoguesOutArrayLiteral}::text[],
+							true,
+							${importedLineageId}
+						)
+						RETURNING tomori_id
+					`
+					: await sql`
+						INSERT INTO tomoris (
+							server_id,
+							tomori_nickname,
+							attribute_list,
+							sample_dialogues_in,
+							sample_dialogues_out,
+							is_alter
+						) VALUES (
+							${mainPersona.server_id},
+							${presetData.tomori_nickname},
+							${attributeArrayLiteral}::text[],
+							${dialoguesInArrayLiteral}::text[],
+							${dialoguesOutArrayLiteral}::text[],
+							true
+						)
+						RETURNING tomori_id
+					`;
 
 			if (!newAlterRow?.tomori_id) {
 				log.error("Failed to insert alter persona row");
@@ -1003,6 +1043,14 @@ export async function execute(
 			}
 
 			const newTomoriId = newAlterRow.tomori_id;
+
+			// 11h.1 Store alter trigger words in persona_configs
+			await sql`
+				INSERT INTO persona_configs (tomori_id, trigger_words)
+				VALUES (${newTomoriId}, ${alterTriggersArrayLiteral}::text[])
+				ON CONFLICT (tomori_id) DO UPDATE
+				SET trigger_words = EXCLUDED.trigger_words
+			`;
 
 			const sanitizedNickname = presetData.tomori_nickname
 				.replace(/[^a-zA-Z0-9-_]/g, "_")

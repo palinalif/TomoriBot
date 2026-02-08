@@ -10,6 +10,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedChoices,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
@@ -25,6 +26,7 @@ import {
 } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_attribute_modal";
@@ -117,9 +119,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("attribute")
-		.setDescription(
-			localizer("en-US", "commands.forget.attribute.description"),
-		);
+		.setDescription(localizer("en-US", "commands.forget.attribute.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -148,6 +148,8 @@ export async function execute(
 
 	// Define state variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
+	let personaSelectionInteraction: ButtonInteraction | null = null;
 
 	try {
 		// 2. Load server's Tomori state (Rule 17)
@@ -160,6 +162,51 @@ export async function execute(
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// Select target persona via paginated selector
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		if (allPersonas.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const personaSelectionItems = allPersonas.map((persona) =>
+			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		);
+		const personaSelection = await replyPaginatedChoices(interaction, locale, {
+			titleKey: "general.pagination.select_persona_title",
+			descriptionKey: "general.pagination.select_persona_description",
+			items: personaSelectionItems,
+			color: ColorCode.INFO,
+			preserveSelectedInteraction: true,
+			onSelect: async () => {},
+		});
+
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+
+		personaSelectionInteraction = personaSelection.interaction;
+		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -184,15 +231,14 @@ export async function execute(
 		}
 
 		// 5. Get the current attribute list
-		const currentAttributes = tomoriState.attribute_list ?? [];
+		const currentAttributes = selectedPersona.attribute_list ?? [];
 
 		// 6. Check if there are any attributes to remove
 		if (currentAttributes.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
 				titleKey: "commands.forget.attribute.no_attributes_title",
 				descriptionKey: "commands.forget.attribute.no_attributes",
 				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -206,7 +252,10 @@ export async function execute(
 			}),
 		);
 
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+		const modalResult = await promptWithPaginatedModal(
+			personaSelectionInteraction,
+			locale,
+			{
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.forget.attribute.modal_title",
 			components: [
@@ -241,7 +290,7 @@ export async function execute(
 
 		// Perform the database update - let helper functions manage interaction state
 		await performAttributeRemoval(
-			tomoriState,
+			selectedPersona,
 			attributeToRemove,
 			userData,
 			modalSubmitInteraction,
@@ -252,40 +301,32 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach attribute",
+				command: "forget attribute",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};
 		await log.error(
-			`Unexpected error in /teach attribute for user ${userData.user_disc_id}`,
+			`Unexpected error in /forget attribute for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 16. Inform user of unknown error
-		if (interaction.deferred || interaction.replied) {
-			try {
-				await interaction.followUp({
-					content: localizer(
-						locale,
-						"general.errors.unknown_error_description",
-					),
-					flags: MessageFlags.Ephemeral,
-				});
-			} catch (followUpError) {
-				log.error(
-					"Failed to send follow-up error message in attribute catch block",
-					followUpError,
-				);
-			}
-		} else {
-			log.warn(
-				"Could not determine valid interaction to send error message in attribute catch block",
-			);
-		}
+		// 16. Inform user of unknown error, prioritizing unacknowledged button interaction
+		const errorReplyTarget =
+			personaSelectionInteraction &&
+			!personaSelectionInteraction.deferred &&
+			!personaSelectionInteraction.replied
+				? personaSelectionInteraction
+				: interaction;
+		await replyInfoEmbed(errorReplyTarget, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

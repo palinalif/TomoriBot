@@ -711,19 +711,32 @@ export function validateAttributeAndDialogue(
  */
 export async function checkPersonalMemoryLimit(
 	userId: number,
+	personaLineageId = 0,
+	includeLegacyFallback = true,
 ): Promise<MemoryValidationResult> {
 	const limits = getMemoryLimits();
 
 	try {
-		// Get current count of personal memories for this user
-		const [userRow] = await sql`
-			SELECT array_length(personal_memories, 1) as memory_count
-			FROM users
-			WHERE user_id = ${userId}
-		`;
+		// Count lineage-scoped memories (with optional legacy lineage 0 fallback during soak)
+		const [countResult] =
+			includeLegacyFallback && personaLineageId !== 0
+				? await sql`
+					SELECT COUNT(*) as memory_count
+					FROM personal_memories
+					WHERE user_id = ${userId}
+					  AND (
+						persona_lineage_id = ${personaLineageId}
+						OR persona_lineage_id = 0
+					  )
+				`
+				: await sql`
+					SELECT COUNT(*) as memory_count
+					FROM personal_memories
+					WHERE user_id = ${userId}
+					  AND persona_lineage_id = ${personaLineageId}
+				`;
 
-		// Handle case where user has no memories yet (array_length returns null for empty arrays)
-		const currentCount = userRow?.memory_count || 0;
+		const currentCount = Number(countResult?.memory_count || 0);
 
 		if (currentCount >= limits.maxPersonalMemories) {
 			return {
@@ -759,16 +772,35 @@ export async function checkPersonalMemoryLimit(
  */
 export async function checkServerMemoryLimit(
 	serverId: number,
+	tomoriId?: number,
+	includeLegacyFallback = true,
 ): Promise<MemoryValidationResult> {
 	const limits = getMemoryLimits();
 
 	try {
-		// Get current count of server memories for this server
-		const [countResult] = await sql`
-			SELECT COUNT(*) as memory_count
-			FROM server_memories
-			WHERE server_id = ${serverId}
-		`;
+		// Count persona-scoped server memories (with optional legacy fallback)
+		const [countResult] =
+			tomoriId && includeLegacyFallback
+				? await sql`
+					SELECT COUNT(*) as memory_count
+					FROM server_memories
+					WHERE server_id = ${serverId}
+					  AND (
+						tomori_id = ${tomoriId}
+						OR tomori_id IS NULL
+					  )
+				`
+				: tomoriId
+					? await sql`
+						SELECT COUNT(*) as memory_count
+						FROM server_memories
+						WHERE tomori_id = ${tomoriId}
+					`
+					: await sql`
+						SELECT COUNT(*) as memory_count
+						FROM server_memories
+						WHERE server_id = ${serverId}
+					`;
 
 		const currentCount = Number(countResult?.memory_count || 0);
 
@@ -806,16 +838,22 @@ export async function checkServerMemoryLimit(
  */
 export async function checkTriggerWordLimit(
 	serverId: number,
+	tomoriId?: number,
 ): Promise<MemoryValidationResult> {
 	const limits = getMemoryLimits();
 
 	try {
-		// Get current count of trigger words for this server
-		const [configResult] = await sql`
-			SELECT array_length(trigger_words, 1) as trigger_count
-			FROM tomori_configs
-			WHERE server_id = ${serverId}
-		`;
+		const [configResult] = tomoriId
+			? await sql`
+				SELECT array_length(trigger_words, 1) as trigger_count
+				FROM persona_configs
+				WHERE tomori_id = ${tomoriId}
+			`
+			: await sql`
+				SELECT array_length(trigger_words, 1) as trigger_count
+				FROM tomori_configs
+				WHERE server_id = ${serverId}
+			`;
 
 		// Handle case where server has no trigger words yet (array_length returns null for empty arrays)
 		const currentCount = configResult?.trigger_count || 0;

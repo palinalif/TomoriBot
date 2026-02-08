@@ -1,5 +1,5 @@
 /**
- * Command: /config prompt preset
+ * Command: /config sysprompt preset
  * Allows users to apply a preset system prompt from pre-made options
  */
 
@@ -44,7 +44,7 @@ export function configureSubcommand(): SlashCommandSubcommandBuilder {
 }
 
 /**
- * Execute the /config prompt preset command
+ * Execute the /config sysprompt preset command
  * @param _client - Discord client (unused)
  * @param interaction - Chat input command interaction
  * @param _userData - User data from database

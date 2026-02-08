@@ -10,6 +10,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedChoices,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
@@ -25,6 +26,7 @@ import {
 } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import type { SelectOption } from "../../types/discord/modal";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_sampledialogue_modal";
@@ -165,6 +167,8 @@ export async function execute(
 
 	// Define state and result variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
+	let personaSelectionInteraction: ButtonInteraction | null = null;
 
 	try {
 		// 2. Load server's Tomori state (Rule 17)
@@ -177,6 +181,51 @@ export async function execute(
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// Select target persona via paginated selector
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		if (allPersonas.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const personaSelectionItems = allPersonas.map((persona) =>
+			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		);
+		const personaSelection = await replyPaginatedChoices(interaction, locale, {
+			titleKey: "general.pagination.select_persona_title",
+			descriptionKey: "general.pagination.select_persona_description",
+			items: personaSelectionItems,
+			color: ColorCode.INFO,
+			preserveSelectedInteraction: true,
+			onSelect: async () => {},
+		});
+
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+
+		personaSelectionInteraction = personaSelection.interaction;
+		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -201,8 +250,8 @@ export async function execute(
 		}
 
 		// 5. Get the current dialogue pairs
-		const currentIn = tomoriState.sample_dialogues_in ?? [];
-		const currentOut = tomoriState.sample_dialogues_out ?? [];
+		const currentIn = selectedPersona.sample_dialogues_in ?? [];
+		const currentOut = selectedPersona.sample_dialogues_out ?? [];
 
 		// 6. Check if there are any dialogues to remove or if arrays mismatch
 		if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
@@ -211,11 +260,10 @@ export async function execute(
 					`Sample dialogue array length mismatch for tomori ${tomoriState.tomori_id} (in: ${currentIn.length}, out: ${currentOut.length})`,
 				);
 			}
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
 				titleKey: "commands.forget.sampledialogue.no_dialogues_title",
 				descriptionKey: "commands.forget.sampledialogue.no_dialogues",
 				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -237,7 +285,10 @@ export async function execute(
 		);
 
 		// 8. Show the paginated modal with dialogue selection
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+		const modalResult = await promptWithPaginatedModal(
+			personaSelectionInteraction,
+			locale,
+			{
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.forget.sampledialogue.modal_title",
 			components: [
@@ -274,7 +325,7 @@ export async function execute(
 
 		// 11. Perform the database update using the helper function - let helper manage interaction state
 		await performSampleDialogueRemoval(
-			tomoriState,
+			selectedPersona,
 			selectedIndex,
 			currentIn,
 			currentOut,
@@ -287,42 +338,32 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach sampledialogue",
+				command: "forget sampledialogue",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};
 		await log.error(
-			`Unexpected error in /teach sampledialogue for user ${userData.user_disc_id}`,
+			`Unexpected error in /forget sampledialogue for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 16. Inform user of unknown error
-		// FIX: PaginatedChoiceResult doesn't have an interaction property
-		// Just use the original interaction since it was deferred
-		if (interaction.deferred || interaction.replied) {
-			try {
-				await interaction.followUp({
-					content: localizer(
-						locale,
-						"general.errors.unknown_error_description",
-					),
-					flags: MessageFlags.Ephemeral,
-				});
-			} catch (followUpError) {
-				log.error(
-					"Failed to send follow-up error message in sampledialogue catch block",
-					followUpError,
-				);
-			}
-		} else {
-			log.warn(
-				"Could not determine valid interaction to send error message in sampledialogue catch block",
-			);
-		}
+		// 16. Inform user of unknown error, prioritizing unacknowledged button interaction
+		const errorReplyTarget =
+			personaSelectionInteraction &&
+			!personaSelectionInteraction.deferred &&
+			!personaSelectionInteraction.replied
+				? personaSelectionInteraction
+				: interaction;
+		await replyInfoEmbed(errorReplyTarget, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

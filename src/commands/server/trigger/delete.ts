@@ -11,20 +11,19 @@ import {
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
-import {
-	getCachedTomoriState,
-	invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import {
 	type UserRow,
 	type ErrorContext,
-	tomoriConfigSchema,
+	personaConfigSchema,
+	type TomoriState,
 } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { sql } from "@/utils/db/client";
+import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 
-// Rule 20: Constants for static values at the top
-const MODAL_CUSTOM_ID = "server_triggerdelete_modal";
+// Modal IDs
+const TRIGGER_MODAL_CUSTOM_ID = "server_triggerdelete_trigger_modal";
 const TRIGGER_SELECT_ID = "trigger_select";
 
 // Configure the subcommand
@@ -38,11 +37,7 @@ export const configureSubcommand = (
 		);
 
 /**
- * Removes trigger word from database using a Paginated embed
- * @param _client - Discord client instance
- * @param interaction - Command interaction
- * @param userData - User data from database
- * @param locale - Locale of the interaction
+ * Removes a trigger word from the currently active (main) persona.
  */
 export async function execute(
 	_client: Client,
@@ -50,7 +45,6 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
 			titleKey: "general.errors.guild_only_title",
@@ -60,12 +54,11 @@ export async function execute(
 		return;
 	}
 
-	try {
-		// 2. Note: Modal will be the first response, so no early defer needed
+	let tomoriState: TomoriState | null = null;
 
-		// 3. Load the Tomori state for this server (Rule #17)
-		const tomoriState = await getCachedTomoriState(interaction.guild.id);
-		if (!tomoriState) {
+	try {
+		tomoriState = await getCachedTomoriState(interaction.guild.id);
+		if (!tomoriState || !tomoriState.tomori_id) {
 			await replyInfoEmbed(
 				interaction,
 				locale,
@@ -79,110 +72,111 @@ export async function execute(
 			return;
 		}
 
-		// 4. Get the current trigger words
-		const currentTriggerWords = tomoriState.config.trigger_words ?? []; // Use ?? [] for safety
-
-		// 5. Check if there are any trigger words to remove
+		const currentTriggerWords = tomoriState.trigger_words ?? [];
 		if (currentTriggerWords.length === 0) {
-			await replyInfoEmbed(
-				interaction,
-				locale,
-				{
-					titleKey: "commands.server.trigger.delete.no_triggers_title",
-					descriptionKey:
-						"commands.server.trigger.delete.no_triggers_description",
-					color: ColorCode.WARN,
-				},
-				MessageFlags.Ephemeral,
-			);
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.server.trigger.delete.no_triggers_title",
+				descriptionKey:
+					"commands.server.trigger.delete.no_triggers_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
 			return;
 		}
 
-		// 6. Create trigger word select options for the modal
-		const triggerWordSelectOptions: SelectOption[] = currentTriggerWords.map(
+		const triggerOptions: SelectOption[] = currentTriggerWords.map(
 			(trigger, index) => ({
 				label: safeSelectOptionText(trigger, 50),
-				value: index.toString(), // Use index to avoid truncation issues
+				value: index.toString(),
 				description: undefined,
 			}),
 		);
 
-		// 7. Show the paginated modal with trigger word selection
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
-			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.server.trigger.delete.modal_title",
-			components: [
-				{
-					customId: TRIGGER_SELECT_ID,
-					labelKey: "commands.server.trigger.delete.select_label",
-					descriptionKey: "commands.server.trigger.delete.select_description",
-					placeholder: "commands.server.trigger.delete.select_placeholder",
-					required: true,
-					options: triggerWordSelectOptions,
-				},
-			],
-		});
+		const triggerModalResult = await promptWithPaginatedModal(
+			interaction,
+			locale,
+			{
+				modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.server.trigger.delete.modal_title",
+				components: [
+					{
+						customId: TRIGGER_SELECT_ID,
+						labelKey: "commands.server.trigger.delete.select_label",
+						descriptionKey:
+							"commands.server.trigger.delete.select_description",
+						placeholder:
+							"commands.server.trigger.delete.select_placeholder",
+						required: true,
+						options: triggerOptions,
+					},
+				],
+			},
+		);
 
-		// 8. Handle modal outcome
-		if (modalResult.outcome !== "submit") {
+		if (triggerModalResult.outcome !== "submit") {
 			log.info(
-				`Trigger word deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+				`Trigger delete selection modal ${triggerModalResult.outcome} for user ${userData.user_id}`,
 			);
 			return;
 		}
 
-		// 9. Extract values from the modal
-		const modalSubmitInteraction = modalResult.interaction;
-		const selectedIndex = modalResult.values?.[TRIGGER_SELECT_ID];
-
-		// Safety checks (should never be null after submit outcome)
-		if (!modalSubmitInteraction || !selectedIndex) {
-			log.error("Modal result unexpectedly missing interaction or values");
+		const triggerModalInteraction = triggerModalResult.interaction;
+		const selectedTriggerIndex = triggerModalResult.values?.[TRIGGER_SELECT_ID];
+		if (!triggerModalInteraction || !selectedTriggerIndex) {
+			log.error("Trigger modal result unexpectedly missing interaction or values");
 			return;
 		}
 
-		// Get the trigger word to remove
-		const selectedIndexNum = Number.parseInt(selectedIndex, 10);
-		const wordToRemove = currentTriggerWords[selectedIndexNum];
+		const selectedWord =
+			currentTriggerWords[Number.parseInt(selectedTriggerIndex, 10)];
+		if (!selectedWord) {
+			await replyInfoEmbed(triggerModalInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.server.trigger.delete.no_triggers_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
 
-		// 10. Update the config in the database using direct SQL - let helper functions manage interaction state
+		// Ensure row exists even for legacy personas that only used old columns
+		await sql`
+			INSERT INTO persona_configs (tomori_id, trigger_words)
+			VALUES (${tomoriState.tomori_id}, ARRAY[]::text[])
+			ON CONFLICT (tomori_id) DO NOTHING
+		`;
+
 		const [updatedRow] = await sql`
-			UPDATE tomori_configs
-			SET trigger_words = array_remove(trigger_words, ${wordToRemove})
-			WHERE server_id = ${tomoriState.server_id}
+			UPDATE persona_configs
+			SET trigger_words = array_remove(trigger_words, ${selectedWord})
+			WHERE tomori_id = ${tomoriState.tomori_id}
 			RETURNING *
 		`;
 
-		// 12. Validate the returned data
-		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
-
+		const validatedConfig = personaConfigSchema.safeParse(updatedRow);
 		if (!validatedConfig.success || !updatedRow) {
-			// Log error specific to this update failure
 			const context: ErrorContext = {
 				tomoriId: tomoriState.tomori_id,
 				serverId: tomoriState.server_id,
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config triggerdelete",
-					guildId: interaction.guild?.id,
-					wordToRemove,
-					selectedIndex: selectedIndexNum,
+					command: "server trigger delete",
+					guildId: interaction.guild.id,
+					triggerWord: selectedWord,
 					validationErrors: validatedConfig.success
 						? null
 						: validatedConfig.error.flatten(),
 				},
 			};
-
 			await log.error(
-				"Failed to update or validate trigger_words in tomori_configs table",
+				"Failed to update or validate trigger_words in persona_configs table",
 				validatedConfig.success
-					? new Error("Database update returned no rows or unexpected data")
+					? new Error("Database update returned no rows")
 					: new Error("Updated config data failed validation"),
 				context,
 			);
 
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
+			await replyInfoEmbed(triggerModalInteraction, locale, {
 				titleKey: "general.errors.update_failed_title",
 				descriptionKey: "general.errors.update_failed_description",
 				color: ColorCode.ERROR,
@@ -190,57 +184,44 @@ export async function execute(
 			return;
 		}
 
-		// 13. Invalidate cache so next message gets fresh config
-		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+		invalidateTomoriStateCache(interaction.guild.id);
 
-		// 14. Log success and show success message
-		log.success(
-			`Removed trigger word "${wordToRemove}" for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
-		);
-
-		await replyInfoEmbed(modalSubmitInteraction, locale, {
+		await replyInfoEmbed(triggerModalInteraction, locale, {
 			titleKey: "commands.server.trigger.delete.success_title",
 			descriptionKey: "commands.server.trigger.delete.success_description",
 			descriptionVars: {
-				triggerWord: wordToRemove,
+				triggerWord: selectedWord,
 			},
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		// 13. Catch unexpected errors during setup or helper execution
-		let serverIdForError: number | null = null;
-		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			// Avoid reloading state if possible, but reload if needed for context
-			const state =
-				(await getCachedTomoriState(interaction.guild.id).catch(() => null)) ?? null;
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
-
 		const context: ErrorContext = {
 			userId: userData.user_id,
-			serverId: serverIdForError,
-			tomoriId: tomoriIdForError,
+			serverId: tomoriState?.server_id,
+			tomoriId: tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config triggerdelete",
+				command: "server trigger delete",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};
-		// Log the error using the standard logger
 		await log.error(
-			`Unexpected error in /config triggerdelete for user ${userData.user_disc_id}`,
-			error as Error, // Type assertion
+			`Unexpected error in /server trigger delete for user ${userData.user_disc_id}`,
+			error as Error,
 			context,
 		);
 
-		// 14. Inform user of unknown error (use followUp since deferred)
-		// Check if interaction is still available and not already replied
-		if (interaction.deferred && !interaction.replied) {
+		if (interaction.deferred || interaction.replied) {
 			await interaction.followUp({
 				content: localizer(locale, "general.errors.unknown_error_description"),
+				flags: MessageFlags.Ephemeral,
+			});
+		} else {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 		}

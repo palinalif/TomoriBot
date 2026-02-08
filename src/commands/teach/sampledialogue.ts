@@ -17,7 +17,7 @@ import {
 	replyInfoEmbed,
 	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
-import { isBlacklisted } from "../../utils/db/dbRead";
+import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
@@ -44,6 +44,12 @@ export const configureSubcommand = (
 		.setName("sampledialogue")
 		.setDescription(
 			localizer("en-US", "commands.teach.sampledialogue.description"),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("persona")
+				.setDescription("Target persona nickname (defaults to current main persona)")
+				.setRequired(false),
 		);
 
 /**
@@ -109,7 +115,32 @@ export async function execute(
 			return;
 		}
 
-		// 6. Check if sample dialogue teaching is enabled and if user has bypass permissions
+		// 6. Resolve target persona (default: current main persona)
+		const personaNameInput = interaction.options.getString("persona");
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		const selectedPersona = personaNameInput
+			? allPersonas.find(
+					(persona) =>
+						persona.tomori_nickname.toLowerCase() ===
+						personaNameInput.toLowerCase(),
+				) ?? null
+			: allPersonas.find((persona) => !persona.is_alter) ?? null;
+
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				description: personaNameInput
+					? `Unknown persona "${personaNameInput}".`
+					: "No target persona available.",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 7. Check if sample dialogue teaching is enabled and if user has bypass permissions
 		// Access config directly from tomoriState
 		if (
 			!tomoriState.config.sampledialogue_memteaching_enabled &&
@@ -125,13 +156,9 @@ export async function execute(
 			return;
 		}
 
-		// 7. Check sample dialogue limit before showing modal (better UX)
-		if (!tomoriState.tomori_id) {
-			log.error("TomoriState missing tomori_id - this should never happen");
-			return;
-		}
+		// 8. Check sample dialogue limit before showing modal (better UX)
 		const dialogueLimitCheck = await checkSampleDialogueLimit(
-			tomoriState.tomori_id,
+			selectedPersona.tomori_id,
 		);
 		if (!dialogueLimitCheck.isValid) {
 			await replyInfoEmbed(interaction, locale, {
@@ -148,7 +175,7 @@ export async function execute(
 			return;
 		}
 
-		// 8. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
+		// 9. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
@@ -178,7 +205,7 @@ export async function execute(
 			],
 		});
 
-		// 9. Handle modal outcome
+		// 10. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Sample dialogue add modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -189,13 +216,13 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit guarantees interaction exists
 		const modalSubmitInteraction = modalResult.interaction!;
 
-		// 10. Get inputs from modal - let helper functions manage interaction state
+		// 11. Get inputs from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
 		const userInput = modalResult.values![USER_INPUT_ID];
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
 		const botInput = modalResult.values![BOT_INPUT_ID];
 
-		// 11. Validate sample dialogue content lengths (server-side validation, modal maxLength can be bypassed)
+		// 12. Validate sample dialogue content lengths (server-side validation, modal maxLength can be bypassed)
 		const userInputValidation = validateSampleDialogue(userInput);
 		if (!userInputValidation.isValid) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -224,14 +251,14 @@ export async function execute(
 			return;
 		}
 
-		// 12. Update Tomori row in the database using Bun SQL (Rule 4, 15, 23)
+		// 13. Update target persona row in the database using Bun SQL
 		// Use array_append for atomic array operations
 		const [updatedTomoriResult] = await sql`
 			UPDATE tomoris
 			SET
 				sample_dialogues_in = array_append(sample_dialogues_in, ${userInput}),
 				sample_dialogues_out = array_append(sample_dialogues_out, ${botInput})
-			WHERE tomori_id = ${tomoriState.tomori_id}
+			WHERE tomori_id = ${selectedPersona.tomori_id}
 			RETURNING *
 		`;
 
@@ -244,7 +271,7 @@ export async function execute(
 			const context: ErrorContext = {
 				userId: userData.user_id,
 				serverId: tomoriState.server_id, // Direct access
-				tomoriId: tomoriState.tomori_id, // Direct access
+				tomoriId: selectedPersona.tomori_id,
 				errorType: "DatabaseValidationError",
 				metadata: {
 					command: "teach sampledialogue",
@@ -267,10 +294,10 @@ export async function execute(
 			return;
 		}
 
-		// 13. Invalidate cache so next message gets fresh config
+		// 14. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-		// 14. Success! Confirm addition (Rule 12, 19)
+		// 15. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.teach.sampledialogue.success_title",
 			descriptionKey: "commands.teach.sampledialogue.success_description",

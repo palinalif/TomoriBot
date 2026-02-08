@@ -65,15 +65,19 @@ function sanitizeMemories(
 /**
  * Exports personal user data (nickname, language preference, memories)
  * @param userDiscId - Discord user ID to export data for
+ * @param personaLineageId - Persona lineage namespace to export memories from
+ * @param includeLegacyFallback - Include legacy lineage `0` memories during soak
  * @returns ExportResult containing the exported data or error
  */
 export async function exportPersonalData(
 	userDiscId: string,
+	personaLineageId = 0,
+	includeLegacyFallback = true,
 ): Promise<ExportResult> {
 	try {
 		// 1. Query user data from database
 		const rows = await sql`
-			SELECT user_nickname, language_pref, personal_memories
+			SELECT user_id, user_nickname, language_pref
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
@@ -88,13 +92,38 @@ export async function exportPersonalData(
 
 		const userData = rows[0];
 
-		// 2. Sanitize memories for safe JSON export
+		// 2. Load personal memories from lineage-scoped table
+		const memoryRows =
+			includeLegacyFallback && personaLineageId !== 0
+				? await sql`
+					SELECT content
+					FROM personal_memories
+					WHERE user_id = ${userData.user_id}
+					  AND (
+						persona_lineage_id = ${personaLineageId}
+						OR persona_lineage_id = 0
+					  )
+					ORDER BY created_at DESC, personal_memory_id DESC
+				`
+				: await sql`
+					SELECT content
+					FROM personal_memories
+					WHERE user_id = ${userData.user_id}
+					  AND persona_lineage_id = ${personaLineageId}
+					ORDER BY created_at DESC, personal_memory_id DESC
+				`;
+
+		const personalMemories = memoryRows.map(
+			(row: { content: string }) => row.content,
+		);
+
+		// 3. Sanitize memories for safe JSON export
 		const { sanitized: sanitizedMemories } = sanitizeMemories(
-			userData.personal_memories || [],
+			personalMemories,
 			"personal memories",
 		);
 
-		// 3. Build export object
+		// 4. Build export object
 		const exportData: PersonalExport = {
 			version: EXPORT_VERSION,
 			type: "personal",
@@ -106,7 +135,7 @@ export async function exportPersonalData(
 			},
 		};
 
-		// 4. Validate export data structure
+		// 5. Validate export data structure
 		const validated = getPersonalExportSchema().safeParse(exportData);
 		if (!validated.success) {
 			log.error(
@@ -135,10 +164,12 @@ export async function exportPersonalData(
 /**
  * Exports server data (configuration and server memories)
  * @param serverDiscId - Discord server ID to export data for
+ * @param tomoriId - Optional persona ID to export persona-scoped server memories from
  * @returns ExportResult containing the exported data or error
  */
 export async function exportServerData(
 	serverDiscId: string,
+	tomoriId?: number,
 ): Promise<ExportResult> {
 	try {
 		// 1. Get internal server ID
@@ -190,25 +221,50 @@ export async function exportServerData(
 
 		const configData = configRows[0];
 
-		// 3. Get server memories
-		const memoryRows = await sql`
-			SELECT content
-			FROM server_memories
-			WHERE server_id = ${serverId}
-			ORDER BY created_at DESC
-		`;
+		// 3. Resolve target persona for server memory export
+		let targetTomoriId = tomoriId;
+		if (!targetTomoriId) {
+			const mainPersonaRows = await sql`
+				SELECT tomori_id
+				FROM tomoris
+				WHERE server_id = ${serverId}
+				  AND is_alter = false
+				ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
+				LIMIT 1
+			`;
+			targetTomoriId = mainPersonaRows[0]?.tomori_id;
+		}
+
+		// 4. Get persona-scoped server memories (include legacy NULL tomori_id during soak)
+		const memoryRows = targetTomoriId
+			? await sql`
+				SELECT content
+				FROM server_memories
+				WHERE server_id = ${serverId}
+				  AND (
+					tomori_id = ${targetTomoriId}
+					OR tomori_id IS NULL
+				  )
+				ORDER BY created_at DESC
+			`
+			: await sql`
+				SELECT content
+				FROM server_memories
+				WHERE server_id = ${serverId}
+				ORDER BY created_at DESC
+			`;
 
 		const serverMemories = memoryRows.map(
 			(row: { content: string }) => row.content,
 		);
 
-		// 4. Sanitize memories for safe JSON export
+		// 5. Sanitize memories for safe JSON export
 		const { sanitized: sanitizedServerMemories } = sanitizeMemories(
 			serverMemories,
 			"server memories",
 		);
 
-		// 5. Build export object
+		// 6. Build export object
 		const exportData: ServerExport = {
 			version: EXPORT_VERSION,
 			type: "server",
@@ -234,7 +290,7 @@ export async function exportServerData(
 			},
 		};
 
-		// 6. Validate export data structure
+		// 7. Validate export data structure
 		const validated = getServerExportSchema().safeParse(exportData);
 		if (!validated.success) {
 			log.error(

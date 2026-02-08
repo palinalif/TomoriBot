@@ -812,6 +812,7 @@ export async function replyPaginatedChoices(
 	const totalItems = options.items.length;
 	const totalPages = Math.ceil(totalItems / PAGINATION_ITEMS_PER_PAGE);
 	let currentPage = 1;
+	const preserveSelectedInteraction = options.preserveSelectedInteraction === true;
 
 	if (totalItems === 0) {
 		// If there are no items, show an empty state
@@ -967,6 +968,7 @@ export async function replyPaginatedChoices(
 			try {
 				const buttonInteraction = await message.awaitMessageComponent({
 					filter: (i) => i.user.id === interaction.user.id,
+					componentType: ComponentType.Button,
 					time: PAGINATION_TIMEOUT_MS,
 				});
 
@@ -1021,6 +1023,39 @@ export async function replyPaginatedChoices(
 					const selectionIdx = Number.parseInt(customId.split("_")[1], 10);
 					const absoluteIndex = startIdx + selectionIdx;
 					const selectedItem = options.items[absoluteIndex];
+
+					// Preserve button interaction for callers that need to open a modal from the selection.
+					if (preserveSelectedInteraction) {
+						try {
+							await options.onSelect(absoluteIndex);
+							return {
+								success: true,
+								selectedIndex: absoluteIndex,
+								selectedItem,
+								interaction: buttonInteraction,
+							};
+						} catch (selectCallbackError) {
+							log.warn(
+								"Error occurred during onSelect callback execution:",
+								selectCallbackError,
+							);
+							await buttonInteraction.reply({
+								embeds: [
+									createStandardEmbed(locale, {
+										titleKey: "general.errors.operation_failed_title",
+										descriptionKey: "general.errors.operation_failed_description",
+										descriptionVars: { item: selectedItem },
+										color: ColorCode.ERROR,
+									}),
+								],
+								flags: MessageFlags.Ephemeral,
+							});
+							return {
+								success: false,
+								reason: "error",
+							};
+						}
+					}
 
 					// Defer update before potentially long-running callback
 					await buttonInteraction.deferUpdate();

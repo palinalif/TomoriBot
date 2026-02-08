@@ -5,12 +5,10 @@ import type {
 	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
-import { sql } from "@/utils/db/client";
-import {
-	userSchema, // Use userSchema for validation
-	type UserRow,
-	type ErrorContext,
-	type TomoriState,
+import type {
+	UserRow,
+	ErrorContext,
+	TomoriState,
 } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -18,7 +16,12 @@ import {
 	replyInfoEmbed,
 	promptWithRawModal,
 } from "../../../utils/discord/interactionHelper";
-import { loadTomoriState, isBlacklisted } from "../../../utils/db/dbRead";
+import {
+	loadTomoriState,
+	isBlacklisted,
+	loadAllPersonasForServer,
+	loadPersonalMemoriesForUserLineage,
+} from "../../../utils/db/dbRead";
 import { invalidateUserCache } from "../../../utils/cache/userCache";
 import type { ModalResult } from "../../../types/discord/modal";
 import {
@@ -26,6 +29,7 @@ import {
 	checkPersonalMemoryLimit,
 	getMemoryLimits,
 } from "../../../utils/db/memoryLimits";
+import { addPersonalMemoryByTomori } from "../../../utils/db/dbWrite";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_personalmemory_add_modal";
@@ -42,6 +46,12 @@ export const configureSubcommand = (
 		.setName("personal")
 		.setDescription(
 			localizer("en-US", "commands.teach.memory.personal.description"),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("persona")
+				.setDescription("Target persona nickname (defaults to current main persona)")
+				.setRequired(false),
 		);
 
 /**
@@ -71,6 +81,7 @@ export async function execute(
 
 	// Define state and modal result outside try for catch block
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
 	let modalResult: ModalResult | null = null;
 	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
 
@@ -92,10 +103,37 @@ export async function execute(
 			return;
 		}
 
-		// 4. Check personal memory limit before showing modal (better UX)
+		// 4. Resolve target persona (default: current main persona)
+		const personaNameInput = interaction.options.getString("persona");
+		const allPersonas = await loadAllPersonasForServer(serverId);
+		selectedPersona = personaNameInput
+			? allPersonas.find(
+					(persona) =>
+						persona.tomori_nickname.toLowerCase() ===
+						personaNameInput.toLowerCase(),
+				) ?? null
+			: allPersonas.find((persona) => !persona.is_alter) ?? null;
+
+		if (!selectedPersona) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				description: personaNameInput
+					? `Unknown persona "${personaNameInput}".`
+					: "No target persona available.",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const targetLineageId = selectedPersona.persona_lineage_id ?? 0;
+
+		// 5. Check personal memory limit before showing modal (better UX)
 		const personalLimitCheck = await checkPersonalMemoryLimit(
 			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
 			userData.user_id!,
+			targetLineageId,
+			true,
 		);
 		if (!personalLimitCheck.isValid) {
 			await replyInfoEmbed(interaction, locale, {
@@ -112,7 +150,7 @@ export async function execute(
 			return;
 		}
 
-		// 5. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
+		// 6. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
 		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.memory.personal.modal_title",
@@ -130,7 +168,7 @@ export async function execute(
 			],
 		});
 
-		// 6. Handle modal outcome
+		// 7. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Personal memory add modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -138,15 +176,15 @@ export async function execute(
 			return;
 		}
 
-		// 7. Capture and immediately defer the modal submission interaction (Rule 25)
+		// 8. Capture and immediately defer the modal submission interaction (Rule 25)
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		modalSubmitInteraction = modalResult.interaction!;
 
-		// 8. Get input from modal - let helper functions manage interaction state
+		// 9. Get input from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
 
-		// 9. Validate memory content length
+		// 10. Validate memory content length
 		const contentValidation = validateMemoryContent(newMemory);
 		if (!contentValidation.isValid) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -159,7 +197,7 @@ export async function execute(
 			return;
 		}
 
-		// 10. Check if user has opted out of personalization (privacy setting)
+		// 11. Check if user has opted out of personalization (privacy setting)
 		const { getPrivacyLevel } = await import("../../../utils/db/dbRead");
 		const { PrivacyLevel } = await import("../../../types/db/schema");
 		const userPrivacyLevel = await getPrivacyLevel(interaction.user.id);
@@ -179,11 +217,17 @@ export async function execute(
 			return;
 		}
 
-		// 11. Prepare updated array using data from userData
-		const currentMemories = userData.personal_memories ?? [];
+		// 12. Load existing memories for duplicate detection
+		const currentMemories = userData.user_id
+			? await loadPersonalMemoriesForUserLineage(
+					userData.user_id,
+					targetLineageId,
+					true,
+				)
+			: [];
 
-		// 12. Check for duplicates within the user's memories
-		if (currentMemories.includes(newMemory)) {
+		// 13. Check for duplicates within the user's memories
+		if (currentMemories.some((row) => row.content === newMemory)) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.teach.memory.personal.duplicate_title",
 				descriptionKey: "commands.teach.memory.personal.duplicate_description",
@@ -193,40 +237,32 @@ export async function execute(
 			return;
 		}
 
-		// 13. Update the user's row in the database using array_append (Rule 4)
-		// This directly appends the new memory to the existing array in the database.
-		// This is a test to see if this approach is more robust for appends than
-		// constructing the full array literal as per original Rule 23.
-		const [updatedUserResult] = await sql`
-            UPDATE users
-            SET personal_memories = array_append(personal_memories, ${newMemory})
-            WHERE user_id = ${userData.user_id}
-            RETURNING *
-        `;
-
-		// 14. Validate the result from the database using userSchema (Rule 3, 5, 6)
-		const validationResult = userSchema.safeParse(updatedUserResult);
-
-		if (!validationResult.success) {
-			// Rule 22: Log error with context
+		// 14. Insert lineage-scoped memory row
+		const insertedMemory = await addPersonalMemoryByTomori(
+			// biome-ignore lint/style/noNonNullAssertion: user row from middleware
+			userData.user_id!,
+			targetLineageId,
+			newMemory,
+		);
+		if (!insertedMemory) {
 			const context: ErrorContext = {
 				userId: userData.user_id,
 				serverId: tomoriState.server_id, // Include server context
-				tomoriId: tomoriState.tomori_id, // Include tomori context
+				tomoriId: selectedPersona.tomori_id, // Include tomori context
 				errorType: "DatabaseValidationError",
 				metadata: {
 					command: "teach personalmemory",
-					table: "users",
-					column: "personal_memories",
-					operation: "UPDATE",
+					table: "personal_memories",
+					column: "content",
+					operation: "INSERT",
 					userDiscordId: interaction.user.id,
+					targetLineageId,
 					newMemoryContent: newMemory,
-					validationErrors: validationResult.error.issues,
 				},
 			};
 			await log.error(
-				"Failed to validate updated user data after adding personal memory",
-				validationResult.error,
+				"Failed to insert personal memory",
+				new Error("Insert returned null"),
 				context,
 			);
 

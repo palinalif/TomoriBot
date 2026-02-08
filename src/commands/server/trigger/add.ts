@@ -20,7 +20,7 @@ import type {
 	TomoriState,
 	UserRow,
 } from "../../../types/db/schema";
-import { tomoriConfigSchema, tomoriSchema } from "../../../types/db/schema";
+import { personaConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import {
 	validateMemoryContent,
@@ -178,9 +178,7 @@ export async function execute(
 			return;
 		}
 
-		const currentTriggerWords = selectedPersona.is_alter
-			? selectedPersona.alter_triggers ?? []
-			: selectedPersona.config?.trigger_words ?? [];
+		const currentTriggerWords = selectedPersona.trigger_words ?? [];
 
 		const parsedTriggers = triggerInput
 			.split(/[,\u3001]/)
@@ -274,88 +272,46 @@ export async function execute(
 			return;
 		}
 
-		if (selectedPersona.is_alter) {
-			const [updatedPersona] = await sql`
-				UPDATE tomoris
-				SET alter_triggers = array_cat(alter_triggers, ${triggerArrayLiteral}::text[])
-				WHERE tomori_id = ${personaId}
-				RETURNING *
-			`;
+		const [updatedConfig] = await sql`
+			INSERT INTO persona_configs (tomori_id, trigger_words)
+			VALUES (${personaId}, ${triggerArrayLiteral}::text[])
+			ON CONFLICT (tomori_id) DO UPDATE
+			SET trigger_words = array_cat(persona_configs.trigger_words, EXCLUDED.trigger_words)
+			RETURNING *
+		`;
 
-			const validatedPersona = tomoriSchema.safeParse(updatedPersona);
-			if (!validatedPersona.success || !updatedPersona) {
-				const context: ErrorContext = {
-					tomoriId: personaId,
-					userId: userData.user_id,
-					serverId: selectedPersona.server_id,
-					errorType: "DatabaseUpdateError",
-					metadata: {
-						command: "config triggeradd",
-						guildId: interaction.guild.id,
-						wordAdded: newTriggers,
-						updatedField: "alter_triggers",
-						targetTable: "tomoris",
-						validationErrors: validatedPersona.success
-							? null
-							: validatedPersona.error.flatten(),
-					},
-				};
-				await log.error(
-					"Failed to update or validate alter_triggers in tomoris table",
-					validatedPersona.success
-						? new Error("Database UPDATE failed to return updated row")
-						: new Error("Updated tomori data failed validation"),
-					context,
-				);
+		const validatedConfig = personaConfigSchema.safeParse(updatedConfig);
+		if (!validatedConfig.success || !updatedConfig) {
+			const context: ErrorContext = {
+				tomoriId: personaId,
+				userId: userData.user_id,
+				serverId: selectedPersona.server_id,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					command: "config triggeradd",
+					guildId: interaction.guild.id,
+					wordAdded: newTriggers,
+					updatedField: "trigger_words",
+					targetTable: "persona_configs",
+					validationErrors: validatedConfig.success
+						? null
+						: validatedConfig.error.flatten(),
+				},
+			};
+			await log.error(
+				"Failed to update or validate trigger_words in persona_configs table",
+				validatedConfig.success
+					? new Error("Database UPDATE failed to return updated row")
+					: new Error("Updated config data failed validation"),
+				context,
+			);
 
-				await replyInfoEmbed(modalSubmitInteraction, locale, {
-					titleKey: "general.errors.update_failed_title",
-					descriptionKey: "general.errors.update_failed_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
-		} else {
-			const [updatedConfig] = await sql`
-				UPDATE tomori_configs
-				SET trigger_words = array_cat(trigger_words, ${triggerArrayLiteral}::text[])
-				WHERE server_id = ${selectedPersona.server_id}
-				RETURNING *
-			`;
-
-			const validatedConfig = tomoriConfigSchema.safeParse(updatedConfig);
-			if (!validatedConfig.success || !updatedConfig) {
-				const context: ErrorContext = {
-					tomoriId: personaId,
-					userId: userData.user_id,
-					serverId: selectedPersona.server_id,
-					errorType: "DatabaseUpdateError",
-					metadata: {
-						command: "config triggeradd",
-						guildId: interaction.guild.id,
-						wordAdded: newTriggers,
-						updatedField: "trigger_words",
-						targetTable: "tomori_configs",
-						validationErrors: validatedConfig.success
-							? null
-							: validatedConfig.error.flatten(),
-					},
-				};
-				await log.error(
-					"Failed to update or validate trigger_words in tomori_configs table",
-					validatedConfig.success
-						? new Error("Database UPDATE failed to return updated row")
-						: new Error("Updated config data failed validation"),
-					context,
-				);
-
-				await replyInfoEmbed(modalSubmitInteraction, locale, {
-					titleKey: "general.errors.update_failed_title",
-					descriptionKey: "general.errors.update_failed_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
 		}
 
 		// Invalidate cache so next message gets fresh config

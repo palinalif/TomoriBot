@@ -8,7 +8,7 @@ import type {
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import {
-	userSchema, // Use userSchema for validation
+	personalMemorySchema,
 	type UserRow,
 	type ErrorContext,
 	type TomoriState,
@@ -17,10 +17,15 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedChoices,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
-import { loadTomoriState } from "../../../utils/db/dbRead";
+import {
+	loadTomoriState,
+	loadAllPersonasForServer,
+	loadPersonalMemoriesForUserLineage,
+} from "../../../utils/db/dbRead";
 import { invalidateUserCache } from "../../../utils/cache/userCache";
 import type { SelectOption } from "../../../types/discord/modal";
 import { createStandardEmbed } from "../../../utils/discord/embedHelper";
@@ -37,7 +42,7 @@ const MEMORY_SELECT_ID = "memory_select";
  * @param locale - User locale
  */
 async function performPersonalMemoryRemoval(
-	memoryToRemove: string,
+	memoryToRemove: { personal_memory_id?: number; content: string },
 	userData: UserRow,
 	replyInteraction:
 		| ChatInputCommandInteraction
@@ -45,16 +50,25 @@ async function performPersonalMemoryRemoval(
 		| ModalSubmitInteraction,
 	locale: string,
 ): Promise<void> {
-	// Update the user's row in the database using array_remove
+	if (!memoryToRemove.personal_memory_id) {
+		await replyInfoEmbed(replyInteraction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// Delete selected memory row from personal_memories
 	const [updatedUserResult] = await sql`
-		UPDATE users
-		SET personal_memories = array_remove(personal_memories, ${memoryToRemove})
-		WHERE user_id = ${userData.user_id}
+		DELETE FROM personal_memories
+		WHERE personal_memory_id = ${memoryToRemove.personal_memory_id}
+		  AND user_id = ${userData.user_id}
 		RETURNING *
 	`;
 
 	// Validate the returned (updated) data
-	const validationResult = userSchema.safeParse(updatedUserResult);
+	const validationResult = personalMemorySchema.safeParse(updatedUserResult);
 
 	if (!validationResult.success || !updatedUserResult) {
 		// Log error specific to this update failure
@@ -65,9 +79,9 @@ async function performPersonalMemoryRemoval(
 			errorType: "DatabaseUpdateError",
 			metadata: {
 				command: "forget personalmemory",
-				table: "users",
-				column: "personal_memories",
-				operation: "UPDATE",
+				table: "personal_memories",
+				column: "content",
+				operation: "DELETE",
 				memoryToRemove,
 				validationErrors: validationResult.success
 					? null
@@ -96,7 +110,7 @@ async function performPersonalMemoryRemoval(
 
 	// Log success and show success message
 	log.success(
-		`Deleted personal memory "${memoryToRemove.slice(0, 30)}..." for user ${userData.user_disc_id} (ID: ${userData.user_id})`,
+		`Deleted personal memory "${memoryToRemove.content.slice(0, 30)}..." for user ${userData.user_disc_id} (ID: ${userData.user_id})`,
 	);
 
 	await replyInfoEmbed(replyInteraction, locale, {
@@ -104,9 +118,9 @@ async function performPersonalMemoryRemoval(
 		descriptionKey: "commands.forget.memory.personal.success_description",
 		descriptionVars: {
 			memory:
-				memoryToRemove.length > 50
-					? `${memoryToRemove.slice(0, 50)}...`
-					: memoryToRemove,
+				memoryToRemove.content.length > 50
+					? `${memoryToRemove.content.slice(0, 50)}...`
+					: memoryToRemove.content,
 		},
 		color: ColorCode.SUCCESS,
 	});
@@ -149,6 +163,8 @@ export async function execute(
 
 	// Define state and result variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
+	let personaSelectionInteraction: ButtonInteraction | null = null;
 	let personalizationDisabledWarning = false; // Flag to check if warning needed
 
 	try {
@@ -172,31 +188,86 @@ export async function execute(
 			personalizationDisabledWarning = true;
 		}
 
-		// 4. Get the user's current personal memories from userData
-		const currentMemories = userData.personal_memories ?? [];
-
-		// 5. Check if there are any memories to remove
-		if (currentMemories.length === 0) {
+		// 4. Select target persona via paginated selector
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		if (allPersonas.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.forget.memory.personal.no_memories_title",
-				descriptionKey: "commands.forget.memory.personal.no_memories",
-				color: ColorCode.WARN,
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 6. Create memory select options for the modal
+		const personaSelectionItems = allPersonas.map((persona) =>
+			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		);
+		const personaSelection = await replyPaginatedChoices(interaction, locale, {
+			titleKey: "general.pagination.select_persona_title",
+			descriptionKey: "general.pagination.select_persona_description",
+			items: personaSelectionItems,
+			color: ColorCode.INFO,
+			preserveSelectedInteraction: true,
+			onSelect: async () => {},
+		});
+
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+
+		personaSelectionInteraction = personaSelection.interaction;
+		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+		if (!selectedPersona) {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		const targetLineageId = selectedPersona.persona_lineage_id ?? 0;
+
+		// 5. Get current personal memories from lineage-scoped table
+		const currentMemories = userData.user_id
+			? await loadPersonalMemoriesForUserLineage(
+					userData.user_id,
+					targetLineageId,
+					true,
+				)
+			: [];
+
+		// 6. Check if there are any memories to remove
+		if (currentMemories.length === 0) {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
+				titleKey: "commands.forget.memory.personal.no_memories_title",
+				descriptionKey: "commands.forget.memory.personal.no_memories",
+				color: ColorCode.WARN,
+			});
+			return;
+		}
+
+		// 7. Create memory select options for the modal
 		const memorySelectOptions: SelectOption[] = currentMemories.map(
 			(memory, index) => ({
-				label: safeSelectOptionText(memory, 20),
+				label: safeSelectOptionText(memory.content, 20),
 				value: index.toString(), // Use index to avoid truncation issues
-				description: safeSelectOptionText(memory),
+				description: safeSelectOptionText(memory.content),
 			}),
 		);
 
-		// 7. Show the paginated modal with memory selection
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+		// 8. Show the paginated modal with memory selection
+		const modalResult = await promptWithPaginatedModal(
+			personaSelectionInteraction,
+			locale,
+			{
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.forget.memory.personal.modal_title",
 			components: [
@@ -211,7 +282,7 @@ export async function execute(
 			],
 		});
 
-		// 8. Handle modal outcome
+		// 9. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -219,7 +290,7 @@ export async function execute(
 			return;
 		}
 
-		// 9. Extract values from the modal
+		// 10. Extract values from the modal
 		const modalSubmitInteraction = modalResult.interaction;
 		const selectedIndex = modalResult.values?.[MEMORY_SELECT_ID];
 
@@ -229,10 +300,18 @@ export async function execute(
 			return;
 		}
 
-		// Get the full memory content from the original array
+		// Get the full memory row from the original array
 		const selectedMemory = currentMemories[Number.parseInt(selectedIndex, 10)];
+		if (!selectedMemory) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.forget.memory.personal.no_memories",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
 
-		// 10. Perform the database update using the helper function - let helper manage interaction state
+		// 11. Perform the database update using the helper function
 		await performPersonalMemoryRemoval(
 			selectedMemory,
 			userData,
@@ -262,40 +341,29 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach personalmemory",
+				command: "forget personalmemory",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};
 		await log.error(
-			`Unexpected error in /teach personalmemory for user ${userData.user_disc_id}`,
+			`Unexpected error in /forget personalmemory for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 17. Inform user of unknown error
-		// Always use the original interaction for followUp in catch block
-		if (interaction.deferred || interaction.replied) {
-			try {
-				await interaction.followUp({
-					// Use interaction.followUp
-					content: localizer(
-						locale,
-						"general.errors.unknown_error_description",
-					),
-					flags: MessageFlags.Ephemeral,
-				});
-			} catch (followUpError) {
-				log.error(
-					"Failed to send follow-up error message in personalmemory catch block",
-					followUpError,
-				);
-			}
-		} else {
-			log.warn(
-				"Initial interaction was not replied or deferred in personalmemory catch block",
-				context,
-			);
-		}
+		// 17. Inform user of unknown error, prioritizing unacknowledged button interaction
+		const errorReplyTarget =
+			personaSelectionInteraction &&
+			!personaSelectionInteraction.deferred &&
+			!personaSelectionInteraction.replied
+				? personaSelectionInteraction
+				: interaction;
+		await replyInfoEmbed(errorReplyTarget, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

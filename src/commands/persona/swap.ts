@@ -79,9 +79,6 @@ function isAvatarUpdateRateLimited(
 const MODAL_CUSTOM_ID = "persona_swap_modal";
 const PERSONA_SELECT_ID = "persona_select";
 
-const formatTextArrayLiteral = (items: string[]): string =>
-	`{${items.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
-
 /**
  * Configure the 'swap' subcommand
  */
@@ -203,13 +200,7 @@ export async function execute(
 		const previousSelectedAlterAvatarUrl = selectedAlter.webhook_avatar_url;
 		const previousMainAvatarUrl = mainPersona.webhook_avatar_url;
 
-		// 8. Get main persona's trigger words and alter's triggers
-		const mainTriggers = mainPersona.config.trigger_words ?? [];
-		const alterTriggers = selectedAlter.alter_triggers ?? [];
-		const mainTriggersArrayLiteral = formatTextArrayLiteral(mainTriggers);
-		const alterTriggersArrayLiteral = formatTextArrayLiteral(alterTriggers);
-
-		// 9. Capture current bot avatar BEFORE swapping (represents former main persona)
+		// 8. Capture current bot avatar BEFORE swapping (represents former main persona)
 		const formerMainAvatarUrl =
 			interaction.guild.members.me?.displayAvatarURL({
 				size: 1024,
@@ -232,32 +223,23 @@ export async function execute(
 			}
 		}
 
-		// 10. Swap is_alter flags and move trigger locations in database (config is server-scoped)
+		// 9. Swap is_alter flags in database.
+		// Trigger words are persona-scoped in persona_configs and do not need migration.
 		await sql.transaction(async (tx) => {
-			// Demote current main to alter (move triggers from config to tomoris.alter_triggers)
 			await tx`
 				UPDATE tomoris
-				SET is_alter = true,
-					alter_triggers = ${mainTriggersArrayLiteral}::text[]
+				SET is_alter = true
 				WHERE tomori_id = ${mainPersona.tomori_id}
 			`;
 
-			// Promote selected alter to main (move triggers from tomoris.alter_triggers to config)
 			await tx`
 				UPDATE tomoris
-				SET is_alter = false,
-					alter_triggers = ARRAY[]::TEXT[]
+				SET is_alter = false
 				WHERE tomori_id = ${selectedAlter.tomori_id}
-			`;
-
-			await tx`
-				UPDATE tomori_configs
-				SET trigger_words = ${alterTriggersArrayLiteral}::text[]
-				WHERE server_id = ${mainPersona.server_id}
 			`;
 		});
 
-		// 11. Try to update nickname and avatar separately (non-fatal if fails)
+		// 10. Try to update nickname and avatar separately (non-fatal if fails)
 		let avatarSwapSuccess = false;
 		let avatarSwapRateLimited = false;
 		let avatarSwapFailed = false;

@@ -120,6 +120,8 @@ export interface PaginatedChoiceOptions {
 	color?: ColorResolvable;
 	onSelect: (index: number) => Promise<void>; // Callback function when an item is selected
 	onCancel?: () => Promise<void>; // Optional callback when pagination is cancelled
+	// When true, returns the selected button interaction unacknowledged so caller can show a modal.
+	preserveSelectedInteraction?: boolean;
 	ephemeral?: boolean; // Whether the message should be ephemeral
 	flags?: MessageFlags;
 }
@@ -131,5 +133,6 @@ export interface PaginatedChoiceResult {
 	success: boolean; // Whether a selection was made successfully
 	selectedIndex?: number; // The index of the selected item (if success is true)
 	selectedItem?: string; // The selected item value (if success is true)
+	interaction?: ButtonInteraction; // Selected button interaction (when preserveSelectedInteraction=true)
 	reason?: "timeout" | "cancelled" | "error"; // Reason for failure if success is false
 }

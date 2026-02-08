@@ -17,7 +17,7 @@ import {
 	replyInfoEmbed,
 	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
-import { isBlacklisted } from "../../utils/db/dbRead";
+import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
@@ -42,7 +42,13 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("attribute")
-		.setDescription(localizer("en-US", "commands.teach.attribute.description"));
+		.setDescription(localizer("en-US", "commands.teach.attribute.description"))
+		.addStringOption((option) =>
+			option
+				.setName("persona")
+				.setDescription("Target persona nickname (defaults to current main persona)")
+				.setRequired(false),
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -71,6 +77,7 @@ export async function execute(
 
 	// Define state and modal result outside try for catch block
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
 	let modalResult: ModalResult | null = null;
 
 	try {
@@ -111,7 +118,32 @@ export async function execute(
 			return;
 		}
 
-		// 6. Check if attribute teaching is enabled and if user has bypass permissions
+		// 6. Resolve target persona (default: current main persona)
+		const personaNameInput = interaction.options.getString("persona");
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		selectedPersona = personaNameInput
+			? allPersonas.find(
+					(persona) =>
+						persona.tomori_nickname.toLowerCase() ===
+						personaNameInput.toLowerCase(),
+				) ?? null
+			: allPersonas.find((persona) => !persona.is_alter) ?? null;
+
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				description: personaNameInput
+					? `Unknown persona "${personaNameInput}".`
+					: "No target persona available.",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 7. Check if attribute teaching is enabled and if user has bypass permissions
 		if (
 			!tomoriState.config.attribute_memteaching_enabled &&
 			!hasManagePermission
@@ -126,13 +158,9 @@ export async function execute(
 			return;
 		}
 
-		// 7. Check attribute limit before showing modal (better UX)
-		if (!tomoriState.tomori_id) {
-			log.error("TomoriState missing tomori_id - this should never happen");
-			return;
-		}
+		// 8. Check attribute limit before showing modal (better UX)
 		const attributeLimitCheck = await checkAttributeLimit(
-			tomoriState.tomori_id,
+			selectedPersona.tomori_id,
 		);
 		if (!attributeLimitCheck.isValid) {
 			await replyInfoEmbed(interaction, locale, {
@@ -147,7 +175,7 @@ export async function execute(
 			return;
 		}
 
-		// 8. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
+		// 9. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
@@ -165,7 +193,7 @@ export async function execute(
 			],
 		});
 
-		// 9. Handle modal outcome
+		// 10. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Attribute add modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -178,11 +206,11 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		const modalSubmitInteraction = modalResult.interaction!;
 
-		// 10. Get input from modal - let helper functions manage interaction state
+		// 11. Get input from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newAttribute = modalResult.values![ATTRIBUTE_INPUT_ID];
 
-		// 11. Validate attribute content length (server-side validation, modal maxLength can be bypassed)
+		// 12. Validate attribute content length (server-side validation, modal maxLength can be bypassed)
 		const attributeValidation = validateAttribute(newAttribute);
 		if (!attributeValidation.isValid) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -197,10 +225,10 @@ export async function execute(
 			return;
 		}
 
-		// 12. Prepare updated array (Access directly from tomoriState)
-		const currentAttributes = tomoriState.attribute_list || [];
+		// 13. Prepare updated array from selected persona
+		const currentAttributes = selectedPersona.attribute_list || [];
 
-		// 13. Check for duplicates before adding
+		// 14. Check for duplicates before adding
 		if (currentAttributes.includes(newAttribute)) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.teach.attribute.duplicate_title", // New locale key
@@ -212,11 +240,11 @@ export async function execute(
 			return;
 		}
 
-		// 14. Update Tomori row in the database using array_append (Rule 4, 15, 23)
+		// 15. Update target persona row in the database using array_append
 		const [updatedTomoriResult] = await sql`
 			UPDATE tomoris
 			SET attribute_list = array_append(attribute_list, ${newAttribute})
-			WHERE tomori_id = ${tomoriState.tomori_id}
+			WHERE tomori_id = ${selectedPersona.tomori_id}
 			RETURNING *
 		`;
 
@@ -228,7 +256,7 @@ export async function execute(
 			const context: ErrorContext = {
 				userId: userData.user_id,
 				serverId: tomoriState.server_id,
-				tomoriId: tomoriState.tomori_id,
+					tomoriId: selectedPersona.tomori_id,
 				errorType: "DatabaseValidationError",
 				metadata: {
 					command: "teach attribute",
@@ -253,10 +281,10 @@ export async function execute(
 			return;
 		}
 
-		// 14. Invalidate cache so next message gets fresh config
+		// 16. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-		// 15. Success! Confirm addition (Rule 12, 19)
+		// 17. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.teach.attribute.success_title", // New locale key
 			descriptionKey: "commands.teach.attribute.success_description", // New locale key

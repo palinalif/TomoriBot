@@ -5,12 +5,10 @@ import type {
 	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
-import { sql } from "@/utils/db/client";
-import {
-	serverMemorySchema, // Use the correct schema for validation
-	type UserRow,
-	type ErrorContext,
-	type TomoriState,
+import type {
+	UserRow,
+	ErrorContext,
+	TomoriState,
 } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -18,7 +16,7 @@ import {
 	replyInfoEmbed,
 	promptWithRawModal,
 } from "../../../utils/discord/interactionHelper";
-import { isBlacklisted } from "../../../utils/db/dbRead";
+import { isBlacklisted, loadAllPersonasForServer } from "../../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
@@ -29,6 +27,7 @@ import {
 	checkServerMemoryLimit,
 	getMemoryLimits,
 } from "../../../utils/db/memoryLimits";
+import { addServerMemoryByTomori } from "../../../utils/db/dbWrite";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_servermemory_add_modal";
@@ -45,6 +44,12 @@ export const configureSubcommand = (
 		.setName("server")
 		.setDescription(
 			localizer("en-US", "commands.teach.memory.server.description"),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("persona")
+				.setDescription("Target persona nickname (defaults to current main persona)")
+				.setRequired(false),
 		);
 
 /**
@@ -74,6 +79,7 @@ export async function execute(
 
 	// Define state and modal result outside try for catch block
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
 	let modalResult: ModalResult | null = null;
 	// Define modalSubmitInteraction here to be accessible in catch block
 	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
@@ -116,7 +122,32 @@ export async function execute(
 			return;
 		}
 
-		// 6. Check if server memory teaching is enabled
+		// 6. Resolve target persona (default: current main persona)
+		const personaNameInput = interaction.options.getString("persona");
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		selectedPersona = personaNameInput
+			? allPersonas.find(
+					(persona) =>
+						persona.tomori_nickname.toLowerCase() ===
+						personaNameInput.toLowerCase(),
+				) ?? null
+			: allPersonas.find((persona) => !persona.is_alter) ?? null;
+
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				description: personaNameInput
+					? `Unknown persona "${personaNameInput}".`
+					: "No target persona available.",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 7. Check if server memory teaching is enabled
 		// NOTE: Check the correct config key name from tomori_configs table
 		if (
 			!tomoriState.config.server_memteaching_enabled && // Assuming this is the correct key
@@ -132,9 +163,11 @@ export async function execute(
 			return;
 		}
 
-		// 7. Check server memory limit before showing modal (better UX)
+		// 8. Check server memory limit before showing modal (better UX)
 		const serverLimitCheck = await checkServerMemoryLimit(
 			tomoriState.server_id,
+			selectedPersona.tomori_id,
+			true,
 		);
 		if (!serverLimitCheck.isValid) {
 			await replyInfoEmbed(interaction, locale, {
@@ -153,7 +186,7 @@ export async function execute(
 			return;
 		}
 
-		// 8. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
+		// 9. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
 		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.memory.server.modal_title",
@@ -170,7 +203,7 @@ export async function execute(
 			],
 		});
 
-		// 9. Handle modal outcome
+		// 10. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Server memory add modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -178,15 +211,15 @@ export async function execute(
 			return;
 		}
 
-		// 10. Capture the modal submission interaction - let helper functions manage interaction state
+		// 11. Capture the modal submission interaction - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		modalSubmitInteraction = modalResult.interaction!;
 
-		// 11. Get input from modal
+		// 12. Get input from modal
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
 
-		// 12. Validate memory content length
+		// 13. Validate memory content length
 		const contentValidation = validateMemoryContent(newMemory);
 		if (!contentValidation.isValid) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -199,26 +232,22 @@ export async function execute(
 			return;
 		}
 
-		// 13. Insert the new memory into the server_memories table (Rule 4, 15)
+		// 14. Insert into persona-scoped server memories table
+		const insertedMemory = await addServerMemoryByTomori(
+			// biome-ignore lint/style/noNonNullAssertion: checked above
+			tomoriState.server_id!,
+			selectedPersona.tomori_id,
+			// biome-ignore lint/style/noNonNullAssertion: user row from middleware
+			userData.user_id!,
+			newMemory,
+		);
 
-		const [insertedMemoryResult] = await sql`
-            INSERT INTO server_memories (server_id, user_id, content)
-            VALUES (${
-							// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
-							tomoriState.server_id!
-						}, ${userData.user_id}, ${newMemory})
-            RETURNING *
-        `;
-
-		// 14. Validate the result from the database using serverMemorySchema (Rule 3, 5, 6)
-		const validationResult = serverMemorySchema.safeParse(insertedMemoryResult);
-
-		if (!validationResult.success) {
+		if (!insertedMemory) {
 			// Rule 22: Log error with context
 			const context: ErrorContext = {
 				userId: userData.user_id,
 				serverId: tomoriState.server_id,
-				tomoriId: tomoriState.tomori_id, // Keep tomori_id for context if available
+				tomoriId: selectedPersona.tomori_id,
 				errorType: "DatabaseValidationError",
 				metadata: {
 					command: "teach servermemory",
@@ -226,12 +255,12 @@ export async function execute(
 					operation: "INSERT",
 					userDiscordId: interaction.user.id,
 					newMemoryContent: newMemory,
-					validationErrors: validationResult.error.issues,
+					targetTomoriId: selectedPersona.tomori_id,
 				},
 			};
 			await log.error(
-				"Failed to validate inserted server memory data",
-				validationResult.error,
+				"Failed to insert server memory data",
+				new Error("Insert returned null"),
 				context,
 			);
 

@@ -15,6 +15,7 @@ import {
 	getUserReminderCount,
 	getBraveApiKeyStatus,
 	getBlacklistedMemberIds,
+	loadPersonalMemoriesForUserLineage,
 } from "../../utils/db/dbRead";
 import type { UserRow } from "../../types/db/schema";
 import { PrivacyLevel } from "../../types/db/schema";
@@ -149,14 +150,27 @@ export async function execute(
 				titleKey = "commands.tool.status.personal_title";
 				descriptionKey = "commands.tool.status.personal_description";
 
-				// 2. Format personal memories
+				// 2. Resolve current lineage pool and load personal memories from DB
+				let personalMemoryList: string[] = [];
+				if (userData.user_id) {
+					const currentState = await loadTomoriState(serverDiscId);
+					const currentLineageId = currentState?.persona_lineage_id ?? 0;
+					const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
+						userData.user_id,
+						currentLineageId,
+						true,
+					);
+					personalMemoryList = personalMemoryRows.map((row) => row.content);
+				}
+
+				// 3. Format personal memories
 				const personalMemoriesValue = formatMemoriesForDisplay(
-					userData.personal_memories,
+					personalMemoryList,
 					locale,
 				);
 
-				// 3. Format personal memories count with slot usage
-				const personalMemoriesCount = userData.personal_memories.length;
+				// 4. Format personal memories count with slot usage
+				const personalMemoriesCount = personalMemoryList.length;
 				const personalMemoriesFieldName = localizer(
 					locale,
 					"commands.tool.status.field_personal_memories_with_count",
@@ -166,10 +180,10 @@ export async function execute(
 					},
 				);
 
-				// 4. Get reminder count for the user
+				// 5. Get reminder count for the user
 				const reminderCount = await getUserReminderCount(interaction.user.id);
 
-				// 5. Add user-specific fields
+				// 6. Add user-specific fields
 				fields.push(
 					{
 						name: localizer(locale, "commands.tool.status.field_user_nickname"),
@@ -204,7 +218,7 @@ export async function execute(
 					},
 				);
 
-				// 6. Set footer for export command
+				// 7. Set footer for export command
 				footerKey = "commands.tool.status.export_footer";
 				break;
 			}

@@ -49,6 +49,8 @@ export default {
 			item_selected: `Selected: {item}`,
 			select_page_title: `Select Page`,
 			select_page_description: `Choose a page to view from {totalItems} items across {totalPages} pages:`,
+			select_persona_title: `Select Persona`,
+			select_persona_description: `Choose which persona to target first:\n\n{items}`,
 		},
 
 		// Common error messages
@@ -917,7 +919,7 @@ export default {
 - I can switch between different personas using \`/persona\` (you can also share and save personas using \`/persona export\`!)
 - Multiple characters can coexist as alter personas, each with their own triggers and webhook avatar
 - My behavior and tone can be tweaked with \`/teach\`
-- A custom system prompt can be set with \`/config prompt\` to further shape my behavior
+- A custom system prompt can be set with \`/config sysprompt\` to further shape my behavior
 - Learn more with \`/help customization\``,
 				memory_title: `Memory & Personalization`,
 				memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
@@ -1594,7 +1596,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				provider_description: `Self-hosted OpenAI-compatible endpoint (non-production only)`,
 			},
 			humanizer: {
-				description: `Set how 'human-like' my responses should be. For custom prompts, use /config prompt change.`,
+				description: `Set how 'human-like' my responses should be. For custom prompts, use /config sysprompt change.`,
 				// value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
 				modal_title: `Set Humanizer Degree`,
 				select_label: `Humanizer Level`,
@@ -1605,7 +1607,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				choice_medium: `2: Default (Typing Simulation & Chunking)`,
 				choice_heavy: `3: Heavy (Lowercase & No Punctuation)`,
 				desc_none: `No humanization. Standard AI responses with formal tone and structure.`,
-				desc_light: `Adds a system prompt. Limits emojis (0-2) and keeps replies concise. Customize via /config prompt.`,
+				desc_light: `Adds a system prompt. Limits emojis (0-2) and keeps replies concise. Customize via /config sysprompt.`,
 				desc_medium: `Light features + typing simulation and improved message chunking for natural flow.`,
 				desc_heavy: `All features + casual text processing (lowercase, reduced punctuation) for informal tone.`,
 				// invalid_value_title: `Invalid Value`,
@@ -1900,6 +1902,18 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 			},
 
 			// System prompt management
+			sysprompt: {
+				description: `Manage custom system prompt for personality instructions`,
+				change: {
+					description: `Set a custom system prompt to guide my behavior`,
+				},
+				clear: {
+					description: `Remove custom system prompt and use default system prompt`,
+				},
+				preset: {
+					description: `Apply a preset system prompt`,
+				},
+			},
 			prompt: {
 				description: `Manage custom system prompt for personality instructions`,
 				change: {

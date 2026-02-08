@@ -671,17 +671,17 @@ export class ReviewCapabilitiesTool extends BaseTool {
 			settingsContent += "## System Prompt\n\n";
 			if (config.system_prompt) {
 				settingsContent += `A custom system prompt is active (${config.system_prompt.length} characters).\n`;
-				settingsContent += "- Modify with `/config prompt change`\n";
+				settingsContent += "- Modify with `/config sysprompt change`\n";
 				settingsContent +=
-					"- Switch to a preset with `/config prompt preset`\n";
-				settingsContent += "- Reset to default with `/config prompt clear`\n\n";
+					"- Switch to a preset with `/config sysprompt preset`\n";
+				settingsContent += "- Reset to default with `/config sysprompt clear`\n\n";
 			} else {
 				settingsContent +=
 					"No custom system prompt is set. Using the default built-in prompt.\n";
 				settingsContent +=
-					"- Set a custom prompt with `/config prompt change`\n";
+					"- Set a custom prompt with `/config sysprompt change`\n";
 				settingsContent +=
-					"- Or choose a preset with `/config prompt preset`\n\n";
+					"- Or choose a preset with `/config sysprompt preset`\n\n";
 			}
 
 			// 7. API Keys Section

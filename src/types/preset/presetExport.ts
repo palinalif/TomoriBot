@@ -41,6 +41,7 @@ export interface PresetExportData {
 	sample_dialogues_in: string[];
 	sample_dialogues_out: string[];
 	trigger_words: string[];
+	persona_lineage_id?: number;
 }
 
 /**
@@ -114,6 +115,7 @@ export const presetExportDataSchema = z.object({
 	trigger_words: z
 		.array(z.string().max(MAX_STRING_LENGTH))
 		.max(ABSOLUTE_MAX_TRIGGER_WORDS),
+	persona_lineage_id: z.number().int().nonnegative().optional(),
 });
 
 /**

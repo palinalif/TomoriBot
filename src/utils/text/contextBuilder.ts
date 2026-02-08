@@ -6,6 +6,7 @@ import {
 	getPrivacyLevel, // Import privacy level checker
 	loadTomoriState,
 	loadUserRow,
+	loadPersonalMemoriesForUserLineage,
 	getPendingRemindersForUser,
 	loadEmbeddingModelById,
 } from "../db/dbRead"; // Import session helpers
@@ -597,6 +598,8 @@ export async function buildContext({
 	tomoriNickname,
 	tomoriAttributes,
 	tomoriConfig,
+	personaPrompt,
+	personaLineageId,
 	isDMChannel = false,
 	mediaContextWindow,
 	snapshot,
@@ -620,6 +623,8 @@ export async function buildContext({
 	tomoriNickname: string;
 	tomoriAttributes: string[];
 	tomoriConfig: TomoriConfigRow;
+	personaPrompt?: string | null;
+	personaLineageId?: number;
 	isDMChannel?: boolean; // Added for DM support
 	mediaContextWindow?: number; // Optional override for media window size
 	snapshot?: import("../../types/misc/context").RequestSnapshot; // Optional per-request snapshot
@@ -665,6 +670,24 @@ export async function buildContext({
 		contextItems.push({
 			role: "system",
 			parts: [{ type: "text", text: humanizerText }],
+			metadataTag: ContextItemTag.SYSTEM_HUMANIZER_RULES,
+		});
+	}
+
+	// 1.5. Persona-specific prompt (appended in addition to system prompt when set)
+	if (personaPrompt?.trim()) {
+		const promptText = await convertMentions(
+			personaPrompt.trim(),
+			client,
+			guildId,
+			"User",
+			botName,
+			tomoriConfig.personal_memories_enabled,
+			snapshot,
+		);
+		contextItems.push({
+			role: "system",
+			parts: [{ type: "text", text: promptText }],
 			metadataTag: ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		});
 	}
@@ -1359,22 +1382,34 @@ export async function buildContext({
 				!userIsBlacklisted &&
 				userPrivacyLevel === PrivacyLevel.MINIMAL
 			) {
-				if (userRow.personal_memories && userRow.personal_memories.length > 0) {
-					const processedMemories = await Promise.all(
-						userRow.personal_memories.map(async (memory, index) => {
-							const processedMemory = await convertMentions(
-								memory,
-								client,
-								guildId,
-								displayName, // Use memory owner's name for {user} token
-								botName,
-								tomoriConfig.personal_memories_enabled,
-							);
-							const memoryId = index + 1;
-							return formatMemoryWithId(memoryId, processedMemory);
-						}),
+				if (userRow.user_id) {
+					const activeLineageId =
+						personaLineageId ??
+						snapshot?.tomoriState?.persona_lineage_id ??
+						tomoriState?.persona_lineage_id ??
+						0;
+					const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
+						userRow.user_id,
+						activeLineageId,
+						true,
 					);
-					detailLines.push(`- Memories: ${processedMemories.join("; ")}`);
+					if (personalMemoryRows.length > 0) {
+						const processedMemories = await Promise.all(
+							personalMemoryRows.map(async (memoryRow, index) => {
+								const processedMemory = await convertMentions(
+									memoryRow.content,
+									client,
+									guildId,
+									displayName, // Use memory owner's name for {user} token
+									botName,
+									tomoriConfig.personal_memories_enabled,
+								);
+								const memoryId = memoryRow.personal_memory_id ?? index + 1;
+								return formatMemoryWithId(memoryId, processedMemory);
+							}),
+						);
+						detailLines.push(`- Memories: ${processedMemories.join("; ")}`);
+					}
 				}
 			}
 

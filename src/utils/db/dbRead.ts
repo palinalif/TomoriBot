@@ -3,11 +3,15 @@ import {
 	tomoriStateSchema,
 	userSchema,
 	serverEmojiSchema,
+	personalMemorySchema,
+	personaConfigSchema,
 	type TomoriState,
 	type TomoriRow,
 	type UserRow,
 	type ServerEmojiRow,
 	type LlmRow,
+	type PersonalMemoryRow,
+	type PersonaConfigRow,
 	llmSchema,
 	type EmbeddingModelRow,
 	embeddingModelSchema,
@@ -33,12 +37,13 @@ export async function loadTomoriState(
 	serverDiscId: string,
 ): Promise<TomoriState | null> {
 	try {
-		// 1. Load base Tomori data using server Discord ID
+		// 1. Load main persona row using server Discord ID
 		const tomoriRows = await sql`
 			SELECT t.* 
 			FROM tomoris t
 			JOIN servers s ON t.server_id = s.server_id
 			WHERE s.server_disc_id = ${serverDiscId}
+			ORDER BY t.is_alter ASC, t.updated_at DESC NULLS LAST, t.tomori_id DESC
 			LIMIT 1
 		`;
 
@@ -99,20 +104,51 @@ export async function loadTomoriState(
 			llmData = llmRows[0] as LlmRow;
 		}
 
-		// 4. Load server memories for this server
-		const serverMemoriesRows = await sql`
+		// 4. Load persona-scoped trigger words + optional persona prompt
+		const personaConfigRows = await sql`
+			SELECT *
+			FROM persona_configs
+			WHERE tomori_id = ${tomoriId}
+			LIMIT 1
+		`;
+		let personaConfig: PersonaConfigRow | null = null;
+		if (personaConfigRows.length > 0) {
+			const parsedPersonaConfig = personaConfigSchema.safeParse(
+				personaConfigRows[0],
+			);
+			if (parsedPersonaConfig.success) {
+				personaConfig = parsedPersonaConfig.data;
+			} else {
+				log.warn(
+					`Invalid persona config row for tomori ${tomoriId}:`,
+					parsedPersonaConfig.error.flatten(),
+				);
+			}
+		}
+
+		// 5. Load server memories for this persona (fallback to legacy server-scoped rows)
+		let serverMemoriesRows = await sql`
 			SELECT content
 			FROM server_memories
-			WHERE server_id = ${tomoriData.server_id}
+			WHERE tomori_id = ${tomoriId}
 			ORDER BY created_at DESC
 		`;
+
+		if (!serverMemoriesRows.length) {
+			serverMemoriesRows = await sql`
+				SELECT content
+				FROM server_memories
+				WHERE server_id = ${tomoriData.server_id}
+				ORDER BY created_at DESC
+			`;
+		}
 
 		// Extract memory content strings into an array
 		const serverMemories = serverMemoriesRows.map(
 			(row: { content: string }) => row.content,
 		);
 
-		// 5. Load API key rotation pool for this server (if any)
+		// 6. Load API key rotation pool for this server (if any)
 		const rotationKeysRows = await sql`
 			SELECT * FROM api_key_rotation
 			WHERE server_id = ${tomoriData.server_id}
@@ -133,11 +169,17 @@ export async function loadTomoriState(
 			}
 		}
 
-		// 6. Combine and validate the full state
+		// 7. Combine and validate the full state
+		const fallbackTriggerWords =
+			tomoriData.is_alter === true
+				? (tomoriData.alter_triggers ?? [])
+				: (configData.trigger_words ?? []);
 		const combinedState = {
 			...tomoriData,
 			config: configData,
 			llm: llmData, // Add the LLM data to match schema
+			trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
+			persona_prompt: personaConfig?.persona_prompt ?? null,
 			server_memories: serverMemories, // Add server memories to the state
 			rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
 		};
@@ -175,136 +217,186 @@ export async function loadAllPersonasForServer(
 	return (
 		(await withCachedPlanRetry(async () => {
 			try {
-		// 1. Load all Tomori persona rows for this server (main first, then alters)
-		const tomoriRows = await sql`
-			SELECT t.*
-			FROM tomoris t
-			JOIN servers s ON t.server_id = s.server_id
-			WHERE s.server_disc_id = ${serverDiscId}
-			ORDER BY t.is_alter ASC
-		`;
+				// 1. Load all Tomori persona rows for this server (main first, then alters)
+				const tomoriRows = await sql`
+					SELECT t.*
+					FROM tomoris t
+					JOIN servers s ON t.server_id = s.server_id
+					WHERE s.server_disc_id = ${serverDiscId}
+					ORDER BY t.is_alter ASC, t.updated_at DESC NULLS LAST, t.tomori_id DESC
+				`;
 
-		if (!tomoriRows.length) {
-			log.warn(`No personas found for server ${serverDiscId}`);
-			return [];
-		}
+				if (!tomoriRows.length) {
+					log.warn(`No personas found for server ${serverDiscId}`);
+					return [];
+				}
 
-		// 2. Load shared server memories once (all personas share the same server memories)
-		const serverId = tomoriRows[0].server_id;
-		const serverMemoriesRows = await sql`
-			SELECT content
-			FROM server_memories
-			WHERE server_id = ${serverId}
-			ORDER BY created_at DESC
-		`;
-		const serverMemories = serverMemoriesRows.map(
-			(row: { content: string }) => row.content,
-		);
+				const serverId = tomoriRows[0].server_id;
 
-		// 3. Load server-scoped config once (fallback to main persona config)
-		let configRows = await sql`
-			SELECT * FROM tomori_configs
-			WHERE server_id = ${serverId}
-			LIMIT 1
-		`;
-
-		if (!configRows.length) {
-			const mainTomoriRow =
-				tomoriRows.find((row: TomoriRow) => row.is_alter === false) ??
-				tomoriRows[0];
-			const fallbackTomoriId = mainTomoriRow?.tomori_id;
-			if (fallbackTomoriId) {
-				log.warn(
-					`No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${fallbackTomoriId}`,
-				);
-				configRows = await sql`
+				// 2. Load server-scoped config once (fallback to main persona config)
+				let configRows = await sql`
 					SELECT * FROM tomori_configs
-					WHERE tomori_id = ${fallbackTomoriId}
+					WHERE server_id = ${serverId}
 					LIMIT 1
 				`;
-			}
-		}
 
-		if (!configRows.length) {
-			log.error(
-				`No config found for server ${serverDiscId}; cannot build persona states`,
-			);
-			return [];
-		}
-		const configData = configRows[0];
+				if (!configRows.length) {
+					const mainTomoriRow =
+						tomoriRows.find((row: TomoriRow) => row.is_alter === false) ??
+						tomoriRows[0];
+					const fallbackTomoriId = mainTomoriRow?.tomori_id;
+					if (fallbackTomoriId) {
+						log.warn(
+							`No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${fallbackTomoriId}`,
+						);
+						configRows = await sql`
+							SELECT * FROM tomori_configs
+							WHERE tomori_id = ${fallbackTomoriId}
+							LIMIT 1
+						`;
+					}
+				}
 
-		// Load LLM data once (with cache fallback)
-		let llmData = getCachedLLM(configData.llm_id);
-		if (!llmData) {
-			log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
-			const llmRows = await sql`
-				SELECT * FROM llms
-				WHERE llm_id = ${configData.llm_id}
-				LIMIT 1
-			`;
+				if (!configRows.length) {
+					log.error(
+						`No config found for server ${serverDiscId}; cannot build persona states`,
+					);
+					return [];
+				}
+				const configData = configRows[0];
 
-			if (!llmRows.length) {
-				log.error(
-					`Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
-				);
-				return [];
-			}
-			llmData = llmRows[0] as LlmRow;
-		}
+				// 3. Load LLM data once (with cache fallback)
+				let llmData = getCachedLLM(configData.llm_id);
+				if (!llmData) {
+					log.info(
+						`Cache miss for LLM ID ${configData.llm_id}, querying database`,
+					);
+					const llmRows = await sql`
+						SELECT * FROM llms
+						WHERE llm_id = ${configData.llm_id}
+						LIMIT 1
+					`;
 
-		// Load rotation keys once (server-scoped)
-		const rotationKeysRows = await sql`
-			SELECT * FROM api_key_rotation
-			WHERE server_id = ${serverId}
-			ORDER BY usage_count ASC, rotation_key_id ASC
-		`;
+					if (!llmRows.length) {
+						log.error(
+							`Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
+						);
+						return [];
+					}
+					llmData = llmRows[0] as LlmRow;
+				}
 
-		const rotationKeys: ApiKeyRotationRow[] = [];
-		for (const row of rotationKeysRows) {
-			const parsed = apiKeyRotationSchema.safeParse(row);
-			if (parsed.success) {
-				rotationKeys.push(parsed.data);
-			} else {
-				const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-				log.warn(
-					`Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
-				);
-			}
-		}
+				// 4. Load rotation keys once (server-scoped)
+				const rotationKeysRows = await sql`
+					SELECT * FROM api_key_rotation
+					WHERE server_id = ${serverId}
+					ORDER BY usage_count ASC, rotation_key_id ASC
+				`;
 
-		// 4. Build persona states using shared config and rotation keys
-		const personas: TomoriState[] = [];
+				const rotationKeys: ApiKeyRotationRow[] = [];
+				for (const row of rotationKeysRows) {
+					const parsed = apiKeyRotationSchema.safeParse(row);
+					if (parsed.success) {
+						rotationKeys.push(parsed.data);
+					} else {
+						const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
+						log.warn(
+							`Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
+						);
+					}
+				}
 
-		for (const tomoriRow of tomoriRows) {
-			const tomoriId = tomoriRow.tomori_id ?? "unknown";
-			// 4a. Combine and validate the full state for this persona
-			const combinedState = {
-				...tomoriRow,
-				config: configData,
-				llm: llmData,
-				server_memories: serverMemories, // Shared across all personas
-				rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
-			};
+				// 5. Load persona configs for all personas in this server
+				const personaConfigRows = await sql`
+					SELECT pc.*
+					FROM persona_configs pc
+					JOIN tomoris t ON t.tomori_id = pc.tomori_id
+					WHERE t.server_id = ${serverId}
+				`;
+				const personaConfigMap = new Map<number, PersonaConfigRow>();
+				for (const row of personaConfigRows) {
+					const parsed = personaConfigSchema.safeParse(row);
+					if (parsed.success) {
+						personaConfigMap.set(parsed.data.tomori_id, parsed.data);
+					} else {
+						log.warn(
+							`Invalid persona config row for server ${serverDiscId}:`,
+							parsed.error.flatten(),
+						);
+					}
+				}
 
-			// Validate using Zod schema
-			const parsedState = tomoriStateSchema.safeParse(combinedState);
-			if (!parsedState.success) {
-				log.error(
-					`Failed to validate persona state for server ${serverDiscId}, tomori_id ${tomoriId}:`,
-					parsedState.error.flatten(),
-				);
-				continue; // Skip this persona
-			}
+				// 6. Load server memories once, grouped by tomori_id
+				const memoryRows = await sql<
+					Array<{ tomori_id: number | null; content: string }>
+				>`
+					SELECT tomori_id, content
+					FROM server_memories
+					WHERE server_id = ${serverId}
+					ORDER BY created_at DESC
+				`;
+				const legacyServerMemories: string[] = [];
+				const memoriesByTomori = new Map<number, string[]>();
+				for (const row of memoryRows) {
+					if (row.tomori_id === null) {
+						legacyServerMemories.push(row.content);
+						continue;
+					}
+					const existing = memoriesByTomori.get(row.tomori_id) ?? [];
+					existing.push(row.content);
+					memoriesByTomori.set(row.tomori_id, existing);
+				}
 
-			personas.push(parsedState.data);
-		}
+				// 7. Build persona states
+				const personas: TomoriState[] = [];
+				for (const tomoriRow of tomoriRows) {
+					const tomoriId = tomoriRow.tomori_id;
+					if (!tomoriId) {
+						log.warn(
+							`Skipping persona with missing tomori_id for server ${serverDiscId}`,
+						);
+						continue;
+					}
 
-		if (personas.length === 0) {
-			log.warn(`No valid personas found for server ${serverDiscId}`);
-			return [];
-		}
+					const personaConfig = personaConfigMap.get(tomoriId);
+					const fallbackTriggerWords =
+						tomoriRow.is_alter === true
+							? (tomoriRow.alter_triggers ?? [])
+							: (configData.trigger_words ?? []);
+					const personaScopedMemories = memoriesByTomori.get(tomoriId);
+					const serverMemories =
+						personaScopedMemories && personaScopedMemories.length > 0
+							? personaScopedMemories
+							: legacyServerMemories;
 
-			return personas;
+					const combinedState = {
+						...tomoriRow,
+						config: configData,
+						llm: llmData,
+						trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
+						persona_prompt: personaConfig?.persona_prompt ?? null,
+						server_memories: serverMemories,
+						rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
+					};
+
+					const parsedState = tomoriStateSchema.safeParse(combinedState);
+					if (!parsedState.success) {
+						log.error(
+							`Failed to validate persona state for server ${serverDiscId}, tomori_id ${tomoriId}:`,
+							parsedState.error.flatten(),
+						);
+						continue;
+					}
+
+					personas.push(parsedState.data);
+				}
+
+				if (personas.length === 0) {
+					log.warn(`No valid personas found for server ${serverDiscId}`);
+					return [];
+				}
+
+				return personas;
 		} catch (error) {
 			log.error(
 				`Error loading all personas for server ${serverDiscId}:`,
@@ -352,6 +444,100 @@ export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
 			return null;
 		}
 	}, `load user row for ID ${userDiscId}`);
+}
+
+/**
+ * Loads persona-scoped config row for a specific persona.
+ * @param tomoriId - Internal persona ID.
+ * @returns PersonaConfigRow or null if not found/invalid.
+ */
+export async function loadPersonaConfigRow(
+	tomoriId: number,
+): Promise<PersonaConfigRow | null> {
+	try {
+		const rows = await sql`
+			SELECT *
+			FROM persona_configs
+			WHERE tomori_id = ${tomoriId}
+			LIMIT 1
+		`;
+
+		if (!rows.length) {
+			return null;
+		}
+
+		const parsed = personaConfigSchema.safeParse(rows[0]);
+		if (!parsed.success) {
+			log.warn(
+				`Failed to validate persona config for tomori ${tomoriId}:`,
+				parsed.error.flatten(),
+			);
+			return null;
+		}
+
+		return parsed.data;
+	} catch (error) {
+		log.error(`Error loading persona config for tomori ${tomoriId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Loads lineage-scoped personal memories for a user.
+ * During soak, callers can include lineage 0 (legacy pool) fallback.
+ *
+ * @param userId - Internal user ID.
+ * @param personaLineageId - Current persona lineage ID.
+ * @param includeLegacyFallback - Include lineage 0 memories during transition.
+ * @returns Array of validated personal memory rows, newest first.
+ */
+export async function loadPersonalMemoriesForUserLineage(
+	userId: number,
+	personaLineageId: number,
+	includeLegacyFallback = true,
+): Promise<PersonalMemoryRow[]> {
+	try {
+		const rows =
+			includeLegacyFallback && personaLineageId !== 0
+				? await sql`
+					SELECT *
+					FROM personal_memories
+					WHERE user_id = ${userId}
+					  AND (
+						persona_lineage_id = ${personaLineageId}
+						OR persona_lineage_id = 0
+					  )
+					ORDER BY created_at DESC, personal_memory_id DESC
+				`
+				: await sql`
+					SELECT *
+					FROM personal_memories
+					WHERE user_id = ${userId}
+					  AND persona_lineage_id = ${personaLineageId}
+					ORDER BY created_at DESC, personal_memory_id DESC
+				`;
+
+		const parsedRows: PersonalMemoryRow[] = [];
+		for (const row of rows) {
+			const parsed = personalMemorySchema.safeParse(row);
+			if (parsed.success) {
+				parsedRows.push(parsed.data);
+			} else {
+				log.warn(
+					`Skipping invalid personal memory row for user ${userId}:`,
+					parsed.error.flatten(),
+				);
+			}
+		}
+
+		return parsedRows;
+	} catch (error) {
+		log.error(
+			`Error loading personal memories for user ${userId} and lineage ${personaLineageId}:`,
+			error,
+		);
+		return [];
+	}
 }
 
 /**

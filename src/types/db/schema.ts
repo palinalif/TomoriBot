@@ -50,6 +50,17 @@ export type ServerRow = z.infer<typeof serverSchema>;
 export const tomoriSchema = z.object({
 	tomori_id: z.number().optional(),
 	server_id: z.number(),
+	persona_lineage_id: z
+		.preprocess((value) => {
+			if (typeof value === "bigint") {
+				return Number(value);
+			}
+			if (typeof value === "string" && value.trim() !== "") {
+				return Number(value);
+			}
+			return value;
+		}, z.number().int().nonnegative())
+		.default(0),
 	tomori_nickname: z.string(),
 	attribute_list: z.array(z.string()).default([]),
 	sample_dialogues_in: z.array(z.string()).default([]),
@@ -159,6 +170,15 @@ export const tomoriConfigSchema = z.object({
 });
 export type TomoriConfigRow = z.infer<typeof tomoriConfigSchema>;
 
+export const personaConfigSchema = z.object({
+	tomori_id: z.number(),
+	trigger_words: z.array(z.string()).default([]),
+	persona_prompt: z.string().nullable().optional(),
+	created_at: z.date().optional(),
+	updated_at: z.date().optional(),
+});
+export type PersonaConfigRow = z.infer<typeof personaConfigSchema>;
+
 export const tomoriPresetSchema = z.object({
 	tomori_preset_id: z.number(),
 	tomori_preset_name: z.string(),
@@ -218,12 +238,31 @@ export type ServerStickerRow = z.infer<typeof serverStickerSchema>;
 export const serverMemorySchema = z.object({
 	server_memory_id: z.number().optional(),
 	server_id: z.number(),
+	tomori_id: z.number().nullable().optional(),
 	user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
 	content: z.string(),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
 export type ServerMemoryRow = z.infer<typeof serverMemorySchema>;
+
+export const personalMemorySchema = z.object({
+	personal_memory_id: z.number().optional(),
+	user_id: z.number(),
+	persona_lineage_id: z.preprocess((value) => {
+		if (typeof value === "bigint") {
+			return Number(value);
+		}
+		if (typeof value === "string" && value.trim() !== "") {
+			return Number(value);
+		}
+		return value;
+	}, z.number().int().nonnegative()),
+	content: z.string(),
+	created_at: z.date().optional(),
+	updated_at: z.date().optional(),
+});
+export type PersonalMemoryRow = z.infer<typeof personalMemorySchema>;
 
 export const documentSchema = z.object({
 	document_id: z.number().optional(),
@@ -445,6 +484,8 @@ export type ServerwideQuotaRow = z.infer<typeof serverwideQuotaSchema>;
 export type TomoriState = TomoriRow & {
 	config: TomoriConfigRow;
 	llm: LlmRow; // Added LLM information
+	trigger_words: string[]; // Persona-scoped trigger words from persona_configs
+	persona_prompt: string | null; // Optional persona-specific prompt appended after system prompt
 	server_memories: string[]; // Changed to string array to match implementation
 	rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
 };
@@ -455,6 +496,8 @@ export type TomoriState = TomoriRow & {
 export const tomoriStateSchema = tomoriSchema.extend({
 	config: tomoriConfigSchema,
 	llm: llmSchema, // Added LLM schema validation
+	trigger_words: z.array(z.string()).default([]),
+	persona_prompt: z.string().nullable().default(null),
 	server_memories: z.array(z.string()).default([]), // Changed to array of strings
 	rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
 });

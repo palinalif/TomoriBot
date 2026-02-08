@@ -22,11 +22,13 @@ import { validateTomoriConfigFields } from "./sqlSecurity";
  * Imports TomoriBot preset personality data, replacing existing personality
  * @param serverDiscId - Discord server ID to import preset for
  * @param importData - The validated preset export data to import
+ * @param identityMode - preserve: keep/import lineage, fork: assign a fresh lineage
  * @returns ImportResult indicating success or failure with item counts
  */
 export async function importPresetData(
 	serverDiscId: string,
 	importData: PresetExportData,
+	identityMode: "preserve" | "fork" = "preserve",
 ): Promise<ImportResult> {
 	try {
 		// 1. Validate all array content for security
@@ -103,7 +105,7 @@ export async function importPresetData(
 
 		// 4. Get internal server ID and tomori ID (main persona only)
 		const serverRows = await sql`
-			SELECT s.server_id, t.tomori_id
+			SELECT s.server_id, t.tomori_id, t.persona_lineage_id
 			FROM servers s
 			JOIN tomoris t ON s.server_id = t.server_id
 			WHERE s.server_disc_id = ${serverDiscId}
@@ -119,6 +121,8 @@ export async function importPresetData(
 		}
 
 		const serverId = serverRows[0].server_id;
+		const mainTomoriId = serverRows[0].tomori_id;
+		const importedLineageId = importData.persona_lineage_id ?? null;
 
 		// 5. Format arrays as PostgreSQL array literals for safe insertion
 		const attributeArrayLiteral = `{${importData.attribute_list
@@ -137,19 +141,30 @@ export async function importPresetData(
 			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
 			.join(",")}}`;
 
-		// 6. Update tomoris table with personality data (main persona only)
+		// 6. Update tomoris table with personality data and lineage behavior
 		await sql`
 			UPDATE tomoris
 			SET
 				tomori_nickname = ${importData.tomori_nickname},
 				attribute_list = ${attributeArrayLiteral}::text[],
 				sample_dialogues_in = ${dialoguesInArrayLiteral}::text[],
-				sample_dialogues_out = ${dialoguesOutArrayLiteral}::text[]
-			WHERE server_id = ${serverId}
-			AND is_alter = false
+				sample_dialogues_out = ${dialoguesOutArrayLiteral}::text[],
+				persona_lineage_id = CASE
+					WHEN ${identityMode} = 'fork' THEN nextval('persona_lineage_id_seq')
+					WHEN ${identityMode} = 'preserve' AND ${importedLineageId} IS NOT NULL THEN ${importedLineageId}
+					ELSE persona_lineage_id
+				END
+			WHERE tomori_id = ${mainTomoriId}
 		`;
 
-		// 7. Update tomori_configs table with trigger words (server-scoped)
+		// 7. Update persona-scoped trigger words (fallback write to tomori_configs for soak)
+		await sql`
+			INSERT INTO persona_configs (tomori_id, trigger_words)
+			VALUES (${mainTomoriId}, ${triggerWordsArrayLiteral}::text[])
+			ON CONFLICT (tomori_id) DO UPDATE
+			SET trigger_words = EXCLUDED.trigger_words
+		`;
+
 		await sql`
 			UPDATE tomori_configs
 			SET

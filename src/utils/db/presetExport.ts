@@ -57,6 +57,7 @@ export async function exportPresetData(
 			SELECT
 				tomori_id,
 				tomori_nickname,
+				persona_lineage_id,
 				attribute_list,
 				sample_dialogues_in,
 				sample_dialogues_out
@@ -112,6 +113,7 @@ export async function exportPresetData(
 				sample_dialogues_in: presetData.sample_dialogues_in || [],
 				sample_dialogues_out: presetData.sample_dialogues_out || [],
 				trigger_words: triggerWords || [],
+				persona_lineage_id: presetData.persona_lineage_id,
 			},
 		};
 

@@ -16,6 +16,7 @@ import {
 	importPersonalData,
 	importServerData,
 } from "../../utils/db/dataImport";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type {
 	PersonalExportData,
 	ServerExportData,
@@ -98,6 +99,14 @@ export const configureSubcommand = (
 						value: "no",
 					},
 				),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("persona")
+				.setDescription(
+					"Target persona nickname for memory import (defaults to active main persona)",
+				)
+				.setRequired(false),
 		);
 
 /**
@@ -117,6 +126,8 @@ export async function execute(
 	try {
 		// 1. Check confirmation
 		const confirmation = interaction.options.getString("confirmation", true);
+		const personaNameInput = interaction.options.getString("persona");
+		const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 
 		if (confirmation !== "yes") {
 			await replyInfoEmbed(interaction, locale, {
@@ -284,6 +295,48 @@ export async function execute(
 		}
 
 		// 8. Import data based on type
+		let targetTomoriId: number | undefined;
+		let targetPersonaLineageId = 0;
+		if (validation.type === "personal" || validation.type === "server") {
+			const personas = await loadAllPersonasForServer(serverDiscId);
+			if (personas.length > 0) {
+				const selectedPersona = personaNameInput
+					? personas.find(
+							(persona) =>
+								persona.tomori_nickname.toLowerCase() ===
+								personaNameInput.toLowerCase(),
+						)
+					: personas.find((persona) => !persona.is_alter) ?? personas[0];
+
+				if (!selectedPersona) {
+					await interaction.editReply({
+						embeds: [
+							new EmbedBuilder()
+								.setTitle(
+									localizer(locale, "general.errors.invalid_option_title"),
+								)
+								.setDescription(`Unknown persona "${personaNameInput}".`)
+								.setColor(ColorCode.ERROR),
+						],
+					});
+					return;
+				}
+
+				targetTomoriId = selectedPersona.tomori_id;
+				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+			} else if (personaNameInput) {
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(localizer(locale, "general.errors.invalid_option_title"))
+							.setDescription(`Unknown persona "${personaNameInput}".`)
+							.setColor(ColorCode.ERROR),
+					],
+				});
+				return;
+			}
+		}
+
 		let importResult:
 			| Awaited<ReturnType<typeof importPersonalData>>
 			| Awaited<ReturnType<typeof importServerData>>;
@@ -292,12 +345,13 @@ export async function execute(
 			importResult = await importPersonalData(
 				interaction.user.id,
 				validation.data as PersonalExportData,
+				targetPersonaLineageId,
 			);
 		} else if (validation.type === "server") {
-			const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 			importResult = await importServerData(
 				serverDiscId,
 				validation.data as ServerExportData,
+				targetTomoriId,
 			);
 		} else {
 			await interaction.editReply({

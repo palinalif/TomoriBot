@@ -27,6 +27,8 @@ import { deletePersonaAvatarFromS3 } from "../../utils/storage/avatarStorage";
 // Constants for modal configuration
 const MODAL_CUSTOM_ID = "persona_remove_modal";
 const PERSONA_SELECT_ID = "persona_select";
+const REMOVE_CONFIRM_VALUE = "confirm_remove";
+const REMOVE_CANCEL_VALUE = "cancel_remove";
 
 /**
  * Configure the 'remove' subcommand
@@ -36,7 +38,25 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("remove")
-		.setDescription(localizer("en-US", "commands.persona.remove.description"));
+		.setDescription(localizer("en-US", "commands.persona.remove.description"))
+		.addStringOption((option) =>
+			option
+				.setName("confirmation")
+				.setDescription(
+					"Confirm deletion scope (removes persona assets + persona-scoped data, keeps lineage personal memories)",
+				)
+				.setRequired(true)
+				.addChoices(
+					{
+						name: "Confirm remove (deletes persona data, keeps lineage personal memories)",
+						value: REMOVE_CONFIRM_VALUE,
+					},
+					{
+						name: "Cancel",
+						value: REMOVE_CANCEL_VALUE,
+					},
+				),
+		);
 
 /**
  * Executes the 'remove' command
@@ -73,6 +93,18 @@ export async function execute(
 				titleKey: "commands.persona.remove.no_permission_title",
 				descriptionKey: "commands.persona.remove.no_permission_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 2.5. Required destructive confirmation
+		const confirmation = interaction.options.getString("confirmation", true);
+		if (confirmation !== REMOVE_CONFIRM_VALUE) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.interaction.cancel_title",
+				descriptionKey: "general.interaction.cancel_description",
+				color: ColorCode.INFO,
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
@@ -187,10 +219,10 @@ export async function execute(
 		// 10. Show success embed with deleted persona's nickname
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.persona.remove.success_title",
-			descriptionKey: "commands.persona.remove.success_description",
-			descriptionVars: {
-				nickname: personaToRemove.tomori_nickname,
-			},
+			description:
+				`${localizer(locale, "commands.persona.remove.success_description", {
+					nickname: personaToRemove.tomori_nickname,
+				})}\n\nLineage personal memories were kept.`,
 			color: ColorCode.SUCCESS,
 		});
 

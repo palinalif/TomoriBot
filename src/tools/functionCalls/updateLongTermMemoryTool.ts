@@ -13,13 +13,18 @@ import {
 	type ToolResult,
 	type ToolParameterSchema,
 } from "../../types/tool/interfaces";
-import { userSchema, PrivacyLevel } from "../../types/db/schema";
+import { PrivacyLevel } from "../../types/db/schema";
 import { validateMemoryContent } from "../../utils/db/memoryLimits";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 import { sendStandardEmbed } from "../../utils/discord/embedHelper";
 import { convertMentions } from "../../utils/text/contextBuilder";
-import { isBlacklisted, loadUserRow, getPrivacyLevel } from "@/utils/db/dbRead";
+import {
+	isBlacklisted,
+	loadUserRow,
+	getPrivacyLevel,
+	loadPersonalMemoriesForUserLineage,
+} from "@/utils/db/dbRead";
 
 export class UpdateLongTermMemoryTool extends BaseTool {
 	name = "update_long_term_memory";
@@ -176,8 +181,10 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 		const isPersonalUpdate = hasTargetUserId && hasTargetUserNickname;
 
 		const tomoriState = context.tomoriState;
-		if (!tomoriState?.server_id) {
-			log.error("Missing server_id in Tomori state for memory update");
+		if (!tomoriState?.server_id || !tomoriState.tomori_id) {
+			log.error(
+				"Missing server_id or tomori_id in Tomori state for memory update",
+			);
 			return {
 				success: false,
 				error: "Internal bot error: Missing server context",
@@ -210,6 +217,10 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 					SET content = ${newContent}, updated_at = CURRENT_TIMESTAMP
 					WHERE server_memory_id = ${memoryId}
 					  AND server_id = ${tomoriState.server_id}
+					  AND (
+						tomori_id = ${tomoriState.tomori_id}
+						OR tomori_id IS NULL
+					  )
 					RETURNING server_memory_id, content, user_id
 				`;
 
@@ -370,8 +381,16 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 				};
 			}
 
-			const personalMemories = targetUserRow.personal_memories ?? [];
-			if (memoryId < 1 || memoryId > personalMemories.length) {
+			const personaLineageId = tomoriState.persona_lineage_id ?? 0;
+			const personalMemories = await loadPersonalMemoriesForUserLineage(
+				targetUserRow.user_id,
+				personaLineageId,
+				true,
+			);
+			const targetMemory = personalMemories.find(
+				(memory) => memory.personal_memory_id === memoryId,
+			);
+			if (!targetMemory) {
 				return {
 					success: false,
 					error: "Personal memory ID not found",
@@ -382,16 +401,22 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 				};
 			}
 
-			const [updatedUser] = await sql`
-				UPDATE users
-				SET personal_memories[${memoryId}] = ${newContent}
-				WHERE user_id = ${targetUserRow.user_id}
-				RETURNING *
+			const [updatedMemory] = await sql`
+				UPDATE personal_memories
+				SET content = ${newContent}, updated_at = CURRENT_TIMESTAMP
+				WHERE personal_memory_id = ${memoryId}
+				  AND user_id = ${targetUserRow.user_id}
+				  AND (
+					persona_lineage_id = ${personaLineageId}
+					OR persona_lineage_id = 0
+				  )
+				RETURNING personal_memory_id, content
 			`;
 
-			const validatedUpdatedUser = userSchema.safeParse(updatedUser);
-			if (!validatedUpdatedUser.success || !updatedUser) {
-				log.error("Failed to validate user row after personal memory update");
+			if (!updatedMemory) {
+				log.error(
+					`Failed to update personal memory ${memoryId} for user ${targetUserRow.user_id}`,
+				);
 				return {
 					success: false,
 					error: "Failed to update personal memory",

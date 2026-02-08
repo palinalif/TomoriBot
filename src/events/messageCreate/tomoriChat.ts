@@ -3178,6 +3178,10 @@ export default async function tomoriChat(
 							tomoriAttributes: tomoriState!.attribute_list,
 							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
 							tomoriConfig: tomoriState!.config,
+							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+							personaPrompt: tomoriState!.persona_prompt ?? null,
+							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+							personaLineageId: tomoriState!.persona_lineage_id,
 							isDMChannel, // Pass DM channel flag for proper context building
 							snapshot: personaSnapshot, // Use persona-specific snapshot for correct context
 							preloadedEmojis: loadedEmojis, // Pass pre-loaded emoji data to avoid redundant DB query
@@ -4375,6 +4379,10 @@ export default async function tomoriChat(
 												tomoriAttributes: tomoriState!.attribute_list,
 												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 												tomoriConfig: tomoriState!.config,
+												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+												personaPrompt: tomoriState!.persona_prompt ?? null,
+												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+												personaLineageId: tomoriState!.persona_lineage_id,
 												isDMChannel,
 												mediaContextWindow: newWindow, // Pass the expanded window
 												snapshot: personaSnapshot, // Use persona-specific snapshot for rebuild
@@ -5030,10 +5038,12 @@ export function determineMatchingPersonas(
 		const config = persona.config;
 		if (!config) continue;
 
-		// Determine which trigger list to use
-		const triggers = persona.is_alter
-			? persona.alter_triggers || []
-			: config.trigger_words;
+		// Persona-scoped trigger words (fallback to legacy columns during soak)
+		const triggers =
+			persona.trigger_words ??
+			(persona.is_alter
+				? (persona.alter_triggers ?? [])
+				: (config.trigger_words ?? []));
 
 		let hasMatch = false;
 		let firstMatchIndex = Number.MAX_SAFE_INTEGER;
@@ -5181,9 +5191,11 @@ export function shouldBotReply(
 		}
 
 		// Determine which trigger list to use
-		const triggers = persona.is_alter
-			? persona.alter_triggers || []
-			: persona.config?.trigger_words || [];
+		const triggers =
+			persona.trigger_words ??
+			(persona.is_alter
+				? (persona.alter_triggers ?? [])
+				: (persona.config?.trigger_words ?? []));
 
 		return triggers.some((trigger: string) => {
 			// Check if trigger is a mention (starts with <@)

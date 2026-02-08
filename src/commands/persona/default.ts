@@ -33,6 +33,31 @@ import { getCachedPresetAvatar } from "../../utils/image/avatarHelper";
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "preset_default_modal";
 const PRESET_SELECT_ID = "preset_select";
+const PRESET_LINEAGE_BY_AVATAR: Record<string, number> = {
+	"default.png": 4, // Default / Boyish
+	"bratty.png": 716,
+	"gloomy.png": 1770,
+	"shy.png": 3585,
+};
+
+function resolvePresetLineageId(preset: TomoriPresetRow): number | null {
+	const avatarPath = (preset.preset_avatar_path ?? "").trim().toLowerCase();
+	if (avatarPath.length > 0) {
+		const fileName = avatarPath.split(/[\\/]/).pop() ?? "";
+		if (fileName in PRESET_LINEAGE_BY_AVATAR) {
+			return PRESET_LINEAGE_BY_AVATAR[fileName];
+		}
+	}
+
+	// Locale-safe fallback for environments where avatar paths were customized.
+	const normalizedName = preset.tomori_preset_name.toLowerCase();
+	if (normalizedName.includes("bratty")) return 716;
+	if (normalizedName.includes("gloomy")) return 1770;
+	if (normalizedName.includes("shy")) return 3585;
+	if (normalizedName.includes("default") || normalizedName.includes("boyish"))
+		return 4;
+	return null;
+}
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -196,6 +221,7 @@ export async function execute(
 		const triggerWordsArrayLiteral = `{${defaultTriggerWords
 			.map((word: string) => `"${word.replace(/(["\\])/g, "\\$1")}"`)
 			.join(",")}}`;
+		const resolvedLineageId = resolvePresetLineageId(selectedPreset);
 
 		// 15. Update Tomori and TomoriConfig in the database
 		// First, update the Tomori table (nickname and attribute/dialogue data)
@@ -205,12 +231,23 @@ export async function execute(
 				tomori_nickname = ${defaultBotName},
 				attribute_list = ${attributeArrayLiteral}::text[],
 				sample_dialogues_in = ${inArrayLiteral}::text[],
-				sample_dialogues_out = ${outArrayLiteral}::text[]
+				sample_dialogues_out = ${outArrayLiteral}::text[],
+				persona_lineage_id = CASE
+					WHEN ${resolvedLineageId} IS NOT NULL THEN ${resolvedLineageId}
+					ELSE persona_lineage_id
+				END
 			WHERE tomori_id = ${tomoriState.tomori_id}
 			RETURNING *
 		`;
 
-		// 16. Update the TomoriConfig table (trigger words)
+		// 16. Update persona-scoped trigger words (plus temporary server config fallback)
+		await sql`
+			INSERT INTO persona_configs (tomori_id, trigger_words)
+			VALUES (${tomoriState.tomori_id}, ${triggerWordsArrayLiteral}::text[])
+			ON CONFLICT (tomori_id) DO UPDATE
+			SET trigger_words = EXCLUDED.trigger_words
+		`;
+
 		await sql`
 			UPDATE tomori_configs
 			SET trigger_words = ${triggerWordsArrayLiteral}::text[]

@@ -1,5 +1,5 @@
 /**
- * Command: /config prompt clear
+ * Command: /config sysprompt clear
  * Clears the custom system prompt, reverting to default DEFAULT_SYSTEM_PROMPT
  */
 
@@ -31,7 +31,7 @@ export function configureSubcommand(): SlashCommandSubcommandBuilder {
 }
 
 /**
- * Execute the /config prompt clear command
+ * Execute the /config sysprompt clear command
  * @param _client - Discord client (unused)
  * @param interaction - Chat input command interaction
  * @param userData - User data from database

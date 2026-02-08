@@ -15,11 +15,13 @@ import { validateTomoriConfigFields } from "./sqlSecurity";
  * Imports personal user data, replacing existing personal memories
  * @param userDiscId - Discord user ID to import data for
  * @param importData - The validated personal export data to import
+ * @param personaLineageId - Persona lineage namespace to import memories into
  * @returns ImportResult indicating success or failure
  */
 export async function importPersonalData(
 	userDiscId: string,
 	importData: PersonalExportData,
+	personaLineageId = 0,
 ): Promise<ImportResult> {
 	try {
 		// 1. Validate memory content length for each memory
@@ -33,30 +35,22 @@ export async function importPersonalData(
 			}
 		}
 
-		// 2. Format personal_memories as PostgreSQL array literal
-		const memoriesArrayLiteral = `{${importData.personal_memories
-			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-			.join(",")}}`;
-
-		// 3. Update user data using UPSERT pattern
+		// 2. Ensure user row exists / update profile fields
 		const updateResult = await sql`
 			INSERT INTO users (
 				user_disc_id,
 				user_nickname,
-				language_pref,
-				personal_memories
+				language_pref
 			) VALUES (
 				${userDiscId},
 				${importData.user_nickname},
-				${importData.language_pref},
-				${memoriesArrayLiteral}::text[]
+				${importData.language_pref}
 			)
 			ON CONFLICT (user_disc_id) DO UPDATE
 			SET
 				user_nickname = EXCLUDED.user_nickname,
-				language_pref = EXCLUDED.language_pref,
-				personal_memories = EXCLUDED.personal_memories
-			RETURNING *
+				language_pref = EXCLUDED.language_pref
+			RETURNING user_id
 		`;
 
 		if (!updateResult.length) {
@@ -64,6 +58,22 @@ export async function importPersonalData(
 				success: false,
 				error: "commands.data.import.error_update_failed",
 			};
+		}
+
+		const targetUserId = updateResult[0].user_id;
+
+		// 3. Replace memories only in the selected lineage namespace
+		await sql`
+			DELETE FROM personal_memories
+			WHERE user_id = ${targetUserId}
+			  AND persona_lineage_id = ${personaLineageId}
+		`;
+
+		for (const memory of importData.personal_memories) {
+			await sql`
+				INSERT INTO personal_memories (user_id, persona_lineage_id, content)
+				VALUES (${targetUserId}, ${personaLineageId}, ${memory})
+			`;
 		}
 
 		return {
@@ -85,18 +95,19 @@ export async function importPersonalData(
  * Imports server data, replacing configuration and server memories
  * @param serverDiscId - Discord server ID to import data for
  * @param importData - The validated server export data to import
+ * @param tomoriId - Optional persona ID to import server memories into
  * @returns ImportResult indicating success or failure
  */
 export async function importServerData(
 	serverDiscId: string,
 	importData: ServerExportData,
+	tomoriId?: number,
 ): Promise<ImportResult> {
 	try {
-		// 1. Get internal server ID and tomori ID
+		// 1. Get internal server ID and resolve target persona
 		const serverRows = await sql`
-			SELECT s.server_id, t.tomori_id
+			SELECT s.server_id
 			FROM servers s
-			JOIN tomoris t ON s.server_id = t.server_id
 			WHERE s.server_disc_id = ${serverDiscId}
 			LIMIT 1
 		`;
@@ -109,6 +120,18 @@ export async function importServerData(
 		}
 
 		const serverId = serverRows[0].server_id;
+		let targetTomoriId = tomoriId;
+		if (!targetTomoriId) {
+			const mainPersonaRows = await sql`
+				SELECT tomori_id
+				FROM tomoris
+				WHERE server_id = ${serverId}
+				  AND is_alter = false
+				ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
+				LIMIT 1
+			`;
+			targetTomoriId = mainPersonaRows[0]?.tomori_id;
+		}
 
 		// 2. Validate all server memories
 		for (const memory of importData.server_memories) {
@@ -153,7 +176,11 @@ export async function importServerData(
 		`;
 
 		// 5. Replace server memories
-		await replaceServerMemories(serverId, importData.server_memories);
+		await replaceServerMemories(
+			serverId,
+			importData.server_memories,
+			targetTomoriId,
+		);
 
 		return {
 			success: true,
@@ -180,12 +207,24 @@ export async function importServerData(
 async function replaceServerMemories(
 	serverId: number,
 	memories: string[],
+	tomoriId?: number,
 ): Promise<void> {
-	// 1. Delete all existing server memories
-	await sql`
-		DELETE FROM server_memories
-		WHERE server_id = ${serverId}
-	`;
+	// 1. Delete all existing server memories for target persona scope
+	if (tomoriId) {
+		await sql`
+			DELETE FROM server_memories
+			WHERE server_id = ${serverId}
+			  AND (
+				tomori_id = ${tomoriId}
+				OR tomori_id IS NULL
+			  )
+		`;
+	} else {
+		await sql`
+			DELETE FROM server_memories
+			WHERE server_id = ${serverId}
+		`;
+	}
 
 	// 2. Insert new server memories if any exist
 	if (memories.length === 0) {
@@ -209,8 +248,8 @@ async function replaceServerMemories(
 	// 4. Insert all new memories
 	for (const content of memories) {
 		await sql`
-			INSERT INTO server_memories (server_id, user_id, content)
-			VALUES (${serverId}, ${userId}, ${content})
+			INSERT INTO server_memories (server_id, tomori_id, user_id, content)
+			VALUES (${serverId}, ${tomoriId ?? null}, ${userId}, ${content})
 		`;
 	}
 

@@ -123,6 +123,35 @@ SELECT add_column_if_not_exists('tomoris', 'is_alter', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomoris', 'webhook_avatar_url', 'TEXT');
 -- alter_triggers: Trigger words for alter personas (main personas use tomori_configs.trigger_words)
 SELECT add_column_if_not_exists('tomoris', 'alter_triggers', 'TEXT[]', 'ARRAY[]::TEXT[]');
+-- persona_lineage_id: Shared identity namespace for cross-server personal memory pooling
+SELECT add_column_if_not_exists('tomoris', 'persona_lineage_id', 'BIGINT');
+
+-- Create lineage sequence (start high so reserved low IDs stay available)
+CREATE SEQUENCE IF NOT EXISTS persona_lineage_id_seq
+	INCREMENT BY 1
+	MINVALUE 10000
+	START WITH 10000;
+
+-- Backfill missing lineage IDs for existing personas
+DO $$
+BEGIN
+	UPDATE tomoris
+	SET persona_lineage_id = nextval('persona_lineage_id_seq')
+	WHERE persona_lineage_id IS NULL;
+END $$;
+
+-- Ensure future personas get lineage IDs automatically
+ALTER TABLE tomoris
+	ALTER COLUMN persona_lineage_id SET DEFAULT nextval('persona_lineage_id_seq');
+ALTER TABLE tomoris
+	ALTER COLUMN persona_lineage_id SET NOT NULL;
+
+-- Ensure sequence advances beyond highest existing lineage or reserved floor
+SELECT setval(
+	'persona_lineage_id_seq',
+	GREATEST((SELECT COALESCE(MAX(persona_lineage_id), 0) FROM tomoris), 9999),
+	true
+);
 
 -- Drop old unique constraint on server_id (allows multiple personas per server)
 DO $$
@@ -139,6 +168,7 @@ END $$;
 
 -- Create index for efficient multi-persona queries (main persona is queried frequently)
 CREATE INDEX IF NOT EXISTS idx_tomoris_server_is_alter ON tomoris(server_id, is_alter);
+CREATE INDEX IF NOT EXISTS idx_tomoris_persona_lineage_id ON tomoris(persona_lineage_id);
 
 CREATE TABLE IF NOT EXISTS llms (
   llm_id SERIAL PRIMARY KEY,
@@ -234,6 +264,48 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE SET NULL,
   FOREIGN KEY (llm_id) REFERENCES llms(llm_id) ON DELETE RESTRICT
 );
+
+-- Persona-scoped config table (trigger words + optional persona prompt)
+CREATE TABLE IF NOT EXISTS persona_configs (
+  tomori_id INT PRIMARY KEY,
+  trigger_words TEXT[] DEFAULT '{}',
+  persona_prompt TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for persona_configs table
+DROP TRIGGER IF EXISTS update_persona_configs_timestamp ON persona_configs;
+CREATE TRIGGER update_persona_configs_timestamp
+BEFORE UPDATE ON persona_configs
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Backfill persona_configs trigger words from legacy locations
+INSERT INTO persona_configs (tomori_id, trigger_words)
+SELECT
+	t.tomori_id,
+	CASE
+		WHEN t.is_alter THEN COALESCE(t.alter_triggers, ARRAY[]::TEXT[])
+		ELSE COALESCE(tc_server.trigger_words, tc_legacy.trigger_words, ARRAY[]::TEXT[])
+	END AS trigger_words
+FROM tomoris t
+LEFT JOIN LATERAL (
+	SELECT trigger_words
+	FROM tomori_configs
+	WHERE server_id = t.server_id
+	ORDER BY updated_at DESC NULLS LAST, tomori_config_id DESC
+	LIMIT 1
+) tc_server ON true
+LEFT JOIN LATERAL (
+	SELECT trigger_words
+	FROM tomori_configs
+	WHERE tomori_id = t.tomori_id
+	ORDER BY updated_at DESC NULLS LAST, tomori_config_id DESC
+	LIMIT 1
+) tc_legacy ON true
+ON CONFLICT (tomori_id) DO NOTHING;
 
 -- Add server_id column for server-scoped configs (January 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'server_id', 'INTEGER');
@@ -639,6 +711,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS server_memories (
   server_memory_id SERIAL PRIMARY KEY,
   server_id INT NOT NULL,
+  tomori_id INT, -- Persona owner of this server memory (nullable for legacy rows during soak)
   user_id INT, -- Creator of this server memory (nullable - set to NULL if user deleted)
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -647,8 +720,84 @@ CREATE TABLE IF NOT EXISTS server_memories (
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
 
+-- Add tomori_id column for existing databases
+SELECT add_column_if_not_exists('server_memories', 'tomori_id', 'INTEGER');
+
+-- Backfill server memories to the current main persona for each server
+DO $$
+BEGIN
+	UPDATE server_memories sm
+	SET tomori_id = main.tomori_id
+	FROM (
+		SELECT DISTINCT ON (server_id)
+			server_id,
+			tomori_id
+		FROM tomoris
+		WHERE is_alter = false
+		ORDER BY server_id, updated_at DESC NULLS LAST, tomori_id DESC
+	) main
+	WHERE sm.tomori_id IS NULL
+	  AND sm.server_id = main.server_id;
+END $$;
+
+-- Add FK for server_memories.tomori_id if missing
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint
+		WHERE conname = 'server_memories_tomori_id_fkey'
+	) THEN
+		ALTER TABLE server_memories
+		ADD CONSTRAINT server_memories_tomori_id_fkey
+		FOREIGN KEY (tomori_id)
+		REFERENCES tomoris(tomori_id)
+		ON DELETE CASCADE;
+	END IF;
+END $$;
+
 -- Removed updated_at trigger for server_memories table (never updated after creation, only INSERT/DELETE)
 DROP TRIGGER IF EXISTS update_server_memories_timestamp ON server_memories;
+CREATE INDEX IF NOT EXISTS idx_server_memories_tomori_id ON server_memories(tomori_id);
+CREATE INDEX IF NOT EXISTS idx_server_memories_tomori_created_at ON server_memories(tomori_id, created_at DESC);
+
+-- Dedicated personal memories table (lineage-scoped)
+CREATE TABLE IF NOT EXISTS personal_memories (
+  personal_memory_id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL,
+  persona_lineage_id BIGINT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for personal_memories table
+DROP TRIGGER IF EXISTS update_personal_memories_timestamp ON personal_memories;
+CREATE TRIGGER update_personal_memories_timestamp
+BEFORE UPDATE ON personal_memories
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Backfill legacy users.personal_memories into lineage 0 once per user
+INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
+SELECT
+	u.user_id,
+	0::BIGINT,
+	legacy_memory,
+	COALESCE(u.updated_at, CURRENT_TIMESTAMP),
+	COALESCE(u.updated_at, CURRENT_TIMESTAMP)
+FROM users u
+CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
+WHERE NOT EXISTS (
+	SELECT 1
+	FROM personal_memories pm
+	WHERE pm.user_id = u.user_id
+	  AND pm.persona_lineage_id = 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_personal_memories_user_lineage_created_at
+ON personal_memories(user_id, persona_lineage_id, created_at DESC);
 
 -- Document/RAG schema is loaded separately when RAG is enabled
 

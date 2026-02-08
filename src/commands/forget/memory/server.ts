@@ -17,6 +17,7 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedChoices,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
@@ -25,6 +26,7 @@ import {
 	invalidateTomoriStateCache,
 } from "../../../utils/cache/tomoriStateCache";
 import type { SelectOption } from "../../../types/discord/modal";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_servermemory_modal";
@@ -151,6 +153,8 @@ export async function execute(
 
 	// Define state and result variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
+	let personaSelectionInteraction: ButtonInteraction | null = null;
 
 	try {
 		// 2. Load server's Tomori state (Rule 17) - Needed for server_id and config checks
@@ -163,6 +167,51 @@ export async function execute(
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// Select target persona via paginated selector
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		if (allPersonas.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const personaSelectionItems = allPersonas.map((persona) =>
+			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		);
+		const personaSelection = await replyPaginatedChoices(interaction, locale, {
+			titleKey: "general.pagination.select_persona_title",
+			descriptionKey: "general.pagination.select_persona_description",
+			items: personaSelectionItems,
+			color: ColorCode.INFO,
+			preserveSelectedInteraction: true,
+			onSelect: async () => {},
+		});
+
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+
+		personaSelectionInteraction = personaSelection.interaction;
+		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -187,13 +236,17 @@ export async function execute(
 
 		// 5. Fetch all server memories for this server from the server_memories table
 		let memoriesQuery = sql`
-            SELECT server_memory_id, content, user_id -- Select user_id too
-            FROM server_memories
-            WHERE server_id = ${
-							// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
-							tomoriState.server_id!
-						}
-        `;
+			SELECT server_memory_id, content, user_id
+			FROM server_memories
+			WHERE server_id = ${
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
+				tomoriState.server_id!
+			}
+			  AND (
+				tomori_id = ${selectedPersona.tomori_id}
+				OR tomori_id IS NULL
+			  )
+		`;
 
 		if (!hasManagePermission) {
 			// If user does NOT have ManageGuild permission, only fetch their own memories
@@ -212,11 +265,10 @@ export async function execute(
 			const descriptionKey = hasManagePermission
 				? "commands.forget.memory.server.no_memories" // No memories on server
 				: "commands.forget.memory.server.no_owned_memories"; // User owns no memories
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
 				titleKey: "commands.forget.memory.server.no_memories_title",
 				descriptionKey: descriptionKey,
 				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -230,7 +282,10 @@ export async function execute(
 			}),
 		);
 
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+		const modalResult = await promptWithPaginatedModal(
+			personaSelectionInteraction,
+			locale,
+			{
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.forget.memory.server.modal_title",
 			components: [
@@ -278,7 +333,7 @@ export async function execute(
 
 		// Perform the database update using the helper function - let helper manage interaction state
 		await performServerMemoryRemoval(
-			tomoriState,
+			selectedPersona,
 			selectedMemory,
 			userData,
 			modalSubmitInteraction,
@@ -289,40 +344,32 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach servermemory",
+				command: "forget servermemory",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};
 		await log.error(
-			`Unexpected error in /teach servermemory for user ${userData.user_disc_id}`,
+			`Unexpected error in /forget servermemory for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 15. Inform user of unknown error
-		if (interaction.deferred || interaction.replied) {
-			try {
-				await interaction.followUp({
-					content: localizer(
-						locale,
-						"general.errors.unknown_error_description",
-					),
-					flags: MessageFlags.Ephemeral,
-				});
-			} catch (followUpError) {
-				log.error(
-					"Failed to send follow-up error message in servermemory catch block",
-					followUpError,
-				);
-			}
-		} else {
-			log.warn(
-				"Could not determine valid interaction to send error message in servermemory catch block",
-			);
-		}
+		// 15. Inform user of unknown error, prioritizing unacknowledged button interaction
+		const errorReplyTarget =
+			personaSelectionInteraction &&
+			!personaSelectionInteraction.deferred &&
+			!personaSelectionInteraction.replied
+				? personaSelectionInteraction
+				: interaction;
+		await replyInfoEmbed(errorReplyTarget, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

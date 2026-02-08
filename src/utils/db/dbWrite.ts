@@ -9,6 +9,7 @@ import {
 	type TomoriConfigRow,
 	type ErrorContext,
 	serverMemorySchema,
+	personalMemorySchema,
 	reminderSchema,
 	type ReminderRow,
 } from "../../types/db/schema"; // Import base schemas and types
@@ -28,6 +29,7 @@ import {
 } from "./memoryLimits";
 import type {
 	ServerMemoryRow,
+	PersonalMemoryRow,
 	SetupConfig,
 	SetupResult,
 } from "../../types/db/schema";
@@ -519,6 +521,13 @@ export async function setupServer(
 				RETURNING *
 			`;
 
+			// Initialize persona-scoped config for the main persona.
+			await tx`
+				INSERT INTO persona_configs (tomori_id, trigger_words)
+				VALUES (${tomori.tomori_id}, ${triggerWordsArrayLiteral}::text[])
+				ON CONFLICT (tomori_id) DO NOTHING
+			`;
+
 			// 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
 			const emojis = [];
 			if (!isDMChannel && guild) {
@@ -981,18 +990,20 @@ export async function updateUser(
  * This memory is associated with a specific server and the user whose interaction triggered the learning.
  *
  * @param serverId - The internal ID of the server this memory pertains to.
+ * @param tomoriId - The internal persona ID this memory belongs to.
  * @param taughtByUserId - The internal ID of the user whose interaction led to Tomori learning this.
  * @param content - The text content of the memory to be saved.
  * @returns The newly created ServerMemoryRow, or null if the operation failed.
  */
 export async function addServerMemoryByTomori(
 	serverId: number,
+	tomoriId: number,
 	taughtByUserId: number,
 	content: string,
 ): Promise<ServerMemoryRow | null> {
 	// 1. Log the attempt to add a server memory.
 	log.info(
-		`Tomori is attempting to self-learn a server memory for server ID ${serverId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
+		`Tomori is attempting to self-learn a server memory for server ID ${serverId}, tomori ID ${tomoriId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
 	);
 
 	// 2. Validate memory content before database operations
@@ -1005,7 +1016,7 @@ export async function addServerMemoryByTomori(
 	}
 
 	// 3. Check server memory limit
-	const serverLimitCheck = await checkServerMemoryLimit(serverId);
+	const serverLimitCheck = await checkServerMemoryLimit(serverId, tomoriId);
 	if (!serverLimitCheck.isValid) {
 		log.warn(
 			`Server memory limit exceeded for server ID ${serverId}: ${serverLimitCheck.currentCount}/${serverLimitCheck.maxAllowed}`,
@@ -1017,10 +1028,10 @@ export async function addServerMemoryByTomori(
 		// 2. Insert the new memory into the server_memories table.
 		// The columns now correctly match the serverMemorySchema.
 		const [newMemory] = await sql`
-            INSERT INTO server_memories (server_id, user_id, content)
-            VALUES (${serverId}, ${taughtByUserId}, ${content})
-            RETURNING *
-        `;
+			INSERT INTO server_memories (server_id, tomori_id, user_id, content)
+			VALUES (${serverId}, ${tomoriId}, ${taughtByUserId}, ${content})
+			RETURNING *
+		`;
 
 		// 3. Validate the returned data using Zod schema (Rule 3, Rule 5, Rule 6).
 		const validatedMemory = serverMemorySchema.safeParse(newMemory);
@@ -1028,6 +1039,7 @@ export async function addServerMemoryByTomori(
 		if (!validatedMemory.success) {
 			const context: ErrorContext = {
 				serverId,
+				tomoriId,
 				userId: taughtByUserId,
 				errorType: "SchemaValidationError",
 				metadata: {
@@ -1046,12 +1058,13 @@ export async function addServerMemoryByTomori(
 
 		// 4. Log success and return the validated memory.
 		log.success(
-			`Tomori successfully saved a new server memory (ID: ${validatedMemory.data.server_memory_id}) for server ID ${serverId}, taught by user ID ${taughtByUserId}.`,
+			`Tomori successfully saved a new server memory (ID: ${validatedMemory.data.server_memory_id}) for server ID ${serverId}, tomori ID ${tomoriId}, taught by user ID ${taughtByUserId}.`,
 		);
 		return validatedMemory.data;
 	} catch (error) {
 		const context: ErrorContext = {
 			serverId,
+			tomoriId,
 			userId: taughtByUserId,
 			errorType: "DatabaseInsertError",
 			metadata: {
@@ -1068,21 +1081,21 @@ export async function addServerMemoryByTomori(
 	}
 }
 /**
- * Adds a new personal memory for a user by atomically appending to their
- * 'personal_memories' array using PostgreSQL's array_append function.
- * This is initiated by Tomori itself.
+ * Adds a new lineage-scoped personal memory for a user.
  *
  * @param userId - The internal ID of the user for whom the memory is being saved.
+ * @param personaLineageId - Persona lineage namespace for the memory.
  * @param content - The text content of the memory to be appended.
- * @returns The updated UserRow with the new memory, or null if the operation failed.
+ * @returns The inserted PersonalMemoryRow, or null if the operation failed.
  */
 export async function addPersonalMemoryByTomori(
 	userId: number,
+	personaLineageId: number,
 	content: string,
-): Promise<UserRow | null> {
+): Promise<PersonalMemoryRow | null> {
 	// 1. Log the attempt to add a personal memory.
 	log.info(
-		`Tomori is attempting to self-learn and append a personal memory for User ID ${userId} using array_append: "${content.substring(0, 50)}..."`,
+		`Tomori is attempting to self-learn a personal memory for user ${userId} in lineage ${personaLineageId}: "${content.substring(0, 50)}..."`,
 	);
 
 	// 2. Validate memory content before database operations
@@ -1095,7 +1108,11 @@ export async function addPersonalMemoryByTomori(
 	}
 
 	// 3. Check personal memory limit
-	const personalLimitCheck = await checkPersonalMemoryLimit(userId);
+	const personalLimitCheck = await checkPersonalMemoryLimit(
+		userId,
+		personaLineageId,
+		true,
+	);
 	if (!personalLimitCheck.isValid) {
 		log.warn(
 			`Personal memory limit exceeded for user ID ${userId}: ${personalLimitCheck.currentCount}/${personalLimitCheck.maxAllowed}`,
@@ -1104,62 +1121,55 @@ export async function addPersonalMemoryByTomori(
 	}
 
 	try {
-		// 2. Atomically update the user's personal_memories array using array_append.
-		// This is generally safer for concurrent appends than read-modify-write from the application.
-		// Rule 23 applies to formatting a full array literal; for appends, array_append is preferred.
-		const [updatedUserResult] = await sql`
-            UPDATE users
-            SET personal_memories = array_append(personal_memories, ${content})
-            WHERE user_id = ${userId}
-            RETURNING *
-        `;
+		const [insertedMemory] = await sql`
+			INSERT INTO personal_memories (user_id, persona_lineage_id, content)
+			VALUES (${userId}, ${personaLineageId}, ${content})
+			RETURNING *
+		`;
 
-		// 3. Check if the user row was found and updated.
-		if (!updatedUserResult) {
-			// This could happen if the userId doesn't exist, though in self-teach, it should.
+		if (!insertedMemory) {
 			log.warn(
-				`Attempted to append personal memory for non-existent User ID ${userId} (self-teach with array_append).`,
+				`Attempted to insert personal memory for non-existent user ${userId}`,
 			);
 			return null;
 		}
 
-		// 4. Validate the returned user data using Zod schema.
-		const validatedUser = userSchema.safeParse(updatedUserResult);
-
-		if (!validatedUser.success) {
+		const validatedMemory = personalMemorySchema.safeParse(insertedMemory);
+		if (!validatedMemory.success) {
 			const context: ErrorContext = {
 				userId,
 				errorType: "SchemaValidationError",
 				metadata: {
-					operation: "addPersonalMemoryByTomori (array_append)",
+					operation: "addPersonalMemoryByTomori",
+					personaLineageId,
 					contentAttempted: content.substring(0, 100),
-					validationErrors: validatedUser.error.flatten(),
+					validationErrors: validatedMemory.error.flatten(),
 				},
 			};
 			await log.error(
-				`Failed to validate updated user row after appending personal memory for User ID ${userId} (self-teach)`,
-				validatedUser.error,
+				`Failed to validate inserted personal memory for user ${userId} in lineage ${personaLineageId}`,
+				validatedMemory.error,
 				context,
 			);
 			return null;
 		}
 
-		// 5. Log success and return the validated user row.
 		log.success(
-			`Tomori successfully appended a personal memory for User ID ${userId} (self-teach using array_append). New array size: ${validatedUser.data.personal_memories.length}.`,
+			`Tomori successfully inserted personal memory (ID: ${validatedMemory.data.personal_memory_id}) for user ${userId} in lineage ${personaLineageId}.`,
 		);
-		return validatedUser.data;
+		return validatedMemory.data;
 	} catch (error) {
 		const context: ErrorContext = {
 			userId,
 			errorType: "DatabaseUpdateError",
 			metadata: {
-				operation: "addPersonalMemoryByTomori (array_append)",
+				operation: "addPersonalMemoryByTomori",
+				personaLineageId,
 				contentAttempted: content.substring(0, 100),
 			},
 		};
 		await log.error(
-			`Error appending personal memory for User ID ${userId} (self-teach using array_append)`,
+			`Error inserting personal memory for user ${userId} in lineage ${personaLineageId}`,
 			error,
 			context,
 		);

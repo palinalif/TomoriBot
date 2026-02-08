@@ -149,6 +149,7 @@ export class MemoryTool extends BaseTool {
 			!userRow ||
 			!userRow.user_id ||
 			!tomoriState.server_id ||
+			!tomoriState.tomori_id ||
 			!resolvedUserId
 		) {
 			// Log which specific value is missing for diagnostics
@@ -157,6 +158,7 @@ export class MemoryTool extends BaseTool {
 				!userRow && "userRow",
 				userRow && !userRow.user_id && "userRow.user_id",
 				tomoriState && !tomoriState.server_id && "tomoriState.server_id",
+				tomoriState && !tomoriState.tomori_id && "tomoriState.tomori_id",
 				!resolvedUserId && "resolvedUserId",
 			].filter(Boolean);
 			log.error(
@@ -230,6 +232,8 @@ export class MemoryTool extends BaseTool {
 				// Check server memory limit before adding
 				const serverLimitCheck = await checkServerMemoryLimit(
 					tomoriState.server_id,
+					tomoriState.tomori_id,
+					true,
 				);
 				if (!serverLimitCheck.isValid) {
 					return {
@@ -247,6 +251,7 @@ export class MemoryTool extends BaseTool {
 
 				const dbResult = await addServerMemoryByTomori(
 					tomoriState.server_id,
+					tomoriState.tomori_id,
 					userRow.user_id,
 					memoryContent,
 				);
@@ -487,6 +492,8 @@ export class MemoryTool extends BaseTool {
 				// Check personal memory limit before adding
 				const personalLimitCheck = await checkPersonalMemoryLimit(
 					targetUserRow.user_id,
+					tomoriState.persona_lineage_id ?? 0,
+					true,
 				);
 				if (!personalLimitCheck.isValid) {
 					return {
@@ -506,6 +513,7 @@ export class MemoryTool extends BaseTool {
 				// Save personal memory (from tomoriChat.ts:1262-1335)
 				const dbResult = await addPersonalMemoryByTomori(
 					targetUserRow.user_id,
+					tomoriState.persona_lineage_id ?? 0,
 					memoryContent,
 				);
 
@@ -599,6 +607,7 @@ export class MemoryTool extends BaseTool {
 							scope: "target_user",
 							user_discord_id: targetUserDiscordIdArg,
 							user_nickname: targetUserNicknameArg,
+							memory_id: dbResult.personal_memory_id,
 							content_saved: memoryContent,
 						},
 					};
