@@ -15,18 +15,18 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 
-const MIN_LIMIT = 0;
+const MIN_LIMIT = 1;
 const MAX_LIMIT = 10;
 const DEFAULT_LIMIT = 3;
 
-// Configure the subcommand (Rule #21)
+// Configure the subcommand
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("selfreply")
+		.setName("multitrigger")
 		.setDescription(
-			localizer("en-US", "commands.config.selfreply.description"),
+			localizer("en-US", "commands.config.multitrigger.description"),
 		)
 		.addIntegerOption((option) =>
 			option
@@ -34,7 +34,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.selfreply.limit_description",
+						"commands.config.multitrigger.limit_description",
 					),
 				)
 				.setMinValue(MIN_LIMIT)
@@ -43,8 +43,7 @@ export const configureSubcommand = (
 		);
 
 /**
- * Configures the self-reply chain limit for persona-to-persona triggering.
- * 0 disables self replies, 1-10 allow a chain up to the specified depth.
+ * Configures the maximum number of personas that can be triggered by a single message.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -76,9 +75,9 @@ export async function execute(
 		// 3. Validate range (redundant but safe)
 		if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.selfreply.limit.invalid_range_title",
+				titleKey: "commands.config.multitrigger.limit.invalid_range_title",
 				descriptionKey:
-					"commands.config.selfreply.limit.invalid_range_description",
+					"commands.config.multitrigger.limit.invalid_range_description",
 				descriptionVars: {
 					min: MIN_LIMIT.toString(),
 					max: MAX_LIMIT.toString(),
@@ -100,12 +99,13 @@ export async function execute(
 		}
 
 		// 5. Check if this is the same as the current limit
-		const currentLimit = tomoriState.config.self_reply_limit ?? DEFAULT_LIMIT;
+		const currentLimit =
+			tomoriState.config.triggered_persona_limit ?? DEFAULT_LIMIT;
 		if (limit === currentLimit) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.selfreply.limit.already_set_title",
+				titleKey: "commands.config.multitrigger.limit.already_set_title",
 				descriptionKey:
-					"commands.config.selfreply.limit.already_set_description",
+					"commands.config.multitrigger.limit.already_set_description",
 				descriptionVars: {
 					limit: limit.toString(),
 				},
@@ -117,7 +117,7 @@ export async function execute(
 		// 6. Update the limit in the database with direct SQL
 		const [updatedRow] = await sql`
 			UPDATE tomori_configs
-			SET self_reply_limit = ${limit}
+			SET triggered_persona_limit = ${limit}
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *
 		`;
@@ -129,13 +129,13 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config selfreply limit",
+					command: "config multitrigger limit",
 					limit,
 					targetTable: "tomori_configs",
 				},
 			};
 			await log.error(
-				"Failed to update self_reply_limit config",
+				"Failed to update triggered_persona_limit config",
 				new Error("Database update returned no rows"),
 				context,
 			);
@@ -156,7 +156,7 @@ export async function execute(
 				serverId: tomoriState.server_id,
 				errorType: "SchemaValidationError",
 				metadata: {
-					command: "config selfreply limit",
+					command: "config multitrigger limit",
 					validationErrors: validatedConfig.error.flatten(),
 				},
 			};
@@ -177,19 +177,14 @@ export async function execute(
 		// 8. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(interaction.guild.id);
 
-		// 9. Success message - indicate disabled state if limit is 0
-		const isEnabled = limit > 0;
+		// 9. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: isEnabled
-				? "commands.config.selfreply.limit.success_title"
-				: "commands.config.selfreply.limit.success_disabled_title",
-			descriptionKey: isEnabled
-				? "commands.config.selfreply.limit.success_description"
-				: "commands.config.selfreply.limit.success_disabled_description",
+			titleKey: "commands.config.multitrigger.limit.success_title",
+			descriptionKey: "commands.config.multitrigger.limit.success_description",
 			descriptionVars: {
 				limit: limit.toString(),
 			},
-			color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
+			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
 		const context: ErrorContext = {
@@ -197,12 +192,12 @@ export async function execute(
 			serverId: (await getCachedTomoriState(interaction.guild.id))?.server_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config selfreply limit",
+				command: "config multitrigger limit",
 				options: interaction.options?.data,
 			},
 		};
 		await log.error(
-			"Error in /config selfreply limit command",
+			"Error in /config multitrigger limit command",
 			error as Error,
 			context,
 		);

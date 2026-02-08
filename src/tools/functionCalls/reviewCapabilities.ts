@@ -227,7 +227,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
 			capabilitiesContent +=
 				"- Alter personas are triggered when their keywords appear in messages\n";
 			capabilitiesContent +=
-				"- Multiple personas can be triggered sequentially from a single message\n";
+				"- Multiple personas can be triggered sequentially from a single message (up to the server's `/config multitrigger` limit)\n";
 			capabilitiesContent +=
 				"- Replying to a webhook message continues the conversation as that persona\n";
 			capabilitiesContent +=

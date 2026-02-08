@@ -35,7 +35,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.server.autotrigger.threshold.threshold_description_v2",
+						"commands.server.autotrigger.threshold.threshold_description",
 					),
 				)
 				.setMinValue(MIN_THRESHOLD)

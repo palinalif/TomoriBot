@@ -112,6 +112,9 @@ const MAX_FUNCTION_CALL_ITERATIONS = 8; // Safety break for function call loops
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 const DEFAULT_SELF_REPLY_LIMIT = 3;
 const MAX_SELF_REPLY_LIMIT = 10;
+const DEFAULT_TRIGGERED_PERSONA_LIMIT = 3;
+const MIN_TRIGGERED_PERSONA_LIMIT = 1;
+const MAX_TRIGGERED_PERSONA_LIMIT = 10;
 const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 30 minutes of inactivity
 const SELF_REPLY_SUPPRESSION_TTL_MS = 5000;
 const selfReplySuppressionUntil = new Map<string, number>();
@@ -190,6 +193,38 @@ function createScreamingRegex(trigger: string): RegExp {
 	// Add word boundaries and create case-insensitive regex
 	const fullPattern = `\\b${pattern}\\b`;
 	return new RegExp(fullPattern, "i");
+}
+
+/**
+ * Returns the first index where a trigger appears in a message.
+ * Used to resolve multi-persona trigger order deterministically.
+ * Returns Infinity when the trigger is not present.
+ */
+function getTriggerFirstMatchIndex(message: Message, trigger: string): number {
+	// Mention trigger format: <@123...> or <@!123...>
+	if (trigger.startsWith("<@")) {
+		const userId = trigger.replace(/[<@!>]/g, "");
+		if (!message.mentions.users.has(userId)) {
+			return Number.POSITIVE_INFINITY;
+		}
+
+		const mentionPattern = new RegExp(`<@!?${escapeRegExp(userId)}>`);
+		const mentionMatch = message.content.match(mentionPattern);
+		// If Discord resolved the mention but we can't find raw text, still treat as matched.
+		return mentionMatch?.index ?? Number.MAX_SAFE_INTEGER;
+	}
+
+	// Japanese triggers: direct substring check
+	const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(trigger);
+	if (isJapanese) {
+		const index = message.content.indexOf(trigger);
+		return index >= 0 ? index : Number.POSITIVE_INFINITY;
+	}
+
+	// English triggers: screaming-aware regex
+	const regex = createScreamingRegex(trigger);
+	const match = message.content.match(regex);
+	return match?.index ?? Number.POSITIVE_INFINITY;
 }
 
 async function sendWebhookErrorEmbed(
@@ -1397,6 +1432,13 @@ export default async function tomoriChat(
 				Math.max(rawSelfReplyLimit, 0),
 				MAX_SELF_REPLY_LIMIT,
 			);
+			const rawTriggeredPersonaLimit =
+				tomoriState?.config.triggered_persona_limit ??
+				DEFAULT_TRIGGERED_PERSONA_LIMIT;
+			const triggeredPersonaLimit = Math.min(
+				Math.max(rawTriggeredPersonaLimit, MIN_TRIGGERED_PERSONA_LIMIT),
+				MAX_TRIGGERED_PERSONA_LIMIT,
+			);
 
 			if (
 				(message.author.bot || message.webhookId) &&
@@ -2005,6 +2047,18 @@ export default async function tomoriChat(
 					isBotMentioned,
 					!!isAutoMsgHit, // Convert to boolean
 				);
+
+				// Apply per-message multi-trigger cap for automatic trigger matching.
+				if (personasToRespond.length > triggeredPersonaLimit) {
+					const droppedPersonas = personasToRespond
+						.slice(triggeredPersonaLimit)
+						.map((p) => p.tomori_nickname)
+						.join(", ");
+					personasToRespond = personasToRespond.slice(0, triggeredPersonaLimit);
+					log.info(
+						`Multi-trigger cap applied (${triggeredPersonaLimit}) for message ${message.id}. Dropped personas: ${droppedPersonas || "none"}`,
+					);
+				}
 			}
 
 			// If no personas match, return early
@@ -4889,7 +4943,7 @@ function isSelfTriggerMessage(
 
 /**
  * Determines which personas should respond to a message based on trigger matching.
- * All matching personas respond, but in randomized order for variety.
+ * All matching personas respond, ordered by the first trigger appearance in message text.
  * @param message - The incoming Discord message
  * @param allPersonas - Array of all personas (main + alters)
  * @param client - Discord client for mention checks
@@ -4897,7 +4951,7 @@ function isSelfTriggerMessage(
  * @param replyPersona - Persona that the message is replying to (if any)
  * @param isBotMentioned - Whether bot is mentioned in the message
  * @param isAutoMsgHit - Whether auto-message threshold is hit
- * @returns Array of matching personas in randomized order
+ * @returns Array of matching personas in deterministic trigger order
  */
 export function determineMatchingPersonas(
 	message: Message,
@@ -4958,9 +5012,13 @@ export function determineMatchingPersonas(
 	}
 
 	// 2. Trigger word matching: Check all personas
-	const matchingPersonas: TomoriState[] = [];
+	const matchingPersonas: Array<{
+		persona: TomoriState;
+		firstMatchIndex: number;
+		insertionOrder: number;
+	}> = [];
 
-	for (const persona of allPersonas) {
+	for (const [insertionOrder, persona] of allPersonas.entries()) {
 		// Prevent self-triggers: skip if this persona sent the message OR is being replied to
 		if (senderPersona && persona.tomori_id === senderPersona.tomori_id) {
 			continue;
@@ -4977,45 +5035,39 @@ export function determineMatchingPersonas(
 			? persona.alter_triggers || []
 			: config.trigger_words;
 
-		// Check if any trigger matches the message content
-		const triggersActive = triggers.some((trigger: string) => {
-			// 1. Check if trigger is a mention (starts with <@)
-			if (trigger.startsWith("<@")) {
-				const userId = trigger.replace(/[<@!>]/g, ""); // Extract user ID
-				return message.mentions.users.has(userId);
+		let hasMatch = false;
+		let firstMatchIndex = Number.MAX_SAFE_INTEGER;
+
+		for (const trigger of triggers) {
+			const matchIndex = getTriggerFirstMatchIndex(message, trigger);
+			if (matchIndex !== Number.POSITIVE_INFINITY) {
+				hasMatch = true;
+				if (matchIndex < firstMatchIndex) {
+					firstMatchIndex = matchIndex;
+				}
 			}
+		}
 
-			// 2. Check if trigger contains Japanese characters
-			const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(
-				trigger,
-			);
-			if (isJapanese) {
-				return message.content.includes(trigger);
-			}
-
-			// 3. English triggers: use screaming-aware regex with word boundaries (case-insensitive)
-			const regex = createScreamingRegex(trigger);
-			return regex.test(message.content);
-		});
-
-		if (triggersActive) {
-			matchingPersonas.push(persona);
+		if (hasMatch) {
+			matchingPersonas.push({
+				persona,
+				firstMatchIndex,
+				insertionOrder,
+			});
 		}
 	}
 
-	// 3. Randomize order: All matching personas respond, but in random order
-	// Fisher-Yates shuffle for fair randomization
-	if (matchingPersonas.length > 1) {
-		for (let i = matchingPersonas.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[matchingPersonas[i], matchingPersonas[j]] = [
-				matchingPersonas[j],
-				matchingPersonas[i],
-			];
+	// 3. Deterministic order:
+	// 1) earliest trigger appearance in message
+	// 2) fallback to persona iteration order when tied
+	matchingPersonas.sort((a, b) => {
+		if (a.firstMatchIndex !== b.firstMatchIndex) {
+			return a.firstMatchIndex - b.firstMatchIndex;
 		}
-	}
+		return a.insertionOrder - b.insertionOrder;
+	});
 
-	return matchingPersonas;
+	return matchingPersonas.map((entry) => entry.persona);
 }
 
 /**

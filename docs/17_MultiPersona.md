@@ -52,7 +52,7 @@ Each persona checks its own trigger list:
 - **Main**: `tomori_configs.trigger_words`.
 - **Alter**: `tomoris.alter_triggers`.
 
-If multiple personas match, all respond in a randomized order.
+If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config multitrigger`.
 
 ### Manual triggers
 
@@ -88,17 +88,17 @@ Think of the self-reply chain as a nested array with size `limit + 1`:
 ```javascript
 // With selfReplyLimit = 3
 const selfReplyChain = [
-  [User/Manual],     // Index 0: Bypass phase (unlimited personas)
-  [Level 1],         // Index 1: depth = 1 (unlimited personas at this level)
-  [Level 2],         // Index 2: depth = 2 (unlimited personas at this level)
-  [Level 3],         // Index 3: depth = 3 (unlimited personas, limit reached!)
+  [User/Manual],     // Index 0: Bypass phase (up to /config multitrigger per message)
+  [Level 1],         // Index 1: depth = 1
+  [Level 2],         // Index 2: depth = 2
+  [Level 3],         // Index 3: depth = 3 (limit reached!)
   [BLOCKED]          // Index 4+: Exceeds limit, all triggers blocked
 ];
 ```
 
 **Key concepts:**
 - Each **level** = one generation of persona responses
-- Each **level** can contain unlimited personas (they're queued with bypass)
+- Each trigger message can enqueue up to the configured multi-trigger cap
 - **Depth** = how many generations deep the chain has gone
 - **Limit** = maximum allowed depth (not counting the user/manual trigger)
 
@@ -106,7 +106,7 @@ const selfReplyChain = [
 
 #### **Bypass Phase (No Limit Applied)**
 
-These triggers do NOT increment depth and can trigger unlimited personas:
+These triggers do NOT increment depth and can still trigger multiple personas (up to `/config multitrigger`):
 
 ✅ **User messages** → `isSelfMessage = false`
 ✅ **Slash commands** (`/respond`, `/impersonate`) → `isManuallyTriggered = true`
@@ -167,6 +167,13 @@ The chain resets (depth → 0) when:
 
 **Command:** `/config selfreply`
 
+**Database:** `tomori_configs.triggered_persona_limit`
+- Default: 3
+- Range: 1 to 10
+- Caps how many personas one message can trigger
+
+**Command:** `/config multitrigger`
+
 ### Example Flow
 
 **Setup:** Limit = 3, Personas A, B, C, D, E
@@ -215,7 +222,7 @@ Level 4       ❌         ❌         ❌        ❌  BLOCKED
 
 ### Key Insights
 
-1. **User always bypasses** - Users can trigger unlimited personas without consuming depth
+1. **User always bypasses depth** - User/manual triggers don’t consume chain depth (but still respect `/config multitrigger`)
 2. **One message = one depth** - Mentioning 10 personas in one message = 1 depth increment
 3. **Shared counter** - All personas share the same depth counter per channel
 4. **Fair multi-triggers** - Multiple personas responding to the same message don't each add depth

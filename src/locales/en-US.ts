@@ -1673,6 +1673,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 			},
 			selfreply: {
 				description: `Manage self-reply chain behavior for persona triggering.`,
+				limit_description: `Number of self replies allowed (0-10, 0 disables).`,
 				limit: {
 					description: `Set the maximum number of self replies in a chain.`,
 					limit_description: `Number of self replies allowed (0-10, 0 disables).`,
@@ -1684,6 +1685,20 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					success_description: `Self-reply chain limit set to **{limit}**.`,
 					success_disabled_title: `Self-Reply Disabled`,
 					success_disabled_description: `Self-reply chain is now disabled.`,
+				},
+			},
+			multitrigger: {
+				description: `Manage how many personas can trigger from a single message.`,
+				limit_description: `Maximum triggered personas allowed per message (1-10).`,
+				limit: {
+					description: `Set the maximum number of personas triggered per message.`,
+					limit_description: `Maximum triggered personas allowed per message (1-10).`,
+					invalid_range_title: `Invalid Limit`,
+					invalid_range_description: `Limit must be between {min} and {max}.`,
+					already_set_title: `Already Set`,
+					already_set_description: `Multi-trigger limit is already set to **{limit}**.`,
+					success_title: `Multi-Trigger Limit Updated`,
+					success_description: `Per-message persona trigger limit set to **{limit}**.`,
 				},
 			},
 			model: {
@@ -1951,7 +1966,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				},
 				threshold: {
 					description: `Set the message count threshold for me to auto-chat (0 to disable).`,
-					threshold_description_v2: `Messages needed before auto-chat (0 to disable, or 30-100).`,
+					threshold_description: `Messages needed before auto-chat (0 to disable, or 30-100).`,
 					invalid_range_title: `Invalid Threshold`,
 					invalid_range_specific_description: `The threshold must be exactly \`{min}\` (to disable) or between \`{range_start}\` and \`{max}\`.`,
 					success_title: `Auto-Chat Threshold Set`,

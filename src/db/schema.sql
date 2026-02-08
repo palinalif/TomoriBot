@@ -373,6 +373,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'cooldown_length', 'INTEGER', 
 -- 0 = disabled, default 3, max 10 enforced by command validation
 SELECT add_column_if_not_exists('tomori_configs', 'self_reply_limit', 'INTEGER', '3');
 
+-- Per-message multi-persona trigger cap (February 2026)
+-- Minimum 1, default 3, max 10 enforced by command validation
+SELECT add_column_if_not_exists('tomori_configs', 'triggered_persona_limit', 'INTEGER', '3');
+
 -- Add custom endpoint URL for self-hosted OpenAI-compatible LLM endpoints (January 2026)
 -- Only used when llm_provider is 'custom', blocked in production environment
 SELECT add_column_if_not_exists('tomori_configs', 'custom_endpoint_url', 'TEXT');
