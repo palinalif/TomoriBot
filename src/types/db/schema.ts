@@ -274,6 +274,7 @@ export const documentSchema = z.object({
 	mime_type: z.string().nullable().optional(),
 	file_size_bytes: z.number().int().nullable().optional(),
 	text_content: z.string(),
+	source_type: z.string().default("upload"),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });

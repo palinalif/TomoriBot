@@ -69,6 +69,8 @@ export async function insertDocumentWithChunks(params: {
 	embeddings: number[][];
 	embeddingModelId: number;
 	embeddingFamily: string;
+	/** Document origin: 'upload' (default) or 'history' */
+	sourceType?: string;
 }): Promise<number> {
 	const {
 		serverId,
@@ -83,6 +85,7 @@ export async function insertDocumentWithChunks(params: {
 		embeddings,
 		embeddingModelId,
 		embeddingFamily,
+		sourceType = "upload",
 	} = params;
 
 	if (chunks.length !== embeddings.length) {
@@ -101,7 +104,8 @@ export async function insertDocumentWithChunks(params: {
 				file_name,
 				mime_type,
 				file_size_bytes,
-				text_content
+				text_content,
+				source_type
 			) VALUES (
 				${serverId},
 				${tomoriId},
@@ -110,7 +114,8 @@ export async function insertDocumentWithChunks(params: {
 				${fileName},
 				${mimeType},
 				${fileSizeBytes},
-				${textContent}
+				${textContent},
+				${sourceType}
 			)
 			RETURNING document_id
 		`;
@@ -283,7 +288,7 @@ export function formatRetrievedChunksForPrompt(
 		}
 
 		const scoreText = `score ${chunk.similarity.toFixed(2)}`;
-		const line = `- [Chunk ${chunk.chunk_index + 1}, ${scoreText}] ${chunk.content}\n`;
+		const line = `- ${chunk.content}\n`;
 		if (output.length + line.length > maxChars) {
 			break;
 		}

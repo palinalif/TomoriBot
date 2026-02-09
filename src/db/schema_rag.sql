@@ -72,6 +72,9 @@ BEFORE UPDATE ON documents
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
+-- Add source_type column to distinguish document origins (upload vs history extraction)
+SELECT add_column_if_not_exists('documents', 'source_type', 'TEXT NOT NULL DEFAULT ''upload''');
+
 -- Document chunks table with embeddings
 CREATE TABLE IF NOT EXISTS document_chunks (
   document_chunk_id SERIAL PRIMARY KEY,
