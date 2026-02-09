@@ -157,12 +157,23 @@ export async function importPresetData(
 			WHERE tomori_id = ${mainTomoriId}
 		`;
 
-		// 7. Update persona-scoped trigger words (fallback write to tomori_configs for soak)
+		// 7. Update persona-scoped trigger words + optional persona prompt
+		const importedPersonaPrompt =
+			typeof importData.persona_prompt === "string"
+				? importData.persona_prompt
+				: null;
+
 		await sql`
-			INSERT INTO persona_configs (tomori_id, trigger_words)
-			VALUES (${mainTomoriId}, ${triggerWordsArrayLiteral}::text[])
+			INSERT INTO persona_configs (tomori_id, trigger_words, persona_prompt)
+			VALUES (
+				${mainTomoriId},
+				${triggerWordsArrayLiteral}::text[],
+				${importedPersonaPrompt}
+			)
 			ON CONFLICT (tomori_id) DO UPDATE
-			SET trigger_words = EXCLUDED.trigger_words
+			SET
+				trigger_words = EXCLUDED.trigger_words,
+				persona_prompt = EXCLUDED.persona_prompt
 		`;
 
 		await sql`

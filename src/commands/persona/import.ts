@@ -1051,12 +1051,23 @@ export async function execute(
 
 			const newTomoriId = newAlterRow.tomori_id;
 
-			// 11h.1 Store alter trigger words in persona_configs
+			// 11h.1 Store alter trigger words + optional persona prompt in persona_configs
+			const importedPersonaPrompt =
+				typeof presetData.persona_prompt === "string"
+					? presetData.persona_prompt
+					: null;
+
 			await sql`
-				INSERT INTO persona_configs (tomori_id, trigger_words)
-				VALUES (${newTomoriId}, ${alterTriggersArrayLiteral}::text[])
+				INSERT INTO persona_configs (tomori_id, trigger_words, persona_prompt)
+				VALUES (
+					${newTomoriId},
+					${alterTriggersArrayLiteral}::text[],
+					${importedPersonaPrompt}
+				)
 				ON CONFLICT (tomori_id) DO UPDATE
-				SET trigger_words = EXCLUDED.trigger_words
+				SET
+					trigger_words = EXCLUDED.trigger_words,
+					persona_prompt = EXCLUDED.persona_prompt
 			`;
 
 			const sanitizedNickname = presetData.tomori_nickname

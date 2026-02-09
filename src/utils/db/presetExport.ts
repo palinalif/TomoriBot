@@ -107,16 +107,18 @@ export async function exportPresetData(
 					? Number(lineageIdRaw)
 					: lineageIdRaw;
 
-		// 3. Load trigger words from persona-scoped config first
+		// 3. Load trigger words + persona prompt from persona-scoped config first
 		let triggerWords: string[] | null = null;
+		let personaPrompt: string | null = null;
 		const personaConfigRows = await sql`
-			SELECT trigger_words
+			SELECT trigger_words, persona_prompt
 			FROM persona_configs
 			WHERE tomori_id = ${presetData.tomori_id}
 			LIMIT 1
 		`;
 		if (personaConfigRows.length) {
 			triggerWords = personaConfigRows[0].trigger_words ?? null;
+			personaPrompt = personaConfigRows[0].persona_prompt ?? null;
 		}
 
 		// 3.1 Legacy/main fallback: server-scoped config (or tomori_id legacy config)
@@ -161,6 +163,7 @@ export async function exportPresetData(
 				sample_dialogues_in: presetData.sample_dialogues_in || [],
 				sample_dialogues_out: presetData.sample_dialogues_out || [],
 				trigger_words: triggerWords || [],
+				persona_prompt: personaPrompt,
 				persona_lineage_id: lineageId,
 			},
 		};
