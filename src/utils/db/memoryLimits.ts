@@ -712,14 +712,14 @@ export function validateAttributeAndDialogue(
 export async function checkPersonalMemoryLimit(
 	userId: number,
 	personaLineageId = 0,
-	includeLegacyFallback = true,
+	includeGlobalMemories = true,
 ): Promise<MemoryValidationResult> {
 	const limits = getMemoryLimits();
 
 	try {
-		// Count lineage-scoped memories (with optional legacy lineage 0 fallback during soak)
+		// Count lineage-scoped memories (optionally including global lineage 0 memories)
 		const [countResult] =
-			includeLegacyFallback && personaLineageId !== 0
+			includeGlobalMemories && personaLineageId !== 0
 				? await sql`
 					SELECT COUNT(*) as memory_count
 					FROM personal_memories

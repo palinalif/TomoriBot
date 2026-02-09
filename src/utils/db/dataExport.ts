@@ -72,7 +72,7 @@ function sanitizeMemories(
 export async function exportPersonalData(
 	userDiscId: string,
 	personaLineageId = 0,
-	includeLegacyFallback = true,
+	includeGlobalMemories = true,
 ): Promise<ExportResult> {
 	try {
 		// 1. Query user data from database
@@ -94,7 +94,7 @@ export async function exportPersonalData(
 
 		// 2. Load personal memories from lineage-scoped table
 		const memoryRows =
-			includeLegacyFallback && personaLineageId !== 0
+			includeGlobalMemories && personaLineageId !== 0
 				? await sql`
 					SELECT content
 					FROM personal_memories
@@ -235,18 +235,39 @@ export async function exportServerData(
 			targetTomoriId = mainPersonaRows[0]?.tomori_id;
 		}
 
-		// 4. Get persona-scoped server memories (include legacy NULL tomori_id during soak)
+		// 4. Get persona-scoped server memories.
+		// Legacy NULL rows are exported only for main persona targets.
+		let includeLegacyFallback = false;
+		if (targetTomoriId) {
+			const [targetPersonaMeta] = await sql<Array<{ is_alter: boolean }>>`
+				SELECT is_alter
+				FROM tomoris
+				WHERE tomori_id = ${targetTomoriId}
+				  AND server_id = ${serverId}
+				LIMIT 1
+			`;
+			includeLegacyFallback = targetPersonaMeta?.is_alter !== true;
+		}
+
 		const memoryRows = targetTomoriId
-			? await sql`
-				SELECT content
-				FROM server_memories
-				WHERE server_id = ${serverId}
-				  AND (
-					tomori_id = ${targetTomoriId}
-					OR tomori_id IS NULL
-				  )
-				ORDER BY created_at DESC
-			`
+			? includeLegacyFallback
+				? await sql`
+					SELECT content
+					FROM server_memories
+					WHERE server_id = ${serverId}
+					  AND (
+						tomori_id = ${targetTomoriId}
+						OR tomori_id IS NULL
+					  )
+					ORDER BY created_at DESC
+				`
+				: await sql`
+					SELECT content
+					FROM server_memories
+					WHERE server_id = ${serverId}
+					  AND tomori_id = ${targetTomoriId}
+					ORDER BY created_at DESC
+				`
 			: await sql`
 				SELECT content
 				FROM server_memories

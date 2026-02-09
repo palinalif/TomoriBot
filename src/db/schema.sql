@@ -779,7 +779,7 @@ BEFORE UPDATE ON personal_memories
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
--- Backfill legacy users.personal_memories into lineage 0 once per user
+-- Backfill existing users.personal_memories into global personal namespace (lineage 0)
 INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
 SELECT
 	u.user_id,

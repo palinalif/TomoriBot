@@ -9,12 +9,16 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import {
 	replyInfoEmbed,
 	promptWithRawModal,
+	safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { sql } from "@/utils/db/client";
+import { localizer } from "@/utils/text/localizer";
+import type { SelectOption } from "@/types/discord/modal";
 
 const MODAL_CUSTOM_ID = "teach_personaprompt_modal";
+const PERSONA_SELECT_ID = "persona_select";
 const PERSONA_PROMPT_INPUT_ID = "persona_prompt_input";
 
 export const configureSubcommand = (
@@ -22,13 +26,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("personaprompt")
-		.setDescription("Set a persona-specific prompt appended after sysprompt")
-		.addStringOption((option) =>
-			option
-				.setName("persona")
-				.setDescription("Target persona nickname (defaults to current main persona)")
-				.setRequired(false),
-		);
+		.setDescription(localizer("en-US", "commands.teach.personaprompt.description"));
 
 export async function execute(
 	_client: Client,
@@ -51,8 +49,8 @@ export async function execute(
 			interaction.memberPermissions?.has("ManageGuild") ?? false;
 		if (!hasPermission) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.persona.remove.no_permission_title",
-				descriptionKey: "commands.persona.remove.no_permission_description",
+				titleKey: "commands.teach.personaprompt.no_permission_title",
+				descriptionKey: "commands.teach.personaprompt.no_permission_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -74,22 +72,28 @@ export async function execute(
 			return;
 		}
 
-		const personaNameInput = interaction.options.getString("persona");
 		const allPersonas = await loadAllPersonasForServer(serverDiscId);
-		const selectedPersona = personaNameInput
-			? allPersonas.find(
-					(persona) =>
-						persona.tomori_nickname.toLowerCase() ===
-						personaNameInput.toLowerCase(),
-				) ?? null
-			: allPersonas.find((persona) => !persona.is_alter) ?? null;
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(
+							locale,
+							"commands.teach.personaprompt.alter_persona_description",
+						)
+					: localizer(
+							locale,
+							"commands.teach.personaprompt.main_persona_description",
+						),
+			}))
+			.filter((option) => option.value !== "");
 
-		if (!selectedPersona?.tomori_id) {
+		if (personaSelectOptions.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				description: personaNameInput
-					? `Unknown persona "${personaNameInput}".`
-					: "No target persona available.",
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -98,18 +102,27 @@ export async function execute(
 
 		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "Set Persona Prompt",
+			modalTitleKey: "commands.teach.personaprompt.modal_title",
 			components: [
 				{
-					customId: PERSONA_PROMPT_INPUT_ID,
-					labelKey: "Persona Prompt",
+					customId: PERSONA_SELECT_ID,
+					labelKey: "commands.teach.personaprompt.persona_select_label",
 					descriptionKey:
-						"This will be appended after the system prompt for this persona.",
+						"commands.teach.personaprompt.persona_select_description",
 					placeholder:
-						"Example: Speak like a veteran tactician, concise and calm.",
+						"commands.teach.personaprompt.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
+				{
+					customId: PERSONA_PROMPT_INPUT_ID,
+					labelKey: "commands.teach.personaprompt.prompt_label",
+					descriptionKey:
+						"commands.teach.personaprompt.prompt_description",
+					placeholder: "commands.teach.personaprompt.prompt_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
-					maxLength: 8000,
+					maxLength: 4000,
 				},
 			],
 		});
@@ -122,8 +135,22 @@ export async function execute(
 		}
 
 		const modalSubmitInteraction = modalResult.interaction;
+		const selectedPersonaId = modalResult.values?.[PERSONA_SELECT_ID];
 		const personaPrompt = modalResult.values?.[PERSONA_PROMPT_INPUT_ID]?.trim();
-		if (!modalSubmitInteraction || !personaPrompt) {
+		if (!modalSubmitInteraction || !selectedPersonaId || !personaPrompt) {
+			return;
+		}
+
+		const selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
 			return;
 		}
 
@@ -137,8 +164,9 @@ export async function execute(
 		invalidateTomoriStateCache(serverDiscId);
 
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "Success",
-			description: `Updated persona prompt for "${selectedPersona.tomori_nickname}".`,
+			titleKey: "commands.teach.personaprompt.success_title",
+			descriptionKey: "commands.teach.personaprompt.success_description",
+			descriptionVars: { persona_name: selectedPersona.tomori_nickname },
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {

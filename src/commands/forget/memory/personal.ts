@@ -17,7 +17,7 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
+	replyPaginatedPersonaChoicesV2,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
@@ -33,6 +33,9 @@ import { createStandardEmbed } from "../../../utils/discord/embedHelper";
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_personalmemory_modal";
 const MEMORY_SELECT_ID = "memory_select";
+const PERSONAL_SCOPE_VALUE = "persona";
+const GLOBAL_SCOPE_VALUE = "global";
+const GLOBAL_PERSONAL_MEMORY_LINEAGE_ID = 0;
 
 /**
  * Helper function to perform personal memory removal from database
@@ -134,6 +137,24 @@ export const configureSubcommand = (
 		.setName("personal")
 		.setDescription(
 			localizer("en-US", "commands.forget.memory.personal.description"),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("scope")
+				.setDescription(
+					"Memory scope: persona-only (default) or global across all personas/servers",
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: "Persona memories (default)",
+						value: PERSONAL_SCOPE_VALUE,
+					},
+					{
+						name: "Global memories (all personas/servers)",
+						value: GLOBAL_SCOPE_VALUE,
+					},
+				),
 		);
 
 /**
@@ -172,6 +193,11 @@ export async function execute(
 		tomoriState = await loadTomoriState(
 			interaction.guild?.id ?? interaction.user.id,
 		);
+		const memoryScope =
+			(interaction.options.getString("scope") as
+				| typeof PERSONAL_SCOPE_VALUE
+				| typeof GLOBAL_SCOPE_VALUE
+				| null) ?? PERSONAL_SCOPE_VALUE;
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title", // Corrected key
@@ -188,65 +214,84 @@ export async function execute(
 			personalizationDisabledWarning = true;
 		}
 
-		// 4. Select target persona via paginated selector
-		const allPersonas = await loadAllPersonasForServer(
-			interaction.guild?.id ?? interaction.user.id,
-		);
-		if (allPersonas.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
+		// 4. Resolve scope + target lineage
+		let targetLineageId = GLOBAL_PERSONAL_MEMORY_LINEAGE_ID;
+		let selectionInteraction: ChatInputCommandInteraction | ButtonInteraction =
+			interaction;
+		if (memoryScope === PERSONAL_SCOPE_VALUE) {
+			const allPersonas = await loadAllPersonasForServer(
+				interaction.guild?.id ?? interaction.user.id,
+			);
+			if (allPersonas.length === 0) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.tomori_not_setup_title",
+					descriptionKey: "general.errors.tomori_not_setup_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const personaSelection = await replyPaginatedPersonaChoicesV2(
+				interaction,
+				locale,
+				{
+					personas: allPersonas,
+					color: ColorCode.INFO,
+					preserveSelectedInteraction: true,
+					onSelect: async () => {},
+				},
+			);
+
+			if (
+				!personaSelection.success ||
+				personaSelection.selectedIndex === undefined ||
+				!personaSelection.interaction
+			) {
+				return;
+			}
+
+			personaSelectionInteraction = personaSelection.interaction;
+			selectionInteraction = personaSelectionInteraction;
+			selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+			if (!selectedPersona) {
+				await replyInfoEmbed(personaSelectionInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			targetLineageId = selectedPersona.persona_lineage_id ?? 0;
+			if (targetLineageId === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID) {
+				await replyInfoEmbed(selectionInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "general.errors.operation_failed_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
 		}
-
-		const personaSelectionItems = allPersonas.map((persona) =>
-			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
-		);
-		const personaSelection = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "general.pagination.select_persona_title",
-			descriptionKey: "general.pagination.select_persona_description",
-			items: personaSelectionItems,
-			color: ColorCode.INFO,
-			preserveSelectedInteraction: true,
-			onSelect: async () => {},
-		});
-
-		if (
-			!personaSelection.success ||
-			personaSelection.selectedIndex === undefined ||
-			!personaSelection.interaction
-		) {
-			return;
-		}
-
-		personaSelectionInteraction = personaSelection.interaction;
-		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-		if (!selectedPersona) {
-			await replyInfoEmbed(personaSelectionInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		const targetLineageId = selectedPersona.persona_lineage_id ?? 0;
 
 		// 5. Get current personal memories from lineage-scoped table
-		const currentMemories = userData.user_id
+		const includeGlobalMemories = memoryScope === GLOBAL_SCOPE_VALUE;
+		const fetchedMemories = userData.user_id
 			? await loadPersonalMemoriesForUserLineage(
 					userData.user_id,
 					targetLineageId,
-					true,
+					includeGlobalMemories,
 				)
 			: [];
+		const currentMemories = fetchedMemories.filter((memory) =>
+			memoryScope === GLOBAL_SCOPE_VALUE
+				? memory.persona_lineage_id === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID
+				: memory.persona_lineage_id === targetLineageId,
+		);
 
 		// 6. Check if there are any memories to remove
 		if (currentMemories.length === 0) {
-			await replyInfoEmbed(personaSelectionInteraction, locale, {
+			await replyInfoEmbed(selectionInteraction, locale, {
 				titleKey: "commands.forget.memory.personal.no_memories_title",
 				descriptionKey: "commands.forget.memory.personal.no_memories",
 				color: ColorCode.WARN,
@@ -265,7 +310,7 @@ export async function execute(
 
 		// 8. Show the paginated modal with memory selection
 		const modalResult = await promptWithPaginatedModal(
-			personaSelectionInteraction,
+			selectionInteraction,
 			locale,
 			{
 			modalCustomId: MODAL_CUSTOM_ID,

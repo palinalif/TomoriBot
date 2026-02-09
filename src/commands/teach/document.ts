@@ -3,17 +3,26 @@ import type {
 	Client,
 	SlashCommandSubcommandBuilder,
 	Attachment,
+	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
+} from "../../utils/discord/interactionHelper";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
-import { isBlacklisted, loadEmbeddingModelById } from "../../utils/db/dbRead";
+import {
+	isBlacklisted,
+	loadAllPersonasForServer,
+	loadEmbeddingModelById,
+} from "../../utils/db/dbRead";
 import {
 	getMemoryLimits,
 } from "../../utils/db/memoryLimits";
@@ -30,8 +39,12 @@ import {
 } from "../../utils/documents/documentService";
 import { generateEmbeddingsBatched } from "../../utils/embeddings/embeddingProvider";
 import type { ErrorContext, TomoriState, UserRow } from "../../types/db/schema";
+import type { SelectOption } from "../../types/discord/modal";
 
 const MAX_DOCUMENT_NAME_LENGTH = 64;
+type DocumentScope = "persona" | "serverwide";
+const DOCUMENT_PERSONA_MODAL_ID = "teach_document_persona_modal";
+const DOCUMENT_PERSONA_SELECT_ID = "persona_select";
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -56,6 +69,30 @@ export const configureSubcommand = (
 					localizer("en-US", "commands.teach.document.file_description"),
 				)
 				.setRequired(true),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("scope")
+				.setDescription(
+					localizer("en-US", "commands.teach.document.scope_description"),
+				)
+				.addChoices(
+					{
+						name: localizer(
+							"en-US",
+							"commands.teach.document.scope_choice_persona",
+						),
+						value: "persona",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.teach.document.scope_choice_serverwide",
+						),
+						value: "serverwide",
+					},
+				)
+				.setRequired(false),
 		);
 
 function validateAttachment(attachment: Attachment): {
@@ -128,6 +165,11 @@ export async function execute(
 
 	const memoryLimits = getMemoryLimits();
 	let tomoriState: TomoriState | null = null;
+	let targetTomoriId: number | null = null;
+	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
+	let responseInteraction:
+		| ChatInputCommandInteraction
+		| ModalSubmitInteraction = interaction;
 
 	try {
 		if (!ragEnabled) {
@@ -267,16 +309,125 @@ export async function execute(
 			return;
 		}
 
-		// 9. Check duplicate document name
-		const existing = await sql`
-			SELECT document_id
-			FROM documents
-			WHERE server_id = ${tomoriState.server_id}
-			  AND document_name = ${nameInput}
-			LIMIT 1
-		`;
+		// 9. Resolve document scope
+		const scopeInput = interaction.options.getString("scope");
+		const scope: DocumentScope =
+			scopeInput === "serverwide" ? "serverwide" : "persona";
+		let scopeLabel =
+			localizer(locale, "commands.teach.document.scope_label_serverwide");
+
+		if (scope === "persona") {
+			const allPersonas = await loadAllPersonasForServer(
+				interaction.guild?.id ?? interaction.user.id,
+			);
+			const personaSelectOptions: SelectOption[] = allPersonas
+				.filter((persona) => persona.tomori_id !== undefined)
+				.map((persona) => ({
+					label: safeSelectOptionText(persona.tomori_nickname),
+					value: persona.tomori_id?.toString() ?? "",
+					description: persona.is_alter
+						? localizer(
+								locale,
+								"commands.teach.document.alter_persona_description",
+							)
+						: localizer(
+								locale,
+								"commands.teach.document.main_persona_description",
+							),
+				}))
+				.filter((option) => option.value !== "");
+
+			if (personaSelectOptions.length === 0) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const personaModalResult = await promptWithPaginatedModal(
+				interaction,
+				locale,
+				{
+					modalCustomId: DOCUMENT_PERSONA_MODAL_ID,
+					modalTitleKey: "commands.teach.document.persona_modal_title",
+					components: [
+						{
+							customId: DOCUMENT_PERSONA_SELECT_ID,
+							labelKey: "commands.teach.document.persona_select_label",
+							descriptionKey:
+								"commands.teach.document.persona_select_description",
+							placeholder:
+								"commands.teach.document.persona_select_placeholder",
+							required: true,
+							options: personaSelectOptions,
+						},
+					],
+				},
+			);
+
+			if (personaModalResult.outcome !== "submit") {
+				log.info(
+					`Teach document persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+				);
+				return;
+			}
+
+			modalSubmitInteraction = personaModalResult.interaction ?? null;
+			if (!modalSubmitInteraction) {
+				return;
+			}
+			responseInteraction = modalSubmitInteraction;
+
+			const selectedPersonaId =
+				personaModalResult.values?.[DOCUMENT_PERSONA_SELECT_ID];
+			const selectedPersona =
+				allPersonas.find(
+					(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+				) ?? null;
+
+			if (!selectedPersona?.tomori_id) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			targetTomoriId = selectedPersona.tomori_id;
+			scopeLabel = localizer(
+				locale,
+				"commands.teach.document.scope_label_persona",
+				{
+					persona_name: selectedPersona.tomori_nickname,
+				},
+			);
+		}
+
+		// 10. Check duplicate document name in selected scope
+		const existing =
+			targetTomoriId === null
+				? await sql`
+					SELECT document_id
+					FROM documents
+					WHERE server_id = ${tomoriState.server_id}
+					  AND tomori_id IS NULL
+					  AND document_name = ${nameInput}
+					LIMIT 1
+				`
+				: await sql`
+					SELECT document_id
+					FROM documents
+					WHERE server_id = ${tomoriState.server_id}
+					  AND tomori_id = ${targetTomoriId}
+					  AND document_name = ${nameInput}
+					LIMIT 1
+				`;
 		if (existing.length > 0) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.teach.document.duplicate_title",
 				descriptionKey: "commands.teach.document.duplicate_description",
 				descriptionVars: { name: nameInput },
@@ -286,20 +437,30 @@ export async function execute(
 			return;
 		}
 
-		// 10. Enforce document count limit
-		const [docCountRow] = await sql`
-			SELECT COUNT(*) as doc_count
-			FROM documents
-			WHERE server_id = ${tomoriState.server_id}
-		`;
+		// 11. Enforce document count limit for selected scope
+		const [docCountRow] =
+			targetTomoriId === null
+				? await sql`
+					SELECT COUNT(*) as doc_count
+					FROM documents
+					WHERE server_id = ${tomoriState.server_id}
+					  AND tomori_id IS NULL
+				`
+				: await sql`
+					SELECT COUNT(*) as doc_count
+					FROM documents
+					WHERE server_id = ${tomoriState.server_id}
+					  AND tomori_id = ${targetTomoriId}
+				`;
 		const docCount = Number(docCountRow?.doc_count || 0);
 		if (docCount >= memoryLimits.maxDocumentsPerServer) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.teach.document.limit_exceeded_title",
 				descriptionKey: "commands.teach.document.limit_exceeded_description",
 				descriptionVars: {
 					current_count: docCount.toString(),
 					max_allowed: memoryLimits.maxDocumentsPerServer.toString(),
+					scope: scopeLabel,
 				},
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
@@ -310,7 +471,7 @@ export async function execute(
 		const attachment = interaction.options.getAttachment("file", true);
 		const attachmentValidation = validateAttachment(attachment);
 		if (!attachmentValidation.isValid) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.teach.document.invalid_file_title",
 				descriptionKey: `commands.teach.document.${attachmentValidation.errorKey}`,
 				color: ColorCode.ERROR,
@@ -321,7 +482,7 @@ export async function execute(
 
 		const maxSizeBytes = memoryLimits.maxDocumentSizeMB * 1024 * 1024;
 		if (attachment.size && attachment.size > maxSizeBytes) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.teach.document.file_too_large_title",
 				descriptionKey: "commands.teach.document.file_too_large_description",
 				descriptionVars: {
@@ -333,7 +494,7 @@ export async function execute(
 			return;
 		}
 
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		const downloadResult = await safeDownload(attachment.url, {
 			maxSizeMB: memoryLimits.maxDocumentSizeMB,
@@ -342,7 +503,7 @@ export async function execute(
 		});
 
 		if (!downloadResult.success || !downloadResult.buffer) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -368,7 +529,7 @@ export async function execute(
 		const normalizedText = normalizeDocumentText(rawText);
 
 		if (!normalizedText) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -384,7 +545,7 @@ export async function execute(
 		}
 
 		if (normalizedText.length > memoryLimits.maxDocumentTextLength) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -408,7 +569,7 @@ export async function execute(
 		);
 
 		if (chunks.length === 0) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -424,7 +585,7 @@ export async function execute(
 		}
 
 		if (chunks.length > memoryLimits.maxDocumentChunks) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -445,17 +606,28 @@ export async function execute(
 			return;
 		}
 
-		const [chunkCountRow] = await sql`
-			SELECT COUNT(*) as chunk_count
-			FROM document_chunks
-			WHERE server_id = ${tomoriState.server_id}
-		`;
+		const [chunkCountRow] =
+			targetTomoriId === null
+				? await sql`
+					SELECT COUNT(*) as chunk_count
+					FROM document_chunks dc
+					JOIN documents d ON d.document_id = dc.document_id
+					WHERE d.server_id = ${tomoriState.server_id}
+					  AND d.tomori_id IS NULL
+				`
+				: await sql`
+					SELECT COUNT(*) as chunk_count
+					FROM document_chunks dc
+					JOIN documents d ON d.document_id = dc.document_id
+					WHERE d.server_id = ${tomoriState.server_id}
+					  AND d.tomori_id = ${targetTomoriId}
+				`;
 		const currentChunkCount = Number(chunkCountRow?.chunk_count || 0);
 		if (
 			currentChunkCount + chunks.length >
 			memoryLimits.maxDocumentChunksPerServer
 		) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -471,6 +643,7 @@ export async function execute(
 								{
 									max_chunks:
 										memoryLimits.maxDocumentChunksPerServer.toString(),
+									scope: scopeLabel,
 								},
 							),
 						)
@@ -499,6 +672,7 @@ export async function execute(
 
 		const documentId = await insertDocumentWithChunks({
 			serverId: tomoriState.server_id,
+			tomoriId: targetTomoriId,
 			uploaderUserId: userData.user_id ?? null,
 			documentName: nameInput,
 			fileName: attachment.name ?? null,
@@ -513,7 +687,7 @@ export async function execute(
 
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-		await interaction.editReply({
+		await responseInteraction.editReply({
 			embeds: [
 				new EmbedBuilder()
 					.setTitle(
@@ -524,6 +698,7 @@ export async function execute(
 							name: nameInput,
 							chunk_count: chunks.length.toString(),
 							document_id: documentId.toString(),
+							scope: scopeLabel,
 						}),
 					)
 					.setColor(ColorCode.SUCCESS),
@@ -533,7 +708,7 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "teach document",
@@ -543,11 +718,20 @@ export async function execute(
 		};
 		await log.error("Error in /teach document command", error, context);
 
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-			color: ColorCode.ERROR,
-			flags: MessageFlags.Ephemeral,
-		});
+		const errorReplyInteraction =
+			modalSubmitInteraction ??
+			(responseInteraction.replied || responseInteraction.deferred
+				? responseInteraction
+				: interaction.replied || interaction.deferred
+					? interaction
+					: null);
+		if (errorReplyInteraction) {
+			await replyInfoEmbed(errorReplyInteraction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+		}
 	}
 }

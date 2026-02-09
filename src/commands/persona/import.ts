@@ -250,18 +250,24 @@ export const configureSubcommand = (
 		)
 		.addStringOption((option) =>
 			option
-				.setName("identity_mode")
+				.setName("memories")
 				.setDescription(
-					"Lineage mode for personal memories: preserve reuses imported lineage memories; fork starts a fresh lineage memory namespace",
+					localizer("en-US", "commands.persona.import.memories_description"),
 				)
 				.setRequired(false)
 				.addChoices(
 					{
-						name: "Preserve lineage memories (Recommended)",
+						name: localizer(
+							"en-US",
+							"commands.persona.import.memories_choice_preserve",
+						),
 						value: "preserve",
 					},
 					{
-						name: "Fork new lineage (no inherited lineage memories)",
+						name: localizer(
+							"en-US",
+							"commands.persona.import.memories_choice_fork",
+						),
 						value: "fork",
 					},
 				),
@@ -286,7 +292,8 @@ export async function execute(
 		const importType = interaction.options.getString("type", true);
 		const additionalTriggersInput = interaction.options.getString("triggers");
 		const identityMode =
-			(interaction.options.getString("identity_mode") as
+			((interaction.options.getString("memories") ??
+				interaction.options.getString("identity_mode")) as
 				| "preserve"
 				| "fork"
 				| null) ?? "preserve";

@@ -14,14 +14,15 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
 import { isBlacklisted, loadAllPersonasForServer } from "../../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "../../../utils/cache/tomoriStateCache";
-import type { ModalResult } from "../../../types/discord/modal";
+import type { ModalResult, SelectOption } from "../../../types/discord/modal";
 import {
 	validateMemoryContent,
 	checkServerMemoryLimit,
@@ -44,12 +45,6 @@ export const configureSubcommand = (
 		.setName("server")
 		.setDescription(
 			localizer("en-US", "commands.teach.memory.server.description"),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("persona")
-				.setDescription("Target persona nickname (defaults to current main persona)")
-				.setRequired(false),
 		);
 
 /**
@@ -123,29 +118,35 @@ export async function execute(
 		}
 
 		// 6. Resolve target persona (default: current main persona)
-		const personaNameInput = interaction.options.getString("persona");
 		const allPersonas = await loadAllPersonasForServer(
 			interaction.guild?.id ?? interaction.user.id,
 		);
-		selectedPersona = personaNameInput
-			? allPersonas.find(
-					(persona) =>
-						persona.tomori_nickname.toLowerCase() ===
-						personaNameInput.toLowerCase(),
-				) ?? null
-			: allPersonas.find((persona) => !persona.is_alter) ?? null;
-
-		if (!selectedPersona?.tomori_id) {
+		if (allPersonas.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				description: personaNameInput
-					? `Unknown persona "${personaNameInput}".`
-					: "No target persona available.",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
+
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(
+							locale,
+							"commands.teach.memory.server.alter_persona_description",
+						)
+					: localizer(
+							locale,
+							"commands.teach.memory.server.main_persona_description",
+						),
+			}))
+			.filter((option) => option.value !== "");
 
 		// 7. Check if server memory teaching is enabled
 		// NOTE: Check the correct config key name from tomori_configs table
@@ -163,34 +164,20 @@ export async function execute(
 			return;
 		}
 
-		// 8. Check server memory limit before showing modal (better UX)
-		const serverLimitCheck = await checkServerMemoryLimit(
-			tomoriState.server_id,
-			selectedPersona.tomori_id,
-			true,
-		);
-		if (!serverLimitCheck.isValid) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.memory.server.limit_exceeded_title",
-				descriptionKey:
-					"commands.teach.memory.server.limit_exceeded_description",
-				descriptionVars: {
-					current_count: serverLimitCheck.currentCount?.toString() || "0",
-					max_allowed: (
-						serverLimitCheck.maxAllowed || memoryLimits.maxServerMemories
-					).toString(),
-				},
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
-		// 9. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
-		modalResult = await promptWithRawModal(interaction, locale, {
+		// 8. Prompt user with persona selector + memory input in one modal
+		modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.memory.server.modal_title",
 			components: [
+				{
+					customId: "persona_select",
+					labelKey: "commands.teach.memory.server.persona_select_label",
+					descriptionKey:
+						"commands.teach.memory.server.persona_select_description",
+					placeholder: "commands.teach.memory.server.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
 				{
 					customId: MEMORY_INPUT_ID,
 					labelKey: "commands.teach.memory.server.memory_input_label",
@@ -218,6 +205,41 @@ export async function execute(
 		// 12. Get input from modal
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
+		const selectedPersonaId = modalResult.values?.persona_select;
+		selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 12.5 Check server memory limit after final persona resolution
+		const serverLimitCheck = await checkServerMemoryLimit(
+			tomoriState.server_id,
+			selectedPersona.tomori_id,
+			selectedPersona.is_alter !== true,
+		);
+		if (!serverLimitCheck.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.memory.server.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.memory.server.limit_exceeded_description",
+				descriptionVars: {
+					current_count: serverLimitCheck.currentCount?.toString() || "0",
+					max_allowed: (
+						serverLimitCheck.maxAllowed || memoryLimits.maxServerMemories
+					).toString(),
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
 
 		// 13. Validate memory content length
 		const contentValidation = validateMemoryContent(newMemory);
@@ -240,6 +262,7 @@ export async function execute(
 			// biome-ignore lint/style/noNonNullAssertion: user row from middleware
 			userData.user_id!,
 			newMemory,
+			selectedPersona.is_alter !== true,
 		);
 
 		if (!insertedMemory) {

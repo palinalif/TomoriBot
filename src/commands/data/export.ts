@@ -2,11 +2,16 @@ import type {
 	ChatInputCommandInteraction,
 	Client,
 	SlashCommandSubcommandBuilder,
+	ModalSubmitInteraction,
 } from "discord.js";
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
+} from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import {
 	exportPersonalData,
@@ -14,6 +19,10 @@ import {
 	exportPersonalityData,
 } from "../../utils/db/dataExport";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
+import type { SelectOption } from "../../types/discord/modal";
+
+const EXPORT_PERSONA_MODAL_ID = "data_export_persona_modal";
+const EXPORT_PERSONA_SELECT_ID = "persona_select";
 
 /**
  * Configure the 'export' subcommand
@@ -51,14 +60,6 @@ export const configureSubcommand = (
 						value: "personality",
 					},
 				),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("persona")
-				.setDescription(
-					"Target persona nickname for memory export (defaults to active main persona)",
-				)
-				.setRequired(false),
 		);
 
 /**
@@ -77,8 +78,10 @@ export async function execute(
 ): Promise<void> {
 	// 1. Get the export type option
 	const exportType = interaction.options.getString("type", true);
-	const personaNameInput = interaction.options.getString("persona");
 	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
+	let responseInteraction:
+		| ChatInputCommandInteraction
+		| ModalSubmitInteraction = interaction;
 
 	try {
 		// 1.5 Resolve target persona for memory exports/imports
@@ -88,20 +91,75 @@ export async function execute(
 		if (exportType === "personal" || exportType === "server") {
 			const personas = await loadAllPersonasForServer(serverDiscId);
 			if (personas.length > 0) {
-				const selectedPersona = personaNameInput
-					? personas.find(
-							(persona) =>
-								persona.tomori_nickname.toLowerCase() ===
-								personaNameInput.toLowerCase(),
-						)
-					: personas.find((persona) => !persona.is_alter) ?? personas[0];
-
-				if (!selectedPersona) {
+				const personaSelectOptions: SelectOption[] = personas
+					.filter((persona) => persona.tomori_id !== undefined)
+					.map((persona) => ({
+						label: safeSelectOptionText(persona.tomori_nickname),
+						value: persona.tomori_id?.toString() ?? "",
+						description: persona.is_alter
+							? localizer(
+									locale,
+									"commands.data.export.alter_persona_description",
+								)
+							: localizer(
+									locale,
+									"commands.data.export.main_persona_description",
+								),
+					}))
+					.filter((option) => option.value !== "");
+				if (personaSelectOptions.length === 0) {
 					await replyInfoEmbed(interaction, locale, {
 						titleKey: "general.errors.invalid_option_title",
-						description: `Unknown persona "${personaNameInput}".`,
+						descriptionKey: "general.errors.invalid_option_description",
 						color: ColorCode.ERROR,
 						flags: MessageFlags.Ephemeral,
+					});
+					return;
+				}
+
+				const personaModalResult = await promptWithPaginatedModal(
+					interaction,
+					locale,
+					{
+						modalCustomId: EXPORT_PERSONA_MODAL_ID,
+						modalTitleKey: "commands.data.export.persona_modal_title",
+						components: [
+							{
+								customId: EXPORT_PERSONA_SELECT_ID,
+								labelKey: "commands.data.export.persona_select_label",
+								descriptionKey:
+									"commands.data.export.persona_select_description",
+								placeholder:
+									"commands.data.export.persona_select_placeholder",
+								required: true,
+								options: personaSelectOptions,
+							},
+						],
+					},
+				);
+				if (personaModalResult.outcome !== "submit") {
+					log.info(
+						`Data export persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+					);
+					return;
+				}
+
+				const modalSubmitInteraction = personaModalResult.interaction;
+				if (!modalSubmitInteraction) {
+					return;
+				}
+				responseInteraction = modalSubmitInteraction;
+				const selectedPersonaId =
+					personaModalResult.values?.[EXPORT_PERSONA_SELECT_ID];
+				const selectedPersona =
+					personas.find(
+						(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+					) ?? null;
+				if (!selectedPersona) {
+					await replyInfoEmbed(responseInteraction, locale, {
+						titleKey: "general.errors.invalid_option_title",
+						descriptionKey: "general.errors.invalid_option_description",
+						color: ColorCode.ERROR,
 					});
 					return;
 				}
@@ -109,14 +167,6 @@ export async function execute(
 				targetTomoriId = selectedPersona.tomori_id;
 				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
 				targetPersonaNickname = selectedPersona.tomori_nickname;
-			} else if (personaNameInput) {
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "general.errors.invalid_option_title",
-					description: `Unknown persona "${personaNameInput}".`,
-					color: ColorCode.ERROR,
-					flags: MessageFlags.Ephemeral,
-				});
-				return;
 			}
 		}
 
@@ -128,7 +178,7 @@ export async function execute(
 					interaction.memberPermissions?.has("ManageGuild") ?? false;
 
 				if (!hasPermission) {
-					await replyInfoEmbed(interaction, locale, {
+					await replyInfoEmbed(responseInteraction, locale, {
 						titleKey: "commands.data.export.no_permission_title",
 						descriptionKey: "commands.data.export.no_permission_description",
 						color: ColorCode.ERROR,
@@ -140,14 +190,14 @@ export async function execute(
 		}
 
 		// 3. Defer reply while we process
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 4. Handle personality export separately (returns text instead of JSON)
 		if (exportType === "personality") {
 			const personalityResult = await exportPersonalityData(serverDiscId);
 
 			if (!personalityResult.success || !personalityResult.text) {
-				await interaction.editReply({
+				await responseInteraction.editReply({
 					embeds: [
 						new EmbedBuilder()
 							.setTitle(localizer(locale, "commands.data.export.failed_title"))
@@ -204,7 +254,7 @@ export async function execute(
 				});
 
 				// Confirm success in the channel
-				await interaction.editReply({
+				await responseInteraction.editReply({
 					embeds: [
 						new EmbedBuilder()
 							.setTitle(localizer(locale, "commands.data.export.success_title"))
@@ -223,7 +273,7 @@ export async function execute(
 					`Failed to send personality export DM to user ${interaction.user.id}:`,
 					dmError as Error,
 				);
-				await interaction.editReply({
+				await responseInteraction.editReply({
 					embeds: [
 						new EmbedBuilder()
 							.setTitle(
@@ -262,7 +312,7 @@ export async function execute(
 				.slice(0, 32);
 			filename = `tomori-server-${personaSlug}-${serverDiscId}-${Date.now()}.json`;
 		} else {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "general.errors.invalid_option_title"))
@@ -277,7 +327,7 @@ export async function execute(
 
 		// 6. Handle export errors
 		if (!exportResult.success || !exportResult.data) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.failed_title"))
@@ -321,7 +371,7 @@ export async function execute(
 			});
 
 			// 9. Confirm success in the channel
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.success_title"))
@@ -339,7 +389,7 @@ export async function execute(
 				`Failed to send export DM to user ${interaction.user.id}:`,
 				dmError as Error,
 			);
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.dm_failed_title"))
@@ -357,15 +407,15 @@ export async function execute(
 		});
 
 		// If we haven't replied yet, reply with error
-		if (!interaction.replied && !interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
+		if (!responseInteraction.replied && !responseInteraction.deferred) {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
 				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 		} else {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "general.errors.unknown_error_title"))

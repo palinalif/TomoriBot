@@ -10,7 +10,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
+	replyPaginatedPersonaChoicesV2,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
@@ -180,17 +180,16 @@ export async function execute(
 			return;
 		}
 
-		const personaSelectionItems = allPersonas.map((persona) =>
-			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		const personaSelection = await replyPaginatedPersonaChoicesV2(
+			interaction,
+			locale,
+			{
+				personas: allPersonas,
+				color: ColorCode.INFO,
+				preserveSelectedInteraction: true,
+				onSelect: async () => {},
+			},
 		);
-		const personaSelection = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "general.pagination.select_persona_title",
-			descriptionKey: "general.pagination.select_persona_description",
-			items: personaSelectionItems,
-			color: ColorCode.INFO,
-			preserveSelectedInteraction: true,
-			onSelect: async () => {},
-		});
 
 		if (
 			!personaSelection.success ||

@@ -24,14 +24,14 @@ async function fetchMetrics(label: string): Promise<void> {
 		tomoris_without_lineage: number;
 		persona_configs_total: number;
 		server_memories_without_tomori: number;
-		personal_memories_lineage_zero: number;
+		personal_memories_global_scope: number;
 		users_with_legacy_array: number;
 	}>`
 		SELECT
 			(SELECT COUNT(*)::int FROM tomoris WHERE persona_lineage_id IS NULL) AS tomoris_without_lineage,
 			(SELECT COUNT(*)::int FROM persona_configs) AS persona_configs_total,
 			(SELECT COUNT(*)::int FROM server_memories WHERE tomori_id IS NULL) AS server_memories_without_tomori,
-			(SELECT COUNT(*)::int FROM personal_memories WHERE persona_lineage_id = 0) AS personal_memories_lineage_zero,
+			(SELECT COUNT(*)::int FROM personal_memories WHERE persona_lineage_id = 0) AS personal_memories_global_scope,
 			(
 				SELECT COUNT(*)::int
 				FROM users
@@ -45,7 +45,7 @@ async function fetchMetrics(label: string): Promise<void> {
 		`[${label}] server_memories_without_tomori=${row.server_memories_without_tomori}`,
 	);
 	log.info(
-		`[${label}] personal_memories_lineage_zero=${row.personal_memories_lineage_zero}`,
+		`[${label}] personal_memories_global_scope=${row.personal_memories_global_scope}`,
 	);
 	log.info(`[${label}] users_with_legacy_array=${row.users_with_legacy_array}`);
 }
@@ -105,7 +105,7 @@ async function runMigration(): Promise<void> {
 			  AND sm.tomori_id IS NULL
 		`;
 
-		// 4) Backfill users.personal_memories into personal_memories lineage 0.
+		// 4) Backfill users.personal_memories into global personal namespace (lineage 0).
 		await tx`
 			INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
 			SELECT

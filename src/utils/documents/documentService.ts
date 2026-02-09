@@ -58,6 +58,7 @@ export function formatVector(values: number[]): string {
 
 export async function insertDocumentWithChunks(params: {
 	serverId: number;
+	tomoriId: number | null;
 	uploaderUserId: number | null;
 	documentName: string;
 	fileName: string | null;
@@ -71,6 +72,7 @@ export async function insertDocumentWithChunks(params: {
 }): Promise<number> {
 	const {
 		serverId,
+		tomoriId,
 		uploaderUserId,
 		documentName,
 		fileName,
@@ -93,6 +95,7 @@ export async function insertDocumentWithChunks(params: {
 		const [documentRow] = await tx`
 			INSERT INTO documents (
 				server_id,
+				tomori_id,
 				uploader_user_id,
 				document_name,
 				file_name,
@@ -101,6 +104,7 @@ export async function insertDocumentWithChunks(params: {
 				text_content
 			) VALUES (
 				${serverId},
+				${tomoriId},
 				${uploaderUserId},
 				${documentName},
 				${fileName},
@@ -146,6 +150,7 @@ export async function insertDocumentWithChunks(params: {
 
 export async function retrieveRelevantDocumentChunks(params: {
 	serverId: number;
+	tomoriId?: number | null;
 	query: string;
 	embeddingModel: EmbeddingModelRow;
 	apiKey: string;
@@ -155,6 +160,7 @@ export async function retrieveRelevantDocumentChunks(params: {
 }): Promise<RetrievedDocumentChunk[]> {
 	const {
 		serverId,
+		tomoriId,
 		query,
 		embeddingModel,
 		apiKey,
@@ -183,27 +189,55 @@ export async function retrieveRelevantDocumentChunks(params: {
 
 	const queryVector = formatVector(queryEmbeddings[0]);
 
-	const rows = await sql<
-		Array<{
-			document_id: number;
-			document_name: string;
-			chunk_index: number;
-			content: string;
-			distance: number | string;
-		}>
-	>`
-		SELECT dc.document_id,
-		       d.document_name,
-		       dc.chunk_index,
-		       dc.content,
-		       (dc.embedding <=> ${queryVector}::vector) AS distance
-		FROM document_chunks dc
-		JOIN documents d ON d.document_id = dc.document_id
-		WHERE dc.server_id = ${serverId}
-		  AND dc.embedding_family = ${embeddingModel.model_family}
-		ORDER BY dc.embedding <=> ${queryVector}::vector
-		LIMIT ${maxResults}
-	`;
+	const rows =
+		tomoriId === null || tomoriId === undefined
+			? await sql<
+					Array<{
+						document_id: number;
+						document_name: string;
+						chunk_index: number;
+						content: string;
+						distance: number | string;
+					}>
+				>`
+					SELECT dc.document_id,
+					       d.document_name,
+					       dc.chunk_index,
+					       dc.content,
+					       (dc.embedding <=> ${queryVector}::vector) AS distance
+					FROM document_chunks dc
+					JOIN documents d ON d.document_id = dc.document_id
+					WHERE dc.server_id = ${serverId}
+					  AND dc.embedding_family = ${embeddingModel.model_family}
+					  AND d.tomori_id IS NULL
+					ORDER BY dc.embedding <=> ${queryVector}::vector
+					LIMIT ${maxResults}
+				`
+			: await sql<
+					Array<{
+						document_id: number;
+						document_name: string;
+						chunk_index: number;
+						content: string;
+						distance: number | string;
+					}>
+				>`
+					SELECT dc.document_id,
+					       d.document_name,
+					       dc.chunk_index,
+					       dc.content,
+					       (dc.embedding <=> ${queryVector}::vector) AS distance
+					FROM document_chunks dc
+					JOIN documents d ON d.document_id = dc.document_id
+					WHERE dc.server_id = ${serverId}
+					  AND dc.embedding_family = ${embeddingModel.model_family}
+					  AND (
+						d.tomori_id = ${tomoriId}
+						OR d.tomori_id IS NULL
+					  )
+					ORDER BY dc.embedding <=> ${queryVector}::vector
+					LIMIT ${maxResults}
+				`;
 
 	const results: RetrievedDocumentChunk[] = [];
 	for (const row of rows) {

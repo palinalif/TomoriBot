@@ -762,14 +762,34 @@ export async function buildContext({
 
 		let serverMemoryLines: string[] = [];
 		try {
-			const serverMemoryRows = await sql<
-				Array<{ server_memory_id: number; content: string }>
-			>`
-				SELECT server_memory_id, content
-				FROM server_memories
-				WHERE server_id = ${tomoriState.server_id}
-				ORDER BY created_at DESC
-			`;
+			const includeLegacyFallback = tomoriState.is_alter !== true;
+			const serverMemoryRows =
+				tomoriState.tomori_id === null || tomoriState.tomori_id === undefined
+					? await sql<Array<{ server_memory_id: number; content: string }>>`
+						SELECT server_memory_id, content
+						FROM server_memories
+						WHERE server_id = ${tomoriState.server_id}
+						  AND tomori_id IS NULL
+						ORDER BY created_at DESC
+					`
+					: includeLegacyFallback
+						? await sql<Array<{ server_memory_id: number; content: string }>>`
+							SELECT server_memory_id, content
+							FROM server_memories
+							WHERE server_id = ${tomoriState.server_id}
+							  AND (
+								tomori_id = ${tomoriState.tomori_id}
+								OR tomori_id IS NULL
+							  )
+							ORDER BY created_at DESC
+						`
+						: await sql<Array<{ server_memory_id: number; content: string }>>`
+							SELECT server_memory_id, content
+							FROM server_memories
+							WHERE server_id = ${tomoriState.server_id}
+							  AND tomori_id = ${tomoriState.tomori_id}
+							ORDER BY created_at DESC
+						`;
 
 			serverMemoryLines = serverMemoryRows.map((row) =>
 				formatMemoryWithId(row.server_memory_id, row.content),
@@ -1170,12 +1190,25 @@ export async function buildContext({
 		) {
 			const queryText = getLatestUserQuery(simplifiedMessageHistory);
 			if (queryText && queryText.length >= DOCUMENT_QUERY_MIN_LENGTH) {
-				const [documentRow] = await sql`
-					SELECT document_id
-					FROM documents
-					WHERE server_id = ${tomoriState.server_id}
-					LIMIT 1
-				`;
+				const [documentRow] =
+					tomoriState.tomori_id === null || tomoriState.tomori_id === undefined
+						? await sql`
+							SELECT document_id
+							FROM documents
+							WHERE server_id = ${tomoriState.server_id}
+							  AND tomori_id IS NULL
+							LIMIT 1
+						`
+						: await sql`
+							SELECT document_id
+							FROM documents
+							WHERE server_id = ${tomoriState.server_id}
+							  AND (
+								tomori_id = ${tomoriState.tomori_id}
+								OR tomori_id IS NULL
+							  )
+							LIMIT 1
+						`;
 
 				if (documentRow?.document_id) {
 					const embeddingModel = await loadEmbeddingModelById(
@@ -1189,6 +1222,7 @@ export async function buildContext({
 
 						const chunks = await retrieveRelevantDocumentChunks({
 							serverId: tomoriState.server_id,
+							tomoriId: tomoriState.tomori_id ?? null,
 							query: queryText,
 							embeddingModel,
 							apiKey: decryptedKey,

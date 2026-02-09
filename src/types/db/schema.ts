@@ -267,6 +267,7 @@ export type PersonalMemoryRow = z.infer<typeof personalMemorySchema>;
 export const documentSchema = z.object({
 	document_id: z.number().optional(),
 	server_id: z.number(),
+	tomori_id: z.number().nullable().optional(),
 	uploader_user_id: z.number().nullable().optional(),
 	document_name: z.string(),
 	file_name: z.string().nullable().optional(),

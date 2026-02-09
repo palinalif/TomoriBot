@@ -126,22 +126,17 @@ export async function loadTomoriState(
 			}
 		}
 
-		// 5. Load server memories for this persona (fallback to legacy server-scoped rows)
-		let serverMemoriesRows = await sql`
+		// 5. Load server memories for this persona plus legacy NULL-scoped rows (soak only).
+		const serverMemoriesRows = await sql`
 			SELECT content
 			FROM server_memories
-			WHERE tomori_id = ${tomoriId}
+			WHERE server_id = ${tomoriData.server_id}
+			  AND (
+				tomori_id = ${tomoriId}
+				OR tomori_id IS NULL
+			  )
 			ORDER BY created_at DESC
 		`;
-
-		if (!serverMemoriesRows.length) {
-			serverMemoriesRows = await sql`
-				SELECT content
-				FROM server_memories
-				WHERE server_id = ${tomoriData.server_id}
-				ORDER BY created_at DESC
-			`;
-		}
 
 		// Extract memory content strings into an array
 		const serverMemories = serverMemoriesRows.map(
@@ -364,10 +359,17 @@ export async function loadAllPersonasForServer(
 							? (tomoriRow.alter_triggers ?? [])
 							: (configData.trigger_words ?? []);
 					const personaScopedMemories = memoriesByTomori.get(tomoriId);
+					// Legacy NULL-scoped server memories are a soak fallback for main persona only.
+					// Alters must remain strictly persona-scoped to prevent cross-persona leakage.
+					const includeLegacyFallback = tomoriRow.is_alter !== true;
 					const serverMemories =
 						personaScopedMemories && personaScopedMemories.length > 0
-							? personaScopedMemories
-							: legacyServerMemories;
+							? includeLegacyFallback && legacyServerMemories.length > 0
+								? [...personaScopedMemories, ...legacyServerMemories]
+								: personaScopedMemories
+							: includeLegacyFallback
+								? legacyServerMemories
+								: [];
 
 					const combinedState = {
 						...tomoriRow,
@@ -484,21 +486,21 @@ export async function loadPersonaConfigRow(
 
 /**
  * Loads lineage-scoped personal memories for a user.
- * During soak, callers can include lineage 0 (legacy pool) fallback.
+ * Lineage 0 is the global personal memory namespace shared across personas/servers.
  *
  * @param userId - Internal user ID.
  * @param personaLineageId - Current persona lineage ID.
- * @param includeLegacyFallback - Include lineage 0 memories during transition.
+ * @param includeGlobalMemories - Include lineage 0 global memories alongside lineage memories.
  * @returns Array of validated personal memory rows, newest first.
  */
 export async function loadPersonalMemoriesForUserLineage(
 	userId: number,
 	personaLineageId: number,
-	includeLegacyFallback = true,
+	includeGlobalMemories = true,
 ): Promise<PersonalMemoryRow[]> {
 	try {
 		const rows =
-			includeLegacyFallback && personaLineageId !== 0
+			includeGlobalMemories && personaLineageId !== 0
 				? await sql`
 					SELECT *
 					FROM personal_memories

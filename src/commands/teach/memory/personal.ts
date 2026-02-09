@@ -14,7 +14,8 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
 import {
 	loadTomoriState,
@@ -23,7 +24,7 @@ import {
 	loadPersonalMemoriesForUserLineage,
 } from "../../../utils/db/dbRead";
 import { invalidateUserCache } from "../../../utils/cache/userCache";
-import type { ModalResult } from "../../../types/discord/modal";
+import type { ModalResult, SelectOption } from "../../../types/discord/modal";
 import {
 	validateMemoryContent,
 	checkPersonalMemoryLimit,
@@ -34,6 +35,9 @@ import { addPersonalMemoryByTomori } from "../../../utils/db/dbWrite";
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_personalmemory_add_modal";
 const MEMORY_INPUT_ID = "personal_memory_input";
+const PERSONAL_SCOPE_VALUE = "persona";
+const GLOBAL_SCOPE_VALUE = "global";
+const GLOBAL_PERSONAL_MEMORY_LINEAGE_ID = 0;
 
 // Get memory limits from environment variables
 const memoryLimits = getMemoryLimits();
@@ -49,9 +53,21 @@ export const configureSubcommand = (
 		)
 		.addStringOption((option) =>
 			option
-				.setName("persona")
-				.setDescription("Target persona nickname (defaults to current main persona)")
-				.setRequired(false),
+				.setName("scope")
+				.setDescription(
+					"Memory scope: persona-only (default) or global across all personas/servers",
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: "Persona memories (default)",
+						value: PERSONAL_SCOPE_VALUE,
+					},
+					{
+						name: "Global memories (all personas/servers)",
+						value: GLOBAL_SCOPE_VALUE,
+					},
+				),
 		);
 
 /**
@@ -90,6 +106,11 @@ export async function execute(
 		// We need this even though we're updating the users table
 		// Use user ID for DM context, guild ID for server context
 		const serverId = interaction.guild?.id ?? interaction.user.id;
+		const memoryScope =
+			(interaction.options.getString("scope") as
+				| typeof PERSONAL_SCOPE_VALUE
+				| typeof GLOBAL_SCOPE_VALUE
+				| null) ?? PERSONAL_SCOPE_VALUE;
 		tomoriState = await loadTomoriState(serverId);
 
 		// 3. Check if Tomori is set up on the server (needed for config check)
@@ -103,69 +124,84 @@ export async function execute(
 			return;
 		}
 
-		// 4. Resolve target persona (default: current main persona)
-		const personaNameInput = interaction.options.getString("persona");
-		const allPersonas = await loadAllPersonasForServer(serverId);
-		selectedPersona = personaNameInput
-			? allPersonas.find(
-					(persona) =>
-						persona.tomori_nickname.toLowerCase() ===
-						personaNameInput.toLowerCase(),
-				) ?? null
-			: allPersonas.find((persona) => !persona.is_alter) ?? null;
+		// 4. Resolve target scope and lineage
+		let targetLineageId = GLOBAL_PERSONAL_MEMORY_LINEAGE_ID;
+		let allPersonas: TomoriState[] = [];
+		const modalComponents: Array<
+			| {
+					customId: string;
+					labelKey: string;
+					descriptionKey?: string;
+					placeholder?: string;
+					required?: boolean;
+					options: SelectOption[];
+			  }
+			| {
+					customId: string;
+					labelKey: string;
+					descriptionKey?: string;
+					placeholder?: string;
+					style: TextInputStyle;
+					required: boolean;
+					maxLength: number;
+			  }
+		> = [];
 
-		if (!selectedPersona) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				description: personaNameInput
-					? `Unknown persona "${personaNameInput}".`
-					: "No target persona available.",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+		if (memoryScope === PERSONAL_SCOPE_VALUE) {
+			allPersonas = await loadAllPersonasForServer(serverId);
+			if (allPersonas.length === 0) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.tomori_not_setup_title",
+					descriptionKey: "general.errors.tomori_not_setup_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
 
-		const targetLineageId = selectedPersona.persona_lineage_id ?? 0;
+			const personaSelectOptions: SelectOption[] = allPersonas
+				.filter((persona) => persona.tomori_id !== undefined)
+				.map((persona) => ({
+					label: safeSelectOptionText(persona.tomori_nickname),
+					value: persona.tomori_id?.toString() ?? "",
+					description: persona.is_alter
+						? localizer(
+								locale,
+								"commands.teach.memory.personal.alter_persona_description",
+							)
+						: localizer(
+								locale,
+								"commands.teach.memory.personal.main_persona_description",
+							),
+				}))
+				.filter((option) => option.value !== "");
 
-		// 5. Check personal memory limit before showing modal (better UX)
-		const personalLimitCheck = await checkPersonalMemoryLimit(
-			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
-			userData.user_id!,
-			targetLineageId,
-			true,
-		);
-		if (!personalLimitCheck.isValid) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.memory.personal.limit_exceeded_title",
+			modalComponents.push({
+				customId: "persona_select",
+				labelKey: "commands.teach.memory.personal.persona_select_label",
 				descriptionKey:
-					"commands.teach.memory.personal.limit_exceeded_description",
-				descriptionVars: {
-					max_allowed:
-						personalLimitCheck.maxAllowed || memoryLimits.maxPersonalMemories,
-					current_count: personalLimitCheck.currentCount || 0,
-				},
-				color: ColorCode.ERROR,
+					"commands.teach.memory.personal.persona_select_description",
+				placeholder: "commands.teach.memory.personal.persona_select_placeholder",
+				required: true,
+				options: personaSelectOptions,
 			});
-			return;
 		}
+
+		modalComponents.push({
+			customId: MEMORY_INPUT_ID,
+			labelKey: "commands.teach.memory.personal.memory_input_label",
+			descriptionKey: "commands.teach.memory.personal.modal_description",
+			placeholder: "commands.teach.memory.personal.memory_input_placeholder",
+			style: TextInputStyle.Paragraph,
+			required: true,
+			maxLength: memoryLimits.maxMemoryLength,
+		});
 
 		// 6. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
-		modalResult = await promptWithRawModal(interaction, locale, {
+		modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.memory.personal.modal_title",
-			components: [
-				{
-					customId: MEMORY_INPUT_ID,
-					labelKey: "commands.teach.memory.personal.memory_input_label",
-					descriptionKey: "commands.teach.memory.personal.modal_description",
-					placeholder:
-						"commands.teach.memory.personal.memory_input_placeholder",
-					style: TextInputStyle.Paragraph,
-					required: true,
-					maxLength: memoryLimits.maxMemoryLength,
-				},
-			],
+			components: modalComponents,
 		});
 
 		// 7. Handle modal outcome
@@ -183,6 +219,52 @@ export async function execute(
 		// 9. Get input from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
+		if (memoryScope === PERSONAL_SCOPE_VALUE) {
+			const selectedPersonaId = modalResult.values?.persona_select;
+			selectedPersona =
+				allPersonas.find(
+					(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+				) ?? null;
+			if (!selectedPersona) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+			targetLineageId = selectedPersona.persona_lineage_id ?? 0;
+			if (targetLineageId === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "general.errors.operation_failed_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+		}
+
+		// 9.5 Check personal memory limit after final scope resolution
+		const personalLimitCheck = await checkPersonalMemoryLimit(
+			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
+			userData.user_id!,
+			targetLineageId,
+			memoryScope === GLOBAL_SCOPE_VALUE,
+		);
+		if (!personalLimitCheck.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.memory.personal.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.memory.personal.limit_exceeded_description",
+				descriptionVars: {
+					max_allowed:
+						personalLimitCheck.maxAllowed || memoryLimits.maxPersonalMemories,
+					current_count: personalLimitCheck.currentCount || 0,
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
 
 		// 10. Validate memory content length
 		const contentValidation = validateMemoryContent(newMemory);
@@ -222,7 +304,7 @@ export async function execute(
 			? await loadPersonalMemoriesForUserLineage(
 					userData.user_id,
 					targetLineageId,
-					true,
+					memoryScope === GLOBAL_SCOPE_VALUE,
 				)
 			: [];
 
@@ -248,7 +330,7 @@ export async function execute(
 			const context: ErrorContext = {
 				userId: userData.user_id,
 				serverId: tomoriState.server_id, // Include server context
-				tomoriId: selectedPersona.tomori_id, // Include tomori context
+				tomoriId: selectedPersona?.tomori_id ?? tomoriState.tomori_id,
 				errorType: "DatabaseValidationError",
 				metadata: {
 					command: "teach personalmemory",
@@ -256,6 +338,7 @@ export async function execute(
 					column: "content",
 					operation: "INSERT",
 					userDiscordId: interaction.user.id,
+					memoryScope,
 					targetLineageId,
 					newMemoryContent: newMemory,
 				},

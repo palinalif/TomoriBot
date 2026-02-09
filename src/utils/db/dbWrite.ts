@@ -1000,6 +1000,7 @@ export async function addServerMemoryByTomori(
 	tomoriId: number,
 	taughtByUserId: number,
 	content: string,
+	includeLegacyFallback = true,
 ): Promise<ServerMemoryRow | null> {
 	// 1. Log the attempt to add a server memory.
 	log.info(
@@ -1016,7 +1017,11 @@ export async function addServerMemoryByTomori(
 	}
 
 	// 3. Check server memory limit
-	const serverLimitCheck = await checkServerMemoryLimit(serverId, tomoriId);
+	const serverLimitCheck = await checkServerMemoryLimit(
+		serverId,
+		tomoriId,
+		includeLegacyFallback,
+	);
 	if (!serverLimitCheck.isValid) {
 		log.warn(
 			`Server memory limit exceeded for server ID ${serverId}: ${serverLimitCheck.currentCount}/${serverLimitCheck.maxAllowed}`,

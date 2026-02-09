@@ -7,17 +7,21 @@ import type {
 import { MessageFlags } from "discord.js";
 import type { UserRow, TomoriState } from "@/types/db/schema";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed, replyPaginatedChoices } from "@/utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	replyPaginatedPersonaChoicesV2,
+} from "@/utils/discord/interactionHelper";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { sql } from "@/utils/db/client";
+import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
 		.setName("personaprompt")
-		.setDescription("Clear a persona-specific prompt");
+		.setDescription(localizer("en-US", "commands.forget.personaprompt.description"));
 
 export async function execute(
 	_client: Client,
@@ -40,8 +44,8 @@ export async function execute(
 			interaction.memberPermissions?.has("ManageGuild") ?? false;
 		if (!hasPermission) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.persona.remove.no_permission_title",
-				descriptionKey: "commands.persona.remove.no_permission_description",
+				titleKey: "commands.forget.personaprompt.no_permission_title",
+				descriptionKey: "commands.forget.personaprompt.no_permission_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -75,17 +79,16 @@ export async function execute(
 			return;
 		}
 
-		const personaSelectionItems = allPersonas.map((persona) =>
-			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		const personaSelection = await replyPaginatedPersonaChoicesV2(
+			interaction,
+			locale,
+			{
+				personas: allPersonas,
+				color: ColorCode.INFO,
+				preserveSelectedInteraction: true,
+				onSelect: async () => {},
+			},
 		);
-		const personaSelection = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "general.pagination.select_persona_title",
-			descriptionKey: "general.pagination.select_persona_description",
-			items: personaSelectionItems,
-			color: ColorCode.INFO,
-			preserveSelectedInteraction: true,
-			onSelect: async () => {},
-		});
 
 		if (
 			!personaSelection.success ||
@@ -117,8 +120,9 @@ export async function execute(
 		invalidateTomoriStateCache(serverDiscId);
 
 		await replyInfoEmbed(personaSelectionInteraction, locale, {
-			titleKey: "Success",
-			description: `Cleared persona prompt for "${selectedPersona.tomori_nickname}".`,
+			titleKey: "commands.forget.personaprompt.success_title",
+			descriptionKey: "commands.forget.personaprompt.success_description",
+			descriptionVars: { persona_name: selectedPersona.tomori_nickname },
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {

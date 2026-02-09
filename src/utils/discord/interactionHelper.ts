@@ -11,13 +11,18 @@ import {
 	InteractionResponseType,
 } from "discord.js";
 import type {
+	ActionRowData,
 	ButtonInteraction,
+	ButtonComponentData,
 	ChatInputCommandInteraction,
+	ComponentInContainerData,
+	ContainerComponentData,
 	Message,
 	MessageActionRowComponentBuilder,
 	ModalSubmitInteraction,
 	InteractionReplyOptions,
 	APIAttachment,
+	TopLevelComponentData,
 } from "discord.js";
 import { localizer } from "../text/localizer";
 import { log, ColorCode } from "../misc/logger";
@@ -27,6 +32,7 @@ import type {
 	RawDiscordShard,
 	GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
+import type { TomoriState } from "@/types/db/schema";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
 const modalSelectValues = new Map<string, Record<string, string>>();
@@ -325,13 +331,13 @@ export async function promptWithConfirmation(
 				components: [buttonRow],
 			});
 		} else {
-			// If not, we need to reply first
-			message = (await interaction.reply({
+			// If not, reply first then fetch the created message
+			await interaction.reply({
 				embeds: [embed],
 				components: [buttonRow],
 				flags: MessageFlags.Ephemeral,
-				fetchReply: true, // Important: we need the Message object
-			})) as Message;
+			});
+			message = (await interaction.fetchReply()) as Message;
 		}
 	} catch (error) {
 		log.error("Failed to edit reply in promptWithConfirmation:", error);
@@ -795,6 +801,203 @@ export async function replySummaryEmbed(
 const PAGINATION_TIMEOUT_MS = 120000; // 2 minute timeout for pagination interactions
 const PAGINATION_ITEMS_PER_PAGE = 9; // Number of items to show per page
 const NUMBER_EMOJIS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]; // Emojis for numbered selection
+const PERSONA_PAGINATION_ITEMS_PER_PAGE = 4;
+const PERSONA_SNIPPET_MAX_LENGTH = 200;
+const PERSONA_SELECT_CUSTOM_ID_PREFIX = "persona_select_";
+const PERSONA_PREV_PAGE_CUSTOM_ID = "persona_prev_page";
+const PERSONA_NEXT_PAGE_CUSTOM_ID = "persona_next_page";
+const PERSONA_CANCEL_CUSTOM_ID = "persona_cancel";
+
+interface PersonaPaginatedChoiceOptions {
+	personas: TomoriState[];
+	titleKey?: string;
+	descriptionKey?: string;
+	color?: string | number;
+	onSelect?: (index: number) => Promise<void>;
+	onCancel?: () => Promise<void>;
+	preserveSelectedInteraction?: boolean;
+}
+
+function resolveAccentColor(color?: string | number): number {
+	if (typeof color === "number") {
+		return color;
+	}
+
+	if (typeof color === "string") {
+		const normalized = color.trim().replace("#", "");
+		if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+			return Number.parseInt(normalized, 16);
+		}
+	}
+
+	return Number.parseInt(ColorCode.INFO.replace("#", ""), 16);
+}
+
+function buildV2StatusComponents(
+	locale: string,
+	titleKey: string,
+	descriptionKey: string,
+	color: string | number,
+	descriptionVars?: Record<string, string | number | boolean>,
+): TopLevelComponentData[] {
+	const container: ContainerComponentData<ComponentInContainerData> = {
+		type: ComponentType.Container,
+		accentColor: resolveAccentColor(color),
+		components: [
+			{
+				type: ComponentType.TextDisplay,
+				content: `**${localizer(locale, titleKey)}**`,
+			},
+			{
+				type: ComponentType.TextDisplay,
+				content: localizer(locale, descriptionKey, descriptionVars),
+			},
+		],
+	};
+
+	return [container];
+}
+
+function buildPersonaPageComponents(
+	interaction: ChatInputCommandInteraction | ButtonInteraction,
+	locale: string,
+	options: PersonaPaginatedChoiceOptions,
+	currentPage: number,
+	totalPages: number,
+): TopLevelComponentData[] {
+	const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
+	const endIdx = Math.min(
+		startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE,
+		options.personas.length,
+	);
+	const pagePersonas = options.personas.slice(startIdx, endIdx);
+	const serverAvatarUrl = interaction.guild?.members.me?.displayAvatarURL({
+		extension: "png",
+		size: 128,
+		forceStatic: true,
+	});
+	const fallbackAvatarUrl =
+		serverAvatarUrl ??
+		interaction.client.user?.displayAvatarURL({
+			extension: "png",
+			size: 128,
+			forceStatic: true,
+		}) ??
+		"https://cdn.discordapp.com/embed/avatars/0.png";
+	const containerComponents: ComponentInContainerData[] = [
+		{
+			type: ComponentType.Section,
+			components: [
+				{
+					type: ComponentType.TextDisplay,
+					content: `## ${localizer(
+						locale,
+						options.titleKey ?? "general.pagination.select_persona_title",
+					)}`,
+				},
+			],
+			accessory: {
+				type: ComponentType.Button,
+				style: ButtonStyle.Danger,
+				customId: PERSONA_CANCEL_CUSTOM_ID,
+				emoji: { name: "✖️" },
+			},
+		},
+	];
+
+	pagePersonas.forEach((persona, idx) => {
+		const firstAttribute = persona.attribute_list?.[0]?.trim();
+		const snippet = safeSelectOptionText(
+			firstAttribute ||
+				localizer(locale, "general.pagination.persona_no_attributes"),
+			PERSONA_SNIPPET_MAX_LENGTH,
+		);
+
+		if (idx === 0) {
+			containerComponents.push({
+				type: ComponentType.Separator,
+				divider: true,
+				spacing: 1,
+			});
+		}
+
+		containerComponents.push({
+			type: ComponentType.Section,
+			components: [
+				{
+					type: ComponentType.TextDisplay,
+					content: `### ${safeSelectOptionText(persona.tomori_nickname, 80)}\n${snippet}`,
+				},
+			],
+			accessory: {
+				type: ComponentType.Thumbnail,
+				media: {
+					url: persona.is_alter
+						? persona.webhook_avatar_url || fallbackAvatarUrl
+						: fallbackAvatarUrl,
+				},
+			},
+		});
+
+		containerComponents.push({
+			type: ComponentType.Section,
+			components: [
+				{
+					type: ComponentType.TextDisplay,
+					content: "** **",
+				},
+			],
+			accessory: {
+				type: ComponentType.Button,
+				style: ButtonStyle.Primary,
+				customId: `${PERSONA_SELECT_CUSTOM_ID_PREFIX}${idx}`,
+				label: localizer(locale, "general.pagination.persona_select_button"),
+			},
+		});
+
+		containerComponents.push({
+			type: ComponentType.Separator,
+			divider: true,
+			spacing: 1,
+		});
+	});
+
+	const navRow: ActionRowData<ButtonComponentData> = {
+		type: ComponentType.ActionRow,
+		components: [
+			{
+				type: ComponentType.Button,
+				style: ButtonStyle.Secondary,
+				customId: PERSONA_PREV_PAGE_CUSTOM_ID,
+				emoji: { name: "⬅️" },
+				disabled: currentPage <= 1,
+			},
+			{
+				type: ComponentType.Button,
+				style: ButtonStyle.Secondary,
+				customId: `persona_page_${currentPage}`,
+				label: `${currentPage}/${totalPages}`,
+				disabled: true,
+			},
+			{
+				type: ComponentType.Button,
+				style: ButtonStyle.Secondary,
+				customId: PERSONA_NEXT_PAGE_CUSTOM_ID,
+				emoji: { name: "➡️" },
+				disabled: currentPage >= totalPages,
+			},
+		],
+	};
+	containerComponents.push(navRow);
+
+	const container: ContainerComponentData<ComponentInContainerData> = {
+		type: ComponentType.Container,
+		accentColor: resolveAccentColor(options.color),
+		components: containerComponents,
+	};
+
+	return [container];
+}
 
 /**
  * Displays a paginated list of choices with emoji reactions for selection
@@ -812,7 +1015,8 @@ export async function replyPaginatedChoices(
 	const totalItems = options.items.length;
 	const totalPages = Math.ceil(totalItems / PAGINATION_ITEMS_PER_PAGE);
 	let currentPage = 1;
-	const preserveSelectedInteraction = options.preserveSelectedInteraction === true;
+	const preserveSelectedInteraction =
+		options.preserveSelectedInteraction === true;
 
 	if (totalItems === 0) {
 		// If there are no items, show an empty state
@@ -949,19 +1153,21 @@ export async function replyPaginatedChoices(
 			const baseReplyOptions: Omit<InteractionReplyOptions, "flags"> = {
 				embeds: [embed],
 				components: rows,
-				fetchReply: true, // Needed for awaitMessageComponent
 			};
 
 			// Send or update the message
-			const message =
-				interaction.replied || interaction.deferred
-					? // 1. Edit the reply if already replied/deferred
-						await interaction.editReply(baseReplyOptions)
-					: // 2. Reply initially, adding flags conditionally
-						await interaction.reply({
-							...baseReplyOptions,
-							flags: MessageFlags.Ephemeral,
-						});
+			let message: Message;
+			if (interaction.replied || interaction.deferred) {
+				// 1. Edit the reply if already replied/deferred
+				message = await interaction.editReply(baseReplyOptions);
+			} else {
+				// 2. Reply initially, then fetch the message for awaitMessageComponent
+				await interaction.reply({
+					...baseReplyOptions,
+					flags: MessageFlags.Ephemeral,
+				});
+				message = await interaction.fetchReply();
+			}
 
 			// --- Start Updated Interaction Handling Block ---
 			// This try-catch handles button interactions and timeouts
@@ -1043,7 +1249,8 @@ export async function replyPaginatedChoices(
 								embeds: [
 									createStandardEmbed(locale, {
 										titleKey: "general.errors.operation_failed_title",
-										descriptionKey: "general.errors.operation_failed_description",
+										descriptionKey:
+											"general.errors.operation_failed_description",
 										descriptionVars: { item: selectedItem },
 										color: ColorCode.ERROR,
 									}),
@@ -1164,6 +1371,284 @@ export async function replyPaginatedChoices(
 		return {
 			success: false,
 			reason: "error", // Indicate a general setup error
+		};
+	}
+}
+
+/**
+ * Displays a Components V2 persona selector with avatar cards and inline select buttons.
+ * Designed for persona-targeting flows in /forget commands.
+ */
+export async function replyPaginatedPersonaChoicesV2(
+	interaction: ChatInputCommandInteraction | ButtonInteraction,
+	locale: string,
+	options: PersonaPaginatedChoiceOptions,
+): Promise<PaginatedChoiceResult> {
+	const totalItems = options.personas.length;
+	const totalPages = Math.ceil(totalItems / PERSONA_PAGINATION_ITEMS_PER_PAGE);
+	let currentPage = 1;
+	const preserveSelectedInteraction =
+		options.preserveSelectedInteraction === true;
+	const onSelect = options.onSelect ?? (async () => {});
+
+	if (totalItems === 0) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: options.titleKey ?? "general.pagination.select_persona_title",
+			descriptionKey: "general.pagination.no_items",
+			color: ColorCode.INFO,
+			flags: MessageFlags.Ephemeral,
+		});
+
+		return {
+			success: false,
+			reason: "error",
+		};
+	}
+
+	try {
+		while (true) {
+			const components = buildPersonaPageComponents(
+				interaction,
+				locale,
+				options,
+				currentPage,
+				totalPages,
+			);
+			const baseReplyOptions: Omit<InteractionReplyOptions, "flags"> = {
+				components,
+			};
+
+			let message: Message;
+			if (interaction.replied || interaction.deferred) {
+				message = await interaction.editReply({
+					...baseReplyOptions,
+					flags: MessageFlags.IsComponentsV2,
+				});
+			} else {
+				await interaction.reply({
+					...baseReplyOptions,
+					flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+				});
+				message = await interaction.fetchReply();
+			}
+
+			try {
+				const buttonInteraction = await message.awaitMessageComponent({
+					filter: (i) => i.user.id === interaction.user.id,
+					componentType: ComponentType.Button,
+					time: PAGINATION_TIMEOUT_MS,
+				});
+
+				const customId = buttonInteraction.customId;
+				if (customId === PERSONA_PREV_PAGE_CUSTOM_ID) {
+					currentPage = Math.max(1, currentPage - 1);
+					await buttonInteraction.deferUpdate();
+					continue;
+				}
+
+				if (customId === PERSONA_NEXT_PAGE_CUSTOM_ID) {
+					currentPage = Math.min(totalPages, currentPage + 1);
+					await buttonInteraction.deferUpdate();
+					continue;
+				}
+
+				if (customId === PERSONA_CANCEL_CUSTOM_ID) {
+					await buttonInteraction.deferUpdate();
+					await interaction.editReply({
+						components: buildV2StatusComponents(
+							locale,
+							options.titleKey ?? "general.pagination.select_persona_title",
+							"general.pagination.cancelled",
+							ColorCode.WARN,
+						),
+						flags: MessageFlags.IsComponentsV2,
+					});
+
+					if (options.onCancel) {
+						try {
+							await options.onCancel();
+						} catch (cancelCallbackError) {
+							log.error(
+								"Error executing onCancel callback in replyPaginatedPersonaChoicesV2",
+								cancelCallbackError,
+							);
+						}
+					}
+
+					return {
+						success: false,
+						reason: "cancelled",
+					};
+				}
+
+				if (customId.startsWith(PERSONA_SELECT_CUSTOM_ID_PREFIX)) {
+					const selectionIdx = Number.parseInt(
+						customId.slice(PERSONA_SELECT_CUSTOM_ID_PREFIX.length),
+						10,
+					);
+					if (Number.isNaN(selectionIdx)) {
+						await buttonInteraction.deferUpdate();
+						continue;
+					}
+
+					const startIdx =
+						(currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
+					const absoluteIndex = startIdx + selectionIdx;
+					const selectedPersona = options.personas[absoluteIndex];
+					const selectedItem =
+						selectedPersona?.tomori_nickname ??
+						localizer(locale, "general.unknown");
+
+					if (!selectedPersona) {
+						await buttonInteraction.deferUpdate();
+						await interaction.editReply({
+							components: buildV2StatusComponents(
+								locale,
+								"general.errors.invalid_option_title",
+								"general.errors.invalid_option_description",
+								ColorCode.ERROR,
+							),
+							flags: MessageFlags.IsComponentsV2,
+						});
+						return {
+							success: false,
+							reason: "error",
+						};
+					}
+
+					if (preserveSelectedInteraction) {
+						try {
+							await onSelect(absoluteIndex);
+							return {
+								success: true,
+								selectedIndex: absoluteIndex,
+								selectedItem,
+								interaction: buttonInteraction,
+							};
+						} catch (selectCallbackError) {
+							log.warn(
+								"Error occurred during onSelect callback execution:",
+								selectCallbackError,
+							);
+							await buttonInteraction.reply({
+								embeds: [
+									createStandardEmbed(locale, {
+										titleKey: "general.errors.operation_failed_title",
+										descriptionKey:
+											"general.errors.operation_failed_description",
+										descriptionVars: { item: selectedItem },
+										color: ColorCode.ERROR,
+									}),
+								],
+								flags: MessageFlags.Ephemeral,
+							});
+							return {
+								success: false,
+								reason: "error",
+							};
+						}
+					}
+
+					await buttonInteraction.deferUpdate();
+
+					try {
+						await onSelect(absoluteIndex);
+						await interaction.editReply({
+							components: buildV2StatusComponents(
+								locale,
+								options.titleKey ?? "general.pagination.select_persona_title",
+								"general.pagination.item_selected",
+								ColorCode.SUCCESS,
+								{ item: selectedItem },
+							),
+							flags: MessageFlags.IsComponentsV2,
+						});
+
+						return {
+							success: true,
+							selectedIndex: absoluteIndex,
+							selectedItem,
+						};
+					} catch (selectCallbackError) {
+						log.warn(
+							"Error occurred during onSelect callback execution:",
+							selectCallbackError,
+						);
+						await interaction.editReply({
+							components: buildV2StatusComponents(
+								locale,
+								"general.errors.operation_failed_title",
+								"general.errors.operation_failed_description",
+								ColorCode.ERROR,
+								{ item: selectedItem },
+							),
+							flags: MessageFlags.IsComponentsV2,
+						});
+						return {
+							success: false,
+							reason: "error",
+						};
+					}
+				}
+			} catch (_error) {
+				log.warn(
+					`Pagination interaction timed out for user ${interaction.user.id}`,
+				);
+				await interaction.editReply({
+					components: buildV2StatusComponents(
+						locale,
+						options.titleKey ?? "general.pagination.select_persona_title",
+						"general.pagination.timeout",
+						ColorCode.WARN,
+					),
+					flags: MessageFlags.IsComponentsV2,
+				});
+
+				return {
+					success: false,
+					reason: "timeout",
+				};
+			}
+		}
+	} catch (error) {
+		log.error(
+			"Unexpected error during replyPaginatedPersonaChoicesV2 setup:",
+			error,
+		);
+
+		try {
+			if (interaction.replied || interaction.deferred) {
+				await interaction.editReply({
+					components: buildV2StatusComponents(
+						locale,
+						"general.errors.unknown_error_title",
+						"general.errors.unknown_error_description",
+						ColorCode.ERROR,
+					),
+					flags: MessageFlags.IsComponentsV2,
+				});
+			} else {
+				await replyInfoEmbed(
+					interaction,
+					locale,
+					{
+						titleKey: "general.errors.unknown_error_title",
+						descriptionKey: "general.errors.unknown_error_description",
+						color: ColorCode.ERROR,
+					},
+					MessageFlags.Ephemeral,
+				);
+			}
+		} catch (finalErrorReplyError) {
+			log.error(
+				"Failed even to send final error message in replyPaginatedPersonaChoicesV2:",
+				finalErrorReplyError,
+			);
+		}
+
+		return {
+			success: false,
+			reason: "error",
 		};
 	}
 }

@@ -17,7 +17,7 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
+	replyPaginatedPersonaChoicesV2,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
@@ -185,17 +185,16 @@ export async function execute(
 			return;
 		}
 
-		const personaSelectionItems = allPersonas.map((persona) =>
-			`${persona.tomori_nickname}${persona.is_alter ? " [Alter]" : " [Main]"}`,
+		const personaSelection = await replyPaginatedPersonaChoicesV2(
+			interaction,
+			locale,
+			{
+				personas: allPersonas,
+				color: ColorCode.INFO,
+				preserveSelectedInteraction: true,
+				onSelect: async () => {},
+			},
 		);
-		const personaSelection = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "general.pagination.select_persona_title",
-			descriptionKey: "general.pagination.select_persona_description",
-			items: personaSelectionItems,
-			color: ColorCode.INFO,
-			preserveSelectedInteraction: true,
-			onSelect: async () => {},
-		});
 
 		if (
 			!personaSelection.success ||
@@ -234,19 +233,31 @@ export async function execute(
 			return;
 		}
 
-		// 5. Fetch all server memories for this server from the server_memories table
-		let memoriesQuery = sql`
-			SELECT server_memory_id, content, user_id
-			FROM server_memories
-			WHERE server_id = ${
-				// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
-				tomoriState.server_id!
-			}
-			  AND (
-				tomori_id = ${selectedPersona.tomori_id}
-				OR tomori_id IS NULL
-			  )
-		`;
+		// 5. Fetch persona-scoped server memories.
+		// Legacy NULL rows are visible only when the selected persona is main.
+		const includeLegacyFallback = selectedPersona.is_alter !== true;
+		let memoriesQuery = includeLegacyFallback
+			? sql`
+				SELECT server_memory_id, content, user_id
+				FROM server_memories
+				WHERE server_id = ${
+					// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
+					tomoriState.server_id!
+				}
+				  AND (
+					tomori_id = ${selectedPersona.tomori_id}
+					OR tomori_id IS NULL
+				  )
+			`
+			: sql`
+				SELECT server_memory_id, content, user_id
+				FROM server_memories
+				WHERE server_id = ${
+					// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
+					tomoriState.server_id!
+				}
+				  AND tomori_id = ${selectedPersona.tomori_id}
+			`;
 
 		if (!hasManagePermission) {
 			// If user does NOT have ManageGuild permission, only fetch their own memories

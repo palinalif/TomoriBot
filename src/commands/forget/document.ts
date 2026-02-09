@@ -11,6 +11,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedPersonaChoicesV2,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
@@ -18,14 +19,17 @@ import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type { SelectOption } from "../../types/discord/modal";
 import type { ErrorContext, TomoriState, UserRow } from "../../types/db/schema";
 
 const MODAL_CUSTOM_ID = "forget_document_modal";
 const DOCUMENT_SELECT_ID = "document_select";
+type DocumentScope = "persona" | "serverwide";
 
 async function performDocumentRemoval(
 	tomoriState: TomoriState,
+	targetTomoriId: number | null,
 	documentId: number,
 	userData: UserRow,
 	replyInteraction:
@@ -34,15 +38,27 @@ async function performDocumentRemoval(
 		| ModalSubmitInteraction,
 	locale: string,
 ): Promise<void> {
-	const [deletedRow] = await sql`
-		DELETE FROM documents
-		WHERE document_id = ${documentId}
-		RETURNING document_name
-	`;
+	const deletedRows =
+		targetTomoriId === null
+			? await sql`
+				DELETE FROM documents
+				WHERE document_id = ${documentId}
+				  AND server_id = ${tomoriState.server_id}
+				  AND tomori_id IS NULL
+				RETURNING document_name
+			`
+			: await sql`
+				DELETE FROM documents
+				WHERE document_id = ${documentId}
+				  AND server_id = ${tomoriState.server_id}
+				  AND tomori_id = ${targetTomoriId}
+				RETURNING document_name
+			`;
+	const [deletedRow] = deletedRows;
 
 	if (!deletedRow?.document_name) {
 		const context: ErrorContext = {
-			tomoriId: tomoriState.tomori_id,
+			tomoriId: targetTomoriId ?? tomoriState.tomori_id,
 			serverId: tomoriState.server_id,
 			userId: userData.user_id,
 			errorType: "DatabaseUpdateError",
@@ -83,7 +99,31 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("document")
-		.setDescription(localizer("en-US", "commands.forget.document.description"));
+		.setDescription(localizer("en-US", "commands.forget.document.description"))
+		.addStringOption((option) =>
+			option
+				.setName("scope")
+				.setDescription(
+					localizer("en-US", "commands.forget.document.scope_description"),
+				)
+				.addChoices(
+					{
+						name: localizer(
+							"en-US",
+							"commands.forget.document.scope_choice_persona",
+						),
+						value: "persona",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.forget.document.scope_choice_serverwide",
+						),
+						value: "serverwide",
+					},
+				)
+				.setRequired(false),
+		);
 
 export async function execute(
 	_client: Client,
@@ -106,6 +146,8 @@ export async function execute(
 	}
 
 	let tomoriState: TomoriState | null = null;
+	let targetTomoriId: number | null = null;
+	let personaSelectionInteraction: ButtonInteraction | null = null;
 
 	try {
 		if (!ragEnabled) {
@@ -143,21 +185,80 @@ export async function execute(
 			return;
 		}
 
-		const documents = await sql<
-			Array<{ document_id: number; document_name: string }>
-		>`
-			SELECT document_id, document_name
-			FROM documents
-			WHERE server_id = ${tomoriState.server_id}
-			ORDER BY created_at DESC
-		`;
+		const scopeInput = interaction.options.getString("scope");
+		const scope: DocumentScope =
+			scopeInput === "serverwide" ? "serverwide" : "persona";
+
+		if (scope === "persona") {
+			const allPersonas = await loadAllPersonasForServer(
+				interaction.guild?.id ?? interaction.user.id,
+			);
+			if (allPersonas.length === 0) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.tomori_not_setup_title",
+					descriptionKey: "general.errors.tomori_not_setup_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const personaSelection = await replyPaginatedPersonaChoicesV2(
+				interaction,
+				locale,
+				{
+					personas: allPersonas,
+					color: ColorCode.INFO,
+					preserveSelectedInteraction: true,
+					onSelect: async () => {},
+				},
+			);
+
+			if (
+				!personaSelection.success ||
+				personaSelection.selectedIndex === undefined ||
+				!personaSelection.interaction
+			) {
+				return;
+			}
+
+			personaSelectionInteraction = personaSelection.interaction;
+			const selectedPersona =
+				allPersonas[personaSelection.selectedIndex] ?? null;
+			if (!selectedPersona?.tomori_id) {
+				await replyInfoEmbed(personaSelectionInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+			targetTomoriId = selectedPersona.tomori_id;
+		}
+
+		const selectionInteraction = personaSelectionInteraction ?? interaction;
+		const documents =
+			targetTomoriId === null
+				? await sql<Array<{ document_id: number; document_name: string }>>`
+					SELECT document_id, document_name
+					FROM documents
+					WHERE server_id = ${tomoriState.server_id}
+					  AND tomori_id IS NULL
+					ORDER BY created_at DESC
+				`
+				: await sql<Array<{ document_id: number; document_name: string }>>`
+					SELECT document_id, document_name
+					FROM documents
+					WHERE server_id = ${tomoriState.server_id}
+					  AND tomori_id = ${targetTomoriId}
+					ORDER BY created_at DESC
+				`;
 
 		if (!documents || documents.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(selectionInteraction, locale, {
 				titleKey: "commands.forget.document.none_title",
 				descriptionKey: "commands.forget.document.none_description",
 				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -167,20 +268,24 @@ export async function execute(
 			value: doc.document_id.toString(),
 		}));
 
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
-			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.forget.document.modal_title",
-			components: [
-				{
-					customId: DOCUMENT_SELECT_ID,
-					labelKey: "commands.forget.document.select_label",
-					descriptionKey: "commands.forget.document.select_description",
-					placeholder: "commands.forget.document.select_placeholder",
-					required: true,
-					options: documentOptions,
-				},
-			],
-		});
+		const modalResult = await promptWithPaginatedModal(
+			selectionInteraction,
+			locale,
+			{
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.forget.document.modal_title",
+				components: [
+					{
+						customId: DOCUMENT_SELECT_ID,
+						labelKey: "commands.forget.document.select_label",
+						descriptionKey: "commands.forget.document.select_description",
+						placeholder: "commands.forget.document.select_placeholder",
+						required: true,
+						options: documentOptions,
+					},
+				],
+			},
+		);
 
 		if (modalResult.outcome !== "submit") {
 			log.info(
@@ -190,11 +295,10 @@ export async function execute(
 		}
 
 		if (!modalResult.interaction || !modalResult.values) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(selectionInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
 				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -215,6 +319,7 @@ export async function execute(
 
 		await performDocumentRemoval(
 			tomoriState,
+			targetTomoriId,
 			selectedId,
 			userData,
 			modalSubmitInteraction,
@@ -224,7 +329,7 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "forget document",
@@ -238,7 +343,13 @@ export async function execute(
 			context,
 		);
 
-		await replyInfoEmbed(interaction, locale, {
+		const errorReplyTarget =
+			personaSelectionInteraction &&
+			!personaSelectionInteraction.deferred &&
+			!personaSelectionInteraction.replied
+				? personaSelectionInteraction
+				: interaction;
+		await replyInfoEmbed(errorReplyTarget, locale, {
 			titleKey: "general.errors.unknown_error_title",
 			descriptionKey: "general.errors.unknown_error_description",
 			color: ColorCode.ERROR,

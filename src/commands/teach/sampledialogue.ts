@@ -2,6 +2,7 @@ import type {
 	ChatInputCommandInteraction,
 	Client,
 	SlashCommandSubcommandBuilder,
+	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import { sql } from "@/utils/db/client";
@@ -15,13 +16,15 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
+import type { SelectOption } from "../../types/discord/modal";
 import {
 	checkSampleDialogueLimit,
 	getMemoryLimits,
@@ -33,6 +36,7 @@ const memoryLimits = getMemoryLimits();
 
 // Rule 20: Constants (Modal IDs, Input IDs)
 const MODAL_CUSTOM_ID = "teach_sampledialogue_add_modal";
+const PERSONA_SELECT_ID = "persona_select";
 const USER_INPUT_ID = "user_input";
 const BOT_INPUT_ID = "bot_input";
 
@@ -44,12 +48,6 @@ export const configureSubcommand = (
 		.setName("sampledialogue")
 		.setDescription(
 			localizer("en-US", "commands.teach.sampledialogue.description"),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("persona")
-				.setDescription("Target persona nickname (defaults to current main persona)")
-				.setRequired(false),
 		);
 
 /**
@@ -77,6 +75,10 @@ export async function execute(
 		return;
 	}
 
+	let tomoriState: TomoriState | null = null;
+	let selectedPersona: TomoriState | null = null;
+	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
+
 	try {
 		// 2. Check if user has Manage Server permission - used for blacklist and teaching restriction bypass
 		const hasManagePermission =
@@ -100,7 +102,7 @@ export async function execute(
 		}
 
 		// 4. Load server's Tomori state (Rule 17)
-		const tomoriState: TomoriState | null = await getCachedTomoriState(
+		tomoriState = await getCachedTomoriState(
 			interaction.guild?.id ?? interaction.user.id,
 		);
 
@@ -115,25 +117,30 @@ export async function execute(
 			return;
 		}
 
-		// 6. Resolve target persona (default: current main persona)
-		const personaNameInput = interaction.options.getString("persona");
+		// 6. Resolve target persona options
 		const allPersonas = await loadAllPersonasForServer(
 			interaction.guild?.id ?? interaction.user.id,
 		);
-		const selectedPersona = personaNameInput
-			? allPersonas.find(
-					(persona) =>
-						persona.tomori_nickname.toLowerCase() ===
-						personaNameInput.toLowerCase(),
-				) ?? null
-			: allPersonas.find((persona) => !persona.is_alter) ?? null;
-
-		if (!selectedPersona?.tomori_id) {
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(
+							locale,
+							"commands.teach.sampledialogue.alter_persona_description",
+						)
+					: localizer(
+							locale,
+							"commands.teach.sampledialogue.main_persona_description",
+						),
+			}))
+			.filter((option) => option.value !== "");
+		if (personaSelectOptions.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.invalid_option_title",
-				description: personaNameInput
-					? `Unknown persona "${personaNameInput}".`
-					: "No target persona available.",
+				descriptionKey: "general.errors.invalid_option_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -156,31 +163,22 @@ export async function execute(
 			return;
 		}
 
-		// 8. Check sample dialogue limit before showing modal (better UX)
-		const dialogueLimitCheck = await checkSampleDialogueLimit(
-			selectedPersona.tomori_id,
-		);
-		if (!dialogueLimitCheck.isValid) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.sampledialogue.limit_exceeded_title",
-				descriptionKey:
-					"commands.teach.sampledialogue.limit_exceeded_description",
-				descriptionVars: {
-					current_count: dialogueLimitCheck.currentCount?.toString() || "0",
-					max_allowed: (dialogueLimitCheck.maxAllowed || 10).toString(),
-				},
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
-		// 9. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
+		// 8. Prompt user with persona selector + dialogue inputs
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
-		const modalResult = await promptWithRawModal(interaction, locale, {
+		const modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.sampledialogue.modal_title",
 			components: [
+				{
+					customId: PERSONA_SELECT_ID,
+					labelKey: "commands.teach.sampledialogue.persona_select_label",
+					descriptionKey:
+						"commands.teach.sampledialogue.persona_select_description",
+					placeholder:
+						"commands.teach.sampledialogue.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
 				{
 					customId: USER_INPUT_ID,
 					// Ensure this locale key's value is <= 45 chars
@@ -214,7 +212,42 @@ export async function execute(
 		}
 
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit guarantees interaction exists
-		const modalSubmitInteraction = modalResult.interaction!;
+		modalSubmitInteraction = modalResult.interaction!;
+
+		// Resolve selected persona from modal
+		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees value
+		const selectedPersonaId = modalResult.values![PERSONA_SELECT_ID];
+		selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 8.5 Check sample dialogue limit after persona resolution
+		const dialogueLimitCheck = await checkSampleDialogueLimit(
+			selectedPersona.tomori_id,
+		);
+		if (!dialogueLimitCheck.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.sampledialogue.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.sampledialogue.limit_exceeded_description",
+				descriptionVars: {
+					current_count: dialogueLimitCheck.currentCount?.toString() || "0",
+					max_allowed: (dialogueLimitCheck.maxAllowed || 10).toString(),
+				},
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
 
 		// 11. Get inputs from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
@@ -314,6 +347,8 @@ export async function execute(
 		// Rule 22: Log error with context
 		const context: ErrorContext = {
 			userId: userData.user_id,
+			serverId: tomoriState?.server_id,
+			tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "teach sampledialogue",
@@ -323,8 +358,11 @@ export async function execute(
 		};
 		await log.error("Error in /teach sampledialogue command", error, context);
 
-		if (interaction.replied || interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
+		const errorReplyInteraction =
+			modalSubmitInteraction ??
+			(interaction.replied || interaction.deferred ? interaction : null);
+		if (errorReplyInteraction) {
+			await replyInfoEmbed(errorReplyInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
 				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,

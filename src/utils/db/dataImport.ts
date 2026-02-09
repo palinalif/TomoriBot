@@ -211,14 +211,30 @@ async function replaceServerMemories(
 ): Promise<void> {
 	// 1. Delete all existing server memories for target persona scope
 	if (tomoriId) {
-		await sql`
-			DELETE FROM server_memories
-			WHERE server_id = ${serverId}
-			  AND (
-				tomori_id = ${tomoriId}
-				OR tomori_id IS NULL
-			  )
+		const [targetPersonaMeta] = await sql<Array<{ is_alter: boolean }>>`
+			SELECT is_alter
+			FROM tomoris
+			WHERE tomori_id = ${tomoriId}
+			  AND server_id = ${serverId}
+			LIMIT 1
 		`;
+		const includeLegacyFallback = targetPersonaMeta?.is_alter !== true;
+		if (includeLegacyFallback) {
+			await sql`
+				DELETE FROM server_memories
+				WHERE server_id = ${serverId}
+				  AND (
+					tomori_id = ${tomoriId}
+					OR tomori_id IS NULL
+				  )
+			`;
+		} else {
+			await sql`
+				DELETE FROM server_memories
+				WHERE server_id = ${serverId}
+				  AND tomori_id = ${tomoriId}
+			`;
+		}
 	} else {
 		await sql`
 			DELETE FROM server_memories

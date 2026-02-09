@@ -2,11 +2,16 @@ import type {
 	ChatInputCommandInteraction,
 	Client,
 	SlashCommandSubcommandBuilder,
+	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
+} from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { memoryGuard, IMPORT_LIMITS } from "../../utils/security/rateLimiter";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
@@ -21,6 +26,10 @@ import type {
 	PersonalExportData,
 	ServerExportData,
 } from "../../types/db/dataExport";
+import type { SelectOption } from "../../types/discord/modal";
+
+const IMPORT_PERSONA_MODAL_ID = "data_import_persona_modal";
+const IMPORT_PERSONA_SELECT_ID = "persona_select";
 
 /**
  * Helper function to localize error messages from utility functions
@@ -99,14 +108,6 @@ export const configureSubcommand = (
 						value: "no",
 					},
 				),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("persona")
-				.setDescription(
-					"Target persona nickname for memory import (defaults to active main persona)",
-				)
-				.setRequired(false),
 		);
 
 /**
@@ -123,11 +124,14 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
+	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
+	let responseInteraction:
+		| ChatInputCommandInteraction
+		| ModalSubmitInteraction = interaction;
+
 	try {
 		// 1. Check confirmation
 		const confirmation = interaction.options.getString("confirmation", true);
-		const personaNameInput = interaction.options.getString("persona");
-		const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 
 		if (confirmation !== "yes") {
 			await replyInfoEmbed(interaction, locale, {
@@ -163,13 +167,87 @@ export async function execute(
 			return;
 		}
 
+		// 3.5 Prompt persona selection before long-running work
+		let targetTomoriId: number | undefined;
+		let targetPersonaLineageId = 0;
+		const personas = await loadAllPersonasForServer(serverDiscId);
+		if (personas.length > 0) {
+			const personaSelectOptions: SelectOption[] = personas
+				.filter((persona) => persona.tomori_id !== undefined)
+				.map((persona) => ({
+					label: safeSelectOptionText(persona.tomori_nickname),
+					value: persona.tomori_id?.toString() ?? "",
+					description: persona.is_alter
+						? localizer(
+								locale,
+								"commands.data.import.alter_persona_description",
+							)
+						: localizer(
+								locale,
+								"commands.data.import.main_persona_description",
+							),
+				}))
+				.filter((option) => option.value !== "");
+			if (personaSelectOptions.length > 0) {
+				const personaModalResult = await promptWithPaginatedModal(
+					interaction,
+					locale,
+					{
+						modalCustomId: IMPORT_PERSONA_MODAL_ID,
+						modalTitleKey: "commands.data.import.persona_modal_title",
+						components: [
+							{
+								customId: IMPORT_PERSONA_SELECT_ID,
+								labelKey: "commands.data.import.persona_select_label",
+								descriptionKey:
+									"commands.data.import.persona_select_description",
+								placeholder:
+									"commands.data.import.persona_select_placeholder",
+								required: true,
+								options: personaSelectOptions,
+							},
+						],
+					},
+				);
+				if (personaModalResult.outcome !== "submit") {
+					log.info(
+						`Data import persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+					);
+					return;
+				}
+
+				const modalSubmitInteraction = personaModalResult.interaction;
+				if (!modalSubmitInteraction) {
+					return;
+				}
+				responseInteraction = modalSubmitInteraction;
+				const selectedPersonaId =
+					personaModalResult.values?.[IMPORT_PERSONA_SELECT_ID];
+				const selectedPersona =
+					personas.find(
+						(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+					) ?? null;
+				if (!selectedPersona) {
+					await replyInfoEmbed(responseInteraction, locale, {
+						titleKey: "general.errors.invalid_option_title",
+						descriptionKey: "general.errors.invalid_option_description",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				targetTomoriId = selectedPersona.tomori_id;
+				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+			}
+		}
+
 		// 4. Defer reply while we process
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 4.5. Memory guard check (defense-in-depth)
 		const memCheck = memoryGuard.checkMemory();
 		if (memCheck.status === "critical") {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -207,7 +285,7 @@ export async function execute(
 			// Handle timeout vs other errors
 			if (error instanceof Error && error.name === "AbortError") {
 				log.warn("Data import download timed out");
-				await interaction.editReply({
+				await responseInteraction.editReply({
 					embeds: [
 						new EmbedBuilder()
 							.setTitle(
@@ -224,7 +302,7 @@ export async function execute(
 
 			// Parse/download errors
 			log.error("Failed to download or parse import file:", error as Error);
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -246,7 +324,7 @@ export async function execute(
 		const validation = validateImportFile(jsonData);
 
 		if (!validation.valid || !validation.type || !validation.data) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -274,7 +352,7 @@ export async function execute(
 					interaction.memberPermissions?.has("ManageGuild") ?? false;
 
 				if (!hasPermission) {
-					await interaction.editReply({
+					await responseInteraction.editReply({
 						embeds: [
 							new EmbedBuilder()
 								.setTitle(
@@ -294,48 +372,7 @@ export async function execute(
 			}
 		}
 
-		// 8. Import data based on type
-		let targetTomoriId: number | undefined;
-		let targetPersonaLineageId = 0;
-		if (validation.type === "personal" || validation.type === "server") {
-			const personas = await loadAllPersonasForServer(serverDiscId);
-			if (personas.length > 0) {
-				const selectedPersona = personaNameInput
-					? personas.find(
-							(persona) =>
-								persona.tomori_nickname.toLowerCase() ===
-								personaNameInput.toLowerCase(),
-						)
-					: personas.find((persona) => !persona.is_alter) ?? personas[0];
-
-				if (!selectedPersona) {
-					await interaction.editReply({
-						embeds: [
-							new EmbedBuilder()
-								.setTitle(
-									localizer(locale, "general.errors.invalid_option_title"),
-								)
-								.setDescription(`Unknown persona "${personaNameInput}".`)
-								.setColor(ColorCode.ERROR),
-						],
-					});
-					return;
-				}
-
-				targetTomoriId = selectedPersona.tomori_id;
-				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
-			} else if (personaNameInput) {
-				await interaction.editReply({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle(localizer(locale, "general.errors.invalid_option_title"))
-							.setDescription(`Unknown persona "${personaNameInput}".`)
-							.setColor(ColorCode.ERROR),
-					],
-				});
-				return;
-			}
-		}
+		// 8. Import data based on type using selected persona scope
 
 		let importResult:
 			| Awaited<ReturnType<typeof importPersonalData>>
@@ -354,7 +391,7 @@ export async function execute(
 				targetTomoriId,
 			);
 		} else {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "general.errors.invalid_option_title"))
@@ -369,7 +406,7 @@ export async function execute(
 
 		// 9. Handle import result
 		if (!importResult.success) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.import.failed_title"))
@@ -403,7 +440,7 @@ export async function execute(
 				? "commands.data.import.success_description_server"
 				: "commands.data.import.success_description";
 
-		await interaction.editReply({
+		await responseInteraction.editReply({
 			embeds: [
 				new EmbedBuilder()
 					.setTitle(localizer(locale, "commands.data.import.success_title"))
@@ -424,15 +461,15 @@ export async function execute(
 		});
 
 		// If we haven't replied yet, reply with error
-		if (!interaction.replied && !interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
+		if (!responseInteraction.replied && !responseInteraction.deferred) {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
 				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 		} else {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "general.errors.unknown_error_title"))

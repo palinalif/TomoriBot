@@ -212,17 +212,27 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 		try {
 			if (!isPersonalUpdate) {
 				// 1) Server memory update (server_id scoped)
-				const [updatedServerMemory] = await sql`
-					UPDATE server_memories
-					SET content = ${newContent}, updated_at = CURRENT_TIMESTAMP
-					WHERE server_memory_id = ${memoryId}
-					  AND server_id = ${tomoriState.server_id}
-					  AND (
-						tomori_id = ${tomoriState.tomori_id}
-						OR tomori_id IS NULL
-					  )
-					RETURNING server_memory_id, content, user_id
-				`;
+				const includeLegacyFallback = tomoriState.is_alter !== true;
+				const [updatedServerMemory] = includeLegacyFallback
+					? await sql`
+						UPDATE server_memories
+						SET content = ${newContent}, updated_at = CURRENT_TIMESTAMP
+						WHERE server_memory_id = ${memoryId}
+						  AND server_id = ${tomoriState.server_id}
+						  AND (
+							tomori_id = ${tomoriState.tomori_id}
+							OR tomori_id IS NULL
+						  )
+						RETURNING server_memory_id, content, user_id
+					`
+					: await sql`
+						UPDATE server_memories
+						SET content = ${newContent}, updated_at = CURRENT_TIMESTAMP
+						WHERE server_memory_id = ${memoryId}
+						  AND server_id = ${tomoriState.server_id}
+						  AND tomori_id = ${tomoriState.tomori_id}
+						RETURNING server_memory_id, content, user_id
+					`;
 
 				if (updatedServerMemory) {
 					const resolvedTriggererUserId = context.message?.author?.id || context.userId;

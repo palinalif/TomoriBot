@@ -8,6 +8,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS documents (
   document_id SERIAL PRIMARY KEY,
   server_id INT NOT NULL,
+  tomori_id INT NULL, -- NULL = serverwide document, non-NULL = persona-scoped document
   uploader_user_id INT NULL,
   document_name TEXT NOT NULL,
   file_name TEXT,
@@ -16,10 +17,53 @@ CREATE TABLE IF NOT EXISTS documents (
   text_content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (server_id, document_name),
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
-  FOREIGN KEY (uploader_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+  FOREIGN KEY (uploader_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+  FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
 );
+
+-- Add tomori_id column for existing databases
+SELECT add_column_if_not_exists('documents', 'tomori_id', 'INTEGER');
+
+-- Normalize stale persona references to serverwide scope (existing pre-scope rows are already NULL)
+UPDATE documents
+SET tomori_id = NULL
+WHERE tomori_id IS NOT NULL
+  AND tomori_id NOT IN (SELECT tomori_id FROM tomoris);
+
+-- Add FK for documents.tomori_id if missing
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'documents_tomori_id_fkey'
+    ) THEN
+        ALTER TABLE documents
+        ADD CONSTRAINT documents_tomori_id_fkey
+        FOREIGN KEY (tomori_id)
+        REFERENCES tomoris(tomori_id)
+        ON DELETE CASCADE;
+    END IF;
+END $$;
+
+-- Drop old unique constraint that only allowed one name per server
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'documents_server_id_document_name_key'
+    ) THEN
+        ALTER TABLE documents DROP CONSTRAINT documents_server_id_document_name_key;
+    END IF;
+END $$;
+
+-- Scope-aware uniqueness: allow same document name across different personas,
+-- but keep names unique within each scope (persona or serverwide).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_scope_name_unique
+ON documents(server_id, COALESCE(tomori_id, -1), document_name);
+CREATE INDEX IF NOT EXISTS idx_documents_server_tomori ON documents(server_id, tomori_id);
 
 -- Create updated_at trigger for documents table
 DROP TRIGGER IF EXISTS update_documents_timestamp ON documents;

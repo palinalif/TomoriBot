@@ -1,6 +1,6 @@
 {
 	"name": "tomoribot",
-	"version": "0.7.82",
+	"version": "0.7.83",
 	"description": "Customizable AI Assistant Discord Bot",
 	"main": "./src/index.ts",
 	"type": "module",
@@ -14,6 +14,7 @@
 		"seed-db": "bun run scripts/seedDb.ts",
 		"nuke-db": "bun run scripts/nukeDb.ts",
 		"backup-db": "bun run scripts/backupDb.ts",
+		"cleanup-legacy-fallbacks": "bun run scripts/cleanupLegacyFallbacksV2.ts",
 		"migrate-nullable-user-id": "bun run scripts/migrateNullableUserId.ts",
 		"delete-test-server": "bun run scripts/deleteTestServer.ts",
 		"lint": "bunx @biomejs/biome lint --fix",

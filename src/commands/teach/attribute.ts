@@ -15,14 +15,15 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
-import type { ModalResult } from "../../types/discord/modal";
+import type { ModalResult, SelectOption } from "../../types/discord/modal";
 import {
 	checkAttributeLimit,
 	getMemoryLimits,
@@ -34,6 +35,7 @@ const memoryLimits = getMemoryLimits();
 
 // Rule 20: Constants (Modal IDs, Input IDs)
 const MODAL_CUSTOM_ID = "teach_attribute_add_modal";
+const PERSONA_SELECT_ID = "persona_select";
 const ATTRIBUTE_INPUT_ID = "attribute_input";
 
 // Rule 21: Configure the subcommand
@@ -42,13 +44,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("attribute")
-		.setDescription(localizer("en-US", "commands.teach.attribute.description"))
-		.addStringOption((option) =>
-			option
-				.setName("persona")
-				.setDescription("Target persona nickname (defaults to current main persona)")
-				.setRequired(false),
-		);
+		.setDescription(localizer("en-US", "commands.teach.attribute.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -118,25 +114,30 @@ export async function execute(
 			return;
 		}
 
-		// 6. Resolve target persona (default: current main persona)
-		const personaNameInput = interaction.options.getString("persona");
+		// 6. Resolve target persona options
 		const allPersonas = await loadAllPersonasForServer(
 			interaction.guild?.id ?? interaction.user.id,
 		);
-		selectedPersona = personaNameInput
-			? allPersonas.find(
-					(persona) =>
-						persona.tomori_nickname.toLowerCase() ===
-						personaNameInput.toLowerCase(),
-				) ?? null
-			: allPersonas.find((persona) => !persona.is_alter) ?? null;
-
-		if (!selectedPersona?.tomori_id) {
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(
+							locale,
+							"commands.teach.attribute.alter_persona_description",
+						)
+					: localizer(
+							locale,
+							"commands.teach.attribute.main_persona_description",
+						),
+			}))
+			.filter((option) => option.value !== "");
+		if (personaSelectOptions.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.invalid_option_title",
-				description: personaNameInput
-					? `Unknown persona "${personaNameInput}".`
-					: "No target persona available.",
+				descriptionKey: "general.errors.invalid_option_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -158,29 +159,21 @@ export async function execute(
 			return;
 		}
 
-		// 8. Check attribute limit before showing modal (better UX)
-		const attributeLimitCheck = await checkAttributeLimit(
-			selectedPersona.tomori_id,
-		);
-		if (!attributeLimitCheck.isValid) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.attribute.limit_exceeded_title",
-				descriptionKey: "commands.teach.attribute.limit_exceeded_description",
-				descriptionVars: {
-					current_count: attributeLimitCheck.currentCount?.toString() || "0",
-					max_allowed: (attributeLimitCheck.maxAllowed || 25).toString(),
-				},
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// 9. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
+		// 8. Prompt user with persona selector + attribute input
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
-		modalResult = await promptWithRawModal(interaction, locale, {
+		modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.attribute.modal_title", // New locale key
 			components: [
+				{
+					customId: PERSONA_SELECT_ID,
+					labelKey: "commands.teach.attribute.persona_select_label",
+					descriptionKey:
+						"commands.teach.attribute.persona_select_description",
+					placeholder: "commands.teach.attribute.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
 				{
 					customId: ATTRIBUTE_INPUT_ID,
 					labelKey: "commands.teach.attribute.attribute_input_label", // New locale key (<= 45 chars)
@@ -193,7 +186,7 @@ export async function execute(
 			],
 		});
 
-		// 10. Handle modal outcome
+		// 9. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Attribute add modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -206,11 +199,43 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		const modalSubmitInteraction = modalResult.interaction!;
 
-		// 11. Get input from modal - let helper functions manage interaction state
+		// 10. Resolve selected persona + attribute text
+		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
+		const selectedPersonaId = modalResult.values![PERSONA_SELECT_ID];
+		selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newAttribute = modalResult.values![ATTRIBUTE_INPUT_ID];
 
-		// 12. Validate attribute content length (server-side validation, modal maxLength can be bypassed)
+		// 10.5 Check attribute limit after final persona resolution
+		const attributeLimitCheck = await checkAttributeLimit(
+			selectedPersona.tomori_id,
+		);
+		if (!attributeLimitCheck.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.attribute.limit_exceeded_title",
+				descriptionKey: "commands.teach.attribute.limit_exceeded_description",
+				descriptionVars: {
+					current_count: attributeLimitCheck.currentCount?.toString() || "0",
+					max_allowed: (attributeLimitCheck.maxAllowed || 25).toString(),
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 11. Validate attribute content length (server-side validation, modal maxLength can be bypassed)
 		const attributeValidation = validateAttribute(newAttribute);
 		if (!attributeValidation.isValid) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -225,10 +250,10 @@ export async function execute(
 			return;
 		}
 
-		// 13. Prepare updated array from selected persona
+		// 12. Prepare updated array from selected persona
 		const currentAttributes = selectedPersona.attribute_list || [];
 
-		// 14. Check for duplicates before adding
+		// 13. Check for duplicates before adding
 		if (currentAttributes.includes(newAttribute)) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.teach.attribute.duplicate_title", // New locale key
@@ -240,7 +265,7 @@ export async function execute(
 			return;
 		}
 
-		// 15. Update target persona row in the database using array_append
+		// 14. Update target persona row in the database using array_append
 		const [updatedTomoriResult] = await sql`
 			UPDATE tomoris
 			SET attribute_list = array_append(attribute_list, ${newAttribute})
