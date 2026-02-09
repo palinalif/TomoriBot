@@ -1498,25 +1498,44 @@ export default async function tomoriChat(
 				// Check against all supported locales to handle cross-locale scenarios
 				// (e.g., Japanese user creates reset embed, English user should still detect it)
 				for (const supportedLocale of getSupportedLocales()) {
+					const matchesUserNicknameTemplate = (
+						template: string,
+						actualTitle: string,
+					): boolean => {
+						const placeholder = "{user_nickname}";
+						const placeholderIndex = template.indexOf(placeholder);
+						if (placeholderIndex === -1) {
+							return actualTitle === template;
+						}
+
+						const prefix = template.slice(0, placeholderIndex);
+						const suffix = template.slice(placeholderIndex + placeholder.length);
+						return (
+							actualTitle.startsWith(prefix) &&
+							actualTitle.endsWith(suffix) &&
+							actualTitle.length >= prefix.length + suffix.length
+						);
+					};
+
 					// Target localizer keys for memory learning embeds
-					const memoryLearningTitles = [
+					const serverMemoryLearningTitles = [
 						localizer(
 							supportedLocale,
 							"genai.self_teach.server_memory_learned_title",
 						),
 						localizer(
 							supportedLocale,
-							"genai.self_teach.personal_memory_learned_title",
-						),
-						localizer(
-							supportedLocale,
 							"genai.self_teach.server_memory_updated_title",
 						),
-						localizer(
-							supportedLocale,
-							"genai.self_teach.personal_memory_updated_title",
-						),
 					];
+					const personalMemoryLearnedTitleTemplate = localizer(
+						supportedLocale,
+						"genai.self_teach.personal_memory_learned_title",
+					);
+					const personalMemoryUpdatedTitleTemplate = localizer(
+						supportedLocale,
+						"genai.self_teach.personal_memory_updated_title",
+					);
 
 					// Target localizer key for conversation reset
 					const resetTitle = localizer(
@@ -1560,7 +1579,17 @@ export default async function tomoriChat(
 					);
 
 					// Check for memory learning embeds
-					if (memoryLearningTitles.some((title) => embedTitle === title)) {
+					if (
+						serverMemoryLearningTitles.some((title) => embedTitle === title) ||
+						matchesUserNicknameTemplate(
+							personalMemoryLearnedTitleTemplate,
+							embedTitle,
+						) ||
+						matchesUserNicknameTemplate(
+							personalMemoryUpdatedTitleTemplate,
+							embedTitle,
+						)
+					) {
 						return { isTarget: true, type: "memory_learning" };
 					}
 

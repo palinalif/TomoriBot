@@ -340,25 +340,41 @@ export async function exportServerData(
 /**
  * Exports personality data as a human-readable text file
  * @param serverDiscId - Discord server ID to export personality for
+ * @param tomoriId - Optional persona ID to export personality for
  * @returns PersonalityExportResult containing formatted text or error
  */
 export async function exportPersonalityData(
 	serverDiscId: string,
+	tomoriId?: number,
 ): Promise<PersonalityExportResult> {
 	try {
-		// 1. Get internal server ID and personality data
-		const rows = await sql`
-			SELECT
-				t.tomori_nickname,
-				t.attribute_list,
-				t.sample_dialogues_in,
-				t.sample_dialogues_out
-			FROM tomoris t
-			JOIN servers s ON t.server_id = s.server_id
-			WHERE s.server_disc_id = ${serverDiscId}
-			AND t.is_alter = false
-			LIMIT 1
-		`;
+		// 1. Get persona data (selected persona or default main persona)
+		const rows =
+			typeof tomoriId === "number"
+				? await sql`
+					SELECT
+						t.tomori_nickname,
+						t.attribute_list,
+						t.sample_dialogues_in,
+						t.sample_dialogues_out
+					FROM tomoris t
+					JOIN servers s ON t.server_id = s.server_id
+					WHERE s.server_disc_id = ${serverDiscId}
+					  AND t.tomori_id = ${tomoriId}
+					LIMIT 1
+				`
+				: await sql`
+					SELECT
+						t.tomori_nickname,
+						t.attribute_list,
+						t.sample_dialogues_in,
+						t.sample_dialogues_out
+					FROM tomoris t
+					JOIN servers s ON t.server_id = s.server_id
+					WHERE s.server_disc_id = ${serverDiscId}
+					  AND t.is_alter = false
+					LIMIT 1
+				`;
 
 		if (!rows.length) {
 			return {

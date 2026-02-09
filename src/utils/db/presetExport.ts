@@ -14,12 +14,14 @@ import {
 
 /**
  * Exports TomoriBot preset personality data for a given server
- * Queries data from both tomoris and tomori_configs tables
+ * Queries data from tomoris/persona_configs with legacy tomori_configs fallback
  * @param serverDiscId - Discord server ID to export preset for
+ * @param targetTomoriId - Optional persona ID to export; defaults to current main persona
  * @returns ExportResult containing the exported preset data or error
  */
 export async function exportPresetData(
 	serverDiscId: string,
+	targetTomoriId?: number,
 ): Promise<ExportResult> {
 	try {
 		// 1. Get internal server ID
@@ -37,69 +39,115 @@ export async function exportPresetData(
 			};
 		}
 
-	const serverId = serverRows[0].server_id;
+		const serverId = serverRows[0].server_id;
 
-		// 2. Query main persona row deterministically (most recently updated)
-		const mainCountRows = await sql`
-			SELECT COUNT(*)::int AS count
-			FROM tomoris
-			WHERE server_id = ${serverId}
-			AND is_alter = false
-		`;
-		const mainCount = Number(mainCountRows[0]?.count ?? 0);
-		if (mainCount > 1) {
-			log.warn(
-				`Multiple main personas found for server ${serverDiscId} (${mainCount}). Export will use the most recently updated.`,
-			);
-		}
+		// 2. Query target persona row (explicit selection) or default main persona
+		const personaRows =
+			typeof targetTomoriId === "number"
+				? await sql`
+					SELECT
+						tomori_id,
+						tomori_nickname,
+						persona_lineage_id,
+						attribute_list,
+						sample_dialogues_in,
+						sample_dialogues_out,
+						is_alter,
+						alter_triggers
+					FROM tomoris
+					WHERE server_id = ${serverId}
+					  AND tomori_id = ${targetTomoriId}
+					LIMIT 1
+				`
+				: await sql`
+					SELECT
+						tomori_id,
+						tomori_nickname,
+						persona_lineage_id,
+						attribute_list,
+						sample_dialogues_in,
+						sample_dialogues_out,
+						is_alter,
+						alter_triggers
+					FROM tomoris
+					WHERE server_id = ${serverId}
+					  AND is_alter = false
+					ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
+					LIMIT 1
+				`;
 
-		const mainRows = await sql`
-			SELECT
-				tomori_id,
-				tomori_nickname,
-				persona_lineage_id,
-				attribute_list,
-				sample_dialogues_in,
-				sample_dialogues_out
-			FROM tomoris
-			WHERE server_id = ${serverId}
-			AND is_alter = false
-			ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
-			LIMIT 1
-		`;
-
-		if (!mainRows.length) {
+		if (!personaRows.length) {
 			return {
 				success: false,
 				error: "commands.persona.export.error_no_preset_data",
 			};
 		}
 
-		const presetData = mainRows[0];
+		const presetData = personaRows[0];
+		if (typeof targetTomoriId !== "number") {
+			const mainCountRows = await sql`
+				SELECT COUNT(*)::int AS count
+				FROM tomoris
+				WHERE server_id = ${serverId}
+				AND is_alter = false
+			`;
+			const mainCount = Number(mainCountRows[0]?.count ?? 0);
+			if (mainCount > 1) {
+				log.warn(
+					`Multiple main personas found for server ${serverDiscId} (${mainCount}). Export will use the most recently updated.`,
+				);
+			}
+		}
 
-		// 3. Load trigger words from server-scoped config (fallback to legacy tomori_id config)
+		const lineageIdRaw = presetData.persona_lineage_id;
+		const lineageId =
+			typeof lineageIdRaw === "bigint"
+				? Number(lineageIdRaw)
+				: typeof lineageIdRaw === "string"
+					? Number(lineageIdRaw)
+					: lineageIdRaw;
+
+		// 3. Load trigger words from persona-scoped config first
 		let triggerWords: string[] | null = null;
-		const configRows = await sql`
+		const personaConfigRows = await sql`
 			SELECT trigger_words
-			FROM tomori_configs
-			WHERE server_id = ${serverId}
-			ORDER BY updated_at DESC NULLS LAST, tomori_config_id DESC
+			FROM persona_configs
+			WHERE tomori_id = ${presetData.tomori_id}
 			LIMIT 1
 		`;
+		if (personaConfigRows.length) {
+			triggerWords = personaConfigRows[0].trigger_words ?? null;
+		}
 
-		if (configRows.length) {
-			triggerWords = configRows[0].trigger_words ?? null;
-		} else if (presetData.tomori_id) {
-			const legacyRows = await sql`
+		// 3.1 Legacy/main fallback: server-scoped config (or tomori_id legacy config)
+		if (triggerWords === null && presetData.is_alter !== true) {
+			const configRows = await sql`
 				SELECT trigger_words
 				FROM tomori_configs
-				WHERE tomori_id = ${presetData.tomori_id}
+				WHERE server_id = ${serverId}
 				ORDER BY updated_at DESC NULLS LAST, tomori_config_id DESC
 				LIMIT 1
 			`;
-			if (legacyRows.length) {
-				triggerWords = legacyRows[0].trigger_words ?? null;
+
+			if (configRows.length) {
+				triggerWords = configRows[0].trigger_words ?? null;
+			} else if (presetData.tomori_id) {
+				const legacyRows = await sql`
+					SELECT trigger_words
+					FROM tomori_configs
+					WHERE tomori_id = ${presetData.tomori_id}
+					ORDER BY updated_at DESC NULLS LAST, tomori_config_id DESC
+					LIMIT 1
+				`;
+				if (legacyRows.length) {
+					triggerWords = legacyRows[0].trigger_words ?? null;
+				}
 			}
+		}
+
+		// 3.2 Legacy alter fallback
+		if (triggerWords === null && presetData.is_alter === true) {
+			triggerWords = presetData.alter_triggers ?? null;
 		}
 
 		// 4. Build export object with metadata
@@ -113,7 +161,7 @@ export async function exportPresetData(
 				sample_dialogues_in: presetData.sample_dialogues_in || [],
 				sample_dialogues_out: presetData.sample_dialogues_out || [],
 				trigger_words: triggerWords || [],
-				persona_lineage_id: presetData.persona_lineage_id,
+				persona_lineage_id: lineageId,
 			},
 		};
 
@@ -131,7 +179,7 @@ export async function exportPresetData(
 		}
 
 		log.success(
-			`Successfully exported preset for server ${serverDiscId}: ${presetData.tomori_nickname}`,
+			`Successfully exported preset for server ${serverDiscId}, persona ${presetData.tomori_id}: ${presetData.tomori_nickname}`,
 		);
 
 		return {

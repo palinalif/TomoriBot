@@ -30,6 +30,9 @@ import type { SelectOption } from "../../types/discord/modal";
 
 const IMPORT_PERSONA_MODAL_ID = "data_import_persona_modal";
 const IMPORT_PERSONA_SELECT_ID = "persona_select";
+const SCOPE_PERSONA = "persona";
+const SCOPE_GLOBAL = "global";
+const SCOPE_SERVERWIDE = "serverwide";
 
 /**
  * Helper function to localize error messages from utility functions
@@ -108,6 +111,37 @@ export const configureSubcommand = (
 						value: "no",
 					},
 				),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("scope")
+				.setDescription(
+					localizer("en-US", "commands.data.import.scope_description"),
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.import.scope_choice_persona",
+						),
+						value: SCOPE_PERSONA,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.import.scope_choice_global",
+						),
+						value: SCOPE_GLOBAL,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.import.scope_choice_serverwide",
+						),
+						value: SCOPE_SERVERWIDE,
+					},
+				),
 		);
 
 /**
@@ -132,6 +166,7 @@ export async function execute(
 	try {
 		// 1. Check confirmation
 		const confirmation = interaction.options.getString("confirmation", true);
+		const scopeInput = interaction.options.getString("scope") ?? SCOPE_PERSONA;
 
 		if (confirmation !== "yes") {
 			await replyInfoEmbed(interaction, locale, {
@@ -170,8 +205,8 @@ export async function execute(
 		// 3.5 Prompt persona selection before long-running work
 		let targetTomoriId: number | undefined;
 		let targetPersonaLineageId = 0;
-		const personas = await loadAllPersonasForServer(serverDiscId);
-		if (personas.length > 0) {
+		if (scopeInput === SCOPE_PERSONA) {
+			const personas = await loadAllPersonasForServer(serverDiscId);
 			const personaSelectOptions: SelectOption[] = personas
 				.filter((persona) => persona.tomori_id !== undefined)
 				.map((persona) => ({
@@ -188,57 +223,66 @@ export async function execute(
 							),
 				}))
 				.filter((option) => option.value !== "");
-			if (personaSelectOptions.length > 0) {
-				const personaModalResult = await promptWithPaginatedModal(
-					interaction,
-					locale,
-					{
-						modalCustomId: IMPORT_PERSONA_MODAL_ID,
-						modalTitleKey: "commands.data.import.persona_modal_title",
-						components: [
-							{
-								customId: IMPORT_PERSONA_SELECT_ID,
-								labelKey: "commands.data.import.persona_select_label",
-								descriptionKey:
-									"commands.data.import.persona_select_description",
-								placeholder:
-									"commands.data.import.persona_select_placeholder",
-								required: true,
-								options: personaSelectOptions,
-							},
-						],
-					},
-				);
-				if (personaModalResult.outcome !== "submit") {
-					log.info(
-						`Data import persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-					);
-					return;
-				}
-
-				const modalSubmitInteraction = personaModalResult.interaction;
-				if (!modalSubmitInteraction) {
-					return;
-				}
-				responseInteraction = modalSubmitInteraction;
-				const selectedPersonaId =
-					personaModalResult.values?.[IMPORT_PERSONA_SELECT_ID];
-				const selectedPersona =
-					personas.find(
-						(persona) => persona.tomori_id?.toString() === selectedPersonaId,
-					) ?? null;
-				if (!selectedPersona) {
-					await replyInfoEmbed(responseInteraction, locale, {
-						titleKey: "general.errors.invalid_option_title",
-						descriptionKey: "general.errors.invalid_option_description",
-						color: ColorCode.ERROR,
-					});
-					return;
-				}
-
-				targetTomoriId = selectedPersona.tomori_id;
-				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+			if (personaSelectOptions.length === 0) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
 			}
+			const personaModalResult = await promptWithPaginatedModal(
+				interaction,
+				locale,
+				{
+					modalCustomId: IMPORT_PERSONA_MODAL_ID,
+					modalTitleKey: "commands.data.import.persona_modal_title",
+					components: [
+						{
+							customId: IMPORT_PERSONA_SELECT_ID,
+							labelKey: "commands.data.import.persona_select_label",
+							descriptionKey:
+								"commands.data.import.persona_select_description",
+							placeholder:
+								"commands.data.import.persona_select_placeholder",
+							required: true,
+							options: personaSelectOptions,
+						},
+					],
+				},
+			);
+			if (personaModalResult.outcome !== "submit") {
+				log.info(
+					`Data import persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+				);
+				return;
+			}
+
+			const modalSubmitInteraction = personaModalResult.interaction;
+			if (!modalSubmitInteraction) {
+				return;
+			}
+			responseInteraction = modalSubmitInteraction;
+			const selectedPersonaId =
+				personaModalResult.values?.[IMPORT_PERSONA_SELECT_ID];
+			const selectedPersona =
+				personas.find(
+					(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+				) ?? null;
+			if (!selectedPersona) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			targetTomoriId = selectedPersona.tomori_id;
+			targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+		} else if (scopeInput === SCOPE_GLOBAL) {
+			targetPersonaLineageId = 0;
 		}
 
 		// 4. Defer reply while we process
@@ -344,6 +388,40 @@ export async function execute(
 			return;
 		}
 
+		// 6.5 Validate scope/type compatibility
+		if (validation.type === "personal" && scopeInput === SCOPE_SERVERWIDE) {
+			await responseInteraction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(localizer(locale, "commands.data.import.invalid_scope_title"))
+						.setDescription(
+							localizer(
+								locale,
+								"commands.data.import.invalid_scope_personal_description",
+							),
+						)
+						.setColor(ColorCode.ERROR),
+				],
+			});
+			return;
+		}
+		if (validation.type === "server" && scopeInput === SCOPE_GLOBAL) {
+			await responseInteraction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(localizer(locale, "commands.data.import.invalid_scope_title"))
+						.setDescription(
+							localizer(
+								locale,
+								"commands.data.import.invalid_scope_server_description",
+							),
+						)
+						.setColor(ColorCode.ERROR),
+				],
+			});
+			return;
+		}
+
 		// 7. Check permissions for server imports (only in guilds)
 		if (validation.type === "server") {
 			// In guilds, require Manage Server permission
@@ -437,7 +515,9 @@ export async function execute(
 		// Use different description for server imports (mentions excluded data)
 		const successDescriptionKey =
 			validation.type === "server"
-				? "commands.data.import.success_description_server"
+				? scopeInput === SCOPE_PERSONA
+					? "commands.data.import.success_description_server_persona_scope"
+					: "commands.data.import.success_description_server"
 				: "commands.data.import.success_description";
 
 		await responseInteraction.editReply({

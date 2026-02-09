@@ -23,6 +23,9 @@ import type { SelectOption } from "../../types/discord/modal";
 
 const EXPORT_PERSONA_MODAL_ID = "data_export_persona_modal";
 const EXPORT_PERSONA_SELECT_ID = "persona_select";
+const SCOPE_PERSONA = "persona";
+const SCOPE_GLOBAL = "global";
+const SCOPE_SERVERWIDE = "serverwide";
 
 /**
  * Configure the 'export' subcommand
@@ -60,6 +63,37 @@ export const configureSubcommand = (
 						value: "personality",
 					},
 				),
+		)
+		.addStringOption((option) =>
+			option
+				.setName("scope")
+				.setDescription(
+					localizer("en-US", "commands.data.export.scope_description"),
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.export.scope_choice_persona",
+						),
+						value: SCOPE_PERSONA,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.export.scope_choice_global",
+						),
+						value: SCOPE_GLOBAL,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.export.scope_choice_serverwide",
+						),
+						value: SCOPE_SERVERWIDE,
+					},
+				),
 		);
 
 /**
@@ -78,96 +112,134 @@ export async function execute(
 ): Promise<void> {
 	// 1. Get the export type option
 	const exportType = interaction.options.getString("type", true);
+	const scopeInput = interaction.options.getString("scope") ?? SCOPE_PERSONA;
 	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 	let responseInteraction:
 		| ChatInputCommandInteraction
 		| ModalSubmitInteraction = interaction;
 
 	try {
-		// 1.5 Resolve target persona for memory exports/imports
+		// 1.5 Validate scope/type compatibility
+		if (exportType === "personal" && scopeInput === SCOPE_SERVERWIDE) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.data.export.invalid_scope_title",
+				descriptionKey:
+					"commands.data.export.invalid_scope_personal_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+		if (exportType === "server" && scopeInput === SCOPE_GLOBAL) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.data.export.invalid_scope_title",
+				descriptionKey: "commands.data.export.invalid_scope_server_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+		if (
+			exportType === "personality" &&
+			(scopeInput === SCOPE_GLOBAL || scopeInput === SCOPE_SERVERWIDE)
+		) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.data.export.invalid_scope_title",
+				descriptionKey:
+					"commands.data.export.invalid_scope_personality_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 1.6 Resolve target persona for persona-scoped exports
 		let targetTomoriId: number | undefined;
 		let targetPersonaLineageId = 0;
 		let targetPersonaNickname: string | null = null;
-		if (exportType === "personal" || exportType === "server") {
+		if (scopeInput === SCOPE_PERSONA) {
 			const personas = await loadAllPersonasForServer(serverDiscId);
-			if (personas.length > 0) {
-				const personaSelectOptions: SelectOption[] = personas
-					.filter((persona) => persona.tomori_id !== undefined)
-					.map((persona) => ({
-						label: safeSelectOptionText(persona.tomori_nickname),
-						value: persona.tomori_id?.toString() ?? "",
-						description: persona.is_alter
-							? localizer(
-									locale,
-									"commands.data.export.alter_persona_description",
-								)
-							: localizer(
-									locale,
-									"commands.data.export.main_persona_description",
-								),
-					}))
-					.filter((option) => option.value !== "");
-				if (personaSelectOptions.length === 0) {
-					await replyInfoEmbed(interaction, locale, {
-						titleKey: "general.errors.invalid_option_title",
-						descriptionKey: "general.errors.invalid_option_description",
-						color: ColorCode.ERROR,
-						flags: MessageFlags.Ephemeral,
-					});
-					return;
-				}
-
-				const personaModalResult = await promptWithPaginatedModal(
-					interaction,
-					locale,
-					{
-						modalCustomId: EXPORT_PERSONA_MODAL_ID,
-						modalTitleKey: "commands.data.export.persona_modal_title",
-						components: [
-							{
-								customId: EXPORT_PERSONA_SELECT_ID,
-								labelKey: "commands.data.export.persona_select_label",
-								descriptionKey:
-									"commands.data.export.persona_select_description",
-								placeholder:
-									"commands.data.export.persona_select_placeholder",
-								required: true,
-								options: personaSelectOptions,
-							},
-						],
-					},
-				);
-				if (personaModalResult.outcome !== "submit") {
-					log.info(
-						`Data export persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-					);
-					return;
-				}
-
-				const modalSubmitInteraction = personaModalResult.interaction;
-				if (!modalSubmitInteraction) {
-					return;
-				}
-				responseInteraction = modalSubmitInteraction;
-				const selectedPersonaId =
-					personaModalResult.values?.[EXPORT_PERSONA_SELECT_ID];
-				const selectedPersona =
-					personas.find(
-						(persona) => persona.tomori_id?.toString() === selectedPersonaId,
-					) ?? null;
-				if (!selectedPersona) {
-					await replyInfoEmbed(responseInteraction, locale, {
-						titleKey: "general.errors.invalid_option_title",
-						descriptionKey: "general.errors.invalid_option_description",
-						color: ColorCode.ERROR,
-					});
-					return;
-				}
-
-				targetTomoriId = selectedPersona.tomori_id;
-				targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
-				targetPersonaNickname = selectedPersona.tomori_nickname;
+			const personaSelectOptions: SelectOption[] = personas
+				.filter((persona) => persona.tomori_id !== undefined)
+				.map((persona) => ({
+					label: safeSelectOptionText(persona.tomori_nickname),
+					value: persona.tomori_id?.toString() ?? "",
+					description: persona.is_alter
+						? localizer(
+								locale,
+								"commands.data.export.alter_persona_description",
+							)
+						: localizer(
+								locale,
+								"commands.data.export.main_persona_description",
+							),
+				}))
+				.filter((option) => option.value !== "");
+			if (personaSelectOptions.length === 0) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
 			}
+
+			const personaModalResult = await promptWithPaginatedModal(
+				interaction,
+				locale,
+				{
+					modalCustomId: EXPORT_PERSONA_MODAL_ID,
+					modalTitleKey: "commands.data.export.persona_modal_title",
+					components: [
+						{
+							customId: EXPORT_PERSONA_SELECT_ID,
+							labelKey: "commands.data.export.persona_select_label",
+							descriptionKey:
+								"commands.data.export.persona_select_description",
+							placeholder:
+								"commands.data.export.persona_select_placeholder",
+							required: true,
+							options: personaSelectOptions,
+						},
+					],
+				},
+			);
+			if (personaModalResult.outcome !== "submit") {
+				log.info(
+					`Data export persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+				);
+				return;
+			}
+
+			const modalSubmitInteraction = personaModalResult.interaction;
+			if (!modalSubmitInteraction) {
+				return;
+			}
+			responseInteraction = modalSubmitInteraction;
+			const selectedPersonaId =
+				personaModalResult.values?.[EXPORT_PERSONA_SELECT_ID];
+			const selectedPersona =
+				personas.find(
+					(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+				) ?? null;
+			if (!selectedPersona) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			targetTomoriId = selectedPersona.tomori_id;
+			targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+			targetPersonaNickname = selectedPersona.tomori_nickname;
+		} else if (scopeInput === SCOPE_GLOBAL) {
+			targetPersonaLineageId = 0;
+			targetPersonaNickname = "global";
+		} else if (scopeInput === SCOPE_SERVERWIDE) {
+			targetPersonaNickname = "serverwide";
 		}
 
 		// 2. Check permissions for server and personality exports (only in guilds)
@@ -194,7 +266,10 @@ export async function execute(
 
 		// 4. Handle personality export separately (returns text instead of JSON)
 		if (exportType === "personality") {
-			const personalityResult = await exportPersonalityData(serverDiscId);
+			const personalityResult = await exportPersonalityData(
+				serverDiscId,
+				targetTomoriId,
+			);
 
 			if (!personalityResult.success || !personalityResult.text) {
 				await responseInteraction.editReply({
@@ -216,7 +291,10 @@ export async function execute(
 			}
 
 			// Create text file attachment
-			const filename = `tomori-personality-${serverDiscId}-${Date.now()}.txt`;
+			const personaSlug = (targetPersonaNickname ?? "persona")
+				.replace(/[^a-zA-Z0-9-_]/g, "_")
+				.slice(0, 32);
+			const filename = `tomori-personality-${personaSlug}-${serverDiscId}-${Date.now()}.txt`;
 			const attachment = new AttachmentBuilder(
 				Buffer.from(personalityResult.text, "utf-8"),
 				{
@@ -299,15 +377,15 @@ export async function execute(
 			exportResult = await exportPersonalData(
 				interaction.user.id,
 				targetPersonaLineageId,
-				true,
+				false,
 			);
-			const personaSlug = (targetPersonaNickname ?? "persona")
+			const personaSlug = (targetPersonaNickname ?? scopeInput)
 				.replace(/[^a-zA-Z0-9-_]/g, "_")
 				.slice(0, 32);
 			filename = `tomori-personal-${personaSlug}-${interaction.user.id}-${Date.now()}.json`;
 		} else if (exportType === "server") {
 			exportResult = await exportServerData(serverDiscId, targetTomoriId);
-			const personaSlug = (targetPersonaNickname ?? "persona")
+			const personaSlug = (targetPersonaNickname ?? scopeInput)
 				.replace(/[^a-zA-Z0-9-_]/g, "_")
 				.slice(0, 32);
 			filename = `tomori-server-${personaSlug}-${serverDiscId}-${Date.now()}.json`;

@@ -115,7 +115,17 @@ export const presetExportDataSchema = z.object({
 	trigger_words: z
 		.array(z.string().max(MAX_STRING_LENGTH))
 		.max(ABSOLUTE_MAX_TRIGGER_WORDS),
-	persona_lineage_id: z.number().int().nonnegative().optional(),
+	persona_lineage_id: z
+		.preprocess((value) => {
+			if (typeof value === "bigint") {
+				return Number(value);
+			}
+			if (typeof value === "string" && value.trim() !== "") {
+				return Number(value);
+			}
+			return value;
+		}, z.number().int().nonnegative())
+		.optional(),
 });
 
 /**

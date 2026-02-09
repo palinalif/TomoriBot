@@ -6,16 +6,28 @@
 import type {
 	ChatInputCommandInteraction,
 	Client,
+	ModalSubmitInteraction,
 	SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
+} from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { exportPresetData } from "../../utils/db/presetExport";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
 import { embedMetadataInPNG } from "../../utils/image/pngMetadata";
+import type { SelectOption } from "../../types/discord/modal";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { safeDownload } from "@/utils/security/safeDownload";
+import { convertToPNG } from "@/utils/image/imageProcessor";
+
+const PERSONA_EXPORT_MODAL_ID = "persona_export_persona_modal";
+const PERSONA_EXPORT_SELECT_ID = "persona_select";
 
 /**
  * Configure the 'export' subcommand
@@ -41,16 +53,93 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	try {
-		// 1. Defer reply while we process (not ephemeral for transparency)
-		await interaction.deferReply();
+	let responseInteraction:
+		| ChatInputCommandInteraction
+		| ModalSubmitInteraction = interaction;
 
-		// 2. Export preset data from database (works for both guilds and DMs)
+	try {
+		// 1. Resolve target persona via selector
 		const serverDiscId = interaction.guild?.id ?? interaction.user.id;
-		const exportResult = await exportPresetData(serverDiscId);
+		const allPersonas = await loadAllPersonasForServer(serverDiscId);
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(
+							locale,
+							"commands.persona.export.alter_persona_description",
+						)
+					: localizer(
+							locale,
+							"commands.persona.export.main_persona_description",
+						),
+			}))
+			.filter((option) => option.value !== "");
+
+		if (personaSelectOptions.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const personaModalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: PERSONA_EXPORT_MODAL_ID,
+			modalTitleKey: "commands.persona.export.persona_modal_title",
+			components: [
+				{
+					customId: PERSONA_EXPORT_SELECT_ID,
+					labelKey: "commands.persona.export.persona_select_label",
+					descriptionKey: "commands.persona.export.persona_select_description",
+					placeholder: "commands.persona.export.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
+			],
+		});
+		if (personaModalResult.outcome !== "submit") {
+			log.info(
+				`Persona export select modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+			);
+			return;
+		}
+
+		const modalSubmitInteraction = personaModalResult.interaction;
+		if (!modalSubmitInteraction) {
+			return;
+		}
+		responseInteraction = modalSubmitInteraction;
+
+		const selectedPersonaId = personaModalResult.values?.[PERSONA_EXPORT_SELECT_ID];
+		const selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 2. Defer reply while we process (not ephemeral for transparency)
+		await responseInteraction.deferReply();
+
+		// 3. Export selected persona data from database
+		const exportResult = await exportPresetData(
+			serverDiscId,
+			selectedPersona.tomori_id,
+		);
 
 		if (!exportResult.success) {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.persona.export.failed_title"))
@@ -64,17 +153,50 @@ export async function execute(
 		// Type is now narrowed to success variant
 		const presetData = exportResult.data;
 
-		// 3. Get server avatar (or bot default avatar for DMs)
+		// 4. Resolve avatar image (alter persona avatar when available, otherwise server avatar)
 		let avatarBuffer: Buffer;
 		try {
-			// In DMs, getServerAvatar will return bot's default avatar when guild is null
-			avatarBuffer = await getServerAvatar(interaction.guild, client);
+			let selectedAvatarBuffer: Buffer | null = null;
+			if (selectedPersona.is_alter && selectedPersona.webhook_avatar_url) {
+				const alterAvatarDownload = await safeDownload(
+					selectedPersona.webhook_avatar_url,
+					{
+						maxSizeMB: 8,
+						timeoutMs: 15000,
+					},
+				);
+				if (alterAvatarDownload.success && alterAvatarDownload.buffer) {
+					try {
+						selectedAvatarBuffer = await convertToPNG(alterAvatarDownload.buffer);
+					} catch (error) {
+						log.warn(
+							`Failed to convert alter avatar to PNG for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
+							error as Error,
+						);
+					}
+				} else {
+					log.warn(
+						`Failed to download alter avatar for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
+						{
+							metadata: {
+								error: alterAvatarDownload.error,
+								details: alterAvatarDownload.details,
+							},
+						},
+					);
+				}
+			}
+
+			avatarBuffer =
+				selectedAvatarBuffer ??
+				// In DMs, getServerAvatar will return bot's default avatar when guild is null
+				(await getServerAvatar(interaction.guild, client));
 		} catch (error) {
 			log.error(
 				`Failed to get avatar for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
 				error as Error,
 			);
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -92,7 +214,7 @@ export async function execute(
 			return;
 		}
 
-		// 4. Embed metadata into PNG
+		// 5. Embed metadata into PNG
 		let pngWithMetadata: Buffer;
 		try {
 			pngWithMetadata = embedMetadataInPNG(avatarBuffer, presetData);
@@ -101,7 +223,7 @@ export async function execute(
 				`Failed to embed metadata into PNG for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
 				error as Error,
 			);
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -133,7 +255,7 @@ export async function execute(
 		});
 
 		// 8. Send to channel with embedded image (visible to everyone for transparency)
-		await interaction.editReply({
+		await responseInteraction.editReply({
 			embeds: [
 				new EmbedBuilder()
 					.setTitle(localizer(locale, "commands.persona.export.success_title"))
@@ -158,15 +280,15 @@ export async function execute(
 		});
 
 		// If we haven't replied yet, reply with error
-		if (!interaction.replied && !interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
+		if (!responseInteraction.replied && !responseInteraction.deferred) {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
 				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 		} else {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "general.errors.unknown_error_title"))

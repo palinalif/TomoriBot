@@ -579,6 +579,9 @@ export class MemoryTool extends BaseTool {
 						{
 							color: ColorCode.SUCCESS,
 							titleKey: "genai.self_teach.personal_memory_learned_title",
+							titleVars: {
+								user_nickname: targetUserNicknameArg,
+							},
 							descriptionKey:
 								"genai.self_teach.personal_memory_learned_description",
 							descriptionVars: {

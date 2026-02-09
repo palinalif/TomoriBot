@@ -3,17 +3,38 @@ import type {
 	Client,
 	SlashCommandSubcommandBuilder,
 	Attachment,
+	ModalSubmitInteraction,
+	BaseGuildTextChannel,
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import type { UserRow, ErrorContext } from "../../types/db/schema";
+import {
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
+} from "../../utils/discord/interactionHelper";
+import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
+import type { SelectOption } from "../../types/discord/modal";
 import { safeDownload } from "../../utils/security/safeDownload";
 import {
 	memoryGuard,
 	reserveAvatarQuota,
 } from "../../utils/security/rateLimiter";
+import { loadAllPersonasForServer } from "../../utils/db/dbRead";
+import { sql } from "../../utils/db/client";
+import { convertToPNG } from "../../utils/image/imageProcessor";
+import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
+import {
+	deletePersonaWebhooks,
+	getOrCreatePersonaWebhook,
+	updatePersonaWebhooksAvatar,
+} from "../../utils/discord/webhookManager";
+import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+
+const PERSONA_SELECT_MODAL_ID = "server_avatar_persona_modal";
+const PERSONA_SELECT_ID = "persona_select";
+const IS_PRODUCTION = process.env.RUN_ENV === "production";
 
 /**
  * Configure the avatar subcommand
@@ -86,6 +107,7 @@ function validateImage(attachment: Attachment): {
 async function attachmentToBase64DataUri(attachment: Attachment): Promise<{
 	success: boolean;
 	dataUri?: string;
+	buffer?: Buffer;
 	error?: "size_exceeded" | "timeout" | "network_error" | "invalid_response";
 	details?: string;
 }> {
@@ -113,7 +135,31 @@ async function attachmentToBase64DataUri(attachment: Attachment): Promise<{
 	return {
 		success: true,
 		dataUri,
+		buffer: downloadResult.buffer,
 	};
+}
+
+/**
+ * Resolves webhook target channel for thread-safe persona webhook operations.
+ * - In threads: use parent channel
+ * - In regular text channels: use current channel
+ */
+function resolveWebhookTargetChannel(
+	interaction: ChatInputCommandInteraction,
+): BaseGuildTextChannel | null {
+	const channel = interaction.channel;
+	if (!channel) {
+		return null;
+	}
+
+	if (channel.isThread()) {
+		const parent = channel.parent;
+		return parent && "fetchWebhooks" in parent
+			? (parent as BaseGuildTextChannel)
+			: null;
+	}
+
+	return "fetchWebhooks" in channel ? (channel as BaseGuildTextChannel) : null;
 }
 
 /**
@@ -217,14 +263,89 @@ export async function execute(
 		return;
 	}
 
-	// 2. Defer the reply to prevent timeout during image processing
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	let responseInteraction:
+		| ChatInputCommandInteraction
+		| ModalSubmitInteraction = interaction;
+	let selectedPersona: TomoriState | null = null;
 
 	try {
-		// 3. Memory guard check (defense-in-depth)
+		// 2. Load personas and prompt user to choose target persona
+		const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(
+							locale,
+							"commands.server.avatar.alter_persona_description",
+						)
+					: localizer(
+							locale,
+							"commands.server.avatar.main_persona_description",
+						),
+			}))
+			.filter((option) => option.value !== "");
+		if (personaSelectOptions.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: PERSONA_SELECT_MODAL_ID,
+			modalTitleKey: "commands.server.avatar.persona_modal_title",
+			components: [
+				{
+					customId: PERSONA_SELECT_ID,
+					labelKey: "commands.server.avatar.persona_select_label",
+					descriptionKey: "commands.server.avatar.persona_select_description",
+					placeholder: "commands.server.avatar.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
+			],
+		});
+
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Server avatar persona select modal ${modalResult.outcome} for user ${interaction.user.id}`,
+			);
+			return;
+		}
+
+		const modalSubmitInteraction = modalResult.interaction;
+		if (!modalSubmitInteraction) {
+			return;
+		}
+		responseInteraction = modalSubmitInteraction;
+
+		const selectedPersonaId = modalResult.values?.[PERSONA_SELECT_ID];
+		selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 3. Defer the reply to prevent timeout during image processing
+		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		// 4. Memory guard check (defense-in-depth)
 		const memCheck = memoryGuard.checkMemory();
 		if (memCheck.status === "critical") {
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -239,14 +360,14 @@ export async function execute(
 			return;
 		}
 
-		// 4. Reserve avatar quota (atomic check+increment for per-server DDoS protection)
+		// 5. Reserve avatar quota (atomic check+increment for per-server DDoS protection)
 		const quotaReserve = reserveAvatarQuota(interaction.guild.id);
 		if (!quotaReserve.allowed) {
 			const resetTime = quotaReserve.resetAt
 				? new Date(quotaReserve.resetAt).toLocaleString(locale)
 				: "unknown";
 
-			await interaction.editReply({
+			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(
@@ -263,37 +384,61 @@ export async function execute(
 			return;
 		}
 
-		// 5. Get the attachment option
+		// 6. Get the attachment option
 		const imageAttachment = interaction.options.getAttachment("image");
+		const isMainPersona = !selectedPersona.is_alter;
 
-		// 6. Handle avatar removal (no attachment provided)
+		// 7. Handle avatar removal (no attachment provided)
 		if (!imageAttachment) {
-			const result = await updateGuildAvatar(interaction.guild.id, null);
+			if (isMainPersona) {
+				const result = await updateGuildAvatar(interaction.guild.id, null);
 
-			if (result.success) {
-				// Quota already reserved at step 4 - no increment needed
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "commands.server.avatar.removed_title",
-					descriptionKey: "commands.server.avatar.removed_description",
-					color: ColorCode.SUCCESS,
-				});
-			} else if (result.error === "timeout") {
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "commands.server.avatar.error_api_timeout",
-					descriptionKey: "commands.server.avatar.error_api_timeout",
-					color: ColorCode.ERROR,
-				});
+				if (result.success) {
+					// Quota already reserved at step 5 - no increment needed
+					await replyInfoEmbed(responseInteraction, locale, {
+						titleKey: "commands.server.avatar.removed_title",
+						descriptionKey: "commands.server.avatar.removed_description",
+						color: ColorCode.SUCCESS,
+					});
+				} else if (result.error === "timeout") {
+					await replyInfoEmbed(responseInteraction, locale, {
+						titleKey: "commands.server.avatar.error_api_timeout",
+						descriptionKey: "commands.server.avatar.error_api_timeout",
+						color: ColorCode.ERROR,
+					});
+				} else {
+					await replyInfoEmbed(responseInteraction, locale, {
+						titleKey: "commands.server.avatar.api_error_title",
+						descriptionKey: "commands.server.avatar.api_error_description",
+						color: ColorCode.ERROR,
+					});
+				}
 			} else {
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "commands.server.avatar.api_error_title",
-					descriptionKey: "commands.server.avatar.api_error_description",
-					color: ColorCode.ERROR,
+				await sql`
+					UPDATE tomoris
+					SET webhook_avatar_url = NULL
+					WHERE tomori_id = ${selectedPersona.tomori_id}
+				`;
+
+				// Non-production alter personas use dedicated persona webhooks with stored avatar state.
+				// Delete them so future sends recreate with default bot avatar.
+				if (!IS_PRODUCTION) {
+					await deletePersonaWebhooks(interaction.guild, selectedPersona.tomori_id);
+				}
+
+				invalidateTomoriStateCache(interaction.guild.id);
+
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.server.avatar.removed_title",
+					descriptionKey: "commands.server.avatar.removed_alter_description",
+					descriptionVars: { persona_name: selectedPersona.tomori_nickname },
+					color: ColorCode.SUCCESS,
 				});
 			}
 			return;
 		}
 
-		// 5. Validate the image attachment
+		// 8. Validate the image attachment
 		const validation = validateImage(imageAttachment);
 		if (!validation.isValid) {
 			let errorKey = "invalid_image_description";
@@ -307,7 +452,7 @@ export async function execute(
 					break;
 			}
 
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.server.avatar.invalid_image_title",
 				descriptionKey: `commands.server.avatar.${errorKey}`,
 				color: ColorCode.ERROR,
@@ -315,7 +460,7 @@ export async function execute(
 			return;
 		}
 
-		// 7. Convert image to base64 data URI with timeout protection
+		// 9. Convert image to base64 data URI with timeout protection
 		const downloadResult = await attachmentToBase64DataUri(imageAttachment);
 		if (!downloadResult.success) {
 			let errorKey: string;
@@ -327,7 +472,7 @@ export async function execute(
 				errorKey = "commands.server.avatar.conversion_error_description";
 			}
 
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.server.avatar.invalid_image_title",
 				descriptionKey: errorKey,
 				color: ColorCode.ERROR,
@@ -335,33 +480,124 @@ export async function execute(
 			return;
 		}
 
-		// biome-ignore lint/style/noNonNullAssertion: Download result is checked in success condition
-		const avatarDataUri = downloadResult.dataUri!;
+		if (isMainPersona) {
+			// biome-ignore lint/style/noNonNullAssertion: Download result is checked in success condition
+			const avatarDataUri = downloadResult.dataUri!;
 
-		// 8. Update the guild avatar via Discord API with timeout protection
-		const updateResult = await updateGuildAvatar(
-			interaction.guild.id,
-			avatarDataUri,
-		);
+			// 10. Update guild avatar for main persona via Discord API with timeout protection
+			const updateResult = await updateGuildAvatar(
+				interaction.guild.id,
+				avatarDataUri,
+			);
 
-		if (updateResult.success) {
-			// Quota already reserved at step 4 - no increment needed
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.server.avatar.success_title",
-				descriptionKey: "commands.server.avatar.success_description",
-				color: ColorCode.SUCCESS,
-			});
-		} else if (updateResult.error === "timeout") {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.server.avatar.error_api_timeout",
-				descriptionKey: "commands.server.avatar.error_api_timeout",
-				color: ColorCode.ERROR,
-			});
+			if (updateResult.success) {
+				// Quota already reserved at step 5 - no increment needed
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.server.avatar.success_title",
+					descriptionKey: "commands.server.avatar.success_description",
+					color: ColorCode.SUCCESS,
+				});
+			} else if (updateResult.error === "timeout") {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.server.avatar.error_api_timeout",
+					descriptionKey: "commands.server.avatar.error_api_timeout",
+					color: ColorCode.ERROR,
+				});
+			} else {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.server.avatar.api_error_title",
+					descriptionKey: "commands.server.avatar.api_error_description",
+					color: ColorCode.ERROR,
+				});
+			}
 		} else {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.server.avatar.api_error_title",
-				descriptionKey: "commands.server.avatar.api_error_description",
-				color: ColorCode.ERROR,
+			// 10. Alter persona path:
+			// - production: upload avatar to S3 and store URL
+			// - non-production: update/create persona webhooks and store permanent webhook avatar URL
+			let persistedAvatarUrl: string | null = null;
+			let dbUpdatedByWebhookSync = false;
+
+			// biome-ignore lint/style/noNonNullAssertion: Download result is checked in success condition
+			const downloadedBuffer = downloadResult.buffer!;
+			let pngBuffer: Buffer;
+			try {
+				pngBuffer = await convertToPNG(downloadedBuffer);
+			} catch (error) {
+				log.warn("Failed to convert selected alter avatar image to PNG", error);
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.server.avatar.conversion_error_title",
+					descriptionKey: "commands.server.avatar.conversion_error_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			const alterAvatarDataUri = `data:image/png;base64,${pngBuffer.toString("base64")}`;
+
+			// Attempt production S3 storage first; no-op outside production.
+			persistedAvatarUrl = await uploadPersonaAvatarToS3({
+				personaId: selectedPersona.tomori_id,
+				serverDiscId: interaction.guild.id,
+				label: "server avatar",
+				buffer: pngBuffer,
+			});
+
+			if (!IS_PRODUCTION) {
+				const updatedCount = await updatePersonaWebhooksAvatar(
+					interaction.guild,
+					selectedPersona.tomori_id,
+					alterAvatarDataUri,
+				);
+				dbUpdatedByWebhookSync = updatedCount > 0;
+
+				if (updatedCount === 0) {
+					const webhookTargetChannel = resolveWebhookTargetChannel(interaction);
+					if (webhookTargetChannel) {
+						const { webhook } = await getOrCreatePersonaWebhook(
+							webhookTargetChannel,
+							selectedPersona,
+						);
+						if (webhook) {
+							await webhook.edit({
+								avatar: alterAvatarDataUri,
+								reason: "TomoriBot alter avatar updated",
+							});
+							const webhookAvatarUrl = webhook.avatarURL({
+								extension: "png",
+								size: 256,
+							});
+							if (webhookAvatarUrl) {
+								persistedAvatarUrl = webhookAvatarUrl;
+							}
+						}
+					}
+				}
+			}
+
+			if (!persistedAvatarUrl && !dbUpdatedByWebhookSync) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.server.avatar.api_error_title",
+					descriptionKey: "commands.server.avatar.api_error_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			if (persistedAvatarUrl) {
+				await sql`
+					UPDATE tomoris
+					SET webhook_avatar_url = ${persistedAvatarUrl}
+					WHERE tomori_id = ${selectedPersona.tomori_id}
+				`;
+			}
+
+			invalidateTomoriStateCache(interaction.guild.id);
+
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "commands.server.avatar.success_title",
+				descriptionKey: "commands.server.avatar.success_alter_description",
+				descriptionVars: { persona_name: selectedPersona.tomori_nickname },
+				color: ColorCode.SUCCESS,
 			});
 		}
 	} catch (error) {
@@ -370,14 +606,23 @@ export async function execute(
 			metadata: {
 				command: "config avatar",
 				guildId: interaction.guild.id,
+				personaId: selectedPersona?.tomori_id ?? null,
 			},
 		};
 		await log.error("Error in /config avatar command", error, context);
 
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-			color: ColorCode.ERROR,
-		});
+		const errorReplyInteraction =
+			responseInteraction.replied || responseInteraction.deferred
+				? responseInteraction
+				: interaction.replied || interaction.deferred
+					? interaction
+					: null;
+		if (errorReplyInteraction) {
+			await replyInfoEmbed(errorReplyInteraction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+			});
+		}
 	}
 }

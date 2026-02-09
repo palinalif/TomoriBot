@@ -468,6 +468,9 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 				{
 					color: ColorCode.MEMORY_UPDATE,
 					titleKey: "genai.self_teach.personal_memory_updated_title",
+					titleVars: {
+						user_nickname: userDisplayName,
+					},
 					descriptionKey:
 						"genai.self_teach.personal_memory_updated_description",
 					descriptionVars: {

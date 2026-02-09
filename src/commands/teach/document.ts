@@ -43,6 +43,7 @@ import type { SelectOption } from "../../types/discord/modal";
 
 const MAX_DOCUMENT_NAME_LENGTH = 64;
 type DocumentScope = "persona" | "serverwide";
+const DEFAULT_DOCUMENT_SCOPE: DocumentScope = "persona";
 const DOCUMENT_PERSONA_MODAL_ID = "teach_document_persona_modal";
 const DOCUMENT_PERSONA_SELECT_ID = "persona_select";
 
@@ -312,10 +313,12 @@ export async function execute(
 		// 9. Resolve document scope
 		const scopeInput = interaction.options.getString("scope");
 		const scope: DocumentScope =
-			scopeInput === "serverwide" ? "serverwide" : "persona";
+			scopeInput === "serverwide" ? "serverwide" : DEFAULT_DOCUMENT_SCOPE;
 		let scopeLabel =
 			localizer(locale, "commands.teach.document.scope_label_serverwide");
 
+		// Scope `persona` explicitly uses a string-select modal.
+		// Scope `serverwide` intentionally skips persona selection and stores tomori_id as NULL.
 		if (scope === "persona") {
 			const allPersonas = await loadAllPersonasForServer(
 				interaction.guild?.id ?? interaction.user.id,

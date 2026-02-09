@@ -11,13 +11,14 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedPersonaChoicesV2,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { getCachedTomoriState } from "../../utils/cache/tomoriStateCache";
 import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
-import { deleteReminderById } from "../../utils/db/dbRead";
+import { deleteReminderById, loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { formatTimeWithOffset, formatUTCOffset } from "../../utils/text/timezoneHelper";
 
 // Rule 20: Constants for static values at the top
@@ -108,6 +109,9 @@ export async function execute(
 	}
 
 	let tomoriState: TomoriState | null = null;
+	let targetTomoriId: number | null = null;
+	let targetIsAlter = false;
+	let personaSelectionInteraction: ButtonInteraction | null = null;
 
 	try {
 		tomoriState = await getCachedTomoriState(
@@ -126,6 +130,52 @@ export async function execute(
 		const hasManagePermission =
 			interaction.memberPermissions?.has("ManageGuild") ?? false;
 
+		const allPersonas = await loadAllPersonasForServer(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		if (allPersonas.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const personaSelection = await replyPaginatedPersonaChoicesV2(
+			interaction,
+			locale,
+			{
+				personas: allPersonas,
+				color: ColorCode.INFO,
+				preserveSelectedInteraction: true,
+				onSelect: async () => {},
+			},
+		);
+
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+
+		personaSelectionInteraction = personaSelection.interaction;
+		const selectedPersona =
+			allPersonas[personaSelection.selectedIndex] ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(personaSelectionInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		targetTomoriId = selectedPersona.tomori_id;
+		targetIsAlter = selectedPersona.is_alter === true;
+
 		let remindersQuery = sql<ReminderSelectionRow[]>`
 			SELECT
 				r.reminder_id,
@@ -141,19 +191,23 @@ export async function execute(
 			WHERE r.server_id = ${tomoriState.server_id}
 		`;
 
+		remindersQuery = targetIsAlter
+			? sql`${remindersQuery} AND r.persona_id = ${targetTomoriId}`
+			: sql`${remindersQuery} AND (r.persona_id = ${targetTomoriId} OR r.persona_id IS NULL)`;
+
 		if (!hasManagePermission) {
 			remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
 		}
 
 		remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
 		const reminders = await remindersQuery;
+		const selectionInteraction = personaSelectionInteraction ?? interaction;
 
 		if (!reminders || reminders.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(selectionInteraction, locale, {
 				titleKey: "commands.forget.reminder.no_reminders_title",
 				descriptionKey: "commands.forget.reminder.no_reminders",
 				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -201,7 +255,7 @@ export async function execute(
 			},
 		);
 
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+		const modalResult = await promptWithPaginatedModal(selectionInteraction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.forget.reminder.modal_title",
 			components: [
@@ -217,9 +271,7 @@ export async function execute(
 		});
 
 		if (modalResult.outcome !== "submit") {
-			log.info(
-				`Reminder deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-			);
+			log.info(`Reminder deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
 			return;
 		}
 
@@ -250,7 +302,7 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "forget reminder",
@@ -264,25 +316,17 @@ export async function execute(
 			context,
 		);
 
-		if (interaction.deferred || interaction.replied) {
-			try {
-				await interaction.followUp({
-					content: localizer(
-						locale,
-						"general.errors.unknown_error_description",
-					),
-					flags: MessageFlags.Ephemeral,
-				});
-			} catch (followUpError) {
-				log.error(
-					"Failed to send follow-up error message in reminder catch block",
-					followUpError,
-				);
-			}
-		} else {
-			log.warn(
-				"Could not determine valid interaction to send error message in reminder catch block",
-			);
-		}
+		const errorReplyTarget =
+			personaSelectionInteraction &&
+			!personaSelectionInteraction.deferred &&
+			!personaSelectionInteraction.replied
+				? personaSelectionInteraction
+				: interaction;
+		await replyInfoEmbed(errorReplyTarget, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }
