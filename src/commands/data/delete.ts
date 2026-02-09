@@ -21,16 +21,16 @@ import type {
 import {
 	invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
-import { invalidateEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
-import { invalidateWhitelistCache } from "../../utils/cache/channelWhitelistCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type { SelectOption } from "../../types/discord/modal";
 
 const DELETE_PERSONA_MODAL_ID = "data_delete_persona_modal";
 const DELETE_PERSONA_SELECT_ID = "persona_select";
-const SCOPE_PERSONA = "persona";
-const SCOPE_GLOBAL = "global";
-const SCOPE_SERVERWIDE = "serverwide";
+const DELETE_TYPE_PERSONA_PERSONAL_MEMORIES = "persona_personal_memories";
+const DELETE_TYPE_PERSONA_SERVER_MEMORIES = "persona_server_memories";
+const DELETE_TYPE_PERSONAL_SETTINGS = "personal_settings";
+const DELETE_TYPE_SERVER_CONFIG = "server_config";
+const DELETE_TYPE_GLOBAL_PERSONAL_MEMORIES = "global_personal_memories";
 
 /**
  * Configure the 'delete' subcommand
@@ -52,13 +52,37 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.data.delete.type_choice_personal",
+							"commands.data.delete.type_choice_persona_personal_memories",
 						),
-						value: "personal",
+						value: DELETE_TYPE_PERSONA_PERSONAL_MEMORIES,
 					},
 					{
-						name: localizer("en-US", "commands.data.delete.type_choice_server"),
-						value: "server",
+						name: localizer(
+							"en-US",
+							"commands.data.delete.type_choice_persona_server_memories",
+						),
+						value: DELETE_TYPE_PERSONA_SERVER_MEMORIES,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.delete.type_choice_personal_settings",
+						),
+						value: DELETE_TYPE_PERSONAL_SETTINGS,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.delete.type_choice_server_config",
+						),
+						value: DELETE_TYPE_SERVER_CONFIG,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.delete.type_choice_global_personal_memories",
+						),
+						value: DELETE_TYPE_GLOBAL_PERSONAL_MEMORIES,
 					},
 				),
 		)
@@ -79,37 +103,6 @@ export const configureSubcommand = (
 						value: "no",
 					},
 				),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("scope")
-				.setDescription(
-					localizer("en-US", "commands.data.delete.scope_description"),
-				)
-				.setRequired(false)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.delete.scope_choice_persona",
-						),
-						value: SCOPE_PERSONA,
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.delete.scope_choice_global",
-						),
-						value: SCOPE_GLOBAL,
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.delete.scope_choice_serverwide",
-						),
-						value: SCOPE_SERVERWIDE,
-					},
-				),
 		);
 
 /**
@@ -126,10 +119,8 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Get the delete type and confirmation options
 	const deleteType = interaction.options.getString("type", true);
 	const confirmation = interaction.options.getString("confirmation", true);
-	const scopeInput = interaction.options.getString("scope");
 	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 	let responseInteraction:
 		| ChatInputCommandInteraction
@@ -137,7 +128,6 @@ export async function execute(
 	let selectedPersona: TomoriState | null = null;
 
 	try {
-		// 2. Validate confirmation
 		if (confirmation !== "yes") {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.data.delete.confirmation_required_title",
@@ -149,48 +139,27 @@ export async function execute(
 			return;
 		}
 
-		// 2.5 Validate scope/type compatibility
-		if (deleteType === "personal" && scopeInput === SCOPE_SERVERWIDE) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.data.delete.invalid_scope_title",
-				descriptionKey:
-					"commands.data.delete.invalid_scope_personal_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-		if (deleteType === "server" && scopeInput === SCOPE_GLOBAL) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.data.delete.invalid_scope_title",
-				descriptionKey: "commands.data.delete.invalid_scope_server_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
-		// 3. Check permissions for server deletions (only in guilds)
-		if (deleteType === "server") {
-			// In guilds, require Manage Server permission
-			if (interaction.guild) {
-				const hasPermission =
-					interaction.memberPermissions?.has("ManageGuild") ?? false;
-
-				if (!hasPermission) {
-					await replyInfoEmbed(interaction, locale, {
-						titleKey: "commands.data.delete.no_permission_title",
-						descriptionKey: "commands.data.delete.no_permission_description",
-						color: ColorCode.ERROR,
-						flags: MessageFlags.Ephemeral,
-					});
-					return;
-				}
+		const requiresServerPermission =
+			deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES ||
+			deleteType === DELETE_TYPE_SERVER_CONFIG;
+		if (requiresServerPermission && interaction.guild) {
+			const hasPermission =
+				interaction.memberPermissions?.has("ManageGuild") ?? false;
+			if (!hasPermission) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "commands.data.delete.no_permission_title",
+					descriptionKey: "commands.data.delete.no_permission_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
 			}
 		}
 
-		// 3.5 Resolve persona when persona scope is requested
-		if (scopeInput === SCOPE_PERSONA) {
+		const needsPersonaSelection =
+			deleteType === DELETE_TYPE_PERSONA_PERSONAL_MEMORIES ||
+			deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES;
+		if (needsPersonaSelection) {
 			const allPersonas = await loadAllPersonasForServer(serverDiscId);
 			const personaSelectOptions: SelectOption[] = allPersonas
 				.filter((persona) => persona.tomori_id !== undefined)
@@ -267,41 +236,9 @@ export async function execute(
 			}
 		}
 
-		// 4. Defer reply while we process the deletion
 		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 5. Execute deletion based on type
-		if (deleteType === "personal") {
-			// Scope omitted: keep legacy full delete behavior
-			if (!scopeInput) {
-				const deletedRows = await sql`
-					DELETE FROM users
-					WHERE user_disc_id = ${interaction.user.id}
-					RETURNING user_id
-				`;
-
-				if (deletedRows.length === 0) {
-					await replyInfoEmbed(responseInteraction, locale, {
-						titleKey: "commands.data.delete.no_data_title",
-						descriptionKey: "commands.data.delete.no_data_description",
-						color: ColorCode.WARN,
-					});
-					return;
-				}
-
-				log.success(
-					`Personal data deleted for user ${interaction.user.id} (user_id: ${deletedRows[0].user_id})`,
-				);
-
-				await replyInfoEmbed(responseInteraction, locale, {
-					titleKey: "commands.data.delete.success_personal_title",
-					descriptionKey: "commands.data.delete.success_personal_description",
-					color: ColorCode.SUCCESS,
-				});
-				return;
-			}
-
-			// Scoped personal memory deletion
+		if (deleteType === DELETE_TYPE_PERSONA_PERSONAL_MEMORIES) {
 			const userRows = await sql<Array<{ user_id: number }>>`
 				SELECT user_id
 				FROM users
@@ -318,10 +255,7 @@ export async function execute(
 				return;
 			}
 
-			const targetLineageId =
-				scopeInput === SCOPE_PERSONA
-					? (selectedPersona?.persona_lineage_id ?? 0)
-					: 0;
+			const targetLineageId = selectedPersona?.persona_lineage_id ?? 0;
 			const deletedMemories = await sql<Array<{ personal_memory_id: number }>>`
 				DELETE FROM personal_memories
 				WHERE user_id = ${targetUserId}
@@ -331,14 +265,10 @@ export async function execute(
 			if (deletedMemories.length === 0) {
 				await replyInfoEmbed(responseInteraction, locale, {
 					titleKey: "commands.data.delete.no_data_title",
-					descriptionKey:
-						scopeInput === SCOPE_PERSONA
-							? "commands.data.delete.no_persona_memories_description"
-							: "commands.data.delete.no_global_memories_description",
-					descriptionVars:
-						scopeInput === SCOPE_PERSONA
-							? { persona_name: selectedPersona?.tomori_nickname ?? "persona" }
-							: undefined,
+					descriptionKey: "commands.data.delete.no_persona_memories_description",
+					descriptionVars: {
+						persona_name: selectedPersona?.tomori_nickname ?? "persona",
+					},
 					color: ColorCode.WARN,
 				});
 				return;
@@ -347,89 +277,94 @@ export async function execute(
 			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.data.delete.success_memory_scope_title",
 				descriptionKey:
-					scopeInput === SCOPE_PERSONA
-						? "commands.data.delete.success_persona_memories_description"
-						: "commands.data.delete.success_global_memories_description",
-				descriptionVars:
-					scopeInput === SCOPE_PERSONA
-						? {
-								persona_name: selectedPersona?.tomori_nickname ?? "persona",
-								memory_count: deletedMemories.length.toString(),
-							}
-						: { memory_count: deletedMemories.length.toString() },
+					"commands.data.delete.success_persona_memories_description",
+				descriptionVars: {
+					persona_name: selectedPersona?.tomori_nickname ?? "persona",
+					memory_count: deletedMemories.length.toString(),
+				},
 				color: ColorCode.SUCCESS,
 			});
-		} else if (deleteType === "server") {
-			// Persona scope: delete only server memories in that persona scope
-			if (scopeInput === SCOPE_PERSONA) {
-				const serverRows = await sql<Array<{ server_id: number }>>`
-					SELECT server_id
-					FROM servers
-					WHERE server_disc_id = ${serverDiscId}
-					LIMIT 1
-				`;
-				const serverId = serverRows[0]?.server_id;
-				if (!serverId) {
-					await replyInfoEmbed(responseInteraction, locale, {
-						titleKey: "commands.data.delete.no_server_data_title",
-						descriptionKey: "commands.data.delete.no_server_data_description",
-						color: ColorCode.WARN,
-					});
-					return;
-				}
+			return;
+		}
 
-				const includeLegacyFallback = selectedPersona?.is_alter !== true;
-				const deletedMemories = includeLegacyFallback
-					? await sql<Array<{ server_memory_id: number }>>`
-						DELETE FROM server_memories
-						WHERE server_id = ${serverId}
-						  AND (
-							tomori_id = ${selectedPersona?.tomori_id}
-							OR tomori_id IS NULL
-						  )
-						RETURNING server_memory_id
-					`
-					: await sql<Array<{ server_memory_id: number }>>`
-						DELETE FROM server_memories
-						WHERE server_id = ${serverId}
-						  AND tomori_id = ${selectedPersona?.tomori_id}
-						RETURNING server_memory_id
-					`;
-				if (deletedMemories.length === 0) {
-					await replyInfoEmbed(responseInteraction, locale, {
-						titleKey: "commands.data.delete.no_server_data_title",
-						descriptionKey:
-							"commands.data.delete.no_persona_server_memories_description",
-						descriptionVars: {
-							persona_name: selectedPersona?.tomori_nickname ?? "persona",
-						},
-						color: ColorCode.WARN,
-					});
-					return;
-				}
-
-				invalidateTomoriStateCache(serverDiscId);
+		if (deleteType === DELETE_TYPE_GLOBAL_PERSONAL_MEMORIES) {
+			const userRows = await sql<Array<{ user_id: number }>>`
+				SELECT user_id
+				FROM users
+				WHERE user_disc_id = ${interaction.user.id}
+				LIMIT 1
+			`;
+			const targetUserId = userRows[0]?.user_id;
+			if (!targetUserId) {
 				await replyInfoEmbed(responseInteraction, locale, {
-					titleKey: "commands.data.delete.success_memory_scope_title",
-					descriptionKey:
-						"commands.data.delete.success_persona_server_memories_description",
-					descriptionVars: {
-						persona_name: selectedPersona?.tomori_nickname ?? "persona",
-						memory_count: deletedMemories.length.toString(),
-					},
-					color: ColorCode.SUCCESS,
+					titleKey: "commands.data.delete.no_data_title",
+					descriptionKey: "commands.data.delete.no_data_description",
+					color: ColorCode.WARN,
 				});
 				return;
 			}
 
-			// Scope omitted or serverwide: legacy full server delete behavior
-			const deletedRows = await sql`
-				DELETE FROM servers
-				WHERE server_disc_id = ${serverDiscId}
-				RETURNING server_id
+			const deletedMemories = await sql<Array<{ personal_memory_id: number }>>`
+				DELETE FROM personal_memories
+				WHERE user_id = ${targetUserId}
+				  AND persona_lineage_id = 0
+				RETURNING personal_memory_id
 			`;
+			if (deletedMemories.length === 0) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.data.delete.no_data_title",
+					descriptionKey: "commands.data.delete.no_global_memories_description",
+					color: ColorCode.WARN,
+				});
+				return;
+			}
 
-			if (deletedRows.length === 0) {
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "commands.data.delete.success_memory_scope_title",
+				descriptionKey:
+					"commands.data.delete.success_global_memories_description",
+				descriptionVars: { memory_count: deletedMemories.length.toString() },
+				color: ColorCode.SUCCESS,
+			});
+			return;
+		}
+
+		if (deleteType === DELETE_TYPE_PERSONAL_SETTINGS) {
+			const updatedUsers = await sql<Array<{ user_id: number }>>`
+				UPDATE users
+				SET
+					user_nickname = ${interaction.user.username},
+					language_pref = 'en-US'
+				WHERE user_disc_id = ${interaction.user.id}
+				RETURNING user_id
+			`;
+			if (!updatedUsers.length) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.data.delete.no_data_title",
+					descriptionKey: "commands.data.delete.no_data_description",
+					color: ColorCode.WARN,
+				});
+				return;
+			}
+
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "commands.data.delete.success_personal_settings_title",
+				descriptionKey:
+					"commands.data.delete.success_personal_settings_description",
+				color: ColorCode.SUCCESS,
+			});
+			return;
+		}
+
+		if (deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES) {
+			const serverRows = await sql<Array<{ server_id: number }>>`
+				SELECT server_id
+				FROM servers
+				WHERE server_disc_id = ${serverDiscId}
+				LIMIT 1
+			`;
+			const serverId = serverRows[0]?.server_id;
+			if (!serverId) {
 				await replyInfoEmbed(responseInteraction, locale, {
 					titleKey: "commands.data.delete.no_server_data_title",
 					descriptionKey: "commands.data.delete.no_server_data_description",
@@ -438,30 +373,142 @@ export async function execute(
 				return;
 			}
 
-			const serverId = deletedRows[0].server_id;
+			const includeLegacyFallback = selectedPersona?.is_alter !== true;
+			const deletedMemories = includeLegacyFallback
+				? await sql<Array<{ server_memory_id: number }>>`
+					DELETE FROM server_memories
+					WHERE server_id = ${serverId}
+					  AND (
+						tomori_id = ${selectedPersona?.tomori_id}
+						OR tomori_id IS NULL
+					  )
+					RETURNING server_memory_id
+				`
+				: await sql<Array<{ server_memory_id: number }>>`
+					DELETE FROM server_memories
+					WHERE server_id = ${serverId}
+					  AND tomori_id = ${selectedPersona?.tomori_id}
+					RETURNING server_memory_id
+				`;
+			if (deletedMemories.length === 0) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.data.delete.no_server_data_title",
+					descriptionKey:
+						"commands.data.delete.no_persona_server_memories_description",
+					descriptionVars: {
+						persona_name: selectedPersona?.tomori_nickname ?? "persona",
+					},
+					color: ColorCode.WARN,
+				});
+				return;
+			}
+
 			invalidateTomoriStateCache(serverDiscId);
-			invalidateEmojiStickerCache(serverId);
-			invalidateWhitelistCache(serverDiscId);
-
-			log.success(
-				`Server data deleted for server ${serverDiscId} (server_id: ${serverId})`,
-			);
-
 			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "commands.data.delete.success_server_title",
-				descriptionKey: "commands.data.delete.success_server_description",
+				titleKey: "commands.data.delete.success_memory_scope_title",
+				descriptionKey:
+					"commands.data.delete.success_persona_server_memories_description",
+				descriptionVars: {
+					persona_name: selectedPersona?.tomori_nickname ?? "persona",
+					memory_count: deletedMemories.length.toString(),
+				},
 				color: ColorCode.SUCCESS,
 			});
-		} else {
-			// Invalid type (should never happen due to addChoices, but handle defensively)
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
+			return;
 		}
+
+		if (deleteType === DELETE_TYPE_SERVER_CONFIG) {
+			const serverRows = await sql<Array<{ server_id: number }>>`
+				SELECT server_id
+				FROM servers
+				WHERE server_disc_id = ${serverDiscId}
+				LIMIT 1
+			`;
+			const serverId = serverRows[0]?.server_id;
+			if (!serverId) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.data.delete.no_server_data_title",
+					descriptionKey: "commands.data.delete.no_server_data_description",
+					color: ColorCode.WARN,
+				});
+				return;
+			}
+
+			let updatedRows = await sql<Array<{ tomori_config_id: number }>>`
+				UPDATE tomori_configs
+				SET
+					llm_temperature = 1.5,
+					humanizer_degree = 1,
+					timezone_offset = 0,
+					server_memteaching_enabled = true,
+					attribute_memteaching_enabled = false,
+					sampledialogue_memteaching_enabled = false,
+					self_teaching_enabled = true,
+					web_search_enabled = true,
+					personal_memories_enabled = true,
+					emoji_usage_enabled = true,
+					sticker_usage_enabled = true,
+					imagegen_enabled = true
+				WHERE server_id = ${serverId}
+				RETURNING tomori_config_id
+			`;
+
+			if (!updatedRows.length) {
+				const mainTomoriRows = await sql<Array<{ tomori_id: number }>>`
+					SELECT tomori_id
+					FROM tomoris
+					WHERE server_id = ${serverId}
+					  AND is_alter = false
+					ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
+					LIMIT 1
+				`;
+				const mainTomoriId = mainTomoriRows[0]?.tomori_id;
+				if (mainTomoriId) {
+					updatedRows = await sql<Array<{ tomori_config_id: number }>>`
+						UPDATE tomori_configs
+						SET
+							llm_temperature = 1.5,
+							humanizer_degree = 1,
+							timezone_offset = 0,
+							server_memteaching_enabled = true,
+							attribute_memteaching_enabled = false,
+							sampledialogue_memteaching_enabled = false,
+							self_teaching_enabled = true,
+							web_search_enabled = true,
+							personal_memories_enabled = true,
+							emoji_usage_enabled = true,
+							sticker_usage_enabled = true,
+							imagegen_enabled = true
+						WHERE tomori_id = ${mainTomoriId}
+						RETURNING tomori_config_id
+					`;
+				}
+			}
+
+			if (!updatedRows.length) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.data.delete.no_server_data_title",
+					descriptionKey: "commands.data.delete.no_server_data_description",
+					color: ColorCode.WARN,
+				});
+				return;
+			}
+
+			invalidateTomoriStateCache(serverDiscId);
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "commands.data.delete.success_server_config_title",
+				descriptionKey: "commands.data.delete.success_server_config_description",
+				color: ColorCode.SUCCESS,
+			});
+			return;
+		}
+
+		await replyInfoEmbed(responseInteraction, locale, {
+			titleKey: "general.errors.invalid_option_title",
+			descriptionKey: "general.errors.invalid_option_description",
+			color: ColorCode.ERROR,
+		});
 	} catch (error) {
-		// 6. Handle unexpected errors
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			errorType: "CommandExecutionError",
@@ -479,7 +526,6 @@ export async function execute(
 			context,
 		);
 
-		// Inform user of error
 		if (responseInteraction.deferred || responseInteraction.replied) {
 			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",

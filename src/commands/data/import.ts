@@ -20,19 +20,74 @@ import {
 	validateImportFile,
 	importPersonalData,
 	importServerData,
-} from "../../utils/db/dataImport";
+	importPersonalMemories,
+	importServerMemories,
+	importPersonalSettings,
+	importServerConfig,
+	type ImportFileType,
+} from "../../utils/db/dataImportV2";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type {
 	PersonalExportData,
 	ServerExportData,
+	PersonalMemoriesExportData,
+	ServerMemoriesExportData,
+	PersonalSettingsExportData,
+	ServerConfigOnlyExportData,
 } from "../../types/db/dataExport";
 import type { SelectOption } from "../../types/discord/modal";
 
 const IMPORT_PERSONA_MODAL_ID = "data_import_persona_modal";
 const IMPORT_PERSONA_SELECT_ID = "persona_select";
-const SCOPE_PERSONA = "persona";
-const SCOPE_GLOBAL = "global";
-const SCOPE_SERVERWIDE = "serverwide";
+const IMPORT_GLOBAL_TARGET_VALUE = "global";
+
+function isMemoryRelatedImportType(type: ImportFileType): boolean {
+	return (
+		type === "personal_memories" ||
+		type === "global_personal_memories" ||
+		type === "server_memories" ||
+		type === "personal" ||
+		type === "server"
+	);
+}
+
+function isServerRelatedImportType(type: ImportFileType): boolean {
+	return (
+		type === "server_memories" ||
+		type === "server_config" ||
+		type === "server"
+	);
+}
+
+function getLocalizedImportTypeName(locale: string, importType: ImportFileType): string {
+	switch (importType) {
+		case "personal_memories":
+			return localizer(
+				locale,
+				"commands.data.export.type_choice_persona_personal_memories",
+			);
+		case "server_memories":
+			return localizer(
+				locale,
+				"commands.data.export.type_choice_persona_server_memories",
+			);
+		case "personal_settings":
+			return localizer(locale, "commands.data.export.type_choice_personal_settings");
+		case "server_config":
+			return localizer(locale, "commands.data.export.type_choice_server_config");
+		case "global_personal_memories":
+			return localizer(
+				locale,
+				"commands.data.export.type_choice_global_personal_memories",
+			);
+		case "personal":
+			return localizer(locale, "commands.data.import.legacy_personal_label");
+		case "server":
+			return localizer(locale, "commands.data.import.legacy_server_label");
+		default:
+			return importType;
+	}
+}
 
 /**
  * Helper function to localize error messages from utility functions
@@ -111,37 +166,6 @@ export const configureSubcommand = (
 						value: "no",
 					},
 				),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("scope")
-				.setDescription(
-					localizer("en-US", "commands.data.import.scope_description"),
-				)
-				.setRequired(false)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.import.scope_choice_persona",
-						),
-						value: SCOPE_PERSONA,
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.import.scope_choice_global",
-						),
-						value: SCOPE_GLOBAL,
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.import.scope_choice_serverwide",
-						),
-						value: SCOPE_SERVERWIDE,
-					},
-				),
 		);
 
 /**
@@ -164,10 +188,7 @@ export async function execute(
 		| ModalSubmitInteraction = interaction;
 
 	try {
-		// 1. Check confirmation
 		const confirmation = interaction.options.getString("confirmation", true);
-		const scopeInput = interaction.options.getString("scope") ?? SCOPE_PERSONA;
-
 		if (confirmation !== "yes") {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.data.import.cancelled_title",
@@ -178,10 +199,8 @@ export async function execute(
 			return;
 		}
 
-		// 2. Get uploaded file attachment
 		const attachment = interaction.options.getAttachment("file", true);
 
-		// 3. Validate file type and size
 		if (!attachment.name.endsWith(".json")) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.data.import.invalid_file_type_title",
@@ -202,36 +221,117 @@ export async function execute(
 			return;
 		}
 
-		// 3.5 Prompt persona selection before long-running work
-		let targetTomoriId: number | undefined;
-		let targetPersonaLineageId = 0;
-		if (scopeInput === SCOPE_PERSONA) {
-			const personas = await loadAllPersonasForServer(serverDiscId);
-			const personaSelectOptions: SelectOption[] = personas
-				.filter((persona) => persona.tomori_id !== undefined)
-				.map((persona) => ({
-					label: safeSelectOptionText(persona.tomori_nickname),
-					value: persona.tomori_id?.toString() ?? "",
-					description: persona.is_alter
-						? localizer(
-								locale,
-								"commands.data.import.alter_persona_description",
-							)
-						: localizer(
-								locale,
-								"commands.data.import.main_persona_description",
-							),
-				}))
-				.filter((option) => option.value !== "");
-			if (personaSelectOptions.length === 0) {
+		let jsonData: unknown;
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+		try {
+			const response = await fetch(attachment.url, {
+				signal: controller.signal,
+			});
+			clearTimeout(timeoutId);
+
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+
+			const textContent = await response.text();
+			jsonData = JSON.parse(textContent);
+		} catch (error) {
+			clearTimeout(timeoutId);
+
+			if (error instanceof Error && error.name === "AbortError") {
+				log.warn("Data import download timed out");
 				await replyInfoEmbed(interaction, locale, {
-					titleKey: "general.errors.invalid_option_title",
-					descriptionKey: "general.errors.invalid_option_description",
+					titleKey: "commands.data.import.failed_title",
+					descriptionKey: "commands.data.import.error_download_timeout",
 					color: ColorCode.ERROR,
 					flags: MessageFlags.Ephemeral,
 				});
 				return;
 			}
+
+			log.error("Failed to download or parse import file:", error as Error);
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.data.import.parse_failed_title",
+				descriptionKey: "commands.data.import.parse_failed_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const validation = validateImportFile(jsonData);
+		if (!validation.valid || !validation.type || !validation.data) {
+			await interaction.reply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(localizer(locale, "commands.data.import.invalid_file_title"))
+						.setDescription(
+							validation.error
+								? localizeError(locale, validation.error)
+								: localizer(
+										locale,
+										"commands.data.import.invalid_file_description",
+									),
+						)
+						.setColor(ColorCode.ERROR),
+				],
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const importType = validation.type;
+		const importData = validation.data;
+
+		if (isServerRelatedImportType(importType) && interaction.guild) {
+			const hasPermission =
+				interaction.memberPermissions?.has("ManageGuild") ?? false;
+			if (!hasPermission) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "commands.data.import.no_permission_title",
+					descriptionKey: "commands.data.import.no_permission_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+		}
+
+		let selectedTomoriId: number | undefined;
+		let selectedPersonaLineageId = 0;
+		let selectedMemoryTargetValue: string | undefined;
+
+		if (isMemoryRelatedImportType(importType)) {
+			const personas = await loadAllPersonasForServer(serverDiscId);
+			const personaSelectOptions: SelectOption[] = [
+				{
+					label: localizer(locale, "commands.data.import.global_option_label"),
+					value: IMPORT_GLOBAL_TARGET_VALUE,
+					description: localizer(
+						locale,
+						"commands.data.import.global_option_description",
+					),
+				},
+				...personas
+					.filter((persona) => persona.tomori_id !== undefined)
+					.map((persona) => ({
+						label: safeSelectOptionText(persona.tomori_nickname),
+						value: persona.tomori_id?.toString() ?? "",
+						description: persona.is_alter
+							? localizer(
+									locale,
+									"commands.data.import.alter_persona_description",
+								)
+							: localizer(
+									locale,
+									"commands.data.import.main_persona_description",
+								),
+					}))
+					.filter((option) => option.value !== ""),
+			];
+
 			const personaModalResult = await promptWithPaginatedModal(
 				interaction,
 				locale,
@@ -264,31 +364,33 @@ export async function execute(
 				return;
 			}
 			responseInteraction = modalSubmitInteraction;
-			const selectedPersonaId =
+			selectedMemoryTargetValue =
 				personaModalResult.values?.[IMPORT_PERSONA_SELECT_ID];
-			const selectedPersona =
-				personas.find(
-					(persona) => persona.tomori_id?.toString() === selectedPersonaId,
-				) ?? null;
-			if (!selectedPersona) {
-				await replyInfoEmbed(responseInteraction, locale, {
-					titleKey: "general.errors.invalid_option_title",
-					descriptionKey: "general.errors.invalid_option_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
 
-			targetTomoriId = selectedPersona.tomori_id;
-			targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
-		} else if (scopeInput === SCOPE_GLOBAL) {
-			targetPersonaLineageId = 0;
+			if (
+				selectedMemoryTargetValue &&
+				selectedMemoryTargetValue !== IMPORT_GLOBAL_TARGET_VALUE
+			) {
+				const selectedPersona =
+					personas.find(
+						(persona) =>
+							persona.tomori_id?.toString() === selectedMemoryTargetValue,
+					) ?? null;
+				if (!selectedPersona) {
+					await replyInfoEmbed(responseInteraction, locale, {
+						titleKey: "general.errors.invalid_option_title",
+						descriptionKey: "general.errors.invalid_option_description",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+				selectedTomoriId = selectedPersona.tomori_id;
+				selectedPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+			}
 		}
 
-		// 4. Defer reply while we process
 		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 4.5. Memory guard check (defense-in-depth)
 		const memCheck = memoryGuard.checkMemory();
 		if (memCheck.status === "critical") {
 			await responseInteraction.editReply({
@@ -306,183 +408,123 @@ export async function execute(
 			return;
 		}
 
-		// 5. Download and parse the JSON file with timeout
-		let jsonData: unknown;
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+		let importResult:
+			| Awaited<ReturnType<typeof importPersonalData>>
+			| Awaited<ReturnType<typeof importServerData>>
+			| Awaited<ReturnType<typeof importPersonalMemories>>
+			| Awaited<ReturnType<typeof importServerMemories>>
+			| Awaited<ReturnType<typeof importPersonalSettings>>
+			| Awaited<ReturnType<typeof importServerConfig>>;
 
-		try {
-			const response = await fetch(attachment.url, {
-				signal: controller.signal,
-			});
-			clearTimeout(timeoutId);
-
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}`);
+		switch (importType) {
+			case "personal_memories":
+			case "global_personal_memories": {
+				const personalMemoriesData = importData as PersonalMemoriesExportData;
+				const targetLineageId =
+					selectedMemoryTargetValue === IMPORT_GLOBAL_TARGET_VALUE
+						? 0
+						: selectedPersonaLineageId;
+				importResult = await importPersonalMemories(
+					interaction.user.id,
+					personalMemoriesData.personal_memories,
+					targetLineageId,
+				);
+				break;
 			}
-
-			const textContent = await response.text();
-			jsonData = JSON.parse(textContent);
-		} catch (error) {
-			clearTimeout(timeoutId);
-
-			// Handle timeout vs other errors
-			if (error instanceof Error && error.name === "AbortError") {
-				log.warn("Data import download timed out");
+			case "server_memories": {
+				const serverMemoriesData = importData as ServerMemoriesExportData;
+				importResult =
+					selectedMemoryTargetValue === IMPORT_GLOBAL_TARGET_VALUE
+						? await importServerMemories(
+								serverDiscId,
+								serverMemoriesData.server_memories,
+								{ mode: "global" },
+							)
+						: await importServerMemories(
+								serverDiscId,
+								serverMemoriesData.server_memories,
+								{ mode: "persona", tomoriId: selectedTomoriId },
+							);
+				break;
+			}
+			case "personal_settings": {
+				const personalSettingsData = importData as PersonalSettingsExportData;
+				importResult = await importPersonalSettings(
+					interaction.user.id,
+					personalSettingsData,
+				);
+				break;
+			}
+			case "server_config": {
+				const serverConfigData = importData as ServerConfigOnlyExportData;
+				importResult = await importServerConfig(
+					serverDiscId,
+					serverConfigData.config,
+				);
+				break;
+			}
+			case "personal": {
+				const personalData = importData as PersonalExportData;
+				const targetLineageId =
+					selectedMemoryTargetValue === IMPORT_GLOBAL_TARGET_VALUE
+						? 0
+						: selectedPersonaLineageId;
+				importResult = await importPersonalData(
+					interaction.user.id,
+					personalData,
+					targetLineageId,
+				);
+				break;
+			}
+			case "server": {
+				const serverData = importData as ServerExportData;
+				if (selectedMemoryTargetValue === IMPORT_GLOBAL_TARGET_VALUE) {
+					const configResult = await importServerConfig(
+						serverDiscId,
+						serverData.config,
+					);
+					if (!configResult.success) {
+						importResult = configResult;
+						break;
+					}
+					const memoriesResult = await importServerMemories(
+						serverDiscId,
+						serverData.server_memories,
+						{ mode: "global" },
+					);
+					importResult = memoriesResult.success
+						? {
+								success: true,
+								itemsImported: {
+									memoriesCount: memoriesResult.itemsImported?.memoriesCount ?? 0,
+									configFieldsCount:
+										configResult.itemsImported?.configFieldsCount ?? 0,
+								},
+							}
+						: memoriesResult;
+				} else {
+					importResult = await importServerData(
+						serverDiscId,
+						serverData,
+						selectedTomoriId,
+					);
+				}
+				break;
+			}
+			default:
 				await responseInteraction.editReply({
 					embeds: [
 						new EmbedBuilder()
-							.setTitle(
-								localizer(
-									locale,
-									"commands.data.import.error_download_timeout",
-								),
+							.setTitle(localizer(locale, "general.errors.invalid_option_title"))
+							.setDescription(
+								localizer(locale, "general.errors.invalid_option_description"),
 							)
 							.setColor(ColorCode.ERROR),
 					],
 				});
 				return;
-			}
-
-			// Parse/download errors
-			log.error("Failed to download or parse import file:", error as Error);
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "commands.data.import.parse_failed_title"),
-						)
-						.setDescription(
-							localizer(
-								locale,
-								"commands.data.import.parse_failed_description",
-							),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
 		}
 
-		// 6. Validate import file structure
-		const validation = validateImportFile(jsonData);
-
-		if (!validation.valid || !validation.type || !validation.data) {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "commands.data.import.invalid_file_title"),
-						)
-						.setDescription(
-							validation.error
-								? localizeError(locale, validation.error)
-								: localizer(
-										locale,
-										"commands.data.import.invalid_file_description",
-									),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
-
-		// 6.5 Validate scope/type compatibility
-		if (validation.type === "personal" && scopeInput === SCOPE_SERVERWIDE) {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "commands.data.import.invalid_scope_title"))
-						.setDescription(
-							localizer(
-								locale,
-								"commands.data.import.invalid_scope_personal_description",
-							),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
-		if (validation.type === "server" && scopeInput === SCOPE_GLOBAL) {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "commands.data.import.invalid_scope_title"))
-						.setDescription(
-							localizer(
-								locale,
-								"commands.data.import.invalid_scope_server_description",
-							),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
-
-		// 7. Check permissions for server imports (only in guilds)
-		if (validation.type === "server") {
-			// In guilds, require Manage Server permission
-			if (interaction.guild) {
-				const hasPermission =
-					interaction.memberPermissions?.has("ManageGuild") ?? false;
-
-				if (!hasPermission) {
-					await responseInteraction.editReply({
-						embeds: [
-							new EmbedBuilder()
-								.setTitle(
-									localizer(locale, "commands.data.import.no_permission_title"),
-								)
-								.setDescription(
-									localizer(
-										locale,
-										"commands.data.import.no_permission_description",
-									),
-								)
-								.setColor(ColorCode.ERROR),
-						],
-					});
-					return;
-				}
-			}
-		}
-
-		// 8. Import data based on type using selected persona scope
-
-		let importResult:
-			| Awaited<ReturnType<typeof importPersonalData>>
-			| Awaited<ReturnType<typeof importServerData>>;
-
-		if (validation.type === "personal") {
-			importResult = await importPersonalData(
-				interaction.user.id,
-				validation.data as PersonalExportData,
-				targetPersonaLineageId,
-			);
-		} else if (validation.type === "server") {
-			importResult = await importServerData(
-				serverDiscId,
-				validation.data as ServerExportData,
-				targetTomoriId,
-			);
-		} else {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "general.errors.invalid_option_title"))
-						.setDescription(
-							localizer(locale, "general.errors.invalid_option_description"),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
-
-		// 9. Handle import result
 		if (!importResult.success) {
 			await responseInteraction.editReply({
 				embeds: [
@@ -499,34 +541,34 @@ export async function execute(
 			return;
 		}
 
-		// Invalidate caches so next message gets fresh data
-		if (validation.type === "personal") {
+		if (
+			importType === "personal" ||
+			importType === "personal_memories" ||
+			importType === "global_personal_memories" ||
+			importType === "personal_settings"
+		) {
 			invalidateUserCache(interaction.user.id);
-		} else if (validation.type === "server") {
-			const serverDiscId = interaction.guild?.id ?? interaction.user.id;
+		}
+		if (
+			importType === "server" ||
+			importType === "server_memories" ||
+			importType === "server_config"
+		) {
 			invalidateTomoriStateCache(serverDiscId);
 		}
 
-		// 10. Send success message with import summary
 		const memoriesCount = importResult.itemsImported?.memoriesCount || 0;
 		const configFieldsCount =
 			importResult.itemsImported?.configFieldsCount || 0;
-
-		// Use different description for server imports (mentions excluded data)
-		const successDescriptionKey =
-			validation.type === "server"
-				? scopeInput === SCOPE_PERSONA
-					? "commands.data.import.success_description_server_persona_scope"
-					: "commands.data.import.success_description_server"
-				: "commands.data.import.success_description";
+		const localizedType = getLocalizedImportTypeName(locale, importType);
 
 		await responseInteraction.editReply({
 			embeds: [
 				new EmbedBuilder()
 					.setTitle(localizer(locale, "commands.data.import.success_title"))
 					.setDescription(
-						localizer(locale, successDescriptionKey, {
-							type: validation.type,
+						localizer(locale, "commands.data.import.success_description", {
+							type: localizedType,
 							memories_count: memoriesCount,
 							config_count: configFieldsCount,
 						}),

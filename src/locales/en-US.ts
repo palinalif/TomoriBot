@@ -557,12 +557,17 @@ export default {
 		data: {
 			description: `Manage your data exports and imports`,
 			export: {
-				description: `Export your personal or server data to a JSON file`,
-				type_description: `What type of data do you want to export?`,
+				description: `Export specific data to a JSON backup file`,
+				type_description: `What do you want to export?`,
 				scope_description: `Choose scope for the selected data type`,
 				type_choice_personal: `Personal Data`,
 				type_choice_server: `Server Data`,
 				type_choice_personality: `Personality Info`,
+				type_choice_persona_personal_memories: `Personal Memories of Persona`,
+				type_choice_persona_server_memories: `Server Memories of Persona`,
+				type_choice_personal_settings: `Personal Settings`,
+				type_choice_server_config: `Server Config`,
+				type_choice_global_personal_memories: `Global Personal Memories`,
 				scope_choice_persona: `Persona`,
 				scope_choice_global: `Global`,
 				scope_choice_serverwide: `Serverwide`,
@@ -598,9 +603,9 @@ export default {
 				error_export_failed: `Failed to export data`,
 			},
 			import: {
-				description: `Import data from a backup JSON file`,
+				description: `Import data from an exported JSON file (auto-detected)`,
 				file_description: `The JSON file to import data from`,
-				confirmation_description: `WARNING: This REPLACES data. Server imports exclude triggers, API keys, personality. Continue?`,
+				confirmation_description: `WARNING: This may replace existing memories/settings based on file type. Continue?`,
 				confirmation_description_server: `WARNING: Replaces server settings & memories. Does NOT restore: trigger words, API keys, personality, avatar.`,
 				scope_description: `Choose scope for where imported data is applied`,
 				confirmation_choice_yes: `Yes, I understand and want to proceed`,
@@ -612,6 +617,10 @@ export default {
 				persona_select_label: `Persona`,
 				persona_select_description: `Choose which persona this import should target.`,
 				persona_select_placeholder: `Select a persona...`,
+				global_option_label: `Global`,
+				global_option_description: `Global means shared memory scope, not persona-specific.`,
+				legacy_personal_label: `Legacy Personal Backup`,
+				legacy_server_label: `Legacy Server Backup`,
 				main_persona_description: `Main Persona`,
 				alter_persona_description: `Alter Persona`,
 				success_title: `🟢 Import Successful`,
@@ -649,14 +658,23 @@ export default {
 				error_incompatible_version: `Incompatible import version. Expected {expected}, got {actual}`,
 				error_invalid_personal_format: `Invalid personal import file format`,
 				error_invalid_server_format: `Invalid server import file format`,
-				error_unknown_type: `Unknown import type: {type}. Must be "personal" or "server"`,
+				error_invalid_personal_memories_format: `Invalid personal memories import file format`,
+				error_invalid_server_memories_format: `Invalid server memories import file format`,
+				error_invalid_personal_settings_format: `Invalid personal settings import file format`,
+				error_invalid_server_config_format: `Invalid server config import file format`,
+				error_unknown_type: `Unknown import type: {type}.`,
 			},
 			delete: {
-				description: `Permanently delete your personal or server data`,
-				type_description: `What type of data do you want to delete?`,
+				description: `Permanently delete selected data scopes`,
+				type_description: `What do you want to delete?`,
 				scope_description: `Optional scope (leave empty for legacy full delete behavior)`,
 				type_choice_personal: `Personal Data`,
 				type_choice_server: `Server Data`,
+				type_choice_persona_personal_memories: `Personal Memories of Persona`,
+				type_choice_persona_server_memories: `Server Memories of Persona`,
+				type_choice_personal_settings: `Personal Settings`,
+				type_choice_server_config: `Server Config`,
+				type_choice_global_personal_memories: `Global Personal Memories`,
 				scope_choice_persona: `Persona`,
 				scope_choice_global: `Global`,
 				scope_choice_serverwide: `Serverwide`,
@@ -682,6 +700,10 @@ export default {
 				success_personal_description: `All your personal data has been permanently deleted. You'll start fresh with default settings if you interact with me again.`,
 				success_server_title: `🟢 Server Data Deleted`,
 				success_server_description: `All server data has been permanently deleted. You'll need to run \`/config setup\` to use me again.`,
+				success_personal_settings_title: `🟢 Personal Settings Reset`,
+				success_personal_settings_description: `Your personal settings have been reset to defaults.`,
+				success_server_config_title: `🟢 Server Config Reset`,
+				success_server_config_description: `Server configuration has been reset to defaults.`,
 				no_data_title: `🟡️ No Data Found`,
 				no_data_description: `You don't have any personal data stored in the database.`,
 				no_persona_memories_description: `No personal memories found for persona "{persona_name}".`,
@@ -1104,19 +1126,23 @@ Setting up TomoriBot means that you and your server members agree to its \`/lega
 				embed_description: `How you can manage your data and what I store:`,
 				export_title: `Export Your Data`,
 				export_description: `Use {dataExport} to download your data:
-- **Personal data**: Your memories, preferences, and user settings
-- **Server data**: Server memories, configurations, and bot settings
-- **Personality data**: Custom personality presets you've created (use {personaExport} instead to share it with others)
-- Data is sent to your DMs as a JSON or text file`,
+- **Personal Memories of Persona**: Personal memories for one selected persona scope
+- **Server Memories of Persona**: Server memories for one selected persona
+- **Personal Settings**: Your nickname/language preferences
+- **Server Config**: Server configuration values (no API keys/triggers)
+- **Global Personal Memories**: Global personal memory scope
+- Data is sent to your DMs as a JSON file`,
 				import_title: `Import Your Data`,
 				import_description: `Use {dataImport} to restore previously exported data:
-- Restore your personal data across servers
-- Transfer server configurations to a new server
+- File type is auto-detected from the export file
+- For memory files, you'll choose a target persona or Global scope
+- Server-related imports require \`Manage Server\` in guilds
 - Simply attach your exported file when using the command`,
 				delete_title: `Delete Your Data`,
 				delete_description: `Use {dataDelete} to permanently remove your data:
-- **Personal deletion**: Removes all your user data, memories, and preferences
-- **Server deletion**: Removes all server data
+- **Personal Memories of Persona** / **Global Personal Memories**
+- **Server Memories of Persona**
+- **Personal Settings** / **Server Config reset**
 - This action cannot be undone!`,
 				privacy_title: `Privacy Notice`,
 				privacy_description: `**What I Store:**

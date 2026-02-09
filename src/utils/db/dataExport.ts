@@ -2,8 +2,18 @@ import { sql } from "@/utils/db/client";
 import { log } from "../misc/logger";
 import {
 	EXPORT_VERSION,
+	personalMemoriesExportSchema,
+	globalPersonalMemoriesExportSchema,
+	personalSettingsExportSchema,
+	serverMemoriesExportSchema,
+	serverConfigOnlyExportSchema,
 	getPersonalExportSchema,
 	getServerExportSchema,
+	type PersonalMemoriesExport,
+	type GlobalPersonalMemoriesExport,
+	type PersonalSettingsExport,
+	type ServerMemoriesExport,
+	type ServerConfigOnlyExport,
 	type PersonalExport,
 	type ServerExport,
 	type ExportResult,
@@ -335,6 +345,221 @@ export async function exportServerData(
 			error: "commands.data.export.error_export_failed",
 		};
 	}
+}
+
+/**
+ * Exports persona-scoped personal memories only.
+ * @param userDiscId - Discord user ID to export data for
+ * @param personaLineageId - Persona lineage namespace to export memories from
+ */
+export async function exportPersonaPersonalMemories(
+	userDiscId: string,
+	personaLineageId: number,
+): Promise<ExportResult> {
+	const baseExport = await exportPersonalData(userDiscId, personaLineageId, false);
+	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
+		return {
+			success: false,
+			error: baseExport.error || "commands.data.export.error_export_failed",
+		};
+	}
+
+	const exportData: PersonalMemoriesExport = {
+		version: EXPORT_VERSION,
+		type: "personal_memories",
+		exported_at: baseExport.data.exported_at,
+		data: {
+			personal_memories: baseExport.data.data.personal_memories,
+		},
+	};
+
+	const validated = personalMemoriesExportSchema.safeParse(exportData);
+	if (!validated.success) {
+		log.error(
+			`Persona personal memories export validation failed for user ${userDiscId}:`,
+			validated.error,
+		);
+		return {
+			success: false,
+			error: "commands.data.export.error_validation_failed",
+		};
+	}
+
+	return {
+		success: true,
+		data: validated.data,
+	};
+}
+
+/**
+ * Exports global personal memories only (lineage 0).
+ * @param userDiscId - Discord user ID to export data for
+ */
+export async function exportGlobalPersonalMemories(
+	userDiscId: string,
+): Promise<ExportResult> {
+	const baseExport = await exportPersonalData(userDiscId, 0, false);
+	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
+		return {
+			success: false,
+			error: baseExport.error || "commands.data.export.error_export_failed",
+		};
+	}
+
+	const exportData: GlobalPersonalMemoriesExport = {
+		version: EXPORT_VERSION,
+		type: "global_personal_memories",
+		exported_at: baseExport.data.exported_at,
+		data: {
+			personal_memories: baseExport.data.data.personal_memories,
+		},
+	};
+
+	const validated = globalPersonalMemoriesExportSchema.safeParse(exportData);
+	if (!validated.success) {
+		log.error(
+			`Global personal memories export validation failed for user ${userDiscId}:`,
+			validated.error,
+		);
+		return {
+			success: false,
+			error: "commands.data.export.error_validation_failed",
+		};
+	}
+
+	return {
+		success: true,
+		data: validated.data,
+	};
+}
+
+/**
+ * Exports personal settings only.
+ * @param userDiscId - Discord user ID to export data for
+ */
+export async function exportPersonalSettings(
+	userDiscId: string,
+): Promise<ExportResult> {
+	const baseExport = await exportPersonalData(userDiscId, 0, false);
+	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
+		return {
+			success: false,
+			error: baseExport.error || "commands.data.export.error_export_failed",
+		};
+	}
+
+	const exportData: PersonalSettingsExport = {
+		version: EXPORT_VERSION,
+		type: "personal_settings",
+		exported_at: baseExport.data.exported_at,
+		data: {
+			user_nickname: baseExport.data.data.user_nickname,
+			language_pref: baseExport.data.data.language_pref,
+		},
+	};
+
+	const validated = personalSettingsExportSchema.safeParse(exportData);
+	if (!validated.success) {
+		log.error(
+			`Personal settings export validation failed for user ${userDiscId}:`,
+			validated.error,
+		);
+		return {
+			success: false,
+			error: "commands.data.export.error_validation_failed",
+		};
+	}
+
+	return {
+		success: true,
+		data: validated.data,
+	};
+}
+
+/**
+ * Exports persona-scoped server memories only.
+ * @param serverDiscId - Discord server ID to export data for
+ * @param tomoriId - Persona ID to export memories from
+ */
+export async function exportPersonaServerMemories(
+	serverDiscId: string,
+	tomoriId: number,
+): Promise<ExportResult> {
+	const baseExport = await exportServerData(serverDiscId, tomoriId);
+	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "server") {
+		return {
+			success: false,
+			error: baseExport.error || "commands.data.export.error_export_failed",
+		};
+	}
+
+	const exportData: ServerMemoriesExport = {
+		version: EXPORT_VERSION,
+		type: "server_memories",
+		exported_at: baseExport.data.exported_at,
+		data: {
+			server_memories: baseExport.data.data.server_memories,
+		},
+	};
+
+	const validated = serverMemoriesExportSchema.safeParse(exportData);
+	if (!validated.success) {
+		log.error(
+			`Persona server memories export validation failed for server ${serverDiscId}:`,
+			validated.error,
+		);
+		return {
+			success: false,
+			error: "commands.data.export.error_validation_failed",
+		};
+	}
+
+	return {
+		success: true,
+		data: validated.data,
+	};
+}
+
+/**
+ * Exports server config only.
+ * @param serverDiscId - Discord server ID to export data for
+ */
+export async function exportServerConfig(
+	serverDiscId: string,
+): Promise<ExportResult> {
+	const baseExport = await exportServerData(serverDiscId);
+	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "server") {
+		return {
+			success: false,
+			error: baseExport.error || "commands.data.export.error_export_failed",
+		};
+	}
+
+	const exportData: ServerConfigOnlyExport = {
+		version: EXPORT_VERSION,
+		type: "server_config",
+		exported_at: baseExport.data.exported_at,
+		data: {
+			config: baseExport.data.data.config,
+		},
+	};
+
+	const validated = serverConfigOnlyExportSchema.safeParse(exportData);
+	if (!validated.success) {
+		log.error(
+			`Server config export validation failed for server ${serverDiscId}:`,
+			validated.error,
+		);
+		return {
+			success: false,
+			error: "commands.data.export.error_validation_failed",
+		};
+	}
+
+	return {
+		success: true,
+		data: validated.data,
+	};
 }
 
 /**

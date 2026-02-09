@@ -14,18 +14,48 @@ import {
 } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import {
-	exportPersonalData,
-	exportServerData,
-	exportPersonalityData,
+	exportPersonaPersonalMemories,
+	exportPersonaServerMemories,
+	exportPersonalSettings,
+	exportServerConfig,
+	exportGlobalPersonalMemories,
 } from "../../utils/db/dataExport";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type { SelectOption } from "../../types/discord/modal";
 
 const EXPORT_PERSONA_MODAL_ID = "data_export_persona_modal";
 const EXPORT_PERSONA_SELECT_ID = "persona_select";
-const SCOPE_PERSONA = "persona";
-const SCOPE_GLOBAL = "global";
-const SCOPE_SERVERWIDE = "serverwide";
+const EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES = "persona_personal_memories";
+const EXPORT_TYPE_PERSONA_SERVER_MEMORIES = "persona_server_memories";
+const EXPORT_TYPE_PERSONAL_SETTINGS = "personal_settings";
+const EXPORT_TYPE_SERVER_CONFIG = "server_config";
+const EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES = "global_personal_memories";
+
+function getLocalizedExportTypeName(locale: string, exportType: string): string {
+	switch (exportType) {
+		case EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES:
+			return localizer(
+				locale,
+				"commands.data.export.type_choice_persona_personal_memories",
+			);
+		case EXPORT_TYPE_PERSONA_SERVER_MEMORIES:
+			return localizer(
+				locale,
+				"commands.data.export.type_choice_persona_server_memories",
+			);
+		case EXPORT_TYPE_PERSONAL_SETTINGS:
+			return localizer(locale, "commands.data.export.type_choice_personal_settings");
+		case EXPORT_TYPE_SERVER_CONFIG:
+			return localizer(locale, "commands.data.export.type_choice_server_config");
+		case EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES:
+			return localizer(
+				locale,
+				"commands.data.export.type_choice_global_personal_memories",
+			);
+		default:
+			return exportType;
+	}
+}
 
 /**
  * Configure the 'export' subcommand
@@ -47,51 +77,37 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.data.export.type_choice_personal",
+							"commands.data.export.type_choice_persona_personal_memories",
 						),
-						value: "personal",
-					},
-					{
-						name: localizer("en-US", "commands.data.export.type_choice_server"),
-						value: "server",
+						value: EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.data.export.type_choice_personality",
+							"commands.data.export.type_choice_persona_server_memories",
 						),
-						value: "personality",
-					},
-				),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("scope")
-				.setDescription(
-					localizer("en-US", "commands.data.export.scope_description"),
-				)
-				.setRequired(false)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.data.export.scope_choice_persona",
-						),
-						value: SCOPE_PERSONA,
+						value: EXPORT_TYPE_PERSONA_SERVER_MEMORIES,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.data.export.scope_choice_global",
+							"commands.data.export.type_choice_personal_settings",
 						),
-						value: SCOPE_GLOBAL,
+						value: EXPORT_TYPE_PERSONAL_SETTINGS,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.data.export.scope_choice_serverwide",
+							"commands.data.export.type_choice_server_config",
 						),
-						value: SCOPE_SERVERWIDE,
+						value: EXPORT_TYPE_SERVER_CONFIG,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.data.export.type_choice_global_personal_memories",
+						),
+						value: EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES,
 					},
 				),
 		);
@@ -110,54 +126,22 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Get the export type option
 	const exportType = interaction.options.getString("type", true);
-	const scopeInput = interaction.options.getString("scope") ?? SCOPE_PERSONA;
 	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
 	let responseInteraction:
 		| ChatInputCommandInteraction
 		| ModalSubmitInteraction = interaction;
 
 	try {
-		// 1.5 Validate scope/type compatibility
-		if (exportType === "personal" && scopeInput === SCOPE_SERVERWIDE) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.data.export.invalid_scope_title",
-				descriptionKey:
-					"commands.data.export.invalid_scope_personal_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-		if (exportType === "server" && scopeInput === SCOPE_GLOBAL) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.data.export.invalid_scope_title",
-				descriptionKey: "commands.data.export.invalid_scope_server_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-		if (
-			exportType === "personality" &&
-			(scopeInput === SCOPE_GLOBAL || scopeInput === SCOPE_SERVERWIDE)
-		) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.data.export.invalid_scope_title",
-				descriptionKey:
-					"commands.data.export.invalid_scope_personality_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
-
-		// 1.6 Resolve target persona for persona-scoped exports
 		let targetTomoriId: number | undefined;
 		let targetPersonaLineageId = 0;
 		let targetPersonaNickname: string | null = null;
-		if (scopeInput === SCOPE_PERSONA) {
+
+		const needsPersonaSelection =
+			exportType === EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES ||
+			exportType === EXPORT_TYPE_PERSONA_SERVER_MEMORIES;
+
+		if (needsPersonaSelection) {
 			const personas = await loadAllPersonasForServer(serverDiscId);
 			const personaSelectOptions: SelectOption[] = personas
 				.filter((persona) => persona.tomori_id !== undefined)
@@ -235,175 +219,88 @@ export async function execute(
 			targetTomoriId = selectedPersona.tomori_id;
 			targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
 			targetPersonaNickname = selectedPersona.tomori_nickname;
-		} else if (scopeInput === SCOPE_GLOBAL) {
-			targetPersonaLineageId = 0;
-			targetPersonaNickname = "global";
-		} else if (scopeInput === SCOPE_SERVERWIDE) {
-			targetPersonaNickname = "serverwide";
 		}
 
-		// 2. Check permissions for server and personality exports (only in guilds)
-		if (exportType === "server" || exportType === "personality") {
-			// In guilds, require Manage Server permission
-			if (interaction.guild) {
-				const hasPermission =
-					interaction.memberPermissions?.has("ManageGuild") ?? false;
-
-				if (!hasPermission) {
-					await replyInfoEmbed(responseInteraction, locale, {
-						titleKey: "commands.data.export.no_permission_title",
-						descriptionKey: "commands.data.export.no_permission_description",
-						color: ColorCode.ERROR,
-						flags: MessageFlags.Ephemeral,
-					});
-					return;
-				}
+		const requiresServerPermission =
+			exportType === EXPORT_TYPE_PERSONA_SERVER_MEMORIES ||
+			exportType === EXPORT_TYPE_SERVER_CONFIG;
+		if (requiresServerPermission && interaction.guild) {
+			const hasPermission =
+				interaction.memberPermissions?.has("ManageGuild") ?? false;
+			if (!hasPermission) {
+				await replyInfoEmbed(responseInteraction, locale, {
+					titleKey: "commands.data.export.no_permission_title",
+					descriptionKey: "commands.data.export.no_permission_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
 			}
 		}
 
-		// 3. Defer reply while we process
 		await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 4. Handle personality export separately (returns text instead of JSON)
-		if (exportType === "personality") {
-			const personalityResult = await exportPersonalityData(
-				serverDiscId,
-				targetTomoriId,
-			);
+		let exportResult: Awaited<ReturnType<typeof exportPersonalSettings>>;
+		let filename: string;
+		const safeSlug = (targetPersonaNickname ?? "global")
+			.replace(/[^a-zA-Z0-9-_]/g, "_")
+			.slice(0, 32);
+		const timestamp = Date.now();
 
-			if (!personalityResult.success || !personalityResult.text) {
+		switch (exportType) {
+			case EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES:
+				exportResult = await exportPersonaPersonalMemories(
+					interaction.user.id,
+					targetPersonaLineageId,
+				);
+				filename = `tomori-personal-memories-${safeSlug}-${interaction.user.id}-${timestamp}.json`;
+				break;
+			case EXPORT_TYPE_PERSONA_SERVER_MEMORIES:
+				if (!targetTomoriId) {
+					await responseInteraction.editReply({
+						embeds: [
+							new EmbedBuilder()
+								.setTitle(localizer(locale, "general.errors.invalid_option_title"))
+								.setDescription(
+									localizer(locale, "general.errors.invalid_option_description"),
+								)
+								.setColor(ColorCode.ERROR),
+						],
+					});
+					return;
+				}
+				exportResult = await exportPersonaServerMemories(
+					serverDiscId,
+					targetTomoriId,
+				);
+				filename = `tomori-server-memories-${safeSlug}-${serverDiscId}-${timestamp}.json`;
+				break;
+			case EXPORT_TYPE_PERSONAL_SETTINGS:
+				exportResult = await exportPersonalSettings(interaction.user.id);
+				filename = `tomori-personal-settings-${interaction.user.id}-${timestamp}.json`;
+				break;
+			case EXPORT_TYPE_SERVER_CONFIG:
+				exportResult = await exportServerConfig(serverDiscId);
+				filename = `tomori-server-config-${serverDiscId}-${timestamp}.json`;
+				break;
+			case EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES:
+				exportResult = await exportGlobalPersonalMemories(interaction.user.id);
+				filename = `tomori-global-personal-memories-${interaction.user.id}-${timestamp}.json`;
+				break;
+			default:
 				await responseInteraction.editReply({
 					embeds: [
 						new EmbedBuilder()
-							.setTitle(localizer(locale, "commands.data.export.failed_title"))
+							.setTitle(localizer(locale, "general.errors.invalid_option_title"))
 							.setDescription(
-								personalityResult.error
-									? localizer(locale, personalityResult.error)
-									: localizer(
-											locale,
-											"commands.data.export.failed_description",
-										),
+								localizer(locale, "general.errors.invalid_option_description"),
 							)
 							.setColor(ColorCode.ERROR),
 					],
 				});
 				return;
-			}
-
-			// Create text file attachment
-			const personaSlug = (targetPersonaNickname ?? "persona")
-				.replace(/[^a-zA-Z0-9-_]/g, "_")
-				.slice(0, 32);
-			const filename = `tomori-personality-${personaSlug}-${serverDiscId}-${Date.now()}.txt`;
-			const attachment = new AttachmentBuilder(
-				Buffer.from(personalityResult.text, "utf-8"),
-				{
-					name: filename,
-				},
-			);
-
-			// Get bot's avatar for the thumbnail (guild avatar if in guild, default otherwise)
-			let botAvatarUrl: string;
-			if (interaction.guild) {
-				const botMember = await interaction.guild.members.fetch(
-					interaction.client.user.id,
-				);
-				botAvatarUrl = botMember.displayAvatarURL({ size: 256 });
-			} else {
-				botAvatarUrl = interaction.client.user.displayAvatarURL({ size: 256 });
-			}
-
-			// Send to user's DM with bot avatar thumbnail
-			try {
-				await interaction.user.send({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle(localizer(locale, "commands.data.export.dm_title"))
-							.setDescription(
-								localizer(
-									locale,
-									"commands.data.export.dm_description_personality",
-								),
-							)
-							.setThumbnail(botAvatarUrl)
-							.setColor(ColorCode.INFO),
-					],
-					files: [attachment],
-				});
-
-				// Confirm success in the channel
-				await responseInteraction.editReply({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle(localizer(locale, "commands.data.export.success_title"))
-							.setDescription(
-								localizer(
-									locale,
-									"commands.data.export.success_description_personality",
-								),
-							)
-							.setColor(ColorCode.SUCCESS),
-					],
-				});
-			} catch (dmError) {
-				// DM failed, likely because user has DMs disabled
-				log.warn(
-					`Failed to send personality export DM to user ${interaction.user.id}:`,
-					dmError as Error,
-				);
-				await responseInteraction.editReply({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle(
-								localizer(locale, "commands.data.export.dm_failed_title"),
-							)
-							.setDescription(
-								localizer(locale, "commands.data.export.dm_failed_description"),
-							)
-							.setColor(ColorCode.ERROR),
-					],
-				});
-			}
-			return;
 		}
 
-		// 5. Export data based on type (personal or server)
-		let exportResult:
-			| Awaited<ReturnType<typeof exportPersonalData>>
-			| Awaited<ReturnType<typeof exportServerData>>;
-		let filename: string;
-
-		if (exportType === "personal") {
-			exportResult = await exportPersonalData(
-				interaction.user.id,
-				targetPersonaLineageId,
-				false,
-			);
-			const personaSlug = (targetPersonaNickname ?? scopeInput)
-				.replace(/[^a-zA-Z0-9-_]/g, "_")
-				.slice(0, 32);
-			filename = `tomori-personal-${personaSlug}-${interaction.user.id}-${Date.now()}.json`;
-		} else if (exportType === "server") {
-			exportResult = await exportServerData(serverDiscId, targetTomoriId);
-			const personaSlug = (targetPersonaNickname ?? scopeInput)
-				.replace(/[^a-zA-Z0-9-_]/g, "_")
-				.slice(0, 32);
-			filename = `tomori-server-${personaSlug}-${serverDiscId}-${Date.now()}.json`;
-		} else {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "general.errors.invalid_option_title"))
-						.setDescription(
-							localizer(locale, "general.errors.invalid_option_description"),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
-
-		// 6. Handle export errors
 		if (!exportResult.success || !exportResult.data) {
 			await responseInteraction.editReply({
 				embeds: [
@@ -420,27 +317,20 @@ export async function execute(
 			return;
 		}
 
-		// 7. Create JSON file attachment
 		const jsonString = JSON.stringify(exportResult.data, null, 2);
 		const attachment = new AttachmentBuilder(Buffer.from(jsonString, "utf-8"), {
 			name: filename,
 		});
 
-		// 8. Send to user's DM
 		try {
-			// Use different description for server exports (mentions excluded data)
-			const dmDescriptionKey =
-				exportType === "server"
-					? "commands.data.export.dm_description_server"
-					: "commands.data.export.dm_description";
-
+			const localizedType = getLocalizedExportTypeName(locale, exportType);
 			await interaction.user.send({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.dm_title"))
 						.setDescription(
-							localizer(locale, dmDescriptionKey, {
-								type: exportType,
+							localizer(locale, "commands.data.export.dm_description", {
+								type: localizedType,
 							}),
 						)
 						.setColor(ColorCode.INFO),
@@ -448,21 +338,19 @@ export async function execute(
 				files: [attachment],
 			});
 
-			// 9. Confirm success in the channel
 			await responseInteraction.editReply({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.success_title"))
 						.setDescription(
 							localizer(locale, "commands.data.export.success_description", {
-								type: exportType,
+								type: localizedType,
 							}),
 						)
 						.setColor(ColorCode.SUCCESS),
 				],
 			});
 		} catch (dmError) {
-			// DM failed, likely because user has DMs disabled
 			log.warn(
 				`Failed to send export DM to user ${interaction.user.id}:`,
 				dmError as Error,
@@ -484,7 +372,6 @@ export async function execute(
 			metadata: { commandName: "export", exportType },
 		});
 
-		// If we haven't replied yet, reply with error
 		if (!responseInteraction.replied && !responseInteraction.deferred) {
 			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
