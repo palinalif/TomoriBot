@@ -1,13 +1,16 @@
 import {
 	MessageFlags,
 	type ChatInputCommandInteraction,
+	type ButtonInteraction,
 	type Client,
+	type ModalSubmitInteraction,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
+	replyPaginatedPersonaChoicesV2,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
@@ -20,7 +23,7 @@ import {
 } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { sql } from "@/utils/db/client";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Modal IDs
 const TRIGGER_MODAL_CUSTOM_ID = "server_triggerdelete_trigger_modal";
@@ -37,7 +40,7 @@ export const configureSubcommand = (
 		);
 
 /**
- * Removes a trigger word from the currently active (main) persona.
+ * Removes a trigger word from a selected persona.
  */
 export async function execute(
 	_client: Client,
@@ -55,10 +58,15 @@ export async function execute(
 	}
 
 	let tomoriState: TomoriState | null = null;
+	let responseInteraction:
+		| ChatInputCommandInteraction
+		| ButtonInteraction
+		| ModalSubmitInteraction = interaction;
+	let selectedPersona: TomoriState | null = null;
 
 	try {
-		tomoriState = await getCachedTomoriState(interaction.guild.id);
-		if (!tomoriState || !tomoriState.tomori_id) {
+		const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
+		if (allPersonas.length === 0) {
 			await replyInfoEmbed(
 				interaction,
 				locale,
@@ -72,14 +80,44 @@ export async function execute(
 			return;
 		}
 
-		const currentTriggerWords = tomoriState.trigger_words ?? [];
+		const personaSelection = await replyPaginatedPersonaChoicesV2(
+			interaction,
+			locale,
+			{
+				personas: allPersonas,
+				color: ColorCode.INFO,
+				preserveSelectedInteraction: true,
+				onSelect: async () => {},
+			},
+		);
+
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+
+		responseInteraction = personaSelection.interaction;
+		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+		tomoriState = selectedPersona;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		const currentTriggerWords = selectedPersona.trigger_words ?? [];
 		if (currentTriggerWords.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "commands.server.trigger.delete.no_triggers_title",
 				descriptionKey:
 					"commands.server.trigger.delete.no_triggers_description",
 				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -93,7 +131,7 @@ export async function execute(
 		);
 
 		const triggerModalResult = await promptWithPaginatedModal(
-			interaction,
+			responseInteraction,
 			locale,
 			{
 				modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
@@ -126,6 +164,7 @@ export async function execute(
 			log.error("Trigger modal result unexpectedly missing interaction or values");
 			return;
 		}
+		responseInteraction = triggerModalInteraction;
 
 		const selectedWord =
 			currentTriggerWords[Number.parseInt(selectedTriggerIndex, 10)];
@@ -141,22 +180,22 @@ export async function execute(
 		// Ensure row exists even for legacy personas that only used old columns
 		await sql`
 			INSERT INTO persona_configs (tomori_id, trigger_words)
-			VALUES (${tomoriState.tomori_id}, ARRAY[]::text[])
+			VALUES (${selectedPersona.tomori_id}, ARRAY[]::text[])
 			ON CONFLICT (tomori_id) DO NOTHING
 		`;
 
 		const [updatedRow] = await sql`
 			UPDATE persona_configs
 			SET trigger_words = array_remove(trigger_words, ${selectedWord})
-			WHERE tomori_id = ${tomoriState.tomori_id}
+			WHERE tomori_id = ${selectedPersona.tomori_id}
 			RETURNING *
 		`;
 
 		const validatedConfig = personaConfigSchema.safeParse(updatedRow);
 		if (!validatedConfig.success || !updatedRow) {
 			const context: ErrorContext = {
-				tomoriId: tomoriState.tomori_id,
-				serverId: tomoriState.server_id,
+				tomoriId: selectedPersona.tomori_id,
+				serverId: selectedPersona.server_id,
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
@@ -197,8 +236,8 @@ export async function execute(
 	} catch (error) {
 		const context: ErrorContext = {
 			userId: userData.user_id,
-			serverId: tomoriState?.server_id,
-			tomoriId: tomoriState?.tomori_id,
+			serverId: selectedPersona?.server_id ?? tomoriState?.server_id,
+			tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "server trigger delete",
@@ -212,13 +251,14 @@ export async function execute(
 			context,
 		);
 
-		if (interaction.deferred || interaction.replied) {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
+		if (responseInteraction.deferred || responseInteraction.replied) {
+			await replyInfoEmbed(responseInteraction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
 			});
 		} else {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(responseInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
 				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
