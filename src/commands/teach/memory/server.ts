@@ -5,6 +5,7 @@ import type {
 	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
+import { sql } from "@/utils/db/client";
 import type {
 	UserRow,
 	ErrorContext,
@@ -29,10 +30,16 @@ import {
 	getMemoryLimits,
 } from "../../../utils/db/memoryLimits";
 import { addServerMemoryByTomori } from "../../../utils/db/dbWrite";
+import {
+	dedupeCaseInsensitive,
+	getNonEmptyNumberedLines,
+	readTxtUpload,
+} from "../../../utils/teach/batchUploadUtils";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_servermemory_add_modal";
 const MEMORY_INPUT_ID = "memory_input";
+const MEMORY_FILE_UPLOAD_ID = "server_memory_file_upload";
 
 // Get memory limits from environment variables
 const memoryLimits = getMemoryLimits();
@@ -181,11 +188,19 @@ export async function execute(
 				{
 					customId: MEMORY_INPUT_ID,
 					labelKey: "commands.teach.memory.server.memory_input_label",
-					descriptionKey: "commands.teach.memory.server.modal_description",
+					descriptionKey: "commands.teach.memory.server.memory_input_description",
 					placeholder: "commands.teach.memory.server.memory_input_placeholder",
 					style: TextInputStyle.Paragraph,
-					required: true,
+					required: false,
 					maxLength: memoryLimits.maxMemoryLength,
+				},
+				{
+					customId: MEMORY_FILE_UPLOAD_ID,
+					labelKey: "commands.teach.memory.server.batch_file_label",
+					descriptionKey: "commands.teach.memory.server.batch_file_description",
+					minValues: 0,
+					maxValues: 1,
+					required: false,
 				},
 			],
 		});
@@ -203,8 +218,8 @@ export async function execute(
 		modalSubmitInteraction = modalResult.interaction!;
 
 		// 12. Get input from modal
-		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
-		const newMemory = modalResult.values![MEMORY_INPUT_ID];
+		const typedMemory = modalResult.values?.[MEMORY_INPUT_ID]?.trim() ?? "";
+		const uploadedTextFile = modalResult.attachments?.[MEMORY_FILE_UPLOAD_ID];
 		const selectedPersonaId = modalResult.values?.persona_select;
 		selectedPersona =
 			allPersonas.find(
@@ -218,67 +233,206 @@ export async function execute(
 			});
 			return;
 		}
-
-		// 12.5 Check server memory limit after final persona resolution
-		const serverLimitCheck = await checkServerMemoryLimit(
-			tomoriState.server_id,
-			selectedPersona.tomori_id,
-			selectedPersona.is_alter !== true,
-		);
-		if (!serverLimitCheck.isValid) {
+		const targetUserId = userData.user_id;
+		if (!targetUserId) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.memory.server.limit_exceeded_title",
-				descriptionKey:
-					"commands.teach.memory.server.limit_exceeded_description",
-				descriptionVars: {
-					current_count: serverLimitCheck.currentCount?.toString() || "0",
-					max_allowed: (
-						serverLimitCheck.maxAllowed || memoryLimits.maxServerMemories
-					).toString(),
-				},
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "general.errors.operation_failed_description",
 				color: ColorCode.ERROR,
 			});
 			return;
 		}
+		const targetTomoriId = selectedPersona.tomori_id;
+		const targetServerId = tomoriState.server_id;
 
-		// 13. Validate memory content length
-		const contentValidation = validateMemoryContent(newMemory);
-		if (!contentValidation.isValid) {
+		const pendingMemories: string[] = [];
+		if (typedMemory) {
+			pendingMemories.push(typedMemory);
+		}
+
+		if (uploadedTextFile) {
+			const uploadResult = await readTxtUpload(uploadedTextFile);
+			if (!uploadResult.isValid || !uploadResult.text) {
+				const errorKey =
+					uploadResult.error === "invalid_format"
+						? "commands.teach.memory.server.invalid_file_description"
+						: uploadResult.error === "file_too_large"
+							? "commands.teach.memory.server.file_too_large_description"
+							: "commands.teach.memory.server.download_failed_description";
+
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.memory.server.invalid_file_title",
+					descriptionKey: errorKey,
+					descriptionVars: {
+						max_size: "1",
+					},
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const importedMemories = getNonEmptyNumberedLines(uploadResult.text).map(
+				(line) => line.content,
+			);
+			pendingMemories.push(...importedMemories);
+		}
+
+		if (pendingMemories.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.memory.server.content_too_long_title",
+				titleKey: "commands.teach.memory.server.no_input_title",
+				descriptionKey: "commands.teach.memory.server.no_input_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const dedupedMemories = dedupeCaseInsensitive(pendingMemories);
+
+		// 13. Validate memory content lengths
+		for (const memory of dedupedMemories) {
+			const contentValidation = validateMemoryContent(memory);
+			if (!contentValidation.isValid) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.memory.server.content_too_long_title",
+					descriptionKey:
+						"commands.teach.memory.server.content_too_long_description",
+					descriptionVars: { max_length: memoryLimits.maxMemoryLength },
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+		}
+
+		const includeLegacyFallback = selectedPersona.is_alter !== true;
+		const existingRows = includeLegacyFallback
+			? await sql`
+				SELECT content
+				FROM server_memories
+				WHERE server_id = ${targetServerId}
+				  AND (
+					tomori_id = ${targetTomoriId}
+					OR tomori_id IS NULL
+				  )
+			`
+			: await sql`
+				SELECT content
+				FROM server_memories
+				WHERE tomori_id = ${targetTomoriId}
+			`;
+		const existingMemories = new Set(
+			existingRows
+				.map((row: { content?: unknown }) =>
+					typeof row.content === "string" ? row.content.trim().toLowerCase() : "",
+				)
+				.filter((content: string) => content.length > 0),
+		);
+		const memoriesToAdd = dedupedMemories.filter(
+			(memory) => !existingMemories.has(memory.toLowerCase()),
+		);
+
+		if (memoriesToAdd.length === 0) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.memory.server.duplicate_title",
+				descriptionKey: "commands.teach.memory.server.duplicate_description",
+				descriptionVars: {
+					memory: dedupedMemories[0] ?? typedMemory,
+				},
+				color: ColorCode.WARN,
+			});
+			return;
+		}
+
+		// 13.5 Check server memory limit after final persona resolution
+		const serverLimitCheck = await checkServerMemoryLimit(
+			targetServerId,
+			targetTomoriId,
+			includeLegacyFallback,
+		);
+		const currentCount = serverLimitCheck.currentCount ?? existingRows.length;
+		const maxAllowed =
+			serverLimitCheck.maxAllowed ?? memoryLimits.maxServerMemories;
+		const availableSlots = Math.max(0, maxAllowed - currentCount);
+		if (memoriesToAdd.length > availableSlots) {
+			const removeCount = memoriesToAdd.length - availableSlots;
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey:
+					uploadedTextFile
+						? "commands.teach.memory.server.batch_limit_exceeded_title"
+						: "commands.teach.memory.server.limit_exceeded_title",
 				descriptionKey:
-					"commands.teach.memory.server.content_too_long_description",
-				descriptionVars: { max_length: memoryLimits.maxMemoryLength },
+					uploadedTextFile
+						? "commands.teach.memory.server.batch_limit_exceeded_description"
+						: "commands.teach.memory.server.limit_exceeded_description",
+				descriptionVars:
+					uploadedTextFile
+						? {
+								current_count: currentCount.toString(),
+								max_allowed: maxAllowed.toString(),
+								import_count: memoriesToAdd.length.toString(),
+								remove_count: removeCount.toString(),
+							}
+						: {
+								current_count: currentCount.toString(),
+								max_allowed: maxAllowed.toString(),
+							},
 				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
 		// 14. Insert into persona-scoped server memories table
-		const insertedMemory = await addServerMemoryByTomori(
-			// biome-ignore lint/style/noNonNullAssertion: checked above
-			tomoriState.server_id!,
-			selectedPersona.tomori_id,
-			// biome-ignore lint/style/noNonNullAssertion: user row from middleware
-			userData.user_id!,
-			newMemory,
-			selectedPersona.is_alter !== true,
-		);
+		let insertSuccess = true;
+		if (memoriesToAdd.length === 1) {
+			const insertedMemory = await addServerMemoryByTomori(
+				targetServerId,
+				targetTomoriId,
+				targetUserId,
+				memoriesToAdd[0] ?? "",
+				includeLegacyFallback,
+			);
+			insertSuccess = insertedMemory !== null;
+		} else {
+			try {
+				await sql.transaction(async (tx) => {
+					for (const memory of memoriesToAdd) {
+						await tx`
+							INSERT INTO server_memories (server_id, tomori_id, user_id, content)
+							VALUES (${targetServerId}, ${targetTomoriId}, ${targetUserId}, ${memory})
+						`;
+					}
+				});
+			} catch (insertError) {
+				insertSuccess = false;
+				await log.error("Batch insert failed for server memories", insertError, {
+					userId: userData.user_id,
+					serverId: targetServerId,
+					tomoriId: targetTomoriId,
+					errorType: "DatabaseValidationError",
+					metadata: {
+						command: "teach servermemory",
+						insertCount: memoriesToAdd.length,
+						targetTomoriId: targetTomoriId,
+					},
+				});
+			}
+		}
 
-		if (!insertedMemory) {
+		if (!insertSuccess) {
 			// Rule 22: Log error with context
 			const context: ErrorContext = {
 				userId: userData.user_id,
-				serverId: tomoriState.server_id,
-				tomoriId: selectedPersona.tomori_id,
+				serverId: targetServerId,
+				tomoriId: targetTomoriId,
 				errorType: "DatabaseValidationError",
 				metadata: {
 					command: "teach servermemory",
 					table: "server_memories",
 					operation: "INSERT",
 					userDiscordId: interaction.user.id,
-					newMemoryContent: newMemory,
-					targetTomoriId: selectedPersona.tomori_id,
+					newMemoryContent: memoriesToAdd.join("\n"),
+					targetTomoriId: targetTomoriId,
 				},
 			};
 			await log.error(
@@ -299,13 +453,29 @@ export async function execute(
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
 		// 16. Success! Confirm addition (Rule 12, 19)
+		const firstMemory = memoriesToAdd[0] ?? "";
+		const memoryPreview =
+			firstMemory.length > 96
+				? `${firstMemory.slice(0, 96)}...`
+				: firstMemory;
+
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.teach.memory.server.success_title",
-			descriptionKey: "commands.teach.memory.server.success_description",
-			descriptionVars: {
-				memory:
-					newMemory.length > 96 ? `${newMemory.slice(0, 96)}...` : newMemory, // Truncate for display
-			},
+			titleKey:
+				memoriesToAdd.length > 1 || uploadedTextFile
+					? "commands.teach.memory.server.batch_success_title"
+					: "commands.teach.memory.server.success_title",
+			descriptionKey:
+				memoriesToAdd.length > 1 || uploadedTextFile
+					? "commands.teach.memory.server.batch_success_description"
+					: "commands.teach.memory.server.success_description",
+			descriptionVars:
+				memoriesToAdd.length > 1 || uploadedTextFile
+					? {
+							added_count: memoriesToAdd.length.toString(),
+						}
+					: {
+							memory: memoryPreview,
+						},
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {

@@ -30,6 +30,12 @@ import {
 	getMemoryLimits,
 	validateSampleDialogue,
 } from "../../utils/db/memoryLimits";
+import {
+	dedupeSampleDialoguePairs,
+	formatTextArrayLiteral,
+	parseSampleDialogueBatch,
+	readTxtUpload,
+} from "../../utils/teach/batchUploadUtils";
 
 // Get memory limits from environment variables
 const memoryLimits = getMemoryLimits();
@@ -39,6 +45,7 @@ const MODAL_CUSTOM_ID = "teach_sampledialogue_add_modal";
 const PERSONA_SELECT_ID = "persona_select";
 const USER_INPUT_ID = "user_input";
 const BOT_INPUT_ID = "bot_input";
+const SAMPLE_DIALOGUE_FILE_UPLOAD_ID = "sampledialogue_file_upload";
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -181,24 +188,30 @@ export async function execute(
 				},
 				{
 					customId: USER_INPUT_ID,
-					// Ensure this locale key's value is <= 45 chars
 					labelKey: "commands.teach.sampledialogue.user_input_label",
 					descriptionKey:
 						"commands.teach.sampledialogue.user_input_description",
 					placeholder: "commands.teach.sampledialogue.user_input_placeholder",
 					style: TextInputStyle.Paragraph,
-					required: true,
+					required: false,
 					maxLength: memoryLimits.maxSampleDialogueLength,
 				},
 				{
 					customId: BOT_INPUT_ID,
-					// Ensure this locale key's value is <= 45 chars
 					labelKey: "commands.teach.sampledialogue.bot_input_label",
 					descriptionKey: "commands.teach.sampledialogue.bot_input_description",
 					placeholder: "commands.teach.sampledialogue.bot_input_placeholder",
 					style: TextInputStyle.Paragraph,
-					required: true,
+					required: false,
 					maxLength: memoryLimits.maxSampleDialogueLength,
+				},
+				{
+					customId: SAMPLE_DIALOGUE_FILE_UPLOAD_ID,
+					labelKey: "commands.teach.sampledialogue.batch_file_label",
+					descriptionKey: "commands.teach.sampledialogue.batch_file_description",
+					minValues: 0,
+					maxValues: 1,
+					required: false,
 				},
 			],
 		});
@@ -230,70 +243,215 @@ export async function execute(
 			return;
 		}
 
-		// 8.5 Check sample dialogue limit after persona resolution
-		const dialogueLimitCheck = await checkSampleDialogueLimit(
-			selectedPersona.tomori_id,
-		);
-		if (!dialogueLimitCheck.isValid) {
+		const typedUserInput = modalResult.values?.[USER_INPUT_ID]?.trim() ?? "";
+		const typedBotInput = modalResult.values?.[BOT_INPUT_ID]?.trim() ?? "";
+		const uploadedTextFile =
+			modalResult.attachments?.[SAMPLE_DIALOGUE_FILE_UPLOAD_ID];
+
+		const pendingDialogues: Array<{ userInput: string; botInput: string }> = [];
+
+		if (typedUserInput || typedBotInput) {
+			if (!typedUserInput || !typedBotInput) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.sampledialogue.no_input_title",
+					descriptionKey:
+						"commands.teach.sampledialogue.manual_pair_required_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			pendingDialogues.push({
+				userInput: typedUserInput,
+				botInput: typedBotInput,
+			});
+		}
+
+		if (uploadedTextFile) {
+			const uploadResult = await readTxtUpload(uploadedTextFile);
+			if (!uploadResult.isValid || !uploadResult.text) {
+				const errorKey =
+					uploadResult.error === "invalid_format"
+						? "commands.teach.sampledialogue.invalid_file_description"
+						: uploadResult.error === "file_too_large"
+							? "commands.teach.sampledialogue.file_too_large_description"
+							: "commands.teach.sampledialogue.download_failed_description";
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.sampledialogue.invalid_file_title",
+					descriptionKey: errorKey,
+					descriptionVars: {
+						max_size: "1",
+					},
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const parsedBatch = parseSampleDialogueBatch(uploadResult.text);
+			if (!parsedBatch.isValid) {
+				const expectedPrefix =
+					parsedBatch.error?.code === "invalid_bot_prefix"
+						? "{bot}: or {{char}}:"
+						: "{user}: or {{user}}:";
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.sampledialogue.invalid_batch_format_title",
+					descriptionKey:
+						"commands.teach.sampledialogue.invalid_batch_format_description",
+					descriptionVars: {
+						line_number: (parsedBatch.error?.lineNumber ?? 1).toString(),
+						expected_prefix: expectedPrefix,
+					},
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			pendingDialogues.push(...parsedBatch.pairs);
+		}
+
+		if (pendingDialogues.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.sampledialogue.limit_exceeded_title",
-				descriptionKey:
-					"commands.teach.sampledialogue.limit_exceeded_description",
-				descriptionVars: {
-					current_count: dialogueLimitCheck.currentCount?.toString() || "0",
-					max_allowed: (dialogueLimitCheck.maxAllowed || 10).toString(),
-				},
+				titleKey: "commands.teach.sampledialogue.no_input_title",
+				descriptionKey: "commands.teach.sampledialogue.no_input_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 11. Get inputs from modal - let helper functions manage interaction state
-		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
-		const userInput = modalResult.values![USER_INPUT_ID];
-		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
-		const botInput = modalResult.values![BOT_INPUT_ID];
+		const dedupedDialogues = dedupeSampleDialoguePairs(pendingDialogues);
 
-		// 12. Validate sample dialogue content lengths (server-side validation, modal maxLength can be bypassed)
-		const userInputValidation = validateSampleDialogue(userInput);
-		if (!userInputValidation.isValid) {
+		// 11. Validate sample dialogue content lengths (server-side validation, modal maxLength can be bypassed)
+		for (const dialogue of dedupedDialogues) {
+			const userInputValidation = validateSampleDialogue(dialogue.userInput);
+			if (!userInputValidation.isValid) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.sampledialogue.user_input_too_long_title",
+					descriptionKey:
+						"commands.teach.sampledialogue.user_input_too_long_description",
+					descriptionVars: {
+						current_length: dialogue.userInput.length.toString(),
+						max_allowed: (
+							userInputValidation.maxAllowed ||
+							memoryLimits.maxSampleDialogueLength
+						).toString(),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			const botInputValidation = validateSampleDialogue(dialogue.botInput);
+			if (!botInputValidation.isValid) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.sampledialogue.bot_input_too_long_title",
+					descriptionKey:
+						"commands.teach.sampledialogue.bot_input_too_long_description",
+					descriptionVars: {
+						current_length: dialogue.botInput.length.toString(),
+						max_allowed: (
+							botInputValidation.maxAllowed ||
+							memoryLimits.maxSampleDialogueLength
+						).toString(),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+		}
+
+		const currentUserDialogues = selectedPersona.sample_dialogues_in || [];
+		const currentBotDialogues = selectedPersona.sample_dialogues_out || [];
+		const existingDialogues = new Set<string>();
+		const existingLength = Math.min(
+			currentUserDialogues.length,
+			currentBotDialogues.length,
+		);
+		for (let i = 0; i < existingLength; i += 1) {
+			existingDialogues.add(
+				`${currentUserDialogues[i]?.trim().toLowerCase()}|||${currentBotDialogues[i]
+					?.trim()
+					.toLowerCase()}`,
+			);
+		}
+
+		const dialoguesToAdd = dedupedDialogues.filter((dialogue) => {
+			const key = `${dialogue.userInput.toLowerCase()}|||${dialogue.botInput.toLowerCase()}`;
+			return !existingDialogues.has(key);
+		});
+
+		if (dialoguesToAdd.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.sampledialogue.user_input_too_long_title",
-				descriptionKey: "commands.teach.sampledialogue.user_input_too_long_description",
-				descriptionVars: {
-					current_length: userInput.length.toString(),
-					max_allowed: (userInputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
-				},
-				color: ColorCode.ERROR,
+				titleKey: "commands.teach.sampledialogue.duplicate_title",
+				descriptionKey: "commands.teach.sampledialogue.duplicate_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		const botInputValidation = validateSampleDialogue(botInput);
-		if (!botInputValidation.isValid) {
+		// 12. Check sample dialogue limit after persona resolution
+		const dialogueLimitCheck = await checkSampleDialogueLimit(
+			selectedPersona.tomori_id,
+		);
+		const currentCount =
+			dialogueLimitCheck.currentCount ?? currentUserDialogues.length;
+		const maxAllowed =
+			dialogueLimitCheck.maxAllowed ?? memoryLimits.maxSampleDialogues;
+		const availableSlots = Math.max(0, maxAllowed - currentCount);
+
+		if (dialoguesToAdd.length > availableSlots) {
+			const removeCount = dialoguesToAdd.length - availableSlots;
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.sampledialogue.bot_input_too_long_title",
-				descriptionKey: "commands.teach.sampledialogue.bot_input_too_long_description",
-				descriptionVars: {
-					current_length: botInput.length.toString(),
-					max_allowed: (botInputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
-				},
+				titleKey:
+					uploadedTextFile
+						? "commands.teach.sampledialogue.batch_limit_exceeded_title"
+						: "commands.teach.sampledialogue.limit_exceeded_title",
+				descriptionKey:
+					uploadedTextFile
+						? "commands.teach.sampledialogue.batch_limit_exceeded_description"
+						: "commands.teach.sampledialogue.limit_exceeded_description",
+				descriptionVars:
+					uploadedTextFile
+						? {
+								current_count: currentCount.toString(),
+								max_allowed: maxAllowed.toString(),
+								import_count: dialoguesToAdd.length.toString(),
+								remove_count: removeCount.toString(),
+							}
+						: {
+								current_count: currentCount.toString(),
+								max_allowed: maxAllowed.toString(),
+							},
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
 		// 13. Update target persona row in the database using Bun SQL
-		// Use array_append for atomic array operations
-		const [updatedTomoriResult] = await sql`
-			UPDATE tomoris
-			SET
-				sample_dialogues_in = array_append(sample_dialogues_in, ${userInput}),
-				sample_dialogues_out = array_append(sample_dialogues_out, ${botInput})
-			WHERE tomori_id = ${selectedPersona.tomori_id}
-			RETURNING *
-		`;
+		// Use array append/cat for atomic array operations
+		const [updatedTomoriResult] =
+			dialoguesToAdd.length === 1
+				? await sql`
+					UPDATE tomoris
+					SET
+						sample_dialogues_in = array_append(sample_dialogues_in, ${dialoguesToAdd[0]?.userInput ?? ""}),
+						sample_dialogues_out = array_append(sample_dialogues_out, ${dialoguesToAdd[0]?.botInput ?? ""})
+					WHERE tomori_id = ${selectedPersona.tomori_id}
+					RETURNING *
+				`
+				: await sql`
+					UPDATE tomoris
+					SET
+						sample_dialogues_in = array_cat(sample_dialogues_in, ${formatTextArrayLiteral(dialoguesToAdd.map((dialogue) => dialogue.userInput))}::text[]),
+						sample_dialogues_out = array_cat(sample_dialogues_out, ${formatTextArrayLiteral(dialoguesToAdd.map((dialogue) => dialogue.botInput))}::text[])
+					WHERE tomori_id = ${selectedPersona.tomori_id}
+					RETURNING *
+				`;
 
 		// 13. Validate the result from the database (Rule 3, 5, 6)
 		// Note: tomoriSchema validates a TomoriRow, not the full TomoriState
@@ -331,15 +489,37 @@ export async function execute(
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
 		// 15. Success! Confirm addition (Rule 12, 19)
+		const firstDialogue = dialoguesToAdd[0] ?? {
+			userInput: "",
+			botInput: "",
+		};
+		const userPreview =
+			firstDialogue.userInput.length > 96
+				? `${firstDialogue.userInput.slice(0, 96)}...`
+				: firstDialogue.userInput;
+		const botPreview =
+			firstDialogue.botInput.length > 96
+				? `${firstDialogue.botInput.slice(0, 96)}...`
+				: firstDialogue.botInput;
+
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.teach.sampledialogue.success_title",
-			descriptionKey: "commands.teach.sampledialogue.success_description",
-			descriptionVars: {
-				user_input:
-					userInput.length > 96 ? `${userInput.slice(0, 96)}...` : userInput,
-				bot_input:
-					botInput.length > 96 ? `${botInput.slice(0, 96)}...` : botInput,
-			},
+			titleKey:
+				dialoguesToAdd.length > 1 || uploadedTextFile
+					? "commands.teach.sampledialogue.batch_success_title"
+					: "commands.teach.sampledialogue.success_title",
+			descriptionKey:
+				dialoguesToAdd.length > 1 || uploadedTextFile
+					? "commands.teach.sampledialogue.batch_success_description"
+					: "commands.teach.sampledialogue.success_description",
+			descriptionVars:
+				dialoguesToAdd.length > 1 || uploadedTextFile
+					? {
+							added_count: dialoguesToAdd.length.toString(),
+						}
+					: {
+							user_input: userPreview,
+							bot_input: botPreview,
+						},
 			color: ColorCode.SUCCESS,
 			flags: MessageFlags.Ephemeral,
 		});

@@ -5,6 +5,7 @@ import type {
 	ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
+import { sql } from "@/utils/db/client";
 import type {
 	UserRow,
 	ErrorContext,
@@ -31,10 +32,17 @@ import {
 	getMemoryLimits,
 } from "../../../utils/db/memoryLimits";
 import { addPersonalMemoryByTomori } from "../../../utils/db/dbWrite";
+import type { ModalComponent } from "../../../types/discord/modal";
+import {
+	dedupeCaseInsensitive,
+	getNonEmptyNumberedLines,
+	readTxtUpload,
+} from "../../../utils/teach/batchUploadUtils";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_personalmemory_add_modal";
 const MEMORY_INPUT_ID = "personal_memory_input";
+const MEMORY_FILE_UPLOAD_ID = "personal_memory_file_upload";
 const PERSONAL_SCOPE_VALUE = "persona";
 const GLOBAL_SCOPE_VALUE = "global";
 const GLOBAL_PERSONAL_MEMORY_LINEAGE_ID = 0;
@@ -127,25 +135,7 @@ export async function execute(
 		// 4. Resolve target scope and lineage
 		let targetLineageId = GLOBAL_PERSONAL_MEMORY_LINEAGE_ID;
 		let allPersonas: TomoriState[] = [];
-		const modalComponents: Array<
-			| {
-					customId: string;
-					labelKey: string;
-					descriptionKey?: string;
-					placeholder?: string;
-					required?: boolean;
-					options: SelectOption[];
-			  }
-			| {
-					customId: string;
-					labelKey: string;
-					descriptionKey?: string;
-					placeholder?: string;
-					style: TextInputStyle;
-					required: boolean;
-					maxLength: number;
-			  }
-		> = [];
+		const modalComponents: ModalComponent[] = [];
 
 		if (memoryScope === PERSONAL_SCOPE_VALUE) {
 			allPersonas = await loadAllPersonasForServer(serverId);
@@ -190,11 +180,19 @@ export async function execute(
 		modalComponents.push({
 			customId: MEMORY_INPUT_ID,
 			labelKey: "commands.teach.memory.personal.memory_input_label",
-			descriptionKey: "commands.teach.memory.personal.modal_description",
+			descriptionKey: "commands.teach.memory.personal.memory_input_description",
 			placeholder: "commands.teach.memory.personal.memory_input_placeholder",
 			style: TextInputStyle.Paragraph,
-			required: true,
+			required: false,
 			maxLength: memoryLimits.maxMemoryLength,
+		});
+		modalComponents.push({
+			customId: MEMORY_FILE_UPLOAD_ID,
+			labelKey: "commands.teach.memory.personal.batch_file_label",
+			descriptionKey: "commands.teach.memory.personal.batch_file_description",
+			minValues: 0,
+			maxValues: 1,
+			required: false,
 		});
 
 		// 6. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
@@ -216,9 +214,9 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		modalSubmitInteraction = modalResult.interaction!;
 
-		// 9. Get input from modal - let helper functions manage interaction state
-		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
-		const newMemory = modalResult.values![MEMORY_INPUT_ID];
+		// 9. Get input from modal
+		const typedMemory = modalResult.values?.[MEMORY_INPUT_ID]?.trim() ?? "";
+		const uploadedTextFile = modalResult.attachments?.[MEMORY_FILE_UPLOAD_ID];
 		if (memoryScope === PERSONAL_SCOPE_VALUE) {
 			const selectedPersonaId = modalResult.values?.persona_select;
 			selectedPersona =
@@ -243,40 +241,74 @@ export async function execute(
 				return;
 			}
 		}
-
-		// 9.5 Check personal memory limit after final scope resolution
-		const personalLimitCheck = await checkPersonalMemoryLimit(
-			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
-			userData.user_id!,
-			targetLineageId,
-			memoryScope === GLOBAL_SCOPE_VALUE,
-		);
-		if (!personalLimitCheck.isValid) {
+		const targetUserId = userData.user_id;
+		if (!targetUserId) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.memory.personal.limit_exceeded_title",
-				descriptionKey:
-					"commands.teach.memory.personal.limit_exceeded_description",
-				descriptionVars: {
-					max_allowed:
-						personalLimitCheck.maxAllowed || memoryLimits.maxPersonalMemories,
-					current_count: personalLimitCheck.currentCount || 0,
-				},
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "general.errors.operation_failed_description",
 				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
-		// 10. Validate memory content length
-		const contentValidation = validateMemoryContent(newMemory);
-		if (!contentValidation.isValid) {
+		const pendingMemories: string[] = [];
+		if (typedMemory) {
+			pendingMemories.push(typedMemory);
+		}
+
+		if (uploadedTextFile) {
+			const uploadResult = await readTxtUpload(uploadedTextFile);
+			if (!uploadResult.isValid || !uploadResult.text) {
+				const errorKey =
+					uploadResult.error === "invalid_format"
+						? "commands.teach.memory.personal.invalid_file_description"
+						: uploadResult.error === "file_too_large"
+							? "commands.teach.memory.personal.file_too_large_description"
+							: "commands.teach.memory.personal.download_failed_description";
+
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.memory.personal.invalid_file_title",
+					descriptionKey: errorKey,
+					descriptionVars: {
+						max_size: "1",
+					},
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const importedMemories = getNonEmptyNumberedLines(uploadResult.text).map(
+				(line) => line.content,
+			);
+			pendingMemories.push(...importedMemories);
+		}
+
+		if (pendingMemories.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.memory.personal.content_too_long_title",
-				descriptionKey:
-					"commands.teach.memory.personal.content_too_long_description",
-				descriptionVars: { max_length: memoryLimits.maxMemoryLength },
+				titleKey: "commands.teach.memory.personal.no_input_title",
+				descriptionKey: "commands.teach.memory.personal.no_input_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
+		}
+
+		const dedupedMemories = dedupeCaseInsensitive(pendingMemories);
+
+		// 10. Validate memory content lengths
+		for (const memory of dedupedMemories) {
+			const contentValidation = validateMemoryContent(memory);
+			if (!contentValidation.isValid) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.memory.personal.content_too_long_title",
+					descriptionKey:
+						"commands.teach.memory.personal.content_too_long_description",
+					descriptionVars: { max_length: memoryLimits.maxMemoryLength },
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
 		}
 
 		// 11. Check if user has opted out of personalization (privacy setting)
@@ -308,25 +340,99 @@ export async function execute(
 				)
 			: [];
 
+		const existingMemories = new Set(
+			currentMemories.map((row) => row.content.trim().toLowerCase()),
+		);
+		const memoriesToAdd = dedupedMemories.filter(
+			(memory) => !existingMemories.has(memory.toLowerCase()),
+		);
+
 		// 13. Check for duplicates within the user's memories
-		if (currentMemories.some((row) => row.content === newMemory)) {
+		if (memoriesToAdd.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.teach.memory.personal.duplicate_title",
 				descriptionKey: "commands.teach.memory.personal.duplicate_description",
-				descriptionVars: { memory: newMemory },
+				descriptionVars: { memory: dedupedMemories[0] ?? typedMemory },
 				color: ColorCode.WARN,
 			});
 			return;
 		}
 
-		// 14. Insert lineage-scoped memory row
-		const insertedMemory = await addPersonalMemoryByTomori(
-			// biome-ignore lint/style/noNonNullAssertion: user row from middleware
-			userData.user_id!,
+		// 13.5 Check personal memory limit after final scope resolution
+		const personalLimitCheck = await checkPersonalMemoryLimit(
+			targetUserId,
 			targetLineageId,
-			newMemory,
+			memoryScope === GLOBAL_SCOPE_VALUE,
 		);
-		if (!insertedMemory) {
+		const currentCount = personalLimitCheck.currentCount ?? currentMemories.length;
+		const maxAllowed =
+			personalLimitCheck.maxAllowed ?? memoryLimits.maxPersonalMemories;
+		const availableSlots = Math.max(0, maxAllowed - currentCount);
+		if (memoriesToAdd.length > availableSlots) {
+			const removeCount = memoriesToAdd.length - availableSlots;
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey:
+					uploadedTextFile
+						? "commands.teach.memory.personal.batch_limit_exceeded_title"
+						: "commands.teach.memory.personal.limit_exceeded_title",
+				descriptionKey:
+					uploadedTextFile
+						? "commands.teach.memory.personal.batch_limit_exceeded_description"
+						: "commands.teach.memory.personal.limit_exceeded_description",
+				descriptionVars:
+					uploadedTextFile
+						? {
+								max_allowed: maxAllowed.toString(),
+								current_count: currentCount.toString(),
+								import_count: memoriesToAdd.length.toString(),
+								remove_count: removeCount.toString(),
+							}
+						: {
+								max_allowed: maxAllowed.toString(),
+								current_count: currentCount.toString(),
+							},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 14. Insert lineage-scoped memory rows
+		let insertSuccess = true;
+		if (memoriesToAdd.length === 1) {
+			const insertedMemory = await addPersonalMemoryByTomori(
+				targetUserId,
+				targetLineageId,
+				memoriesToAdd[0] ?? "",
+			);
+			insertSuccess = insertedMemory !== null;
+		} else {
+			try {
+				await sql.transaction(async (tx) => {
+					for (const memory of memoriesToAdd) {
+						await tx`
+							INSERT INTO personal_memories (user_id, persona_lineage_id, content)
+							VALUES (${targetUserId}, ${targetLineageId}, ${memory})
+						`;
+					}
+				});
+			} catch (insertError) {
+				insertSuccess = false;
+				await log.error("Batch insert failed for personal memories", insertError, {
+					userId: userData.user_id,
+					serverId: tomoriState.server_id,
+					tomoriId: selectedPersona?.tomori_id ?? tomoriState.tomori_id,
+					errorType: "DatabaseValidationError",
+					metadata: {
+						command: "teach personalmemory",
+						memoryScope,
+						targetLineageId,
+						insertCount: memoriesToAdd.length,
+					},
+				});
+			}
+		}
+
+		if (!insertSuccess) {
 			const context: ErrorContext = {
 				userId: userData.user_id,
 				serverId: tomoriState.server_id, // Include server context
@@ -340,7 +446,7 @@ export async function execute(
 					userDiscordId: interaction.user.id,
 					memoryScope,
 					targetLineageId,
-					newMemoryContent: newMemory,
+					newMemoryContent: memoriesToAdd.join("\n"),
 				},
 			};
 			await log.error(
@@ -358,7 +464,10 @@ export async function execute(
 		}
 
 		// 15. Check personalization settings and user blacklisting status to prepare appropriate message
-		let descriptionKey = "commands.teach.memory.personal.success_description";
+		const isBatchAdd = memoriesToAdd.length > 1 || Boolean(uploadedTextFile);
+		let descriptionKey = isBatchAdd
+			? "commands.teach.memory.personal.batch_success_description"
+			: "commands.teach.memory.personal.success_description";
 		let embedColor = ColorCode.SUCCESS;
 
 		// Check both personalization settings and user blacklisting (similar to memoryTool.ts:437-454)
@@ -372,11 +481,15 @@ export async function execute(
 
 		if (!personalizationEnabled) {
 			descriptionKey =
-				"commands.teach.memory.personal.success_but_disabled_description";
+				isBatchAdd
+					? "commands.teach.memory.personal.batch_success_but_disabled_description"
+					: "commands.teach.memory.personal.success_but_disabled_description";
 			embedColor = ColorCode.WARN;
 		} else if (userIsBlacklisted) {
 			descriptionKey =
-				"commands.teach.memory.personal.success_but_blacklisted_description";
+				isBatchAdd
+					? "commands.teach.memory.personal.batch_success_but_blacklisted_description"
+					: "commands.teach.memory.personal.success_but_blacklisted_description";
 			embedColor = ColorCode.WARN;
 		}
 
@@ -384,13 +497,24 @@ export async function execute(
 		invalidateUserCache(interaction.user.id);
 
 		// 16. Success! Confirm addition (with potential warning) (Rule 12, 19)
+		const firstMemory = memoriesToAdd[0] ?? "";
+		const memoryPreview =
+			firstMemory.length > 96
+				? `${firstMemory.slice(0, 96)}...`
+				: firstMemory;
+
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.teach.memory.personal.success_title",
+			titleKey: isBatchAdd
+				? "commands.teach.memory.personal.batch_success_title"
+				: "commands.teach.memory.personal.success_title",
 			descriptionKey: descriptionKey, // Use the determined description key
-			descriptionVars: {
-				memory:
-					newMemory.length > 96 ? `${newMemory.slice(0, 96)}...` : newMemory, // Truncate for display
-			},
+			descriptionVars: isBatchAdd
+					? {
+						added_count: memoriesToAdd.length.toString(),
+					}
+					: {
+						memory: memoryPreview,
+					},
 			color: embedColor, // Use the determined color
 		});
 	} catch (error) {

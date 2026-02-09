@@ -29,6 +29,12 @@ import {
 	getMemoryLimits,
 	validateAttribute,
 } from "../../utils/db/memoryLimits";
+import {
+	dedupeCaseInsensitive,
+	formatTextArrayLiteral,
+	getNonEmptyNumberedLines,
+	readTxtUpload,
+} from "../../utils/teach/batchUploadUtils";
 
 // Get memory limits from environment variables
 const memoryLimits = getMemoryLimits();
@@ -37,6 +43,7 @@ const memoryLimits = getMemoryLimits();
 const MODAL_CUSTOM_ID = "teach_attribute_add_modal";
 const PERSONA_SELECT_ID = "persona_select";
 const ATTRIBUTE_INPUT_ID = "attribute_input";
+const ATTRIBUTE_FILE_UPLOAD_ID = "attribute_file_upload";
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -163,7 +170,7 @@ export async function execute(
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.teach.attribute.modal_title", // New locale key
+			modalTitleKey: "commands.teach.attribute.modal_title",
 			components: [
 				{
 					customId: PERSONA_SELECT_ID,
@@ -176,12 +183,20 @@ export async function execute(
 				},
 				{
 					customId: ATTRIBUTE_INPUT_ID,
-					labelKey: "commands.teach.attribute.attribute_input_label", // New locale key (<= 45 chars)
-					descriptionKey: "commands.teach.attribute.modal_description",
+					labelKey: "commands.teach.attribute.attribute_input_label",
+					descriptionKey: "commands.teach.attribute.attribute_input_description",
 					placeholder: "commands.teach.attribute.attribute_input_placeholder",
-					style: TextInputStyle.Paragraph, // Allow longer attributes
-					required: true,
-					maxLength: memoryLimits.maxAttributeLength, // Use correct limit for attributes (2000, not 256)
+					style: TextInputStyle.Paragraph,
+					required: false,
+					maxLength: memoryLimits.maxAttributeLength,
+				},
+				{
+					customId: ATTRIBUTE_FILE_UPLOAD_ID,
+					labelKey: "commands.teach.attribute.batch_file_label",
+					descriptionKey: "commands.teach.attribute.batch_file_description",
+					minValues: 0,
+					maxValues: 1,
+					required: false,
 				},
 			],
 		});
@@ -199,8 +214,8 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		const modalSubmitInteraction = modalResult.interaction!;
 
-		// 10. Resolve selected persona + attribute text
-		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
+		// 10. Resolve selected persona + attribute input
+		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required persona select guarantees value
 		const selectedPersonaId = modalResult.values![PERSONA_SELECT_ID];
 		selectedPersona =
 			allPersonas.find(
@@ -215,63 +230,145 @@ export async function execute(
 			return;
 		}
 
-		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
-		const newAttribute = modalResult.values![ATTRIBUTE_INPUT_ID];
+		const typedAttribute = modalResult.values?.[ATTRIBUTE_INPUT_ID]?.trim() ?? "";
+		const uploadedTextFile = modalResult.attachments?.[ATTRIBUTE_FILE_UPLOAD_ID];
+		const pendingAttributes: string[] = [];
 
-		// 10.5 Check attribute limit after final persona resolution
-		const attributeLimitCheck = await checkAttributeLimit(
-			selectedPersona.tomori_id,
-		);
-		if (!attributeLimitCheck.isValid) {
+		if (typedAttribute) {
+			pendingAttributes.push(typedAttribute);
+		}
+
+		if (uploadedTextFile) {
+			const uploadResult = await readTxtUpload(uploadedTextFile);
+			if (!uploadResult.isValid || !uploadResult.text) {
+				const errorKey =
+					uploadResult.error === "invalid_format"
+						? "commands.teach.attribute.invalid_file_description"
+						: uploadResult.error === "file_too_large"
+							? "commands.teach.attribute.file_too_large_description"
+							: "commands.teach.attribute.download_failed_description";
+
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.attribute.invalid_file_title",
+					descriptionKey: errorKey,
+					descriptionVars: {
+						max_size: "1",
+					},
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+
+			const importedAttributes = getNonEmptyNumberedLines(uploadResult.text).map(
+				(line) => line.content,
+			);
+			pendingAttributes.push(...importedAttributes);
+		}
+
+		if (pendingAttributes.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.attribute.limit_exceeded_title",
-				descriptionKey: "commands.teach.attribute.limit_exceeded_description",
-				descriptionVars: {
-					current_count: attributeLimitCheck.currentCount?.toString() || "0",
-					max_allowed: (attributeLimitCheck.maxAllowed || 25).toString(),
-				},
+				titleKey: "commands.teach.attribute.no_input_title",
+				descriptionKey: "commands.teach.attribute.no_input_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 11. Validate attribute content length (server-side validation, modal maxLength can be bypassed)
-		const attributeValidation = validateAttribute(newAttribute);
-		if (!attributeValidation.isValid) {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.attribute.content_too_long_title",
-				descriptionKey: "commands.teach.attribute.content_too_long_description",
-				descriptionVars: {
-					current_length: newAttribute.length.toString(),
-					max_allowed: (attributeValidation.maxAllowed || memoryLimits.maxAttributeLength).toString(),
-				},
-				color: ColorCode.ERROR,
-			});
-			return;
+		const dedupedAttributes = dedupeCaseInsensitive(pendingAttributes);
+
+		// 11. Validate each attribute length
+		for (const attribute of dedupedAttributes) {
+			const attributeValidation = validateAttribute(attribute);
+			if (!attributeValidation.isValid) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.teach.attribute.content_too_long_title",
+					descriptionKey: "commands.teach.attribute.content_too_long_description",
+					descriptionVars: {
+						current_length: attribute.length.toString(),
+						max_allowed: (
+							attributeValidation.maxAllowed || memoryLimits.maxAttributeLength
+						).toString(),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
 		}
 
 		// 12. Prepare updated array from selected persona
 		const currentAttributes = selectedPersona.attribute_list || [];
+		const existingAttributes = new Set(
+			currentAttributes.map((attribute) => attribute.trim().toLowerCase()),
+		);
+		const attributesToAdd = dedupedAttributes.filter(
+			(attribute) => !existingAttributes.has(attribute.toLowerCase()),
+		);
 
 		// 13. Check for duplicates before adding
-		if (currentAttributes.includes(newAttribute)) {
+		if (attributesToAdd.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.attribute.duplicate_title", // New locale key
-				descriptionKey: "commands.teach.attribute.duplicate_description", // New locale key
-				descriptionVars: { attribute: newAttribute },
+				titleKey: "commands.teach.attribute.duplicate_title",
+				descriptionKey: "commands.teach.attribute.duplicate_description",
+				descriptionVars: { attribute: dedupedAttributes[0] ?? typedAttribute },
 				color: ColorCode.WARN,
-				// No flags needed
 			});
 			return;
 		}
 
-		// 14. Update target persona row in the database using array_append
-		const [updatedTomoriResult] = await sql`
-			UPDATE tomoris
-			SET attribute_list = array_append(attribute_list, ${newAttribute})
-			WHERE tomori_id = ${selectedPersona.tomori_id}
-			RETURNING *
-		`;
+		// 13.5 Check limit against final import size
+		const attributeLimitCheck = await checkAttributeLimit(
+			selectedPersona.tomori_id,
+		);
+		const currentCount =
+			attributeLimitCheck.currentCount ?? currentAttributes.length;
+		const maxAllowed = attributeLimitCheck.maxAllowed ?? memoryLimits.maxAttributes;
+		const availableSlots = Math.max(0, maxAllowed - currentCount);
+
+		if (attributesToAdd.length > availableSlots) {
+			const removeCount = attributesToAdd.length - availableSlots;
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey:
+					uploadedTextFile
+						? "commands.teach.attribute.batch_limit_exceeded_title"
+						: "commands.teach.attribute.limit_exceeded_title",
+				descriptionKey:
+					uploadedTextFile
+						? "commands.teach.attribute.batch_limit_exceeded_description"
+						: "commands.teach.attribute.limit_exceeded_description",
+				descriptionVars:
+					uploadedTextFile
+						? {
+								current_count: currentCount.toString(),
+								max_allowed: maxAllowed.toString(),
+								import_count: attributesToAdd.length.toString(),
+								remove_count: removeCount.toString(),
+							}
+						: {
+								current_count: currentCount.toString(),
+								max_allowed: maxAllowed.toString(),
+							},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 14. Update target persona row in the database
+		const [updatedTomoriResult] =
+			attributesToAdd.length === 1
+				? await sql`
+					UPDATE tomoris
+					SET attribute_list = array_append(attribute_list, ${attributesToAdd[0]})
+					WHERE tomori_id = ${selectedPersona.tomori_id}
+					RETURNING *
+				`
+				: await sql`
+					UPDATE tomoris
+					SET attribute_list = array_cat(attribute_list, ${formatTextArrayLiteral(attributesToAdd)}::text[])
+					WHERE tomori_id = ${selectedPersona.tomori_id}
+					RETURNING *
+				`;
 
 		// 15. Validate the result from the database (Rule 3, 5, 6)
 		const validationResult = tomoriSchema.safeParse(updatedTomoriResult);
@@ -286,7 +383,7 @@ export async function execute(
 				metadata: {
 					command: "teach attribute",
 					userDiscordId: interaction.user.id, // Keep Discord ID for easier user lookup
-					newAttribute,
+					newAttribute: attributesToAdd.join("\n"),
 					validationErrors: validationResult.error.issues,
 				},
 			};
@@ -311,13 +408,23 @@ export async function execute(
 
 		// 17. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.teach.attribute.success_title", // New locale key
-			descriptionKey: "commands.teach.attribute.success_description", // New locale key
-			descriptionVars: {
-				attribute: newAttribute,
-			},
+			titleKey:
+				attributesToAdd.length > 1 || uploadedTextFile
+					? "commands.teach.attribute.batch_success_title"
+					: "commands.teach.attribute.success_title",
+			descriptionKey:
+				attributesToAdd.length > 1 || uploadedTextFile
+					? "commands.teach.attribute.batch_success_description"
+					: "commands.teach.attribute.success_description",
+			descriptionVars:
+				attributesToAdd.length > 1 || uploadedTextFile
+					? {
+							added_count: attributesToAdd.length.toString(),
+						}
+					: {
+							attribute: attributesToAdd[0],
+						},
 			color: ColorCode.SUCCESS,
-			// No flags needed
 		});
 	} catch (error) {
 		// Rule 22: Log error with context
