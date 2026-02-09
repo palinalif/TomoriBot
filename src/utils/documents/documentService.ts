@@ -287,7 +287,7 @@ export function formatRetrievedChunksForPrompt(
 			currentDoc = chunk.document_name;
 		}
 
-		const scoreText = `score ${chunk.similarity.toFixed(2)}`;
+		// const scoreText = `score ${chunk.similarity.toFixed(2)}`;
 		const line = `- ${chunk.content}\n`;
 		if (output.length + line.length > maxChars) {
 			break;

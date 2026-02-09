@@ -21,7 +21,10 @@ import type {
 } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
 // Provider-specific types moved to individual providers
-import type { FunctionCall } from "../../types/provider/interfaces";
+import type {
+	FunctionCall,
+	FunctionResponseImageMetadata,
+} from "../../types/provider/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import { getCachedAllPersonas } from "../../utils/cache/tomoriStateCache";
 import {
@@ -3628,6 +3631,9 @@ export default async function tomoriChat(
 					const functionInteractionHistory: {
 						functionCall: FunctionCall;
 						functionResponse: Record<string, unknown>;
+						imageMetadata?: FunctionResponseImageMetadata;
+						/** Text parts the model generated before the function call (prevents repetition on continuation) */
+						preToolCallTextParts?: Array<Record<string, unknown>>;
 					}[] = [];
 					let finalStreamCompleted = false;
 					let finalAccumulatedText = ""; // Track accumulated text from successful stream
@@ -4531,10 +4537,12 @@ export default async function tomoriChat(
 									}
 
 									// 3. Add the model's function call and our function's result to the history
+									// Include pre-tool-call text parts so the LLM doesn't repeat itself on continuation
 									const historyEntry: {
 										functionCall: FunctionCall;
 										functionResponse: Record<string, unknown>;
 										imageMetadata?: typeof toolResult.imageMetadata;
+										preToolCallTextParts?: Array<Record<string, unknown>>;
 									} = {
 										functionCall: funcCall,
 										functionResponse: {
@@ -4543,6 +4551,10 @@ export default async function tomoriChat(
 												response: { result: functionExecutionResult },
 											},
 										},
+										preToolCallTextParts:
+											personaAccumulatedParts.length > 0
+												? [...personaAccumulatedParts]
+												: undefined,
 									};
 
 									// Add imageMetadata if present (for tools that send images like brave_image_search)
@@ -4550,6 +4562,12 @@ export default async function tomoriChat(
 										historyEntry.imageMetadata = toolResult.imageMetadata;
 										log.info(
 											`Including ${toolResult.imageMetadata.totalSent} image(s) in function response history for LLM visibility`,
+										);
+									}
+
+									if (historyEntry.preToolCallTextParts) {
+										log.info(
+											`Preserving ${historyEntry.preToolCallTextParts.length} pre-tool-call text part(s) in function history to prevent repetition`,
 										);
 									}
 

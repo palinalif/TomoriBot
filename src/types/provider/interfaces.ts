@@ -167,6 +167,8 @@ export interface LLMProvider {
 			functionCall: FunctionCall;
 			functionResponse: Record<string, unknown>;
 			imageMetadata?: FunctionResponseImageMetadata;
+			/** Text parts the model generated before the function call (prevents repetition on continuation) */
+			preToolCallTextParts?: Array<Record<string, unknown>>;
 		}>,
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,
@@ -221,6 +223,8 @@ export abstract class BaseLLMProvider implements LLMProvider {
 			functionCall: FunctionCall;
 			functionResponse: Record<string, unknown>;
 			imageMetadata?: FunctionResponseImageMetadata;
+			/** Text parts the model generated before the function call (prevents repetition on continuation) */
+			preToolCallTextParts?: Array<Record<string, unknown>>;
 		}>,
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,

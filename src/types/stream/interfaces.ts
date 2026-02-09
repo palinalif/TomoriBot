@@ -110,6 +110,8 @@ export interface StreamContext {
 		functionCall: FunctionCall;
 		functionResponse: Record<string, unknown>;
 		imageMetadata?: FunctionResponseImageMetadata;
+		/** Text parts the model generated before the function call (prevents repetition on continuation) */
+		preToolCallTextParts?: Array<Record<string, unknown>>;
 	}>;
 
 	// Provider context

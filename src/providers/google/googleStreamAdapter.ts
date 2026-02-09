@@ -159,9 +159,27 @@ export class GoogleStreamAdapter implements StreamProvider {
 					functionCallPart.thoughtSignature = item.functionCall.thoughtSignature;
 				}
 
+				// Build model parts: pre-tool-call text (if any) + function call
+				const modelParts: Part[] = [];
+
+				// Prepend text parts the model generated before the function call
+				if (
+					item.preToolCallTextParts &&
+					item.preToolCallTextParts.length > 0
+				) {
+					for (const textPart of item.preToolCallTextParts) {
+						modelParts.push(textPart as Part);
+					}
+					log.info(
+						`Google: Including ${item.preToolCallTextParts.length} pre-tool-call text part(s) in model turn`,
+					);
+				}
+
+				modelParts.push(functionCallPart);
+
 				finalContents.push({
 					role: "model",
-					parts: [functionCallPart],
+					parts: modelParts,
 				});
 
 				// Build function response parts array
@@ -646,6 +664,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 		_functionInteractionHistory?: Array<{
 			functionCall: FunctionCall;
 			functionResponse: Record<string, unknown>;
+			preToolCallTextParts?: Array<Record<string, unknown>>;
 		}>,
 	): Promise<{ systemInstruction?: string; dialogueContents: Content[] }> {
 		const systemInstructionParts: string[] = [];

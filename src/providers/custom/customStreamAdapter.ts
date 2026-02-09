@@ -675,6 +675,7 @@ export class CustomStreamAdapter implements StreamProvider {
 			functionCall: FunctionCall;
 			functionResponse: Record<string, unknown>;
 			imageMetadata?: FunctionResponseImageMetadata;
+			preToolCallTextParts?: Array<Record<string, unknown>>;
 		}>,
 		seesImages: boolean = false,
 	): Promise<Array<Record<string, unknown>>> {
@@ -798,10 +799,25 @@ export class CustomStreamAdapter implements StreamProvider {
 			for (const interaction of functionInteractionHistory) {
 				const toolCallId = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+				// Join pre-tool-call text parts into content string (prevents model from repeating itself)
+				let preToolCallContent = "";
+				if (
+					interaction.preToolCallTextParts &&
+					interaction.preToolCallTextParts.length > 0
+				) {
+					preToolCallContent = interaction.preToolCallTextParts
+						.map((part) => (part as { text?: string }).text)
+						.filter(
+							(text): text is string =>
+								typeof text === "string" && text.length > 0,
+						)
+						.join("");
+				}
+
 				// Assistant message with tool call
 				messages.push({
 					role: "assistant",
-					content: "",
+					content: preToolCallContent,
 					tool_calls: [
 						{
 							id: toolCallId,

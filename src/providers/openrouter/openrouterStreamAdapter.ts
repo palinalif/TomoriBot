@@ -1359,6 +1359,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			functionCall: FunctionCall;
 			functionResponse: Record<string, unknown>;
 			imageMetadata?: FunctionResponseImageMetadata;
+			preToolCallTextParts?: Array<Record<string, unknown>>;
 		}>,
 		seesImages: boolean = true,
 	): Promise<Array<Record<string, unknown>>> {
@@ -1679,9 +1680,31 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 					);
 				}
 
+				// Join pre-tool-call text parts into content string (prevents model from repeating itself)
+				let preToolCallContent: string | null = null;
+				if (
+					interaction.preToolCallTextParts &&
+					interaction.preToolCallTextParts.length > 0
+				) {
+					preToolCallContent = interaction.preToolCallTextParts
+						.map((part) => (part as { text?: string }).text)
+						.filter(
+							(text): text is string =>
+								typeof text === "string" && text.length > 0,
+						)
+						.join("");
+					if (preToolCallContent.length > 0) {
+						log.info(
+							`OpenRouter: Including ${preToolCallContent.length} chars of pre-tool-call text in assistant message`,
+						);
+					} else {
+						preToolCallContent = null;
+					}
+				}
+
 				const assistantMessage: Record<string, unknown> = {
 					role: "assistant",
-					content: null,
+					content: preToolCallContent,
 					tool_calls: [toolCallObject],
 				};
 
