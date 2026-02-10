@@ -273,7 +273,7 @@ jobs:
             # --- BYPASS LOGIC START ---
             if grep -q "fast-xml-parser" audit-output.txt; then
               echo ""
-              echo "⚠️ KNOWN ISSUE DETECTED: fast-xml-parser"
+              echo "KNOWN ISSUE DETECTED: fast-xml-parser"
               echo "   Marking as SAFE because this is a known low-risk issue in AWS SDK."
               exit 0
             fi
@@ -448,6 +448,8 @@ jobs:
     needs: security-gate
     outputs:
       image_uri: ${{ steps.ecr_uri.outputs.uri }}
+      deploy: ${{ steps.ecr_uri.outputs.deploy }}
+      version: ${{ steps.package_version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -470,27 +472,90 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Get version from package.json
+        id: package_version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: v$VERSION"
+
+      - name: Check if version exists in ECR
+        id: version_check
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+          VERSION: ${{ steps.package_version.outputs.version }}
+        run: |
+          # Check if version tag exists in ECR
+          if aws ecr describe-images \
+            --registry-id ${ECR_REGISTRY%%.*} \
+            --repository-name $ECR_REPOSITORY \
+            --image-ids imageTag=v$VERSION \
+            >/dev/null 2>&1; then
+            echo "version_exists=true" >> $GITHUB_OUTPUT
+            echo " Version v$VERSION already exists in ECR - skipping deployment"
+          else
+            echo "version_exists=false" >> $GITHUB_OUTPUT
+            echo "Version v$VERSION is new - will deploy"
+          fi
+
       - name: Tag and push image to ECR
         id: ecr_uri
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
           IMAGE_TAG: ${{ github.sha }}
+          VERSION: ${{ steps.package_version.outputs.version }}
+          VERSION_EXISTS: ${{ steps.version_check.outputs.version_exists }}
         run: |
-          echo "Tagging image..."
+          echo "Tagging image with commit hash..."
           docker tag tomoribot:latest $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag tomoribot:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-          echo "Pushing image to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "Pushed commit hash tag: $IMAGE_TAG"
 
-          echo "Image pushed successfully!"
-          echo "uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          # Always update 'latest' tag for debugging
+          docker tag tomoribot:latest $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "Updated 'latest' tag"
+
+          # Tag with semantic version if new
+          if [ "$VERSION_EXISTS" = "false" ]; then
+            echo "Tagging image with semantic version..."
+            docker tag tomoribot:latest $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
+            echo "Pushed version tag: v$VERSION"
+
+            # Use version tag for deployment
+            echo "uri=$ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION" >> $GITHUB_OUTPUT
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo " Skipping version tag (already exists)"
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            # Output commit hash as fallback (won't be used for deployment)
+            echo "uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deployment summary
+        env:
+          VERSION: ${{ steps.package_version.outputs.version }}
+          DEPLOY: ${{ steps.ecr_uri.outputs.deploy }}
+        run: |
+          echo "=================================="
+          echo "Version: v$VERSION"
+          echo "Deploy: $DEPLOY"
+          if [ "$DEPLOY" = "true" ]; then
+            echo "Deployment will proceed with version v$VERSION"
+          else
+            echo "Deployment skipped - version v$VERSION already exists"
+            echo "To deploy, increment version in package.json"
+          fi
+          echo "=================================="
 
   deploy-with-terraform:
     runs-on: ubuntu-latest
     needs: push-to-ecr
+    # Only deploy if version is new (not already in ECR)
+    if: needs['push-to-ecr'].outputs.deploy == 'true'
     env:
       TF_VAR_container_image: ${{ needs['push-to-ecr'].outputs.image_uri }}
       TF_VAR_rds_master_password: ${{ secrets.RDS_MASTER_PASSWORD }}
