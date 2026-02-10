@@ -126,15 +126,22 @@ export async function loadTomoriState(
 			}
 		}
 
-		// 5. Load server memories for this persona plus legacy NULL-scoped rows (soak only).
+		// 5. Load server memories scoped by persona lineage.
+		const rawLineageId = tomoriData.persona_lineage_id;
+		const parsedPersonaLineageId =
+			typeof rawLineageId === "bigint"
+				? Number(rawLineageId)
+				: typeof rawLineageId === "string"
+					? Number(rawLineageId)
+					: (rawLineageId ?? 0);
+		const personaLineageId = Number.isFinite(parsedPersonaLineageId)
+			? parsedPersonaLineageId
+			: 0;
 		const serverMemoriesRows = await sql`
 			SELECT content
 			FROM server_memories
 			WHERE server_id = ${tomoriData.server_id}
-			  AND (
-				tomori_id = ${tomoriId}
-				OR tomori_id IS NULL
-			  )
+			  AND persona_lineage_id = ${personaLineageId}
 			ORDER BY created_at DESC
 		`;
 
@@ -321,25 +328,39 @@ export async function loadAllPersonasForServer(
 					}
 				}
 
-				// 6. Load server memories once, grouped by tomori_id
+				// 6. Load server memories once, grouped by persona_lineage_id
 				const memoryRows = await sql<
-					Array<{ tomori_id: number | null; content: string }>
+					Array<{
+						persona_lineage_id: number | string | bigint | null;
+						content: string;
+					}>
 				>`
-					SELECT tomori_id, content
+					SELECT persona_lineage_id, content
 					FROM server_memories
 					WHERE server_id = ${serverId}
 					ORDER BY created_at DESC
 				`;
-				const legacyServerMemories: string[] = [];
-				const memoriesByTomori = new Map<number, string[]>();
+				const memoriesByLineage = new Map<number, string[]>();
 				for (const row of memoryRows) {
-					if (row.tomori_id === null) {
-						legacyServerMemories.push(row.content);
+					const lineageId =
+						typeof row.persona_lineage_id === "bigint"
+							? Number(row.persona_lineage_id)
+							: typeof row.persona_lineage_id === "string"
+								? Number(row.persona_lineage_id)
+								: row.persona_lineage_id;
+					if (
+						typeof lineageId !== "number" ||
+						!Number.isFinite(lineageId) ||
+						lineageId < 0
+					) {
+						log.warn(
+							`Skipping server memory with invalid persona_lineage_id for server ${serverDiscId}`,
+						);
 						continue;
 					}
-					const existing = memoriesByTomori.get(row.tomori_id) ?? [];
+					const existing = memoriesByLineage.get(lineageId) ?? [];
 					existing.push(row.content);
-					memoriesByTomori.set(row.tomori_id, existing);
+					memoriesByLineage.set(lineageId, existing);
 				}
 
 				// 7. Build persona states
@@ -358,18 +379,18 @@ export async function loadAllPersonasForServer(
 						tomoriRow.is_alter === true
 							? (tomoriRow.alter_triggers ?? [])
 							: (configData.trigger_words ?? []);
-					const personaScopedMemories = memoriesByTomori.get(tomoriId);
-					// Legacy NULL-scoped server memories are a soak fallback for main persona only.
-					// Alters must remain strictly persona-scoped to prevent cross-persona leakage.
-					const includeLegacyFallback = tomoriRow.is_alter !== true;
-					const serverMemories =
-						personaScopedMemories && personaScopedMemories.length > 0
-							? includeLegacyFallback && legacyServerMemories.length > 0
-								? [...personaScopedMemories, ...legacyServerMemories]
-								: personaScopedMemories
-							: includeLegacyFallback
-								? legacyServerMemories
-								: [];
+					const rawPersonaLineageId = tomoriRow.persona_lineage_id;
+					const parsedPersonaLineageId =
+						typeof rawPersonaLineageId === "bigint"
+							? Number(rawPersonaLineageId)
+							: typeof rawPersonaLineageId === "string"
+								? Number(rawPersonaLineageId)
+								: (rawPersonaLineageId ?? 0);
+					const personaLineageId = Number.isFinite(parsedPersonaLineageId)
+						? parsedPersonaLineageId
+						: 0;
+					// Personas sharing lineage intentionally share server memories.
+					const serverMemories = memoriesByLineage.get(personaLineageId) ?? [];
 
 					const combinedState = {
 						...tomoriRow,

@@ -373,23 +373,13 @@ export async function execute(
 				return;
 			}
 
-			const includeLegacyFallback = selectedPersona?.is_alter !== true;
-			const deletedMemories = includeLegacyFallback
-				? await sql<Array<{ server_memory_id: number }>>`
-					DELETE FROM server_memories
-					WHERE server_id = ${serverId}
-					  AND (
-						tomori_id = ${selectedPersona?.tomori_id}
-						OR tomori_id IS NULL
-					  )
-					RETURNING server_memory_id
-				`
-				: await sql<Array<{ server_memory_id: number }>>`
-					DELETE FROM server_memories
-					WHERE server_id = ${serverId}
-					  AND tomori_id = ${selectedPersona?.tomori_id}
-					RETURNING server_memory_id
-				`;
+			const targetLineageId = selectedPersona?.persona_lineage_id ?? 0;
+			const deletedMemories = await sql<Array<{ server_memory_id: number }>>`
+				DELETE FROM server_memories
+				WHERE server_id = ${serverId}
+				  AND persona_lineage_id = ${targetLineageId}
+				RETURNING server_memory_id
+			`;
 			if (deletedMemories.length === 0) {
 				await replyInfoEmbed(responseInteraction, locale, {
 					titleKey: "commands.data.delete.no_server_data_title",

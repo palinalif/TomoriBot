@@ -83,6 +83,54 @@ async function resolveMainTomoriId(serverId: number): Promise<number | undefined
 	return mainPersonaRows[0]?.tomori_id;
 }
 
+function coerceLineageId(
+	value: number | string | bigint | null | undefined,
+): number | null {
+	if (typeof value === "bigint") {
+		return Number(value);
+	}
+	if (typeof value === "string" && value.trim() !== "") {
+		return Number(value);
+	}
+	if (typeof value === "number") {
+		return value;
+	}
+	return null;
+}
+
+async function resolveMainTomoriScope(
+	serverId: number,
+): Promise<{ tomoriId: number; personaLineageId: number } | null> {
+	const mainPersonaRows = await sql<
+		Array<{ tomori_id: number; persona_lineage_id: number | string | bigint }>
+	>`
+		SELECT tomori_id, persona_lineage_id
+		FROM tomoris
+		WHERE server_id = ${serverId}
+		  AND is_alter = false
+		ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
+		LIMIT 1
+	`;
+
+	const mainTomori = mainPersonaRows[0];
+	if (!mainTomori) {
+		return null;
+	}
+
+	const personaLineageId = coerceLineageId(mainTomori.persona_lineage_id);
+	if (
+		typeof personaLineageId !== "number" ||
+		!Number.isFinite(personaLineageId)
+	) {
+		return null;
+	}
+
+	return {
+		tomoriId: mainTomori.tomori_id,
+		personaLineageId,
+	};
+}
+
 export async function importPersonalMemories(
 	userDiscId: string,
 	memories: string[],
@@ -295,49 +343,59 @@ export async function importServerMemories(
 		}
 
 		let insertTomoriId: number | null = null;
-		if (target.mode === "persona") {
-			insertTomoriId =
-				target.tomoriId ?? (await resolveMainTomoriId(serverId)) ?? null;
-		}
+		let targetPersonaLineageId: number | null = null;
 
-		if (target.mode === "global") {
-			await sql`
-				DELETE FROM server_memories
-				WHERE server_id = ${serverId}
-				  AND tomori_id IS NULL
-			`;
-		} else if (insertTomoriId) {
-			const [targetPersonaMeta] = await sql<Array<{ is_alter: boolean }>>`
-				SELECT is_alter
-				FROM tomoris
-				WHERE tomori_id = ${insertTomoriId}
-				  AND server_id = ${serverId}
-				LIMIT 1
-			`;
-			const includeLegacyFallback = targetPersonaMeta?.is_alter !== true;
-			if (includeLegacyFallback) {
-				await sql`
-					DELETE FROM server_memories
+		if (target.mode === "persona") {
+			if (target.tomoriId) {
+				const [targetPersona] = await sql<
+					Array<{
+						tomori_id: number;
+						persona_lineage_id: number | string | bigint;
+					}>
+				>`
+					SELECT tomori_id, persona_lineage_id
+					FROM tomoris
 					WHERE server_id = ${serverId}
-					  AND (
-						tomori_id = ${insertTomoriId}
-						OR tomori_id IS NULL
-					  )
+					  AND tomori_id = ${target.tomoriId}
+					LIMIT 1
 				`;
+				if (!targetPersona) {
+					return {
+						success: false,
+						error: "commands.data.import.error_no_server_data",
+					};
+				}
+				insertTomoriId = targetPersona.tomori_id;
+				targetPersonaLineageId = coerceLineageId(
+					targetPersona.persona_lineage_id,
+				);
 			} else {
-				await sql`
-					DELETE FROM server_memories
-					WHERE server_id = ${serverId}
-					  AND tomori_id = ${insertTomoriId}
-				`;
+				const mainScope = await resolveMainTomoriScope(serverId);
+				insertTomoriId = mainScope?.tomoriId ?? null;
+				targetPersonaLineageId = mainScope?.personaLineageId ?? null;
 			}
 		} else {
-			await sql`
-				DELETE FROM server_memories
-				WHERE server_id = ${serverId}
-				  AND tomori_id IS NULL
-			`;
+			// Global target maps to the current main persona lineage.
+			const mainScope = await resolveMainTomoriScope(serverId);
+			targetPersonaLineageId = mainScope?.personaLineageId ?? null;
+			insertTomoriId = null;
 		}
+
+		if (
+			typeof targetPersonaLineageId !== "number" ||
+			!Number.isFinite(targetPersonaLineageId)
+		) {
+			return {
+				success: false,
+				error: "commands.data.import.error_no_server_data",
+			};
+		}
+
+		await sql`
+			DELETE FROM server_memories
+			WHERE server_id = ${serverId}
+			  AND persona_lineage_id = ${targetPersonaLineageId}
+		`;
 
 		if (memories.length === 0) {
 			return {
@@ -365,8 +423,8 @@ export async function importServerMemories(
 
 		for (const content of memories) {
 			await sql`
-				INSERT INTO server_memories (server_id, tomori_id, user_id, content)
-				VALUES (${serverId}, ${insertTomoriId}, ${userId}, ${content})
+				INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content)
+				VALUES (${serverId}, ${insertTomoriId}, ${targetPersonaLineageId}, ${userId}, ${content})
 			`;
 		}
 

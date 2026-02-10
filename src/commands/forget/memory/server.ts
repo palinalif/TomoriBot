@@ -233,31 +233,17 @@ export async function execute(
 			return;
 		}
 
-		// 5. Fetch persona-scoped server memories.
-		// Legacy NULL rows are visible only when the selected persona is main.
-		const includeLegacyFallback = selectedPersona.is_alter !== true;
-		let memoriesQuery = includeLegacyFallback
-			? sql`
-				SELECT server_memory_id, content, user_id
-				FROM server_memories
-				WHERE server_id = ${
-					// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
-					tomoriState.server_id!
-				}
-				  AND (
-					tomori_id = ${selectedPersona.tomori_id}
-					OR tomori_id IS NULL
-				  )
-			`
-			: sql`
-				SELECT server_memory_id, content, user_id
-				FROM server_memories
-				WHERE server_id = ${
-					// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
-					tomoriState.server_id!
-				}
-				  AND tomori_id = ${selectedPersona.tomori_id}
-			`;
+		// 5. Fetch lineage-scoped server memories for the selected persona.
+		const targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
+		let memoriesQuery = sql`
+			SELECT server_memory_id, content, user_id
+			FROM server_memories
+			WHERE server_id = ${
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees server_id
+				tomoriState.server_id!
+			}
+			  AND persona_lineage_id = ${targetPersonaLineageId}
+		`;
 
 		if (!hasManagePermission) {
 			// If user does NOT have ManageGuild permission, only fetch their own memories

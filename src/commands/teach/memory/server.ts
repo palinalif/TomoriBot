@@ -243,6 +243,7 @@ export async function execute(
 			return;
 		}
 		const targetTomoriId = selectedPersona.tomori_id;
+		const targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
 		const targetServerId = tomoriState.server_id;
 
 		const pendingMemories: string[] = [];
@@ -305,22 +306,12 @@ export async function execute(
 			}
 		}
 
-		const includeLegacyFallback = selectedPersona.is_alter !== true;
-		const existingRows = includeLegacyFallback
-			? await sql`
-				SELECT content
-				FROM server_memories
-				WHERE server_id = ${targetServerId}
-				  AND (
-					tomori_id = ${targetTomoriId}
-					OR tomori_id IS NULL
-				  )
-			`
-			: await sql`
-				SELECT content
-				FROM server_memories
-				WHERE tomori_id = ${targetTomoriId}
-			`;
+		const existingRows = await sql`
+			SELECT content
+			FROM server_memories
+			WHERE server_id = ${targetServerId}
+			  AND persona_lineage_id = ${targetPersonaLineageId}
+		`;
 		const existingMemories = new Set(
 			existingRows
 				.map((row: { content?: unknown }) =>
@@ -347,8 +338,7 @@ export async function execute(
 		// 13.5 Check server memory limit after final persona resolution
 		const serverLimitCheck = await checkServerMemoryLimit(
 			targetServerId,
-			targetTomoriId,
-			includeLegacyFallback,
+			targetPersonaLineageId,
 		);
 		const currentCount = serverLimitCheck.currentCount ?? existingRows.length;
 		const maxAllowed =
@@ -388,9 +378,9 @@ export async function execute(
 			const insertedMemory = await addServerMemoryByTomori(
 				targetServerId,
 				targetTomoriId,
+				targetPersonaLineageId,
 				targetUserId,
 				memoriesToAdd[0] ?? "",
-				includeLegacyFallback,
 			);
 			insertSuccess = insertedMemory !== null;
 		} else {
@@ -398,8 +388,8 @@ export async function execute(
 				await sql.transaction(async (tx) => {
 					for (const memory of memoriesToAdd) {
 						await tx`
-							INSERT INTO server_memories (server_id, tomori_id, user_id, content)
-							VALUES (${targetServerId}, ${targetTomoriId}, ${targetUserId}, ${memory})
+							INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content)
+							VALUES (${targetServerId}, ${targetTomoriId}, ${targetPersonaLineageId}, ${targetUserId}, ${memory})
 						`;
 					}
 				});

@@ -768,39 +768,30 @@ export async function checkPersonalMemoryLimit(
 /**
  * Check if a server has reached its memory limit
  * @param serverId - Internal server ID (not Discord ID)
+ * @param personaLineageId - Optional persona lineage scope for server memories
  * @returns MemoryValidationResult indicating if server can add more memories
  */
 export async function checkServerMemoryLimit(
 	serverId: number,
-	tomoriId?: number,
-	includeLegacyFallback = true,
+	personaLineageId?: number,
 ): Promise<MemoryValidationResult> {
 	const limits = getMemoryLimits();
 
 	try {
-		// Count persona-scoped server memories (with optional legacy fallback)
+		// Count lineage-scoped server memories.
 		const [countResult] =
-			tomoriId && includeLegacyFallback
+			personaLineageId !== undefined
 				? await sql`
 					SELECT COUNT(*) as memory_count
 					FROM server_memories
 					WHERE server_id = ${serverId}
-					  AND (
-						tomori_id = ${tomoriId}
-						OR tomori_id IS NULL
-					  )
+					  AND persona_lineage_id = ${personaLineageId}
 				`
-				: tomoriId
-					? await sql`
-						SELECT COUNT(*) as memory_count
-						FROM server_memories
-						WHERE tomori_id = ${tomoriId}
-					`
-					: await sql`
-						SELECT COUNT(*) as memory_count
-						FROM server_memories
-						WHERE server_id = ${serverId}
-					`;
+				: await sql`
+					SELECT COUNT(*) as memory_count
+					FROM server_memories
+					WHERE server_id = ${serverId}
+				`;
 
 		const currentCount = Number(countResult?.memory_count || 0);
 

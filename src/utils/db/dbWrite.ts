@@ -991,6 +991,7 @@ export async function updateUser(
  *
  * @param serverId - The internal ID of the server this memory pertains to.
  * @param tomoriId - The internal persona ID this memory belongs to.
+ * @param personaLineageId - Shared persona lineage namespace for this memory.
  * @param taughtByUserId - The internal ID of the user whose interaction led to Tomori learning this.
  * @param content - The text content of the memory to be saved.
  * @returns The newly created ServerMemoryRow, or null if the operation failed.
@@ -998,13 +999,13 @@ export async function updateUser(
 export async function addServerMemoryByTomori(
 	serverId: number,
 	tomoriId: number,
+	personaLineageId: number,
 	taughtByUserId: number,
 	content: string,
-	includeLegacyFallback = true,
 ): Promise<ServerMemoryRow | null> {
 	// 1. Log the attempt to add a server memory.
 	log.info(
-		`Tomori is attempting to self-learn a server memory for server ID ${serverId}, tomori ID ${tomoriId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
+		`Tomori is attempting to self-learn a server memory for server ID ${serverId}, tomori ID ${tomoriId}, lineage ${personaLineageId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
 	);
 
 	// 2. Validate memory content before database operations
@@ -1019,8 +1020,7 @@ export async function addServerMemoryByTomori(
 	// 3. Check server memory limit
 	const serverLimitCheck = await checkServerMemoryLimit(
 		serverId,
-		tomoriId,
-		includeLegacyFallback,
+		personaLineageId,
 	);
 	if (!serverLimitCheck.isValid) {
 		log.warn(
@@ -1033,8 +1033,8 @@ export async function addServerMemoryByTomori(
 		// 2. Insert the new memory into the server_memories table.
 		// The columns now correctly match the serverMemorySchema.
 		const [newMemory] = await sql`
-			INSERT INTO server_memories (server_id, tomori_id, user_id, content)
-			VALUES (${serverId}, ${tomoriId}, ${taughtByUserId}, ${content})
+			INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content)
+			VALUES (${serverId}, ${tomoriId}, ${personaLineageId}, ${taughtByUserId}, ${content})
 			RETURNING *
 		`;
 

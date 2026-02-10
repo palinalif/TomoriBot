@@ -231,11 +231,14 @@ export async function exportServerData(
 
 		const configData = configRows[0];
 
-		// 3. Resolve target persona for server memory export
+		// 3. Resolve target persona/lineage for server memory export
 		let targetTomoriId = tomoriId;
+		let targetPersonaLineageId: number | null = null;
 		if (!targetTomoriId) {
-			const mainPersonaRows = await sql`
-				SELECT tomori_id
+			const mainPersonaRows = await sql<
+				Array<{ tomori_id: number; persona_lineage_id: number | bigint | string }>
+			>`
+				SELECT tomori_id, persona_lineage_id
 				FROM tomoris
 				WHERE server_id = ${serverId}
 				  AND is_alter = false
@@ -243,47 +246,61 @@ export async function exportServerData(
 				LIMIT 1
 			`;
 			targetTomoriId = mainPersonaRows[0]?.tomori_id;
-		}
-
-		// 4. Get persona-scoped server memories.
-		// Legacy NULL rows are exported only for main persona targets.
-		let includeLegacyFallback = false;
-		if (targetTomoriId) {
-			const [targetPersonaMeta] = await sql<Array<{ is_alter: boolean }>>`
-				SELECT is_alter
+			const rawMainLineageId = mainPersonaRows[0]?.persona_lineage_id;
+			targetPersonaLineageId =
+				typeof rawMainLineageId === "bigint"
+					? Number(rawMainLineageId)
+					: typeof rawMainLineageId === "string"
+						? Number(rawMainLineageId)
+						: (rawMainLineageId ?? null);
+		} else {
+			const [targetPersonaMeta] = await sql<
+				Array<{ persona_lineage_id: number | bigint | string }>
+			>`
+				SELECT persona_lineage_id
 				FROM tomoris
 				WHERE tomori_id = ${targetTomoriId}
 				  AND server_id = ${serverId}
 				LIMIT 1
 			`;
-			includeLegacyFallback = targetPersonaMeta?.is_alter !== true;
+			if (!targetPersonaMeta) {
+				return {
+					success: false,
+					error: "commands.data.export.error_no_server_data",
+				};
+			}
+			const rawLineageId = targetPersonaMeta?.persona_lineage_id;
+			targetPersonaLineageId =
+				typeof rawLineageId === "bigint"
+					? Number(rawLineageId)
+					: typeof rawLineageId === "string"
+						? Number(rawLineageId)
+						: (rawLineageId ?? null);
 		}
 
-		const memoryRows = targetTomoriId
-			? includeLegacyFallback
+		if (
+			targetPersonaLineageId !== null &&
+			!Number.isFinite(targetPersonaLineageId)
+		) {
+			targetPersonaLineageId = null;
+		}
+
+		// 4. Get lineage-scoped server memories for the selected persona target.
+		const memoryRows =
+			targetPersonaLineageId !== null
 				? await sql`
 					SELECT content
 					FROM server_memories
 					WHERE server_id = ${serverId}
-					  AND (
-						tomori_id = ${targetTomoriId}
-						OR tomori_id IS NULL
-					  )
+					  AND persona_lineage_id = ${targetPersonaLineageId}
 					ORDER BY created_at DESC
 				`
 				: await sql`
 					SELECT content
 					FROM server_memories
 					WHERE server_id = ${serverId}
-					  AND tomori_id = ${targetTomoriId}
 					ORDER BY created_at DESC
-				`
-			: await sql`
-				SELECT content
-				FROM server_memories
-				WHERE server_id = ${serverId}
-				ORDER BY created_at DESC
-			`;
+				`;
 
 		const serverMemories = memoryRows.map(
 			(row: { content: string }) => row.content,

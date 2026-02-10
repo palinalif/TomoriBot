@@ -766,34 +766,15 @@ export async function buildContext({
 
 		let serverMemoryLines: string[] = [];
 		try {
-			const includeLegacyFallback = tomoriState.is_alter !== true;
-			const serverMemoryRows =
-				tomoriState.tomori_id === null || tomoriState.tomori_id === undefined
-					? await sql<Array<{ server_memory_id: number; content: string }>>`
-						SELECT server_memory_id, content
-						FROM server_memories
-						WHERE server_id = ${tomoriState.server_id}
-						  AND tomori_id IS NULL
-						ORDER BY created_at DESC
-					`
-					: includeLegacyFallback
-						? await sql<Array<{ server_memory_id: number; content: string }>>`
-							SELECT server_memory_id, content
-							FROM server_memories
-							WHERE server_id = ${tomoriState.server_id}
-							  AND (
-								tomori_id = ${tomoriState.tomori_id}
-								OR tomori_id IS NULL
-							  )
-							ORDER BY created_at DESC
-						`
-						: await sql<Array<{ server_memory_id: number; content: string }>>`
-							SELECT server_memory_id, content
-							FROM server_memories
-							WHERE server_id = ${tomoriState.server_id}
-							  AND tomori_id = ${tomoriState.tomori_id}
-							ORDER BY created_at DESC
-						`;
+			const serverMemoryRows = await sql<
+				Array<{ server_memory_id: number; content: string }>
+			>`
+				SELECT server_memory_id, content
+				FROM server_memories
+				WHERE server_id = ${tomoriState.server_id}
+				  AND persona_lineage_id = ${tomoriState.persona_lineage_id}
+				ORDER BY created_at DESC
+			`;
 
 			serverMemoryLines = serverMemoryRows.map((row) =>
 				formatMemoryWithId(row.server_memory_id, row.content),

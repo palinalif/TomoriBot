@@ -239,6 +239,15 @@ export const serverMemorySchema = z.object({
 	server_memory_id: z.number().optional(),
 	server_id: z.number(),
 	tomori_id: z.number().nullable().optional(),
+	persona_lineage_id: z.preprocess((value) => {
+		if (typeof value === "bigint") {
+			return Number(value);
+		}
+		if (typeof value === "string" && value.trim() !== "") {
+			return Number(value);
+		}
+		return value;
+	}, z.number().int().nonnegative()),
 	user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
 	content: z.string(),
 	created_at: z.date().optional(),

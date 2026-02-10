@@ -711,7 +711,8 @@ END $$;
 CREATE TABLE IF NOT EXISTS server_memories (
   server_memory_id SERIAL PRIMARY KEY,
   server_id INT NOT NULL,
-  tomori_id INT, -- Persona owner of this server memory (nullable for legacy rows during soak)
+  tomori_id INT, -- Optional persona pointer for attribution (set to NULL if persona deleted)
+  persona_lineage_id BIGINT NOT NULL, -- Shared persona identity for memory continuity across remove/re-import
   user_id INT, -- Creator of this server memory (nullable - set to NULL if user deleted)
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -722,6 +723,8 @@ CREATE TABLE IF NOT EXISTS server_memories (
 
 -- Add tomori_id column for existing databases
 SELECT add_column_if_not_exists('server_memories', 'tomori_id', 'INTEGER');
+-- Add lineage scope column for existing databases
+SELECT add_column_if_not_exists('server_memories', 'persona_lineage_id', 'BIGINT');
 
 -- Backfill server memories to the current main persona for each server
 DO $$
@@ -740,19 +743,101 @@ BEGIN
 	  AND sm.server_id = main.server_id;
 END $$;
 
--- Add FK for server_memories.tomori_id if missing
+-- Backfill server_memories.persona_lineage_id from linked persona rows
 DO $$
 BEGIN
-	IF NOT EXISTS (
-		SELECT 1
-		FROM pg_constraint
-		WHERE conname = 'server_memories_tomori_id_fkey'
-	) THEN
+	UPDATE server_memories sm
+	SET persona_lineage_id = t.persona_lineage_id
+	FROM tomoris t
+	WHERE sm.persona_lineage_id IS NULL
+	  AND sm.tomori_id = t.tomori_id;
+END $$;
+
+-- Backfill any remaining lineage NULLs to each server's current main persona lineage
+DO $$
+BEGIN
+	UPDATE server_memories sm
+	SET persona_lineage_id = main.persona_lineage_id
+	FROM (
+		SELECT DISTINCT ON (server_id)
+			server_id,
+			persona_lineage_id
+		FROM tomoris
+		WHERE is_alter = false
+		ORDER BY server_id, updated_at DESC NULLS LAST, tomori_id DESC
+	) main
+	WHERE sm.persona_lineage_id IS NULL
+	  AND sm.server_id = main.server_id;
+END $$;
+
+-- Final fallback for unusual servers without a current main persona
+DO $$
+BEGIN
+	UPDATE server_memories sm
+	SET persona_lineage_id = fallback.persona_lineage_id
+	FROM (
+		SELECT DISTINCT ON (server_id)
+			server_id,
+			persona_lineage_id
+		FROM tomoris
+		ORDER BY server_id, is_alter ASC, updated_at DESC NULLS LAST, tomori_id DESC
+	) fallback
+	WHERE sm.persona_lineage_id IS NULL
+	  AND sm.server_id = fallback.server_id;
+END $$;
+
+-- Guard against orphaned persona pointers before enforcing tomori FK
+UPDATE server_memories sm
+SET tomori_id = NULL
+WHERE sm.tomori_id IS NOT NULL
+  AND NOT EXISTS (
+  	SELECT 1
+  	FROM tomoris t
+  	WHERE t.tomori_id = sm.tomori_id
+  );
+
+-- Enforce NOT NULL only when all rows have been backfilled
+DO $$
+DECLARE
+	unresolved_count INTEGER;
+BEGIN
+	SELECT COUNT(*) INTO unresolved_count
+	FROM server_memories
+	WHERE persona_lineage_id IS NULL;
+
+	IF unresolved_count = 0 THEN
+		ALTER TABLE server_memories
+		ALTER COLUMN persona_lineage_id SET NOT NULL;
+	ELSE
+		RAISE NOTICE 'Skipping NOT NULL on server_memories.persona_lineage_id: % unresolved rows remain', unresolved_count;
+	END IF;
+END $$;
+
+-- Ensure FK for server_memories.tomori_id exists with ON DELETE SET NULL
+DO $$
+DECLARE
+	fk_delete_action CHAR;
+BEGIN
+	SELECT c.confdeltype
+	INTO fk_delete_action
+	FROM pg_constraint c
+	WHERE c.conname = 'server_memories_tomori_id_fkey'
+	LIMIT 1;
+
+	IF fk_delete_action IS NULL THEN
 		ALTER TABLE server_memories
 		ADD CONSTRAINT server_memories_tomori_id_fkey
 		FOREIGN KEY (tomori_id)
 		REFERENCES tomoris(tomori_id)
-		ON DELETE CASCADE;
+		ON DELETE SET NULL;
+	ELSIF fk_delete_action <> 'n' THEN
+		ALTER TABLE server_memories
+		DROP CONSTRAINT server_memories_tomori_id_fkey;
+		ALTER TABLE server_memories
+		ADD CONSTRAINT server_memories_tomori_id_fkey
+		FOREIGN KEY (tomori_id)
+		REFERENCES tomoris(tomori_id)
+		ON DELETE SET NULL;
 	END IF;
 END $$;
 
@@ -760,6 +845,8 @@ END $$;
 DROP TRIGGER IF EXISTS update_server_memories_timestamp ON server_memories;
 CREATE INDEX IF NOT EXISTS idx_server_memories_tomori_id ON server_memories(tomori_id);
 CREATE INDEX IF NOT EXISTS idx_server_memories_tomori_created_at ON server_memories(tomori_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_server_memories_lineage_id ON server_memories(persona_lineage_id);
+CREATE INDEX IF NOT EXISTS idx_server_memories_server_lineage_created_at ON server_memories(server_id, persona_lineage_id, created_at DESC);
 
 -- Dedicated personal memories table (lineage-scoped)
 CREATE TABLE IF NOT EXISTS personal_memories (

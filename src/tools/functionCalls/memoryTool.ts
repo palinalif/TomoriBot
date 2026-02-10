@@ -232,8 +232,7 @@ export class MemoryTool extends BaseTool {
 				// Check server memory limit before adding
 				const serverLimitCheck = await checkServerMemoryLimit(
 					tomoriState.server_id,
-					tomoriState.tomori_id,
-					tomoriState.is_alter !== true,
+					tomoriState.persona_lineage_id ?? 0,
 				);
 				if (!serverLimitCheck.isValid) {
 					return {
@@ -252,9 +251,9 @@ export class MemoryTool extends BaseTool {
 				const dbResult = await addServerMemoryByTomori(
 					tomoriState.server_id,
 					tomoriState.tomori_id,
+					tomoriState.persona_lineage_id ?? 0,
 					userRow.user_id,
 					memoryContent,
-					tomoriState.is_alter !== true,
 				);
 
 				if (dbResult) {
