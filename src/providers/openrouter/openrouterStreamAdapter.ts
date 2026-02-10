@@ -24,6 +24,10 @@ import {
 } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import {
+	getOpenRouterSupportedParameters,
+	isOpenRouterCapabilityCacheReady,
+} from "../../utils/cache/openrouterCapabilityCache";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -130,6 +134,10 @@ interface AccumulatedToolCall {
  * OpenRouter streaming adapter implementation
  */
 export class OpenrouterStreamAdapter implements StreamProvider {
+	private static readonly TEMPERATURE_OMIT_MODELS = new Set([
+		"openrouter/pony-alpha",
+	]);
+
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		ContextItemTag.SYSTEM_PERSONALITY,
@@ -146,6 +154,97 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 	// Accumulator for reasoning_details across streaming chunks (required for Gemini models)
 	// biome-ignore lint/suspicious/noExplicitAny: reasoning_details has complex nested structure that varies by provider
 	private reasoningDetailsAccumulator: any[] = [];
+
+	private isOpenRouterParamSupported(
+		supportedParameters: ReadonlySet<string> | null,
+		param: string,
+		aliases: string[] = [],
+	): boolean {
+		if (!supportedParameters) return true;
+		return (
+			supportedParameters.has(param) ||
+			aliases.some((alias) => supportedParameters.has(alias))
+		);
+	}
+
+	private isLikelyGenericErrorMessage(message: string): boolean {
+		const normalized = message.trim().toLowerCase();
+		return (
+			normalized.length === 0 ||
+			normalized === "error" ||
+			normalized === "bad request" ||
+			normalized === "request failed"
+		);
+	}
+
+	private cloneWithoutKeys(
+		input: Record<string, unknown>,
+		keysToRemove: string[],
+	): Record<string, unknown> {
+		const cloned: Record<string, unknown> = { ...input };
+		for (const key of keysToRemove) {
+			delete cloned[key];
+		}
+		return cloned;
+	}
+
+	private parseHttpErrorFromResponse(
+		responseStatus: number,
+		responseStatusText: string,
+		errorText: string,
+		requestBody: Record<string, unknown>,
+		model: string | undefined,
+		attemptLabel: string,
+	): { error: Error; errorMessage: string; statusCode: number } {
+		let errorMessage = errorText || responseStatusText;
+		let errorCode: string | undefined;
+		let rawErrorBodyFromMetadata: string | undefined;
+
+		try {
+			const errorData = JSON.parse(errorText) as {
+				error?: {
+					message?: string;
+					code?: string | number;
+					metadata?: { raw?: string };
+				};
+				message?: string;
+			};
+			errorCode =
+				errorData?.error?.code !== undefined
+					? String(errorData.error.code)
+					: undefined;
+			rawErrorBodyFromMetadata = errorData?.error?.metadata?.raw;
+			errorMessage =
+				errorData?.error?.metadata?.raw ||
+				errorData?.error?.message ||
+				errorData?.message ||
+				errorText ||
+				responseStatusText;
+		} catch {
+			errorMessage = errorText || responseStatusText;
+		}
+
+		const statusLabel = errorCode
+			? `HTTP ${responseStatus} (${errorCode})`
+			: `HTTP ${responseStatus}`;
+		const requestParamKeys = Object.keys(requestBody).sort().join(", ");
+		const rawErrorBody = rawErrorBodyFromMetadata || errorText;
+		const rawErrorBodySnippet =
+			rawErrorBody.length > 3000
+				? `${rawErrorBody.substring(0, 3000)}...`
+				: rawErrorBody;
+		const shouldAppendRawBody =
+			this.isLikelyGenericErrorMessage(errorMessage) &&
+			Boolean(rawErrorBodySnippet);
+
+		return {
+			error: new Error(
+				`${statusLabel}: ${errorMessage}${shouldAppendRawBody ? ` | raw_response: ${rawErrorBodySnippet}` : ""} | model: ${model ?? "account-setting"} | request_params: ${requestParamKeys} | request_attempt: ${attemptLabel}`,
+			),
+			errorMessage,
+			statusCode: responseStatus,
+		};
+	}
 
 	/**
 	 * Start streaming from OpenRouter's API
@@ -202,45 +301,126 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		let controller: AbortController | null = null;
 
 		try {
+			const supportedParameters =
+				config.model &&
+				config.model !== "account-setting" &&
+				isOpenRouterCapabilityCacheReady()
+					? (getOpenRouterSupportedParameters(config.model) ?? null)
+					: null;
+			const skippedUnsupportedParams: string[] = [];
+			const normalizedModel = (config.model ?? "").toLowerCase();
+			const omitTemperatureByModelOverride =
+				OpenrouterStreamAdapter.TEMPERATURE_OMIT_MODELS.has(normalizedModel);
+
 			// Build request body (OpenAI-compatible)
 			const requestBody: Record<string, unknown> = {
 				// Only include model if it's not "account-setting" (which signals to use the user's OpenRouter account default)
 				...(config.model !== "account-setting" && { model: config.model }),
 				messages,
-				temperature: config.temperature,
 				stream: true,
 				stream_options: { include_usage: true },
 			};
 
+			if (
+				config.temperature !== undefined &&
+				!omitTemperatureByModelOverride &&
+				this.isOpenRouterParamSupported(supportedParameters, "temperature")
+			) {
+				requestBody.temperature = config.temperature;
+			} else if (config.temperature !== undefined) {
+				skippedUnsupportedParams.push("temperature");
+			}
+
 			// OpenRouter follows OpenAI's snake_case for max_tokens
 			if (config.maxOutputTokens !== undefined) {
-				requestBody.max_tokens = config.maxOutputTokens;
+				if (
+					this.isOpenRouterParamSupported(supportedParameters, "max_tokens", [
+						"max_completion_tokens",
+					])
+				) {
+					requestBody.max_tokens = config.maxOutputTokens;
+				} else {
+					skippedUnsupportedParams.push("max_tokens");
+				}
 			}
 
 			// Only include tools if defined and has items
 			if (config.tools && config.tools.length > 0) {
-				requestBody.tools = config.tools;
+				if (this.isOpenRouterParamSupported(supportedParameters, "tools")) {
+					requestBody.tools = config.tools;
+				} else {
+					skippedUnsupportedParams.push("tools");
+				}
 			}
 
 			// Add OpenRouter-specific sampling parameters if provided
 			if (openrouterConfig.topP !== undefined) {
-				requestBody.top_p = openrouterConfig.topP;
+				if (this.isOpenRouterParamSupported(supportedParameters, "top_p")) {
+					requestBody.top_p = openrouterConfig.topP;
+				} else {
+					skippedUnsupportedParams.push("top_p");
+				}
 			}
 			if (openrouterConfig.topK !== undefined) {
-				requestBody.top_k = openrouterConfig.topK;
+				if (this.isOpenRouterParamSupported(supportedParameters, "top_k")) {
+					requestBody.top_k = openrouterConfig.topK;
+				} else {
+					skippedUnsupportedParams.push("top_k");
+				}
 			}
 			if (openrouterConfig.frequencyPenalty !== undefined) {
-				requestBody.frequency_penalty = openrouterConfig.frequencyPenalty;
+				if (
+					this.isOpenRouterParamSupported(
+						supportedParameters,
+						"frequency_penalty",
+					)
+				) {
+					requestBody.frequency_penalty = openrouterConfig.frequencyPenalty;
+				} else {
+					skippedUnsupportedParams.push("frequency_penalty");
+				}
 			}
 			if (openrouterConfig.presencePenalty !== undefined) {
-				requestBody.presence_penalty = openrouterConfig.presencePenalty;
+				if (
+					this.isOpenRouterParamSupported(
+						supportedParameters,
+						"presence_penalty",
+					)
+				) {
+					requestBody.presence_penalty = openrouterConfig.presencePenalty;
+				} else {
+					skippedUnsupportedParams.push("presence_penalty");
+				}
 			}
 			if (openrouterConfig.repetitionPenalty !== undefined) {
-				requestBody.repetition_penalty = openrouterConfig.repetitionPenalty;
+				if (
+					this.isOpenRouterParamSupported(
+						supportedParameters,
+						"repetition_penalty",
+					)
+				) {
+					requestBody.repetition_penalty = openrouterConfig.repetitionPenalty;
+				} else {
+					skippedUnsupportedParams.push("repetition_penalty");
+				}
 			}
 
+			if (supportedParameters && skippedUnsupportedParams.length > 0) {
+				log.info(
+					`OpenRouter: Skipping unsupported params for ${config.model}: ${skippedUnsupportedParams.join(", ")}`,
+				);
+			}
+			if (omitTemperatureByModelOverride) {
+				log.info(
+					`OpenRouter: Temperature omitted due to model override for ${config.model}`,
+				);
+			}
+
+			const effectiveTemperatureLabel =
+				"temperature" in requestBody ? String(config.temperature) : "omitted";
+
 			log.info(
-				`Sampling params - temp: ${config.temperature}, top_p: ${openrouterConfig.topP ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}`,
+				`Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${openrouterConfig.topP ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}`,
 			);
 
 			// Build headers
@@ -256,47 +436,120 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			controller = new AbortController();
 			const inactivityTimeoutMs = config.inactivityTimeoutMs ?? 120000;
 
-			const response = await fetch(
-				"https://openrouter.ai/api/v1/chat/completions",
-				{
-					method: "POST",
-					headers,
-					body: JSON.stringify(requestBody),
-					signal: controller.signal,
-				},
+			const attempts: Array<{ label: string; body: Record<string, unknown> }> =
+				[];
+			const seenSerializedBodies = new Set<string>();
+			const addAttempt = (label: string, body: Record<string, unknown>) => {
+				const serialized = JSON.stringify(body);
+				if (!seenSerializedBodies.has(serialized)) {
+					seenSerializedBodies.add(serialized);
+					attempts.push({ label, body });
+				}
+			};
+
+			addAttempt("default", requestBody);
+
+			// Baseline for probing hidden incompatibilities:
+			// remove stream_options first so per-parameter probes isolate other fields.
+			const probeBaseline =
+				"stream_options" in requestBody
+					? this.cloneWithoutKeys(requestBody, ["stream_options"])
+					: { ...requestBody };
+			addAttempt("no_stream_options", probeBaseline);
+
+			const mandatoryKeys = new Set(["model", "messages", "stream"]);
+			const probeCandidateKeys = Object.keys(probeBaseline).filter(
+				(key) => !mandatoryKeys.has(key),
+			);
+			if (probeCandidateKeys.length > 0) {
+				log.info(
+					`OpenRouter generic-400 probe candidates (${config.model}): ${probeCandidateKeys.join(", ")}`,
+				);
+				for (const key of probeCandidateKeys) {
+					addAttempt(
+						`probe_drop_${key}`,
+						this.cloneWithoutKeys(probeBaseline, [key]),
+					);
+				}
+			}
+
+			addAttempt(
+				"minimal_payload",
+				config.model !== "account-setting"
+					? { model: config.model, messages, stream: true }
+					: { messages, stream: true },
 			);
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				let errorMessage = errorText || response.statusText;
-				let errorCode: string | undefined;
-				try {
-					const errorData = JSON.parse(errorText) as {
-						error?: {
-							message?: string;
-							code?: string | number;
-							metadata?: { raw?: string };
-						};
-						message?: string;
-					};
-					errorCode =
-						errorData?.error?.code !== undefined
-							? String(errorData.error.code)
-							: undefined;
-					errorMessage =
-						errorData?.error?.metadata?.raw ||
-						errorData?.error?.message ||
-						errorData?.message ||
-						errorText ||
-						response.statusText;
-				} catch {
-					errorMessage = errorText || response.statusText;
+			let response: Response | null = null;
+			for (let i = 0; i < attempts.length; i++) {
+				const attempt = attempts[i];
+				const isRetry = i > 0;
+
+				if (isRetry) {
+					log.warn(
+						`OpenRouter request retry with degraded payload: ${attempt.label} (${config.model})`,
+					);
 				}
 
-				const statusLabel = errorCode
-					? `HTTP ${response.status} (${errorCode})`
-					: `HTTP ${response.status}`;
-				throw new Error(`${statusLabel}: ${errorMessage}`);
+				const attemptResponse = await fetch(
+					"https://openrouter.ai/api/v1/chat/completions",
+					{
+						method: "POST",
+						headers,
+						body: JSON.stringify(attempt.body),
+						signal: controller.signal,
+					},
+				);
+
+				if (attemptResponse.ok) {
+					response = attemptResponse;
+					if (isRetry) {
+						log.warn(
+							`OpenRouter request recovered after retry: ${attempt.label} (${config.model})`,
+						);
+						if (attempt.label.startsWith("probe_drop_")) {
+							const droppedParam = attempt.label.replace("probe_drop_", "");
+							log.warn(
+								`OpenRouter probe indicates likely incompatible parameter for ${config.model}: ${droppedParam}`,
+							);
+						}
+					}
+					break;
+				}
+
+				const errorText = await attemptResponse.text();
+				const parsedError = this.parseHttpErrorFromResponse(
+					attemptResponse.status,
+					attemptResponse.statusText,
+					errorText,
+					attempt.body,
+					config.model,
+					attempt.label,
+				);
+
+				const hasMoreAttempts = i < attempts.length - 1;
+				const isGeneric400 =
+					parsedError.statusCode === 400 &&
+					this.isLikelyGenericErrorMessage(parsedError.errorMessage);
+
+				if (isGeneric400 && hasMoreAttempts) {
+					log.warn(
+						`OpenRouter returned generic HTTP 400 on attempt '${attempt.label}', trying fallback payload`,
+						{
+							model: config.model,
+							errorMessage: parsedError.errorMessage,
+						},
+					);
+					continue;
+				}
+
+				throw parsedError.error;
+			}
+
+			if (!response) {
+				throw new Error(
+					"OpenRouter request failed before obtaining a response",
+				);
 			}
 
 			if (!response.body) {
@@ -1806,7 +2059,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		if (currentTurnModelParts.length > 0) {
 			const prefillText = currentTurnModelParts
 				.map((part) => (part as { text?: string }).text)
-				.filter((text): text is string => typeof text === "string" && text.length > 0)
+				.filter(
+					(text): text is string => typeof text === "string" && text.length > 0,
+				)
 				.join("");
 			if (prefillText) {
 				messages.push({

@@ -752,11 +752,17 @@ export async function execute(
 			}
 
 			// Show success message
+			const successDescriptionKey = configuredModelName
+				? isDMChannel
+					? "commands.config.setup.success_desc_dm_with_model"
+					: "commands.config.setup.success_desc_with_model"
+				: isDMChannel
+					? "commands.config.setup.success_desc_dm"
+					: "commands.config.setup.success_desc";
+
 			await replySummaryEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.config.setup.success_title",
-				descriptionKey: isDMChannel
-					? "commands.config.setup.success_desc_dm"
-					: "commands.config.setup.success_desc",
+				descriptionKey: successDescriptionKey,
 				descriptionVars: configuredModelName
 					? { model_name: configuredModelName }
 					: undefined,

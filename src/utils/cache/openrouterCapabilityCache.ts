@@ -48,6 +48,7 @@ export interface ModelCapabilities {
  * Value: ModelCapabilities object
  */
 const capabilityCache = new Map<string, ModelCapabilities>();
+const supportedParametersCache = new Map<string, Set<string>>();
 
 /**
  * Cache initialization state
@@ -77,6 +78,12 @@ function detectToolSupport(model: OpenRouterModel): boolean {
 	const hasTools = model.supported_parameters.includes("tools");
 	const hasToolChoice = model.supported_parameters.includes("tool_choice");
 
+	// Narrow compatibility exception:
+	// pony-alpha currently may expose tool support without tool_choice metadata.
+	if (model.id === "openrouter/pony-alpha") {
+		return hasTools;
+	}
+
 	return hasTools && hasToolChoice;
 }
 
@@ -95,7 +102,9 @@ function detectImageSupport(model: OpenRouterModel): boolean {
 	const modality = model.architecture?.modality?.toLowerCase();
 
 	// 2. Check for vision or multimodal indicators
-	return modality?.includes("vision") || modality?.includes("multimodal") || false;
+	return (
+		modality?.includes("vision") || modality?.includes("multimodal") || false
+	);
 }
 
 /**
@@ -114,8 +123,7 @@ function detectVideoSupport(model: OpenRouterModel): boolean {
 	const hasVideoModality = modality?.includes("video") || false;
 
 	// 2. Check supported_parameters for explicit video parameter
-	const hasVideoParam =
-		model.supported_parameters?.includes("video") || false;
+	const hasVideoParam = model.supported_parameters?.includes("video") || false;
 
 	// 3. Model supports video if either indicator is present
 	return hasVideoModality || hasVideoParam;
@@ -160,6 +168,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 
 		// 1. Clear existing cache
 		capabilityCache.clear();
+		supportedParametersCache.clear();
 		cacheReady = false;
 
 		// 2. Fetch models from OpenRouter API (no auth required - public endpoint)
@@ -199,6 +208,10 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 
 			// Store in cache with model ID as key
 			capabilityCache.set(model.id, capabilities);
+			supportedParametersCache.set(
+				model.id,
+				new Set(model.supported_parameters ?? []),
+			);
 		}
 
 		// 7. Mark cache as ready
@@ -229,6 +242,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 
 		// Ensure cache is in a clean state even on error
 		capabilityCache.clear();
+		supportedParametersCache.clear();
 		cacheReady = false;
 	}
 }
@@ -255,6 +269,22 @@ export function getOpenRouterCapabilities(
 
 	// 2. Look up capabilities in cache
 	return capabilityCache.get(modelCodename);
+}
+
+/**
+ * Gets the supported parameter names for a specific OpenRouter model.
+ *
+ * @param modelCodename - Model codename (e.g., "anthropic/claude-3.5-sonnet")
+ * @returns Set of supported parameter names, or undefined if cache/model not ready
+ */
+export function getOpenRouterSupportedParameters(
+	modelCodename: string,
+): ReadonlySet<string> | undefined {
+	if (!cacheReady) {
+		return undefined;
+	}
+
+	return supportedParametersCache.get(modelCodename);
 }
 
 /**

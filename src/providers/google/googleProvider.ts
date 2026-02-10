@@ -323,14 +323,11 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		tomoriState: TomoriState,
 		apiKey: string,
 	): Promise<GoogleProviderConfig> {
-		const tools = await this.getTools(tomoriState);
-
-		return {
+		const config: GoogleProviderConfig = {
 			model: tomoriState.llm.llm_codename,
 			apiKey: apiKey,
 			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 8192,
-			tools: tools,
 			safetySettings: [
 				{
 					category: "HARM_CATEGORY_HARASSMENT",
@@ -357,6 +354,14 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				stopSequences: [],
 			},
 		};
+
+		// Only attach tools for models that explicitly support function calling.
+		// This prevents Google API 400 errors on models like gemma-3-27b-it.
+		if (tomoriState.llm.has_tools) {
+			config.tools = await this.getTools(tomoriState);
+		}
+
+		return config;
 	}
 
 	/**
@@ -450,8 +455,9 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				);
 			}
 
-			// Override tools with context-aware tools when streaming context is provided
-			if (streamingContext) {
+			// Override tools with context-aware tools when streaming context is provided,
+			// but only for models that support function calling.
+			if (streamingContext && tomoriState.llm.has_tools) {
 				log.info(
 					"GoogleProvider: Reloading tools with streaming context for context-aware availability",
 				);
@@ -460,6 +466,10 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 					streamingContext,
 				);
 				streamConfig.tools = contextAwareTools;
+			} else if (streamingContext && !tomoriState.llm.has_tools) {
+				log.info(
+					"GoogleProvider: Skipping context-aware tool reload - model doesn't support tools",
+				);
 			}
 
 			// Create streaming context

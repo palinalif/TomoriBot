@@ -225,13 +225,14 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 						retryable = false;
 				}
 
-				const providerError: import("../../types/stream/interfaces").ProviderError = {
-					type: errorType,
-					message: `OpenRouter auth error (${response.status}): ${errorMessage}`,
-					code: response.status.toString(),
-					retryable,
-					originalError: new Error(errorMessage),
-				};
+				const providerError: import("../../types/stream/interfaces").ProviderError =
+					{
+						type: errorType,
+						message: `OpenRouter auth error (${response.status}): ${errorMessage}`,
+						code: response.status.toString(),
+						retryable,
+						originalError: new Error(errorMessage),
+					};
 
 				return { valid: false, error: providerError };
 			}
@@ -243,13 +244,14 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 			// The response should contain user information and rate limits
 			if (!data || typeof data !== "object") {
 				log.warn("API key validation received invalid response structure");
-				const providerError: import("../../types/stream/interfaces").ProviderError = {
-					type: "api_error",
-					message: "OpenRouter auth endpoint returned invalid data structure",
-					code: "unknown",
-					retryable: false,
-					originalError: new Error("Invalid response structure"),
-				};
+				const providerError: import("../../types/stream/interfaces").ProviderError =
+					{
+						type: "api_error",
+						message: "OpenRouter auth endpoint returned invalid data structure",
+						code: "unknown",
+						retryable: false,
+						originalError: new Error("Invalid response structure"),
+					};
 				return { valid: false, error: providerError };
 			}
 
@@ -522,15 +524,19 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 					DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
 				humanizerDegree: tomoriState.config.humanizer_degree,
 				emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
-				seesImages: tomoriState.llm.sees_images,
+				// Preserve createConfig capability overrides (don't revert to DB flags here)
+				seesImages: openrouterConfig.seesImages,
 				// Command-specific overrides from streaming context
 				forceReason: streamingContext?.forceReason,
 				isManuallyTriggered: streamingContext?.isManuallyTriggered,
 			};
 
 			// Override tools with context-aware tools when streaming context is provided
-			// BUT only if the model supports tools
-			if (streamingContext && tomoriState.llm.has_tools) {
+			// BUT only if tools were enabled in createConfig (after API capability overrides)
+			const modelSupportsToolsAfterOverride = Array.isArray(
+				openrouterConfig.tools,
+			);
+			if (streamingContext && modelSupportsToolsAfterOverride) {
 				log.info(
 					"OpenrouterProvider: Reloading tools with streaming context for context-aware availability",
 				);
@@ -542,9 +548,9 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 				log.info(
 					`Context-aware tools loaded: ${contextAwareTools.length} tools`,
 				);
-			} else if (streamingContext && !tomoriState.llm.has_tools) {
+			} else if (streamingContext && !modelSupportsToolsAfterOverride) {
 				log.info(
-					"Skipping context-aware tool reload - model doesn't support tools",
+					"Skipping context-aware tool reload - tools disabled by capability override",
 				);
 			}
 
