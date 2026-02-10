@@ -420,10 +420,11 @@ async function buildShortTermMemoryContext(
 		const crossServerOptIn =
 			userRow?.shortterm_cache_crossserver_opt_in ?? false;
 
-		// 2. Get short-term memories for user (excluding current channel for other-channel section)
+		// 2. Get short-term memories for user (excluding current channel, scoped to current persona's lineage)
 		const otherChannelMemories = getShortTermMemoriesForUser(
 			triggeringUserId,
 			currentChannelId,
+			tomoriState?.persona_lineage_id,
 		);
 
 		// 3. Filter based on cross-server setting
@@ -468,7 +469,8 @@ async function buildShortTermMemoryContext(
 					otherChannelText += `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
 
 					for (const msg of memory.messages) {
-						const speaker = msg.role === "user" ? triggererName : botName;
+						// Use stored speaker name if available, otherwise fall back to role-based naming
+						const speaker = msg.speakerName || (msg.role === "user" ? triggererName : botName);
 						otherChannelText += `${speaker}: "${msg.content}"\n`;
 					}
 
@@ -502,9 +504,11 @@ async function buildShortTermMemoryContext(
 		// - Summary (if exists): Goes with other memories (middle of context)
 		// - Create prompt (if no summary): Goes at end as instruction
 		if (tomoriState?.llm?.has_tools) {
+			// Persona-scoped: each persona only sees its own same-channel STM
 			const sameChannelMemory = getShortTermMemoryForChannel(
 				triggeringUserId,
 				currentChannelId,
+				tomoriState?.tomori_id,
 			);
 
 			if (sameChannelMemory?.summary) {

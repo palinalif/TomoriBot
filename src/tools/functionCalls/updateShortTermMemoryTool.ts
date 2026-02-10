@@ -123,10 +123,14 @@ export class UpdateShortTermMemoryTool extends BaseTool {
 			const channelName =
 				"name" in context.channel ? context.channel.name : undefined;
 
-			// 5. Update short-term memory summary
-			const cacheKey = `shortterm:${triggeringUserId}:${channelId}`;
+			// 5. Update short-term memory summary (persona-scoped via tomoriId + lineage for cross-server)
+			const tomoriId = context.tomoriState?.tomori_id ?? null;
+			const personaLineageId = context.tomoriState?.persona_lineage_id ?? null;
+			const cacheKey = tomoriId
+				? `shortterm:${triggeringUserId}:${channelId}:${tomoriId}`
+				: `shortterm:${triggeringUserId}:${channelId}`;
 			log.info(
-				`[updateShortTermMemoryTool] [TOOL_EXECUTE] Calling updateShortTermMemorySummary - cacheKey=${cacheKey}, summaryLength=${trimmedSummary.length}, serverId=${serverId}`,
+				`[updateShortTermMemoryTool] [TOOL_EXECUTE] Calling updateShortTermMemorySummary - cacheKey=${cacheKey}, summaryLength=${trimmedSummary.length}, serverId=${serverId}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
 			);
 
 			updateShortTermMemorySummary(
@@ -136,6 +140,8 @@ export class UpdateShortTermMemoryTool extends BaseTool {
 				serverId,
 				serverName,
 				channelName,
+				tomoriId,
+				personaLineageId,
 			);
 
 			log.success(

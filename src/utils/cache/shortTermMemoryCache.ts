@@ -11,7 +11,7 @@
  * - Relative timestamp formatting (e.g., "2 hours ago")
  *
  * Design:
- * - Key pattern: `shortterm:${userId}:${channelId}`
+ * - Key pattern: `shortterm:${userId}:${channelId}` or `shortterm:${userId}:${channelId}:${tomoriId}` (persona-scoped)
  * - Conversations: Last 10 condensed turns (user + model messages)
  * - Summaries: Tool-generated summaries replace crude conversations
  * - Cross-model compatible: Summaries created by any model work for all models
@@ -26,6 +26,8 @@ interface ShortTermMessage {
 	role: "user" | "model";
 	content: string;
 	timestamp: number;
+	/** Original speaker name (persona name or username) for multi-persona labeling */
+	speakerName?: string;
 }
 
 /**
@@ -49,6 +51,12 @@ export interface ShortTermMemoryEntry {
 
 	/** Optional channel name (for same-server channel mentions) */
 	channelName?: string;
+
+	/** Tomori persona ID for persona-scoped memory */
+	tomoriId?: number | null;
+
+	/** Persona lineage ID for cross-server persona matching */
+	personaLineageId?: number | null;
 
 	/** Unix timestamp (ms) of last update */
 	lastUpdated: number;
@@ -103,9 +111,13 @@ const stats: CacheStats = {
 };
 
 /**
- * Generate cache key for a user in a channel
+ * Generate cache key for a user in a channel, optionally scoped to a persona
+ * @param userId - Discord user ID
+ * @param channelId - Discord channel ID
+ * @param tomoriId - Optional persona ID for persona-scoped memory
  */
-function getCacheKey(userId: string, channelId: string): string {
+function getCacheKey(userId: string, channelId: string, tomoriId?: number | null): string {
+	if (tomoriId) return `shortterm:${userId}:${channelId}:${tomoriId}`;
 	return `shortterm:${userId}:${channelId}`;
 }
 
@@ -159,10 +171,12 @@ export function getRelativeTimestamp(timestamp: number): string {
  *
  * @param userId - Discord user ID
  * @param channelId - Discord channel ID
- * @param messages - Array of conversation messages (max 10 turns)
+ * @param messages - Array of conversation messages (max 10 turns) with optional speaker names
  * @param serverId - Discord server ID (or "DM" for direct messages)
  * @param serverName - Optional server name for same-server channel mentions
  * @param channelName - Optional channel name for same-server channel mentions
+ * @param tomoriId - Optional persona ID for persona-scoped memory
+ * @param personaLineageId - Optional persona lineage ID for cross-server persona matching
  */
 export function storeShortTermMemory(
 	userId: string,
@@ -171,10 +185,13 @@ export function storeShortTermMemory(
 		role: "user" | "model";
 		content: string;
 		timestamp: number;
+		speakerName?: string;
 	}>,
 	serverId: string,
 	serverName?: string,
 	channelName?: string,
+	tomoriId?: number | null,
+	personaLineageId?: number | null,
 ): void {
 	try {
 		// 1. Validate inputs
@@ -189,7 +206,7 @@ export function storeShortTermMemory(
 		const limitedMessages = messages.slice(-MAX_MESSAGES_PER_CHANNEL);
 
 		// 3. Get existing entry (preserve summary if exists)
-		const key = getCacheKey(userId, channelId);
+		const key = getCacheKey(userId, channelId, tomoriId);
 		const existing = cache.get(key);
 
 		// 🔍 DEBUG: Log existing entry state BEFORE creating new entry
@@ -205,6 +222,8 @@ export function storeShortTermMemory(
 			serverName,
 			channelId,
 			channelName,
+			tomoriId,
+			personaLineageId,
 			lastUpdated: Date.now(),
 		};
 
@@ -229,15 +248,17 @@ export function storeShortTermMemory(
 }
 
 /**
- * Get all short-term memories for a user across channels
+ * Get all short-term memories for a user across channels, optionally scoped to a persona lineage
  *
  * @param userId - Discord user ID
  * @param excludeChannelId - Optional channel ID to exclude (e.g., current channel)
+ * @param personaLineageId - Optional persona lineage ID to filter by (only returns entries matching this lineage)
  * @returns Array of non-expired memory entries
  */
 export function getShortTermMemoriesForUser(
 	userId: string,
 	excludeChannelId?: string,
+	personaLineageId?: number | null,
 ): ShortTermMemoryEntry[] {
 	try {
 		const memories: ShortTermMemoryEntry[] = [];
@@ -251,6 +272,12 @@ export function getShortTermMemoriesForUser(
 
 			// Exclude specified channel if provided
 			if (excludeChannelId && entry.channelId === excludeChannelId) {
+				continue;
+			}
+
+			// Filter by persona lineage if provided (persona-scoped cross-channel/cross-server)
+			// Only include entries that match the requesting persona's lineage
+			if (personaLineageId && entry.personaLineageId !== personaLineageId) {
 				continue;
 			}
 
@@ -269,7 +296,7 @@ export function getShortTermMemoriesForUser(
 		memories.sort((a, b) => b.lastUpdated - a.lastUpdated);
 
 		log.info(
-			`[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}`,
+			`[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
 		);
 
 		return memories;
@@ -287,18 +314,20 @@ export function getShortTermMemoriesForUser(
 }
 
 /**
- * Get short-term memory for a specific channel
+ * Get short-term memory for a specific channel, optionally scoped to a persona
  *
  * @param userId - Discord user ID
  * @param channelId - Discord channel ID
+ * @param tomoriId - Optional persona ID for persona-scoped memory
  * @returns Memory entry if found and not expired, undefined otherwise
  */
 export function getShortTermMemoryForChannel(
 	userId: string,
 	channelId: string,
+	tomoriId?: number | null,
 ): ShortTermMemoryEntry | undefined {
 	try {
-		const key = getCacheKey(userId, channelId);
+		const key = getCacheKey(userId, channelId, tomoriId);
 		const entry = cache.get(key);
 
 		// 🔍 DEBUG: Log what we found in cache
@@ -354,6 +383,8 @@ export function getShortTermMemoryForChannel(
  * @param serverId - Discord server ID (required if creating new entry)
  * @param serverName - Server name (optional, for new entries)
  * @param channelName - Channel name (optional, for new entries)
+ * @param tomoriId - Optional persona ID for persona-scoped memory
+ * @param personaLineageId - Optional persona lineage ID for cross-server persona matching
  */
 export function updateShortTermMemorySummary(
 	userId: string,
@@ -362,6 +393,8 @@ export function updateShortTermMemorySummary(
 	serverId?: string,
 	serverName?: string,
 	channelName?: string,
+	tomoriId?: number | null,
+	personaLineageId?: number | null,
 ): void {
 	try {
 		// 1. Validate inputs
@@ -379,7 +412,7 @@ export function updateShortTermMemorySummary(
 				: summary;
 
 		// 3. Get existing entry
-		const key = getCacheKey(userId, channelId);
+		const key = getCacheKey(userId, channelId, tomoriId);
 		let existing = cache.get(key);
 
 		// 🔍 DEBUG: Log state BEFORE updating summary
@@ -400,6 +433,8 @@ export function updateShortTermMemorySummary(
 				serverName,
 				channelId,
 				channelName,
+				tomoriId,
+				personaLineageId,
 				lastUpdated: Date.now(),
 			};
 		} else {
@@ -436,13 +471,15 @@ export function updateShortTermMemorySummary(
  *
  * @param userId - Discord user ID
  * @param channelId - Discord channel ID
+ * @param tomoriId - Optional persona ID for persona-scoped memory
  */
 export function invalidateShortTermMemory(
 	userId: string,
 	channelId: string,
+	tomoriId?: number | null,
 ): void {
 	try {
-		const key = getCacheKey(userId, channelId);
+		const key = getCacheKey(userId, channelId, tomoriId);
 		const deleted = cache.delete(key);
 
 		if (deleted) {

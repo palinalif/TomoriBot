@@ -67,7 +67,7 @@ import {
 	type SelectedKeyResult,
 } from "@/utils/security/keyRotation";
 import { localizer, getSupportedLocales } from "../../utils/text/localizer";
-import { escapeRegExp } from "../../utils/text/stringHelper";
+import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 
@@ -519,6 +519,7 @@ interface SelfReplyChainState {
 	depth: number; // Number of self replies already generated in this chain
 	lastWasSelf: boolean;
 	updatedAt: number;
+	lastRespondedPersonaId: number | null; // Prevents same persona from triggering in consecutive depth levels
 }
 
 const selfReplyChainStates = new Map<string, SelfReplyChainState>();
@@ -535,6 +536,7 @@ function getSelfReplyChainState(channelId: string): SelfReplyChainState {
 		depth: 0,
 		lastWasSelf: false,
 		updatedAt: now,
+		lastRespondedPersonaId: null,
 	};
 	selfReplyChainStates.set(channelId, fresh);
 	return fresh;
@@ -550,6 +552,7 @@ function updateSelfReplyChainState(
 	if (!isSelfMessage) {
 		state.depth = 0;
 		state.lastWasSelf = false;
+		state.lastRespondedPersonaId = null;
 		return state;
 	}
 
@@ -566,6 +569,32 @@ function incrementSelfReplyChainDepth(channelId: string): number {
 	state.lastWasSelf = true;
 	state.updatedAt = Date.now();
 	return state.depth;
+}
+
+/**
+ * Records which persona last responded in a channel.
+ * Used to prevent the same persona from triggering in consecutive depth levels.
+ * @param channelId - The Discord channel ID
+ * @param personaId - The tomori_id of the persona that just responded
+ */
+function setLastRespondedPersona(
+	channelId: string,
+	personaId: number,
+): void {
+	const state = getSelfReplyChainState(channelId);
+	state.lastRespondedPersonaId = personaId;
+	state.updatedAt = Date.now();
+}
+
+/**
+ * Gets the ID of the last persona that responded in a channel.
+ * Returns null if no persona has responded yet or the chain has expired.
+ * @param channelId - The Discord channel ID
+ * @returns The tomori_id of the last responded persona, or null
+ */
+function getLastRespondedPersonaId(channelId: string): number | null {
+	const state = getSelfReplyChainState(channelId);
+	return state.lastRespondedPersonaId;
 }
 
 /**
@@ -2080,6 +2109,26 @@ export default async function tomoriChat(
 					!!isAutoMsgHit, // Convert to boolean
 				);
 
+				// Consecutive persona filter: prevent the same persona from triggering in
+				// back-to-back depth levels. E.g. if C responded last at depth N, skip C at depth N+1.
+				if (isSelfMessage && personasToRespond.length > 0) {
+					const lastRespondedId = getLastRespondedPersonaId(channel.id);
+					if (lastRespondedId != null) {
+						const before = personasToRespond.length;
+						personasToRespond = personasToRespond.filter(
+							(p) => p.tomori_id !== lastRespondedId,
+						);
+						if (personasToRespond.length < before) {
+							const skippedPersona = allPersonas.find(
+								(p) => p.tomori_id === lastRespondedId,
+							);
+							log.info(
+								`Consecutive persona filter: skipped "${skippedPersona?.tomori_nickname ?? lastRespondedId}" (last responder) for message ${message.id} in channel ${channel.id}`,
+							);
+						}
+					}
+				}
+
 				// Apply per-message multi-trigger cap for automatic trigger matching.
 				if (personasToRespond.length > triggeredPersonaLimit) {
 					const droppedPersonas = personasToRespond
@@ -2981,8 +3030,8 @@ export default async function tomoriChat(
 			// Each persona will generate a response sequentially using the same message history
 			// but with their own personality, config, and (for alters) webhook avatar
 
-			// Track persona responses for short-term memory storage
-			const personaResponses: Array<{ personaName: string; text: string }> = [];
+			// Track persona responses for short-term memory storage (includes tomoriId + lineageId for persona-scoped STM)
+			const personaResponses: Array<{ personaName: string; text: string; tomoriId?: number; personaLineageId?: number | null }> = [];
 
 			for (
 				let personaIndex = 0;
@@ -4573,7 +4622,21 @@ export default async function tomoriChat(
 
 									functionInteractionHistory.push(historyEntry);
 
-									// 4. Safety break if max iterations reached
+									// 4. Early-stop: If text was already streamed to Discord before a short-term
+									// memory update, the streamed text IS the complete response — skip continuation
+									// to prevent the model from producing redundant follow-up text.
+									if (
+										funcName === "update_short_term_memory" &&
+										personaAccumulatedParts.length > 0
+									) {
+										log.info(
+											"Short-term memory updated after text was already streamed. Ending persona turn to prevent repetition.",
+										);
+										finalStreamCompleted = true;
+										break;
+									}
+
+									// 5. Safety break if max iterations reached
 									if (i === MAX_FUNCTION_CALL_ITERATIONS - 1) {
 										log.warn(
 											"Max function call iterations reached in streaming mode. LLM did not provide a final text stream.",
@@ -4745,7 +4808,16 @@ export default async function tomoriChat(
 						personaResponses.push({
 							personaName: currentPersona.tomori_nickname,
 							text: finalAccumulatedText.trim(),
+							tomoriId: currentPersona.tomori_id,
+							personaLineageId: currentPersona.persona_lineage_id,
 						});
+						// Track the last persona that responded for consecutive trigger prevention
+						if (currentPersona.tomori_id) {
+							setLastRespondedPersona(
+								channel.id,
+								currentPersona.tomori_id,
+							);
+						}
 						log.info(
 							`[SHORT_TERM_MEMORY] Captured response from ${currentPersona.tomori_nickname} - length=${finalAccumulatedText.trim().length}`,
 						);
@@ -4821,44 +4893,79 @@ export default async function tomoriChat(
 					userRow &&
 					requestSnapshot.triggererPrivacyLevel !== PrivacyLevel.FULL
 				) {
-					// Extract last 10 messages (user + model only) with timestamps
+					// Extract last 10 messages (user + model only) with timestamps and speaker names
 					const messagesToStore = simplifiedMessages
 						.slice(-10)
 						.filter((msg) => msg.authorType === "user" || msg.authorType === "persona")
 						.map((msg) => ({
 							role: msg.authorType === "user" ? ("user" as const) : ("model" as const),
-							content: msg.content || "",
+							content: normalizeCustomEmojisForLlm(msg.content || ""),
 							timestamp: Date.now(), // Use current time as approximation
+							speakerName: msg.authorType === "persona" ? (msg.personaName || msg.authorName) : msg.authorName,
 						}));
 
 					// Add persona responses from this turn (bot's responses just sent)
 					for (const response of personaResponses) {
 						messagesToStore.push({
 							role: "model",
-							content: response.text,
+							content: normalizeCustomEmojisForLlm(response.text),
 							timestamp: Date.now(),
+							speakerName: response.personaName,
 						});
 					}
 
-					// Store in cache
+					// Store in cache — persona-scoped: each responding persona gets its own STM entry
+					// with the full conversation (including all personas' labeled messages)
 					if (messagesToStore.length > 0) {
-						const cacheKey = `shortterm:${userDiscId}:${channel.id}`;
-						log.info(
-							`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - cacheKey=${cacheKey}, messageCount=${messagesToStore.length}`,
-						);
+						// Collect unique tomoriIds from responding personas (filter out undefined)
+						const uniqueTomoriIds = [...new Set(personaResponses.map((r) => r.tomoriId).filter((id): id is number => id !== undefined))];
 
-						storeShortTermMemory(
-							userDiscId,
-							channel.id,
-							messagesToStore,
-							isDMChannel ? "DM" : serverDiscId,
-							serverName,
-							channelName,
-						);
+						if (uniqueTomoriIds.length > 0) {
+							// Multi-persona or single-persona: store under each responding persona's key
+							for (const tomoriId of uniqueTomoriIds) {
+								// Look up the lineage ID for this persona from the responses
+								const matchingResponse = personaResponses.find((r) => r.tomoriId === tomoriId);
+								const personaLineageId = matchingResponse?.personaLineageId ?? null;
+								const cacheKey = `shortterm:${userDiscId}:${channel.id}:${tomoriId}`;
+								log.info(
+									`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - cacheKey=${cacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
+								);
 
-						log.info(
-							`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - cacheKey=${cacheKey}`,
-						);
+								storeShortTermMemory(
+									userDiscId,
+									channel.id,
+									messagesToStore,
+									isDMChannel ? "DM" : serverDiscId,
+									serverName,
+									channelName,
+									tomoriId,
+									personaLineageId,
+								);
+
+								log.info(
+									`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - cacheKey=${cacheKey}`,
+								);
+							}
+						} else {
+							// Fallback: no persona responses captured (e.g., all failed), store without tomoriId
+							const cacheKey = `shortterm:${userDiscId}:${channel.id}`;
+							log.info(
+								`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - cacheKey=${cacheKey}, messageCount=${messagesToStore.length}`,
+							);
+
+							storeShortTermMemory(
+								userDiscId,
+								channel.id,
+								messagesToStore,
+								isDMChannel ? "DM" : serverDiscId,
+								serverName,
+								channelName,
+							);
+
+							log.info(
+								`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - cacheKey=${cacheKey}`,
+							);
+						}
 					}
 				}
 			} catch (storageError) {
