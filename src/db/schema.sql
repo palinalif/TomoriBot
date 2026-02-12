@@ -149,7 +149,7 @@ ALTER TABLE tomoris
 -- Ensure sequence advances beyond highest existing lineage or reserved floor
 SELECT setval(
 	'persona_lineage_id_seq',
-	GREATEST((SELECT COALESCE(MAX(persona_lineage_id), 0) FROM tomoris), 9999),
+	GREATEST((SELECT COALESCE(MAX(persona_lineage_id), 0) FROM tomoris), 10000),
 	true
 );
 

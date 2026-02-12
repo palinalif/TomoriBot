@@ -16,7 +16,7 @@ import {
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
-import { loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { loadAllPersonasForServer, loadTomoriState } from "@/utils/db/dbRead";
 import {
 	getOrCreateWebhook,
 	sendAsPersona,
@@ -24,6 +24,13 @@ import {
 import type { SelectOption } from "@/types/discord/modal";
 import type { UserRow } from "@/types/db/schema";
 import tomoriChat from "@/events/messageCreate/tomoriChat";
+import {
+	checkMessageTriggerCooldownWithWhitelist,
+	setMessageTriggerCooldownWithWhitelist,
+} from "@/utils/db/cooldownManager";
+import { CooldownType } from "@/types/db/schema";
+import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
+import { sendCooldownDM } from "@/utils/discord/cooldownDM";
 
 /**
  * Configures the /bot impersonate subcommand
@@ -295,11 +302,76 @@ async function handleUserImpersonation(
 
 	const channel = interaction.channel as TextChannel;
 
+	log.info(
+		`[/bot impersonate me] Command invoked by user ${interaction.user.id} (${interaction.user.username}) in channel ${interaction.channel.id}`,
+	);
+
 	// 1. Defer the interaction immediately (Pattern 2 - async work ahead)
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	try {
-		// 2. Get the latest message in the channel to use as a "passport"
+		// 2. Load tomori state for cooldown configuration
+		const tomoriState = await loadTomoriState(interaction.guild.id);
+		if (!tomoriState) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 3. Check cooldown (shares cooldown pool with message triggers and /bot respond)
+		// Uses whitelist-aware version to respect per-channel cooldown overrides
+		const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
+		const cooldownLength = tomoriState.config.cooldown_length ?? 5;
+
+		log.info(
+			`[/bot impersonate me] Checking cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s, guild: ${interaction.guild.id}, user: ${interaction.user.id}, channel: ${interaction.channel.id}`,
+		);
+
+		const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
+			interaction.guild.id,
+			interaction.user.id,
+			interaction.channel.id,
+			cooldownType,
+			interaction.member as import("discord.js").GuildMember | null,
+		);
+
+		log.info(
+			`[/bot impersonate me] Cooldown check result: ${cooldownResult.isOnCooldown ? "ON COOLDOWN" : "NOT ON COOLDOWN"}, remaining: ${cooldownResult.remainingSeconds}s`,
+		);
+
+		if (cooldownResult.isOnCooldown) {
+			// If blocked by whitelist, show a specific "not whitelisted" message instead of cooldown
+			if (cooldownResult.blockedByWhitelist) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.message_cooldown_title",
+					descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+					color: ColorCode.WARN,
+				});
+				return;
+			}
+
+			// Show cooldown warning via DM (with ephemeral fallback)
+			const footerKey = getCooldownTypeFooterKey(cooldownResult.cooldownType);
+			await sendCooldownDM(
+				interaction.user,
+				locale,
+				"general.message_cooldown_title",
+				"commands.bot.impersonate.cooldown_active",
+				{
+					seconds: cooldownResult.remainingSeconds.toString(),
+					botName: tomoriState.tomori_nickname,
+				},
+				footerKey,
+				interaction,
+				MessageFlags.Ephemeral,
+			);
+			return;
+		}
+
+		// 4. Get the latest message in the channel to use as a "passport"
 		// Same pattern as /bot respond - no placeholder message needed
 		const messages = await channel.messages.fetch({ limit: 1 });
 		const latestMessage = messages.first();
@@ -313,7 +385,7 @@ async function handleUserImpersonation(
 			return;
 		}
 
-		// 3. Call tomoriChat with user impersonation enabled
+		// 5. Call tomoriChat with user impersonation enabled
 		// tomoriChat will handle everything: context building, refresh embeds, provider call, webhook, etc.
 		await tomoriChat(
 			client,
@@ -334,7 +406,21 @@ async function handleUserImpersonation(
 			interaction.user.id, // impersonatedUserId - the user to mimic
 		);
 
-		// 4. Send success confirmation
+		// 6. Set cooldown after successful response (shares cooldown pool with message triggers and /bot respond)
+		// Uses whitelist-aware version to respect per-channel cooldown overrides
+		log.info(
+			`[/bot impersonate me] Setting cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s`,
+		);
+		await setMessageTriggerCooldownWithWhitelist(
+			interaction.guild.id,
+			interaction.user.id,
+			interaction.channel.id,
+			cooldownType,
+			cooldownLength,
+		);
+		log.info(`[/bot impersonate me] Cooldown set successfully`);
+
+		// 7. Send success confirmation
 		const member = interaction.guild.members.cache.get(interaction.user.id);
 		const displayName =
 			member?.displayName || member?.user.displayName || "User";

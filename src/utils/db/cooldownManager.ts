@@ -11,6 +11,8 @@ export interface CooldownCheckResult {
 	isOnCooldown: boolean;
 	remainingSeconds: number;
 	cooldownType: CooldownType;
+	/** True when the channel is blocked because a whitelist exists but this channel isn't on it */
+	blockedByWhitelist?: boolean;
 }
 
 /**
@@ -271,11 +273,12 @@ export async function checkMessageTriggerCooldownWithWhitelist(
 
 	// 2. Block non-whitelisted channels if ANY whitelist exists
 	if (whitelistStatus.hasActiveWhitelist && !whitelistStatus.isChannelWhitelisted) {
-		// Channel not whitelisted - effectively "on permanent cooldown"
+		// Channel not whitelisted — blocked entirely (not a cooldown)
 		return {
 			isOnCooldown: true,
-			remainingSeconds: 999999,
+			remainingSeconds: 0,
 			cooldownType: CooldownType.OFF,
+			blockedByWhitelist: true,
 		};
 	}
 

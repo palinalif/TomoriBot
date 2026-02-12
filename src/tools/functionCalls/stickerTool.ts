@@ -40,6 +40,100 @@ export class StickerTool extends BaseTool {
 	};
 
 	/**
+	 * Normalize sticker names for strict matching:
+	 * - trims
+	 * - removes surrounding :name: wrappers
+	 * - collapses repeated whitespace
+	 * - lowercases for case-insensitive comparison
+	 */
+	private static normalizeStickerNameForExact(input: string): string {
+		return input
+			.normalize("NFKC")
+			.replace(/^:(.*):$/u, "$1")
+			.trim()
+			.replace(/\s+/gu, " ")
+			.toLowerCase();
+	}
+
+	/**
+	 * Normalize sticker names for relaxed/fuzzy matching:
+	 * - preserves unicode letters/numbers (important for JP/CJK names)
+	 * - treats separators and quotes as non-significant
+	 */
+	private static normalizeStickerNameForLoose(input: string): string {
+		return StickerTool.normalizeStickerNameForExact(input)
+			.replace(/[_-]+/gu, " ")
+			.replace(/["'`“”‘’]+/gu, "")
+			.replace(/[^\p{L}\p{N}\s]+/gu, " ")
+			.replace(/\s+/gu, " ")
+			.trim();
+	}
+
+	private static pickNewestSticker<
+		T extends { createdTimestamp?: number | null; id: string },
+	>(stickers: T[]): T | null {
+		if (stickers.length === 0) return null;
+		return stickers.sort((a, b) => {
+			const aTime = a.createdTimestamp ?? 0;
+			const bTime = b.createdTimestamp ?? 0;
+			if (aTime !== bTime) return bTime - aTime;
+			return a.id.localeCompare(b.id);
+		})[0];
+	}
+
+	private static levenshteinDistance(a: string, b: string): number {
+		if (a === b) return 0;
+		if (a.length === 0) return b.length;
+		if (b.length === 0) return a.length;
+
+		const prev = new Array<number>(b.length + 1);
+		const curr = new Array<number>(b.length + 1);
+
+		for (let j = 0; j <= b.length; j++) prev[j] = j;
+
+		for (let i = 1; i <= a.length; i++) {
+			curr[0] = i;
+			for (let j = 1; j <= b.length; j++) {
+				const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+				curr[j] = Math.min(
+					prev[j] + 1,
+					curr[j - 1] + 1,
+					prev[j - 1] + cost,
+				);
+			}
+			for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+		}
+
+		return prev[b.length];
+	}
+
+	private static computeFuzzyScore(query: string, candidate: string): number {
+		if (!query || !candidate) return 0;
+		if (query === candidate) return 1;
+
+		// Prefer strong partial matches when users omit separators/punctuation.
+		if (candidate.includes(query) || query.includes(candidate)) {
+			const overlapRatio =
+				Math.min(query.length, candidate.length) /
+				Math.max(query.length, candidate.length);
+			return 0.9 + overlapRatio * 0.08;
+		}
+
+		const distance = StickerTool.levenshteinDistance(query, candidate);
+		const maxLen = Math.max(query.length, candidate.length);
+		if (maxLen === 0) return 0;
+
+		return 1 - distance / maxLen;
+	}
+
+	private static getFuzzyScoreThreshold(queryLength: number): number {
+		if (queryLength <= 4) return 0.96;
+		if (queryLength <= 7) return 0.88;
+		if (queryLength <= 12) return 0.78;
+		return 0.72;
+	}
+
+	/**
 	 * Check if sticker tool is available for the given provider
 	 * @param _provider - LLM provider name (unused)
 	 * @returns True if provider supports sticker selection
@@ -104,7 +198,7 @@ export class StickerTool extends BaseTool {
 		}
 
 		const normalizedStickerName = hasStickerName
-			? stickerName.replace(/^:(.*):$/, "$1").trim()
+			? StickerTool.normalizeStickerNameForExact(stickerName)
 			: "";
 
 		try {
@@ -114,33 +208,113 @@ export class StickerTool extends BaseTool {
 
 			// Get the guild from channel context
 			const guild = context.channel.guild;
+			let ambiguousMatches: Array<{
+				id: string;
+				name: string;
+				description: string;
+			}> = [];
+			let fuzzySuggestions: Array<{
+				id: string;
+				name: string;
+				description: string;
+				score: number;
+			}> = [];
 
 			/**
 			 * Helper function to lookup sticker from cache
 			 * @returns Sticker if found, null otherwise
 			 */
 			const lookupSticker = () => {
-				if (normalizedStickerName) {
-					const nameKey = normalizedStickerName.toLowerCase();
-					const matchingStickers = guild.stickers.cache.filter(
-						(sticker) => sticker.name?.toLowerCase() === nameKey,
-					);
+				ambiguousMatches = [];
+				fuzzySuggestions = [];
 
-					if (matchingStickers.size > 0) {
-						return matchingStickers
-							.sort((a, b) => {
-								const aTime = a.createdTimestamp ?? 0;
-								const bTime = b.createdTimestamp ?? 0;
-								if (aTime !== bTime) return bTime - aTime;
-								return a.id.localeCompare(b.id);
-							})
-							.first();
+				if (normalizedStickerName) {
+					const stickers = guild.stickers.cache
+						.filter((sticker) => sticker.name?.trim())
+						.map((sticker) => sticker);
+
+					// 1) Strict normalized exact match (case/whitespace tolerant).
+					const exactMatches = stickers.filter(
+						(sticker) =>
+							StickerTool.normalizeStickerNameForExact(sticker.name) ===
+							normalizedStickerName,
+					);
+					const exactMatch = StickerTool.pickNewestSticker(exactMatches);
+					if (exactMatch) return exactMatch;
+
+					// 2) Loose normalized exact match (separator/quote tolerant).
+					const looseQuery =
+						StickerTool.normalizeStickerNameForLoose(normalizedStickerName);
+					if (!looseQuery) return null;
+
+					const looseMatches = stickers.filter(
+						(sticker) =>
+							StickerTool.normalizeStickerNameForLoose(sticker.name) === looseQuery,
+					);
+					const looseMatch = StickerTool.pickNewestSticker(looseMatches);
+					if (looseMatch) return looseMatch;
+
+					// 3) Guarded fuzzy fallback.
+					const scoredCandidates = stickers
+						.map((sticker) => {
+							const looseName = StickerTool.normalizeStickerNameForLoose(
+								sticker.name,
+							);
+							const score = StickerTool.computeFuzzyScore(looseQuery, looseName);
+							return { sticker, score };
+						})
+						.filter((entry) => entry.score > 0)
+						.sort((a, b) => {
+							if (a.score !== b.score) return b.score - a.score;
+							const aTime = a.sticker.createdTimestamp ?? 0;
+							const bTime = b.sticker.createdTimestamp ?? 0;
+							if (aTime !== bTime) return bTime - aTime;
+							return a.sticker.id.localeCompare(b.sticker.id);
+						});
+
+					fuzzySuggestions = scoredCandidates.slice(0, 5).map((entry) => ({
+						id: entry.sticker.id,
+						name: entry.sticker.name,
+						description: entry.sticker.description || "No description available",
+						score: entry.score,
+					}));
+
+					const threshold = StickerTool.getFuzzyScoreThreshold(looseQuery.length);
+					const best = scoredCandidates[0];
+					if (!best || best.score < threshold) {
+						return null;
 					}
+
+					const second = scoredCandidates[1];
+					const isAmbiguous =
+						!!second &&
+						second.score >= threshold &&
+						best.score - second.score < 0.08;
+
+					if (isAmbiguous) {
+						ambiguousMatches = scoredCandidates
+							.filter((entry) => entry.score >= threshold)
+							.slice(0, 3)
+							.map((entry) => ({
+								id: entry.sticker.id,
+								name: entry.sticker.name,
+								description:
+									entry.sticker.description || "No description available",
+							}));
+						log.warn(
+							`Sticker name '${normalizedStickerName}' is ambiguous. Top matches: ${ambiguousMatches.map((s) => s.name).join(", ")}`,
+						);
+						return null;
+					}
+
+					log.info(
+						`Fuzzy matched sticker '${best.sticker.name}' for query '${normalizedStickerName}' (score=${best.score.toFixed(3)})`,
+					);
+					return best.sticker;
 				} else {
 					// Legacy path: select by sticker ID
 					return guild.stickers.cache.get(stickerId) ?? null;
 				}
-				return null;
 			};
 
 			// 1. First attempt: lookup in current cache
@@ -209,6 +383,23 @@ export class StickerTool extends BaseTool {
 				}))
 				.slice(0, 10); // Limit to prevent overwhelming the LLM
 
+			if (ambiguousMatches.length > 1) {
+				const ambiguousMessage =
+					"Multiple stickers closely matched the requested name. Please choose one exact sticker name from the available list or do not use a sticker.";
+				return {
+					success: false,
+					error: "Sticker name is ambiguous",
+					message: ambiguousMessage,
+					data: {
+						status: "sticker_name_ambiguous",
+						sticker_name_attempted: normalizedStickerName || undefined,
+						reason: ambiguousMessage,
+						possibleMatches: ambiguousMatches,
+						availableStickers: availableStickerData,
+					},
+				};
+			}
+
 			const notFoundMessage = normalizedStickerName
 				? "The sticker name provided was not found among the available server stickers. Please choose from the provided list or do not use a sticker."
 				: "The sticker ID provided was not found among the available server stickers. Please choose by name from the provided list or do not use a sticker.";
@@ -223,6 +414,15 @@ export class StickerTool extends BaseTool {
 					sticker_name_attempted: normalizedStickerName || undefined,
 					sticker_id_attempted: !normalizedStickerName ? stickerId : undefined,
 					reason: notFoundMessage,
+					closeMatches: fuzzySuggestions
+						.filter((match) => match.score >= 0.6)
+						.slice(0, 3)
+						.map((match) => ({
+							id: match.id,
+							name: match.name,
+							description: match.description,
+							score: Number(match.score.toFixed(3)),
+						})),
 					availableStickers: availableStickerData,
 				},
 			};

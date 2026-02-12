@@ -1470,6 +1470,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				no_smart_model_title: `No Reasoning Model Found`,
 				no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config apikey set\`.`,
 				cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot respond\` again. This cooldown is shared with message triggers.`,
+				channel_not_whitelisted: `This server has a channel whitelist active. \`/bot respond\` can only be used in whitelisted channels.`,
 			},
 			kill: {
 				description: `Immediately stop the current stream without a follow-up response.`,
@@ -1501,6 +1502,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				me_success_description: `Generated message as {user}.`,
 				no_messages_title: `No Messages Found`,
 				no_messages_description: `No messages found in this channel. Send at least one message before using user impersonation.`,
+				cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate me\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
+				channel_not_whitelisted: `This server has a channel whitelist active. \`/bot impersonate me\` can only be used in whitelisted channels.`,
 
 				// System impersonation
 				system_modal_title: `System Prompt Injection`,

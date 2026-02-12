@@ -134,8 +134,9 @@ interface AccumulatedToolCall {
  * OpenRouter streaming adapter implementation
  */
 export class OpenrouterStreamAdapter implements StreamProvider {
-	private static readonly TEMPERATURE_OMIT_MODELS = new Set([
-		"openrouter/pony-alpha",
+	private static readonly TEMPERATURE_OMIT_MODELS = new Set<string>([
+		// Models that don't support temperature parameter
+		// (empty - pony-alpha removed as deprecated)
 	]);
 
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [

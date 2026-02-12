@@ -496,6 +496,8 @@ interface ChannelLockEntry {
 		isStopResponse?: boolean; // Flag to prevent stopping stop responses
 		selectedPersonaId?: number;
 		isPersonaJob?: boolean;
+		isUserImpersonation?: boolean; // Preserve user impersonation flag through queue
+		impersonatedUserId?: string; // Preserve impersonated user ID through queue
 		manualSystemPrompt?: string;
 		manualPrefill?: string;
 	}>;
@@ -1274,6 +1276,8 @@ export default async function tomoriChat(
 						llmOverrideCodename,
 						selectedPersonaId,
 						isPersonaJob,
+						isUserImpersonation: isUserImpersonation || undefined,
+						impersonatedUserId,
 						manualSystemPrompt,
 						manualPrefill,
 					});
@@ -3161,8 +3165,10 @@ export default async function tomoriChat(
 					// This fixes the UX issue where manual /bot respond commands
 					// don't work if the selected persona was the last one to speak in the conversation
 					// IMPORTANT: Skip this for reasoning queries - they have their own system message
+					// IMPORTANT: Skip this for user impersonation - continuation directives conflict with role reversal
 					if (
 						isManuallyTriggered &&
+						!isUserImpersonation &&
 						!reasoningQuery &&
 						!reminderRecipientID &&
 						!reminderData?.self_reminder &&
@@ -5053,8 +5059,8 @@ export default async function tomoriChat(
 							undefined, // reminderData
 							nextMessageData.selectedPersonaId,
 							nextMessageData.isPersonaJob ?? false,
-							undefined, // isUserImpersonation
-							undefined, // impersonatedUserId
+							nextMessageData.isUserImpersonation, // Preserve user impersonation through queue
+							nextMessageData.impersonatedUserId, // Preserve impersonated user ID through queue
 							nextMessageData.manualSystemPrompt, // manualSystemPrompt
 							nextMessageData.manualPrefill, // manualPrefill
 						).catch((e) => {

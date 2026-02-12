@@ -655,7 +655,8 @@ export async function buildContext({
 	};
 
 	// 1. System prompt + Humanizer rules (comes FIRST for prompt optimization)
-	if (tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT) {
+	// Skip system prompt for user impersonation (bot-specific personality should not leak)
+	if (!isUserImpersonation && tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT) {
 		const systemPrompt =
 			tomoriConfig.system_prompt?.trim() || DEFAULT_SYSTEM_PROMPT;
 		let humanizerText = systemPrompt;
@@ -679,7 +680,8 @@ export async function buildContext({
 	}
 
 	// 1.5. Persona-specific prompt (appended in addition to system prompt when set)
-	if (personaPrompt?.trim()) {
+	// Skip persona prompt for user impersonation (bot-specific personality should not leak)
+	if (!isUserImpersonation && personaPrompt?.trim()) {
 		const promptText = await convertMentions(
 			personaPrompt.trim(),
 			client,
@@ -697,24 +699,27 @@ export async function buildContext({
 	}
 
 	// 2. Personality attributes (SECOND - separated from humanizer for better organization)
-	let personalityText = tomoriAttributes.join("\n");
+	// Skip personality attributes for user impersonation (bot-specific traits should not leak)
+	if (!isUserImpersonation) {
+		let personalityText = tomoriAttributes.join("\n");
 
-	// CRITICAL: Use stable "User" placeholder for system instruction to prevent cache invalidation across different users
-	personalityText = await convertMentions(
-		personalityText,
-		client,
-		guildId,
-		"User", // Stable placeholder instead of triggererName
-		botName,
-		tomoriConfig.personal_memories_enabled,
-		snapshot,
-	);
+		// CRITICAL: Use stable "User" placeholder for system instruction to prevent cache invalidation across different users
+		personalityText = await convertMentions(
+			personalityText,
+			client,
+			guildId,
+			"User", // Stable placeholder instead of triggererName
+			botName,
+			tomoriConfig.personal_memories_enabled,
+			snapshot,
+		);
 
-	contextItems.push({
-		role: "system",
-		parts: [{ type: "text", text: personalityText }],
-		metadataTag: ContextItemTag.SYSTEM_PERSONALITY,
-	});
+		contextItems.push({
+			role: "system",
+			parts: [{ type: "text", text: personalityText }],
+			metadataTag: ContextItemTag.SYSTEM_PERSONALITY,
+		});
+	}
 
 	// --- Preamble/Knowledge Base Segments ---
 	// These will be consolidated into the system prompt in Phase 2.
@@ -752,9 +757,11 @@ export async function buildContext({
 	});
 
 	// 4. Server Memories / Conversation Memories
+	// Skip server memories for user impersonation (bot-specific knowledge should not leak)
 	// Use snapshot if available, otherwise load from DB
 	const tomoriState = snapshot?.tomoriState ?? (await loadTomoriState(guildId));
 	if (
+		!isUserImpersonation &&
 		tomoriState?.server_memories &&
 		Array.isArray(tomoriState.server_memories) &&
 		tomoriState.server_memories.length > 0
@@ -1396,7 +1403,13 @@ export async function buildContext({
 			}
 
 			// 9. Add personal memories (only for Level 0 MINIMAL privacy)
+			// For user impersonation: only include memories about the impersonated user (so AI knows facts about them)
+			const shouldIncludePersonalMemories =
+				!isUserImpersonation ||
+				(isUserImpersonation && userRow.user_disc_id === impersonatedUserId);
+
 			if (
+				shouldIncludePersonalMemories &&
 				serverPersonalizationEnabled &&
 				!userIsBlacklisted &&
 				userPrivacyLevel === PrivacyLevel.MINIMAL

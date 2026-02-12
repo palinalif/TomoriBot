@@ -78,12 +78,6 @@ function detectToolSupport(model: OpenRouterModel): boolean {
 	const hasTools = model.supported_parameters.includes("tools");
 	const hasToolChoice = model.supported_parameters.includes("tool_choice");
 
-	// Narrow compatibility exception:
-	// pony-alpha currently may expose tool support without tool_choice metadata.
-	if (model.id === "openrouter/pony-alpha") {
-		return hasTools;
-	}
-
 	return hasTools && hasToolChoice;
 }
 

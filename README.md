@@ -199,6 +199,8 @@ Before running TomoriBot, ensure you have the following installed:
    ```
     # Discord Bot Configuration (Required)
     DISCORD_TOKEN=your_discord_bot_token_here
+    # Make sure your Discord bot has the following Privileged Gateway Intents:
+    # GuildMembers, MessageContent, GuildPresences
 
     # Security (Required)
     CRYPTO_SECRET=your_32_character_crypto_secret_here

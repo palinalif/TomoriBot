@@ -18,8 +18,8 @@ import {
 	loadTomoriState,
 } from "../../utils/db/dbRead";
 import {
-	checkCooldown,
-	setCooldown,
+	checkMessageTriggerCooldownWithWhitelist,
+	setMessageTriggerCooldownWithWhitelist,
 } from "../../utils/db/cooldownManager";
 import { CooldownType } from "../../types/db/schema";
 import { getCooldownTypeFooterKey } from "../../utils/db/messageCooldown";
@@ -111,7 +111,8 @@ export async function execute(
 	const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
 	const cooldownLength = tomoriState.config.cooldown_length ?? 5;
 
-	const cooldownResult = await checkCooldown(
+	// Uses whitelist-aware version to respect per-channel cooldown overrides
+	const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
 		interaction.guild.id,
 		interaction.user.id,
 		interaction.channel.id,
@@ -120,6 +121,16 @@ export async function execute(
 	);
 
 	if (cooldownResult.isOnCooldown) {
+		// If blocked by whitelist, show a specific "not whitelisted" message instead of cooldown
+		if (cooldownResult.blockedByWhitelist) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.message_cooldown_title",
+				descriptionKey: "commands.bot.respond.channel_not_whitelisted",
+				color: ColorCode.WARN,
+			});
+			return;
+		}
+
 		// Show cooldown warning via DM (with ephemeral fallback)
 		const footerKey = getCooldownTypeFooterKey(cooldownResult.cooldownType);
 		await sendCooldownDM(
@@ -352,7 +363,8 @@ export async function execute(
 		);
 
 		// 7. Set cooldown after successful response (shares cooldown pool with message triggers)
-		await setCooldown(
+		// Uses whitelist-aware version to respect per-channel cooldown overrides
+		await setMessageTriggerCooldownWithWhitelist(
 			interaction.guild.id,
 			interaction.user.id,
 			interaction.channel.id,
