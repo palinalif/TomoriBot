@@ -254,6 +254,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 					const duckduckgoSearchFunctions = [
 						"web-search",
 						"felo-search",
+						"iask-search",
+						"monica-search",
 						"fetch-url",
 						"url-metadata",
 					];

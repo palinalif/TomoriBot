@@ -198,7 +198,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// Build the prompt based on model type
 		let prompt: string;
 		if (isGlm) {
-			// GLM 4.6: Official chat template with role tags and /nothink
+			// GLM 4.6: Official chat template with role tags and forced thinking
 			prompt = this.assembleGlmChatPrompt(
 				context.contextItems,
 				context.tomoriState.tomori_nickname,
@@ -324,6 +324,76 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		// Check for completion
 		if (novelaiChunk.final) {
+			// GLM 4.6: If the stream ends while accumulating a tool call (model hit token cap
+			// before generating </tool_call>), try to parse what we have. NAI's token limit
+			// often cuts off the closing tag, so we synthesize it from the accumulated buffer.
+			if (
+				this.toolCallMode === "tool_call" &&
+				this.toolCallBuffer.trim()
+			) {
+				log.info(
+					"NovelAI GLM: Stream ended during tool call accumulation — attempting to parse without closing tag",
+				);
+				// Append closing tag so extractToolCallBlock can match
+				const patched = `${this.toolCallBuffer.trimEnd()}\n</tool_call>`;
+				const toolCallBlock = this.extractToolCallBlock(patched);
+				if (toolCallBlock) {
+					const parsedCall = this.parseToolCallBlock(toolCallBlock);
+					if (parsedCall) {
+						log.info(
+							`NovelAI GLM: Successfully parsed truncated tool call: ${parsedCall.name}`,
+						);
+						this.generationBuffer = "";
+						this.sentenceTrailingBuffer = "";
+						this.resetToolParsingState();
+						return {
+							type: "function_call",
+							functionCall: parsedCall,
+						};
+					}
+				}
+				log.warn(
+					"NovelAI GLM: Failed to parse truncated tool call — treating as empty response",
+				);
+			}
+
+			// GLM 4.6: If still in undecided mode with a prelude buffer that looks like
+			// an incomplete tool call (e.g., just the function name, waiting for <arg_key>),
+			// try to parse it as a tool call before discarding.
+			if (
+				this.toolCallMode === "undecided" &&
+				this.toolPreludeBuffer.trim()
+			) {
+				const trimmedPrelude = this.toolPreludeBuffer.trim();
+				const firstLine = trimmedPrelude.split("\n")[0].trim();
+				const matchedTool = this.toolDefinitions.find(
+					(t) => t.name === firstLine,
+				);
+
+				if (matchedTool && trimmedPrelude.includes("<arg_key>")) {
+					log.info(
+						`NovelAI GLM: Stream ended with unwrapped tool call in prelude — attempting parse for "${matchedTool.name}"`,
+					);
+					const patched = `<tool_call>${trimmedPrelude}\n</tool_call>`;
+					const toolCallBlock = this.extractToolCallBlock(patched);
+					if (toolCallBlock) {
+						const parsedCall = this.parseToolCallBlock(toolCallBlock);
+						if (parsedCall) {
+							log.info(
+								`NovelAI GLM: Successfully parsed truncated prelude tool call: ${parsedCall.name}`,
+							);
+							this.generationBuffer = "";
+							this.sentenceTrailingBuffer = "";
+							this.resetToolParsingState();
+							return {
+								type: "function_call",
+								functionCall: parsedCall,
+							};
+						}
+					}
+				}
+			}
+
 			// For GLM 4.6: check if the sentence trailing buffer has a complete thought.
 			// If it ends at a sentence boundary, flush it before signaling done.
 			// If not (NAI cut off mid-sentence), silently drop it for a clean ending.
@@ -372,6 +442,16 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		if (novelaiChunk.token) {
 			if (this.toolsEnabled) {
 				return this.processTokenWithToolParsing(novelaiChunk.token);
+			}
+
+			// GLM 4.6: Strip any <think>...</think> blocks before visible text processing.
+			// With /nothink removed, the model may emit thinking blocks in its response.
+			if (this.isGlmModel) {
+				const stripped = this.stripThinkBlocks(novelaiChunk.token);
+				if (!stripped) {
+					return { type: "text", content: "" };
+				}
+				return this.processVisibleText(stripped);
 			}
 
 			return this.processVisibleText(novelaiChunk.token);
@@ -651,11 +731,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				return { mode: "wait" };
 			}
 
+			// 1. Handle stray </think> closing tags
 			if (trimmedStart.startsWith("</think>")) {
 				buffer = trimmedStart.slice("</think>".length);
 				continue;
 			}
 
+			// 2. Handle <think>...</think> blocks (consume and continue)
 			if (trimmedStart.startsWith("<think>")) {
 				const thinkEndIndex = trimmedStart.indexOf("</think>");
 				if (thinkEndIndex === -1) {
@@ -668,6 +750,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				continue;
 			}
 
+			// 3. Properly wrapped tool call — <tool_call> tag present
 			if (trimmedStart.startsWith("<tool_call>")) {
 				return { mode: "tool_call", toolCallText: trimmedStart };
 			}
@@ -675,6 +758,32 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			if (trimmedStart.startsWith("<tool_call")) {
 				// Wait until the tag is fully received
 				if (!trimmedStart.includes(">")) {
+					return { mode: "wait" };
+				}
+			}
+
+			// 4. Unwrapped tool call — model outputs function name directly without <tool_call> tag.
+			//    GLM 4.6 sometimes omits the wrapper tag and generates:
+			//      brave_web_search\n<arg_key>query</arg_key>\n<arg_value>...</arg_value>
+			//    Detect this by checking if the first line matches a known tool name.
+			const firstLine = trimmedStart.split("\n")[0].trim();
+			if (firstLine) {
+				const matchedTool = this.toolDefinitions.find(
+					(t) => t.name === firstLine,
+				);
+
+				if (matchedTool) {
+					if (trimmedStart.includes("<arg_key>")) {
+						// Confirmed unwrapped tool call — wrap in <tool_call> for parsing
+						log.info(
+							`NovelAI GLM: Detected unwrapped tool call for "${matchedTool.name}" — wrapping in <tool_call> tags`,
+						);
+						return {
+							mode: "tool_call",
+							toolCallText: `<tool_call>${trimmedStart}`,
+						};
+					}
+					// Tool name found but no <arg_key> yet — wait for more tokens
 					return { mode: "wait" };
 				}
 			}
@@ -1296,7 +1405,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * {consolidated system instructions + tool definitions}
 	 *
 	 * <|user|>
-	 * Eli: Hello there!/nothink
+	 * Eli: Hello there!
 	 * <|assistant|>
 	 * <think></think>
 	 * Hi Eli!
@@ -1309,10 +1418,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * - User turns keep speaker labels (multi-user Discord needs disambiguation)
 	 * - Assistant turns have bot name STRIPPED — <|assistant|> is sufficient, and
 	 *   including "Tomori:" causes garbled name artifacts (e.g., "Tomo", "Tomorleasing")
-	 * - /nothink appended to every user message to disable thinking and save tokens
+	 * - /nothink is NOT appended — removing it allows GLM to reason when needed
+	 *   (tool use requires internal reasoning). /nothink was the directive disabling it.
+	 * - <think></think> on assistant turns and generation prompt shows the expected format
+	 * - If the model decides to think, any <think>...</think> blocks are stripped by
+	 *   stripThinkBlocks() in the streaming pipeline
 	 * - Tool definitions use <tools> XML format in the system block
 	 * - Tool history uses <|assistant|> + <tool_call> + <|observation|> structure
-	 * - Generation prompt ends with <|assistant|>\n<think></think>\n so model continues
 	 *
 	 * @param contextItems - Structured context items from context builder
 	 * @param botName - Current bot persona name
@@ -1408,7 +1520,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			if (turn.role === "user") {
 				// User turns keep speaker labels for multi-user disambiguation
 				promptParts.push("<|user|>");
-				promptParts.push(`${turn.content}/nothink`);
+				promptParts.push(turn.content);
 			} else if (turn.role === "model") {
 				// Assistant turns: strip bot name prefix — <|assistant|> is sufficient
 				const strippedContent = turn.content.replace(
@@ -1438,8 +1550,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			}
 		}
 
-		// 6. Generation prompt: signal the model to generate the assistant's response
-		// The model continues from "<|assistant|>\n<think></think>\n"
+		// 6. Generation prompt: signal the model to generate the assistant's response.
+		// <think></think> shows the expected format (thinking already complete for this turn).
+		// Removing /nothink from user messages allows the model to reason when needed —
+		// /nothink was the directive that explicitly disabled reasoning.
 		promptParts.push("<|assistant|>");
 		promptParts.push("<think></think>");
 

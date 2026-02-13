@@ -299,6 +299,8 @@ export class CustomToolAdapter implements MCPCapableToolAdapter {
 
 				const disabledDDGFunctions = [
 					"felo-search",
+					"iask-search",
+					"monica-search",
 					"fetch-url",
 					"url-metadata",
 				];

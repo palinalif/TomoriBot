@@ -297,6 +297,8 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
 
 				const disabledDDGFunctions = [
 					"felo-search",
+					"iask-search",
+					"monica-search",
 					"fetch-url",
 					"url-metadata",
 				];

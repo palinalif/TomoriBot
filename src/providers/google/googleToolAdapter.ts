@@ -337,10 +337,13 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
 				// Disabled DuckDuckGo functions (always filtered out)
 				// felo-search: Streaming not compatible with Discord
+				// iask-search / monica-search: unsupported or low-quality search modes
 				// fetch-url: Use dedicated Fetch MCP server instead
 				// url-metadata: Redundant with Fetch MCP server
 				const disabledDDGFunctions = [
 					"felo-search",
+					"iask-search",
+					"monica-search",
 					"fetch-url",
 					"url-metadata",
 				];
@@ -396,7 +399,12 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 					const mcpTools = mcpManager.getMCPTools();
 
 					// DuckDuckGo search function names for filtering when Brave is available
-					const duckduckgoSearchFunctions = ["web-search", "url-metadata"];
+					const duckduckgoSearchFunctions = [
+						"web-search",
+						"iask-search",
+						"monica-search",
+						"url-metadata",
+					];
 
 					for (const mcpTool of mcpTools) {
 						try {
