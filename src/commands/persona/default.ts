@@ -30,6 +30,15 @@ import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { getCachedPresetAvatar } from "../../utils/image/avatarHelper";
 
+function isUniqueViolation(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		(error as { code?: string }).code === "23505"
+	);
+}
+
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "preset_default_modal";
 const PRESET_SELECT_ID = "preset_select";
@@ -223,6 +232,24 @@ export async function execute(
 			.join(",")}}`;
 		const resolvedLineageId = resolvePresetLineageId(selectedPreset);
 
+		const duplicateNameRows = await sql<Array<{ tomori_id: number }>>`
+			SELECT tomori_id
+			FROM tomoris
+			WHERE server_id = ${tomoriState.server_id}
+			  AND tomori_id <> ${tomoriState.tomori_id}
+			  AND lower(btrim(tomori_nickname)) = lower(btrim(${defaultBotName}))
+			LIMIT 1
+		`;
+		if (duplicateNameRows.length > 0) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.persona.name_conflict_title",
+				descriptionKey: "commands.persona.name_conflict_description",
+				descriptionVars: { name: defaultBotName },
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
 		// 15. Update Tomori and TomoriConfig in the database
 		// First, update the Tomori table (nickname and attribute/dialogue data)
 		const [updatedTomoriResult] = await sql`
@@ -369,6 +396,17 @@ export async function execute(
 					: undefined,
 		});
 	} catch (error) {
+		if (isUniqueViolation(error)) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.persona.name_conflict_title",
+				descriptionKey: "commands.persona.name_conflict_description",
+				descriptionVars: { name: getDefaultBotName(locale) },
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
 		// 20. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;

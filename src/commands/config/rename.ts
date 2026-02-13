@@ -20,6 +20,15 @@ import { sql } from "@/utils/db/client";
 const NICKNAME_MIN_LENGTH = 2;
 const NICKNAME_MAX_LENGTH = 32;
 
+function isUniqueViolation(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		(error as { code?: string }).code === "23505"
+	);
+}
+
 // Configure the subcommand
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
@@ -111,6 +120,24 @@ export async function execute(
 					nickname: newNickname,
 				},
 				color: ColorCode.WARN,
+			});
+			return;
+		}
+
+		const duplicateNameRows = await sql<Array<{ tomori_id: number }>>`
+			SELECT tomori_id
+			FROM tomoris
+			WHERE server_id = ${tomoriState.server_id}
+			  AND tomori_id <> ${tomoriState.tomori_id}
+			  AND lower(btrim(tomori_nickname)) = lower(btrim(${newNickname}))
+			LIMIT 1
+		`;
+		if (duplicateNameRows.length > 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.persona.name_conflict_title",
+				descriptionKey: "commands.persona.name_conflict_description",
+				descriptionVars: { name: newNickname },
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -290,6 +317,18 @@ export async function execute(
 					: undefined,
 		});
 	} catch (error) {
+		if (isUniqueViolation(error)) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.persona.name_conflict_title",
+				descriptionKey: "commands.persona.name_conflict_description",
+				descriptionVars: {
+					name: interaction.options.getString("name", true),
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
 		// 14. Log error with context (Rule #22)
 		// ... (error logging remains largely the same, maybe add which step failed if possible) ...
 		let serverIdForError: number | null = null;

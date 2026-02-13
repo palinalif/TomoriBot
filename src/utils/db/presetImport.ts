@@ -18,6 +18,15 @@ import {
 } from "./memoryLimits";
 import { validateTomoriConfigFields } from "./sqlSecurity";
 
+function isUniqueViolation(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		(error as { code?: string }).code === "23505"
+	);
+}
+
 /**
  * Imports TomoriBot preset personality data, replacing existing personality
  * @param serverDiscId - Discord server ID to import preset for
@@ -124,6 +133,22 @@ export async function importPresetData(
 		const mainTomoriId = serverRows[0].tomori_id;
 		const importedLineageId = importData.persona_lineage_id ?? null;
 
+		// 4.5. Enforce persona nickname uniqueness within this server (excluding current main persona)
+		const conflictingNameRows = await sql<Array<{ tomori_id: number }>>`
+			SELECT tomori_id
+			FROM tomoris
+			WHERE server_id = ${serverId}
+			  AND tomori_id <> ${mainTomoriId}
+			  AND lower(btrim(tomori_nickname)) = lower(btrim(${importData.tomori_nickname}))
+			LIMIT 1
+		`;
+		if (conflictingNameRows.length > 0) {
+			return {
+				success: false,
+				error: `commands.persona.import.error_name_conflict|${importData.tomori_nickname}`,
+			};
+		}
+
 		// 5. Format arrays as PostgreSQL array literals for safe insertion
 		const attributeArrayLiteral = `{${importData.attribute_list
 			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
@@ -142,20 +167,30 @@ export async function importPresetData(
 			.join(",")}}`;
 
 		// 6. Update tomoris table with personality data and lineage behavior
-		await sql`
-			UPDATE tomoris
-			SET
-				tomori_nickname = ${importData.tomori_nickname},
-				attribute_list = ${attributeArrayLiteral}::text[],
-				sample_dialogues_in = ${dialoguesInArrayLiteral}::text[],
-				sample_dialogues_out = ${dialoguesOutArrayLiteral}::text[],
-				persona_lineage_id = CASE
-					WHEN ${identityMode} = 'fork' THEN nextval('persona_lineage_id_seq')
-					WHEN ${identityMode} = 'preserve' AND ${importedLineageId} IS NOT NULL THEN ${importedLineageId}
-					ELSE persona_lineage_id
-				END
-			WHERE tomori_id = ${mainTomoriId}
-		`;
+		try {
+			await sql`
+				UPDATE tomoris
+				SET
+					tomori_nickname = ${importData.tomori_nickname},
+					attribute_list = ${attributeArrayLiteral}::text[],
+					sample_dialogues_in = ${dialoguesInArrayLiteral}::text[],
+					sample_dialogues_out = ${dialoguesOutArrayLiteral}::text[],
+					persona_lineage_id = CASE
+						WHEN ${identityMode} = 'fork' THEN nextval('persona_lineage_id_seq')
+						WHEN ${identityMode} = 'preserve' AND ${importedLineageId} IS NOT NULL THEN ${importedLineageId}
+						ELSE persona_lineage_id
+					END
+				WHERE tomori_id = ${mainTomoriId}
+			`;
+		} catch (error) {
+			if (isUniqueViolation(error)) {
+				return {
+					success: false,
+					error: `commands.persona.import.error_name_conflict|${importData.tomori_nickname}`,
+				};
+			}
+			throw error;
+		}
 
 		// 7. Update persona-scoped trigger words + optional persona prompt
 		const importedPersonaPrompt =

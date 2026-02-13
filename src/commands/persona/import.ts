@@ -115,6 +115,19 @@ function dedupeTriggers(triggers: string[]): string[] {
 	return uniqueTriggers;
 }
 
+function normalizePersonaName(name: string): string {
+	return name.trim().toLowerCase();
+}
+
+function isUniqueViolation(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		(error as { code?: string }).code === "23505"
+	);
+}
+
 /**
  * Helper function to localize error messages from utility functions
  * Handles both simple locale keys and keys with pipe-separated variables
@@ -149,6 +162,9 @@ function localizeError(locale: string, errorString: string): string {
 	}
 	if (key === "commands.persona.import.error_invalid_type") {
 		return localizer(locale, key, { type: parts[1] });
+	}
+	if (key === "commands.persona.import.error_name_conflict") {
+		return localizer(locale, key, { name: parts[1] });
 	}
 
 	// Fallback: just localize the key
@@ -907,9 +923,9 @@ export async function execute(
 
 			// 11b. Check for name uniqueness (case-insensitive)
 			const existingNames = allPersonas.map((p) =>
-				p.tomori_nickname.toLowerCase(),
+				normalizePersonaName(p.tomori_nickname),
 			);
-			const importName = presetData.tomori_nickname.toLowerCase();
+			const importName = normalizePersonaName(presetData.tomori_nickname);
 
 			if (existingNames.includes(importName)) {
 				await interaction.editReply({
@@ -993,9 +1009,11 @@ export async function execute(
 
 			// 11h. Insert new alter persona row with lineage mode behavior
 			const importedLineageId = presetData.persona_lineage_id ?? null;
-			const [newAlterRow] =
-				identityMode === "preserve" && importedLineageId !== null
-					? await sql`
+			let newAlterRow: { tomori_id: number } | undefined;
+			try {
+				[newAlterRow] =
+					identityMode === "preserve" && importedLineageId !== null
+						? await sql`
 						INSERT INTO tomoris (
 							server_id,
 							tomori_nickname,
@@ -1015,7 +1033,7 @@ export async function execute(
 						)
 						RETURNING tomori_id
 					`
-					: await sql`
+						: await sql`
 						INSERT INTO tomoris (
 							server_id,
 							tomori_nickname,
@@ -1033,6 +1051,24 @@ export async function execute(
 						)
 						RETURNING tomori_id
 					`;
+			} catch (error) {
+				if (isUniqueViolation(error)) {
+					await interaction.editReply({
+						embeds: [
+							new EmbedBuilder()
+								.setTitle(localizer(locale, "commands.persona.name_conflict_title"))
+								.setDescription(
+									localizer(locale, "commands.persona.name_conflict_description", {
+										name: presetData.tomori_nickname,
+									}),
+								)
+								.setColor(ColorCode.ERROR),
+						],
+					});
+					return;
+				}
+				throw error;
+			}
 
 			if (!newAlterRow?.tomori_id) {
 				log.error("Failed to insert alter persona row");

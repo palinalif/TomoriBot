@@ -67,7 +67,10 @@ import {
 	type SelectedKeyResult,
 } from "@/utils/security/keyRotation";
 import { localizer, getSupportedLocales } from "../../utils/text/localizer";
-import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
+import {
+	escapeRegExp,
+	normalizeCustomEmojisForLlm,
+} from "../../utils/text/stringHelper";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 
@@ -579,10 +582,7 @@ function incrementSelfReplyChainDepth(channelId: string): number {
  * @param channelId - The Discord channel ID
  * @param personaId - The tomori_id of the persona that just responded
  */
-function setLastRespondedPersona(
-	channelId: string,
-	personaId: number,
-): void {
+function setLastRespondedPersona(channelId: string, personaId: number): void {
 	const state = getSelfReplyChainState(channelId);
 	state.lastRespondedPersonaId = personaId;
 	state.updatedAt = Date.now();
@@ -952,7 +952,11 @@ export default async function tomoriChat(
 
 	// Check if user is allowed to trigger bot (Level 2 FULL privacy users cannot trigger)
 	// Skip this check for manual triggers and reminders
-	if (!isManuallyTriggered && !reminderRecipientID && !reminderData?.self_reminder) {
+	if (
+		!isManuallyTriggered &&
+		!reminderRecipientID &&
+		!reminderData?.self_reminder
+	) {
 		const userPrivacyLevel = await getCachedPrivacyLevel(userDiscId);
 		if (userPrivacyLevel === PrivacyLevel.FULL) {
 			// Silently ignore - Level 2 users chose to be completely invisible
@@ -1234,13 +1238,14 @@ export default async function tomoriChat(
 						}
 
 						// Continue with cooldown check
-						const preQueueCooldownResult = await checkMessageTriggerCooldownWithWhitelist(
-							guild?.id ?? message.author.id,
-							message.author.id,
-							message.channelId,
-							earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
-							message.member,
-						);
+						const preQueueCooldownResult =
+							await checkMessageTriggerCooldownWithWhitelist(
+								guild?.id ?? message.author.id,
+								message.author.id,
+								message.channelId,
+								earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
+								message.member,
+							);
 						if (preQueueCooldownResult.isOnCooldown) {
 							// Show cooldown warning via DM and don't queue
 							const footerKey = getCooldownTypeFooterKey(
@@ -1391,7 +1396,9 @@ export default async function tomoriChat(
 
 			// Register user if they don't exist yet (first message interaction)
 			if (!userRow) {
-				const registrationLocale = message.guild?.preferredLocale.startsWith("ja")
+				const registrationLocale = message.guild?.preferredLocale.startsWith(
+					"ja",
+				)
 					? "ja"
 					: "en-US";
 				userRow = await registerUser(
@@ -1545,7 +1552,9 @@ export default async function tomoriChat(
 						}
 
 						const prefix = template.slice(0, placeholderIndex);
-						const suffix = template.slice(placeholderIndex + placeholder.length);
+						const suffix = template.slice(
+							placeholderIndex + placeholder.length,
+						);
 						return (
 							actualTitle.startsWith(prefix) &&
 							actualTitle.endsWith(suffix) &&
@@ -2068,7 +2077,7 @@ export default async function tomoriChat(
 				}
 			}
 
-			log.info(`Conditions met for Gemini reply in server ${serverDiscId}`);
+			log.info(`Conditions met for reply in server ${serverDiscId}`);
 
 			// 8. Set message trigger cooldown (skip for manual triggers and stop responses)
 			// Set early to prevent race conditions with concurrent triggers
@@ -2088,7 +2097,11 @@ export default async function tomoriChat(
 			let personasToRespond: TomoriState[];
 			if (isManuallyTriggered) {
 				personasToRespond = selectedPersona ? [selectedPersona] : [];
-			} else if (reminderRecipientID || reminderData?.self_reminder || isStopResponse) {
+			} else if (
+				reminderRecipientID ||
+				reminderData?.self_reminder ||
+				isStopResponse
+			) {
 				// Only main persona for reminders and stop responses
 				personasToRespond = tomoriState ? [tomoriState] : [];
 			} else {
@@ -2339,9 +2352,10 @@ export default async function tomoriChat(
 							embedCheck.type === "compact_refresh")
 					) {
 						embedContainsReset = true;
-						resetType = embedCheck.type === "compact_refresh"
-							? "compact_refresh"
-							: "reset";
+						resetType =
+							embedCheck.type === "compact_refresh"
+								? "compact_refresh"
+								: "reset";
 						break;
 					}
 				}
@@ -2427,8 +2441,9 @@ export default async function tomoriChat(
 									: msgReferencedMessage.author.username;
 
 							// Get the referenced message content (truncate if too long)
-							let referencedContent =
-								(msgReferencedMessage.content || "[No text content]").replace(/\n/g, " ");
+							let referencedContent = (
+								msgReferencedMessage.content || "[No text content]"
+							).replace(/\n/g, " ");
 							if (referencedContent.length > 200) {
 								referencedContent = `${referencedContent.substring(0, 197)}...`;
 							}
@@ -2942,7 +2957,9 @@ export default async function tomoriChat(
 					imageAttachments.length > 0 || videoAttachments.length > 0
 						? hasLocalMedia
 							? [msg.id, ...mediaSourceMessageIds]
-							: mediaSourceMessageIds.length > 0 ? mediaSourceMessageIds : undefined
+							: mediaSourceMessageIds.length > 0
+								? mediaSourceMessageIds
+								: undefined
 						: undefined;
 
 				// 5.c. Check if this message is from the same effective author as the previous one
@@ -2983,10 +3000,16 @@ export default async function tomoriChat(
 							...videoAttachments,
 						];
 					}
-					if (resolvedMediaSourceMessageIds && resolvedMediaSourceMessageIds.length > 0) {
-							// Merge media source message IDs, avoiding duplicates
+					if (
+						resolvedMediaSourceMessageIds &&
+						resolvedMediaSourceMessageIds.length > 0
+					) {
+						// Merge media source message IDs, avoiding duplicates
 						const existingIds = prevMessage.mediaSourceMessageIds ?? [];
-						const combinedIds = [...existingIds, ...resolvedMediaSourceMessageIds];
+						const combinedIds = [
+							...existingIds,
+							...resolvedMediaSourceMessageIds,
+						];
 						prevMessage.mediaSourceMessageIds = [...new Set(combinedIds)]; // Remove duplicates
 					}
 				} else if (
@@ -3035,7 +3058,12 @@ export default async function tomoriChat(
 			// but with their own personality, config, and (for alters) webhook avatar
 
 			// Track persona responses for short-term memory storage (includes tomoriId + lineageId for persona-scoped STM)
-			const personaResponses: Array<{ personaName: string; text: string; tomoriId?: number; personaLineageId?: number | null }> = [];
+			const personaResponses: Array<{
+				personaName: string;
+				text: string;
+				tomoriId?: number;
+				personaLineageId?: number | null;
+			}> = [];
 
 			for (
 				let personaIndex = 0;
@@ -3121,7 +3149,10 @@ export default async function tomoriChat(
 
 					// Inject reminder into conversation history if needed
 					// This makes the reminder part of the natural conversation flow rather than system injection
-					if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
+					if (
+						reminderData &&
+						(reminderRecipientID || reminderData.self_reminder)
+					) {
 						const isSelfReminder = reminderData.self_reminder === true;
 						let reminderContent = "";
 
@@ -3216,18 +3247,18 @@ export default async function tomoriChat(
 								tomoriState?.tomori_nickname ??
 								process.env.DEFAULT_BOTNAME ??
 								"Tomori";
-						const continuationText = trimmedPrefill
-							? isFromSelectedPersona && !isEmbedMessage
-								? `[Continue your last message. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
-								: `[Begin your next reply with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
-							: "[Continue your last message]";
+							const continuationText = trimmedPrefill
+								? isFromSelectedPersona && !isEmbedMessage
+									? `[Continue your last message. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
+									: `[Begin your next reply with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
+								: "[Continue your last message]";
 
-						manualContinuationDirective = continuationText;
-						log.info(
-							`Captured continuation directive for ${selectedPersona?.tomori_nickname} response`,
-						);
+							manualContinuationDirective = continuationText;
+							log.info(
+								`Captured continuation directive for ${selectedPersona?.tomori_nickname} response`,
+							);
+						}
 					}
-				}
 
 					// 11. Build Context
 					// The `buildContext` function will be refactored in a subsequent step to accept
@@ -3238,7 +3269,8 @@ export default async function tomoriChat(
 						// Query database nickname for user impersonation
 						let impersonatedUserNickname: string | undefined;
 						if (isUserImpersonation && impersonatedUserId) {
-							const impersonatedUserRow = await getCachedUserRow(impersonatedUserId);
+							const impersonatedUserRow =
+								await getCachedUserRow(impersonatedUserId);
 							impersonatedUserNickname = impersonatedUserRow?.user_nickname;
 						}
 
@@ -3367,13 +3399,14 @@ export default async function tomoriChat(
 								"Tomori";
 							const prefillMessage: StructuredContextItem = {
 								role: "model",
-								parts: [{ type: "text", text: `${botName}: ${trimmedPrefill}` }],
+								parts: [
+									{ type: "text", text: `${botName}: ${trimmedPrefill}` },
+								],
 								metadataTag: ContextItemTag.DIALOGUE_HISTORY,
 							};
 							contextSegments.push(prefillMessage);
 							log.info(`Injected manual prefill: "${trimmedPrefill}"`);
 						}
-
 					} catch (error) {
 						log.error("Error building context for LLM API Call:", error, {
 							serverId: tomoriState?.server_id, // Use internal DB ID if available
@@ -3628,19 +3661,22 @@ export default async function tomoriChat(
 								`Created temporary webhook for user impersonation: ${impersonatedUserDiscordName}`,
 							);
 						} catch (error) {
-							log.error("Failed to create temporary webhook for user impersonation", {
-								error,
-								impersonatedUserId,
-							});
+							log.error(
+								"Failed to create temporary webhook for user impersonation",
+								{
+									error,
+									impersonatedUserId,
+								},
+							);
 						}
 					}
 
 					const personaAvatarUrl = isUserImpersonation
 						? undefined // Webhook already has user's avatar
 						: personaWebhook &&
-							  guild &&
-							  currentPersona.is_alter &&
-							  !usePersonaWebhooks
+								guild &&
+								currentPersona.is_alter &&
+								!usePersonaWebhooks
 							? resolvePersonaAvatarURL(currentPersona, guild)
 							: undefined;
 
@@ -4097,16 +4133,16 @@ export default async function tomoriChat(
 										const currentLockEntry = channelLocks.get(channel.id);
 										if (currentLockEntry) {
 											// Queue the original stop message as a "passport" for stop response
-												currentLockEntry.messageQueue.unshift({
-													message: stopContext.originalStopMessage,
-													isManuallyTriggered: true, // This bypasses normal trigger logic
-													forceReason: false,
-													llmOverrideCodename,
-													isStopResponse: true, // This response cannot be stopped
-													// Keep stop follow-up persona aligned with the interrupted stream.
-													selectedPersonaId:
-														currentPersona.tomori_id ?? undefined,
-												});
+											currentLockEntry.messageQueue.unshift({
+												message: stopContext.originalStopMessage,
+												isManuallyTriggered: true, // This bypasses normal trigger logic
+												forceReason: false,
+												llmOverrideCodename,
+												isStopResponse: true, // This response cannot be stopped
+												// Keep stop follow-up persona aligned with the interrupted stream.
+												selectedPersonaId:
+													currentPersona.tomori_id ?? undefined,
+											});
 
 											log.info(
 												`Stop response queued after stream completion for channel ${channel.id}. Queue size: ${currentLockEntry.messageQueue.length}`,
@@ -4520,8 +4556,7 @@ export default async function tomoriChat(
 														.filter((part) => part.type === "text")
 														.map(
 															(part) =>
-																(part as { type: "text"; text: string })
-																	.text,
+																(part as { type: "text"; text: string }).text,
 														)
 														.join(" ");
 													tailDirectives.push(
@@ -4819,10 +4854,7 @@ export default async function tomoriChat(
 						});
 						// Track the last persona that responded for consecutive trigger prevention
 						if (currentPersona.tomori_id) {
-							setLastRespondedPersona(
-								channel.id,
-								currentPersona.tomori_id,
-							);
+							setLastRespondedPersona(channel.id, currentPersona.tomori_id);
 						}
 						log.info(
 							`[SHORT_TERM_MEMORY] Captured response from ${currentPersona.tomori_nickname} - length=${finalAccumulatedText.trim().length}`,
@@ -4902,12 +4934,21 @@ export default async function tomoriChat(
 					// Extract last 10 messages (user + model only) with timestamps and speaker names
 					const messagesToStore = simplifiedMessages
 						.slice(-10)
-						.filter((msg) => msg.authorType === "user" || msg.authorType === "persona")
+						.filter(
+							(msg) =>
+								msg.authorType === "user" || msg.authorType === "persona",
+						)
 						.map((msg) => ({
-							role: msg.authorType === "user" ? ("user" as const) : ("model" as const),
+							role:
+								msg.authorType === "user"
+									? ("user" as const)
+									: ("model" as const),
 							content: normalizeCustomEmojisForLlm(msg.content || ""),
 							timestamp: Date.now(), // Use current time as approximation
-							speakerName: msg.authorType === "persona" ? (msg.personaName || msg.authorName) : msg.authorName,
+							speakerName:
+								msg.authorType === "persona"
+									? msg.personaName || msg.authorName
+									: msg.authorName,
 						}));
 
 					// Add persona responses from this turn (bot's responses just sent)
@@ -4924,14 +4965,23 @@ export default async function tomoriChat(
 					// with the full conversation (including all personas' labeled messages)
 					if (messagesToStore.length > 0) {
 						// Collect unique tomoriIds from responding personas (filter out undefined)
-						const uniqueTomoriIds = [...new Set(personaResponses.map((r) => r.tomoriId).filter((id): id is number => id !== undefined))];
+						const uniqueTomoriIds = [
+							...new Set(
+								personaResponses
+									.map((r) => r.tomoriId)
+									.filter((id): id is number => id !== undefined),
+							),
+						];
 
 						if (uniqueTomoriIds.length > 0) {
 							// Multi-persona or single-persona: store under each responding persona's key
 							for (const tomoriId of uniqueTomoriIds) {
 								// Look up the lineage ID for this persona from the responses
-								const matchingResponse = personaResponses.find((r) => r.tomoriId === tomoriId);
-								const personaLineageId = matchingResponse?.personaLineageId ?? null;
+								const matchingResponse = personaResponses.find(
+									(r) => r.tomoriId === tomoriId,
+								);
+								const personaLineageId =
+									matchingResponse?.personaLineageId ?? null;
 								const cacheKey = `shortterm:${userDiscId}:${channel.id}:${tomoriId}`;
 								log.info(
 									`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - cacheKey=${cacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,

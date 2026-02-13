@@ -170,6 +170,29 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_tomoris_server_is_alter ON tomoris(server_id, is_alter);
 CREATE INDEX IF NOT EXISTS idx_tomoris_persona_lineage_id ON tomoris(persona_lineage_id);
 
+-- Normalize legacy duplicate persona names within a server before enforcing uniqueness.
+-- Keep the highest-priority row unchanged (main persona first, then most-recent),
+-- and append a deterministic suffix to lower-priority duplicates.
+WITH ranked_persona_names AS (
+	SELECT
+		tomori_id,
+		server_id,
+		ROW_NUMBER() OVER (
+			PARTITION BY server_id, lower(btrim(tomori_nickname))
+			ORDER BY is_alter ASC, updated_at DESC NULLS LAST, tomori_id DESC
+		) AS name_rank
+	FROM tomoris
+)
+UPDATE tomoris t
+SET tomori_nickname = t.tomori_nickname || ' [dup-' || t.tomori_id::TEXT || ']'
+FROM ranked_persona_names r
+WHERE t.tomori_id = r.tomori_id
+  AND r.name_rank > 1;
+
+-- Hard guardrail: persona names must be unique per server (case-insensitive, trimmed).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tomoris_server_nickname_ci_unique
+ON tomoris(server_id, lower(btrim(tomori_nickname)));
+
 CREATE TABLE IF NOT EXISTS llms (
   llm_id SERIAL PRIMARY KEY,
   llm_provider TEXT NOT NULL,

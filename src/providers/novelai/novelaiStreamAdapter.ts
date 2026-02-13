@@ -133,9 +133,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 */
 	private sentenceTrailingBuffer = "";
 
-	/** Regex matching characters that indicate a natural sentence/thought boundary */
+	/** Regex matching characters that indicate a natural sentence/thought boundary.
+	 * NOTE: Single quote (') is intentionally excluded — contractions like "How's",
+	 * "don't", "it's" are far more common than closing single quotes, causing
+	 * false positives that cut mid-word (e.g., "How'" instead of "How's it going?").
+	 */
 	private static readonly SENTENCE_BOUNDARY_PATTERN =
-		/[.!?*~)\]"'\u300D\u2026\u2014]\s*$/;
+		/[.!?*~)\]"\u300D\u2026\u2014]\s*$/;
 
 
 	private getSystemInstructionTags(includeTools: boolean): ContextItemTag[] {
@@ -465,8 +469,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * Find the index of the last sentence boundary character in the given text.
 	 *
 	 * Sentence boundaries are characters that typically end a complete thought:
-	 * punctuation (. ! ? …), closing quotes/brackets (" ' ) ] 」), markdown
+	 * punctuation (. ! ? …), closing quotes/brackets (" ) ] 」), markdown
 	 * formatting (* ~), em dash (—), and newlines.
+	 * NOTE: Single quote (') excluded — contractions (How's, don't) cause false cuts.
 	 *
 	 * @param text - Text to scan for sentence boundaries
 	 * @returns Index of the last boundary character, or -1 if none found
@@ -484,7 +489,6 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				char === ")" ||
 				char === "]" ||
 				char === "\"" ||
-				char === "'" ||
 				char === "\u300D" || // 」
 				char === "\u2026" || // …
 				char === "\u2014" || // —

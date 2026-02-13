@@ -28,6 +28,10 @@ import { deletePersonaAvatarFromS3 } from "../../utils/storage/avatarStorage";
 const MODAL_CUSTOM_ID = "persona_remove_modal";
 const PERSONA_SELECT_ID = "persona_select";
 
+function isDuplicateTaggedName(name: string): boolean {
+	return /\[dup-\d+\]\s*$/i.test(name.trim());
+}
+
 /**
  * Configure the 'remove' subcommand
  */
@@ -81,11 +85,15 @@ export async function execute(
 		// 3. Load all personas for this server
 		const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
 
-		// 4. Filter to alters only
-		const alterPersonas = allPersonas.filter((p) => p.is_alter);
+		// 4. Filter to removable personas:
+		// - all alters
+		// - duplicate-tagged personas created by schema migration cleanup, even if marked as main
+		const removablePersonas = allPersonas.filter(
+			(p) => p.is_alter || isDuplicateTaggedName(p.tomori_nickname),
+		);
 
 		// 5. Error if no alters exist
-		if (alterPersonas.length === 0) {
+		if (removablePersonas.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.persona.remove.no_alters_error_title",
 				descriptionKey: "commands.persona.remove.no_alters_error_description",
@@ -96,7 +104,7 @@ export async function execute(
 		}
 
 		// 6. Build select options for modal
-		const alterSelectOptions: SelectOption[] = alterPersonas.map(
+		const alterSelectOptions: SelectOption[] = removablePersonas.map(
 			(persona, index) => ({
 				label: safeSelectOptionText(persona.tomori_nickname),
 				value: index.toString(), // Use index to avoid truncation issues
@@ -137,7 +145,7 @@ export async function execute(
 			modalResult.values![PERSONA_SELECT_ID],
 			10,
 		);
-		const personaToRemove = alterPersonas[selectedIndex];
+		const personaToRemove = removablePersonas[selectedIndex];
 		if (!personaToRemove || !personaToRemove.tomori_id) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "general.errors.unknown_error_title",
@@ -152,11 +160,30 @@ export async function execute(
 		}
 		const personaId = personaToRemove.tomori_id;
 
-		// 8. Delete selected alter from database
+		// 8. Delete selected persona from database.
+		// For non-alter duplicate-tagged rows, ensure at least one main persona remains.
+		if (!personaToRemove.is_alter) {
+			const [mainCountRow] = await sql<Array<{ main_count: number | string }>>`
+				SELECT COUNT(*)::int AS main_count
+				FROM tomoris
+				WHERE server_id = ${personaToRemove.server_id}
+				  AND is_alter = false
+			`;
+			const mainCount = Number(mainCountRow?.main_count ?? 0);
+			if (mainCount <= 1) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.update_failed_title",
+					descriptionKey: "general.errors.update_failed_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+		}
+
 		await sql`
 			DELETE FROM tomoris
 			WHERE tomori_id = ${personaId}
-			AND is_alter = true
 		`;
 
 		// 8.5. Delete persona webhooks (non-production uses per-persona webhooks)

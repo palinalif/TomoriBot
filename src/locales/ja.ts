@@ -721,6 +721,8 @@ export default {
 		// ペルソナコマンド
 		persona: {
 			description: `人格プリセットを管理する`,
+			name_conflict_title: `🔴 ペルソナ名の競合`,
+			name_conflict_description: `**{name}** という名前のペルソナは既にこのサーバーに存在します。ペルソナ名はサーバー内で一意である必要があります。`,
 			export: {
 				description: `の人格を共有可能なPNGファイルとしてエクスポートする`,
 				persona_modal_title: `ペルソナを選択`,
@@ -805,6 +807,7 @@ export default {
 				error_dialogue_mismatch: `サンプル対話配列の長さが一致しません`,
 				error_invalid_config: `ペルソナデータに無効な設定フィールドがあります`,
 				error_no_server_data: `データベースにサーバーが見つかりません。まず \`/config setup\` を実行してください。`,
+				error_name_conflict: `**{name}** という名前のペルソナは既にこのサーバーに存在します。別の名前を使用してください。`,
 				error_import_failed: `ペルソナデータのインポートに失敗しました`,
 				error_not_json: `ペルソナファイルには有効なJSONデータが含まれている必要があります`,
 				error_incompatible_version: `互換性のないペルソナバージョン。期待: {expected}、実際: {actual}`,

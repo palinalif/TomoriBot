@@ -719,6 +719,8 @@ export default {
 		// Preset commands
 		persona: {
 			description: `Manage personality presets`,
+			name_conflict_title: `🔴 Persona Name Conflict`,
+			name_conflict_description: `A persona named **{name}** already exists on this server. Persona names must be unique within a server.`,
 			export: {
 				description: `Export current personality as a shareable PNG file`,
 				persona_modal_title: `Select Persona`,
@@ -803,6 +805,7 @@ export default {
 				error_dialogue_mismatch: `Sample dialogue arrays don't match in length`,
 				error_invalid_config: `Invalid configuration fields in persona data`,
 				error_no_server_data: `Server not found in database. Please run \`/config setup\` first.`,
+				error_name_conflict: `A persona with the name **{name}** already exists on this server. Please use a different name.`,
 				error_import_failed: `Failed to import persona data`,
 				error_not_json: `Preset file must contain valid JSON data`,
 				error_incompatible_version: `Incompatible preset version. Expected {expected}, got {actual}`,
