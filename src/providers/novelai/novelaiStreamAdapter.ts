@@ -123,6 +123,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	private isGlmModel = false;
 
 	/**
+	 * Tracks whether any visible text has been emitted to the user during this stream.
+	 * Used to suppress stray tool calls that appear after text output — these are model
+	 * hallucinations (e.g., empty select_sticker_for_response) that fail on execution.
+	 */
+	private hasEmittedVisibleText = false;
+
+	/**
 	 * Sentence-boundary trailing buffer for GLM 4.6.
 	 *
 	 * NAI's ~150-token hard cap often cuts text mid-sentence. Instead of trying
@@ -176,6 +183,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// Reset buffers for new stream
 		this.generationBuffer = "";
 		this.sentenceTrailingBuffer = "";
+		this.hasEmittedVisibleText = false;
 		this.toolDefinitions = this.normalizeToolDefinitions(config.tools ?? []);
 		this.toolsEnabled = this.toolDefinitions.length > 0;
 		this.resetToolParsingState();
@@ -327,6 +335,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// GLM 4.6: If the stream ends while accumulating a tool call (model hit token cap
 			// before generating </tool_call>), try to parse what we have. NAI's token limit
 			// often cuts off the closing tag, so we synthesize it from the accumulated buffer.
+			// Text preamble before the tool call is fine — it's already been emitted.
 			if (
 				this.toolCallMode === "tool_call" &&
 				this.toolCallBuffer.trim()
@@ -366,9 +375,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			) {
 				const trimmedPrelude = this.toolPreludeBuffer.trim();
 				const firstLine = trimmedPrelude.split("\n")[0].trim();
-				const matchedTool = this.toolDefinitions.find(
-					(t) => t.name === firstLine,
-				);
+				const normalizedName = firstLine
+					? this.normalizeToolName(firstLine)
+					: "";
+				const matchedTool = normalizedName
+					? this.toolDefinitions.find(
+							(t) => t.name === normalizedName,
+						)
+					: undefined;
 
 				if (matchedTool && trimmedPrelude.includes("<arg_key>")) {
 					log.info(
@@ -419,6 +433,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// Clear all buffers on completion
 			this.generationBuffer = "";
 			this.sentenceTrailingBuffer = "";
+			this.hasEmittedVisibleText = false;
 			this.resetToolParsingState();
 
 			// If we have a final flush, emit it as text before done
@@ -485,6 +500,33 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			};
 		}
 
+		// GLM 4.6: Detect stray </think> tags in visible text.
+		// After the initial <think></think> block is consumed by stripThinkBlocks(),
+		// any subsequent </think> in the visible text phase indicates model debris —
+		// the model hallucinates garbage after the tag (e.g., "oggers:</think>\nI'll kill you").
+		// Stop the stream immediately and only emit clean text before the tag.
+		if (this.isGlmModel) {
+			const thinkCloseIdx = text.indexOf("</think>");
+			if (thinkCloseIdx !== -1) {
+				const cleanBefore = text.slice(0, thinkCloseIdx).trim();
+				log.warn(
+					`NovelAI GLM: Stray </think> detected in visible text — stopping stream. ` +
+					`Clean text before tag: "${cleanBefore.substring(0, 80)}"`,
+				);
+				// Clear buffers — stream will end naturally after this return
+				this.generationBuffer = "";
+				this.sentenceTrailingBuffer = "";
+				this.hasEmittedVisibleText = false;
+				if (cleanBefore) {
+					// Emit clean text directly (skip speaker detection since we're stopping).
+					// Set the flag for consistency with downstream logic.
+					this.hasEmittedVisibleText = true;
+					return { type: "text", content: cleanBefore };
+				}
+				return { type: "done" };
+			}
+		}
+
 		// Add to buffer for speaker detection
 		this.generationBuffer += text;
 
@@ -505,6 +547,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		// For Kayra: pass text through directly (no sentence buffering needed)
 		if (!this.isGlmModel) {
+			if (text.trim()) this.hasEmittedVisibleText = true;
 			return {
 				type: "text",
 				content: text,
@@ -539,6 +582,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			lastBoundaryIndex + 1,
 		);
 
+		if (emitText.trim()) this.hasEmittedVisibleText = true;
 		return {
 			type: "text",
 			content: emitText,
@@ -595,6 +639,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			}
 
 			if (decision.mode === "tool_call") {
+				// Accept tool calls regardless of whether text was already emitted.
+				// Text + tool call is a valid pattern (model announces intent then acts).
+				// Invalid tool calls (wrong name, no args) are handled at the executor level.
+				if (this.hasEmittedVisibleText) {
+					log.info(
+						"NovelAI GLM: Tool call detected after visible text — accepting (text preamble pattern)",
+					);
+				}
 				this.toolCallMode = "tool_call";
 				this.toolCallBuffer = decision.toolCallText ?? "";
 				this.toolPreludeBuffer = "";
@@ -651,6 +703,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		this.textScanBuffer += token;
 
+		// 1. Check for wrapped <tool_call> tag
 		const tagIndex = this.textScanBuffer.indexOf(
 			NovelaiStreamAdapter.TOOL_CALL_TAG,
 		);
@@ -660,8 +713,17 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			const toolPart = this.textScanBuffer.slice(tagIndex);
 			this.textScanBuffer = "";
 
+			// Accept tool calls found after text — text + tool call is a valid pattern
+			// (model announces "Let me search for that" then calls the tool).
+			// Emit any remaining visible text before the tag as preamble.
 			this.toolCallMode = "tool_call";
 			this.toolCallBuffer = toolPart;
+
+			if (this.hasEmittedVisibleText || visiblePart.trim().length > 0) {
+				log.info(
+					"NovelAI GLM: <tool_call> found after visible text — accepting as text+tool pattern",
+				);
+			}
 
 			if (visiblePart.trim().length > 0) {
 				const cleaned = this.stripThinkBlocks(visiblePart);
@@ -696,7 +758,44 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			return { type: "text", content: "" };
 		}
 
-		// No tool tag found yet - flush everything except a small tail to avoid leaking partial tags
+		// 2. Check for unwrapped tool call — bare function name on a new line followed by <arg_key>.
+		//    GLM sometimes outputs text then switches to a tool call without <tool_call> wrapper.
+		//    Scan for "\n{tool_name}\n<arg_key>" pattern in the buffer.
+		if (this.isGlmModel && this.textScanBuffer.includes("<arg_key>")) {
+			const unwrappedMatch = this.detectUnwrappedToolCallInText(this.textScanBuffer);
+			if (unwrappedMatch) {
+				const visiblePart = this.textScanBuffer.slice(0, unwrappedMatch.startIndex);
+				const toolPart = this.textScanBuffer.slice(unwrappedMatch.startIndex);
+				this.textScanBuffer = "";
+
+				if (this.hasEmittedVisibleText || visiblePart.trim().length > 0) {
+					log.info(
+						`NovelAI GLM: Unwrapped tool call "${unwrappedMatch.toolName}" found after visible text — accepting as text+tool pattern`,
+					);
+				}
+
+				// Emit any remaining visible text before the tool call as preamble
+				if (visiblePart.trim().length > 0) {
+					const cleaned = this.stripThinkBlocks(visiblePart);
+					if (cleaned) {
+						// Emit text first; tool call will be picked up on subsequent tokens
+						this.toolCallMode = "tool_call";
+						this.toolCallBuffer = `<tool_call>${toolPart.trim()}`;
+						return this.processVisibleText(cleaned);
+					}
+				}
+
+				// Wrap in <tool_call> for standard parsing
+				log.info(
+					`NovelAI GLM: Detected unwrapped tool call "${unwrappedMatch.toolName}" mid-text — wrapping in <tool_call> tags`,
+				);
+				this.toolCallMode = "tool_call";
+				this.toolCallBuffer = `<tool_call>${toolPart.trim()}`;
+				return { type: "text", content: "" };
+			}
+		}
+
+		// 3. No tool tag found yet — flush everything except a small tail to avoid leaking partial tags
 		const holdLength = NovelaiStreamAdapter.TOOL_CALL_TAG_LENGTH - 1;
 		if (this.textScanBuffer.length <= holdLength) {
 			return { type: "text", content: "" };
@@ -715,6 +814,53 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			return { type: "text", content: "" };
 		}
 		return this.processVisibleText(cleaned);
+	}
+
+	/**
+	 * Detect an unwrapped tool call in mid-text — a bare function name on its own line
+	 * followed by `<arg_key>`. Returns the match position and tool name, or null.
+	 *
+	 * Scans for pattern: `\n{known_tool_name}\n<arg_key>` (newline-delimited tool name
+	 * that matches a registered tool, with at least one argument following).
+	 *
+	 * @param buffer - Text scan buffer to search
+	 * @returns Object with startIndex and toolName, or null if no match
+	 */
+	private detectUnwrappedToolCallInText(
+		buffer: string,
+	): { startIndex: number; toolName: string } | null {
+		// Split into lines and check if any line matches a tool name with <arg_key> after it.
+		// Track position through buffer using cumulative line lengths (no indexOf needed).
+		const lines = buffer.split("\n");
+		let currentIndex = 0;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i].trim();
+			if (line) {
+				const normalizedName = this.normalizeToolName(line);
+				const matchedTool = this.toolDefinitions.find(
+					(t) => t.name === normalizedName,
+				);
+
+				if (matchedTool) {
+					// Check if <arg_key> appears somewhere after this line
+					const remainingText = lines.slice(i + 1).join("\n");
+					if (remainingText.includes("<arg_key>")) {
+						// currentIndex points to the start of lines[i].
+						// Walk back one char to include the preceding newline separator.
+						const startIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex;
+						return { startIndex, toolName: matchedTool.name };
+					}
+				}
+			}
+			// Advance by line length + newline separator (except for last line)
+			currentIndex += lines[i].length;
+			if (i < lines.length - 1) {
+				currentIndex += 1;
+			}
+		}
+
+		return null;
 	}
 
 	private decideToolCallMode(prelude: string): {
@@ -766,15 +912,20 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			//    GLM 4.6 sometimes omits the wrapper tag and generates:
 			//      brave_web_search\n<arg_key>query</arg_key>\n<arg_value>...</arg_value>
 			//    Detect this by checking if the first line matches a known tool name.
+			//    Uses normalizeToolName() to handle underscore/hyphen variations
+			//    (model outputs "brave_web_search" but tool is registered as "brave-web-search").
 			const firstLine = trimmedStart.split("\n")[0].trim();
 			if (firstLine) {
+				const normalizedName = this.normalizeToolName(firstLine);
 				const matchedTool = this.toolDefinitions.find(
-					(t) => t.name === firstLine,
+					(t) => t.name === normalizedName,
 				);
 
 				if (matchedTool) {
 					if (trimmedStart.includes("<arg_key>")) {
-						// Confirmed unwrapped tool call — wrap in <tool_call> for parsing
+						// Confirmed unwrapped tool call — wrap in <tool_call> for parsing.
+						// Use the ORIGINAL name from the model (not normalized) so parseToolCallBlock
+						// can normalize it during parsing.
 						log.info(
 							`NovelAI GLM: Detected unwrapped tool call for "${matchedTool.name}" — wrapping in <tool_call> tags`,
 						);
@@ -817,10 +968,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		);
 
 		for (const match of argMatches) {
-			const argKey = match[1]?.trim();
+			const rawArgKey = match[1]?.trim();
 			const rawValue = match[2]?.trim();
-			if (!argKey) continue;
+			if (!rawArgKey) continue;
 
+			// Normalize garbled param names — GLM drops tokens at high temperature.
+			// e.g., "ave_wuery" → "query", "ount" → "count"
+			const argKey = this.normalizeParamName(functionName, rawArgKey);
 			const expectedType = this.getToolParamType(functionName, argKey);
 			args[argKey] = this.coerceArgValue(rawValue ?? "", expectedType);
 		}
@@ -831,22 +985,227 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		};
 	}
 
+	/**
+	 * Normalize a tool name from model output to match a registered tool definition.
+	 *
+	 * GLM 4.6 frequently outputs tool names that don't exactly match the registration:
+	 * - Underscore/hyphen swaps: "brave_web_search" vs "brave-web-search"
+	 * - Truncated prefixes: "ave_web_search" instead of "brave_web_search" (high-temp sampling drops tokens)
+	 *
+	 * Matching strategy (in priority order):
+	 * 1. Exact match
+	 * 2. Underscore → hyphen conversion
+	 * 3. Hyphen → underscore conversion
+	 * 4. Suffix match — if the raw name is a suffix of exactly one registered tool (handles dropped prefix tokens)
+	 *
+	 * @param rawName - Tool name as generated by the model
+	 * @returns Normalized tool name matching a registered definition, or rawName if no match
+	 */
 	private normalizeToolName(rawName: string): string {
+		// 1. Exact match
 		if (this.toolDefinitions.some((tool) => tool.name === rawName)) {
 			return rawName;
 		}
 
+		// 2. Underscore → hyphen
 		const hyphenName = rawName.replace(/_/g, "-");
 		if (this.toolDefinitions.some((tool) => tool.name === hyphenName)) {
 			return hyphenName;
 		}
 
+		// 3. Hyphen → underscore
 		const underscoreName = rawName.replace(/-/g, "_");
 		if (this.toolDefinitions.some((tool) => tool.name === underscoreName)) {
 			return underscoreName;
 		}
 
+		// 4. Suffix match — handles dropped prefix tokens from high-temperature sampling.
+		//    e.g., model outputs "ave_web_search" (missing "br"), match "brave_web_search".
+		//    Also try with underscore/hyphen normalization on both sides.
+		const candidates = [rawName, hyphenName, underscoreName];
+		const suffixMatches = this.toolDefinitions.filter((tool) =>
+			candidates.some((candidate) =>
+				tool.name.endsWith(candidate) && candidate.length >= 4,
+			),
+		);
+		if (suffixMatches.length === 1) {
+			log.info(
+				`NovelAI GLM: Fuzzy-matched tool name "${rawName}" → "${suffixMatches[0].name}" (suffix match)`,
+			);
+			return suffixMatches[0].name;
+		}
+
+		// 5. Levenshtein distance — catch garbled names that aren't simple suffix truncations.
+		//    Use stricter threshold (40%) than param matching since tool namespace is larger.
+		let bestLevMatch: NormalizedToolDefinition | undefined;
+		let bestLevDist = Number.POSITIVE_INFINITY;
+		let secondBestDist = Number.POSITIVE_INFINITY;
+		for (const tool of this.toolDefinitions) {
+			// Try all normalized variants against each tool name
+			const minDist = Math.min(
+				...candidates.map((c) => this.levenshteinDistance(c, tool.name)),
+			);
+			const maxLen = Math.max(rawName.length, tool.name.length);
+			if (minDist < bestLevDist && minDist <= Math.ceil(maxLen * 0.4)) {
+				secondBestDist = bestLevDist;
+				bestLevDist = minDist;
+				bestLevMatch = tool;
+			} else if (minDist < secondBestDist) {
+				secondBestDist = minDist;
+			}
+		}
+		if (bestLevMatch && (secondBestDist - bestLevDist >= 2 || this.toolDefinitions.length <= 2)) {
+			log.info(
+				`NovelAI GLM: Fuzzy-matched tool name "${rawName}" → "${bestLevMatch.name}" (edit distance: ${bestLevDist})`,
+			);
+			return bestLevMatch.name;
+		}
+
 		return rawName;
+	}
+
+	/**
+	 * Normalize a garbled parameter name from model output to match a registered parameter.
+	 *
+	 * GLM 4.6 at higher temperatures drops or garbles tokens in argument names,
+	 * e.g., "ave_wuery" instead of "query", "ount" instead of "count".
+	 *
+	 * Matching strategy:
+	 * 1. Exact match — parameter exists in the tool definition
+	 * 2. Suffix match — raw name is a suffix of a known parameter (handles dropped prefix tokens)
+	 * 3. Best substring match — find the parameter whose name contains the most of the raw name
+	 *
+	 * @param functionName - Normalized tool name to look up parameters for
+	 * @param rawParamName - Parameter name as generated by the model
+	 * @returns Normalized parameter name, or rawParamName if no match
+	 */
+	private normalizeParamName(functionName: string, rawParamName: string): string {
+		const tool = this.toolDefinitions.find((t) => t.name === functionName);
+		if (!tool?.parameters?.properties) return rawParamName;
+
+		const knownParams = Object.keys(tool.parameters.properties);
+
+		// 1. Exact match
+		if (knownParams.includes(rawParamName)) {
+			return rawParamName;
+		}
+
+		// 2. Suffix match — "uery" matches "query", "ount" matches "count"
+		const suffixMatches = knownParams.filter(
+			(p) => p.endsWith(rawParamName) && rawParamName.length >= 3,
+		);
+		if (suffixMatches.length === 1) {
+			log.info(
+				`NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${suffixMatches[0]}" (suffix match)`,
+			);
+			return suffixMatches[0];
+		}
+
+		// 3. Containment match — raw name contains a known param or vice versa
+		//    Handles cases like "ave_wuery" where the model garbles across the name.
+		//    Find the known param with the longest common subsequence in the raw name.
+		const containmentMatches = knownParams.filter(
+			(p) => rawParamName.includes(p) || p.includes(rawParamName),
+		);
+		if (containmentMatches.length === 1) {
+			log.info(
+				`NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${containmentMatches[0]}" (containment match)`,
+			);
+			return containmentMatches[0];
+		}
+
+		// 4. Best suffix overlap — find the param that shares the longest suffix with rawParamName
+		//    e.g., "ave_wuery" shares no direct suffix with "query", but we can check
+		//    if the raw name ends with a significant portion of any known param.
+		let bestMatch = "";
+		let bestOverlap = 0;
+		for (const param of knownParams) {
+			// Check how many trailing characters of rawParamName match trailing characters of param
+			let overlap = 0;
+			const minLen = Math.min(rawParamName.length, param.length);
+			for (let i = 1; i <= minLen; i++) {
+				if (rawParamName[rawParamName.length - i] === param[param.length - i]) {
+					overlap++;
+				} else {
+					break;
+				}
+			}
+			// Require at least 3 chars overlap and >50% of the shorter name
+			if (overlap > bestOverlap && overlap >= 3 && overlap > minLen * 0.5) {
+				bestOverlap = overlap;
+				bestMatch = param;
+			}
+		}
+		if (bestMatch) {
+			log.info(
+				`NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${bestMatch}" (suffix overlap: ${bestOverlap} chars)`,
+			);
+			return bestMatch;
+		}
+
+		// 5. Levenshtein distance — catch severely garbled names like "ave_wuery" → "query".
+		//    Accept if edit distance is ≤60% of the longer name's length. High tolerance is safe
+		//    because the param namespace is small (typically 3-8 params per tool), so false
+		//    positives are unlikely. Also requires the best match to be clearly better than runner-up.
+		let bestLevMatch = "";
+		let bestLevDistance = Number.POSITIVE_INFINITY;
+		let secondBestDistance = Number.POSITIVE_INFINITY;
+		for (const param of knownParams) {
+			const distance = this.levenshteinDistance(rawParamName, param);
+			const maxLen = Math.max(rawParamName.length, param.length);
+			if (distance < bestLevDistance && distance <= Math.ceil(maxLen * 0.6)) {
+				secondBestDistance = bestLevDistance;
+				bestLevDistance = distance;
+				bestLevMatch = param;
+			} else if (distance < secondBestDistance) {
+				secondBestDistance = distance;
+			}
+		}
+		// Only accept if there's a clear winner (best is at least 2 edits better than runner-up)
+		if (bestLevMatch && (secondBestDistance - bestLevDistance >= 2 || knownParams.length <= 2)) {
+			log.info(
+				`NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${bestLevMatch}" (edit distance: ${bestLevDistance})`,
+			);
+			return bestLevMatch;
+		}
+
+		log.warn(
+			`NovelAI GLM: Could not match param name "${rawParamName}" to any known parameter of "${functionName}". Known params: [${knownParams.join(", ")}]`,
+		);
+		return rawParamName;
+	}
+
+	/**
+	 * Compute the Levenshtein (edit) distance between two strings.
+	 * Used for fuzzy matching garbled parameter names from GLM output.
+	 *
+	 * @param a - First string
+	 * @param b - Second string
+	 * @returns Minimum number of single-character edits (insert, delete, substitute) to transform a into b
+	 */
+	private levenshteinDistance(a: string, b: string): number {
+		const m = a.length;
+		const n = b.length;
+
+		// Use single-row optimization (O(min(m,n)) space)
+		const prev = new Array<number>(n + 1);
+		for (let j = 0; j <= n; j++) prev[j] = j;
+
+		for (let i = 1; i <= m; i++) {
+			let prevDiag = prev[0];
+			prev[0] = i;
+			for (let j = 1; j <= n; j++) {
+				const temp = prev[j];
+				if (a[i - 1] === b[j - 1]) {
+					prev[j] = prevDiag;
+				} else {
+					prev[j] = 1 + Math.min(prevDiag, prev[j - 1], prev[j]);
+				}
+				prevDiag = temp;
+			}
+		}
+
+		return prev[n];
 	}
 
 	private getToolParamType(

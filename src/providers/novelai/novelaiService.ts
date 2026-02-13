@@ -11,7 +11,18 @@ import { log } from "@/utils/misc/logger";
 // =============================================
 
 const NOVELAI_API_BASE_URL = "https://text.novelai.net";
-const REQUEST_TIMEOUT = 60; // 60 seconds (NovelAI can be slow)
+/** Default timeout for NovelAI API requests in milliseconds */
+const REQUEST_TIMEOUT = Number.parseInt(
+	process.env.NOVELAI_REQUEST_TIMEOUT_MS || "60000",
+	10,
+);
+
+/** Per-read inactivity timeout for streaming — if no data arrives within this window, abort.
+ *  Prevents indefinite hangs when NAI's server stops sending chunks mid-stream. */
+const STREAM_READ_TIMEOUT_MS = Number.parseInt(
+	process.env.NOVELAI_STREAM_READ_TIMEOUT_MS || "30000",
+	10,
+);
 
 // =============================================
 // Types
@@ -188,7 +199,7 @@ export function getGlmParameters(): NovelAIParameters {
 	return {
 		max_length: 600, // Higher per-chunk budget to reduce continuation attempts (API still caps ~150 tokens)
 		min_length: 1,
-		temperature: 1.2, // GLM 4.6 default — higher than old 0.75 for more natural output
+		temperature: 1.0, // GLM 4.6 default — balanced between natural output and tool call precision
 		top_k: 40,
 		top_p: 0.95,
 		top_a: 1,
@@ -226,18 +237,18 @@ export function convertTemperatureToNovelAI(
 		return geminiTemp - 0.15;
 	}
 
-	// glm-4-6: Piecewise linear mapping (recentered around 1.2 default)
-	// Low range:  [1.0, 1.5] gemini → [0.8, 1.2] glm
-	// High range: [1.5, 2.0] gemini → [1.2, 1.8] glm
+	// glm-4-6: Piecewise linear mapping (recentered around 1.0 default)
+	// Low range:  [1.0, 1.5] gemini → [0.6, 1.0] glm
+	// High range: [1.5, 2.0] gemini → [1.0, 1.6] glm
 	if (geminiTemp <= 1.5) {
-		// Below or at Gemini default: interpolate between 0.8 and 1.2
-		// slope = (1.2 - 0.8) / (1.5 - 1.0) = 0.8
-		return 0.8 + (geminiTemp - 1.0) * 0.8;
+		// Below or at Gemini default: interpolate between 0.6 and 1.0
+		// slope = (1.0 - 0.6) / (1.5 - 1.0) = 0.8
+		return 0.6 + (geminiTemp - 1.0) * 0.8;
 	}
 
-	// Above Gemini default: interpolate between 1.2 and 1.8
-	// slope = (1.8 - 1.2) / (2.0 - 1.5) = 1.2
-	return 1.2 + (geminiTemp - 1.5) * 1.2;
+	// Above Gemini default: interpolate between 1.0 and 1.6
+	// slope = (1.6 - 1.0) / (2.0 - 1.5) = 1.2
+	return 1.0 + (geminiTemp - 1.5) * 1.2;
 }
 
 /**
@@ -455,14 +466,30 @@ async function* novelaiGenerateStreamOpenAI(
 			return;
 		}
 
-		// Read SSE stream
+		// Read SSE stream with per-read inactivity timeout.
+		// NAI's server sometimes stops sending chunks mid-stream without closing
+		// the connection. Without this timeout, reader.read() blocks indefinitely.
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = "";
 
 		try {
 			while (true) {
-				const { done, value } = await reader.read();
+				// Race the read against an inactivity timeout to prevent indefinite hangs.
+				// The timer is cleared after each successful read to avoid leaking timers.
+				let readTimer: ReturnType<typeof setTimeout> | undefined;
+				const readResult = await Promise.race([
+					reader.read(),
+					new Promise<never>((_, reject) => {
+						readTimer = setTimeout(
+							() => reject(new Error(`NovelAI stream read timed out after ${STREAM_READ_TIMEOUT_MS}ms of inactivity`)),
+							STREAM_READ_TIMEOUT_MS,
+						);
+					}),
+				]);
+				if (readTimer) clearTimeout(readTimer);
+
+				const { done, value } = readResult;
 
 				if (done) {
 					log.info("NovelAI OpenAI stream complete");
@@ -526,6 +553,14 @@ async function* novelaiGenerateStreamOpenAI(
 				yield {
 					error: "Request timed out",
 				};
+			} else if (error.message.includes("stream read timed out")) {
+				// Per-read inactivity timeout — NAI stopped sending data mid-stream.
+				// Yield a final chunk so the stream adapter can flush any buffered text
+				// (e.g., incomplete sentence trailing buffer) and terminate cleanly.
+				log.warn(
+					`NovelAI OpenAI: ${error.message} — yielding final chunk to flush buffers`,
+				);
+				yield { final: true };
 			} else {
 				log.error("NovelAI OpenAI streaming error:", error);
 				yield {
@@ -594,62 +629,84 @@ async function* novelaiGenerateStreamNative(
 			return;
 		}
 
-		// Parse SSE stream
+		// Parse SSE stream with per-read inactivity timeout
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = "";
 
-		while (true) {
-			const { done, value } = await reader.read();
+		try {
+			while (true) {
+				let readTimer: ReturnType<typeof setTimeout> | undefined;
+				const readResult = await Promise.race([
+					reader.read(),
+					new Promise<never>((_, reject) => {
+						readTimer = setTimeout(
+							() => reject(new Error(`NovelAI stream read timed out after ${STREAM_READ_TIMEOUT_MS}ms of inactivity`)),
+							STREAM_READ_TIMEOUT_MS,
+						);
+					}),
+				]);
+				if (readTimer) clearTimeout(readTimer);
 
-			if (done) {
-				log.info("NovelAI stream completed");
-				yield { final: true };
-				break;
-			}
+				const { done, value } = readResult;
 
-			// Decode chunk and add to buffer
-			buffer += decoder.decode(value, { stream: true });
-
-			// Process complete SSE messages (lines ending with \n\n)
-			const lines = buffer.split("\n");
-			buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-			for (const line of lines) {
-				// Skip empty lines and comments
-				if (!line.trim() || line.startsWith(":")) {
-					continue;
+				if (done) {
+					log.info("NovelAI stream completed");
+					yield { final: true };
+					break;
 				}
 
-				// Parse SSE data lines
-				if (line.startsWith("data: ")) {
-					const data = line.slice(6); // Remove "data: " prefix
+				// Decode chunk and add to buffer
+				buffer += decoder.decode(value, { stream: true });
 
-					try {
-						const parsed = JSON.parse(data);
+				// Process complete SSE messages (lines ending with \n\n)
+				const lines = buffer.split("\n");
+				buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
-						// NovelAI sends tokens as strings in the response
-						if (typeof parsed === "string") {
-							yield { token: parsed };
-						} else if (parsed.token) {
-							yield { token: parsed.token };
-						} else if (parsed.error) {
-							yield { error: parsed.error };
-							return;
+				for (const line of lines) {
+					// Skip empty lines and comments
+					if (!line.trim() || line.startsWith(":")) {
+						continue;
+					}
+
+					// Parse SSE data lines
+					if (line.startsWith("data: ")) {
+						const data = line.slice(6); // Remove "data: " prefix
+
+						try {
+							const parsed = JSON.parse(data);
+
+							// NovelAI sends tokens as strings in the response
+							if (typeof parsed === "string") {
+								yield { token: parsed };
+							} else if (parsed.token) {
+								yield { token: parsed.token };
+							} else if (parsed.error) {
+								yield { error: parsed.error };
+								return;
+							}
+						} catch (_parseError) {
+							log.warn(`Failed to parse NovelAI SSE data: ${data}`);
+							// Yield raw data if JSON parsing fails
+							yield { token: data };
 						}
-					} catch (_parseError) {
-						log.warn(`Failed to parse NovelAI SSE data: ${data}`);
-						// Yield raw data if JSON parsing fails
-						yield { token: data };
 					}
 				}
 			}
+		} finally {
+			reader.releaseLock();
 		}
 	} catch (error) {
 		if (error instanceof Error) {
 			if (error.name === "AbortError") {
 				log.error("NovelAI streaming timed out");
 				yield { error: "Request timed out" };
+			} else if (error.message.includes("stream read timed out")) {
+				// Per-read inactivity timeout — NAI stopped sending data mid-stream
+				log.warn(
+					`NovelAI Native: ${error.message} — yielding final chunk to flush buffers`,
+				);
+				yield { final: true };
 			} else {
 				log.error("NovelAI streaming failed:", error);
 				yield { error: error.message };
