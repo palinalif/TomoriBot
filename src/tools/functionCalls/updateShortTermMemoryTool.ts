@@ -45,11 +45,15 @@ export class UpdateShortTermMemoryTool extends BaseTool {
 	};
 
 	/**
-	 * Check if this tool is available for a given provider
-	 * Available for all providers that support tools
+	 * Check if this tool is available for a given provider.
+	 * Disabled for NovelAI — GLM 4.6's limited token budget (~2800 tokens) makes
+	 * short-term memory updates impractical; the tool definition and STM prompts
+	 * consume tokens better spent on core conversation context.
+	 * @param provider - LLM provider name
+	 * @returns True if provider supports short-term memory updates
 	 */
-	isAvailableFor(_provider: string): boolean {
-		// Available for all tool-calling models
+	isAvailableFor(provider: string): boolean {
+		if (provider === "novelai") return false;
 		return true;
 	}
 

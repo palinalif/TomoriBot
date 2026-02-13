@@ -100,8 +100,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 	private static readonly SYSTEM_INSTRUCTION_TAGS_TOOLING: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_FUNCTION_GUIDE,
-		ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
-		ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
+		// REMOVED: KNOWLEDGE_SERVER_EMOJIS, KNOWLEDGE_SERVER_STICKERS — GLM 4.6 is text-only
+		// and cannot use emojis/stickers. Omitting saves significant tokens toward the ~2800
+		// token quality threshold.
 	];
 
 	private toolsEnabled = false;

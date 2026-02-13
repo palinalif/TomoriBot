@@ -98,12 +98,83 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 
 		const memoryIdArg = args.memory_id;
 		const memoryContentArg = args.memory_content;
-		const targetUserDiscordIdArg = args.target_user_discord_id as
+		let targetUserDiscordIdArg = args.target_user_discord_id as
 			| string
 			| undefined;
-		const targetUserNicknameArg = args.target_user_nickname as
+		let targetUserNicknameArg = args.target_user_nickname as
 			| string
 			| undefined;
+
+		// NovelAI GLM recovery: resolve missing or garbled user params from context.
+		// GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
+		// (e.g., last few digits off). When the model is clearly trying to update a personal
+		// memory about the message author, resolve from context instead of failing.
+		if (context.message?.author && (targetUserDiscordIdArg || targetUserNicknameArg)) {
+			const authorId = context.message.author.id;
+			const guildMember =
+				context.message.guild?.members.cache.get(authorId);
+			const authorDisplayName =
+				guildMember?.displayName ?? context.message.author.username;
+
+			// 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
+			if (targetUserDiscordIdArg && targetUserDiscordIdArg !== authorId) {
+				const guild = context.message.guild;
+				if (guild) {
+					const exactMember = guild.members.cache.get(
+						targetUserDiscordIdArg,
+					);
+					if (!exactMember) {
+						try {
+							const idDiff =
+								BigInt(targetUserDiscordIdArg) > BigInt(authorId)
+									? BigInt(targetUserDiscordIdArg) -
+										BigInt(authorId)
+									: BigInt(authorId) -
+										BigInt(targetUserDiscordIdArg);
+							if (idDiff < 1000n && idDiff > 0n) {
+								log.info(
+									`Update memory tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${authorId}" (diff: ${idDiff}, likely message author)`,
+								);
+								targetUserDiscordIdArg = authorId;
+							}
+						} catch {
+							// BigInt parsing failed — ID contains non-numeric characters, skip fuzzy match
+						}
+					}
+				}
+			}
+
+			// 2. Auto-fill missing target_user_nickname from context
+			if (
+				!targetUserNicknameArg?.trim() &&
+				targetUserDiscordIdArg === authorId
+			) {
+				log.info(
+					`Update memory tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
+				);
+				targetUserNicknameArg = authorDisplayName;
+			}
+
+			// 3. Auto-fill missing target_user_discord_id if nickname matches the author
+			if (
+				!targetUserDiscordIdArg?.trim() &&
+				targetUserNicknameArg?.trim()
+			) {
+				const providedLower = targetUserNicknameArg.toLowerCase();
+				const authorNameLower = authorDisplayName.toLowerCase();
+				const authorUsernameLower =
+					context.message.author.username.toLowerCase();
+				if (
+					providedLower === authorNameLower ||
+					providedLower === authorUsernameLower
+				) {
+					log.info(
+						`Update memory tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
+					);
+					targetUserDiscordIdArg = authorId;
+				}
+			}
+		}
 
 		if (
 			typeof memoryIdArg !== "number" ||

@@ -3,6 +3,7 @@
  * Allows the AI to pin selected Discord messages in the channel for important information or "pins of shame"
  */
 
+import type { Message } from "discord.js";
 import { log } from "../../utils/misc/logger";
 import {
 	BaseTool,
@@ -75,7 +76,7 @@ export class PinMessageTool extends BaseTool {
 			};
 		}
 
-		const messageId = args.message_id as string;
+		let messageId = args.message_id as string;
 
 		// 3. Validate message ID format (Discord snowflake pattern)
 		if (!/^\d{17,20}$/.test(messageId)) {
@@ -100,7 +101,37 @@ export class PinMessageTool extends BaseTool {
 			});
 
 			// 5. Check if the message ID exists in recent messages
-			const targetMessage = recentMessages.get(messageId);
+			let targetMessage = recentMessages.get(messageId);
+
+			// NovelAI GLM recovery: if exact match fails, try BigInt fuzzy match against recent messages.
+			// GLM often garbles the last few digits of Discord snowflake IDs due to token-level
+			// sampling noise. Find the closest matching message ID within a small numeric distance.
+			if (!targetMessage) {
+				try {
+					const targetBigInt = BigInt(messageId);
+					let bestMatch: Message<true> | undefined ;
+					let bestDiff = 1000n; // Max acceptable numeric distance
+					for (const [id, msg] of recentMessages) {
+						const diff =
+							targetBigInt > BigInt(id)
+								? targetBigInt - BigInt(id)
+								: BigInt(id) - targetBigInt;
+						if (diff < bestDiff && diff > 0n) {
+							bestDiff = diff;
+							bestMatch = msg;
+						}
+					}
+					if (bestMatch) {
+						log.info(
+							`PinMessageTool: Fuzzy-matched garbled message ID "${messageId}" → "${bestMatch.id}" (diff: ${bestDiff})`,
+						);
+						messageId = bestMatch.id;
+						targetMessage = bestMatch;
+					}
+				} catch {
+					// BigInt parsing failed — messageId contains non-numeric characters, skip fuzzy match
+				}
+			}
 
 			if (!targetMessage) {
 				// Message not found in recent messages

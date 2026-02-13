@@ -58,13 +58,13 @@ export class PeekProfilePictureTool extends BaseTool {
 	private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
 
 	/**
-	 * Check if profile picture tool is available for the given provider
-	 * This tool requires providers with image processing capabilities
-	 * @param _provider - LLM provider name (unused - availability based on model capabilities)
-	 * @returns True for all providers (actual check happens in isAvailableForContext)
+	 * Check if profile picture tool is available for the given provider.
+	 * Disabled for NovelAI — GLM 4.6 is text-only with no image/vision capabilities.
+	 * @param provider - LLM provider name
+	 * @returns True if provider supports image analysis (actual vision check in isAvailableForContext)
 	 */
-	isAvailableFor(_provider: string): boolean {
-		// Provider-agnostic, but requires vision capability check in isAvailableForContext
+	isAvailableFor(provider: string): boolean {
+		if (provider === "novelai") return false;
 		return true;
 	}
 

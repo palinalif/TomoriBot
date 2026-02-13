@@ -131,8 +131,8 @@ export class ReminderTool extends BaseTool {
 
 		// Extract arguments
 		const reminderPurposeArg = args.reminder_purpose as string;
-		const targetUserNicknameArg = args.target_user_nickname as string;
-		const targetUserDiscordIdArg = args.target_user_discord_id as string;
+		let targetUserNicknameArg = args.target_user_nickname as string;
+		let targetUserDiscordIdArg = args.target_user_discord_id as string;
 		const reminderTimeArg = args.reminder_time as string | undefined;
 		const minutesFromNowArg = args.minutes_from_now as number | undefined;
 		const hoursFromNowArg = args.hours_from_now as number | undefined;
@@ -142,7 +142,105 @@ export class ReminderTool extends BaseTool {
 			| number
 			| undefined;
 		const selfReminderArg = args.self_reminder as boolean | undefined;
-		const requestedChannelIdArg = args.channel_id as string | undefined;
+		let requestedChannelIdArg = args.channel_id as string | undefined;
+
+		// NovelAI GLM recovery: resolve missing or garbled user/channel params from context.
+		// GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
+		// (e.g., last few digits off). When the model is clearly trying to target the message
+		// author, resolve from context instead of failing.
+		if (context.message?.author && selfReminderArg !== true) {
+			const authorId = context.message.author.id;
+			const guildMember =
+				context.message.guild?.members.cache.get(authorId);
+			const authorDisplayName =
+				guildMember?.displayName ?? context.message.author.username;
+
+			// 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
+			//    GLM often gets IDs wrong by a few digits due to token-level sampling noise.
+			if (targetUserDiscordIdArg && targetUserDiscordIdArg !== authorId) {
+				const guild = context.message.guild;
+				if (guild) {
+					const exactMember = guild.members.cache.get(
+						targetUserDiscordIdArg,
+					);
+					if (!exactMember) {
+						// ID doesn't match anyone — check if it's close to the message author's ID.
+						// Use BigInt for comparison since Discord snowflake IDs exceed Number.MAX_SAFE_INTEGER.
+						try {
+							const idDiff =
+								BigInt(targetUserDiscordIdArg) > BigInt(authorId)
+									? BigInt(targetUserDiscordIdArg) -
+										BigInt(authorId)
+									: BigInt(authorId) -
+										BigInt(targetUserDiscordIdArg);
+							if (idDiff < 1000n && idDiff > 0n) {
+								log.info(
+									`Reminder tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${authorId}" (diff: ${idDiff}, likely message author)`,
+								);
+								targetUserDiscordIdArg = authorId;
+							}
+						} catch {
+							// BigInt parsing failed — ID contains non-numeric characters, skip fuzzy match
+						}
+					}
+				}
+			}
+
+			// 2. Auto-fill missing target_user_nickname from context
+			if (
+				!targetUserNicknameArg?.trim() &&
+				targetUserDiscordIdArg === authorId
+			) {
+				log.info(
+					`Reminder tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
+				);
+				targetUserNicknameArg = authorDisplayName;
+			}
+
+			// 3. Auto-fill missing target_user_discord_id if nickname matches the author
+			if (
+				!targetUserDiscordIdArg?.trim() &&
+				targetUserNicknameArg?.trim()
+			) {
+				const providedLower = targetUserNicknameArg.toLowerCase();
+				const authorNameLower = authorDisplayName.toLowerCase();
+				const authorUsernameLower =
+					context.message.author.username.toLowerCase();
+				if (
+					providedLower === authorNameLower ||
+					providedLower === authorUsernameLower
+				) {
+					log.info(
+						`Reminder tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
+					);
+					targetUserDiscordIdArg = authorId;
+				}
+			}
+
+			// 4. Fuzzy-match channel_id if provided but doesn't resolve to a valid channel
+			if (requestedChannelIdArg?.trim()) {
+				const currentChannelId = context.channel.id;
+				if (requestedChannelIdArg !== currentChannelId) {
+					try {
+						const idDiff =
+							BigInt(requestedChannelIdArg) >
+							BigInt(currentChannelId)
+								? BigInt(requestedChannelIdArg) -
+									BigInt(currentChannelId)
+								: BigInt(currentChannelId) -
+									BigInt(requestedChannelIdArg);
+						if (idDiff < 1000n && idDiff > 0n) {
+							log.info(
+								`Reminder tool: Correcting garbled channel ID "${requestedChannelIdArg}" → "${currentChannelId}" (diff: ${idDiff}, likely current channel)`,
+							);
+							requestedChannelIdArg = currentChannelId;
+						}
+					} catch {
+						// BigInt parsing failed, skip fuzzy match
+					}
+				}
+			}
+		}
 
 		// Import database functions and utilities
 		const { loadUserRow } = await import("../../utils/db/dbRead");

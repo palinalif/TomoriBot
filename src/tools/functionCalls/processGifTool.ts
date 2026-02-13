@@ -55,13 +55,14 @@ export class ProcessGifTool extends BaseTool {
 	};
 
 	/**
-	 * Check if GIF processing tool is available for the given provider
-	 * Only available in development (GUARDS_ENABLED = false)
+	 * Check if GIF processing tool is available for the given provider.
+	 * Only available in development (GUARDS_ENABLED = false).
+	 * Disabled for NovelAI — GLM 4.6 is text-only with no image/vision capabilities.
 	 *
-	 * @param _provider - LLM provider name (unused - availability based on model capabilities and environment)
-	 * @returns True only if not in production (actual model check happens in isAvailableForContext)
+	 * @param provider - LLM provider name
+	 * @returns True only if not in production and provider supports vision
 	 */
-	isAvailableFor(_provider: string): boolean {
+	isAvailableFor(provider: string): boolean {
 		// Block in production to prevent memory exhaustion
 		if (GUARDS_ENABLED) {
 			log.info(
@@ -70,7 +71,7 @@ export class ProcessGifTool extends BaseTool {
 			return false;
 		}
 
-		// Provider-agnostic, but requires vision capability check in isAvailableForContext
+		if (provider === "novelai") return false;
 		return true;
 	}
 

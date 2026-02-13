@@ -503,7 +503,13 @@ async function buildShortTermMemoryContext(
 		// Only shown for tool-calling models
 		// - Summary (if exists): Goes with other memories (middle of context)
 		// - Create prompt (if no summary): Goes at end as instruction
+		// NOTE: STM tool instructions are suppressed for NovelAI — GLM 4.6's limited token
+		// budget (~2800 tokens) makes the update_short_term_memory tool impractical. The
+		// summary data itself is still included as context when available.
 		if (tomoriState?.llm?.has_tools) {
+			const isStmToolAvailable =
+				tomoriState.llm.llm_provider !== "novelai";
+
 			// Persona-scoped: each persona only sees its own same-channel STM
 			const sameChannelMemory = getShortTermMemoryForChannel(
 				triggeringUserId,
@@ -534,30 +540,35 @@ async function buildShortTermMemoryContext(
 				});
 
 				// Add the HINT immediately after the summary (not at the end)
-				const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic]`;
+				// Only when the STM tool is available for this provider
+				if (isStmToolAvailable) {
+					const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic]`;
 
-				memoryItems.push({
-					role: "user",
-					parts: [
-						{
-							type: "text",
-							text: await convertMentions(
-								hintText,
-								client,
-								currentServerId,
-								triggererName,
-								botName,
-								personalMemoriesEnabled,
-							),
-						},
-					],
-					metadataTag: ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY,
-				});
+					memoryItems.push({
+						role: "user",
+						parts: [
+							{
+								type: "text",
+								text: await convertMentions(
+									hintText,
+									client,
+									currentServerId,
+									triggererName,
+									botName,
+									personalMemoriesEnabled,
+								),
+							},
+						],
+						metadataTag: ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY,
+					});
+				}
 			} else if (
+				isStmToolAvailable &&
 				sameChannelMemory &&
 				sameChannelMemory.messages.length >= MIN_MESSAGES_FOR_SUMMARY
 			) {
 				// NO SUMMARY but enough messages - Create prompt at end
+				// Only when the STM tool is available for this provider
 				const createText =
 					"You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels.";
 
