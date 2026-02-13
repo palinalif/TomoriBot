@@ -530,6 +530,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			context.currentTurnModelParts.push({ text: textContent });
 		}
 
+		// Suppress text output if flagged (NAI tool retry mode — model state is kept coherent above but nothing reaches Discord)
+		if (context.suppressTextOutput) {
+			return;
+		}
+
 		// Add to buffer
 		state.buffer += textContent;
 		metrics.totalCharacters += textContent.length;

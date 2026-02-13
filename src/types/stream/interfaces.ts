@@ -138,6 +138,9 @@ export interface StreamContext {
 	// Optional output prefill for hybrid prefix streaming
 	outputPrefill?: string;
 	outputPrefillState?: { sent: boolean };
+
+	// NAI text suppression: keeps model state coherent but suppresses Discord output during tool retries
+	suppressTextOutput?: boolean;
 }
 
 /**

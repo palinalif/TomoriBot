@@ -59,6 +59,7 @@ export interface StreamingContext {
 		handle: string;
 		userId: string;
 	}>; // Additional mention handles to force-resolve (e.g., reminder recipients)
+	suppressTextOutput?: boolean; // Suppress text output to Discord (NAI tool retry mode — keeps model state coherent but hides repeated text)
 }
 
 /**
@@ -137,6 +138,7 @@ export interface Tool {
 	// Optional tool configuration
 	requiresPermissions?: string[];
 	requiresFeatureFlag?: string;
+	requiresFollowUp?: boolean; // If true, always allow follow-up generation after tool execution (e.g., search/fetch tools)
 }
 
 /**

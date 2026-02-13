@@ -162,6 +162,11 @@ export default {
 		max_iterations_streaming_description:
 			"I got stuck in a thinking loop and couldn't complete the request, use `/tool refresh` if this issue persists.",
 
+		// NAI tool retry exhaustion
+		nai_tool_retry_exhausted_title: "Tool Error",
+		nai_tool_retry_exhausted_description:
+			"A tool failed multiple times and couldn't complete the request. Please try again or use `/tool refresh` if this issue persists.",
+
 		// Generic no response warning (for unknown status or unhandled cases)
 		no_response_title: `No Response`,
 		no_response_description: `I didn't respond - this may be due to an empty response or timeout from the AI.`,

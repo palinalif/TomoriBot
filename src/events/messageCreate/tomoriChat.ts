@@ -115,6 +115,10 @@ const WEBHOOK_ERROR_COOLDOWN_MS = 10 * 60 * 1000;
 const webhookErrorCooldowns = new Map<string, number>();
 
 const MAX_FUNCTION_CALL_ITERATIONS = 8; // Safety break for function call loops
+const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
+	process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3",
+	10,
+); // Max consecutive tool failures before showing error embed (NAI GLM only)
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 const DEFAULT_SELF_REPLY_LIMIT = 3;
 const MAX_SELF_REPLY_LIMIT = 10;
@@ -3730,6 +3734,7 @@ export default async function tomoriChat(
 					let finalAccumulatedText = ""; // Track accumulated text from successful stream
 					const accumulatedStreamedModelParts: Array<Record<string, unknown>> =
 						[];
+					let naiConsecutiveToolFailures = 0; // Tracks consecutive tool failures for NAI GLM retry logic (Case 2)
 
 					for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
 						log.info(
@@ -4640,19 +4645,41 @@ export default async function tomoriChat(
 											`Tool execution failed for ${funcName}: ${toolResult.error}`,
 										);
 
-										// GLM 4.6 fail-gracefully: if the model already streamed visible text
-										// to Discord before calling a tool that failed, disable tools for the
-										// next retry so it can generate a graceful closing message without
-										// getting stuck in a retry loop. GLM is unstable with tool args and
-										// will repeat the same failing call indefinitely otherwise.
-										const textAlreadySent = (streamResult.accumulatedText ?? "").trim().length > 0;
+										// Case 2: NAI GLM tool failure with text already sent
+									// Suppress text output on retry so the model can re-attempt the tool
+									// without repeating the pre-tool text to Discord. After exceeding the
+									// retry threshold, show an error embed and end the turn.
+									const textAlreadySent = (streamResult.accumulatedText ?? "").trim().length > 0;
 										if (
 											textAlreadySent &&
 											provider.getInfo().name === "novelai"
 										) {
-											streamingContext.disableAllTools = true;
+											naiConsecutiveToolFailures++;
+											if (naiConsecutiveToolFailures >= NAI_TOOL_FAILURE_RETRY_THRESHOLD) {
+												log.warn(
+													`NovelAI GLM: Tool "${funcName}" failed ${naiConsecutiveToolFailures} consecutive times after text was sent — showing error embed and ending turn`,
+												);
+												await sendStandardEmbed(
+													channel,
+													locale,
+													{
+														color: ColorCode.ERROR,
+														titleKey: "genai.nai_tool_retry_exhausted_title",
+														descriptionKey: "genai.nai_tool_retry_exhausted_description",
+													},
+													{
+														webhook: personaWebhook ?? undefined,
+														personaUsername,
+														personaAvatarUrl,
+													},
+												);
+												finalStreamCompleted = true;
+												break;
+											}
+											// Suppress text on next iteration so repeated pre-tool text isn't shown
+											streamingContext.suppressTextOutput = true;
 											log.info(
-												`NovelAI GLM: Tool "${funcName}" failed after text was already sent to Discord — disabling tools for next iteration to prevent retry loop`,
+												`NovelAI GLM: Tool "${funcName}" failed (attempt ${naiConsecutiveToolFailures}/${NAI_TOOL_FAILURE_RETRY_THRESHOLD}) — suppressing text output for retry`,
 											);
 										}
 									}
@@ -4694,13 +4721,54 @@ export default async function tomoriChat(
 
 									functionInteractionHistory.push(historyEntry);
 
-									// 4. Early-stop: If text was already streamed to Discord before a short-term
-									// memory update, the streamed text IS the complete response — skip continuation
-									// to prevent the model from producing redundant follow-up text.
+									// 4. NAI GLM follow-up control: decide whether to allow, suppress,
+									// or skip the next generation based on whether text was already sent
+									// and whether the tool requires a follow-up (e.g., search/fetch).
 									if (
+										provider.getInfo().name === "novelai" &&
+										personaAccumulatedParts.length > 0
+									) {
+										// STM is always a silent tool — end the turn immediately (unchanged)
+										if (funcName === "update_short_term_memory") {
+											log.info(
+												"Short-term memory updated after text was already streamed. Ending persona turn to prevent repetition.",
+											);
+											finalStreamCompleted = true;
+											break;
+										}
+
+										if (toolResult.success) {
+											// Reset failure counter on success
+											naiConsecutiveToolFailures = 0;
+
+											// Check if this tool needs a follow-up to present results
+											const needsFollowUp = await ToolRegistry.requiresFollowUp(
+												funcName,
+												"novelai",
+											);
+
+											if (needsFollowUp) {
+												// Case 4: Search/fetch tool succeeded with pre-text — allow follow-up
+												// Clear suppression in case it was set by a prior failed attempt
+												streamingContext.suppressTextOutput = false;
+												log.info(
+													`NovelAI GLM: Tool "${funcName}" requires follow-up — allowing next generation`,
+												);
+											} else {
+												// Case 1: Non-search tool succeeded with pre-text — suppress follow-up
+												log.info(
+													`NovelAI GLM: Tool "${funcName}" succeeded after text was sent — ending turn (no follow-up needed)`,
+												);
+												finalStreamCompleted = true;
+												break;
+											}
+										}
+										// Tool failure with pre-text is handled above in Case 2 block
+									} else if (
 										funcName === "update_short_term_memory" &&
 										personaAccumulatedParts.length > 0
 									) {
+										// Non-NAI providers: keep existing STM early-stop behavior
 										log.info(
 											"Short-term memory updated after text was already streamed. Ending persona turn to prevent repetition.",
 										);

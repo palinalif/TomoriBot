@@ -352,6 +352,29 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	}
 
 	/**
+	 * Check if a tool requires a follow-up generation after execution
+	 * Built-in tools check the `requiresFollowUp` property; MCP tools always return true
+	 * (all MCP tools are search/fetch and need the model to present results)
+	 * @param functionName - Name of the function to check
+	 * @param provider - Provider name for MCP adapter lookup
+	 * @returns Promise<boolean> - True if the tool needs a follow-up generation
+	 */
+	async requiresFollowUp(
+		functionName: string,
+		provider: string,
+	): Promise<boolean> {
+		// 1. Check if it's an MCP function — all MCP tools require follow-up
+		const isMcp = await this.isMCPFunction(functionName, provider);
+		if (isMcp) {
+			return true;
+		}
+
+		// 2. Check built-in tool property
+		const tool = this.getTool(functionName);
+		return tool?.requiresFollowUp ?? false;
+	}
+
+	/**
 	 * Execute a tool by name with given arguments and context
 	 * Now supports both built-in tools and MCP functions seamlessly
 	 * @param toolName - Name of the tool/function to execute
@@ -812,6 +835,13 @@ export async function isMCPFunction(
 	provider: string,
 ): Promise<boolean> {
 	return ToolRegistry.isMCPFunction(functionName, provider);
+}
+
+export async function requiresFollowUp(
+	functionName: string,
+	provider: string,
+): Promise<boolean> {
+	return ToolRegistry.requiresFollowUp(functionName, provider);
 }
 
 export async function getAvailableToolsWithMCP(

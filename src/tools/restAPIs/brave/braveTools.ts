@@ -29,6 +29,7 @@ import {
 abstract class BaseBraveSearchTool extends BaseTool {
 	category = "search" as const;
 	requiresFeatureFlag = "web_search";
+	requiresFollowUp = true; // Search tools always need a follow-up to present results to the user
 
 	// All Brave Search tools are available for all providers
 	isAvailableFor(_provider: string): boolean {

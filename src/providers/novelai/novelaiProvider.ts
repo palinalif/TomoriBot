@@ -407,6 +407,9 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 
 				// Forced mentions (e.g., reminder recipients)
 				forcedMentions: streamingContext?.forcedMentions,
+
+				// NAI text suppression for tool retry mode
+				suppressTextOutput: streamingContext?.suppressTextOutput,
 			};
 
 			// Create the modular streaming components
