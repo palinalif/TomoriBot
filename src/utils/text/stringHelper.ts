@@ -1131,6 +1131,8 @@ export function cleanLLMOutput(
 		.replace(/\n{3,}/g, "\n\n")
 		.replace(/<\|im_end\|>(\s*)$/, "")
 		.replace(/<\|file_separator\|>(\s*)$/, "") // Old Gemini bug when using inline markers
+		// NovelAI GLM 4.6 continuation artifacts — stray think tags that leak across chunk boundaries
+		.replace(/<\/?think>/g, "")
 		// Replace bold/italic markers around angle brackets that can break emoji syntax
 		.replace(/\*\*<(.*?)>\*\*/g, "<$1>") // Bold **<emoji>**
 		.replace(/\*<(.*?)>\*/g, "<$1>") // Italic *<emoji>*

@@ -89,6 +89,8 @@ export interface NovelAIStreamChunk {
 	token?: string;
 	final?: boolean;
 	error?: string;
+	/** Populated from OpenAI-compatible endpoint: "stop", "length", or null */
+	finishReason?: string;
 }
 
 /**
@@ -184,9 +186,9 @@ export function getKayraParameters(): NovelAIParameters {
  */
 export function getGlmParameters(): NovelAIParameters {
 	return {
-		max_length: 150, // Increased from reference for longer responses
+		max_length: 600, // Higher per-chunk budget to reduce continuation attempts (API still caps ~150 tokens)
 		min_length: 1,
-		temperature: 0.75,
+		temperature: 1.2, // GLM 4.6 default — higher than old 0.75 for more natural output
 		top_k: 40,
 		top_p: 0.95,
 		top_a: 1,
@@ -196,12 +198,11 @@ export function getGlmParameters(): NovelAIParameters {
 		repetition_penalty_range: 0,
 		repetition_penalty_slope: 0,
 		repetition_penalty_frequency: 0,
-		repetition_penalty_presence: 0,
+		repetition_penalty_presence: 0.5, // Mild presence penalty to discourage repetitive phrasing
 		cfg_scale: 1,
 		phrase_rep_pen: "medium",
 		use_string: true,
 		stop_sequences: [],
-		// stop_sequences: [[58]], // Character "["
 	};
 }
 
@@ -225,18 +226,18 @@ export function convertTemperatureToNovelAI(
 		return geminiTemp - 0.15;
 	}
 
-	// glm-4-6: Piecewise linear mapping
-	// Low range: [1.0, 1.5] gemini → [0.5, 0.75] glm
-	// High range: [1.5, 2.0] gemini → [0.75, 1.5] glm
+	// glm-4-6: Piecewise linear mapping (recentered around 1.2 default)
+	// Low range:  [1.0, 1.5] gemini → [0.8, 1.2] glm
+	// High range: [1.5, 2.0] gemini → [1.2, 1.8] glm
 	if (geminiTemp <= 1.5) {
-		// Below or at default: interpolate between 0.5 and 0.75
-		// slope = (0.75 - 0.5) / (1.5 - 1.0) = 0.5
-		return 0.5 + (geminiTemp - 1.0) * 0.5;
+		// Below or at Gemini default: interpolate between 0.8 and 1.2
+		// slope = (1.2 - 0.8) / (1.5 - 1.0) = 0.8
+		return 0.8 + (geminiTemp - 1.0) * 0.8;
 	}
 
-	// Above default: interpolate between 0.75 and 1.5
-	// slope = (1.5 - 0.75) / (2.0 - 1.5) = 1.5
-	return 0.75 + (geminiTemp - 1.5) * 1.5;
+	// Above Gemini default: interpolate between 1.2 and 1.8
+	// slope = (1.8 - 1.2) / (2.0 - 1.5) = 1.2
+	return 1.2 + (geminiTemp - 1.5) * 1.2;
 }
 
 /**
@@ -287,6 +288,10 @@ function convertToOpenAIParams(
 		frequency_penalty: naiParams.repetition_penalty_frequency,
 		presence_penalty: naiParams.repetition_penalty_presence,
 		repetition_penalty: naiParams.repetition_penalty,
+		// GLM 4.6 turn boundary stop sequences — these are defensive: the model
+		// rarely emits role tags in completions mode (it generates "Username:" instead),
+		// so speaker detection in the adapter handles the primary turn-stopping logic.
+		stop: ["<|user|>", "<|observation|>", "<|system|>"],
 	};
 }
 
@@ -486,18 +491,21 @@ async function* novelaiGenerateStreamOpenAI(
 
 						try {
 							const chunk = JSON.parse(data) as OpenAIStreamChunk;
+							const finishReason =
+								chunk.choices?.[0]?.finish_reason ?? undefined;
 
 							// Extract text from choices
 							if (chunk.choices?.[0]?.text) {
 								yield {
 									token: chunk.choices[0].text,
-									final: chunk.choices[0].finish_reason !== null,
+									final: finishReason !== null && finishReason !== undefined,
+									finishReason,
 								};
 							}
 
 							// Check if generation is complete
-							if (chunk.choices?.[0]?.finish_reason) {
-								yield { final: true };
+							if (finishReason) {
+								yield { final: true, finishReason };
 								return;
 							}
 						} catch (parseError) {

@@ -24,6 +24,7 @@ import {
 } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
+import { escapeRegExp } from "@/utils/text/stringHelper";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -38,6 +39,7 @@ import {
 	isNovelAIApiKeyError,
 	isNovelAICreditsError,
 	isNovelAIRateLimitError,
+	usesOpenAIEndpoint,
 	type NovelAIGenerationRequest,
 	type NovelAIStreamChunk,
 } from "./novelaiService";
@@ -114,6 +116,28 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	private static readonly TOOL_CALL_TAG_LENGTH =
 		NovelaiStreamAdapter.TOOL_CALL_TAG.length;
 
+	/**
+	 * Whether the current stream is using GLM 4.6 (enables sentence-boundary buffering).
+	 * Set in startStream() based on model type.
+	 */
+	private isGlmModel = false;
+
+	/**
+	 * Sentence-boundary trailing buffer for GLM 4.6.
+	 *
+	 * NAI's ~150-token hard cap often cuts text mid-sentence. Instead of trying
+	 * to continue (which causes garbled artifacts), we hold back text after the
+	 * last sentence boundary and silently drop it when the stream ends.
+	 *
+	 * Only active for GLM 4.6 — Kayra uses generate_until_sentence at the API level.
+	 */
+	private sentenceTrailingBuffer = "";
+
+	/** Regex matching characters that indicate a natural sentence/thought boundary */
+	private static readonly SENTENCE_BOUNDARY_PATTERN =
+		/[.!?*~)\]"'\u300D\u2026\u2014]\s*$/;
+
+
 	private getSystemInstructionTags(includeTools: boolean): ContextItemTag[] {
 		if (!includeTools) {
 			return NovelaiStreamAdapter.SYSTEM_INSTRUCTION_TAGS_BASE;
@@ -127,6 +151,17 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 	/**
 	 * Start streaming from NovelAI's API
+	 *
+	 * For GLM 4.6 (OpenAI endpoint):
+	 * - Uses the official GLM chat template with <|system|>, <|user|>, <|assistant|> tags
+	 * - Single-pass generation — no continuation loop (NAI's ~150-token cap is accepted)
+	 * - Incomplete trailing sentences are silently dropped via sentence-boundary buffering
+	 * - Uses regex speaker detection for turn boundaries (GLM doesn't emit <|user|> tokens)
+	 *
+	 * For Kayra (native endpoint):
+	 * - Uses flat text prompt with "Username: message" format
+	 * - Uses generate_until_sentence for clean endings
+	 * - Uses regex speaker detection for turn boundaries
 	 */
 	async *startStream(
 		config: StreamConfig,
@@ -134,8 +169,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	): AsyncGenerator<RawStreamChunk, void, unknown> {
 		log.info("NovelAIStreamAdapter: Initializing NovelAI streaming");
 
-		// Reset buffer for new stream
+		// Reset buffers for new stream
 		this.generationBuffer = "";
+		this.sentenceTrailingBuffer = "";
 		this.toolDefinitions = this.normalizeToolDefinitions(config.tools ?? []);
 		this.toolsEnabled = this.toolDefinitions.length > 0;
 		this.resetToolParsingState();
@@ -152,21 +188,36 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			);
 		}
 
-		// Assemble context for NovelAI format
-		const basePrompt = this.assembleNovelAIPrompt(
-			context.contextItems,
-			context.tomoriState.tomori_nickname,
-			{
-				toolDefinitions: this.toolDefinitions,
-				functionInteractionHistory: context.functionInteractionHistory,
-			},
-		);
+		const isGlm = usesOpenAIEndpoint(config.model);
+		this.isGlmModel = isGlm;
 
-		// Append bot name at the end to signal it should generate the bot's response
-		// This is the standard NovelAI roleplay format: the prompt should end with "BotName: "
-		const prompt = `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
+		// Build the prompt based on model type
+		let prompt: string;
+		if (isGlm) {
+			// GLM 4.6: Official chat template with role tags and /nothink
+			prompt = this.assembleGlmChatPrompt(
+				context.contextItems,
+				context.tomoriState.tomori_nickname,
+				{
+					toolDefinitions: this.toolDefinitions,
+					functionInteractionHistory: context.functionInteractionHistory,
+				},
+			);
+		} else {
+			// Kayra: Flat text prompt with "Username: message" format
+			const basePrompt = this.assembleNovelAIPrompt(
+				context.contextItems,
+				context.tomoriState.tomori_nickname,
+				{
+					toolDefinitions: this.toolDefinitions,
+					functionInteractionHistory: context.functionInteractionHistory,
+				},
+			);
+			// Append bot name to signal it should generate the bot's response
+			prompt = `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
+		}
 
-		log.info(`Assembled NovelAI prompt. Length: ${prompt.length} characters`);
+		log.info(`Assembled NovelAI prompt (${isGlm ? "GLM" : "Kayra"}). Length: ${prompt.length} characters`);
 
 		// Log the full prompt for debugging
 		log.section("NovelAI Full Prompt");
@@ -175,7 +226,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// Get generation parameters for the model
 		const parameters = getParametersForModel(config.model, config.temperature);
 
-		// Build request (no prefix parameter needed - we already added bot name to prompt)
+		// Build request
 		const request: NovelAIGenerationRequest = {
 			input: prompt,
 			model: config.model,
@@ -186,23 +237,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		this.logSanitizedRequest(request, prompt.length);
 
 		try {
-			// Start streaming
-			const stream = novelaiGenerateStream(request, {
-				apiKey: config.apiKey,
-				timeout: config.inactivityTimeoutMs,
-			});
-
-			// Yield each chunk
-			for await (const chunk of stream) {
-				yield {
-					data: chunk,
-					provider: "novelai",
-					metadata: {
-						timestamp: Date.now(),
-						model: config.model,
-					},
-				};
-			}
+			// Single-pass streaming for both models:
+			// - Kayra: generate_until_sentence handles clean endings
+			// - GLM 4.6: sentence-boundary buffering drops incomplete trailing fragments
+			yield* this.streamSinglePass(request, config);
 		} catch (error) {
 			// Convert NovelAI errors to our format
 			const providerError = this.handleProviderError(error);
@@ -212,6 +250,30 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				metadata: {
 					timestamp: Date.now(),
 					error: true,
+				},
+			};
+		}
+	}
+
+	/**
+	 * Single-pass streaming for Kayra — no continuation loop
+	 */
+	private async *streamSinglePass(
+		request: NovelAIGenerationRequest,
+		config: StreamConfig,
+	): AsyncGenerator<RawStreamChunk, void, unknown> {
+		const stream = novelaiGenerateStream(request, {
+			apiKey: config.apiKey,
+			timeout: config.inactivityTimeoutMs,
+		});
+
+		for await (const chunk of stream) {
+			yield {
+				data: chunk,
+				provider: "novelai",
+				metadata: {
+					timestamp: Date.now(),
+					model: config.model,
 				},
 			};
 		}
@@ -258,9 +320,45 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		// Check for completion
 		if (novelaiChunk.final) {
-			// Clear buffer on completion
+			// For GLM 4.6: check if the sentence trailing buffer has a complete thought.
+			// If it ends at a sentence boundary, flush it before signaling done.
+			// If not (NAI cut off mid-sentence), silently drop it for a clean ending.
+			let finalFlush = "";
+			if (this.isGlmModel && this.sentenceTrailingBuffer.trim()) {
+				if (
+					NovelaiStreamAdapter.SENTENCE_BOUNDARY_PATTERN.test(
+						this.sentenceTrailingBuffer,
+					)
+				) {
+					// Trailing buffer ends at a sentence boundary — it's a complete thought
+					finalFlush = this.sentenceTrailingBuffer;
+				} else {
+					// Incomplete sentence — silently drop it
+					log.info(
+						`NovelAI GLM: Dropping incomplete trailing fragment ` +
+						`(${this.sentenceTrailingBuffer.length} chars): ` +
+						`"${this.sentenceTrailingBuffer.substring(0, 80)}..."`,
+					);
+				}
+			}
+
+			// Clear all buffers on completion
 			this.generationBuffer = "";
+			this.sentenceTrailingBuffer = "";
 			this.resetToolParsingState();
+
+			// If we have a final flush, emit it as text before done
+			if (finalFlush) {
+				// Return text — the orchestrator will get "done" on the next processChunk
+				// call (which won't happen since the stream ended). Instead, we need to
+				// signal both the text and done. Return text here; the stream's own
+				// termination will signal done to the orchestrator.
+				return {
+					type: "text",
+					content: finalFlush,
+				};
+			}
+
 			return {
 				type: "done",
 			};
@@ -282,6 +380,19 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		};
 	}
 
+	/**
+	 * Process visible text with speaker detection and sentence-boundary buffering.
+	 *
+	 * For GLM 4.6: Text is routed through a sentence-boundary-aware trailing buffer.
+	 * Only text up to the last confirmed sentence boundary is emitted to the orchestrator.
+	 * The trailing fragment (potentially incomplete sentence) is held back and silently
+	 * dropped if the stream ends mid-sentence (NAI's ~150-token cap).
+	 *
+	 * For Kayra: Text is passed through directly (generate_until_sentence handles endings).
+	 *
+	 * Both models use regex-based speaker transition detection to stop generation
+	 * when the model starts another character's turn.
+	 */
 	private processVisibleText(text: string): ProcessedChunk {
 		if (!text) {
 			return {
@@ -293,24 +404,97 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// Add to buffer for speaker detection
 		this.generationBuffer += text;
 
-		// Check if we've hit a speaker transition pattern
-		// Pattern: newline(s) followed by text and a colon (e.g., "\n\nUsername:")
+		// Detect speaker transitions — the model is generating another character's turn.
+		// Both Kayra and GLM 4.6 need this: Kayra has no API stop sequences, and GLM
+		// doesn't emit <|user|> tokens in completions mode (it just starts "Username: ...")
 		const speakerPattern = /\n+([^\n:]+):\s*/;
 		const match = this.generationBuffer.match(speakerPattern);
 
 		if (match) {
-			// Found a speaker transition - this means the model is trying to generate
-			// another character's turn. We need to stop here.
+			// Found a speaker transition — stop generation here
 			this.generationBuffer = "";
+			this.sentenceTrailingBuffer = "";
 			return {
 				type: "done",
 			};
 		}
 
+		// For Kayra: pass text through directly (no sentence buffering needed)
+		if (!this.isGlmModel) {
+			return {
+				type: "text",
+				content: text,
+			};
+		}
+
+		// GLM 4.6: Sentence-boundary buffering
+		// Accumulate text in the trailing buffer, then emit everything up to the
+		// last sentence boundary. The remainder stays buffered in case NAI cuts
+		// the output mid-sentence — it gets silently dropped in processChunk on "final".
+		this.sentenceTrailingBuffer += text;
+
+		// Find the last sentence boundary in the buffer
+		const lastBoundaryIndex = this.findLastSentenceBoundary(
+			this.sentenceTrailingBuffer,
+		);
+
+		if (lastBoundaryIndex === -1) {
+			// No sentence boundary found yet — hold everything
+			return {
+				type: "text",
+				content: "",
+			};
+		}
+
+		// Emit text up to and including the boundary, keep the rest buffered
+		const emitText = this.sentenceTrailingBuffer.slice(
+			0,
+			lastBoundaryIndex + 1,
+		);
+		this.sentenceTrailingBuffer = this.sentenceTrailingBuffer.slice(
+			lastBoundaryIndex + 1,
+		);
+
 		return {
 			type: "text",
-			content: text,
+			content: emitText,
 		};
+	}
+
+	/**
+	 * Find the index of the last sentence boundary character in the given text.
+	 *
+	 * Sentence boundaries are characters that typically end a complete thought:
+	 * punctuation (. ! ? …), closing quotes/brackets (" ' ) ] 」), markdown
+	 * formatting (* ~), em dash (—), and newlines.
+	 *
+	 * @param text - Text to scan for sentence boundaries
+	 * @returns Index of the last boundary character, or -1 if none found
+	 */
+	private findLastSentenceBoundary(text: string): number {
+		// Scan backwards for the last sentence-ending character
+		for (let i = text.length - 1; i >= 0; i--) {
+			const char = text[i];
+			if (
+				char === "." ||
+				char === "!" ||
+				char === "?" ||
+				char === "*" ||
+				char === "~" ||
+				char === ")" ||
+				char === "]" ||
+				char === "\"" ||
+				char === "'" ||
+				char === "\u300D" || // 」
+				char === "\u2026" || // …
+				char === "\u2014" || // —
+				char === "\n"
+			) {
+				return i;
+			}
+		}
+
+		return -1;
 	}
 
 	private processTokenWithToolParsing(token: string): ProcessedChunk {
@@ -696,67 +880,63 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		return normalized;
 	}
 
+	/**
+	 * Build tool calling guide using GLM 4.6's official <tools> XML format.
+	 * Matches the Jinja chat template structure from the reference implementation.
+	 *
+	 * @param toolDefinitions - Normalized tool definitions to include
+	 * @returns Formatted tool guide string, or null if no tools
+	 */
 	private buildToolCallingGuide(
 		toolDefinitions: NormalizedToolDefinition[],
 	): string | null {
 		if (!toolDefinitions.length) return null;
 
 		const lines: string[] = [
-			"[System: Tool Calling]",
-			"You can call tools to perform actions or fetch information.",
-			"When you need a tool, respond with ONLY a tool call using this exact format:",
-			"<tool_call>tool_name",
-			"<arg_key>param</arg_key>",
-			"<arg_value>JSON_VALUE</arg_value>",
-			"</tool_call>",
-			"Rules:",
-			"- Do not include extra text outside the tool call when calling a tool.",
-			"- Use valid JSON for each <arg_value> (strings must be quoted).",
-			"- If no tool is needed, respond normally without <tool_call> blocks.",
-			"Available tools:",
+			"# Tools",
+			"",
+			"You may call one or more functions to assist with the user query.",
+			"",
+			"You are provided with function signatures within <tools></tools> XML tags:",
+			"<tools>",
 		];
 
+		// Emit each tool as a JSON object (matching the Jinja template's `tool | tojson`)
 		for (const tool of toolDefinitions) {
-			const description = tool.description?.trim() || "No description provided.";
-			lines.push(`- ${tool.name}: ${description}`);
-
-			const paramSummary = this.formatToolParameters(tool.parameters);
-			if (paramSummary) {
-				lines.push(`  params: ${paramSummary}`);
+			const toolJson: Record<string, unknown> = {
+				name: tool.name,
+			};
+			if (tool.description) {
+				toolJson.description = tool.description;
 			}
+			if (tool.parameters) {
+				toolJson.parameters = tool.parameters;
+			}
+			lines.push(JSON.stringify(toolJson));
 		}
+
+		lines.push("</tools>");
+		lines.push("");
+		lines.push(
+			"For each function call, output the function name and arguments within the following XML format:",
+		);
+		lines.push("<tool_call>{function-name}");
+		lines.push("<arg_key>{arg-key-1}</arg_key>");
+		lines.push("<arg_value>{arg-value-1}</arg_value>");
+		lines.push("<arg_key>{arg-key-2}</arg_key>");
+		lines.push("<arg_value>{arg-value-2}</arg_value>");
+		lines.push("...");
+		lines.push("</tool_call>");
 
 		return lines.join("\n");
 	}
 
-	private formatToolParameters(parameters?: ToolParameterSchema): string | null {
-		if (!parameters?.properties) return null;
 
-		const parts: string[] = [];
-		for (const [name, schema] of Object.entries(parameters.properties)) {
-			let typeLabel: string = schema.type || "string";
-			if (typeLabel === "array" && schema.items?.type) {
-				typeLabel = `array<${schema.items.type}>`;
-			}
-
-			let segment = `${name}: ${typeLabel}`;
-			if (schema.enum?.length) {
-				segment += ` enum=[${schema.enum.join(", ")}]`;
-			}
-			parts.push(segment);
-		}
-
-		if (!parts.length) return null;
-
-		const required =
-			parameters.required && parameters.required.length > 0
-				? ` required=[${parameters.required.join(", ")}]`
-				: "";
-
-		return `{ ${parts.join(", ")} }${required}`;
-	}
-
-	private buildToolHistory(
+	/**
+	 * Build tool interaction history in flat text format (Kayra).
+	 * Uses simple [Tool Result] labels without GLM role tags.
+	 */
+	private buildToolHistoryFlat(
 		history: StreamContext["functionInteractionHistory"] = [],
 	): string | null {
 		if (!history.length) return null;
@@ -775,6 +955,62 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		return lines.join("\n");
+	}
+
+	/**
+	 * Build tool interaction history using GLM 4.6 role tags.
+	 * Each tool call/response pair uses proper <|assistant|> + <|observation|> structure.
+	 *
+	 * @returns Array of { role, content } pairs for insertion into GLM chat template
+	 */
+	private buildToolHistoryGlm(
+		history: StreamContext["functionInteractionHistory"] = [],
+	): Array<{ role: "assistant" | "observation"; content: string }> {
+		if (!history.length) return [];
+
+		const turns: Array<{
+			role: "assistant" | "observation";
+			content: string;
+		}> = [];
+
+		for (const item of history) {
+			// Assistant turn with tool call
+			const toolCallLines: string[] = [];
+			toolCallLines.push(`<tool_call>${item.functionCall.name}`);
+			const args = item.functionCall.args ?? {};
+			for (const [key, value] of Object.entries(args)) {
+				toolCallLines.push(
+					`<arg_key>${key}</arg_key>`,
+				);
+				toolCallLines.push(
+					`<arg_value>${JSON.stringify(value)}</arg_value>`,
+				);
+			}
+			toolCallLines.push("</tool_call>");
+
+			turns.push({
+				role: "assistant",
+				content: toolCallLines.join("\n"),
+			});
+
+			// Observation turn with tool response
+			const responseLines: string[] = ["<tool_response>"];
+			responseLines.push(JSON.stringify(item.functionResponse));
+			responseLines.push("</tool_response>");
+
+			if (item.imageMetadata?.messageIds?.length) {
+				responseLines.push(
+					`[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`,
+				);
+			}
+
+			turns.push({
+				role: "observation",
+				content: responseLines.join("\n"),
+			});
+		}
+
+		return turns;
 	}
 
 	private formatToolCallForPrompt(functionCall: FunctionCall): string {
@@ -1026,7 +1262,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				systemInstructionParts.push(toolGuide);
 			}
 
-			const toolHistory = this.buildToolHistory(
+			const toolHistory = this.buildToolHistoryFlat(
 				options?.functionInteractionHistory ?? [],
 			);
 			if (toolHistory) {
@@ -1044,6 +1280,166 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		const prompt = parts.join("\n\n");
 
 		return prompt;
+	}
+
+	/**
+	 * Assemble a GLM 4.6 chat prompt using the official chat template.
+	 *
+	 * Structure:
+	 * ```
+	 * [gMASK]<sop>
+	 * <|system|>
+	 * {consolidated system instructions + tool definitions}
+	 *
+	 * <|user|>
+	 * Eli: Hello there!/nothink
+	 * <|assistant|>
+	 * <think></think>
+	 * Hi Eli!
+	 * ...
+	 * <|assistant|>
+	 * <think></think>
+	 * ```
+	 *
+	 * Key decisions:
+	 * - User turns keep speaker labels (multi-user Discord needs disambiguation)
+	 * - Assistant turns have bot name STRIPPED — <|assistant|> is sufficient, and
+	 *   including "Tomori:" causes garbled name artifacts (e.g., "Tomo", "Tomorleasing")
+	 * - /nothink appended to every user message to disable thinking and save tokens
+	 * - Tool definitions use <tools> XML format in the system block
+	 * - Tool history uses <|assistant|> + <tool_call> + <|observation|> structure
+	 * - Generation prompt ends with <|assistant|>\n<think></think>\n so model continues
+	 *
+	 * @param contextItems - Structured context items from context builder
+	 * @param botName - Current bot persona name
+	 * @param options - Tool definitions and function interaction history
+	 * @returns Complete GLM 4.6 chat template prompt string
+	 */
+	private assembleGlmChatPrompt(
+		contextItems: StructuredContextItem[],
+		botName: string,
+		options?: {
+			toolDefinitions?: NormalizedToolDefinition[];
+			functionInteractionHistory?: StreamContext["functionInteractionHistory"];
+		},
+	): string {
+		const systemInstructionParts: string[] = [];
+		const dialogueTurns: Array<{
+			role: "user" | "model";
+			content: string;
+		}> = [];
+		const includeTools = (options?.toolDefinitions?.length ?? 0) > 0;
+		const systemTags = this.getSystemInstructionTags(includeTools);
+
+		// 1. Classify context items into system instructions and dialogue turns
+		for (const item of contextItems) {
+			// Extract text content from parts
+			const textContent = item.parts
+				.filter((p) => p.type === "text")
+				.map((p) => (p as { type: "text"; text: string }).text)
+				.join("\n");
+
+			if (!textContent) {
+				// Skip items with no text (images/videos — NovelAI doesn't support these)
+				continue;
+			}
+
+			// System instruction classification (same logic as Kayra)
+			if (item.metadataTag) {
+				if (systemTags.includes(item.metadataTag)) {
+					systemInstructionParts.push(textContent);
+				}
+			} else if (item.role === "system") {
+				systemInstructionParts.push(textContent);
+			}
+
+			// Dialogue turns (user/model items not in system tags)
+			if ((item.role === "user" || item.role === "model") && textContent) {
+				const isInSystemTags =
+					item.metadataTag &&
+					systemTags.includes(item.metadataTag);
+
+				if (!isInSystemTags) {
+					dialogueTurns.push({
+						role: item.role,
+						content: textContent,
+					});
+				}
+			}
+		}
+
+		// 2. Add tool calling guide to system instructions
+		if (includeTools) {
+			const toolGuide = this.buildToolCallingGuide(
+				options?.toolDefinitions ?? [],
+			);
+			if (toolGuide) {
+				systemInstructionParts.push(toolGuide);
+			}
+		}
+
+		// 3. Build the prompt using GLM 4.6 chat template
+		const promptParts: string[] = [];
+
+		// Header: [gMASK]<sop>
+		promptParts.push("[gMASK]<sop>");
+
+		// System block: consolidated system instructions
+		if (systemInstructionParts.length > 0) {
+			promptParts.push("<|system|>");
+			promptParts.push(systemInstructionParts.join("\n\n"));
+		}
+
+		// 4. Dialogue turns with proper role tags
+		// Build a regex to strip the bot's speaker label from assistant turns.
+		// The <|assistant|> tag already identifies who's speaking, so the model
+		// doesn't need "Tomori:" in the content — and including it causes the model
+		// to try generating partial/garbled name prefixes (e.g., "Tomo", "Tomorleasing").
+		const botNamePrefixPattern = new RegExp(
+			`^${escapeRegExp(botName)}:\\s*`,
+			"i",
+		);
+
+		for (const turn of dialogueTurns) {
+			if (turn.role === "user") {
+				// User turns keep speaker labels for multi-user disambiguation
+				promptParts.push("<|user|>");
+				promptParts.push(`${turn.content}/nothink`);
+			} else if (turn.role === "model") {
+				// Assistant turns: strip bot name prefix — <|assistant|> is sufficient
+				const strippedContent = turn.content.replace(
+					botNamePrefixPattern,
+					"",
+				);
+				promptParts.push("<|assistant|>");
+				promptParts.push("<think></think>");
+				promptParts.push(strippedContent);
+			}
+		}
+
+		// 5. Tool interaction history (after dialogue, before generation prompt)
+		if (includeTools && options?.functionInteractionHistory?.length) {
+			const toolTurns = this.buildToolHistoryGlm(
+				options.functionInteractionHistory,
+			);
+			for (const toolTurn of toolTurns) {
+				if (toolTurn.role === "assistant") {
+					promptParts.push("<|assistant|>");
+					promptParts.push("<think></think>");
+					promptParts.push(toolTurn.content);
+				} else if (toolTurn.role === "observation") {
+					promptParts.push("<|observation|>");
+					promptParts.push(toolTurn.content);
+				}
+			}
+		}
+
+		// 6. Generation prompt: signal the model to generate the assistant's response
+		// The model continues from "<|assistant|>\n<think></think>\n"
+		promptParts.push("<|assistant|>");
+		promptParts.push("<think></think>");
+
+		return promptParts.join("\n");
 	}
 
 	/**
