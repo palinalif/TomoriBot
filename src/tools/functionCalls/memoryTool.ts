@@ -110,12 +110,71 @@ export class MemoryTool extends BaseTool {
 		// Extract arguments (from tomoriChat.ts:1070-1076)
 		const memoryContentArg = args.memory_content as string;
 		const memoryScopeArg = args.memory_scope as "server_wide" | "target_user";
-		const targetUserDiscordIdArg = args.target_user_discord_id as
+		let targetUserDiscordIdArg = args.target_user_discord_id as
 			| string
 			| undefined;
-		const targetUserNicknameArg = args.target_user_nickname as
+		let targetUserNicknameArg = args.target_user_nickname as
 			| string
 			| undefined;
+
+		// NovelAI GLM recovery: resolve missing or garbled user params from context.
+		// GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
+		// (e.g., last few digits off). When the model is clearly trying to target the message
+		// author, resolve from context instead of failing.
+		if (memoryScopeArg === "target_user" && context.message?.author) {
+			const authorId = context.message.author.id;
+			const guildMember = context.message.guild?.members.cache.get(authorId);
+			const authorDisplayName = guildMember?.displayName ?? context.message.author.username;
+
+			// 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
+			//    GLM often gets IDs wrong by a few digits due to token-level sampling noise.
+			if (targetUserDiscordIdArg && targetUserDiscordIdArg !== authorId) {
+				const guild = context.message.guild;
+				if (guild) {
+					// Check if the provided ID is "close" to any guild member (within a few digits)
+					const exactMember = guild.members.cache.get(targetUserDiscordIdArg);
+					if (!exactMember) {
+						// ID doesn't match anyone — check if it's close to the message author's ID
+						// (most common case: model is trying to save a memory about who they're talking to).
+						// Use BigInt for comparison since Discord snowflake IDs exceed Number.MAX_SAFE_INTEGER.
+						try {
+							const idDiff = BigInt(targetUserDiscordIdArg) > BigInt(authorId)
+								? BigInt(targetUserDiscordIdArg) - BigInt(authorId)
+								: BigInt(authorId) - BigInt(targetUserDiscordIdArg);
+							if (idDiff < 1000n && idDiff > 0n) {
+								log.info(
+									`Memory tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${authorId}" (diff: ${idDiff}, likely message author)`,
+								);
+								targetUserDiscordIdArg = authorId;
+							}
+						} catch {
+							// BigInt parsing failed — ID contains non-numeric characters, skip fuzzy match
+						}
+					}
+				}
+			}
+
+			// 2. Auto-fill missing target_user_nickname from context
+			if (!targetUserNicknameArg?.trim() && targetUserDiscordIdArg === authorId) {
+				log.info(
+					`Memory tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
+				);
+				targetUserNicknameArg = authorDisplayName;
+			}
+
+			// 3. Auto-fill missing target_user_discord_id if nickname matches the author
+			if (!targetUserDiscordIdArg?.trim() && targetUserNicknameArg?.trim()) {
+				const providedLower = targetUserNicknameArg.toLowerCase();
+				const authorNameLower = authorDisplayName.toLowerCase();
+				const authorUsernameLower = context.message.author.username.toLowerCase();
+				if (providedLower === authorNameLower || providedLower === authorUsernameLower) {
+					log.info(
+						`Memory tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
+					);
+					targetUserDiscordIdArg = authorId;
+				}
+			}
+		}
 
 		// Import database functions
 		const { addPersonalMemoryByTomori, addServerMemoryByTomori } = await import(

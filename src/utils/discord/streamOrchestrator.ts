@@ -480,7 +480,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 							context,
 						);
 					}
-					return { status: "function_call", data: chunk.functionCall };
+					return {
+						status: "function_call",
+						data: chunk.functionCall,
+						accumulatedText: state.accumulatedText,
+					};
 				}
 				break;
 

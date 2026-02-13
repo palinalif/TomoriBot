@@ -901,11 +901,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				return { mode: "tool_call", toolCallText: trimmedStart };
 			}
 
-			if (trimmedStart.startsWith("<tool_call")) {
-				// Wait until the tag is fully received
-				if (!trimmedStart.includes(">")) {
-					return { mode: "wait" };
-				}
+			// 3b. Partial <tool_call> tag — buffer is a prefix of the full tag.
+			//     NAI chunks can split the tag at any point (e.g., "<to", "<tool_cal").
+			//     Wait for more tokens until the full tag arrives or we can rule it out.
+			if (
+				trimmedStart.startsWith("<tool_call") ||
+				(trimmedStart.startsWith("<") && "<tool_call>".startsWith(trimmedStart))
+			) {
+				return { mode: "wait" };
 			}
 
 			// 4. Unwrapped tool call — model outputs function name directly without <tool_call> tag.
@@ -935,8 +938,15 @@ export class NovelaiStreamAdapter implements StreamProvider {
 						};
 					}
 					// Tool name found but no <arg_key> yet — wait for more tokens
+					log.info(
+						`NovelAI GLM: decideToolCallMode — tool name "${matchedTool.name}" matched, waiting for <arg_key>. Prelude length: ${prelude.length}`,
+					);
 					return { mode: "wait" };
 				}
+				// No tool match — log for debugging unwrapped tool call detection failures
+				log.info(
+					`NovelAI GLM: decideToolCallMode — firstLine "${firstLine}" did not match any tool (normalized: "${normalizedName}"). Falling through to text mode.`,
+				);
 			}
 
 			return { mode: "text", visibleText: buffer };
@@ -1225,6 +1235,15 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		const trimmed = rawValue.trim();
 		const parsed = this.tryParseJson(trimmed);
 		if (parsed.success) {
+			// If tool schema expects a string but JSON parsed as number/boolean,
+			// coerce to string. GLM often outputs bare numbers for ID fields
+			// (e.g., discord_id: 684462114022490100 instead of "684462114022490100").
+			if (
+				expectedType === "string" &&
+				typeof parsed.value !== "string"
+			) {
+				return String(parsed.value);
+			}
 			return parsed.value;
 		}
 
@@ -1446,7 +1465,20 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}> = [];
 
 		for (const item of history) {
-			// Assistant turn with tool call
+			// Assistant turn: include any text the model already streamed before the tool call,
+			// so it doesn't repeat itself on the continuation pass.
+			const assistantParts: string[] = [];
+
+			if (item.preToolCallTextParts?.length) {
+				for (const part of item.preToolCallTextParts) {
+					const text = (part as { text?: string }).text;
+					if (text?.trim()) {
+						assistantParts.push(text.trim());
+					}
+				}
+			}
+
+			// Tool call block
 			const toolCallLines: string[] = [];
 			toolCallLines.push(`<tool_call>${item.functionCall.name}`);
 			const args = item.functionCall.args ?? {};
@@ -1459,10 +1491,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				);
 			}
 			toolCallLines.push("</tool_call>");
+			assistantParts.push(toolCallLines.join("\n"));
 
 			turns.push({
 				role: "assistant",
-				content: toolCallLines.join("\n"),
+				content: assistantParts.join("\n"),
 			});
 
 			// Observation turn with tool response
@@ -1892,8 +1925,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			}
 		}
 
-		// 5. Tool interaction history (after dialogue, before generation prompt)
-		if (includeTools && options?.functionInteractionHistory?.length) {
+		// 5. Tool interaction history (after dialogue, before generation prompt).
+		//    Include even when tools are disabled for the current iteration —
+		//    the model needs to see prior tool calls (and failures) plus any text
+		//    it already streamed, so it doesn't repeat itself.
+		if (options?.functionInteractionHistory?.length) {
 			const toolTurns = this.buildToolHistoryGlm(
 				options.functionInteractionHistory,
 			);

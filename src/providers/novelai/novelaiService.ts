@@ -197,7 +197,7 @@ export function getKayraParameters(): NovelAIParameters {
  */
 export function getGlmParameters(): NovelAIParameters {
 	return {
-		max_length: 600, // Higher per-chunk budget to reduce continuation attempts (API still caps ~150 tokens)
+		max_length: 4096, // Request full token budget — API may cap lower but let's test the actual limit
 		min_length: 1,
 		temperature: 1.0, // GLM 4.6 default — balanced between natural output and tool call precision
 		top_k: 40,

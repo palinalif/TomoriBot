@@ -134,12 +134,14 @@ export class StickerTool extends BaseTool {
 	}
 
 	/**
-	 * Check if sticker tool is available for the given provider
-	 * @param _provider - LLM provider name (unused)
+	 * Check if sticker tool is available for the given provider.
+	 * Disabled for NovelAI — GLM 4.6 can't reliably generate Japanese/CJK sticker
+	 * names as tool arguments due to token-level instability.
+	 * @param provider - LLM provider name
 	 * @returns True if provider supports sticker selection
 	 */
-	isAvailableFor(_provider: string): boolean {
-		// Stickers work with all providers
+	isAvailableFor(provider: string): boolean {
+		if (provider === "novelai") return false;
 		return true;
 	}
 
@@ -170,15 +172,6 @@ export class StickerTool extends BaseTool {
 		const hasStickerName = stickerName.length > 0;
 		const hasStickerId = stickerId.length > 0;
 
-		if (!hasStickerName && !hasStickerId) {
-			return {
-				success: false,
-				error: "Invalid parameters: missing sticker_name or sticker_id",
-				message:
-					"Provide a sticker_name (preferred) or a valid sticker_id.",
-			};
-		}
-
 		// Check if tool is enabled
 		if (!this.isEnabled(context)) {
 			return {
@@ -194,6 +187,38 @@ export class StickerTool extends BaseTool {
 				success: false,
 				error: "Stickers not available in DMs",
 				message: "Stickers are not available in Direct Messages.",
+			};
+		}
+
+		// Empty args recovery — model ran out of tokens before generating sticker_name.
+		// Return the available sticker list so the model can retry with a specific name
+		// on its next generation pass (fresh token budget).
+		if (!hasStickerName && !hasStickerId) {
+			const guild = context.channel.guild;
+			const availableStickerData = guild.stickers.cache
+				.map((sticker) => ({
+					name: sticker.name,
+					description: sticker.description || "No description available",
+				}))
+				.slice(0, 15);
+
+			const stickerListText = availableStickerData.length > 0
+				? `Available stickers: ${availableStickerData.map((s) => `"${s.name}"`).join(", ")}. Call select_sticker_for_response again with one of these exact names as the sticker_name argument.`
+				: "No stickers are available in this server.";
+
+			log.warn(
+				"Sticker tool called with empty args (likely token budget exhaustion). Returning sticker list for retry.",
+			);
+
+			return {
+				success: false,
+				error: "Missing sticker_name — please retry with a specific name",
+				message: stickerListText,
+				data: {
+					status: "sticker_name_missing_retry",
+					reason: "No sticker_name was provided. This usually happens when the model runs out of tokens before generating the argument. Please retry with one of the available sticker names.",
+					availableStickers: availableStickerData,
+				},
 			};
 		}
 
@@ -374,18 +399,23 @@ export class StickerTool extends BaseTool {
 				`Sticker '${normalizedStickerName || stickerId}' not found even after cache refresh. Sticker does not exist.`,
 			);
 
-			// Get available stickers for error message
+			// Get available stickers for error message — include names inline so the model
+			// can retry with an exact name on its next generation pass.
 			const availableStickers = guild.stickers.cache;
 			const availableStickerData = availableStickers
 				.map((sticker) => ({
 					name: sticker.name,
 					description: sticker.description || "No description available",
 				}))
-				.slice(0, 10); // Limit to prevent overwhelming the LLM
+				.slice(0, 15);
+
+			const stickerListHint = availableStickerData.length > 0
+				? ` Available stickers: ${availableStickerData.map((s) => `"${s.name}"`).join(", ")}. Call select_sticker_for_response again with one of these exact names, or do not use a sticker.`
+				: "";
 
 			if (ambiguousMatches.length > 1) {
 				const ambiguousMessage =
-					"Multiple stickers closely matched the requested name. Please choose one exact sticker name from the available list or do not use a sticker.";
+					`Multiple stickers closely matched "${normalizedStickerName}". Please choose one exact sticker name.${stickerListHint}`;
 				return {
 					success: false,
 					error: "Sticker name is ambiguous",
@@ -401,8 +431,8 @@ export class StickerTool extends BaseTool {
 			}
 
 			const notFoundMessage = normalizedStickerName
-				? "The sticker name provided was not found among the available server stickers. Please choose from the provided list or do not use a sticker."
-				: "The sticker ID provided was not found among the available server stickers. Please choose by name from the provided list or do not use a sticker.";
+				? `Sticker "${normalizedStickerName}" was not found.${stickerListHint}`
+				: `Sticker ID "${stickerId}" was not found.${stickerListHint}`;
 
 			return {
 				success: false,

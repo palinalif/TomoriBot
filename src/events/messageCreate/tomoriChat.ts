@@ -4163,6 +4163,18 @@ export default async function tomoriChat(
 										finalStreamCompleted = true;
 										break;
 									}
+
+									// Capture any text the model streamed to Discord before calling
+									// the tool, so it appears in the function interaction history
+									// and the model won't repeat itself on continuation.
+									const preToolText = (streamResult.accumulatedText ?? "").trim();
+									if (preToolText) {
+										accumulatedStreamedModelParts.push({
+											type: "text",
+											text: preToolText,
+										});
+									}
+
 									const funcCall = streamResult.data as FunctionCall; // Type assertion
 									const funcName = funcCall.name?.trim() ?? "";
 									log.info(
@@ -4613,10 +4625,13 @@ export default async function tomoriChat(
 											continue;
 										}
 									} else {
-										// Tool execution failed
+										// Tool execution failed — prefer `message` (detailed, actionable) over
+										// `error` (short label) so the model gets useful retry instructions
+										// (e.g., available sticker list for token-budget exhaustion recovery).
 										functionExecutionResult = {
 											status: "tool_execution_failed",
 											reason:
+												toolResult.message ||
 												toolResult.error ||
 												"Tool execution failed without specific error",
 											tool_name: funcName,
@@ -4624,6 +4639,22 @@ export default async function tomoriChat(
 										log.error(
 											`Tool execution failed for ${funcName}: ${toolResult.error}`,
 										);
+
+										// GLM 4.6 fail-gracefully: if the model already streamed visible text
+										// to Discord before calling a tool that failed, disable tools for the
+										// next retry so it can generate a graceful closing message without
+										// getting stuck in a retry loop. GLM is unstable with tool args and
+										// will repeat the same failing call indefinitely otherwise.
+										const textAlreadySent = (streamResult.accumulatedText ?? "").trim().length > 0;
+										if (
+											textAlreadySent &&
+											provider.getInfo().name === "novelai"
+										) {
+											streamingContext.disableAllTools = true;
+											log.info(
+												`NovelAI GLM: Tool "${funcName}" failed after text was already sent to Discord — disabling tools for next iteration to prevent retry loop`,
+											);
+										}
 									}
 
 									// 3. Add the model's function call and our function's result to the history
