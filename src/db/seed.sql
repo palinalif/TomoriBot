@@ -130,10 +130,10 @@ VALUES
   ('novelai', 'nai-diffusion-3-furry', false, false, false, true,
    'NovelAI furry-specialized diffusion model',
    'NovelAIのファーリー特化型拡散モデル'),
-  ('novelai', 'nai-diffusion-4.5-full', true, false, false, true,
+  ('novelai', 'nai-diffusion-4-5-full', true, false, false, true,
    'NovelAI Diffusion 4.5 full model with uncensored generation',
    'NovelAI Diffusion 4.5 フルモデル（無検閲生成対応）'),
-  ('novelai', 'nai-diffusion-4.5-curated', false, false, false, true,
+  ('novelai', 'nai-diffusion-4-5-curated', false, false, false, true,
    'NovelAI Diffusion 4.5 curated model with refined outputs',
    'NovelAI Diffusion 4.5 キュレーションモデル（洗練された出力）')
 ON CONFLICT (codename) DO UPDATE SET

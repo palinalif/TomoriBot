@@ -29,7 +29,7 @@ const NAI_NOISE_SCHEDULE =
 	process.env.NAI_IMAGE_NOISE_SCHEDULE || "karras";
 const NAI_NEGATIVE_PROMPT =
 	process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
-	"lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry";
+	"blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page";
 
 /** Base URL for NovelAI's image generation API */
 const NAI_IMAGE_BASE_URL = "https://image.novelai.net";
@@ -263,6 +263,17 @@ export class GenerateImageNaiTool extends BaseTool {
 	 * @param orientation - Image orientation key (portrait/landscape/square)
 	 * @returns Buffer containing the generated PNG image data
 	 */
+	/**
+	 * Checks whether the given model codename is a v4+ model that requires the v4_prompt format.
+	 * V4 models use a structured caption object instead of a flat prompt string.
+	 * @param model - Diffusion model codename
+	 * @returns True if the model requires v4_prompt format
+	 */
+	private isV4Model(model: string): boolean {
+		// Match models like nai-diffusion-4-5-full, nai-diffusion-4-5-curated, or future nai-diffusion-4-*
+		return /nai-diffusion-4/.test(model);
+	}
+
 	private async generateImage(
 		apiKey: string,
 		model: string,
@@ -273,26 +284,101 @@ export class GenerateImageNaiTool extends BaseTool {
 			ORIENTATION_PRESETS[orientation] || ORIENTATION_PRESETS.portrait;
 		const seed = Math.floor(Math.random() * 2147483647);
 
-		// 1. Build request payload
-		const requestPayload = {
-			action: "generate",
-			input: prompt,
-			model,
-			parameters: {
-				width: dimensions.width,
-				height: dimensions.height,
-				steps: NAI_STEPS,
-				scale: NAI_SCALE,
-				sampler: NAI_SAMPLER,
-				noise_schedule: NAI_NOISE_SCHEDULE,
-				n_samples: 1,
-				seed,
-				negative_prompt: NAI_NEGATIVE_PROMPT,
-			},
-		};
+		// 1. Build request payload — v4 models require a different parameter structure than v3
+		let requestPayload: Record<string, unknown>;
+
+		if (this.isV4Model(model)) {
+			// V4+ models: prompt goes in input, parameters.prompt, AND v4_prompt.caption.base_caption
+			// Negative prompt goes in both parameters.uc AND v4_negative_prompt.caption.base_caption
+			// Structure reverse-engineered from NovelAI website network requests
+			requestPayload = {
+				action: "generate",
+				input: prompt,
+				model,
+				parameters: {
+					prompt,
+					seed,
+					n_samples: 1,
+					steps: NAI_STEPS,
+					height: dimensions.height,
+					width: dimensions.width,
+					scale: NAI_SCALE,
+					uncond_scale: 0.0,
+					cfg_rescale: 0.0,
+					sampler: NAI_SAMPLER,
+					noise_schedule: NAI_NOISE_SCHEDULE,
+					legacy_v3_extend: false,
+					reference_information_extracted_multiple: [],
+					reference_strength_multiple: [],
+					v4_prompt: {
+						caption: {
+							base_caption: prompt,
+							char_captions: [],
+						},
+						use_coords: false,
+						use_order: true,
+						legacy_uc: false,
+					},
+					v4_negative_prompt: {
+						caption: {
+							base_caption: NAI_NEGATIVE_PROMPT,
+							char_captions: [],
+						},
+						use_coords: false,
+						use_order: false,
+						legacy_uc: false,
+					},
+					controlnet_strength: 1.0,
+					controlnet_model: null,
+					dynamic_thresholding: false,
+					dynamic_thresholding_percentile: 0.999,
+					dynamic_thresholding_mimic_scale: 10.0,
+					sm: false,
+					sm_dyn: false,
+					skip_cfg_above_sigma: null,
+					skip_cfg_below_sigma: 0.0,
+					lora_unet_weights: null,
+					lora_clip_weights: null,
+					deliberate_euler_ancestral_bug: false,
+					prefer_brownian: true,
+					cfg_sched_eligibility:
+						"enable_for_post_summer_samplers",
+					explike_fine_detail: false,
+					minimize_sigma_inf: false,
+					uncond_per_vibe: true,
+					wonky_vibe_correlation: true,
+					version: 1,
+					uc: NAI_NEGATIVE_PROMPT,
+					request_type: "PromptGenerateRequest",
+				},
+			};
+		} else {
+			// V3 models: simpler flat structure with negative_prompt
+			requestPayload = {
+				action: "generate",
+				input: prompt,
+				model,
+				parameters: {
+					width: dimensions.width,
+					height: dimensions.height,
+					steps: NAI_STEPS,
+					scale: NAI_SCALE,
+					sampler: NAI_SAMPLER,
+					noise_schedule: NAI_NOISE_SCHEDULE,
+					n_samples: 1,
+					seed,
+					negative_prompt: NAI_NEGATIVE_PROMPT,
+				},
+			};
+		}
 
 		log.info(
 			`[NAI] Generating image with model "${model}" (${dimensions.width}x${dimensions.height}, seed: ${seed})`,
+		);
+
+		// Debug: log full request payload to compare against working examples
+		log.info(
+			`[NAI] Full request payload:\n${JSON.stringify(requestPayload, null, 2)}`,
 		);
 
 		// 2. Send generation request
@@ -445,7 +531,7 @@ export class GenerateImageNaiTool extends BaseTool {
 		// Extract arguments
 		const prompt = args.prompt as string;
 		const orientation = (args.orientation as string) || "portrait";
-		const isSelfPortrait = (args.is_self_portrait as boolean) || false;
+		const isSelfPortrait = args.is_self_portrait !== false; // Default to true when not provided
 
 		try {
 			// 3. Get the diffusion model codename from database
