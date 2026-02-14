@@ -69,6 +69,7 @@ export const tomoriSchema = z.object({
 	is_alter: z.boolean().default(false), // Added January 2026 - Distinguishes main persona (false) from alter personas (true)
 	webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Discord CDN URL for alter persona avatars from import embed
 	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
+	nai_tags: z.array(z.string()).default([]), // Imageboard-style character tags for NovelAI self-portrait generation
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });

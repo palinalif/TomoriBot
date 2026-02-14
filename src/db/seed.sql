@@ -125,7 +125,17 @@ VALUES
    'OpenRouter経由の強化された品質と解像度オプションを備えた高度な画像生成'),
   ('openrouter', 'openai/gpt-5-image-mini', false, false, false, false,
    'Lightweight OpenAI image generation model via OpenRouter',
-   'OpenRouter経由の軽量なOpenAI画像生成モデル')
+   'OpenRouter経由の軽量なOpenAI画像生成モデル'),
+  -- NovelAI Diffusion Models
+  ('novelai', 'nai-diffusion-3-furry', false, false, false, true,
+   'NovelAI furry-specialized diffusion model',
+   'NovelAIのファーリー特化型拡散モデル'),
+  ('novelai', 'nai-diffusion-4.5-full', true, false, false, true,
+   'NovelAI Diffusion 4.5 full model with uncensored generation',
+   'NovelAI Diffusion 4.5 フルモデル（無検閲生成対応）'),
+  ('novelai', 'nai-diffusion-4.5-curated', false, false, false, true,
+   'NovelAI Diffusion 4.5 curated model with refined outputs',
+   'NovelAI Diffusion 4.5 キュレーションモデル（洗練された出力）')
 ON CONFLICT (codename) DO UPDATE SET
   model_description = EXCLUDED.model_description,
   ja_description = EXCLUDED.ja_description,

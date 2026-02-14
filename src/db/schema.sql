@@ -125,6 +125,8 @@ SELECT add_column_if_not_exists('tomoris', 'webhook_avatar_url', 'TEXT');
 SELECT add_column_if_not_exists('tomoris', 'alter_triggers', 'TEXT[]', 'ARRAY[]::TEXT[]');
 -- persona_lineage_id: Shared identity namespace for cross-server personal memory pooling
 SELECT add_column_if_not_exists('tomoris', 'persona_lineage_id', 'BIGINT');
+-- nai_tags: Imageboard-style character tags for NovelAI self-portrait generation
+SELECT add_column_if_not_exists('tomoris', 'nai_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Create lineage sequence (start high so reserved low IDs stay available)
 CREATE SEQUENCE IF NOT EXISTS persona_lineage_id_seq
