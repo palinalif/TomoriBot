@@ -142,7 +142,7 @@ export class ReminderTool extends BaseTool {
 			| number
 			| undefined;
 		const selfReminderArg = args.self_reminder as boolean | undefined;
-		let requestedChannelIdArg = args.channel_id as string | undefined;
+		const requestedChannelIdArg = args.channel_id as string | undefined;
 
 		// NovelAI GLM recovery: resolve missing or garbled user/channel params from context.
 		// GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
@@ -155,29 +155,39 @@ export class ReminderTool extends BaseTool {
 			const authorDisplayName =
 				guildMember?.displayName ?? context.message.author.username;
 
-			// 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
-			//    GLM often gets IDs wrong by a few digits due to token-level sampling noise.
-			if (targetUserDiscordIdArg && targetUserDiscordIdArg !== authorId) {
+			// 1. Fuzzy-match Discord ID: if the provided ID doesn't match any cached guild member,
+			//    search ALL cached members for the closest snowflake ID within a tolerance of 1000.
+			//    GLM often gets IDs wrong by a few digits due to floating-point precision loss
+			//    on large snowflake IDs (which exceed Number.MAX_SAFE_INTEGER).
+			if (targetUserDiscordIdArg) {
 				const guild = context.message.guild;
 				if (guild) {
 					const exactMember = guild.members.cache.get(
 						targetUserDiscordIdArg,
 					);
 					if (!exactMember) {
-						// ID doesn't match anyone — check if it's close to the message author's ID.
-						// Use BigInt for comparison since Discord snowflake IDs exceed Number.MAX_SAFE_INTEGER.
 						try {
-							const idDiff =
-								BigInt(targetUserDiscordIdArg) > BigInt(authorId)
-									? BigInt(targetUserDiscordIdArg) -
-										BigInt(authorId)
-									: BigInt(authorId) -
-										BigInt(targetUserDiscordIdArg);
-							if (idDiff < 1000n && idDiff > 0n) {
+							const garbledId = BigInt(targetUserDiscordIdArg);
+							let closestMemberId: string | null = null;
+							let smallestDiff = BigInt(1000); // threshold: < 1000
+
+							// Scan all cached guild members for the closest matching ID
+							for (const [memberId] of guild.members.cache) {
+								const diff =
+									garbledId > BigInt(memberId)
+										? garbledId - BigInt(memberId)
+										: BigInt(memberId) - garbledId;
+								if (diff > 0n && diff < smallestDiff) {
+									smallestDiff = diff;
+									closestMemberId = memberId;
+								}
+							}
+
+							if (closestMemberId) {
 								log.info(
-									`Reminder tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${authorId}" (diff: ${idDiff}, likely message author)`,
+									`Reminder tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${closestMemberId}" (diff: ${smallestDiff}, fuzzy-matched from guild members cache)`,
 								);
-								targetUserDiscordIdArg = authorId;
+								targetUserDiscordIdArg = closestMemberId;
 							}
 						} catch {
 							// BigInt parsing failed — ID contains non-numeric characters, skip fuzzy match
@@ -214,30 +224,6 @@ export class ReminderTool extends BaseTool {
 						`Reminder tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
 					);
 					targetUserDiscordIdArg = authorId;
-				}
-			}
-
-			// 4. Fuzzy-match channel_id if provided but doesn't resolve to a valid channel
-			if (requestedChannelIdArg?.trim()) {
-				const currentChannelId = context.channel.id;
-				if (requestedChannelIdArg !== currentChannelId) {
-					try {
-						const idDiff =
-							BigInt(requestedChannelIdArg) >
-							BigInt(currentChannelId)
-								? BigInt(requestedChannelIdArg) -
-									BigInt(currentChannelId)
-								: BigInt(currentChannelId) -
-									BigInt(requestedChannelIdArg);
-						if (idDiff < 1000n && idDiff > 0n) {
-							log.info(
-								`Reminder tool: Correcting garbled channel ID "${requestedChannelIdArg}" → "${currentChannelId}" (diff: ${idDiff}, likely current channel)`,
-							);
-							requestedChannelIdArg = currentChannelId;
-						}
-					} catch {
-						// BigInt parsing failed, skip fuzzy match
-					}
 				}
 			}
 		}
@@ -443,9 +429,48 @@ export class ReminderTool extends BaseTool {
 					};
 				}
 			} else {
-				const targetChannel = await context.client.channels
+				let targetChannel = await context.client.channels
 					.fetch(trimmedChannelId)
 					.catch(() => null);
+
+				// GLM fuzzy recovery: if exact channel ID not found, search all guild
+				// channels for the closest snowflake ID within a tolerance of 1000.
+				// GLM loses precision on large snowflake IDs due to float rounding.
+				if (!targetChannel && context.guildId) {
+					try {
+						const garbledId = BigInt(trimmedChannelId);
+						const guild = await context.client.guilds
+							.fetch(context.guildId)
+							.catch(() => null);
+						if (guild) {
+							let closestChannelId: string | null = null;
+							let smallestDiff = BigInt(1000); // threshold: < 1000
+
+							// Scan all cached guild channels for the closest matching ID
+							for (const [chId] of guild.channels.cache) {
+								const diff =
+									garbledId > BigInt(chId)
+										? garbledId - BigInt(chId)
+										: BigInt(chId) - garbledId;
+								if (diff > 0n && diff < smallestDiff) {
+									smallestDiff = diff;
+									closestChannelId = chId;
+								}
+							}
+
+							if (closestChannelId) {
+								log.info(
+									`Reminder tool: Correcting garbled channel ID "${trimmedChannelId}" → "${closestChannelId}" (diff: ${smallestDiff}, fuzzy-matched from guild channels cache)`,
+								);
+								targetChannel = await context.client.channels
+									.fetch(closestChannelId)
+									.catch(() => null);
+							}
+						}
+					} catch {
+						// BigInt parsing failed, skip fuzzy match
+					}
+				}
 
 				if (!targetChannel || targetChannel.isDMBased()) {
 					return {

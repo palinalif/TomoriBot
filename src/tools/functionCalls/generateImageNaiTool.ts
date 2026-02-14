@@ -22,7 +22,7 @@ import {
 } from "../../utils/quota/imageQuotaManager";
 
 // Configurable generation parameters via environment variables
-const NAI_STEPS = Number.parseInt(process.env.NAI_IMAGE_STEPS || "23", 10);
+const NAI_STEPS = Number.parseInt(process.env.NAI_IMAGE_STEPS || "28", 10);
 const NAI_SCALE = Number.parseFloat(process.env.NAI_IMAGE_SCALE || "5");
 const NAI_SAMPLER = process.env.NAI_IMAGE_SAMPLER || "k_euler_ancestral";
 const NAI_NOISE_SCHEDULE =
@@ -65,6 +65,7 @@ export class GenerateImageNaiTool extends BaseTool {
 		"Generate an AI image using NovelAI's diffusion models. Provide imageboard-style tags (e.g. '1girl, short hair, red eyes, sunset'). If is_self_portrait is true, the persona's character tags are automatically prepended. The image will be sent directly to the Discord channel.";
 	category = "utility" as const;
 	requiresFeatureFlag = "image_gen";
+	requiresFollowUp = true; // Allow model to generate a text response after image is sent, preventing orphaned self-reply
 
 	parameters: ToolParameterSchema = {
 		type: "object",
@@ -571,29 +572,37 @@ export class GenerateImageNaiTool extends BaseTool {
 				};
 			}
 
-			// 4. Build tag list — prepend persona character tags for self-portraits
-			let tags = prompt
+			// 4. Build tag list — quality tags and character tags are trusted (no normalization needed)
+			const qualityTags = ["8k", "absurdres", "masterpiece", "best quality", "good quality", "newest"];
+
+			// Parse model-provided tags (these need normalization)
+			const modelTags = prompt
 				.split(/[,\u3001]/)
 				.map((t) => t.trim())
 				.filter((t) => t.length > 0);
 
+			// Trusted tags: quality + persona character tags (skip normalization)
+			const trustedTags = [...qualityTags];
+
 			if (isSelfPortrait) {
 				const naiTags = context.tomoriState.nai_tags || [];
 				if (naiTags.length > 0) {
-					// Prepend character tags before the user's prompt tags
-					tags = [...naiTags, ...tags];
+					trustedTags.push(...naiTags);
 					log.info(
 						`[NAI] Prepended ${naiTags.length} persona character tag(s) for self-portrait`,
 					);
 				}
 			}
 
-			// 5. Normalize tags via suggest-tags API (parallel processing)
-			const normalizedTags = await this.normalizeTags(
-				tags,
+			// 5. Normalize only the model-provided tags via suggest-tags API
+			const normalizedModelTags = await this.normalizeTags(
+				modelTags,
 				modelCodename,
 				apiKey,
 			);
+
+			// Combine: trusted tags first (as-is), then normalized model tags
+			const normalizedTags = [...trustedTags, ...normalizedModelTags];
 
 			const normalizedPrompt = normalizedTags.join(", ");
 			log.info(
@@ -629,7 +638,7 @@ export class GenerateImageNaiTool extends BaseTool {
 			);
 
 			// Build success message with remaining quota info
-			let successMessage = `Successfully generated and sent NovelAI image to Discord (message ID: ${sentMessage.id}). The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
+			let successMessage = `Good job! The image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it — do NOT generate another image unless asked. The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
 
 			if (quotaCheck.userRemaining !== undefined) {
 				const remainingText = localizer(
