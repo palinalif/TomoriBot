@@ -4,6 +4,7 @@ import type { ErrorContext } from "../../types/db/schema";
 import { registerMCPAdapter } from "../../tools/toolRegistry";
 import { getGoogleToolAdapter } from "../../providers/google/googleToolAdapter";
 import { getOpenrouterToolAdapter } from "../../providers/openrouter/openrouterToolAdapter";
+// import { getNovelaiToolAdapter } from "../../providers/novelai/novelaiToolAdapter";
 
 /**
  * Event handler for initializing MCP servers when the bot is ready
@@ -22,6 +23,13 @@ export default async (): Promise<void> => {
 		const openrouterAdapter = getOpenrouterToolAdapter();
 		registerMCPAdapter(openrouterAdapter);
 		log.info("Registered OpenRouter tool adapter with MCP capabilities");
+
+		// NovelAI MCP adapter registration is disabled for now — GLM 4.6 has a strict
+		// prompt token budget, and MCP tools (like fetch) consume too many tokens.
+		// Uncomment when NovelAI models support larger contexts.
+		// const novelaiAdapter = getNovelaiToolAdapter();
+		// registerMCPAdapter(novelaiAdapter);
+		// log.info("Registered NovelAI tool adapter with MCP capabilities");
 
 		// Get the MCP manager singleton instance
 		const mcpManager = getMCPManager();

@@ -295,12 +295,17 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
 			if (mcpManager.isReady() && allowedMCPFunctions) {
 				let addedMCPToolsCount = 0;
 
-				const disabledDDGFunctions = [
+				// MCP functions disabled for NovelAI GLM — either redundant with
+				// other providers or too token-expensive for GLM's strict prompt budget.
+				// "fetch" is the dedicated fetch MCP server; "fetch-url" is DDG's variant.
+				const disabledMCPFunctions = [
 					"felo-search",
 					"iask-search",
 					"monica-search",
 					"fetch-url",
 					"url-metadata",
+					"fetch",
+					"brave_news_search",
 				];
 
 				const mcpTools = mcpManager.getMCPTools();
@@ -315,7 +320,7 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
 							).filter((declaration) => {
 								const functionName = declaration.name as string;
 
-								if (disabledDDGFunctions.includes(functionName)) {
+								if (disabledMCPFunctions.includes(functionName)) {
 									return false;
 								}
 

@@ -1593,6 +1593,35 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 
 	/**
+	 * Recursively strip fetch capability reminder fields from tool response objects.
+	 * GLM 4.6 has a strict prompt token budget, and these fields waste tokens on
+	 * a capability (fetch MCP) that is disabled for NovelAI.
+	 * @param obj - The tool response object to sanitize
+	 * @returns A deep copy with agentInstructions and fetchCapabilityReminder removed
+	 */
+	private stripFetchReminderFields(obj: Record<string, unknown>): Record<string, unknown> {
+		const keysToStrip = new Set(["agentInstructions", "fetchCapabilityReminder"]);
+
+		const strip = (value: unknown): unknown => {
+			if (Array.isArray(value)) {
+				return value.map(strip);
+			}
+			if (value !== null && typeof value === "object") {
+				const result: Record<string, unknown> = {};
+				for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+					if (!keysToStrip.has(k)) {
+						result[k] = strip(v);
+					}
+				}
+				return result;
+			}
+			return value;
+		};
+
+		return strip(obj) as Record<string, unknown>;
+	}
+
+	/**
 	 * Build tool interaction history in flat text format (Kayra).
 	 * Uses simple [Tool Result] labels without GLM role tags.
 	 */
@@ -1605,7 +1634,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		for (const item of history) {
 			lines.push(this.formatToolCallForPrompt(item.functionCall));
-			lines.push(`[Tool Result] ${JSON.stringify(item.functionResponse)}`);
+
+			// Strip fetch capability reminder fields recursively to save tokens
+			const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
+			lines.push(`[Tool Result] ${JSON.stringify(sanitizedResponse)}`);
 
 			if (item.imageMetadata?.messageIds?.length) {
 				lines.push(
@@ -1668,8 +1700,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			});
 
 			// Observation turn with tool response
+			// Strip fetch capability reminder fields recursively to save tokens —
+			// GLM 4.6 has a strict prompt budget, and fetch MCP is disabled for NovelAI.
+			const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
 			const responseLines: string[] = ["<tool_response>"];
-			responseLines.push(JSON.stringify(item.functionResponse));
+			responseLines.push(JSON.stringify(sanitizedResponse));
 			responseLines.push("</tool_response>");
 
 			if (item.imageMetadata?.messageIds?.length) {
