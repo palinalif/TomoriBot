@@ -11,7 +11,7 @@
  * - Emoticons (text-based like :), :D, etc.)
  */
 const EMOJI_REGEX =
-	/(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?|[\u{1F1E6}-\u{1F1FF}]{2}|:[a-zA-Z0-9_]+:|:[)D(POp[\]\\|]|;\)|:'\(|<3)/gu;
+	/(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?|[\u{1F1E6}-\u{1F1FF}]{2}|:[a-zA-Z0-9_~]+:|:[)D(POp[\]\\|]|;\)|:'\(|<3)/gu;
 
 /**
  * Count the number of emojis in a given text string
@@ -76,7 +76,7 @@ export function countEmojisInMultiple(texts: string[]): number {
  * Regex to match custom Discord server emojis in normalized format (:emoji_name:)
  * Matches patterns like :tomori:, :pepehands:, :custom_emoji_123:
  */
-const CUSTOM_EMOJI_REGEX = /:[a-zA-Z0-9_]+:/g;
+const CUSTOM_EMOJI_REGEX = /:[a-zA-Z0-9_~]+:/g;
 
 /**
  * Extract all custom Discord server emojis from text (after normalization)

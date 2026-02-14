@@ -1226,7 +1226,7 @@ export function cleanLLMOutput(
 		// like "<_name:id>" or "<(Name:id>"
 		// to proper "<:name:id>"
 		cleanedText = cleanedText.replace(
-			/<[^:>\s]*:([A-Za-z0-9_]+):(\d+)>/g,
+			/<[^:>\s]*:([A-Za-z0-9_~]+):(\d+)>/g,
 			"<:$1:$2>",
 		);
 
@@ -1250,7 +1250,7 @@ export function cleanLLMOutput(
 			// Use negative lookahead to ensure we don't match already-correct :name: patterns
 			// Use positive lookahead to ensure we're at a word boundary (space, punctuation, or end of string)
 			const malformedPattern = new RegExp(
-				`(:${escapeRegExp(name)})(?!:)(?=\\s|$|[^a-zA-Z0-9_])`,
+				`(:${escapeRegExp(name)})(?!:)(?=\\s|$|[^a-zA-Z0-9_~])`,
 				"gi",
 			);
 			cleanedText = cleanedText.replace(malformedPattern, "$1:");
@@ -1326,7 +1326,7 @@ export function cleanLLMOutput(
 	}
 
 	// 4. Final generic cleanup for any stray :name: patterns
-	cleanedText = cleanedText.replace(/\s+:[a-zA-Z0-9_]+:\s+/g, " ");
+	cleanedText = cleanedText.replace(/\s+:[a-zA-Z0-9_~]+:\s+/g, " ");
 
 	// 4.5. Convert @{name} handles into mentions when resolvable
 	cleanedText = replaceMentionHandles(cleanedText, mentionMap, mentionIdSet);
