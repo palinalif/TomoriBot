@@ -310,9 +310,10 @@ export class MCPConfigManager {
 		let args: string[];
 
 		if (config.npmPackage) {
-			// Use npx for npm packages
-			command = "npx";
-			args = ["-y", config.npmPackage];
+			// Use bunx for npm packages to avoid npm parsing project overrides.
+			// This project is Bun-based and bunx runs MCP packages directly.
+			command = "bunx";
+			args = [config.npmPackage];
 		} else if (config.command) {
 			// Use specified command
 			command = config.command;

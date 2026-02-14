@@ -635,8 +635,15 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			return this.processVisibleText(token);
 		}
 
+		// Normalize Unicode bracket variants in tokens entering the tool parsing pipeline.
+		// GLM 4.6 in Japanese conversations sometimes outputs full-width ＜ ＞ instead of ASCII < >,
+		// which breaks all downstream tag detection (indexOf, includes, startsWith, regex).
+		// This is safe for visible text since full-width angle brackets are extremely rare in
+		// conversational text — the model only produces them when attempting XML tool call tags.
+		const normalizedToken = this.normalizeXmlBrackets(token);
+
 		if (this.toolCallMode === "undecided") {
-			this.toolPreludeBuffer += token;
+			this.toolPreludeBuffer += normalizedToken;
 			const decision = this.decideToolCallMode(this.toolPreludeBuffer);
 
 			if (decision.mode === "wait") {
@@ -668,7 +675,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		if (this.toolCallMode === "tool_call") {
-			this.toolCallBuffer += token;
+			this.toolCallBuffer += normalizedToken;
 			const toolCallBlock = this.extractToolCallBlock(this.toolCallBuffer);
 			if (!toolCallBlock) {
 				return { type: "text", content: "" };
@@ -698,7 +705,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			};
 		}
 
-		return this.processTextWithToolScan(token);
+		return this.processTextWithToolScan(normalizedToken);
 	}
 
 	private processTextWithToolScan(token: string): ProcessedChunk {
@@ -978,7 +985,21 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		const functionName = this.normalizeToolName(rawName);
 		const args: Record<string, unknown> = {};
 
-		const argMatches = inner.matchAll(
+		// GLM 4.6 in non-English (especially Japanese) conversations sometimes outputs
+		// full-width Unicode angle brackets (＜ ＞) instead of ASCII < >.
+		// Normalize to ASCII before parsing to ensure the regex matches.
+		let normalizedInner = this.normalizeXmlBrackets(inner);
+
+		// Fix truncated closing tags — the stream frequently cuts off right before
+		// the final ">" of the last </arg_value> or </arg_key> tag.
+		// e.g., "</arg_value" (missing ">") → "</arg_value>"
+		// The >? makes this idempotent — already-complete tags are left unchanged.
+		normalizedInner = normalizedInner
+			.replace(/<\/arg_value>?\s*$/, "</arg_value>")
+			.replace(/<\/arg_key>?\s*$/, "</arg_key>");
+
+		// 1. Primary format: XML <arg_key>/<arg_value> pairs (standard GLM tool format)
+		const argMatches = normalizedInner.matchAll(
 			/<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g,
 		);
 
@@ -994,10 +1015,153 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			args[argKey] = this.coerceArgValue(rawValue ?? "", expectedType);
 		}
 
+		// 2. Fallback: when GLM outputs args in non-XML formats (common in Japanese conversations).
+		//    GLM 4.6 sometimes drops the XML arg tags entirely when responding in Japanese, outputting:
+		//    - JSON object: {"query": "search term"}
+		//    - Key-value lines: query: "search term" or query="search term"
+		//    Only attempt fallback if the primary XML parser found zero arguments.
+		if (Object.keys(args).length === 0) {
+			const bodyAfterName = normalizedInner.slice(nameMatch[0].length).trim();
+			if (bodyAfterName) {
+				this.parseToolCallArgsFallback(functionName, bodyAfterName, args);
+			}
+		}
+
+		// Diagnostic: log hex dump of characters around "arg_key" to identify invisible/non-ASCII issues
+		if (Object.keys(args).length === 0 && inner.includes("\n")) {
+			const argKeyIdx = inner.indexOf("arg_key");
+			let hexContext = "";
+			if (argKeyIdx >= 0) {
+				// Show 5 chars before "arg_key" as hex codes to catch non-ASCII brackets
+				const start = Math.max(0, argKeyIdx - 5);
+				const snippet = inner.slice(start, argKeyIdx + 12);
+				hexContext = ` | Hex near arg_key: ${[...snippet].map((c) => `U+${c.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}`).join(" ")}`;
+			}
+			log.warn(
+				`NovelAI GLM: Tool call "${functionName}" parsed with empty args.${hexContext} | Raw body: ${inner.slice(0, 300)}`,
+			);
+		}
+
 		return {
 			name: functionName,
 			args,
 		};
+	}
+
+	/**
+	 * Normalize Unicode angle bracket variants to ASCII for reliable XML tag parsing.
+	 *
+	 * GLM 4.6 in non-English conversations (especially Japanese) sometimes outputs
+	 * full-width angle brackets (＜ ＞), other Unicode bracket variants, or
+	 * adds zero-width characters adjacent to brackets. This method normalizes all
+	 * known variants to standard ASCII < > so the arg parsing regex can match.
+	 *
+	 * @param text - Raw text that may contain non-ASCII angle brackets
+	 * @returns Text with all angle bracket variants replaced with ASCII equivalents
+	 */
+	private normalizeXmlBrackets(text: string): string {
+		return text
+			// Full-width angle brackets: ＜ (ï¼) → <, ＞ (ï¼) → >
+			.replace(/\uff1c/g, "<")
+			.replace(/\uff1e/g, ">")
+			// Angle brackets: 〈 〉 (deprecated but still used)
+			.replace(/\u2329/g, "<")
+			.replace(/\u232a/g, ">")
+			// Mathematical angle brackets: ⟨ ⟩
+			.replace(/\u27e8/g, "<")
+			.replace(/\u27e9/g, ">")
+			// Single angle quotation marks: ‹ › (sometimes confused by models)
+			.replace(/\u2039/g, "<")
+			.replace(/\u203a/g, ">")
+			// Strip zero-width characters that can appear adjacent to tags
+			.replace(/\u200b/g, "")
+			.replace(/\u200c/g, "")
+			.replace(/\u200d/g, "")
+			.replace(/\ufeff/g, "");
+	}
+
+	/**
+	 * Fallback argument parser for non-XML tool call formats.
+	 *
+	 * GLM 4.6 in non-English conversations sometimes drops the <arg_key>/<arg_value> XML
+	 * tags and outputs arguments in alternative formats:
+	 * - JSON object: {"query": "search term", "count": 3}
+	 * - YAML-style key-value: query: "search term"\ncount: 3
+	 * - Assignment-style: query="search term"
+	 *
+	 * This method attempts each format in order, populating the args object in-place.
+	 * Parsed keys are normalized through normalizeParamName() and values through coerceArgValue().
+	 *
+	 * @param functionName - Normalized tool name (for param type lookup and name normalization)
+	 * @param body - Raw text after the function name line, without XML wrapper tags
+	 * @param args - Args object to populate (mutated in-place)
+	 */
+	private parseToolCallArgsFallback(
+		functionName: string,
+		body: string,
+		args: Record<string, unknown>,
+	): void {
+		// Strategy A: Try JSON object parse — e.g. {"query": "LCK LoL schedule", "count": 5}
+		const jsonMatch = body.match(/\{[\s\S]*\}/);
+		if (jsonMatch) {
+			try {
+				const parsed = JSON.parse(jsonMatch[0]);
+				if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+					for (const [rawKey, rawVal] of Object.entries(parsed)) {
+						const argKey = this.normalizeParamName(functionName, rawKey.trim());
+						const expectedType = this.getToolParamType(functionName, argKey);
+						args[argKey] = this.coerceArgValue(
+							typeof rawVal === "string" ? rawVal : JSON.stringify(rawVal),
+							expectedType,
+						);
+					}
+					if (Object.keys(args).length > 0) {
+						log.info(
+							`NovelAI GLM: Fallback parsed ${Object.keys(args).length} arg(s) for "${functionName}" via JSON format`,
+						);
+						return;
+					}
+				}
+			} catch {
+				// JSON parse failed, try next strategy
+			}
+		}
+
+		// Strategy B: Key-value lines — e.g. "query: LCK LoL schedule\ncount: 5"
+		//    Matches patterns: "key: value", "key:value", 'key: "value"', "key: 'value'"
+		//    Also handles assignment style: "key=value", 'key="value"'
+		const kvLines = body.split("\n");
+		for (const line of kvLines) {
+			const trimmedLine = line.trim();
+			if (!trimmedLine) continue;
+
+			// Match "key: value" or "key = value" or "key=value"
+			const kvMatch = trimmedLine.match(
+				/^([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*(.+)$/,
+			);
+			if (kvMatch) {
+				const rawKey = kvMatch[1].trim();
+				let rawValue = kvMatch[2].trim();
+
+				// Strip surrounding quotes from value if present
+				if (
+					(rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+					(rawValue.startsWith("'") && rawValue.endsWith("'"))
+				) {
+					rawValue = rawValue.slice(1, -1);
+				}
+
+				const argKey = this.normalizeParamName(functionName, rawKey);
+				const expectedType = this.getToolParamType(functionName, argKey);
+				args[argKey] = this.coerceArgValue(rawValue, expectedType);
+			}
+		}
+
+		if (Object.keys(args).length > 0) {
+			log.info(
+				`NovelAI GLM: Fallback parsed ${Object.keys(args).length} arg(s) for "${functionName}" via key-value format`,
+			);
+		}
 	}
 
 	/**
