@@ -198,6 +198,55 @@ function getDayOfWeek(date: Date): string {
 			][dayOfWeek];
 }
 
+const DISCORD_CUSTOM_EMOJI_NAME_REGEX = /^<a?:([^:>]+):[^>]+>$/;
+const DEFAULT_EMOJI_RUN_PREFIX_LENGTH = 3;
+const MIN_EMOJI_RUN_PREFIX_LENGTH = 1;
+const MAX_EMOJI_RUN_PREFIX_LENGTH = 32;
+
+function loadEmojiRunPrefixLength(): number {
+	const raw = process.env.EMOJI_RUN_PREFIX_LENGTH;
+	if (!raw) return DEFAULT_EMOJI_RUN_PREFIX_LENGTH;
+
+	const parsed = Number.parseInt(raw, 10);
+	if (Number.isNaN(parsed)) {
+		log.warn(
+			`Invalid EMOJI_RUN_PREFIX_LENGTH value: ${raw}. Using default: ${DEFAULT_EMOJI_RUN_PREFIX_LENGTH}`,
+		);
+		return DEFAULT_EMOJI_RUN_PREFIX_LENGTH;
+	}
+
+	return Math.min(
+		MAX_EMOJI_RUN_PREFIX_LENGTH,
+		Math.max(MIN_EMOJI_RUN_PREFIX_LENGTH, parsed),
+	);
+}
+
+const EMOJI_RUN_PREFIX_LENGTH = loadEmojiRunPrefixLength();
+
+function getEmojiRunPrefix(emojiTag: string): string | null {
+	const match = DISCORD_CUSTOM_EMOJI_NAME_REGEX.exec(emojiTag);
+	if (!match?.[1]) return null;
+
+	// Normalize separators so variants like JoeCaught_1 / JoeCaught1 share a base prefix.
+	const normalizedName = match[1].toLowerCase().replace(/[^a-z0-9]/g, "");
+	if (normalizedName.length < EMOJI_RUN_PREFIX_LENGTH) return null;
+
+	return normalizedName.slice(0, EMOJI_RUN_PREFIX_LENGTH);
+}
+
+function shouldMergeEmojiRun(
+	previousEmojiTag: string | null,
+	nextEmojiTag: string,
+): boolean {
+	if (!previousEmojiTag) return true;
+
+	const previousPrefix = getEmojiRunPrefix(previousEmojiTag);
+	const nextPrefix = getEmojiRunPrefix(nextEmojiTag);
+	if (!previousPrefix || !nextPrefix) return false;
+
+	return previousPrefix === nextPrefix;
+}
+
 /**
  * Splits a long message into smaller chunks for Discord's limits, preserving code blocks and natural breakpoints
  * @param inputText - Text to split into chunks
@@ -559,6 +608,7 @@ export function chunkMessage(
 	let currentChunk = "";
 	// Accumulates consecutive emoji blocks so they are sent as a single chunk
 	let emojiRun = "";
+	let lastEmojiInRun: string | null = null;
 
 	for (const block of mergedBlocks) {
 		// Flush any accumulated emoji run before processing a non-emoji block.
@@ -570,6 +620,7 @@ export function chunkMessage(
 			if (!isWhitespaceText) {
 				chunkedMessages.push(emojiRun);
 				emojiRun = "";
+				lastEmojiInRun = null;
 			}
 		}
 
@@ -598,14 +649,27 @@ export function chunkMessage(
 				break;
 
 			case "emoji":
-				// 3b. Handle Emojis - flush pending text, then accumulate into emoji run
-				// Consecutive emojis are grouped into a single chunk so they render together
+				// 3b. Handle Emojis - flush pending text, then append only related emoji variants.
 				if (currentChunk.length > 0) {
 					chunkedMessages.push(currentChunk);
 					currentChunk = "";
 				}
 
+				if (emojiRun.length === 0) {
+					emojiRun = block.content;
+					lastEmojiInRun = block.content;
+					break;
+				}
+
+				if (!shouldMergeEmojiRun(lastEmojiInRun, block.content)) {
+					chunkedMessages.push(emojiRun);
+					emojiRun = block.content;
+					lastEmojiInRun = block.content;
+					break;
+				}
+
 				emojiRun += block.content;
+				lastEmojiInRun = block.content;
 				break;
 
 			case "url":

@@ -285,7 +285,22 @@ export class MemoryTool extends BaseTool {
 			};
 		}
 
-		if (memoryScopeArg === "server_wide") {
+		// Auto-fallback: if the bot tries to save a personal memory about itself,
+		// silently switch to server_wide scope instead of returning an error.
+		// This avoids a wasted tool retry — the memory is still saved, just as server-wide.
+		let effectiveScope = memoryScopeArg;
+		if (
+			effectiveScope === "target_user" &&
+			targetUserDiscordIdArg &&
+			targetUserDiscordIdArg === context.client.user?.id
+		) {
+			log.info(
+				"Memory tool: Bot tried to save a personal memory about itself — falling back to server_wide scope",
+			);
+			effectiveScope = "server_wide";
+		}
+
+		if (effectiveScope === "server_wide") {
 			// Server-wide memory handling (from tomoriChat.ts:1127-1179)
 			try {
 				// Check server memory limit before adding
@@ -406,26 +421,9 @@ export class MemoryTool extends BaseTool {
 					},
 				};
 			}
-		} else if (memoryScopeArg === "target_user") {
+		} else if (effectiveScope === "target_user") {
 			// User-specific memory handling (from tomoriChat.ts:1180-1339)
-
-			// Prevent saving personal memories about the bot itself
-			if (
-				targetUserDiscordIdArg &&
-				targetUserDiscordIdArg === context.client.user?.id
-			) {
-				return {
-					success: false,
-					error:
-						"Cannot save personal memories about the bot. Use 'server_wide' scope for information about the bot.",
-					data: {
-						status: "memory_save_failed_invalid_target",
-						scope: "target_user",
-						reason:
-							"Personal memories cannot be saved about the bot itself. Server-wide memories should be used for bot-related information.",
-					},
-				};
-			}
+			// Note: bot self-target check is handled above via auto-fallback to server_wide scope.
 
 			// Validate required arguments for target_user scope
 			if (

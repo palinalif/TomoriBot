@@ -44,6 +44,10 @@ import {
 	type NovelAIStreamChunk,
 } from "./novelaiService";
 
+/** Whether GLM 4.6 thinking (reasoning) is enabled. When disabled, /nothink is appended to suppress internal reasoning. */
+const NAI_GLM_THINKING_ENABLED =
+	(process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
+
 type ToolParamType = "string" | "number" | "boolean" | "array" | "object";
 
 interface ToolParameterSchema {
@@ -1811,9 +1815,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * - User turns keep speaker labels (multi-user Discord needs disambiguation)
 	 * - Assistant turns have bot name STRIPPED — <|assistant|> is sufficient, and
 	 *   including "Tomori:" causes garbled name artifacts (e.g., "Tomo", "Tomorleasing")
-	 * - /nothink is NOT appended — removing it allows GLM to reason when needed
-	 *   (tool use requires internal reasoning). /nothink was the directive disabling it.
-	 * - <think></think> on assistant turns and generation prompt shows the expected format
+	 * - Thinking mode is controlled by NAI_GLM_THINKING_ENABLED env var (default: true).
+	 *   When enabled, <think></think> seeds each assistant turn; when disabled, /nothink
+	 *   is appended instead to suppress internal reasoning.
 	 * - If the model decides to think, any <think>...</think> blocks are stripped by
 	 *   stripThinkBlocks() in the streaming pipeline
 	 * - Tool definitions use <tools> XML format in the system block
@@ -1888,6 +1892,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		// 3. Build the prompt using GLM 4.6 chat template
+		// Thinking directive: <think></think> seeds the expected format when thinking is enabled;
+		// /nothink explicitly disables internal reasoning when thinking is turned off.
+		const thinkDirective = NAI_GLM_THINKING_ENABLED
+			? "<think></think>"
+			: "/nothink";
 		const promptParts: string[] = [];
 
 		// Header: [gMASK]<sop>
@@ -1921,7 +1930,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					"",
 				);
 				promptParts.push("<|assistant|>");
-				promptParts.push("<think></think>");
+				promptParts.push(thinkDirective);
 				promptParts.push(strippedContent);
 			}
 		}
@@ -1937,7 +1946,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			for (const toolTurn of toolTurns) {
 				if (toolTurn.role === "assistant") {
 					promptParts.push("<|assistant|>");
-					promptParts.push("<think></think>");
+					promptParts.push(thinkDirective);
 					promptParts.push(toolTurn.content);
 				} else if (toolTurn.role === "observation") {
 					promptParts.push("<|observation|>");
@@ -1947,11 +1956,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		// 6. Generation prompt: signal the model to generate the assistant's response.
-		// <think></think> shows the expected format (thinking already complete for this turn).
-		// Removing /nothink from user messages allows the model to reason when needed —
-		// /nothink was the directive that explicitly disabled reasoning.
+		// thinkDirective is either <think></think> (seeds thinking format) or /nothink (disables reasoning).
 		promptParts.push("<|assistant|>");
-		promptParts.push("<think></think>");
+		promptParts.push(thinkDirective);
 
 		return promptParts.join("\n");
 	}

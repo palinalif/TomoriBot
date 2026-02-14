@@ -299,10 +299,12 @@ function convertToOpenAIParams(
 		frequency_penalty: naiParams.repetition_penalty_frequency,
 		presence_penalty: naiParams.repetition_penalty_presence,
 		repetition_penalty: naiParams.repetition_penalty,
-		// GLM 4.6 turn boundary stop sequences — these are defensive: the model
-		// rarely emits role tags in completions mode (it generates "Username:" instead),
-		// so speaker detection in the adapter handles the primary turn-stopping logic.
-		stop: ["<|user|>", "<|observation|>", "<|system|>"],
+		// GLM 4.6 stop sequences:
+		// - Role tags are defensive (model rarely emits them in completions mode —
+		//   speaker detection in the adapter handles primary turn-stopping).
+		// - </think> prevents the model from continuing past a stray closing think tag,
+		//   which causes garbage/out-of-character generation after visible text.
+		stop: ["<|user|>", "<|observation|>", "<|system|>", "</think>"],
 	};
 }
 
