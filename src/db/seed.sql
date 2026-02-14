@@ -168,6 +168,16 @@ EXCEPTION
         RAISE NOTICE 'Column not found during FK creation, skipping';
 END $$;
 
+-- Backfill NULL diffusion_model_id with the provider's default diffusion model.
+-- This ensures existing servers (created before image generation was added) automatically
+-- get a default image model without requiring manual configuration.
+UPDATE tomori_configs tc
+SET diffusion_model_id = dm.diffusion_model_id
+FROM llms l
+JOIN image_diffusion_models dm ON dm.provider = l.llm_provider AND dm.is_default = true
+WHERE tc.llm_id = l.llm_id
+  AND tc.diffusion_model_id IS NULL;
+
 -- Ensure all required columns exist in embedding_models table
 SELECT add_column_if_not_exists('embedding_models', 'model_family', 'TEXT');
 SELECT add_column_if_not_exists('embedding_models', 'model_description', 'TEXT');

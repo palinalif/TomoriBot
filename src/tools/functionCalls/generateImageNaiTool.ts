@@ -25,8 +25,7 @@ import {
 const NAI_STEPS = Number.parseInt(process.env.NAI_IMAGE_STEPS || "28", 10);
 const NAI_SCALE = Number.parseFloat(process.env.NAI_IMAGE_SCALE || "5");
 const NAI_SAMPLER = process.env.NAI_IMAGE_SAMPLER || "k_euler_ancestral";
-const NAI_NOISE_SCHEDULE =
-	process.env.NAI_IMAGE_NOISE_SCHEDULE || "karras";
+const NAI_NOISE_SCHEDULE = process.env.NAI_IMAGE_NOISE_SCHEDULE || "karras";
 const NAI_NEGATIVE_PROMPT =
 	process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
 	"blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page";
@@ -342,8 +341,7 @@ export class GenerateImageNaiTool extends BaseTool {
 					lora_clip_weights: null,
 					deliberate_euler_ancestral_bug: false,
 					prefer_brownian: true,
-					cfg_sched_eligibility:
-						"enable_for_post_summer_samplers",
+					cfg_sched_eligibility: "enable_for_post_summer_samplers",
 					explike_fine_detail: false,
 					minimize_sigma_inf: false,
 					uncond_per_vibe: true,
@@ -383,17 +381,14 @@ export class GenerateImageNaiTool extends BaseTool {
 		);
 
 		// 2. Send generation request
-		const response = await fetch(
-			`${NAI_IMAGE_BASE_URL}/ai/generate-image`,
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(requestPayload),
+		const response = await fetch(`${NAI_IMAGE_BASE_URL}/ai/generate-image`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				"Content-Type": "application/json",
 			},
-		);
+			body: JSON.stringify(requestPayload),
+		});
 
 		if (!response.ok) {
 			const errorText = await response.text().catch(() => "");
@@ -413,9 +408,7 @@ export class GenerateImageNaiTool extends BaseTool {
 		);
 
 		if (!pngFileName) {
-			throw new Error(
-				"NovelAI response ZIP did not contain a PNG file",
-			);
+			throw new Error("NovelAI response ZIP did not contain a PNG file");
 		}
 
 		const pngData = await zip.files[pngFileName].async("nodebuffer");
@@ -532,7 +525,7 @@ export class GenerateImageNaiTool extends BaseTool {
 		// Extract arguments
 		const prompt = args.prompt as string;
 		const orientation = (args.orientation as string) || "portrait";
-		const isSelfPortrait = args.is_self_portrait !== false; // Default to true when not provided
+		const isSelfPortrait = args.is_self_portrait !== true; // Default to false when not provided
 
 		try {
 			// 3. Get the diffusion model codename from database
@@ -541,7 +534,8 @@ export class GenerateImageNaiTool extends BaseTool {
 			if (!diffusionModelId) {
 				return {
 					success: false,
-					error: "No diffusion model configured for this server. Please run the setup command or configure an API key to enable image generation.",
+					error:
+						"No diffusion model configured for this server. Please run the setup command or configure an API key to enable image generation.",
 				};
 			}
 
@@ -573,7 +567,14 @@ export class GenerateImageNaiTool extends BaseTool {
 			}
 
 			// 4. Build tag list — quality tags and character tags are trusted (no normalization needed)
-			const qualityTags = ["8k", "absurdres", "masterpiece", "best quality", "good quality", "newest"];
+			const qualityTags = [
+				"8k",
+				"absurdres",
+				"masterpiece",
+				"best quality",
+				"good quality",
+				"newest",
+			];
 
 			// Parse model-provided tags (these need normalization)
 			const modelTags = prompt
@@ -622,20 +623,12 @@ export class GenerateImageNaiTool extends BaseTool {
 				name: `nai_generated_${Date.now()}.png`,
 			});
 
-			const sentMessage = await this.sendGeneratedImage(
-				context,
-				attachment,
-			);
+			const sentMessage = await this.sendGeneratedImage(context, attachment);
 
-			log.success(
-				"Successfully generated and sent NAI image to Discord",
-			);
+			log.success("Successfully generated and sent NAI image to Discord");
 
 			// 8. Increment quota after successful generation
-			await incrementImageQuota(
-				context.tomoriState.server_id,
-				userDiscId,
-			);
+			await incrementImageQuota(context.tomoriState.server_id, userDiscId);
 
 			// Build success message with remaining quota info
 			let successMessage = `Good job! The image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it — do NOT generate another image unless asked. The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
@@ -669,18 +662,17 @@ export class GenerateImageNaiTool extends BaseTool {
 			) {
 				return {
 					success: false,
-					error: "NovelAI API authentication failed. Please check your API key and subscription status.",
+					error:
+						"NovelAI API authentication failed. Please check your API key and subscription status.",
 				};
 			}
 
 			// Check for rate limiting
-			if (
-				errorMessage.includes("429") ||
-				errorMessage.includes("rate limit")
-			) {
+			if (errorMessage.includes("429") || errorMessage.includes("rate limit")) {
 				return {
 					success: false,
-					error: "NovelAI API rate limit reached. Please try again in a moment.",
+					error:
+						"NovelAI API rate limit reached. Please try again in a moment.",
 				};
 			}
 
