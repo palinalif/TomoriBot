@@ -58,33 +58,38 @@ After adding her to your server through either method above, run the `/config se
 ## Feature Showcase
 
 
-![Screenshots 1](img/scs/1st.png)
-
-<h3 align="center">Agentic AI-Powered Conversation</h3>
-<p align="center">TomoriBot has LOTS of tools that allows her to go beyond just chatting, such as searching the web, setting reminders, analyzing images, binge-watching YouTube, and utilizing your server's emotes/stickers </p>
-
-<br />
-
+![Screenshots 2.5](img/scs/multi-persona.png)
 ![Screenshots 2](img/scs/2nd.png)
 
 <h3 align="center">Each Server's TomoriBot is Unique</h3>
-<p align="center"> 50+ slash commands are available for complete customization. TomoriBot's in-server personality, behavior, and avatar can be easily changed as well as exported for others as Personas (akin to shareable AI Character Cards). She also remembers interactions using Memories, which can only be accessed by you and your server (with complete options to delete or block for privacy) </p>
+<p align="center"> 50+ slash commands are available for complete customization, including having multiple personas! TomoriBot's in-server personality, behavior, and avatar can be easily changed as well as exported for others as Personas (akin to shareable AI Character Cards). She also remembers interactions using Memories, which can only be accessed by you and your server (with complete options to delete or block for privacy) </p>
 
 <br />
+
+
+![Screenshots 1](img/scs/1st.png)
+![Screenshots 1.5](img/scs/agentic-orchestration.png)
+
+<h3 align="center">Agentic AI-Powered Conversation</h3>
+<p align="center">TomoriBot has LOTS of tools that allows her to go beyond just chatting, such as searching the web, setting reminders, analyzing images, binge-watching YouTube, and utilizing your server's emotes/stickers. You can also orchestrate multiple personas to work with each other to do work in your server!</p>
+
+<br />
+
 
 
 ![Screenshots 3](img/scs/3rd.png)
 
 <h3 align="center">Multilingual and Multi-Provider Support</h3>
-<p align="center">Different AI providers and models are available (currently Google Gemini, OpenRouter, and NovelAI), ranging from practical coding AI to role-playing AI that would power your TomoriBot's "brain". TomoriBot is also multilingual based on your chosen AI provider/model</p>
+<p align="center">Different AI providers and models are available (currently Google Gemini, OpenRouter, NovelAI, and locally hosted models (KoboldCPP, Ollama)), ranging from practical coding AI to role-playing AI that would power your TomoriBot's "brain". TomoriBot is also multilingual based on your chosen AI provider/model</p>
 
 <br />
 
 
+![Screenshots 4.5](img/scs/roleplay-tools.png)
 ![Screenshots 4](img/scs/4th.png)
 
 <h3 align="center">...and much MORE!</h3>
-<p align="center">TomoriBot is currently in Beta, with new features such as Image Generation currently in testing (please report through GitHub issues or the official Discord for any bugs!)</p>
+<p align="center">TomoriBot is currently in Beta, with new features such as Image Generation and role-playing tools such as prefills and impersonations! (please report through GitHub issues or the official Discord for any bugs!)</p>
 
 
 <!-- GETTING STARTED -->

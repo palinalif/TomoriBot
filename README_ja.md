@@ -58,17 +58,19 @@ TomoriBotは、[SillyTavern](https://github.com/SillyTavern/SillyTavern)とDisco
 ## 機能紹介
 
 
-![Screenshots 1](img/scs/1st.png)
-
-<h3 align="center">エージェント型AIによる会話</h3>
-<p align="center">TomoriBotは、Web検索、リマインダー設定、画像分析、YouTube視聴、サーバーの絵文字/スタンプの使用など、単なるチャット以上のことができる多数のツールを持っています</p>
-
-<br />
-
+![Screenshots 2.5](img/scs/multi-persona.png)
 ![Screenshots 2](img/scs/2nd.png)
 
 <h3 align="center">各サーバーのTomoriBotは独自</h3>
-<p align="center">50以上のスラッシュコマンドで完全なカスタマイズが可能です。TomoriBotのサーバー内でのパーソナリティ、行動、アバターは簡単に変更でき、ペルソナとして他のユーザーにエクスポートすることもできます（共有可能なAIキャラクターカードのようなもの）。また、メモリーを使用してやり取りを記憶し、あなたとあなたのサーバーのみがアクセスできます（プライバシーのための完全な削除またはブロックオプション付き）</p>
+<p align="center">50以上のスラッシュコマンドで完全なカスタマイズが可能で、複数ペルソナの運用にも対応しています。TomoriBotのサーバー内でのパーソナリティ、行動、アバターは簡単に変更でき、ペルソナとして他のユーザーにエクスポートすることもできます（共有可能なAIキャラクターカードのようなもの）。また、メモリーを使用してやり取りを記憶し、あなたとあなたのサーバーのみがアクセスできます（プライバシーのための完全な削除またはブロックオプション付き）</p>
+
+<br />
+
+![Screenshots 1](img/scs/1st.png)
+![Screenshots 1.5](img/scs/agentic-orchestration.png)
+
+<h3 align="center">エージェント型AIによる会話</h3>
+<p align="center">TomoriBotは、Web検索、リマインダー設定、画像分析、YouTube視聴、サーバーの絵文字/スタンプの使用など、単なるチャット以上のことができる多数のツールを持っています。さらに、複数のペルソナを連携させて、サーバー内の作業を協調して進めることもできます！</p>
 
 <br />
 
@@ -76,15 +78,16 @@ TomoriBotは、[SillyTavern](https://github.com/SillyTavern/SillyTavern)とDisco
 ![Screenshots 3](img/scs/3rd.png)
 
 <h3 align="center">多言語・マルチプロバイダー対応</h3>
-<p align="center">異なるAIプロバイダーとモデルが利用可能です（現在Google Gemini、OpenRouter、NovelAI）。実用的なコーディングAIからロールプレイAIまで、TomoriBotの「頭脳」を動かすさまざまなモデルが使えます。TomoriBotは選択したAIプロバイダー/モデルに基づいて多言語対応です</p>
+<p align="center">異なるAIプロバイダーとモデルが利用可能です（現在Google Gemini、OpenRouter、NovelAI、ローカルホストモデル（KoboldCPP、Ollama））。実用的なコーディングAIからロールプレイAIまで、TomoriBotの「頭脳」を動かすさまざまなモデルが使えます。TomoriBotは選択したAIプロバイダー/モデルに基づいて多言語対応です</p>
 
 <br />
 
 
+![Screenshots 4.5](img/scs/roleplay-tools.png)
 ![Screenshots 4](img/scs/4th.png)
 
 <h3 align="center">...その他多数！</h3>
-<p align="center">TomoriBotは現在ベータ版で、新機能のテストが進行中です。近日公開予定</p>
+<p align="center">TomoriBotは現在ベータ版で、画像生成やプリフィル、なりきり（impersonation）などのロールプレイ支援機能も追加されています！（バグはGitHub Issuesまたは公式Discordで報告してください）</p>
 
 
 <!-- GETTING STARTED -->
