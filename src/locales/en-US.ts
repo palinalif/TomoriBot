@@ -855,6 +855,9 @@ export default {
 			},
 			default: {
 				description: `Apply a preset personality configuration`,
+				type_description: `Target main/default persona or create as alter persona`,
+				type_choice_default: `Default Persona`,
+				type_choice_alter: `Alter Persona`,
 				no_permission_title: `🔴 Permission Denied`,
 				no_permission_description: `You need the **Manage Server** permission to apply personality presets.`,
 				modal_title: `Apply Personality Preset`,

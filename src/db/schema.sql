@@ -543,6 +543,7 @@ CREATE TABLE IF NOT EXISTS tomori_presets (
   preset_sample_dialogues_in TEXT[] DEFAULT '{}', -- array index is soft id of sample dialogue pairs
   preset_sample_dialogues_out TEXT[] DEFAULT '{}',
   preset_language TEXT NOT NULL,
+  preset_trigger_words TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -552,6 +553,7 @@ DROP TRIGGER IF EXISTS update_tomori_presets_timestamp ON tomori_presets;
 
 -- Add preset avatar path column for profile pictures 
 SELECT add_column_if_not_exists('tomori_presets', 'preset_avatar_path', 'TEXT');
+SELECT add_column_if_not_exists('tomori_presets', 'preset_trigger_words', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Table: system_prompt_presets
 -- Purpose: Store pre-made system prompt presets that users can apply

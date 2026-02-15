@@ -165,6 +165,8 @@ export async function importPresetData(
 		const triggerWordsArrayLiteral = `{${importData.trigger_words
 			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
 			.join(",")}}`;
+		const shouldUseImportedLineage =
+			identityMode === "preserve" && importedLineageId !== null;
 
 		// 6. Update tomoris table with personality data and lineage behavior
 		try {
@@ -177,7 +179,7 @@ export async function importPresetData(
 					sample_dialogues_out = ${dialoguesOutArrayLiteral}::text[],
 					persona_lineage_id = CASE
 						WHEN ${identityMode} = 'fork' THEN nextval('persona_lineage_id_seq')
-						WHEN ${identityMode} = 'preserve' AND ${importedLineageId} IS NOT NULL THEN ${importedLineageId}
+						WHEN ${shouldUseImportedLineage} THEN ${importedLineageId}::bigint
 						ELSE persona_lineage_id
 					END
 				WHERE tomori_id = ${mainTomoriId}

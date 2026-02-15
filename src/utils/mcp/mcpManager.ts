@@ -230,12 +230,19 @@ export class MCPManager {
 				error instanceof Error ? error.message : String(error);
 
 			if (errorMessage.includes("timed out")) {
-				log.warn(
-					`${displayName} connection timed out - this is normal on first install`,
-				);
-				if (command === "npx") {
+				const usesPackageRunner = command === "npx" || command === "bunx";
+
+				if (usesPackageRunner) {
+					log.warn(
+						`${displayName} connection timed out - this can happen during first install or cache warm-up`,
+					);
 					log.info(
-						"Try restarting TomoriBot after npm finishes installing the package",
+						"Try restarting TomoriBot after package installation/cache warm-up completes",
+					);
+				} else {
+					log.error(
+						`${displayName} connection timed out while starting '${command}' (${timeout}ms)`,
+						error as Error,
 					);
 				}
 			} else if (

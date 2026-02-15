@@ -445,7 +445,32 @@ export async function setupServer(
 				? selectedEmbeddingModel.embedding_model_id
 				: null;
 
-			const defaultTriggers = getBaseTriggerWords(validConfig.locale);
+			const presetRows = await tx<Array<{ preset_trigger_words: string[] | null }>>`
+				SELECT preset_trigger_words
+				FROM tomori_presets
+				WHERE tomori_preset_id = ${validConfig.presetId}
+				LIMIT 1
+			`;
+			const presetTriggerCandidates =
+				presetRows[0]?.preset_trigger_words?.filter(
+					(trigger): trigger is string =>
+						typeof trigger === "string" && trigger.trim().length > 0,
+				) ?? [];
+			const dedupedPresetTriggers: string[] = [];
+			const seenPresetTriggers = new Set<string>();
+			for (const trigger of presetTriggerCandidates) {
+				const normalized = trigger.trim().toLowerCase();
+				if (seenPresetTriggers.has(normalized)) {
+					continue;
+				}
+				seenPresetTriggers.add(normalized);
+				dedupedPresetTriggers.push(trigger.trim());
+			}
+
+			const defaultTriggers =
+				dedupedPresetTriggers.length > 0
+					? dedupedPresetTriggers
+					: getBaseTriggerWords(validConfig.locale);
 
 			// 1. Create or update server record with DM support (Rule 15)
 			// registration_locale is only set on INSERT (static field for analytics)

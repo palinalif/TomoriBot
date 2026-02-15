@@ -309,7 +309,16 @@ export class MCPConfigManager {
 		let command: string;
 		let args: string[];
 
-		if (config.npmPackage) {
+		const isProductionRuntime =
+			process.env.RUN_ENV === "production" ||
+			process.env.NODE_ENV === "production";
+
+		if (isProductionRuntime && config.command) {
+			// In production, prefer explicit binaries installed in the image
+			// to avoid bunx cold-cache/network startup delays.
+			command = config.command;
+			args = config.args || [];
+		} else if (config.npmPackage) {
 			// Use bunx for npm packages to avoid npm parsing project overrides.
 			// This project is Bun-based and bunx runs MCP packages directly.
 			command = "bunx";

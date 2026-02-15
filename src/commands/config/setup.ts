@@ -562,7 +562,7 @@ export async function execute(
 				provider: normalizedProvider, // Use the case-normalized provider name
 				presetId: selectedPresetId,
 				humanizer: humanizerDegree, // Use the selected humanizer degree
-				tomoriName: getDefaultBotName(locale), // Get bot name from locale files
+				tomoriName: getDefaultBotName(serverLocale), // Use server locale for default persona name
 				timezoneOffset: timezoneOffset, // Add timezone offset to config
 				locale: serverLocale, // Persist guild locale for server analytics/triggers; DM falls back to user locale
 				registrationLocale, // Analytics-only locale for servers

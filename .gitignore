@@ -1,6 +1,7 @@
 nul
 .venv*
 *.backup
+.tmp
 
 # Local Monitoring
 grafana_data/

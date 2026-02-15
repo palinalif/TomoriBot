@@ -189,6 +189,7 @@ export const tomoriPresetSchema = z.object({
 	preset_sample_dialogues_out: z.array(z.string()).default([]),
 	preset_language: z.string(),
 	preset_avatar_path: z.string().nullable().optional(),
+	preset_trigger_words: z.array(z.string()).default([]),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
