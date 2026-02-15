@@ -3644,13 +3644,26 @@ export default async function tomoriChat(
 						try {
 							const impersonatedMember =
 								guild?.members.cache.get(impersonatedUserId);
+							const impersonatedUser =
+								impersonatedMember?.user ||
+								(await client.users.fetch(impersonatedUserId).catch(() => null));
+
+							// Force static PNG to avoid webhook avatar failures on animated profile pictures.
 							const impersonatedUserAvatar =
-								impersonatedMember?.avatarURL({ extension: "png" }) ||
-								impersonatedMember?.user.avatarURL({ extension: "png" });
+								impersonatedMember?.displayAvatarURL({
+									size: 1024,
+									extension: "png",
+									forceStatic: true,
+								}) ||
+								impersonatedUser?.displayAvatarURL({
+									size: 1024,
+									extension: "png",
+									forceStatic: true,
+								});
 							// Use Discord display name for webhook (what shows in Discord UI)
 							const impersonatedUserDiscordName =
 								impersonatedMember?.displayName ||
-								impersonatedMember?.user.displayName ||
+								impersonatedUser?.displayName ||
 								"User";
 
 							// Create temporary webhook with impersonated user's Discord identity

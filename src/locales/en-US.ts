@@ -1516,7 +1516,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				description: `Impersonate personas, users, or inject system prompts.`,
 				target_description: `Choose who or what to impersonate.`,
 				target_persona: `Persona`,
-				target_me: `Me (User)`,
+				target_me: `Me`,
 				target_user: `User`,
 				target_system: `System`,
 				user_select_title: `Select User`,
