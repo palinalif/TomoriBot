@@ -403,18 +403,14 @@ export default {
 
 		self_teach: {
 			server_memory_learned_title: "🧠 I Learned Something New!",
-			server_memory_learned_description:
-				"`{memory_content}`",
+			server_memory_learned_description: "`{memory_content}`",
 			server_memory_updated_title: "📝 Updated a Memory!",
-			server_memory_updated_description:
-				"`{memory_content}`",
+			server_memory_updated_description: "`{memory_content}`",
 			personal_memory_learned_title:
 				"💡 I Learned Something New about {user_nickname}!",
-			personal_memory_learned_description:
-				"`{memory_content}`",
+			personal_memory_learned_description: "`{memory_content}`",
 			personal_memory_updated_title: "📝 Updated Memory about {user_nickname}!",
-			personal_memory_updated_description:
-				"`{memory_content}`",
+			personal_memory_updated_description: "`{memory_content}`",
 			server_memory_footer:
 				"Server managers can manage this memory using `/teach` and `/forget` commands.",
 			personal_memory_footer_manage:
@@ -1453,7 +1449,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 		},
 
 		// NovelAI image generation commands
-		nai: {
+		novelai: {
 			charactertags: {
 				description: `Configure NovelAI character tags for a persona's self-portraits.`,
 				modal_title: `Character Tags`,
@@ -2877,10 +2873,8 @@ You can change this anytime using \`/personal privacy\`.`,
 					"You have reached your daily image generation quota. {reset_info}",
 				serverwide_quota_exceeded_description:
 					"This server has reached its image generation quota for this period. {reset_info}",
-				quota_resets_in_hours:
-					"Quota resets in {hours} hour(s).",
-				quota_resets_in_days:
-					"Quota resets in {days} day(s).",
+				quota_resets_in_hours: "Quota resets in {hours} hour(s).",
+				quota_resets_in_days: "Quota resets in {days} day(s).",
 			},
 		},
 	},

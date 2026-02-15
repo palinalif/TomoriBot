@@ -49,7 +49,7 @@ export const configureSubcommand = (
 	subcommand
 		.setName("charactertags")
 		.setDescription(
-			localizer("en-US", "commands.nai.charactertags.description"),
+			localizer("en-US", "commands.novelai.charactertags.description"),
 		);
 
 /**
@@ -132,25 +132,24 @@ export async function execute(
 		// 4. Show modal with persona select + tags text input
 		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.nai.charactertags.modal_title",
+			modalTitleKey: "commands.novelai.charactertags.modal_title",
 			components: [
 				{
 					customId: PERSONA_SELECT_ID,
-					labelKey: "commands.nai.charactertags.persona_select_label",
+					labelKey: "commands.novelai.charactertags.persona_select_label",
 					descriptionKey:
-						"commands.nai.charactertags.persona_select_description",
+						"commands.novelai.charactertags.persona_select_description",
 					placeholder:
-						"commands.nai.charactertags.persona_select_placeholder",
+						"commands.novelai.charactertags.persona_select_placeholder",
 					required: true,
 					options: personaSelectOptions,
 				},
 				{
 					customId: TAGS_INPUT_ID,
-					labelKey: "commands.nai.charactertags.tags_input_label",
+					labelKey: "commands.novelai.charactertags.tags_input_label",
 					descriptionKey:
-						"commands.nai.charactertags.tags_input_description",
-					placeholder:
-						"commands.nai.charactertags.tags_input_placeholder",
+						"commands.novelai.charactertags.tags_input_description",
+					placeholder: "commands.novelai.charactertags.tags_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: false, // Empty input clears tags
 					maxLength: 4000,
@@ -205,8 +204,8 @@ export async function execute(
 			invalidateTomoriStateCache(interaction.guild.id);
 
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.nai.charactertags.cleared_title",
-				descriptionKey: "commands.nai.charactertags.cleared_description",
+				titleKey: "commands.novelai.charactertags.cleared_title",
+				descriptionKey: "commands.novelai.charactertags.cleared_description",
 				descriptionVars: {
 					persona_name: selectedPersona.tomori_nickname,
 				},
@@ -234,8 +233,8 @@ export async function execute(
 		// 8. Validate: at least 1 tag
 		if (uniqueTags.length === 0) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.nai.charactertags.no_tags_title",
-				descriptionKey: "commands.nai.charactertags.no_tags_description",
+				titleKey: "commands.novelai.charactertags.no_tags_title",
+				descriptionKey: "commands.novelai.charactertags.no_tags_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -244,9 +243,9 @@ export async function execute(
 		// 9. Validate: max tag count
 		if (uniqueTags.length > MAX_TAGS) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.nai.charactertags.too_many_tags_title",
+				titleKey: "commands.novelai.charactertags.too_many_tags_title",
 				descriptionKey:
-					"commands.nai.charactertags.too_many_tags_description",
+					"commands.novelai.charactertags.too_many_tags_description",
 				descriptionVars: { max_tags: MAX_TAGS.toString() },
 				color: ColorCode.ERROR,
 			});
@@ -257,9 +256,9 @@ export async function execute(
 		for (const tag of uniqueTags) {
 			if (tag.length > MAX_TAG_LENGTH) {
 				await replyInfoEmbed(modalSubmitInteraction, locale, {
-					titleKey: "commands.nai.charactertags.tag_too_long_title",
+					titleKey: "commands.novelai.charactertags.tag_too_long_title",
 					descriptionKey:
-						"commands.nai.charactertags.tag_too_long_description",
+						"commands.novelai.charactertags.tag_too_long_description",
 					descriptionVars: { max_length: MAX_TAG_LENGTH.toString() },
 					color: ColorCode.ERROR,
 				});
@@ -282,8 +281,8 @@ export async function execute(
 
 		// 13. Success response with tag list
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.nai.charactertags.success_title",
-			descriptionKey: "commands.nai.charactertags.success_description",
+			titleKey: "commands.novelai.charactertags.success_title",
+			descriptionKey: "commands.novelai.charactertags.success_description",
 			descriptionVars: {
 				persona_name: selectedPersona.tomori_nickname,
 				tag_list: uniqueTags.join(", "),
@@ -299,11 +298,7 @@ export async function execute(
 				personaId: selectedPersona?.tomori_id ?? null,
 			},
 		};
-		await log.error(
-			"Error in /nai charactertags command",
-			error,
-			context,
-		);
+		await log.error("Error in /nai charactertags command", error, context);
 
 		const errorReplyInteraction = modalSubmitInteraction ?? interaction;
 
