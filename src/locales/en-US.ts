@@ -1506,9 +1506,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				channel_not_whitelisted: `This server has a channel whitelist active. \`/bot respond\` can only be used in whitelisted channels.`,
 			},
 			kill: {
-				description: `Immediately stop the current stream without a follow-up response.`,
+				description: `Immediately stop the current stream and clear queued responses in this channel.`,
 				success_title: `Stream Stopped`,
-				success_description: `Stopped the active response stream with no follow-up reply.`,
+				success_description: `Stopped the active response stream and cleared queued responses in this channel.`,
 				nothing_to_stop_title: `No Active Stream`,
 				nothing_to_stop_description: `There is no active response stream to stop in this channel.`,
 			},

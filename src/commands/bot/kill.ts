@@ -1,6 +1,9 @@
 import { MessageFlags, type SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
-import { isChannelProcessingLocked } from "../../events/messageCreate/tomoriChat";
+import {
+	clearChannelProcessingQueue,
+	isChannelProcessingLocked,
+} from "../../events/messageCreate/tomoriChat";
 import type { UserRow } from "../../types/db/schema";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
@@ -61,8 +64,9 @@ export async function execute(
 	}
 
 	StreamOrchestrator.requestStop(interaction.channel.id, interaction.user.id);
+	const clearedQueueCount = clearChannelProcessingQueue(interaction.channel.id);
 	log.info(
-		`Silent stop requested via /bot kill by user ${interaction.user.id} in channel ${interaction.channel.id}`,
+		`Silent stop requested via /bot kill by user ${interaction.user.id} in channel ${interaction.channel.id}. Cleared ${clearedQueueCount} queued message(s).`,
 	);
 
 	await replyInfoEmbed(

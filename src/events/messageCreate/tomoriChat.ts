@@ -524,6 +524,26 @@ export function isChannelProcessingLocked(channelId: string): boolean {
 	return true;
 }
 
+/**
+ * Clears all queued messages for a channel and returns the number removed.
+ * This does not affect the message currently being processed.
+ */
+export function clearChannelProcessingQueue(channelId: string): number {
+	const lockEntry = channelLocks.get(channelId);
+	if (!lockEntry || lockEntry.messageQueue.length === 0) {
+		return 0;
+	}
+
+	const clearedCount = lockEntry.messageQueue.length;
+	lockEntry.messageQueue = [];
+
+	log.info(
+		`Cleared ${clearedCount} queued message(s) for channel ${channelId}.`,
+	);
+
+	return clearedCount;
+}
+
 interface SelfReplyChainState {
 	depth: number; // Number of self replies already generated in this chain
 	lastWasSelf: boolean;
