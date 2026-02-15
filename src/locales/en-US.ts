@@ -869,6 +869,8 @@ export default {
 				preset_not_found: `The selected preset could not be found.`,
 				success_title: `Preset Applied`,
 				success_description: `Successfully applied the '{preset_name}' preset.`,
+				success_details_description: `Successfully applied preset **{preset_name}** to persona **{nickname}**!\nAttributes: {attribute_count}\nSample Dialogues: {dialogue_count}\nTrigger Words ({trigger_word_count}): {triggers}`,
+				success_confirmation: `Preset applied to **{nickname}**. Detailed information has been posted in this channel.`,
 				avatar_update_failed: `🟡️ Server avatar could not be updated due to a Discord API error, but persona was applied successfully.`,
 				avatar_update_skipped_dm: `Preset was applied successfully, except avatar updates which are not available in Direct Messages`,
 			},
@@ -1519,7 +1521,11 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				target_description: `Choose who or what to impersonate.`,
 				target_persona: `Persona`,
 				target_me: `Me (User)`,
+				target_user: `User`,
 				target_system: `System`,
+				user_select_title: `Select User`,
+				user_select_description: `Choose a user to impersonate.`,
+				user_select_placeholder: `Select a user to impersonate...`,
 
 				// Persona impersonation
 				persona_modal_title: `Impersonate Persona`,
@@ -1538,7 +1544,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				no_messages_title: `No Messages Found`,
 				no_messages_description: `No messages found in this channel. Send at least one message before using user impersonation.`,
 				cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate me\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
+				cooldown_active_user: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate user\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
 				channel_not_whitelisted: `This server has a channel whitelist active. \`/bot impersonate me\` can only be used in whitelisted channels.`,
+				channel_not_whitelisted_user: `This server has a channel whitelist active. \`/bot impersonate user\` can only be used in whitelisted channels.`,
 
 				// System impersonation
 				system_modal_title: `System Prompt Injection`,

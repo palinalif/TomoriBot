@@ -2,12 +2,16 @@ import type {
 	Client,
 	ChatInputCommandInteraction,
 	TextChannel,
+	UserSelectMenuInteraction,
 } from "discord.js";
 import {
 	MessageFlags,
 	type SlashCommandSubcommandBuilder,
 	EmbedBuilder,
 	ChannelType,
+	ActionRowBuilder,
+	UserSelectMenuBuilder,
+	ComponentType,
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode, log } from "@/utils/misc/logger";
@@ -60,12 +64,92 @@ export const configureSubcommand = (
 						value: "me",
 					},
 					{
+						name: localizer("en-US", "commands.bot.impersonate.target_user"),
+						value: "user",
+					},
+					{
 						name: localizer("en-US", "commands.bot.impersonate.target_system"),
 						value: "system",
 					},
 				),
 		);
 };
+
+/**
+ * Handles user-target impersonation - prompt for a user, then run user impersonation flow
+ * @param client - Discord client
+ * @param interaction - Command interaction
+ * @param locale - User's locale
+ */
+async function handleTargetUserImpersonation(
+	client: Client,
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+): Promise<void> {
+	const userSelect = new UserSelectMenuBuilder()
+		.setCustomId("impersonate_target_user_select")
+		.setPlaceholder(
+			localizer(locale, "commands.bot.impersonate.user_select_placeholder"),
+		)
+		.setMinValues(1)
+		.setMaxValues(1);
+
+	const selectEmbed = new EmbedBuilder()
+		.setTitle(localizer(locale, "commands.bot.impersonate.user_select_title"))
+		.setDescription(
+			localizer(locale, "commands.bot.impersonate.user_select_description"),
+		)
+		.setColor(ColorCode.INFO);
+
+	await interaction.reply({
+		embeds: [selectEmbed],
+		components: [
+			new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(userSelect),
+		],
+		flags: MessageFlags.Ephemeral,
+	});
+
+	const promptMessage = await interaction.fetchReply();
+	let userSelectInteraction: UserSelectMenuInteraction;
+
+	try {
+		userSelectInteraction = await promptMessage.awaitMessageComponent({
+			componentType: ComponentType.UserSelect,
+			filter: (i: UserSelectMenuInteraction) => i.user.id === interaction.user.id,
+			time: 60_000,
+		});
+	} catch (_error) {
+		log.warn(
+			`[/bot impersonate user] User select prompt timed out for user ${interaction.user.id}`,
+		);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.interaction.timeout_title",
+			descriptionKey: "general.interaction.timeout_description",
+			color: ColorCode.WARN,
+		});
+		return;
+	}
+
+	await userSelectInteraction.deferUpdate();
+	await interaction.editReply({ components: [] });
+
+	const selectedUserId = userSelectInteraction.values[0];
+	const selectedUser = userSelectInteraction.users.get(selectedUserId);
+	const selectedMember = interaction.guild?.members.cache.get(selectedUserId);
+	const selectedDisplayName =
+		selectedMember?.displayName ||
+		selectedUser?.displayName ||
+		selectedUser?.username ||
+		"User";
+
+	await handleUserImpersonation(
+		client,
+		interaction,
+		locale,
+		selectedUserId,
+		selectedDisplayName,
+	);
+}
 
 /**
  * Handles persona impersonation - user sends messages as bot personas
@@ -276,6 +360,8 @@ async function handleUserImpersonation(
 	client: Client,
 	interaction: ChatInputCommandInteraction,
 	locale: string,
+	impersonatedUserId: string = interaction.user.id,
+	impersonatedDisplayName?: string,
 ): Promise<void> {
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
@@ -301,13 +387,23 @@ async function handleUserImpersonation(
 	}
 
 	const channel = interaction.channel as TextChannel;
+	const isSelfImpersonation = impersonatedUserId === interaction.user.id;
+	const commandTarget = isSelfImpersonation ? "me" : "user";
+	const cooldownActiveKey = isSelfImpersonation
+		? "commands.bot.impersonate.cooldown_active"
+		: "commands.bot.impersonate.cooldown_active_user";
+	const channelWhitelistKey = isSelfImpersonation
+		? "commands.bot.impersonate.channel_not_whitelisted"
+		: "commands.bot.impersonate.channel_not_whitelisted_user";
 
 	log.info(
-		`[/bot impersonate me] Command invoked by user ${interaction.user.id} (${interaction.user.username}) in channel ${interaction.channel.id}`,
+		`[/bot impersonate ${commandTarget}] Command invoked by user ${interaction.user.id} (${interaction.user.username}) in channel ${interaction.channel.id} targeting ${impersonatedUserId}`,
 	);
 
 	// 1. Defer the interaction immediately (Pattern 2 - async work ahead)
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	if (!interaction.deferred && !interaction.replied) {
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	}
 
 	try {
 		// 2. Load tomori state for cooldown configuration
@@ -327,7 +423,7 @@ async function handleUserImpersonation(
 		const cooldownLength = tomoriState.config.cooldown_length ?? 5;
 
 		log.info(
-			`[/bot impersonate me] Checking cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s, guild: ${interaction.guild.id}, user: ${interaction.user.id}, channel: ${interaction.channel.id}`,
+			`[/bot impersonate ${commandTarget}] Checking cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s, guild: ${interaction.guild.id}, user: ${interaction.user.id}, channel: ${interaction.channel.id}`,
 		);
 
 		const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
@@ -339,7 +435,7 @@ async function handleUserImpersonation(
 		);
 
 		log.info(
-			`[/bot impersonate me] Cooldown check result: ${cooldownResult.isOnCooldown ? "ON COOLDOWN" : "NOT ON COOLDOWN"}, remaining: ${cooldownResult.remainingSeconds}s`,
+			`[/bot impersonate ${commandTarget}] Cooldown check result: ${cooldownResult.isOnCooldown ? "ON COOLDOWN" : "NOT ON COOLDOWN"}, remaining: ${cooldownResult.remainingSeconds}s`,
 		);
 
 		if (cooldownResult.isOnCooldown) {
@@ -347,7 +443,7 @@ async function handleUserImpersonation(
 			if (cooldownResult.blockedByWhitelist) {
 				await replyInfoEmbed(interaction, locale, {
 					titleKey: "general.message_cooldown_title",
-					descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+					descriptionKey: channelWhitelistKey,
 					color: ColorCode.WARN,
 				});
 				return;
@@ -359,7 +455,7 @@ async function handleUserImpersonation(
 				interaction.user,
 				locale,
 				"general.message_cooldown_title",
-				"commands.bot.impersonate.cooldown_active",
+				cooldownActiveKey,
 				{
 					seconds: cooldownResult.remainingSeconds.toString(),
 					botName: tomoriState.tomori_nickname,
@@ -403,13 +499,13 @@ async function handleUserImpersonation(
 			undefined, // No selected persona
 			false, // Not a persona job
 			true, // isUserImpersonation - enables role reversal
-			interaction.user.id, // impersonatedUserId - the user to mimic
+			impersonatedUserId, // impersonatedUserId - the user to mimic
 		);
 
 		// 6. Set cooldown after successful response (shares cooldown pool with message triggers and /bot respond)
 		// Uses whitelist-aware version to respect per-channel cooldown overrides
 		log.info(
-			`[/bot impersonate me] Setting cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s`,
+			`[/bot impersonate ${commandTarget}] Setting cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s`,
 		);
 		await setMessageTriggerCooldownWithWhitelist(
 			interaction.guild.id,
@@ -418,11 +514,12 @@ async function handleUserImpersonation(
 			cooldownType,
 			cooldownLength,
 		);
-		log.info(`[/bot impersonate me] Cooldown set successfully`);
+		log.info(`[/bot impersonate ${commandTarget}] Cooldown set successfully`);
 
 		// 7. Send success confirmation
-		const member = interaction.guild.members.cache.get(interaction.user.id);
+		const member = interaction.guild.members.cache.get(impersonatedUserId);
 		const displayName =
+			impersonatedDisplayName ||
 			member?.displayName || member?.user.displayName || "User";
 
 		await interaction.editReply({
@@ -445,6 +542,7 @@ async function handleUserImpersonation(
 		log.error("Failed to handle user impersonation", {
 			error,
 			userId: interaction.user.id,
+			impersonatedUserId,
 			guildId: interaction.guild?.id,
 		});
 
@@ -604,6 +702,9 @@ export async function execute(
 			break;
 		case "me":
 			await handleUserImpersonation(client, interaction, locale);
+			break;
+		case "user":
+			await handleTargetUserImpersonation(client, interaction, locale);
 			break;
 		case "system":
 			await handleSystemImpersonation(interaction, locale);

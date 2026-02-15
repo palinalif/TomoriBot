@@ -1,9 +1,14 @@
 import {
+	AttachmentBuilder,
+	EmbedBuilder,
 	MessageFlags,
+	type BaseGuildTextChannel,
 	type ChatInputCommandInteraction,
 	type Client,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
+import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { loadAllPersonasForServer, loadPresetRowsByLocale } from "../../utils/db/dbRead";
 import {
 	getCachedTomoriState,
@@ -30,6 +35,11 @@ import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { getCachedPresetAvatar } from "../../utils/image/avatarHelper";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
+import {
+	getOrCreatePersonaWebhook,
+	updatePersonaWebhooksAvatar,
+} from "../../utils/discord/webhookManager";
+import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
 function isUniqueViolation(error: unknown): boolean {
 	return (
@@ -130,6 +140,53 @@ function resolvePresetLineageId(preset: TomoriPresetRow): number | null {
 	if (normalizedName.includes("default") || normalizedName.includes("boyish"))
 		return 4;
 	return null;
+}
+
+function decodeBase64DataUri(dataUri: string): Buffer | null {
+	const base64Marker = "base64,";
+	const markerIndex = dataUri.indexOf(base64Marker);
+	if (markerIndex === -1) {
+		return null;
+	}
+
+	const base64Payload = dataUri.slice(markerIndex + base64Marker.length).trim();
+	if (base64Payload.length === 0) {
+		return null;
+	}
+
+	try {
+		return Buffer.from(base64Payload, "base64");
+	} catch {
+		return null;
+	}
+}
+
+async function getPresetAvatarBuffer(
+	preset: TomoriPresetRow,
+): Promise<Buffer | null> {
+	const cachedAvatarDataUri = getCachedPresetAvatar(preset.tomori_preset_id);
+	if (cachedAvatarDataUri) {
+		const decoded = decodeBase64DataUri(cachedAvatarDataUri);
+		if (decoded) {
+			return decoded;
+		}
+	}
+
+	const presetAvatarPath = preset.preset_avatar_path?.trim();
+	if (!presetAvatarPath) {
+		return null;
+	}
+
+	try {
+		const absolutePath = path.join(process.cwd(), presetAvatarPath);
+		return await readFile(absolutePath);
+	} catch (error) {
+		log.warn(
+			`Failed to load preset avatar file "${presetAvatarPath}" for preset ${preset.tomori_preset_id}`,
+			error,
+		);
+		return null;
+	}
 }
 
 // Configure the subcommand
@@ -428,17 +485,25 @@ export async function execute(
 			// 11c. Update guild avatar/nickname only for main/default target
 			const isDM = !interaction.guild;
 			let avatarUpdateFailed = false;
+			let nicknameUpdateFailed = false;
 
 			if (!isDM) {
 				try {
 					if (interaction.guild?.members.me) {
 						const nicknameToSet =
 							resolvedPersonaName === defaultBotName ? null : resolvedPersonaName;
-						await interaction.guild.members.me.setNickname(nicknameToSet);
-						log.info(
-							`Updated guild nickname for ${interaction.guild.id} after applying preset (default target)` +
-								` to ${nicknameToSet ?? "(global default)"}`,
-						);
+						try {
+							await interaction.guild.members.me.setNickname(nicknameToSet);
+							log.info(
+								`Updated guild nickname for ${interaction.guild.id} after applying preset (default target)` +
+									` to ${nicknameToSet ?? "(global default)"}`,
+							);
+						} catch (error) {
+							nicknameUpdateFailed = true;
+							log.warn(
+								`Failed to update guild nickname after applying preset (non-fatal): ${error}`,
+							);
+						}
 					}
 
 					if (interaction.guild) {
@@ -479,22 +544,110 @@ export async function execute(
 				}
 			}
 
+			const triggerSummary =
+				presetTriggerWords.length > 0 ? presetTriggerWords.join(", ") : "N/A";
+			const detailedSuccessDescription = localizer(
+				locale,
+				"commands.persona.default.success_details_description",
+				{
+					preset_name: selectedPreset.tomori_preset_name,
+					nickname: resolvedPersonaName,
+					attribute_count: attributesWithDescription.length,
+					dialogue_count: selectedPreset.preset_sample_dialogues_in.length,
+					trigger_word_count: presetTriggerWords.length,
+					triggers: triggerSummary,
+				},
+			);
+
+			const descriptionLines = [detailedSuccessDescription];
+			if (nicknameUpdateFailed) {
+				descriptionLines.push(
+					localizer(locale, "commands.persona.import.nickname_update_failed"),
+				);
+			}
+			if (avatarUpdateFailed) {
+				descriptionLines.push(
+					localizer(locale, "commands.persona.import.avatar_update_failed"),
+				);
+			}
+
+			const successEmbed = new EmbedBuilder()
+				.setTitle(localizer(locale, "commands.persona.default.success_title"))
+				.setDescription(descriptionLines.join("\n\n"))
+				.setColor(
+					isDM || avatarUpdateFailed || nicknameUpdateFailed
+						? ColorCode.WARN
+						: ColorCode.SUCCESS,
+				);
+
+			const footerParts: string[] = [];
+			if (isDM) {
+				footerParts.push(
+					localizer(locale, "commands.persona.default.avatar_update_skipped_dm"),
+				);
+			} else if (avatarUpdateFailed) {
+				footerParts.push(
+					localizer(locale, "commands.persona.default.avatar_update_failed"),
+				);
+			}
+			footerParts.push(
+				localizer(locale, "commands.persona.import.refresh_reminder"),
+			);
+			successEmbed.setFooter({ text: footerParts.join(" • ") });
+
+			const presetAvatarBuffer = await getPresetAvatarBuffer(selectedPreset);
+			let avatarAttachment: AttachmentBuilder | null = null;
+			if (presetAvatarBuffer) {
+				const sanitizedNickname = resolvedPersonaName
+					.replace(/[^a-zA-Z0-9-_]/g, "_")
+					.slice(0, 50);
+				const timestamp = Date.now();
+				const avatarFilename = `persona-default-${sanitizedNickname}-${timestamp}.png`;
+				avatarAttachment = new AttachmentBuilder(presetAvatarBuffer, {
+					name: avatarFilename,
+				});
+				successEmbed.setImage(`attachment://${avatarFilename}`);
+			}
+
+			if (!interaction.channel || !("send" in interaction.channel)) {
+				log.error("No channel available for persona default success message");
+				await modalSubmitInteraction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(localizer(locale, "general.errors.unknown_error_title"))
+							.setDescription(
+								localizer(locale, "general.errors.unknown_error_description"),
+							)
+							.setColor(ColorCode.ERROR),
+					],
+				});
+				return;
+			}
+
+			await interaction.channel.send({
+				embeds: [successEmbed],
+				files: avatarAttachment ? [avatarAttachment] : [],
+			});
+
 			log.success(
 				`Applied preset "${selectedPreset.tomori_preset_name}" to main persona for server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
 			);
 
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.persona.default.success_title",
-				descriptionKey: "commands.persona.default.success_description",
-				descriptionVars: {
-					preset_name: selectedPreset.tomori_preset_name,
-				},
-				color: avatarUpdateFailed || isDM ? ColorCode.WARN : ColorCode.SUCCESS,
-				footerKey: isDM
-					? "commands.persona.default.avatar_update_skipped_dm"
-					: avatarUpdateFailed
-						? "commands.persona.default.avatar_update_failed"
-						: undefined,
+			await modalSubmitInteraction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(localizer(locale, "commands.persona.default.success_title"))
+						.setDescription(
+							localizer(locale, "commands.persona.default.success_confirmation", {
+								nickname: resolvedPersonaName,
+							}),
+						)
+						.setColor(
+							avatarUpdateFailed || nicknameUpdateFailed
+								? ColorCode.WARN
+								: ColorCode.SUCCESS,
+						),
+				],
 			});
 			return;
 		}
@@ -528,6 +681,21 @@ export async function execute(
 			});
 			return;
 		}
+
+		// Mirror /persona import alter behavior:
+		// keep only trigger words that do not overlap with existing personas.
+		const allTriggerWords = new Set<string>();
+		for (const persona of allPersonas) {
+			for (const trigger of persona.trigger_words ?? []) {
+				allTriggerWords.add(normalizeForComparison(trigger));
+			}
+		}
+
+		const uniqueAlterTriggers = presetTriggerWords.filter(
+			(trigger) => !allTriggerWords.has(normalizeForComparison(trigger)),
+		);
+		const hasNoTriggers = uniqueAlterTriggers.length === 0;
+		const alterTriggerWordsArrayLiteral = toPgTextArrayLiteral(uniqueAlterTriggers);
 
 		let insertedAlterRow: unknown;
 		if (shouldUseResolvedLineageId) {
@@ -614,24 +782,167 @@ export async function execute(
 
 		await sql`
 			INSERT INTO persona_configs (tomori_id, trigger_words)
-			VALUES (${newAlterId}, ${triggerWordsArrayLiteral}::text[])
+			VALUES (${newAlterId}, ${alterTriggerWordsArrayLiteral}::text[])
 			ON CONFLICT (tomori_id) DO UPDATE
 			SET trigger_words = EXCLUDED.trigger_words
 		`;
 
 		invalidateTomoriStateCache(serverDiscId);
 
+		const descriptionParts = [
+			localizer(locale, "commands.persona.import.alter_success_description", {
+				nickname: resolvedAlterName,
+				trigger_count: uniqueAlterTriggers.length,
+				triggers:
+					uniqueAlterTriggers.length > 0
+						? uniqueAlterTriggers.join(", ")
+						: "N/A",
+			}),
+		];
+		if (hasNoTriggers) {
+			descriptionParts.push(
+				"\n\n" +
+					localizer(locale, "commands.persona.import.alter_no_triggers_warning"),
+			);
+		}
+
+		const successEmbed = new EmbedBuilder()
+			.setTitle(localizer(locale, "commands.persona.default.success_title"))
+			.setDescription(descriptionParts.join(""))
+			.setColor(hasNoTriggers ? ColorCode.WARN : ColorCode.SUCCESS)
+			.setFooter({
+				text: localizer(locale, "commands.persona.import.refresh_reminder"),
+			});
+
+		const presetAvatarBuffer = await getPresetAvatarBuffer(selectedPreset);
+		let avatarAttachment: AttachmentBuilder | null = null;
+		if (presetAvatarBuffer) {
+			const sanitizedNickname = resolvedAlterName
+				.replace(/[^a-zA-Z0-9-_]/g, "_")
+				.slice(0, 50);
+			const timestamp = Date.now();
+			const avatarFilename = `persona-default-alter-${sanitizedNickname}-${timestamp}.png`;
+			avatarAttachment = new AttachmentBuilder(presetAvatarBuffer, {
+				name: avatarFilename,
+			});
+			successEmbed.setImage(`attachment://${avatarFilename}`);
+		}
+
+		if (!interaction.channel || !("send" in interaction.channel)) {
+			log.error("No channel available for persona default alter success message");
+			await modalSubmitInteraction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(localizer(locale, "general.errors.unknown_error_title"))
+						.setDescription(
+							localizer(locale, "general.errors.unknown_error_description"),
+						)
+						.setColor(ColorCode.ERROR),
+				],
+			});
+			return;
+		}
+
+		const channelMessage = await interaction.channel.send({
+			embeds: [successEmbed],
+			files: avatarAttachment ? [avatarAttachment] : [],
+		});
+
+		// Mirror /persona import alter avatar persistence flow so webhook avatars remain stable.
+		if (presetAvatarBuffer) {
+			const sentEmbed = channelMessage.embeds[0];
+			const embedAvatarUrl = sentEmbed?.image?.url ?? null;
+			const s3AvatarUrl = await uploadPersonaAvatarToS3({
+				personaId: newAlterId,
+				serverDiscId,
+				label: "default alter preset",
+				buffer: presetAvatarBuffer,
+			});
+			const avatarUrl = s3AvatarUrl ?? embedAvatarUrl;
+
+			if (avatarUrl) {
+				await sql`
+					UPDATE tomoris
+					SET webhook_avatar_url = ${avatarUrl}
+					WHERE tomori_id = ${newAlterId}
+				`;
+
+				if (interaction.guild) {
+					await updatePersonaWebhooksAvatar(
+						interaction.guild,
+						newAlterId,
+						presetAvatarBuffer,
+					);
+				}
+			} else {
+				log.warn(
+					`Failed to extract avatar URL from success embed for alter persona ${newAlterId}`,
+				);
+			}
+		}
+
+		// Proactively create webhook in the current channel (non-production) to upgrade
+		// attachment-backed avatar URLs immediately, matching /persona import behavior.
+		const IS_PRODUCTION = process.env.RUN_ENV === "production";
+		if (
+			!IS_PRODUCTION &&
+			presetAvatarBuffer &&
+			interaction.channel &&
+			"fetchWebhooks" in interaction.channel &&
+			interaction.guild
+		) {
+			try {
+				const refreshedPersonas = await loadAllPersonasForServer(serverDiscId);
+				const newPersona = refreshedPersonas.find((p) => p.tomori_id === newAlterId);
+
+				if (newPersona) {
+					const { webhook, errorReason } = await getOrCreatePersonaWebhook(
+						interaction.channel as BaseGuildTextChannel,
+						newPersona,
+					);
+
+					if (webhook) {
+						log.success(
+							`[Persona Default] Proactively created webhook in current channel for persona ${newAlterId} to upgrade avatar URL immediately`,
+						);
+					} else {
+						log.warn(
+							`[Persona Default] Failed to create proactive webhook for persona ${newAlterId}: ${errorReason ?? "unknown"}. Avatar URL will upgrade on first use.`,
+						);
+					}
+				} else {
+					log.warn(
+						`[Persona Default] Could not find newly created persona ${newAlterId} for proactive webhook creation`,
+					);
+				}
+			} catch (error) {
+				log.warn(
+					`[Persona Default] Failed to create proactive webhook for persona ${newAlterId}, avatar URL will upgrade on first use`,
+					error,
+				);
+			}
+		}
+
 		log.success(
-			`Applied preset "${selectedPreset.tomori_preset_name}" to alter persona "${resolvedAlterName}" for server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
+			`Applied preset "${selectedPreset.tomori_preset_name}" to alter persona "${resolvedAlterName}" with ${uniqueAlterTriggers.length} unique triggers for server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
 		);
 
-		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.persona.default.success_title",
-			descriptionKey: "commands.persona.default.success_description",
-			descriptionVars: {
-				preset_name: selectedPreset.tomori_preset_name,
-			},
-			color: ColorCode.SUCCESS,
+		await modalSubmitInteraction.editReply({
+			embeds: [
+				new EmbedBuilder()
+					.setTitle(localizer(locale, "commands.persona.default.success_title"))
+					.setDescription(
+						localizer(
+							locale,
+							"commands.persona.import.alter_success_confirmation",
+							{
+								nickname: resolvedAlterName,
+								trigger_count: uniqueAlterTriggers.length,
+							},
+						),
+					)
+					.setColor(hasNoTriggers ? ColorCode.WARN : ColorCode.SUCCESS),
+			],
 		});
 	} catch (error) {
 		if (isUniqueViolation(error)) {
