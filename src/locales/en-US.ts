@@ -552,6 +552,17 @@ export default {
 				field_dialogue_count_with_count: `{current} out of {max} slots used`,
 				field_blacklisted_members_with_count: `{current} members`,
 			},
+			comment: {
+				description: `Send a comment embed visible in chat but invisible in context.`,
+				modal_title: `Create Comment`,
+				content_label: `Comment Content`,
+				content_placeholder: `Type your comment here...`,
+				invalid_channel_title: `Invalid Channel`,
+				invalid_channel_description: `This command can only be used in text channels.`,
+				footer: `Comment by {user}, invisible in context`,
+				success_title: `Comment Posted`,
+				success_description: `Your comment has been posted in this channel.`,
+			},
 		},
 
 		// Data management commands
@@ -1531,9 +1542,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				persona_message_placeholder: `Enter the message to send as the persona...`,
 				persona_success_title: `Message Sent`,
 				persona_success_description: `Message sent successfully as {persona}.`,
-				impersonation_notice_title: `Impersonation by {user}`,
-				user_impersonation_notice_description: `Impersonating {target}.`,
-				impersonation_notice_footer: `Hide this embed via \`/config permissions\`.`,
+				persona_impersonation_notice_description: `Hide this embed via \`/config permissions\`.`,
+				persona_impersonation_notice_footer: `Impersonation by {user}`,
+				user_impersonation_notice_description: `Hide this embed via \`/config permissions\`.`,
+				user_impersonation_notice_footer: `{user} triggered a {target} impersonation`,
 
 				// User impersonation
 				me_success_title: `User Impersonation Triggered`,

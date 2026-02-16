@@ -280,19 +280,32 @@ async function handlePersonaImpersonation(
 		// 6. Build impersonation notice embed if needed
 		const embeds: EmbedBuilder[] = [];
 		if (!shouldHideEmbed) {
+			const invokerAvatarUrl = interaction.member
+				? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
+						size: 64,
+						extension: "png",
+						forceStatic: true,
+					})
+				: interaction.user.displayAvatarURL({
+						size: 64,
+						extension: "png",
+						forceStatic: true,
+					});
+
 			const noticeEmbed = new EmbedBuilder()
-				.setTitle(
+				.setDescription(
 					localizer(
 						locale,
-						"commands.bot.impersonate.impersonation_notice_title",
-						{ user: interaction.user.username },
+						"commands.bot.impersonate.persona_impersonation_notice_description",
 					),
 				)
 				.setFooter({
 					text: localizer(
 						locale,
-						"commands.bot.impersonate.impersonation_notice_footer",
+						"commands.bot.impersonate.persona_impersonation_notice_footer",
+						{ user: interaction.user.username },
 					),
+					iconURL: invokerAvatarUrl,
 				})
 				.setColor(ColorCode.INFO);
 			embeds.push(noticeEmbed);
@@ -486,26 +499,32 @@ async function handleUserImpersonation(
 		// 5. Show public impersonation notice if enabled in permissions
 		if (!(tomoriState.config.hide_impersonation_embeds ?? false)) {
 			try {
+				const invokerAvatarUrl = interaction.member
+					? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
+							size: 64,
+							extension: "png",
+							forceStatic: true,
+						})
+					: interaction.user.displayAvatarURL({
+							size: 64,
+							extension: "png",
+							forceStatic: true,
+						});
+
 				const noticeEmbed = new EmbedBuilder()
-					.setTitle(
-						localizer(
-							locale,
-							"commands.bot.impersonate.impersonation_notice_title",
-							{ user: interaction.user.username },
-						),
-					)
 					.setDescription(
 						localizer(
 							locale,
 							"commands.bot.impersonate.user_impersonation_notice_description",
-							{ target: displayName },
 						),
 					)
 					.setFooter({
 						text: localizer(
 							locale,
-							"commands.bot.impersonate.impersonation_notice_footer",
+							"commands.bot.impersonate.user_impersonation_notice_footer",
+							{ user: interaction.user.username, target: displayName },
 						),
+						iconURL: invokerAvatarUrl,
 					})
 					.setColor(ColorCode.INFO);
 
@@ -708,10 +727,23 @@ async function handleSystemImpersonation(
 		.setColor(ColorCode.SECTION);
 
 	// Add footer showing who injected the prompt
+	const invokerAvatarUrl = interaction.member
+		? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
+				size: 64,
+				extension: "png",
+				forceStatic: true,
+			})
+		: interaction.user.displayAvatarURL({
+				size: 64,
+				extension: "png",
+				forceStatic: true,
+			});
+
 	embed.setFooter({
 		text: localizer(locale, "commands.bot.impersonate.system_injected_footer", {
 			user: interaction.user.username,
 		}),
+		iconURL: invokerAvatarUrl,
 	});
 
 	// 4. Send as public message in the channel (not ephemeral - this is the injection)
