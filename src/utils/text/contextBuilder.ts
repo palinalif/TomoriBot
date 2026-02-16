@@ -407,6 +407,7 @@ async function buildShortTermMemoryContext(
 	botName: string,
 	personalMemoriesEnabled: boolean,
 	client: Client,
+	isUserImpersonation: boolean,
 ): Promise<{
 	memoryItems: StructuredContextItem[];
 	createPromptText?: string;
@@ -463,10 +464,16 @@ async function buildShortTermMemoryContext(
 				// Show summary if available, otherwise show crude conversation
 				if (memory.summary) {
 					// SUMMARY FORMAT (preferred)
-					otherChannelText += `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`;
+					const memoryPrefix = isUserImpersonation
+						? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+						: `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`;
+					otherChannelText += memoryPrefix;
 				} else {
 					// CRUDE CONVERSATION FORMAT (fallback)
-					otherChannelText += `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
+					const memoryPrefix = isUserImpersonation
+						? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`
+						: `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
+					otherChannelText += memoryPrefix;
 
 					for (const msg of memory.messages) {
 						// Use stored speaker name if available, otherwise fall back to role-based naming
@@ -519,7 +526,9 @@ async function buildShortTermMemoryContext(
 
 			if (sameChannelMemory?.summary) {
 				// EXISTING SUMMARY - Add to memoryItems (middle of context, with other memories)
-				const summaryText = `[System: ${botName}'s short term memory for this ongoing conversation:\n${sameChannelMemory.summary}]`;
+				const summaryText = isUserImpersonation
+					? `[System: Short term memory for this ongoing conversation:\n${sameChannelMemory.summary}]`
+					: `[System: ${botName}'s short term memory for this ongoing conversation:\n${sameChannelMemory.summary}]`;
 
 				memoryItems.push({
 					role: "user",
@@ -740,10 +749,18 @@ export async function buildContext({
 	let serverInfoContent = "";
 	if (isDMChannel) {
 		// For DMs, indicate the bot is in a direct message (user name will be in dialogue section)
-		serverInfoContent = `# Knowledge Base\n${botName} is currently in a Direct Message with User.\n`;
+		if (isUserImpersonation && impersonatedUserNickname) {
+			serverInfoContent = `# Knowledge Base\nYou are ${impersonatedUserNickname}, currently in a Direct Message with User.\n`;
+		} else {
+			serverInfoContent = `# Knowledge Base\n${botName} is currently in a Direct Message with User.\n`;
+		}
 	} else {
 		// For servers, show server name and description
-		serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
+		if (isUserImpersonation && impersonatedUserNickname) {
+			serverInfoContent = `# Knowledge Base\nYou are ${impersonatedUserNickname}, currently in the Discord server named "${serverName}".\n`;
+		} else {
+			serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
+		}
 		if (serverDescription) {
 			serverInfoContent += `## ${serverName}'s Description\n${serverDescription}`;
 		}
@@ -964,7 +981,9 @@ export async function buildContext({
 			}
 
 			const emojiContent = `## ${serverName}'s Emojis\n- ${emojiLines.join("\n- ")}.`;
-			const emojiUsage = `\nTo use ${serverName}'s emojis, just write :name: (name only, no IDs). Names are case-insensitive, and {bot} will expand them to the correct custom emoji. {bot} only uses server emojis when it matches their actual mood.\n`;
+			const emojiUsage = isUserImpersonation
+				? `\nTo use ${serverName}'s emojis, write :name: (name only, no IDs). Names are case-insensitive.\n`
+				: `\nTo use ${serverName}'s emojis, just write :name: (name only, no IDs). Names are case-insensitive, and {bot} will expand them to the correct custom emoji. {bot} only uses server emojis when it matches their actual mood.\n`;
 
 			contextItems.push({
 				role: "system",
@@ -993,7 +1012,8 @@ export async function buildContext({
 
 	// 6. Stickers with Semantic Metadata (only available in guild channels, not DMs)
 	// CRITICAL: Text-based format with LLM-generated descriptions and emotion keys for efficient caching
-	if (tomoriConfig.sticker_usage_enabled && !isDMChannel) {
+	// Skip during user impersonation (stickers require select_sticker_for_response tool)
+	if (tomoriConfig.sticker_usage_enabled && !isDMChannel && !isUserImpersonation) {
 		const guild = client.guilds.cache.get(guildId);
 		const guildStickersCache = guild?.stickers.cache;
 
@@ -1259,7 +1279,11 @@ export async function buildContext({
 		let usersInConversationText =
 			"[System: The following users are having a conversation:\n\n";
 
-		usersInConversationText += `If ${botName} wants to ping any of these users, simply prepend an "@" symbol to their mention handle, like @{username} (case-insensitive). If a name is duplicated, use the handle with the user ID suffix (e.g., @{name|123456789012345678}). This ensures the user gets a notification from ${botName}'s message. Use only if it's an important message, otherwise do not ping users.\n\n`;
+		if (isUserImpersonation) {
+			usersInConversationText += `To ping users, prepend an "@" symbol to their mention handle, like @{username} (case-insensitive). If a name is duplicated, use the handle with the user ID suffix (e.g., @{name|123456789012345678}). Use only if it's an important message, otherwise do not ping users.\n\n`;
+		} else {
+			usersInConversationText += `If ${botName} wants to ping any of these users, simply prepend an "@" symbol to their mention handle, like @{username} (case-insensitive). If a name is duplicated, use the handle with the user ID suffix (e.g., @{name|123456789012345678}). This ensures the user gets a notification from ${botName}'s message. Use only if it's an important message, otherwise do not ping users.\n\n`;
+		}
 
 		type UserConversationEntry = {
 			userId: string;
@@ -1598,6 +1622,7 @@ export async function buildContext({
 					botName,
 					tomoriConfig.personal_memories_enabled,
 					client,
+					isUserImpersonation,
 				);
 			// Push memory items now (goes in middle of context)
 			// Includes: other-channel memories + same-channel summary (if exists)
