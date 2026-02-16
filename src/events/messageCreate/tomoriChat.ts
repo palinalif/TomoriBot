@@ -1612,11 +1612,12 @@ export default async function tomoriChat(
 						"commands.tool.refresh.title",
 					);
 
-					// Target localizer key for reminder set confirmation
-					const reminderSetTitle = localizer(
-						supportedLocale,
-						"reminders.reminder_set_title",
-					);
+					// Target localizer keys for reminder set confirmations (all types)
+					const reminderSetTitles = [
+						localizer(supportedLocale, "reminders.reminder_set_title"),
+						localizer(supportedLocale, "reminders.recurring_task_set_title"),
+						localizer(supportedLocale, "reminders.task_set_title"),
+					];
 					// Target localizer key for system message injection
 					const systemInjectionTitle = localizer(
 						supportedLocale,
@@ -1698,8 +1699,8 @@ export default async function tomoriChat(
 						return { isTarget: true, type: "compact_summary" };
 					}
 
-					// Check for reminder set confirmation embed
-					if (embedTitle === reminderSetTitle) {
+					// Check for reminder set confirmation embeds (all types)
+					if (reminderSetTitles.some((title) => embedTitle === title)) {
 						return { isTarget: true, type: "reminder_set" };
 					}
 				}

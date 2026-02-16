@@ -63,16 +63,22 @@ export const configureSubcommand = (
 			option
 				.setName("scope")
 				.setDescription(
-					"Memory scope: persona-only (default) or global across all personas/servers",
+					localizer("en-US", "commands.teach.memory.personal.scope_description"),
 				)
 				.setRequired(false)
 				.addChoices(
 					{
-						name: "Persona memories (default)",
+						name: localizer(
+							"en-US",
+							"commands.teach.memory.personal.scope_choice_persona",
+						),
 						value: PERSONAL_SCOPE_VALUE,
 					},
 					{
-						name: "Global memories (all personas/servers)",
+						name: localizer(
+							"en-US",
+							"commands.teach.memory.personal.scope_choice_global",
+						),
 						value: GLOBAL_SCOPE_VALUE,
 					},
 				),

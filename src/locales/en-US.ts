@@ -1186,6 +1186,10 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 			apikey: {
 				description: `Learn how to set up API keys for AI providers`,
 				provider_description: `Choose your AI provider`,
+				provider_choice_brave: `Brave Search`,
+				provider_choice_google: `Google Gemini`,
+				provider_choice_novelai: `NovelAI`,
+				provider_choice_openrouter: `OpenRouter`,
 				// Brave Search
 				brave_title: `Setting Up Brave Search API Key`,
 				brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
@@ -2624,6 +2628,9 @@ You can change this anytime using \`/personal privacy\`.`,
 				description: `Manage my memories`,
 				personal: {
 					description: `Add a personal memory of you I can remember across any server.`,
+					scope_description: `Memory scope: persona-only (default) or global across all personas/servers`,
+					scope_choice_persona: `Persona memories (default)`,
+					scope_choice_global: `Global memories (all personas/servers)`,
 					modal_title: `Add Personal Memory`,
 					persona_select_label: `Persona`,
 					persona_select_description: `Choose which persona this memory is for.`,
@@ -2789,6 +2796,9 @@ You can change this anytime using \`/personal privacy\`.`,
 				description: `Manage my memories`,
 				personal: {
 					description: `Remove a personal memory.`,
+					scope_description: `Memory scope: persona-only (default) or global across all personas/servers`,
+					scope_choice_persona: `Persona memories (default)`,
+					scope_choice_global: `Global memories (all personas/servers)`,
 					modal_title: `Remove Personal Memory`,
 					select_label: `Memory to Remove`,
 					select_description: `Choose which personal memory to remove`,

@@ -30,10 +30,31 @@ export const configureSubcommand = (
 				)
 				.setRequired(true)
 				.addChoices(
-					{ name: "Brave Search", value: "brave" },
-					{ name: "Google Gemini", value: "google" },
-					{ name: "NovelAI", value: "novelai" },
-					{ name: "OpenRouter", value: "openrouter" },
+					{
+						name: localizer("en-US", "commands.help.apikey.provider_choice_brave"),
+						value: "brave",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.help.apikey.provider_choice_google",
+						),
+						value: "google",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.help.apikey.provider_choice_novelai",
+						),
+						value: "novelai",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.help.apikey.provider_choice_openrouter",
+						),
+						value: "openrouter",
+					},
 				),
 		);
 

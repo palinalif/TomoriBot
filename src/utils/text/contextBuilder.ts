@@ -78,7 +78,7 @@ const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const ENABLE_LOCAL_RAG = process.env.ACTIVATE_LOCAL_RAG === "true";
 
 export const DEFAULT_SYSTEM_PROMPT =
-	"\n{bot} limits themselves to only 0 to 1 emojis per response ({bot} prefers to use available server emojis than normal emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
+	"\n{bot} makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
 
 /**
  * Simplified message structure received from tomoriChat.ts.
@@ -477,7 +477,9 @@ async function buildShortTermMemoryContext(
 
 					for (const msg of memory.messages) {
 						// Use stored speaker name if available, otherwise fall back to role-based naming
-						const speaker = msg.speakerName || (msg.role === "user" ? triggererName : botName);
+						const speaker =
+							msg.speakerName ||
+							(msg.role === "user" ? triggererName : botName);
 						otherChannelText += `${speaker}: "${msg.content}"\n`;
 					}
 
@@ -514,8 +516,7 @@ async function buildShortTermMemoryContext(
 		// budget (~2800 tokens) makes the update_short_term_memory tool impractical. The
 		// summary data itself is still included as context when available.
 		if (tomoriState?.llm?.has_tools) {
-			const isStmToolAvailable =
-				tomoriState.llm.llm_provider !== "novelai";
+			const isStmToolAvailable = tomoriState.llm.llm_provider !== "novelai";
 
 			// Persona-scoped: each persona only sees its own same-channel STM
 			const sameChannelMemory = getShortTermMemoryForChannel(
@@ -667,8 +668,6 @@ export async function buildContext({
 	let sameChannelMemoryDirective: string | undefined;
 	let uncensorDirective: string | undefined;
 	const botName = tomoriNickname;
-	let missingEmojiMetadataCount = 0;
-	let missingStickerMetadataCount = 0;
 	const uncensorInputOptions = {
 		unicodeSpacesEnabled: tomoriConfig.uncensor_unicode_space_enabled,
 		sanitizeEnabled: tomoriConfig.uncensor_sanitize_enabled,
@@ -676,7 +675,10 @@ export async function buildContext({
 
 	// 1. System prompt + Humanizer rules (comes FIRST for prompt optimization)
 	// Skip system prompt for user impersonation (bot-specific personality should not leak)
-	if (!isUserImpersonation && tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT) {
+	if (
+		!isUserImpersonation &&
+		tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT
+	) {
 		const systemPrompt =
 			tomoriConfig.system_prompt?.trim() || DEFAULT_SYSTEM_PROMPT;
 		let humanizerText = systemPrompt;
@@ -844,7 +846,7 @@ export async function buildContext({
 	// 5. Emojis with Semantic Metadata (only available in guild channels, not DMs)
 	// CRITICAL: Text-based format with LLM-generated descriptions and emotion keys
 	// Kept in system instruction for better caching (deterministic ordering prevents frequent invalidation)
-	if (!isDMChannel) {
+	if (!isDMChannel && tomoriConfig.emoji_usage_enabled) {
 		const guild = client.guilds.cache.get(guildId);
 		const guildEmojisCache = guild?.emojis.cache;
 
@@ -938,21 +940,7 @@ export async function buildContext({
 				return latestEmojiByName.get(emoji.name.toLowerCase())?.id === emoji.id;
 			});
 
-			// 5. Count emojis missing both emotion key and description (based on display list)
-			missingEmojiMetadataCount = 0;
-			for (const emoji of dedupedEmojis) {
-				if (!emoji.name) continue;
-				const metadata = emojiMetadataByName.get(emoji.name.toLowerCase());
-				const hasEmotionKey =
-					metadata?.emotion_key && metadata.emotion_key !== "unset";
-				const hasDescription =
-					metadata?.emoji_desc && metadata.emoji_desc.trim().length > 0;
-				if (!hasEmotionKey && !hasDescription) {
-					missingEmojiMetadataCount++;
-				}
-			}
-
-			// 6. Build emoji list with descriptions and emotion keys
+			// 5. Build emoji list with descriptions and emotion keys
 			const emojiLines: string[] = [];
 			for (const emoji of dedupedEmojis) {
 				const metadata = emojiMetadataByName.get(emoji.name.toLowerCase());
@@ -1013,7 +1001,11 @@ export async function buildContext({
 	// 6. Stickers with Semantic Metadata (only available in guild channels, not DMs)
 	// CRITICAL: Text-based format with LLM-generated descriptions and emotion keys for efficient caching
 	// Skip during user impersonation (stickers require select_sticker_for_response tool)
-	if (tomoriConfig.sticker_usage_enabled && !isDMChannel && !isUserImpersonation) {
+	if (
+		tomoriConfig.sticker_usage_enabled &&
+		!isDMChannel &&
+		!isUserImpersonation
+	) {
 		const guild = client.guilds.cache.get(guildId);
 		const guildStickersCache = guild?.stickers.cache;
 
@@ -1110,21 +1102,7 @@ export async function buildContext({
 				);
 			});
 
-			// 5. Count stickers missing both emotion key and description (based on display list)
-			missingStickerMetadataCount = 0;
-			for (const sticker of dedupedStickers) {
-				if (!sticker.name) continue;
-				const metadata = stickerMetadataByName.get(sticker.name.toLowerCase());
-				const hasEmotionKey =
-					metadata?.emotion_key && metadata.emotion_key !== "unset";
-				const hasDescription =
-					metadata?.sticker_desc && metadata.sticker_desc.trim().length > 0;
-				if (!hasEmotionKey && !hasDescription) {
-					missingStickerMetadataCount++;
-				}
-			}
-
-			// 6. Build sticker list with descriptions and emotion keys
+			// 5. Build sticker list with descriptions and emotion keys
 			let stickerContent = `## ${serverName}'s Stickers\nThis server has the following stickers available for ${botName} to use with the 'select_sticker_for_response' function:\n`;
 
 			for (const sticker of dedupedStickers) {
@@ -1185,20 +1163,7 @@ export async function buildContext({
 		}
 	}
 
-	// 6.5. Metadata reminder (server only)
-	if (
-		!isDMChannel &&
-		(missingEmojiMetadataCount > 0 || missingStickerMetadataCount > 0)
-	) {
-		const reminderText = `Metadata check: ${missingEmojiMetadataCount} emoji(s) and ${missingStickerMetadataCount} sticker(s) have missing emotion key and description. Remind the User to use \`/server initialize expressions\` to fill it up.`;
-		contextItems.push({
-			role: "system",
-			parts: [{ type: "text", text: reminderText }],
-			metadataTag: ContextItemTag.KNOWLEDGE_SERVER_INFO,
-		});
-	}
-
-	// 6.75 Server Documents (RAG)
+	// 6.5 Server Documents (RAG)
 	// Placed after all static system content (personality, memories, emojis, stickers) so that
 	// the stable prefix stays cache-friendly — RAG results change per query and would invalidate
 	// everything that follows if left higher in the prompt.
