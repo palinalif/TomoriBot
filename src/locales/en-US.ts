@@ -1508,9 +1508,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 			kill: {
 				description: `Immediately stop the current stream and clear queued responses in this channel.`,
 				success_title: `Stream Stopped`,
-				success_description: `Stopped the active response stream and cleared queued responses in this channel.`,
-				nothing_to_stop_title: `No Active Stream`,
-				nothing_to_stop_description: `There is no active response stream to stop in this channel.`,
+				success_description: `Stopped the active response stream (if any) and cleared queued responses in this channel.`,
+				nothing_to_stop_title: `Nothing to Stop`,
+				nothing_to_stop_description: `There is no active response stream or queued response to clear in this channel.`,
 			},
 			impersonate: {
 				description: `Impersonate personas, users, or inject system prompts.`,
@@ -1532,6 +1532,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				persona_success_title: `Message Sent`,
 				persona_success_description: `Message sent successfully as {persona}.`,
 				impersonation_notice_title: `Impersonation by {user}`,
+				user_impersonation_notice_description: `Impersonating {target}.`,
 				impersonation_notice_footer: `Hide this embed via \`/config permissions\`.`,
 
 				// User impersonation

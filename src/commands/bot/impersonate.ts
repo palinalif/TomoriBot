@@ -60,10 +60,6 @@ export const configureSubcommand = (
 						value: "persona",
 					},
 					{
-						name: localizer("en-US", "commands.bot.impersonate.target_me"),
-						value: "me",
-					},
-					{
 						name: localizer("en-US", "commands.bot.impersonate.target_user"),
 						value: "user",
 					},
@@ -148,6 +144,7 @@ async function handleTargetUserImpersonation(
 		locale,
 		selectedUserId,
 		selectedDisplayName,
+		"user",
 	);
 }
 
@@ -362,6 +359,7 @@ async function handleUserImpersonation(
 	locale: string,
 	impersonatedUserId: string = interaction.user.id,
 	impersonatedDisplayName?: string,
+	invokedTarget: "me" | "user" = "me",
 ): Promise<void> {
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
@@ -387,12 +385,11 @@ async function handleUserImpersonation(
 	}
 
 	const channel = interaction.channel as TextChannel;
-	const isSelfImpersonation = impersonatedUserId === interaction.user.id;
-	const commandTarget = isSelfImpersonation ? "me" : "user";
-	const cooldownActiveKey = isSelfImpersonation
+	const commandTarget = invokedTarget;
+	const cooldownActiveKey = invokedTarget === "me"
 		? "commands.bot.impersonate.cooldown_active"
 		: "commands.bot.impersonate.cooldown_active_user";
-	const channelWhitelistKey = isSelfImpersonation
+	const channelWhitelistKey = invokedTarget === "me"
 		? "commands.bot.impersonate.channel_not_whitelisted"
 		: "commands.bot.impersonate.channel_not_whitelisted_user";
 
@@ -481,7 +478,73 @@ async function handleUserImpersonation(
 			return;
 		}
 
-		// 5. Call tomoriChat with user impersonation enabled
+		const member = interaction.guild.members.cache.get(impersonatedUserId);
+		const displayName =
+			impersonatedDisplayName ||
+			member?.displayName || member?.user.displayName || "User";
+
+		// 5. Show public impersonation notice if enabled in permissions
+		if (!(tomoriState.config.hide_impersonation_embeds ?? false)) {
+			try {
+				const noticeEmbed = new EmbedBuilder()
+					.setTitle(
+						localizer(
+							locale,
+							"commands.bot.impersonate.impersonation_notice_title",
+							{ user: interaction.user.username },
+						),
+					)
+					.setDescription(
+						localizer(
+							locale,
+							"commands.bot.impersonate.user_impersonation_notice_description",
+							{ target: displayName },
+						),
+					)
+					.setFooter({
+						text: localizer(
+							locale,
+							"commands.bot.impersonate.impersonation_notice_footer",
+						),
+					})
+					.setColor(ColorCode.INFO);
+
+				const impersonatedUser =
+					member?.user ||
+					(await client.users.fetch(impersonatedUserId).catch(() => null));
+				const impersonatedAvatarUrl =
+					member?.displayAvatarURL({
+						size: 1024,
+						extension: "png",
+						forceStatic: true,
+					}) ||
+					impersonatedUser?.displayAvatarURL({
+						size: 1024,
+						extension: "png",
+						forceStatic: true,
+					});
+
+				const { webhook } = await getOrCreateWebhook(channel);
+				if (webhook) {
+					await webhook.send({
+						embeds: [noticeEmbed],
+						username: displayName,
+						avatarURL: impersonatedAvatarUrl,
+					});
+				} else {
+					// Fallback to bot message when webhook creation fails.
+					await channel.send({ embeds: [noticeEmbed] });
+				}
+			} catch (noticeError) {
+				log.warn("Failed to send user impersonation notice embed", {
+					noticeError,
+					channelId: interaction.channel.id,
+					guildId: interaction.guild.id,
+				});
+			}
+		}
+
+		// 6. Call tomoriChat with user impersonation enabled
 		// tomoriChat will handle everything: context building, refresh embeds, provider call, webhook, etc.
 		await tomoriChat(
 			client,
@@ -502,7 +565,7 @@ async function handleUserImpersonation(
 			impersonatedUserId, // impersonatedUserId - the user to mimic
 		);
 
-		// 6. Set cooldown after successful response (shares cooldown pool with message triggers and /bot respond)
+		// 7. Set cooldown after successful response (shares cooldown pool with message triggers and /bot respond)
 		// Uses whitelist-aware version to respect per-channel cooldown overrides
 		log.info(
 			`[/bot impersonate ${commandTarget}] Setting cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s`,
@@ -516,11 +579,7 @@ async function handleUserImpersonation(
 		);
 		log.info(`[/bot impersonate ${commandTarget}] Cooldown set successfully`);
 
-		// 7. Send success confirmation
-		const member = interaction.guild.members.cache.get(impersonatedUserId);
-		const displayName =
-			impersonatedDisplayName ||
-			member?.displayName || member?.user.displayName || "User";
+		// 8. Send success confirmation
 
 		await interaction.editReply({
 			embeds: [

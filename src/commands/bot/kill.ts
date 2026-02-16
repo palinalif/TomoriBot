@@ -23,7 +23,8 @@ export const configureSubcommand = (
 		.setDescription(localizer("en-US", "commands.bot.kill.description"));
 
 /**
- * Execute the kill command - stop active stream in this channel without follow-up response
+ * Execute the kill command for this channel.
+ * Stops the active stream if one exists and clears any queued responses.
  * @param _client - Discord client instance (unused)
  * @param interaction - Command interaction
  * @param _userData - User data from database (unused)
@@ -49,7 +50,11 @@ export async function execute(
 		return;
 	}
 
-	if (!isChannelProcessingLocked(interaction.channel.id)) {
+	const channelId = interaction.channel.id;
+	const hasActiveStream = isChannelProcessingLocked(channelId);
+	const clearedQueueCount = clearChannelProcessingQueue(channelId);
+
+	if (!hasActiveStream && clearedQueueCount === 0) {
 		await replyInfoEmbed(
 			interaction,
 			locale,
@@ -63,10 +68,12 @@ export async function execute(
 		return;
 	}
 
-	StreamOrchestrator.requestStop(interaction.channel.id, interaction.user.id);
-	const clearedQueueCount = clearChannelProcessingQueue(interaction.channel.id);
+	if (hasActiveStream) {
+		StreamOrchestrator.requestStop(channelId, interaction.user.id);
+	}
+
 	log.info(
-		`Silent stop requested via /bot kill by user ${interaction.user.id} in channel ${interaction.channel.id}. Cleared ${clearedQueueCount} queued message(s).`,
+		`Stop/clear requested via /bot kill by user ${interaction.user.id} in channel ${channelId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s).`,
 	);
 
 	await replyInfoEmbed(
