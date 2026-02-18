@@ -1,6 +1,6 @@
 {
 	"name": "tomoribot",
-	"version": "0.7.869",
+	"version": "0.7.870",
 	"description": "Customizable AI Assistant Discord Bot",
 	"main": "./src/index.ts",
 	"type": "module",
@@ -70,6 +70,7 @@
 		"qs": "6.14.2",
 		"hono": "$hono",
 		"undici": "^6.23.0",
-		"fast-xml-parser": "^4.4.1"
+		"fast-xml-parser": "^5.3.6",
+		"ajv": "^8.18.0"
 	}
 }
