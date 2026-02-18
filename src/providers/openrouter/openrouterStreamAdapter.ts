@@ -1209,6 +1209,16 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 		// Handle finishReason "stop" (normal completion)
 		if (finishReason === "stop") {
+			// Google models via OpenRouter commonly bundle the last text fragment with
+			// the stop signal in a single chunk. Flush that content as a text chunk first;
+			// the stream's natural close will signal done to the orchestrator.
+			if (choice.delta?.content) {
+				return {
+					type: "text",
+					content: choice.delta.content,
+					metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+				};
+			}
 			return {
 				type: "done",
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
