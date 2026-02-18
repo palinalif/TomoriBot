@@ -103,6 +103,7 @@ import {
 	getOpenRouterTokenLimits,
 	isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
+import { getGeminiTokenLimits } from "../../utils/cache/geminiCapabilityCache";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = Number.parseInt(
@@ -3343,13 +3344,36 @@ export default async function tomoriChat(
 
 						// Truncate oldest dialogue history pairs if the conversation is approaching
 						// the context window limit, ensuring the output budget is always preserved.
-						// Only applies to OpenRouter (capability cache provides contextLength + maxCompletionTokens).
+						// OpenRouter: uses the live capability cache (fetched at startup from their API).
+						// Google: uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
 						if (
 							tomoriState.llm.llm_provider === "openrouter" &&
 							tomoriState.llm.llm_codename !== "account-setting" &&
 							isOpenRouterCapabilityCacheReady()
 						) {
 							const tokenLimits = getOpenRouterTokenLimits(
+								tomoriState.llm.llm_codename,
+							);
+							if (
+								tokenLimits &&
+								tokenLimits.contextLength > 0 &&
+								tokenLimits.maxCompletionTokens
+							) {
+								const { truncated, pairsDropped } = truncateDialogueHistory(
+									contextSegments,
+									tokenLimits.contextLength,
+									tokenLimits.maxCompletionTokens,
+								);
+								if (pairsDropped > 0) {
+									log.warn(
+										`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+											`${tomoriState.llm.llm_codename} to preserve output budget`,
+									);
+									contextSegments = truncated;
+								}
+							}
+						} else if (tomoriState.llm.llm_provider === "google") {
+							const tokenLimits = getGeminiTokenLimits(
 								tomoriState.llm.llm_codename,
 							);
 							if (
@@ -4608,13 +4632,36 @@ export default async function tomoriChat(
 
 											// Truncate oldest dialogue history pairs if the conversation is approaching
 											// the context window limit, ensuring the output budget is always preserved.
-											// Only applies to OpenRouter (capability cache provides contextLength + maxCompletionTokens).
+											// OpenRouter: uses the live capability cache (fetched at startup from their API).
+											// Google: uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
 											if (
 												tomoriState.llm.llm_provider === "openrouter" &&
 												tomoriState.llm.llm_codename !== "account-setting" &&
 												isOpenRouterCapabilityCacheReady()
 											) {
 												const tokenLimits = getOpenRouterTokenLimits(
+													tomoriState.llm.llm_codename,
+												);
+												if (
+													tokenLimits &&
+													tokenLimits.contextLength > 0 &&
+													tokenLimits.maxCompletionTokens
+												) {
+													const { truncated, pairsDropped } = truncateDialogueHistory(
+														contextSegments,
+														tokenLimits.contextLength,
+														tokenLimits.maxCompletionTokens,
+													);
+													if (pairsDropped > 0) {
+														log.warn(
+															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+																`${tomoriState.llm.llm_codename} to preserve output budget`,
+														);
+														contextSegments = truncated;
+													}
+												}
+											} else if (tomoriState.llm.llm_provider === "google") {
+												const tokenLimits = getGeminiTokenLimits(
 													tomoriState.llm.llm_codename,
 												);
 												if (
