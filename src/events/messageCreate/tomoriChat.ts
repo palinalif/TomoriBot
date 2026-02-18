@@ -98,6 +98,11 @@ import {
 } from "@/utils/db/cooldownManager";
 import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { CooldownType } from "@/types/db/schema";
+import { truncateDialogueHistory } from "../../utils/text/contextTruncator";
+import {
+	getOpenRouterTokenLimits,
+	isOpenRouterCapabilityCacheReady,
+} from "../../utils/cache/openrouterCapabilityCache";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = Number.parseInt(
@@ -3335,6 +3340,37 @@ export default async function tomoriChat(
 							impersonatedUserNickname, // Pass database nickname for context (February 2026)
 						});
 						contextSegments = contextBuild.contextItems;
+
+						// Truncate oldest dialogue history pairs if the conversation is approaching
+						// the context window limit, ensuring the output budget is always preserved.
+						// Only applies to OpenRouter (capability cache provides contextLength + maxCompletionTokens).
+						if (
+							tomoriState.llm.llm_provider === "openrouter" &&
+							tomoriState.llm.llm_codename !== "account-setting" &&
+							isOpenRouterCapabilityCacheReady()
+						) {
+							const tokenLimits = getOpenRouterTokenLimits(
+								tomoriState.llm.llm_codename,
+							);
+							if (
+								tokenLimits &&
+								tokenLimits.contextLength > 0 &&
+								tokenLimits.maxCompletionTokens
+							) {
+								const { truncated, pairsDropped } = truncateDialogueHistory(
+									contextSegments,
+									tokenLimits.contextLength,
+									tokenLimits.maxCompletionTokens,
+								);
+								if (pairsDropped > 0) {
+									log.warn(
+										`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+											`${tomoriState.llm.llm_codename} to preserve output budget`,
+									);
+									contextSegments = truncated;
+								}
+							}
+						}
 						const tailDirectives: string[] = [...contextBuild.tailDirectives];
 						const uncensorDirective = contextBuild.uncensorDirective;
 						if (manualContinuationDirective) {
@@ -4569,6 +4605,37 @@ export default async function tomoriChat(
 												impersonatedUserId, // Pass impersonated user ID (February 2026)
 											});
 											contextSegments = contextBuild.contextItems;
+
+											// Truncate oldest dialogue history pairs if the conversation is approaching
+											// the context window limit, ensuring the output budget is always preserved.
+											// Only applies to OpenRouter (capability cache provides contextLength + maxCompletionTokens).
+											if (
+												tomoriState.llm.llm_provider === "openrouter" &&
+												tomoriState.llm.llm_codename !== "account-setting" &&
+												isOpenRouterCapabilityCacheReady()
+											) {
+												const tokenLimits = getOpenRouterTokenLimits(
+													tomoriState.llm.llm_codename,
+												);
+												if (
+													tokenLimits &&
+													tokenLimits.contextLength > 0 &&
+													tokenLimits.maxCompletionTokens
+												) {
+													const { truncated, pairsDropped } = truncateDialogueHistory(
+														contextSegments,
+														tokenLimits.contextLength,
+														tokenLimits.maxCompletionTokens,
+													);
+													if (pairsDropped > 0) {
+														log.warn(
+															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+																`${tomoriState.llm.llm_codename} to preserve output budget`,
+														);
+														contextSegments = truncated;
+													}
+												}
+											}
 											const tailDirectives: string[] = [
 												...contextBuild.tailDirectives,
 											];

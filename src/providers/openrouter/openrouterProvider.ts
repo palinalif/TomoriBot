@@ -47,6 +47,7 @@ import {
 } from "../../utils/cache/llmCache";
 import {
 	getOpenRouterCapabilities,
+	getOpenRouterTokenLimits,
 	isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
 import {
@@ -452,11 +453,29 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 			Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
 		);
 
+		// Resolve max output tokens from the OpenRouter capability cache.
+		// If the model reports a max_completion_tokens value, use it exactly.
+		// If unknown (cache miss or account-setting), leave it undefined so the
+		// stream adapter omits max_tokens entirely and lets the model decide.
+		let resolvedMaxOutputTokens: number | undefined;
+		if (
+			tomoriState.llm.llm_codename !== "account-setting" &&
+			isOpenRouterCapabilityCacheReady()
+		) {
+			const tokenLimits = getOpenRouterTokenLimits(
+				tomoriState.llm.llm_codename,
+			);
+			resolvedMaxOutputTokens = tokenLimits?.maxCompletionTokens;
+		}
+		log.info(
+			`maxOutputTokens resolved to: ${resolvedMaxOutputTokens ?? "undefined (omitted from request)"}`,
+		);
+
 		const config: OpenrouterProviderConfig = {
 			model: tomoriState.llm.llm_codename,
 			apiKey: apiKey,
 			temperature: adjustedTemperature,
-			maxOutputTokens: 4096, // Default, can be adjusted per model
+			maxOutputTokens: resolvedMaxOutputTokens,
 			seesImages: effectiveSeesImages, // Use effective value (may be overridden)
 			// Sampling parameters to reduce hallucinations and improve coherence
 			topP: 0.9, // Nucleus sampling - use top 90% probability mass

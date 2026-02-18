@@ -23,11 +23,15 @@ interface OpenRouterModel {
 	id: string;
 	name: string;
 	description?: string;
+	context_length?: number; // Total context window size (input + output tokens)
 	supported_parameters?: string[];
 	architecture?: {
 		modality?: string;
 		tokenizer?: string;
 		instruct_type?: string;
+	};
+	top_provider?: {
+		max_completion_tokens?: number; // Maximum output tokens the provider supports
 	};
 }
 
@@ -43,12 +47,28 @@ export interface ModelCapabilities {
 }
 
 /**
+ * Cached model token limits
+ * Extracted from OpenRouter API's context_length and top_provider fields
+ */
+export interface ModelTokenLimits {
+	contextLength: number; // Total context window (input + output)
+	maxCompletionTokens: number | undefined; // Max output tokens, undefined if not reported
+}
+
+/**
  * In-memory cache for OpenRouter model capabilities
  * Key: llm_codename (e.g., "anthropic/claude-3.5-sonnet")
  * Value: ModelCapabilities object
  */
 const capabilityCache = new Map<string, ModelCapabilities>();
 const supportedParametersCache = new Map<string, Set<string>>();
+
+/**
+ * In-memory cache for OpenRouter model token limits
+ * Key: llm_codename (e.g., "anthropic/claude-3.5-sonnet")
+ * Value: ModelTokenLimits object
+ */
+const tokenLimitsCache = new Map<string, ModelTokenLimits>();
 
 /**
  * Cache initialization state
@@ -160,9 +180,10 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 	try {
 		log.info("Initializing OpenRouter capability cache...");
 
-		// 1. Clear existing cache
+		// 1. Clear existing caches
 		capabilityCache.clear();
 		supportedParametersCache.clear();
+		tokenLimitsCache.clear();
 		cacheReady = false;
 
 		// 2. Fetch models from OpenRouter API (no auth required - public endpoint)
@@ -190,7 +211,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 		const models: OpenRouterModel[] = data.data;
 		log.info(`Fetched ${models.length} models from OpenRouter API`);
 
-		// 6. Cache capabilities for each model
+		// 6. Cache capabilities and token limits for each model
 		for (const model of models) {
 			// Extract capabilities using detection functions
 			const capabilities: ModelCapabilities = {
@@ -200,12 +221,19 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 				supportsStructuredOutput: detectStructuredOutputSupport(model),
 			};
 
-			// Store in cache with model ID as key
+			// Extract token limits from API response fields
+			const tokenLimits: ModelTokenLimits = {
+				contextLength: model.context_length ?? 0,
+				maxCompletionTokens: model.top_provider?.max_completion_tokens,
+			};
+
+			// Store in caches with model ID as key
 			capabilityCache.set(model.id, capabilities);
 			supportedParametersCache.set(
 				model.id,
 				new Set(model.supported_parameters ?? []),
 			);
+			tokenLimitsCache.set(model.id, tokenLimits);
 		}
 
 		// 7. Mark cache as ready
@@ -234,9 +262,10 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 			error as Error,
 		);
 
-		// Ensure cache is in a clean state even on error
+		// Ensure caches are in a clean state even on error
 		capabilityCache.clear();
 		supportedParametersCache.clear();
+		tokenLimitsCache.clear();
 		cacheReady = false;
 	}
 }
@@ -302,4 +331,17 @@ export function isOpenRouterCapabilityCacheReady(): boolean {
  */
 export function getOpenRouterCapabilityCacheSize(): number {
 	return capabilityCache.size;
+}
+
+/**
+ * Gets the cached token limits for a specific OpenRouter model
+ *
+ * @param modelCodename - Model codename (e.g., "google/gemini-2.0-flash-exp")
+ * @returns ModelTokenLimits if found, undefined if not cached or cache not ready
+ */
+export function getOpenRouterTokenLimits(
+	modelCodename: string,
+): ModelTokenLimits | undefined {
+	if (!cacheReady) return undefined;
+	return tokenLimitsCache.get(modelCodename);
 }

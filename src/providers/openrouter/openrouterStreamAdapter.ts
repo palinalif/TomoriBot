@@ -26,6 +26,7 @@ import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import {
 	getOpenRouterSupportedParameters,
+	getOpenRouterTokenLimits,
 	isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
 import type {
@@ -332,14 +333,48 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				skippedUnsupportedParams.push("temperature");
 			}
 
-			// OpenRouter follows OpenAI's snake_case for max_tokens
-			if (config.maxOutputTokens !== undefined) {
+			// OpenRouter follows OpenAI's snake_case for max_tokens.
+			// Apply a context-window safety cap so long conversations don't crowd out
+			// the output budget. The cap is: floor((contextLength - estimatedInputTokens) * 0.9)
+			// We rough-estimate input tokens as serialized-message chars / 4 (a standard
+			// approximation), then shrink by 10% to absorb tokenizer discrepancies.
+			// If maxOutputTokens is undefined (unknown model), we skip max_tokens entirely
+			// and let OpenRouter use the model's natural limit.
+			let effectiveMaxOutputTokens = config.maxOutputTokens;
+			if (
+				effectiveMaxOutputTokens !== undefined &&
+				config.model &&
+				config.model !== "account-setting" &&
+				isOpenRouterCapabilityCacheReady()
+			) {
+				const tokenLimits = getOpenRouterTokenLimits(config.model);
+				if (tokenLimits && tokenLimits.contextLength > 0) {
+					// 1. Rough input token estimate: serialized message content chars / 4
+					const estimatedInputTokens = Math.ceil(
+						JSON.stringify(messages).length / 4,
+					);
+					// 2. Budget = 90% of remaining context after input
+					const safeOutputBudget = Math.floor(
+						(tokenLimits.contextLength - estimatedInputTokens) * 0.9,
+					);
+					// 3. Cap max output to whichever is smaller: model limit or safe budget
+					if (safeOutputBudget < effectiveMaxOutputTokens) {
+						log.warn(
+							`Context-window safety cap applied for ${config.model}: ` +
+								`maxOutputTokens ${effectiveMaxOutputTokens} → ${safeOutputBudget} ` +
+								`(contextLength=${tokenLimits.contextLength}, estimatedInput≈${estimatedInputTokens})`,
+						);
+						effectiveMaxOutputTokens = Math.max(1, safeOutputBudget);
+					}
+				}
+			}
+			if (effectiveMaxOutputTokens !== undefined) {
 				if (
 					this.isOpenRouterParamSupported(supportedParameters, "max_tokens", [
 						"max_completion_tokens",
 					])
 				) {
-					requestBody.max_tokens = config.maxOutputTokens;
+					requestBody.max_tokens = effectiveMaxOutputTokens;
 				} else {
 					skippedUnsupportedParams.push("max_tokens");
 				}
