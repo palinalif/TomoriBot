@@ -105,8 +105,9 @@ function detectToolSupport(model: OpenRouterModel): boolean {
  * Determines if a model supports image inputs (vision)
  *
  * Detection logic:
- * - Checks architecture.modality for "vision" or "multimodal"
- * - OpenRouter uses modality field to indicate visual capabilities
+ * - Checks architecture.modality for image capability indicators
+ * - OpenRouter uses arrow notation: "text+image->text" (NOT "vision"/"multimodal")
+ * - Also accepts "vision" and "multimodal" as fallback keywords for forward compatibility
  *
  * @param model - OpenRouter model object from API
  * @returns True if model supports image inputs
@@ -115,9 +116,14 @@ function detectImageSupport(model: OpenRouterModel): boolean {
 	// 1. Get modality string and convert to lowercase for comparison
 	const modality = model.architecture?.modality?.toLowerCase();
 
-	// 2. Check for vision or multimodal indicators
+	// 2. Check for image capability indicators
+	// OpenRouter uses "text+image->text" notation — check for "image" as the primary signal,
+	// plus "vision" and "multimodal" for forward compatibility with any future API format changes
 	return (
-		modality?.includes("vision") || modality?.includes("multimodal") || false
+		modality?.includes("image") ||
+		modality?.includes("vision") ||
+		modality?.includes("multimodal") ||
+		false
 	);
 }
 

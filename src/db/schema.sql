@@ -483,6 +483,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_endpoint_url', 'TEXT')
 -- Optional field - if empty, provider will fall back to llm_codename
 SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 
+-- Add RP channel IDs for per-channel emoji/sticker suppression (February 2026)
+-- Channels in this list always suppress emojis and stickers regardless of global settings
+SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
+
 -- Add foreign key constraint if the column was just created
 DO $$
 BEGIN

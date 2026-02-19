@@ -173,24 +173,6 @@ jobs:
           echo "Packages downloaded to docker-pip-cache/"
           ls -lah docker-pip-cache/
 
-      - name: Setup Node.js for npm caching
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Pre-download npm-based MCP servers
-        run: |
-          echo "Pre-downloading npm-based MCP servers..."
-
-          # Create directory for npm packages
-          mkdir -p docker-npm-cache
-
-          # Download DuckDuckGo MCP server package
-          npm pack @oevortex/ddg_search@latest --pack-destination=docker-npm-cache
-
-          echo "npm packages downloaded to docker-npm-cache/"
-          ls -lah docker-npm-cache/
-
       - name: Build Docker image
         run: |
           echo "Building TomoriBot Docker image..."

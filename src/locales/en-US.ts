@@ -2112,6 +2112,26 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
 		// Server configuration commands (admin-only)
 		server: {
+			// RP channel management (subcommand group)
+			rpchannel: {
+				description: `Manage RP channels where emojis and stickers are always suppressed`,
+				add: {
+					description: `Add a channel to the RP channel list (disables emojis and stickers).`,
+					channel_description: `The text channel to add to the RP channel list.`,
+					success_title: `RP Channel Added`,
+					success_description: `Successfully added \`{channel_name}\` to the RP channel list. Emojis and stickers will always be suppressed there.`,
+					already_added_title: `Channel Already in List`,
+					already_added_description: `The channel \`{channel_name}\` is already in the RP channel list.`,
+				},
+				remove: {
+					description: `Remove a channel from the RP channel list.`,
+					channel_description: `The text channel to remove from the RP channel list.`,
+					success_title: `RP Channel Removed`,
+					success_description: `Successfully removed \`{channel_name}\` from the RP channel list. Emojis and stickers will follow global settings there.`,
+					not_found_title: `Channel Not Found`,
+					not_found_description: `The channel \`{channel_name}\` is not in the RP channel list.`,
+				},
+			},
 			// Auto-chat configuration (subcommand group)
 			autotrigger: {
 				description: `Manage auto-chat settings`,

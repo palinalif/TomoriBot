@@ -628,36 +628,44 @@ export class MemoryTool extends BaseTool {
 							"genai.self_teach.personal_memory_footer_manage";
 					}
 
-					// Send notification embed
-					await sendStandardEmbed(
-						context.channel,
-						context.locale,
-						{
-							color: ColorCode.SUCCESS,
-							titleKey: "genai.self_teach.personal_memory_learned_title",
-							titleVars: {
-								user_nickname: targetUserNicknameArg,
-							},
-							descriptionKey:
-								"genai.self_teach.personal_memory_learned_description",
-							descriptionVars: {
-								user_nickname: targetUserNicknameArg,
-								memory_content:
-									processedMemoryContent.length > 200
-										? `${processedMemoryContent.substring(0, 197)}...`
-										: processedMemoryContent,
-							},
-							footerKey: personalMemoryFooterKey,
-						},
-						{
-							webhook: context.webhook,
-							personaUsername: context.personaUsername,
-							personaAvatarUrl: context.personaAvatarUrl,
-						},
-					);
-
 					// Invalidate user cache so next message includes new memory
+					// Done before the notification embed so cache is always fresh even if embed fails
 					invalidateUserCache(targetUserDiscordIdArg);
+
+					// Send notification embed (non-fatal: missing permissions won't block the memory save)
+					try {
+						await sendStandardEmbed(
+							context.channel,
+							context.locale,
+							{
+								color: ColorCode.SUCCESS,
+								titleKey: "genai.self_teach.personal_memory_learned_title",
+								titleVars: {
+									user_nickname: targetUserNicknameArg,
+								},
+								descriptionKey:
+									"genai.self_teach.personal_memory_learned_description",
+								descriptionVars: {
+									user_nickname: targetUserNicknameArg,
+									memory_content:
+										processedMemoryContent.length > 200
+											? `${processedMemoryContent.substring(0, 197)}...`
+											: processedMemoryContent,
+								},
+								footerKey: personalMemoryFooterKey,
+							},
+							{
+								webhook: context.webhook,
+								personaUsername: context.personaUsername,
+								personaAvatarUrl: context.personaAvatarUrl,
+							},
+						);
+					} catch (embedError) {
+						log.warn(
+							"Failed to send personal memory notification embed (non-fatal)",
+							embedError as Error,
+						);
+					}
 
 					return {
 						success: true,

@@ -1212,8 +1212,25 @@ export function cleanLLMOutput(
 		.trim();
 
 	// 2. Emoji handling, only if we have a list of valid emojis
-	if (emojiUsageEnabled === false)
+	if (emojiUsageEnabled === false) {
+		// Strip Discord custom emojis (e.g. <:name:id> and <a:name:id>)
 		cleanedText = cleanedText.replace(/<(a?):[^:]+:[^>]+>/g, "");
+		// Strip unicode emoji sequences. Uses alternation (not character class) to avoid
+		// JSC quirks with \p{...} inside [...]. Order: full sequence first, then residue.
+		// - \p{Extended_Pictographic}: catches pictographic glyphs (frogs, hearts, flags…)
+		// - \p{Emoji_Presentation}: catches emoji with default emoji rendering (e.g. 😊)
+		// - \uFE0F: variation selector-16 (forces emoji presentation, e.g. ❤️)
+		// - \u200D: zero-width joiner left behind by ZWJ sequences (e.g. 👨‍💻)
+		// - \p{Emoji_Modifier}: skin-tone modifiers (e.g. 🏻🏼🏽🏾🏿)
+		cleanedText = cleanedText.replace(
+			/\p{Extended_Pictographic}|\p{Emoji_Presentation}|\p{Emoji_Modifier}|\uFE0F|\u200D/gu,
+			"",
+		);
+		// Strip text-based emoji shortcodes (e.g. :smile: :thumbs_up:).
+		// Lookahead ensures at least one letter is present, preventing false matches
+		// on time strings like 12:30:00 whose :30: segment is digit-only.
+		cleanedText = cleanedText.replace(/:(?=[^:]*[a-zA-Z_])[\w-]+:/g, "");
+	}
 	else if (emojiStrings && emojiStrings.length > 0) {
 		// Debug: Log emoji conversion attempt
 		log.info(

@@ -3127,21 +3127,44 @@ export default async function tomoriChat(
 					let loadedEmojis: ServerEmojiRow[] | null = null;
 					let loadedStickers: ServerStickerRow[] | null = null;
 
+					// Check if current channel is designated as an RP channel (always suppresses emojis/stickers)
+					const isRpChannel =
+						tomoriState.config.rp_channel_ids.includes(channel.id);
+					const effectiveEmojiEnabled = isRpChannel
+						? false
+						: tomoriState.config.emoji_usage_enabled;
+					const effectiveStickerEnabled = isRpChannel
+						? false
+						: tomoriState.config.sticker_usage_enabled;
+					// Shallow-copy config with effective flags for context building (avoids mutating cached state)
+					const effectiveTomoriConfig = isRpChannel
+						? {
+								...tomoriState.config,
+								emoji_usage_enabled: false,
+								sticker_usage_enabled: false,
+							}
+						: tomoriState.config;
+					// Shallow-copy TomoriState with effective config so both createConfig and streamToDiscord
+					// see the suppressed flags without ever mutating the cached TomoriState object
+					const effectiveTomoriState = isRpChannel
+						? { ...tomoriState, config: effectiveTomoriConfig }
+						: tomoriState;
+
 					// Load emojis and stickers from 5-minute in-memory cache (lazy sync included)
 					if (!isDMChannel && guild && currentPersona.server_id) {
 						const { emojis, stickers } = await loadEmojiStickerCache(
 							tomoriState.server_id,
 							guild,
-							tomoriState.config.emoji_usage_enabled,
-							tomoriState.config.sticker_usage_enabled,
+							effectiveEmojiEnabled,
+							effectiveStickerEnabled,
 						);
 
 						loadedEmojis = emojis;
 						loadedStickers = stickers;
 
-						// Process emojis for conversion (if emoji usage is enabled)
+						// Process emojis for conversion (if emoji usage is effectively enabled for this channel)
 						if (
-							tomoriState.config.emoji_usage_enabled &&
+							effectiveEmojiEnabled &&
 							emojis &&
 							emojis.length > 0
 						) {
@@ -3326,8 +3349,8 @@ export default async function tomoriChat(
 								currentPersona.tomori_nickname ?? tomoriState!.tomori_nickname,
 							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
 							tomoriAttributes: tomoriState!.attribute_list,
-							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-							tomoriConfig: tomoriState!.config,
+							// Use effectiveTomoriConfig so RP channels suppress emoji/sticker system instructions
+							tomoriConfig: effectiveTomoriConfig,
 							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
 							personaPrompt: tomoriState!.persona_prompt ?? null,
 							// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
@@ -3671,8 +3694,10 @@ export default async function tomoriChat(
 						);
 					}
 
+					// Use effectiveTomoriState (immutable shallow copy) for createConfig so the provider's
+					// StreamConfig reflects RP channel suppression without mutating the cached TomoriState
 					const providerConfig = await provider.createConfig(
-						tomoriState,
+						effectiveTomoriState,
 						decryptedApiKey,
 					);
 
@@ -3680,6 +3705,7 @@ export default async function tomoriChat(
 					if (originalModelCodename) {
 						tomoriState.llm.llm_codename = originalModelCodename;
 					}
+
 
 					log.info(
 						"Streaming mode enabled. Attempting to stream response to Discord.",
@@ -3888,7 +3914,7 @@ export default async function tomoriChat(
 									return { streamResult: null, abort: true };
 								}
 
-								const activeTomoriState = tomoriState;
+								const activeTomoriState = effectiveTomoriState;
 								let attemptCount = 0;
 								let lastStreamResult: StreamResult | null = null;
 
@@ -4614,8 +4640,7 @@ export default async function tomoriChat(
 													tomoriState!.tomori_nickname,
 												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 												tomoriAttributes: tomoriState!.attribute_list,
-												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
-												tomoriConfig: tomoriState!.config,
+												tomoriConfig: effectiveTomoriConfig,
 												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 												personaPrompt: tomoriState!.persona_prompt ?? null,
 												// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above

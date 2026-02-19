@@ -454,9 +454,15 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 		);
 
 		// Resolve max output tokens from the OpenRouter capability cache.
-		// If the model reports a max_completion_tokens value, use it exactly.
+		// If the model reports a max_completion_tokens value, use it — but cap it
+		// at OPENROUTER_MAX_OUTPUT_TOKENS (default: 8192) to avoid 402 errors on
+		// accounts with low daily credit limits.
 		// If unknown (cache miss or account-setting), leave it undefined so the
 		// stream adapter omits max_tokens entirely and lets the model decide.
+		const maxOutputTokensCap = Number.parseInt(
+			process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
+			10,
+		);
 		let resolvedMaxOutputTokens: number | undefined;
 		if (
 			tomoriState.llm.llm_codename !== "account-setting" &&
@@ -465,10 +471,15 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 			const tokenLimits = getOpenRouterTokenLimits(
 				tomoriState.llm.llm_codename,
 			);
-			resolvedMaxOutputTokens = tokenLimits?.maxCompletionTokens;
+			if (tokenLimits?.maxCompletionTokens !== undefined) {
+				resolvedMaxOutputTokens = Math.min(
+					tokenLimits.maxCompletionTokens,
+					maxOutputTokensCap,
+				);
+			}
 		}
 		log.info(
-			`maxOutputTokens resolved to: ${resolvedMaxOutputTokens ?? "undefined (omitted from request)"}`,
+			`maxOutputTokens resolved to: ${resolvedMaxOutputTokens ?? "undefined (omitted from request)"} (cap: ${maxOutputTokensCap})`,
 		);
 
 		const config: OpenrouterProviderConfig = {

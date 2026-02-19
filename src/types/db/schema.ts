@@ -138,6 +138,7 @@ export const tomoriConfigSchema = z.object({
 	key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
 	trigger_words: z.array(z.string()).default([]),
 	autoch_disc_ids: z.array(z.string()).default([]),
+	rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
 	autoch_threshold: z.number().default(0),
 	self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
 	triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message

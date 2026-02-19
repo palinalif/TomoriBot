@@ -103,20 +103,28 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Send search status embed to Discord (consistent with Brave Search UX)
-			await sendStandardEmbed(
-				context.channel,
-				context.locale,
-				{
-					titleKey: "genai.search.web_search_title",
-					titleVars: { query: String(args.query || args.q || "your search") },
-					descriptionKey: "genai.search.disclaimer_description",
-				},
-				{
-					webhook: context.webhook,
-					personaUsername: context.personaUsername,
-					personaAvatarUrl: context.personaAvatarUrl,
-				},
-			);
+			// Non-fatal: missing permissions should not prevent search results from reaching the AI
+			try {
+				await sendStandardEmbed(
+					context.channel,
+					context.locale,
+					{
+						titleKey: "genai.search.web_search_title",
+						titleVars: { query: String(args.query || args.q || "your search") },
+						descriptionKey: "genai.search.disclaimer_description",
+					},
+					{
+						webhook: context.webhook,
+						personaUsername: context.personaUsername,
+						personaAvatarUrl: context.personaAvatarUrl,
+					},
+				);
+			} catch (embedError) {
+				log.warn(
+					"Failed to send DuckDuckGo search status embed (non-fatal)",
+					embedError as Error,
+				);
+			}
 
 			// Check for errors or rate limits before processing
 			if (mcpResult.isError || this.isRateLimitError(mcpResult)) {
