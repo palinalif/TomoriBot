@@ -410,6 +410,9 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 
 				// NAI text suppression for tool retry mode
 				suppressTextOutput: streamingContext?.suppressTextOutput,
+
+				// NAI GLM-4.6 prompt continuation: trailing fragment from previous truncated stream
+				naiContinuationPrefill: streamingContext?.naiContinuationPrefill,
 			};
 
 			// Create the modular streaming components
@@ -429,6 +432,17 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 			log.info(
 				`NovelAIProvider: Streaming completed with status: ${result.status}`,
 			);
+
+			// For GLM-4.6 empty responses: attach the incomplete trailing sentence so
+			// tomoriChat can use it as a prompt continuation on the retry, instead of
+			// starting a fresh generation that produces the same truncated output.
+			const pendingPrefill = novelaiAdapter.getPendingContinuationPrefill();
+			if (result.status === "empty_response" && pendingPrefill) {
+				log.info(
+					`NovelAIProvider: Attaching continuation prefill to StreamResult (${pendingPrefill.length} chars)`,
+				);
+				return { ...result, naiContinuationPrefill: pendingPrefill };
+			}
 			return result;
 		} catch (error) {
 			log.error(

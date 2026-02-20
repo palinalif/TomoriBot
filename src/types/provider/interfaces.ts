@@ -39,6 +39,8 @@ export interface StreamResult {
 		| "empty_response";
 	data?: unknown | Error; // Function call data or error details
 	accumulatedText?: string; // Text sent to Discord (for short-term memory storage)
+	/** NAI GLM-4.6: incomplete trailing sentence dropped by sentenceTrailingBuffer, available for prompt continuation on retry */
+	naiContinuationPrefill?: string;
 }
 
 /**

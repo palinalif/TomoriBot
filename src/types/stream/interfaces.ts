@@ -141,6 +141,10 @@ export interface StreamContext {
 
 	// NAI text suppression: keeps model state coherent but suppresses Discord output during tool retries
 	suppressTextOutput?: boolean;
+
+	// NAI GLM-4.6 prompt continuation: incomplete trailing fragment from previous stream, appended to the
+	// assembled prompt so the model continues mid-sentence rather than starting a new response
+	naiContinuationPrefill?: string;
 }
 
 /**

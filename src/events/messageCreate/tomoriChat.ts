@@ -850,6 +850,9 @@ async function enforceGlobalRateLimit(params: {
  * @param isPersonaJob - Whether this invocation is an internal queued persona job.
  * @param manualSystemPrompt - Optional system prompt to append at the end of context.
  * @param manualPrefill - Optional assistant prefill used for hybrid prefix output and final context item.
+ * @param naiContinuationPrefill - NAI GLM-4.6 only: incomplete trailing sentence from the previous stream,
+ *   appended to the prompt so the model continues mid-sentence instead of restarting.
+ *   Set automatically on empty-response retries when the provider surfaces a pending continuation fragment.
  */
 export default async function tomoriChat(
 	client: Client,
@@ -874,6 +877,7 @@ export default async function tomoriChat(
 	impersonatedUserId?: string,
 	manualSystemPrompt?: string,
 	manualPrefill?: string,
+	naiContinuationPrefill?: string,
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
@@ -976,6 +980,7 @@ export default async function tomoriChat(
 		forceReason, // Pass reasoning flag for enhanced AI responses
 		isManuallyTriggered, // Pass command flag to indicate manual triggering
 		disableAllTools: isUserImpersonation, // Disable tools for user impersonation
+		naiContinuationPrefill, // NAI GLM-4.6: carry trailing fragment into prompt for mid-sentence continuation
 	};
 
 	// biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
@@ -3865,6 +3870,14 @@ export default async function tomoriChat(
 						streamingContext.outputPrefillState = undefined;
 					}
 
+					// NAI GLM-4.6 continuation: if retrying with a prompt continuation fragment,
+					// also set it as the output prefill so Discord shows the complete sentence
+					// (prefill + model continuation) rather than just the mid-word continuation.
+					if (naiContinuationPrefill && !streamingContext.outputPrefill) {
+						streamingContext.outputPrefill = naiContinuationPrefill;
+						streamingContext.outputPrefillState = { sent: false };
+					}
+
 					// 1. Initialize variables for the function calling loop in streaming mode
 					let selectedStickerToSend: Sticker | null = null;
 					const functionInteractionHistory: {
@@ -4231,6 +4244,8 @@ export default async function tomoriChat(
 											impersonatedUserId,
 											manualSystemPrompt,
 											manualPrefill,
+											// NAI GLM-4.6: pass trailing fragment so next call appends it to the prompt
+											streamResult.naiContinuationPrefill,
 										);
 									} else {
 										// Max retries reached, show error embed

@@ -55,8 +55,8 @@ VALUES
   ('openrouter', 'mistralai/mistral-small-3.2-24b-instruct:free', false, false, false, true, true, false, false, false, false, false, false, 'Free general-purpose model', '無料の汎用モデル'),
   ('openrouter', 'tngtech/deepseek-r1t2-chimera:free', false, true, true, false, true, true, false, false, false, true, false, 'Free model for solving complex tasks and problems', '複雑なタスクや問題の解決に適した無料モデル'),
   ('openrouter', 'mistralai/mistral-small-3.1-24b-instruct:free', false, false, false, false, true, true, true, false, false, false, false, 'Free multimodal model with enhanced reasoning and vision capabilities', '強化された推論とビジョン機能を備えた無料のマルチモーダルモデル'),
-  ('openrouter', 'z-ai/glm-4.5-air:free', false, false, false, false, true, true, false, false, false, false, false, 'Free lightweight model with thinking mode for reasoning and agent tasks', '推論とエージェントタスク向けのシンキングモードを備えた無料軽量モデル'),
-  ('openrouter', 'tngtech/tng-r1t-chimera:free', false, false, false, false, true, true, false, false, false, false, false, 'Free experimental model for creative storytelling and character interaction', '創作とキャラクター対話に特化した無料の実験モデル'),
+  ('openrouter', 'z-ai/glm-4.5-air:free', false, true, false, false, true, true, false, false, false, false, false, 'Free lightweight model with thinking mode for reasoning and agent tasks', '推論とエージェントタスク向けのシンキングモードを備えた無料軽量モデル'),
+  ('openrouter', 'tngtech/tng-r1t-chimera:free', false, false, false, true, true, true, false, false, false, false, false, 'Free experimental model for creative storytelling and character interaction', '創作とキャラクター対話に特化した無料の実験モデル'),
   ('openrouter', 'account-setting', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Uses your OpenRouter account default model', '上級者向け：OpenRouterアカウントのデフォルトモデルを使用'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint

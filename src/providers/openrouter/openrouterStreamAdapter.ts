@@ -141,6 +141,25 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		// (empty - pony-alpha removed as deprecated)
 	]);
 
+	/**
+	 * Priority order for probe-drop attempts on parameter rejection errors.
+	 * Sampling params come first (most likely culprits), followed by generation
+	 * params, with capability params (tools) last since they're pre-filtered
+	 * by the model capability cache and rarely cause these errors.
+	 * Keys not in this list are probed after all listed keys, in original order.
+	 */
+	private static readonly PROBE_DROP_PRIORITY: readonly string[] = [
+		"top_p",
+		"top_k",
+		"min_p",
+		"frequency_penalty",
+		"presence_penalty",
+		"repetition_penalty",
+		"temperature",
+		"max_tokens",
+		// "tools" intentionally omitted — goes last as an unlisted key
+	];
+
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		ContextItemTag.SYSTEM_PERSONALITY,
@@ -177,6 +196,21 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			normalized === "error" ||
 			normalized === "bad request" ||
 			normalized === "request failed"
+		);
+	}
+
+	/**
+	 * Detects upstream provider errors that explicitly reject a request parameter.
+	 * These non-generic messages are still parameter-related and benefit from probe-drop
+	 * retries just as much as generic 400s do.
+	 */
+	private isParameterRejectionError(message: string): boolean {
+		const normalized = message.toLowerCase();
+		return (
+			normalized.includes("invalid api parameter") ||
+			normalized.includes("unsupported parameter") ||
+			normalized.includes("unknown parameter") ||
+			normalized.includes("parameter not supported")
 		);
 	}
 
@@ -511,12 +545,22 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			addAttempt("no_stream_options", probeBaseline);
 
 			const mandatoryKeys = new Set(["model", "messages", "stream"]);
-			const probeCandidateKeys = Object.keys(probeBaseline).filter(
-				(key) => !mandatoryKeys.has(key),
-			);
+			// Sort candidates so sampling params are probed first — they're the most
+			// likely culprits for parameter rejection errors. Unlisted keys (e.g. tools)
+			// fall to the end, preserving their relative insertion order among themselves.
+			const probeCandidateKeys = Object.keys(probeBaseline)
+				.filter((key) => !mandatoryKeys.has(key))
+				.sort((a, b) => {
+					const aIdx = OpenrouterStreamAdapter.PROBE_DROP_PRIORITY.indexOf(a);
+					const bIdx = OpenrouterStreamAdapter.PROBE_DROP_PRIORITY.indexOf(b);
+					if (aIdx === -1 && bIdx === -1) return 0;
+					if (aIdx === -1) return 1;
+					if (bIdx === -1) return -1;
+					return aIdx - bIdx;
+				});
 			if (probeCandidateKeys.length > 0) {
 				log.info(
-					`OpenRouter generic-400 probe candidates (${config.model}): ${probeCandidateKeys.join(", ")}`,
+					`OpenRouter probe candidates (${config.model}): ${probeCandidateKeys.join(", ")}`,
 				);
 				for (const key of probeCandidateKeys) {
 					addAttempt(
@@ -584,16 +628,22 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				const isGeneric400 =
 					parsedError.statusCode === 400 &&
 					this.isLikelyGenericErrorMessage(parsedError.errorMessage);
+				// Upstream provider explicitly rejected a parameter — probe-drop can isolate which one.
+				const isParamRejection400 =
+					parsedError.statusCode === 400 &&
+					this.isParameterRejectionError(parsedError.errorMessage);
 				// "No endpoints found" 404 means no backend supports the model+params combo,
 				// not that the model is missing. Probe-drop retries can find a working subset.
 				const isNoEndpoints404 =
 					parsedError.statusCode === 404 &&
 					this.isNoEndpointsFound(parsedError.errorMessage);
 
-				if ((isGeneric400 || isNoEndpoints404) && hasMoreAttempts) {
+				if ((isGeneric400 || isParamRejection400 || isNoEndpoints404) && hasMoreAttempts) {
 					const reason = isNoEndpoints404
 						? "no endpoints found (404)"
-						: "generic HTTP 400";
+						: isParamRejection400
+							? "parameter rejection (400)"
+							: "generic HTTP 400";
 					log.warn(
 						`OpenRouter returned ${reason} on attempt '${attempt.label}', trying fallback payload`,
 						{

@@ -162,6 +162,29 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 */
 	private sentenceTrailingBuffer = "";
 
+	/**
+	 * Incomplete trailing sentence saved when the stream ends mid-sentence.
+	 *
+	 * Set in processChunk() when a trailing fragment is dropped (no sentence boundary).
+	 * Retrieved by NovelaiProvider after streamToDiscord() returns so it can attach the
+	 * fragment to the StreamResult and forward it as a prompt continuation on the next retry.
+	 *
+	 * Reset at the start of each startStream() call so stale values never leak across turns.
+	 */
+	private pendingContinuationPrefill: string | undefined = undefined;
+
+	/**
+	 * Returns the incomplete trailing sentence from the most recent stream, if any.
+	 *
+	 * NovelaiProvider calls this after the orchestrator finishes to surface the fragment
+	 * through StreamResult.naiContinuationPrefill for use as a prompt continuation.
+	 *
+	 * @returns The dropped trailing text, or undefined if the stream ended cleanly
+	 */
+	getPendingContinuationPrefill(): string | undefined {
+		return this.pendingContinuationPrefill;
+	}
+
 	/** Regex matching characters that indicate a natural sentence/thought boundary.
 	 * NOTE: Single quote (') is intentionally excluded — contractions like "How's",
 	 * "don't", "it's" are far more common than closing single quotes, causing
@@ -206,6 +229,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		this.generationBuffer = "";
 		this.sentenceTrailingBuffer = "";
 		this.hasEmittedVisibleText = false;
+		this.pendingContinuationPrefill = undefined;
 		this.toolDefinitions = this.normalizeToolDefinitions(config.tools ?? []);
 		this.toolsEnabled = this.toolDefinitions.length > 0;
 		this.resetToolParsingState();
@@ -249,6 +273,26 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			);
 			// Append bot name to signal it should generate the bot's response
 			prompt = `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
+		}
+
+		// For GLM 4.6: if a previous stream was cut off mid-sentence, append the trailing
+		// fragment to the prompt so the model continues from that exact point rather than
+		// generating a brand-new response. The prompt currently ends with "BotName:" (when
+		// NAI_GLM_CHAR_PREFIX_ENABLED is true) or "/nothink", so we append with a single
+		// space separator to stay on the same line.
+		if (isGlm && context.naiContinuationPrefill?.trim()) {
+			const prefill = context.naiContinuationPrefill.trimStart();
+			if (NAI_GLM_CHAR_PREFIX_ENABLED) {
+				// Prompt ends with "BotName:" — continue on the same line
+				prompt = `${prompt} ${prefill}`;
+			} else {
+				// Prompt ends with "/nothink" — start fragment on a new line
+				prompt = `${prompt}\n${prefill}`;
+			}
+			log.info(
+				`NovelAI GLM: Appended continuation prefill to prompt ` +
+				`(${prefill.length} chars): "${prefill.substring(0, 80)}"`,
+			);
 		}
 
 		log.info(`Assembled NovelAI prompt (${isGlm ? "GLM" : "Kayra"}). Length: ${prompt.length} characters`);
@@ -451,9 +495,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					// Trailing buffer ends at a sentence boundary — it's a complete thought
 					finalFlush = this.sentenceTrailingBuffer;
 				} else {
-					// Incomplete sentence — silently drop it
+					// Incomplete sentence — save it as a continuation prefill for the retry.
+					// NovelaiProvider reads this via getPendingContinuationPrefill() after the
+					// stream ends and attaches it to StreamResult.naiContinuationPrefill so
+					// tomoriChat can append it to the next prompt instead of starting over.
+					this.pendingContinuationPrefill = this.sentenceTrailingBuffer;
 					log.info(
-						`NovelAI GLM: Dropping incomplete trailing fragment ` +
+						`NovelAI GLM: Trailing fragment saved for continuation ` +
 						`(${this.sentenceTrailingBuffer.length} chars): ` +
 						`"${this.sentenceTrailingBuffer.substring(0, 80)}..."`,
 					);
