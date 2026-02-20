@@ -65,6 +65,34 @@ const NAI_GLM_THINKING_ENABLED =
 const NAI_GLM_CHAR_PREFIX_ENABLED =
 	(process.env.NAI_GLM_CHAR_PREFIX_ENABLED ?? "true").toLowerCase() === "true";
 
+/**
+ * Characters-per-token ratio used to estimate GLM 4.6 input token count from prompt length.
+ *
+ * GLM 4.6 actual tokenization runs ~2.2–2.5 chars/token, far below the 4 chars/token
+ * assumed by contextTruncator. This value is used by the dynamic max_length cap to
+ * re-estimate token usage from the final assembled prompt (which includes formatting
+ * overhead not present in the raw context items seen by the truncator).
+ *
+ * Configured via NAI_GLM_CHARS_PER_TOKEN env var (default: "2.5").
+ * Lower values = more conservative, more clamping; higher values = less clamping.
+ */
+const NAI_GLM_CHARS_PER_TOKEN = Number.parseFloat(
+	process.env.NAI_GLM_CHARS_PER_TOKEN ?? "2.5",
+);
+
+/**
+ * Hard context window ceiling (input + output tokens combined) for GLM 4.6.
+ *
+ * Matches the real NovelAI API limit. The dynamic max_length cap uses this to compute
+ * how many output tokens remain after accounting for estimated input token usage.
+ *
+ * Configured via NAI_GLM_CONTEXT_LIMIT env var (default: "12288").
+ */
+const NAI_GLM_CONTEXT_LIMIT = Number.parseInt(
+	process.env.NAI_GLM_CONTEXT_LIMIT ?? "12288",
+	10,
+);
+
 type ToolParamType = "string" | "number" | "boolean" | "array" | "object";
 
 interface ToolParameterSchema {
@@ -311,6 +339,37 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			llm_top_p,
 			llm_min_p,
 		);
+
+		// Dynamic max_length safety cap for GLM 4.6.
+		//
+		// contextTruncator runs earlier on raw context items using a 4 chars/token estimate.
+		// GLM 4.6 actually tokenizes at ~2.2–2.5 chars/token, so the assembled prompt (which
+		// also includes GLM role tags, the tool guide, and /nothink directives not present
+		// in raw context items) can still exceed the API's 12 288-token ceiling.
+		//
+		// Here we re-estimate input tokens from the final prompt length and shrink
+		// max_length if needed so that input + output ≤ NAI_GLM_CONTEXT_LIMIT × 0.95.
+		// A floor of 50 ensures we always request at least a minimal response.
+		if (isGlm) {
+			const estimatedInputTokens = Math.ceil(
+				prompt.length / NAI_GLM_CHARS_PER_TOKEN,
+			);
+			const maxAllowedOutput = Math.floor(
+				(NAI_GLM_CONTEXT_LIMIT - estimatedInputTokens) * 0.95,
+			);
+			const clampedMaxLength = Math.max(50, maxAllowedOutput);
+
+			// Only clamp when max_length is defined and exceeds the safe budget
+			const currentMaxLength = parameters.max_length ?? 0;
+			if (clampedMaxLength < currentMaxLength) {
+				log.warn(
+					`NovelAI GLM: Clamping max_length ${currentMaxLength} → ${clampedMaxLength} ` +
+					`(prompt ${prompt.length} chars ≈ ${estimatedInputTokens} tokens, ` +
+					`context limit: ${NAI_GLM_CONTEXT_LIMIT})`,
+				);
+				parameters.max_length = clampedMaxLength;
+			}
+		}
 
 		// Build request
 		const request: NovelAIGenerationRequest = {
