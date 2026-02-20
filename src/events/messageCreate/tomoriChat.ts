@@ -889,7 +889,13 @@ export default async function tomoriChat(
 	const isFromClientUser = Boolean(
 		client.user && message.author.id === client.user.id,
 	);
-	const isLikelySelfMessage = isFromClientUser || isWebhookMessage;
+	// Matrix relay messages arrive via a channel webhook but represent real user messages.
+	// They must not be treated as self-messages or persona jobs — exempt them from all
+	// webhook/bot guards so TomoriBot responds to them like regular user messages.
+	const isMatrixRelayMessage =
+		isWebhookMessage && message.author.username.startsWith("[Matrix|");
+	const isLikelySelfMessage =
+		!isMatrixRelayMessage && (isFromClientUser || isWebhookMessage);
 
 	const isSeedPlaceholderMessage =
 		isFromClientUser &&
@@ -1522,7 +1528,8 @@ export default async function tomoriChat(
 			if (
 				(message.author.bot || message.webhookId) &&
 				!isSelfMessage &&
-				!isManuallyTriggered
+				!isManuallyTriggered &&
+				!isMatrixRelayMessage
 			) {
 				return;
 			}
@@ -5640,6 +5647,8 @@ export function shouldBotReply(
 	allPersonas: TomoriState[],
 ): boolean {
 	const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
+	const isMatrixRelayMessage =
+		Boolean(message.webhookId) && message.author.username.startsWith("[Matrix|");
 	const rawSelfReplyLimit =
 		tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
 	const selfReplyLimit = Math.min(
@@ -5647,7 +5656,7 @@ export function shouldBotReply(
 		MAX_SELF_REPLY_LIMIT,
 	);
 
-	if (message.webhookId && !isSelfMessage) {
+	if (message.webhookId && !isSelfMessage && !isMatrixRelayMessage) {
 		return false;
 	}
 	if (isSelfMessage && selfReplyLimit <= 0) {
@@ -5663,7 +5672,7 @@ export function shouldBotReply(
 		message.channel.type === ChannelType.GuildVoice ||
 		message.channel.type === ChannelType.GuildStageVoice;
 	if (
-		(message.author.bot && (!isSelfMessage || selfReplyLimit <= 0)) ||
+		(message.author.bot && (!isSelfMessage || selfReplyLimit <= 0) && !isMatrixRelayMessage) ||
 		message.content.startsWith("!") || // Basic command prefix check
 		!(
 			message.channel instanceof TextChannel ||

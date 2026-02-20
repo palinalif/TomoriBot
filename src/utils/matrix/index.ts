@@ -3,11 +3,12 @@
  * Import from "@/utils/matrix" to access all Matrix bridge utilities.
  */
 
-export { isMatrixUserId } from "./isMatrixUserId";
+export { isMatrixUserId, stripMatrixWebhookPrefix } from "./isMatrixUserId";
 export {
 	initializeMatrixClient,
 	getMatrixClient,
 	sendToMatrixRoom,
+	sendAttachmentToMatrixRoom,
 	getLinkedMatrixRoom,
 	getDiscordChannelForRoom,
 	invalidateMatrixLinkCache,

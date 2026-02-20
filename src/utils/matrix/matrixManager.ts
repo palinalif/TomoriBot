@@ -16,8 +16,12 @@ import {
 	createClient,
 	ClientEvent,
 	RoomEvent,
+	EventType,
+	MsgType,
+	getHttpUriForMxc,
 	type MatrixClient,
 } from "matrix-js-sdk";
+import type { RoomMessageEventContent } from "matrix-js-sdk/lib/@types/events";
 import { EmbedBuilder, MessageFlags, type BaseGuildTextChannel, type Client } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
@@ -40,6 +44,21 @@ let matrixClient: MatrixClient | null = null;
  */
 const CACHE_TTL_MS =
 	Number.parseInt(process.env.MATRIX_LINK_CACHE_TTL_MINUTES || "5", 10) * 60_000;
+
+/**
+ * Maximum attachment size (in bytes) to relay in either direction.
+ * Files larger than this threshold are replaced with a text notice.
+ * Configurable via MATRIX_MAX_ATTACHMENT_MB (default: 8 MB).
+ */
+const MATRIX_MAX_ATTACHMENT_BYTES =
+	Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) * 1024 * 1024;
+
+/**
+ * Timeout in milliseconds for Matrix media download/upload requests.
+ * Configurable via MATRIX_MEDIA_TIMEOUT_MS (default: 15 000 ms).
+ */
+const MATRIX_MEDIA_TIMEOUT_MS =
+	Number.parseInt(process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000", 10);
 
 /** Cache: Discord channel ID → linked Matrix room ID (null = known-not-linked). */
 const channelLinkCache = new Map<
@@ -130,6 +149,60 @@ export async function sendToMatrixRoom(roomId: string, text: string): Promise<vo
 }
 
 /**
+ * Upload a file to Matrix and send it as a media event in the given room.
+ * Silently no-ops if the Matrix client is not configured.
+ * Uses `m.image` msgtype for image/* MIME types, `m.video` for video/*, else `m.file`.
+ *
+ * @param roomId   - The Matrix room ID (e.g., "!abc:matrix.org")
+ * @param data     - Raw file bytes as an ArrayBuffer (avoids Node.js Buffer ↔ Blob friction)
+ * @param filename - Original filename (used as the event `body`)
+ * @param mimeType - MIME type string (e.g., "image/png")
+ * @param size     - File size in bytes (included in the event `info` block)
+ */
+export async function sendAttachmentToMatrixRoom(
+	roomId: string,
+	data: ArrayBuffer,
+	filename: string,
+	mimeType: string,
+	size: number,
+): Promise<void> {
+	if (!matrixClient) return;
+
+	try {
+		// 1. Wrap in Blob for uploadContent() — Blob (not Buffer) satisfies
+		//    XMLHttpRequestBodyInit (FileType), and ArrayBuffer is a valid BlobPart
+		const blob           = new Blob([data], { type: mimeType });
+		const uploadResponse = await matrixClient.uploadContent(blob, {
+			name: filename,
+			type: mimeType,
+		});
+		const mxcUri = uploadResponse.content_uri;
+		const info   = { mimetype: mimeType, size };
+
+		// 2. Route to the appropriate typed send method based on MIME type.
+		//    sendImageMessage() exists in the SDK; for video/file we use sendEvent()
+		//    with an explicit type assertion since the sendMessage() union is too narrow.
+		if (mimeType.startsWith("image/")) {
+			await matrixClient.sendImageMessage(roomId, mxcUri, info, filename);
+		} else {
+			const msgtype = mimeType.startsWith("video/") ? MsgType.Video : MsgType.File;
+			// sendMessage()'s union type (RoomMessageEventContent) is overly strict for
+			// dynamic msgtype values — use sendEvent() with a double cast as the escape hatch
+			const mediaContent = {
+				msgtype,
+				body: filename,
+				url: mxcUri,
+				info,
+			} as unknown as RoomMessageEventContent;
+			await matrixClient.sendEvent(roomId, EventType.RoomMessage, mediaContent);
+		}
+	} catch (error) {
+		// Non-critical: log warning but don't propagate to avoid disrupting Discord flow
+		log.warn(`Matrix bridge: failed to send attachment to room ${roomId}`, error);
+	}
+}
+
+/**
  * Cached DB lookup: Discord channel ID → linked Matrix room ID.
  * Returns null if the channel has no linked Matrix room.
  * Results are cached for CACHE_TTL_MS to reduce DB load.
@@ -211,6 +284,73 @@ export function invalidateMatrixLinkCache(
 // ─── Private helpers ───────────────────────────────────────────────────────
 
 /**
+ * Download a Matrix media file identified by an `mxc://` URL.
+ * Handles authenticated media (MSC3916) by sending the bot's access token.
+ * Returns null and logs a warning on any failure (network, size, or parse error).
+ *
+ * @param mxcUrl        - The `mxc://` media URL from the Matrix event content
+ * @param homeserverUrl - The homeserver base URL used to resolve the HTTP download URL
+ * @param accessToken   - The bot's access token for authenticated media endpoints
+ * @param knownSize     - Optional pre-flight size from the event's `info.size` field
+ * @returns             - `{ buffer, mimeType }` on success, or null on failure
+ */
+async function downloadMatrixMedia(
+	mxcUrl: string,
+	homeserverUrl: string,
+	accessToken: string,
+	knownSize?: number,
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+	// 1. Pre-flight size guard: reject oversized files before even fetching
+	if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
+		return null;
+	}
+
+	// 2. Convert mxc:// URI to a standard HTTP(S) download URL
+	const httpUrl = getHttpUriForMxc(homeserverUrl, mxcUrl);
+	if (!httpUrl) {
+		log.warn(`Matrix bridge: could not resolve mxc URL: ${mxcUrl}`);
+		return null;
+	}
+
+	try {
+		// 3. Fetch with auth header and a timeout (MSC3916 authenticated media)
+		const response = await fetch(httpUrl, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+		});
+
+		if (!response.ok) {
+			log.warn(`Matrix bridge: media fetch failed (${response.status}) for ${httpUrl}`);
+			return null;
+		}
+
+		// 4. Secondary size guard via Content-Length header (if provided)
+		const contentLength = Number.parseInt(
+			response.headers.get("content-length") ?? "0",
+			10,
+		);
+		if (contentLength > MATRIX_MAX_ATTACHMENT_BYTES) {
+			return null;
+		}
+
+		// 5. Buffer the response body
+		const arrayBuffer = await response.arrayBuffer();
+		const buffer = Buffer.from(arrayBuffer);
+
+		// 6. Final size guard on the actual downloaded bytes
+		if (buffer.length > MATRIX_MAX_ATTACHMENT_BYTES) {
+			return null;
+		}
+
+		const mimeType = response.headers.get("content-type") ?? "application/octet-stream";
+		return { buffer, mimeType };
+	} catch (error) {
+		log.warn(`Matrix bridge: failed to download media from ${httpUrl}`, error);
+		return null;
+	}
+}
+
+/**
  * Handles the Matrix `/refresh` command.
  * Posts the standard refresh embed to the Discord channel (triggering history reset in tomoriChat)
  * and clears the short-term memory cache for the channel.
@@ -259,19 +399,37 @@ function setupMatrixSyncListener(discordClient: Client, botUserId: string): void
 
 	matrixClient.on(RoomEvent.Timeline, async (event, room, toStartOfTimeline) => {
 		try {
+			// DEBUG: log every timeline event so we can see what's being received
+			log.info(
+				`[Matrix debug] event type=${event.getType()} room=${room?.roomId} sender=${event.getSender()} toStartOfTimeline=${toStartOfTimeline}`,
+			);
+
 			// 1. Skip historical events replayed from start of timeline
-			if (toStartOfTimeline) return;
+			if (toStartOfTimeline) {
+				log.info("[Matrix debug] skipped: toStartOfTimeline=true");
+				return;
+			}
 
 			// 2. Only relay text messages
-			if (event.getType() !== MATRIX_TEXT_MSG_TYPE) return;
+			if (event.getType() !== MATRIX_TEXT_MSG_TYPE) {
+				log.info(`[Matrix debug] skipped: event type ${event.getType()} is not m.room.message`);
+				return;
+			}
 
 			// 3. Loop prevention: ignore messages sent by the bot itself
-			if (event.getSender() === botUserId) return;
+			if (event.getSender() === botUserId) {
+				log.info("[Matrix debug] skipped: sender is bot itself");
+				return;
+			}
 
-			if (!room) return;
+			if (!room) {
+				log.info("[Matrix debug] skipped: room is undefined");
+				return;
+			}
 
 			// 4. Look up the linked Discord channel (cached DB query)
 			const channelDiscId = await getDiscordChannelForRoom(room.roomId);
+			log.info(`[Matrix debug] getDiscordChannelForRoom(${room.roomId}) = ${channelDiscId}`);
 			if (!channelDiscId) return;
 
 			// 5. Fetch the Discord channel
@@ -287,24 +445,84 @@ function setupMatrixSyncListener(discordClient: Client, botUserId: string): void
 				? `${rawUsername.slice(0, 77)}...`
 				: rawUsername;
 
-			// 7. Extract message text
-			const text = (event.getContent().body as string | undefined)?.trim();
-			if (!text) return;
+			// 7. Extract content and msgtype
+			const content  = event.getContent();
+			const msgtype  = (content.msgtype as string | undefined) ?? "m.text";
+			const bodyText = (content.body as string | undefined)?.trim();
 
-			// 8. Special command: /refresh — post the standard reset embed to Discord
-			//    instead of relaying the raw text. The embed title is the exact marker
-			//    that checkTargetEmbedTitle() in tomoriChat.ts detects as a history reset point.
-			if (text === "/refresh") {
+			// 8. Branch on msgtype: media events relay as Discord file attachments
+			const isMediaMsg =
+				msgtype === "m.image" ||
+				msgtype === "m.video" ||
+				msgtype === "m.file"  ||
+				msgtype === "m.audio";
+
+			if (isMediaMsg) {
+				// 8a. Resolve the webhook first (needed for both success and fallback paths)
+				const { webhook: mediaWebhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
+				if (!mediaWebhook) return;
+
+				const mxcUrl    = content.url as string | undefined;
+				const info      = content.info as Record<string, unknown> | undefined;
+				const knownSize = typeof info?.size === "number" ? info.size : undefined;
+				const filename  = bodyText ?? "attachment";
+
+				// 8b. Reject oversized attachments with a text notice rather than silently dropping
+				if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
+					const sizeMb = (knownSize / (1024 * 1024)).toFixed(1);
+					await mediaWebhook.send({
+						content: `[Matrix: attachment too large to relay (${sizeMb} MB)]`,
+						username,
+						allowedMentions: { parse: [] },
+					});
+					return;
+				}
+
+				// 8c. Attempt to download and relay the media file
+				if (mxcUrl) {
+					const homeserverUrl = process.env.MATRIX_HOMESERVER_URL ?? "";
+					const accessToken   = process.env.MATRIX_ACCESS_TOKEN   ?? "";
+					const media = await downloadMatrixMedia(mxcUrl, homeserverUrl, accessToken, knownSize);
+
+					if (media) {
+						await mediaWebhook.send({
+							files: [{ attachment: media.buffer, name: filename }],
+							username,
+							allowedMentions: { parse: [] },
+						});
+						return;
+					}
+				}
+
+				// 8d. Fallback: media unavailable (bad URL, download failure, etc.)
+				await mediaWebhook.send({
+					content: `[Matrix: attachment unavailable — ${filename}]`,
+					username,
+					allowedMentions: { parse: [] },
+				});
+				return;
+			}
+
+			// 9. Text / emote / unknown: relay as plain text
+			//    Skip m.notice (bot/automated messages) to prevent relay loops with other bots
+			if (msgtype === "m.notice") return;
+
+			if (!bodyText) return;
+
+			// 10. Special command: /refresh — post the standard reset embed to Discord
+			//     instead of relaying the raw text. The embed title is the exact marker
+			//     that checkTargetEmbedTitle() in tomoriChat.ts detects as a history reset point.
+			if (bodyText === "/refresh") {
 				await handleMatrixRefresh(channel as BaseGuildTextChannel, channelDiscId);
 				return;
 			}
 
-			// 9. Send via webhook so the sender identity appears correctly in Discord
+			// 11. Send via webhook so the sender identity appears correctly in Discord
 			const { webhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
 			if (!webhook) return;
 
 			await webhook.send({
-				content: text,
+				content: bodyText,
 				username,
 				allowedMentions: { parse: [] }, // Prevent accidental Discord @mentions from Matrix text
 			});
