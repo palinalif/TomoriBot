@@ -104,6 +104,7 @@ import {
 	isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
 import { getGeminiTokenLimits } from "../../utils/cache/geminiCapabilityCache";
+import { getNovelAITokenLimits } from "../../utils/cache/novelaiCapabilityCache";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = Number.parseInt(
@@ -3368,7 +3369,8 @@ export default async function tomoriChat(
 						// Truncate oldest dialogue history pairs if the conversation is approaching
 						// the context window limit, ensuring the output budget is always preserved.
 						// OpenRouter: uses the live capability cache (fetched at startup from their API).
-						// Google: uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
+						// Google:     uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
+						// NovelAI:    uses the static NOVELAI_TOKEN_LIMITS map (API does not expose limits).
 						if (
 							tomoriState.llm.llm_provider === "openrouter" &&
 							tomoriState.llm.llm_codename !== "account-setting" &&
@@ -3397,6 +3399,28 @@ export default async function tomoriChat(
 							}
 						} else if (tomoriState.llm.llm_provider === "google") {
 							const tokenLimits = getGeminiTokenLimits(
+								tomoriState.llm.llm_codename,
+							);
+							if (
+								tokenLimits &&
+								tokenLimits.contextLength > 0 &&
+								tokenLimits.maxCompletionTokens
+							) {
+								const { truncated, pairsDropped } = truncateDialogueHistory(
+									contextSegments,
+									tokenLimits.contextLength,
+									tokenLimits.maxCompletionTokens,
+								);
+								if (pairsDropped > 0) {
+									log.warn(
+										`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+											`${tomoriState.llm.llm_codename} to preserve output budget`,
+									);
+									contextSegments = truncated;
+								}
+							}
+						} else if (tomoriState.llm.llm_provider === "novelai") {
+							const tokenLimits = getNovelAITokenLimits(
 								tomoriState.llm.llm_codename,
 							);
 							if (
@@ -4662,7 +4686,8 @@ export default async function tomoriChat(
 											// Truncate oldest dialogue history pairs if the conversation is approaching
 											// the context window limit, ensuring the output budget is always preserved.
 											// OpenRouter: uses the live capability cache (fetched at startup from their API).
-											// Google: uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
+											// Google:     uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
+											// NovelAI:    uses the static NOVELAI_TOKEN_LIMITS map (API does not expose limits).
 											if (
 												tomoriState.llm.llm_provider === "openrouter" &&
 												tomoriState.llm.llm_codename !== "account-setting" &&
@@ -4691,6 +4716,28 @@ export default async function tomoriChat(
 												}
 											} else if (tomoriState.llm.llm_provider === "google") {
 												const tokenLimits = getGeminiTokenLimits(
+													tomoriState.llm.llm_codename,
+												);
+												if (
+													tokenLimits &&
+													tokenLimits.contextLength > 0 &&
+													tokenLimits.maxCompletionTokens
+												) {
+													const { truncated, pairsDropped } = truncateDialogueHistory(
+														contextSegments,
+														tokenLimits.contextLength,
+														tokenLimits.maxCompletionTokens,
+													);
+													if (pairsDropped > 0) {
+														log.warn(
+															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+																`${tomoriState.llm.llm_codename} to preserve output budget`,
+														);
+														contextSegments = truncated;
+													}
+												}
+											} else if (tomoriState.llm.llm_provider === "novelai") {
+												const tokenLimits = getNovelAITokenLimits(
 													tomoriState.llm.llm_codename,
 												);
 												if (
