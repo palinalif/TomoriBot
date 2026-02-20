@@ -48,6 +48,7 @@
 		"hono": "^4.12.0",
 		"jszip": "^3.10.1",
 		"libsodium-wrappers": "^0.7.16",
+		"matrix-js-sdk": "^41.0.0-rc.0",
 		"pdf-parse": "^1.1.4",
 		"pg": "^8.18.0",
 		"pino": "^10.3.1",

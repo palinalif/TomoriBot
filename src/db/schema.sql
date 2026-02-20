@@ -1326,3 +1326,23 @@ $$ LANGUAGE plpgsql;
 -- SELECT add_column_if_not_exists('tomori_configs', 'new_feature_flag', 'BOOLEAN', 'false');
 -- SELECT add_column_if_not_exists('users', 'avatar_url', 'TEXT');
 -- SELECT add_column_if_not_exists('tomoris', 'response_count', 'INT', '0');
+
+-- ============================================================================
+-- MATRIX BRIDGE
+-- Bidirectional message bridge between Discord channels and Matrix rooms.
+-- One-to-one mapping enforced by UNIQUE constraints on both sides.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS matrix_channel_links (
+  link_id          SERIAL PRIMARY KEY,
+  server_id        INT  NOT NULL,
+  channel_disc_id  TEXT NOT NULL,
+  matrix_room_id   TEXT NOT NULL,
+  created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  UNIQUE (channel_disc_id),
+  UNIQUE (matrix_room_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_matrix_links_channel ON matrix_channel_links(channel_disc_id);
+CREATE INDEX IF NOT EXISTS idx_matrix_links_room    ON matrix_channel_links(matrix_room_id);

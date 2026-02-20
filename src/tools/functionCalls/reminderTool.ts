@@ -19,6 +19,7 @@ import {
 	formatUTCOffset,
 	formatTimeWithOffset,
 } from "../../utils/text/timezoneHelper";
+import { isMatrixUserId } from "../../utils/matrix/isMatrixUserId";
 
 /**
  * Tool for setting user reminders that will trigger messages at specific times
@@ -159,7 +160,8 @@ export class ReminderTool extends BaseTool {
 			//    search ALL cached members for the closest snowflake ID within a tolerance of 1000.
 			//    GLM often gets IDs wrong by a few digits due to floating-point precision loss
 			//    on large snowflake IDs (which exceed Number.MAX_SAFE_INTEGER).
-			if (targetUserDiscordIdArg) {
+			//    Skip fuzzy-match entirely for Matrix user IDs (@user:host) — BigInt parsing would fail.
+			if (targetUserDiscordIdArg && !isMatrixUserId(targetUserDiscordIdArg)) {
 				const guild = context.message.guild;
 				if (guild) {
 					const exactMember = guild.members.cache.get(

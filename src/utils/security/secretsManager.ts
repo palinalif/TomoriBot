@@ -32,6 +32,10 @@ export interface TomoriSecrets {
 	AVATAR_S3_REGION?: string;
 	AVATAR_S3_PREFIX?: string;
 	AVATAR_PUBLIC_BASE_URL?: string;
+	// Matrix Bridge (optional — leave unset to disable the bridge entirely)
+	MATRIX_HOMESERVER_URL?: string; // e.g., https://matrix.org
+	MATRIX_ACCESS_TOKEN?:   string; // Long-lived access token for the bot's Matrix account
+	MATRIX_BOT_USER_ID?:    string; // e.g., @tomoribot:matrix.org
 	[key: string]: string | undefined; // Allow dynamic CRYPTO_SECRET_V* keys
 }
 
@@ -126,6 +130,17 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 			secrets.AVATAR_PUBLIC_BASE_URL = process.env.AVATAR_PUBLIC_BASE_URL;
 		}
 
+		// Optional Matrix bridge credentials
+		if (process.env.MATRIX_HOMESERVER_URL) {
+			secrets.MATRIX_HOMESERVER_URL = process.env.MATRIX_HOMESERVER_URL;
+		}
+		if (process.env.MATRIX_ACCESS_TOKEN) {
+			secrets.MATRIX_ACCESS_TOKEN = process.env.MATRIX_ACCESS_TOKEN;
+		}
+		if (process.env.MATRIX_BOT_USER_ID) {
+			secrets.MATRIX_BOT_USER_ID = process.env.MATRIX_BOT_USER_ID;
+		}
+
 		// Validate required fields
 		validateRequiredSecrets(secrets);
 
@@ -194,6 +209,17 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 		}
 		if (rawSecrets.AVATAR_PUBLIC_BASE_URL) {
 			secrets.AVATAR_PUBLIC_BASE_URL = rawSecrets.AVATAR_PUBLIC_BASE_URL;
+		}
+
+		// Optional Matrix bridge credentials
+		if (rawSecrets.MATRIX_HOMESERVER_URL) {
+			secrets.MATRIX_HOMESERVER_URL = rawSecrets.MATRIX_HOMESERVER_URL;
+		}
+		if (rawSecrets.MATRIX_ACCESS_TOKEN) {
+			secrets.MATRIX_ACCESS_TOKEN = rawSecrets.MATRIX_ACCESS_TOKEN;
+		}
+		if (rawSecrets.MATRIX_BOT_USER_ID) {
+			secrets.MATRIX_BOT_USER_ID = rawSecrets.MATRIX_BOT_USER_ID;
 		}
 
 		// 7. Validate required fields

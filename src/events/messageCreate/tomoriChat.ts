@@ -5474,7 +5474,7 @@ export default async function tomoriChat(
 	}
 }
 
-function isSelfTriggerMessage(
+export function isSelfTriggerMessage(
 	message: Message,
 	allPersonas: TomoriState[],
 ): boolean {

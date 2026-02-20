@@ -2431,6 +2431,29 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					progress_saving: `Saving results to database...`,
 				},
 			},
+			// Matrix bridge management
+			matrix: {
+				link: {
+					description: `Link a Discord channel to a Matrix room for bidirectional relay`,
+					channel_description: `The Discord channel to link`,
+					room_description: `The Matrix room ID to link (e.g., !abc:matrix.org)`,
+					success_title: `Matrix Room Linked`,
+					success_description: `<#{channel_id}> is now bridged to \`{room_id}\`. Messages from TomoriBot will appear in the Matrix room, and Matrix messages will appear here.`,
+					invalid_room_title: `Invalid Room ID`,
+					invalid_room_description: `The Matrix room ID must start with \`!\` and contain a \`:\` (e.g., \`!abc:matrix.org\`). Please check the room ID and try again.`,
+					join_failed_description: `<#{channel_id}> has been linked to \`{room_id}\`, but I couldn't join the Matrix room automatically. Please invite \`{bot_user_id}\` to the room manually.`,
+					matrix_not_configured_title: `Matrix Bridge Not Available`,
+					matrix_not_configured_description: `The Matrix bridge is not configured on this bot instance. Contact the bot owner to enable it.`,
+				},
+				unlink: {
+					description: `Remove the Matrix bridge link from a Discord channel`,
+					channel_description: `The Discord channel to unlink from its Matrix room`,
+					success_title: `Matrix Room Unlinked`,
+					success_description: `<#{channel_id}> is no longer bridged to any Matrix room.`,
+					not_linked_title: `Not Linked`,
+					not_linked_description: `<#{channel_id}> doesn't have a Matrix room linked to it.`,
+				},
+			},
 		},
 
 		// Personal user configuration commands

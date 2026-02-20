@@ -26,6 +26,11 @@ import {
 	getOrCreateWebhook,
 	resolvePersonaAvatarURL,
 } from "../utils/discord/webhookManager";
+import { isMatrixUserId } from "../utils/matrix/isMatrixUserId";
+import {
+	getLinkedMatrixRoom,
+	sendToMatrixRoom,
+} from "../utils/matrix";
 
 /**
  * Class to manage the fallback reminder timer system
@@ -235,7 +240,17 @@ export class ReminderTimer {
 				`tomoriChat call completed for reminder ${reminder.reminder_id}`,
 			);
 
-			if (!isSelfReminder) {
+			// For Matrix users, relay the reminder notification to the linked Matrix room
+			// instead of sending a Discord mention (Matrix users have no Discord ID to ping).
+			if (!isSelfReminder && isMatrixUserId(reminder.user_discord_id)) {
+				const matrixRoomId = await getLinkedMatrixRoom(reminder.channel_disc_id);
+				if (matrixRoomId) {
+					await sendToMatrixRoom(
+						matrixRoomId,
+						`Reminder for ${reminder.user_nickname}: ${reminder.reminder_purpose}`,
+					);
+				}
+			} else if (!isSelfReminder) {
 				await this.ensureReminderRecipientMention(
 					channel,
 					reminder,
@@ -298,6 +313,9 @@ export class ReminderTimer {
 		afterMessageId: string,
 		reminderStartTime: number,
 	): Promise<void> {
+		// Matrix user IDs cannot be mentioned in Discord — skip the mention step entirely.
+		if (isMatrixUserId(reminder.user_discord_id)) return;
+
 		type SendableChannel = TextBasedChannel & {
 			send: (options: {
 				content: string;

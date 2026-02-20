@@ -12,6 +12,7 @@ import {
 } from "../../types/tool/interfaces";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
+import { isMatrixUserId } from "../../utils/matrix/isMatrixUserId";
 
 /**
  * Tool for remembering and learning new information during conversations
@@ -109,13 +110,21 @@ export class MemoryTool extends BaseTool {
 
 		// Extract arguments (from tomoriChat.ts:1070-1076)
 		const memoryContentArg = args.memory_content as string;
-		const memoryScopeArg = args.memory_scope as "server_wide" | "target_user";
+		let memoryScopeArg = args.memory_scope as "server_wide" | "target_user";
 		let targetUserDiscordIdArg = args.target_user_discord_id as
 			| string
 			| undefined;
 		let targetUserNicknameArg = args.target_user_nickname as
 			| string
 			| undefined;
+
+		// Matrix users have no Discord user row — force server-wide memory scope to avoid crashes.
+		// Matrix user IDs follow @localpart:homeserver format and cannot be used for BigInt fuzzy-match.
+		if (memoryScopeArg === "target_user" && targetUserDiscordIdArg && isMatrixUserId(targetUserDiscordIdArg)) {
+			memoryScopeArg = "server_wide";
+			targetUserDiscordIdArg = undefined;
+			targetUserNicknameArg = undefined;
+		}
 
 		// NovelAI GLM recovery: resolve missing or garbled user params from context.
 		// GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
