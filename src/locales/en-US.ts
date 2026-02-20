@@ -2032,7 +2032,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					already_set_title: `Frequency Penalty Already Set`,
 					already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
 					success_title: `Frequency Penalty Updated`,
-					success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter only (NovelAI uses a different penalty system)`,
+					success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter and NovelAI`,
 				},
 				"presence-penalty": {
 					description: `Set the presence penalty for repeated topics.`,
@@ -2042,7 +2042,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					already_set_title: `Presence Penalty Already Set`,
 					already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
 					success_title: `Presence Penalty Updated`,
-					success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter only (NovelAI uses a different penalty system)`,
+					success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter and NovelAI`,
 				},
 				"min-p": {
 					description: `Set the min-P (minimum probability) threshold.`,
