@@ -252,13 +252,21 @@ export function convertTemperatureToNovelAI(
 }
 
 /**
- * Get parameters for a specific model with optional temperature override
+ * Get parameters for a specific model with optional sampling overrides
+ * DB values with neutral defaults are omitted (topK=0, topP=1.0, minP=0.0)
+ * so the model preset values are preserved when the user hasn't configured them.
  * @param model - Model name
  * @param temperature - Optional temperature in Gemini scale (will be converted to NovelAI scale)
+ * @param topK - Optional top-K sampling override (0 = use model preset)
+ * @param topP - Optional top-P sampling override (1.0 = use model preset)
+ * @param minP - Optional min-P sampling override (0.0 = use model preset)
  */
 export function getParametersForModel(
 	model: string,
 	temperature?: number,
+	topK?: number,
+	topP?: number,
+	minP?: number,
 ): NovelAIParameters {
 	const params =
 		model === "kayra-v1" ? getKayraParameters() : getGlmParameters();
@@ -266,6 +274,19 @@ export function getParametersForModel(
 	// Override temperature if provided (convert from Gemini scale to NovelAI scale)
 	if (temperature !== undefined) {
 		params.temperature = convertTemperatureToNovelAI(temperature, model);
+	}
+
+	// Override topK from DB if non-neutral (0 = use model preset)
+	if (topK !== undefined && topK > 0) {
+		params.top_k = topK;
+	}
+	// Override topP from DB if non-neutral (1.0 = use model preset)
+	if (topP !== undefined && topP < 1.0) {
+		params.top_p = topP;
+	}
+	// Override minP from DB if non-neutral (0.0 = use model preset)
+	if (minP !== undefined && minP > 0) {
+		params.min_p = minP;
 	}
 
 	return params;

@@ -125,6 +125,7 @@ export interface OpenrouterProviderConfig extends ProviderConfig {
 	frequencyPenalty?: number; // Penalize frequent tokens (-2.0 to 2.0)
 	presencePenalty?: number; // Penalize repeated topics (-2.0 to 2.0)
 	repetitionPenalty?: number; // Penalize token repetition (0.0-2.0)
+	minP?: number; // Minimum probability threshold (0.0=disabled)
 }
 
 /**
@@ -488,11 +489,15 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 			temperature: adjustedTemperature,
 			maxOutputTokens: resolvedMaxOutputTokens,
 			seesImages: effectiveSeesImages, // Use effective value (may be overridden)
-			// Sampling parameters to reduce hallucinations and improve coherence
-			topP: 0.9, // Nucleus sampling - use top 90% probability mass
-			frequencyPenalty: 0.3, // Slightly penalize frequent tokens
-			presencePenalty: 0.2, // Slightly penalize repeated topics
-			repetitionPenalty: 1.1, // Penalize exact token repetition
+			// repetitionPenalty is hardcoded as a general token repetition dampener
+			repetitionPenalty: 1.1,
+			// Conditionally include user-configured sampling params (neutral = omit entirely)
+			// Neutral values: topP=1.0, topK=0, frequencyPenalty=0.0, presencePenalty=0.0, minP=0.0
+			...(tomoriState.config.llm_top_p < 1.0 && { topP: tomoriState.config.llm_top_p }),
+			...(tomoriState.config.llm_top_k > 0 && { topK: tomoriState.config.llm_top_k }),
+			...(tomoriState.config.llm_frequency_penalty !== 0 && { frequencyPenalty: tomoriState.config.llm_frequency_penalty }),
+			...(tomoriState.config.llm_presence_penalty !== 0 && { presencePenalty: tomoriState.config.llm_presence_penalty }),
+			...(tomoriState.config.llm_min_p > 0 && { minP: tomoriState.config.llm_min_p }),
 		};
 
 		// Only add tools field if the model supports them (use effective value)

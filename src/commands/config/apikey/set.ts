@@ -532,6 +532,29 @@ export async function execute(
 		// 14. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(serverId);
 
+		// 14.3. NovelAI auto-disable: when switching TO NovelAI, flip emoji and sticker
+		// usage off. Both default to true on every config row, but NovelAI's token budget
+		// makes them counterproductive. The user is notified in the success embed and can
+		// re-enable via /config permissions. Only fires on provider switch, not key updates.
+		if (currentProvider !== newProvider && newProvider === "novelai") {
+			try {
+				await sql`
+					UPDATE tomori_configs
+					SET emoji_usage_enabled = false,
+					    sticker_usage_enabled = false
+					WHERE server_id = ${tomoriState.server_id}
+				`;
+				log.info(
+					`Auto-disabled emoji/sticker usage after switching to NovelAI for server ${tomoriState.server_id}`,
+				);
+			} catch (disableError) {
+				// Non-critical — log but don't fail the key update
+				log.warn(
+					`Failed to auto-disable emoji/sticker for NovelAI switch: ${disableError}`,
+				);
+			}
+		}
+
 		// 14.5. Clean up old custom LLM entry if switching away from custom provider
 		// IMPORTANT: This must happen AFTER updating llm_id to avoid foreign key constraint violation
 		if (shouldCleanupCustomLLM) {
@@ -540,10 +563,14 @@ export async function execute(
 		}
 
 		// 15. Success message (include model info if provider changed)
+		// When switching specifically to NovelAI, use the dedicated key that also
+		// notifies the user that emoji/sticker usage were automatically disabled.
 		const successDescriptionKey =
-			currentProvider !== newProvider
-				? "commands.config.apikey.set.success_with_model_description"
-				: "commands.config.apikey.set.success_description";
+			currentProvider !== newProvider && newProvider === "novelai"
+				? "commands.config.apikey.set.novelai_success_with_model_description"
+				: currentProvider !== newProvider
+					? "commands.config.apikey.set.success_with_model_description"
+					: "commands.config.apikey.set.success_description";
 
 		const descriptionVars: Record<string, string> = {
 			provider:

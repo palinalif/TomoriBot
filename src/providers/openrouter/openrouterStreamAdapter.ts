@@ -50,6 +50,7 @@ export interface OpenrouterStreamConfig extends StreamConfig {
 	frequencyPenalty?: number; // Penalize frequent tokens (-2.0 to 2.0)
 	presencePenalty?: number; // Penalize repeated topics (-2.0 to 2.0)
 	repetitionPenalty?: number; // Penalize token repetition (0.0-2.0)
+	minP?: number; // Minimum probability threshold (0.0=disabled)
 }
 
 /**
@@ -177,6 +178,15 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			normalized === "bad request" ||
 			normalized === "request failed"
 		);
+	}
+
+	/**
+	 * Detects OpenRouter's "No endpoints found" 404 — this means no provider backend
+	 * supports the requested model with the given parameter combination, not that the
+	 * model itself is missing. Retrying with fewer params can recover the request.
+	 */
+	private isNoEndpointsFound(message: string): boolean {
+		return message.toLowerCase().includes("no endpoints found");
 	}
 
 	private cloneWithoutKeys(
@@ -440,6 +450,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 					skippedUnsupportedParams.push("repetition_penalty");
 				}
 			}
+			if (openrouterConfig.minP !== undefined) {
+				if (this.isOpenRouterParamSupported(supportedParameters, "min_p")) {
+					requestBody.min_p = openrouterConfig.minP;
+				} else {
+					skippedUnsupportedParams.push("min_p");
+				}
+			}
 
 			if (supportedParameters && skippedUnsupportedParams.length > 0) {
 				log.info(
@@ -456,7 +473,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				"temperature" in requestBody ? String(config.temperature) : "omitted";
 
 			log.info(
-				`Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${openrouterConfig.topP ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}`,
+				`Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${openrouterConfig.topP ?? "default"}, top_k: ${openrouterConfig.topK ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}, min_p: ${openrouterConfig.minP ?? "default"}`,
 			);
 
 			// Build headers
@@ -567,10 +584,18 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				const isGeneric400 =
 					parsedError.statusCode === 400 &&
 					this.isLikelyGenericErrorMessage(parsedError.errorMessage);
+				// "No endpoints found" 404 means no backend supports the model+params combo,
+				// not that the model is missing. Probe-drop retries can find a working subset.
+				const isNoEndpoints404 =
+					parsedError.statusCode === 404 &&
+					this.isNoEndpointsFound(parsedError.errorMessage);
 
-				if (isGeneric400 && hasMoreAttempts) {
+				if ((isGeneric400 || isNoEndpoints404) && hasMoreAttempts) {
+					const reason = isNoEndpoints404
+						? "no endpoints found (404)"
+						: "generic HTTP 400";
 					log.warn(
-						`OpenRouter returned generic HTTP 400 on attempt '${attempt.label}', trying fallback payload`,
+						`OpenRouter returned ${reason} on attempt '${attempt.label}', trying fallback payload`,
 						{
 							model: config.model,
 							errorMessage: parsedError.errorMessage,

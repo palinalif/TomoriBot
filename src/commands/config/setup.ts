@@ -594,6 +594,31 @@ export async function execute(
 				return;
 			}
 
+			// NovelAI auto-disable: flip emoji and sticker usage off immediately after setup.
+			// The schema defaults both to true, but NovelAI's token budget makes them
+			// counterproductive — they consume context without the model being able to use them.
+			// The user is notified in the success embed and can re-enable via /config permissions.
+			if (normalizedProvider === "novelai") {
+				try {
+					await sql`
+						UPDATE tomori_configs
+						SET emoji_usage_enabled = false,
+						    sticker_usage_enabled = false
+						WHERE server_id = (
+							SELECT server_id FROM servers WHERE discord_id = ${serverId}
+						)
+					`;
+					log.info(
+						`[Setup] Auto-disabled emoji/sticker usage for NovelAI server ${serverId}`,
+					);
+				} catch (disableError) {
+					// Non-critical — log but don't fail setup
+					log.warn(
+						`[Setup] Failed to auto-disable emoji/sticker for NovelAI: ${disableError}`,
+					);
+				}
+			}
+
 			// Custom provider post-processing: update config with endpoint URL and LLM ID
 			if (isCustomProvider(normalizedProvider) && customCapabilitiesResult && customCapabilitiesResult.llmId && customEndpointUrl) {
 				// Non-null assertion is safe here - we've verified llmId is truthy in the if condition
@@ -739,6 +764,17 @@ export async function execute(
 					value: humanizerLabel,
 				},
 			];
+
+			// Add NovelAI expressions warning field if provider is NovelAI
+			if (normalizedProvider === "novelai") {
+				successFields.push({
+					nameKey: "commands.config.setup.novelai_expressions_warning_field",
+					value: localizer(
+						locale,
+						"commands.config.setup.novelai_expressions_warning_value",
+					),
+				});
+			}
 
 			// Add DM explanation field if in DM context
 			if (isDMChannel) {

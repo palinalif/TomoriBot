@@ -4184,6 +4184,10 @@ export default async function tomoriChat(
 										);
 
 										// Recursive call with fresh context (skipLock=true to avoid semaphore issues)
+										// Use currentPersona.tomori_id to preserve the exact persona that got the
+										// empty response (e.g. an Alter triggered by keyword), since selectedPersonaId
+										// is only set for manual triggers and would be undefined for keyword-triggered alters,
+										// causing the retry to fall back to the main persona via the fallbackPersona path.
 										return await tomoriChat(
 											client,
 											message,
@@ -4197,7 +4201,7 @@ export default async function tomoriChat(
 											true, // skipLock - parent already holds the lock
 											reminderRecipientID,
 											reminderData,
-											selectedPersonaId,
+											currentPersona.tomori_id ?? selectedPersonaId, // Pin retry to the persona that got the empty response
 											isPersonaJob,
 											isUserImpersonation,
 											impersonatedUserId,

@@ -48,6 +48,23 @@ import {
 const NAI_GLM_THINKING_ENABLED =
 	(process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
 
+/**
+ * Whether to include the bot's persona name as a "{char}:" prefix in GLM 4.6 assistant turns.
+ *
+ * When ON (default): bot name is preserved in sample dialogue and conversation history turns,
+ * mirroring how other providers (Google, OpenRouter) format their context. The generation prompt
+ * also appends "{botName}:" after <think></think> as a true prefill, steering the model to respond
+ * in the persona's voice from the very first token.
+ *
+ * When OFF: bot name is stripped from assistant turns — <|assistant|> is sufficient as the
+ * structural signal. The original motivation for stripping was garbled name artifacts
+ * (e.g., "Tomo", "Tomorleasing"), but keeping the prefix has shown better persona consistency.
+ *
+ * Only affects GLM 4.6 — Kayra already appends the bot name as a prefill at prompt assembly.
+ */
+const NAI_GLM_CHAR_PREFIX_ENABLED =
+	(process.env.NAI_GLM_CHAR_PREFIX_ENABLED ?? "true").toLowerCase() === "true";
+
 type ToolParamType = "string" | "number" | "boolean" | "array" | "object";
 
 interface ToolParameterSchema {
@@ -240,8 +257,16 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		log.section("NovelAI Full Prompt");
 		log.info(prompt);
 
-		// Get generation parameters for the model
-		const parameters = getParametersForModel(config.model, config.temperature);
+		// Get generation parameters for the model, passing DB sampling overrides.
+		// Neutral values (topK=0, topP=1.0, minP=0.0) preserve the model preset defaults.
+		const { llm_top_k, llm_top_p, llm_min_p } = context.tomoriState.config;
+		const parameters = getParametersForModel(
+			config.model,
+			config.temperature,
+			llm_top_k,
+			llm_top_p,
+			llm_min_p,
+		);
 
 		// Build request
 		const request: NovelAIGenerationRequest = {
@@ -2012,8 +2037,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 *
 	 * Key decisions:
 	 * - User turns keep speaker labels (multi-user Discord needs disambiguation)
-	 * - Assistant turns have bot name STRIPPED — <|assistant|> is sufficient, and
-	 *   including "Tomori:" causes garbled name artifacts (e.g., "Tomo", "Tomorleasing")
+	 * - Assistant turns have bot name STRIPPED by default — <|assistant|> is sufficient, and
+	 *   including "Tomori:" causes garbled name artifacts (e.g., "Tomo", "Tomorleasing").
+	 *   Set NAI_GLM_CHAR_PREFIX_ENABLED=false to strip the name (legacy behaviour).
 	 * - Thinking mode is controlled by NAI_GLM_THINKING_ENABLED env var (default: true).
 	 *   When enabled, <think></think> seeds each assistant turn; when disabled, /nothink
 	 *   is appended instead to suppress internal reasoning.
@@ -2108,10 +2134,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		// 4. Dialogue turns with proper role tags
-		// Build a regex to strip the bot's speaker label from assistant turns.
-		// The <|assistant|> tag already identifies who's speaking, so the model
-		// doesn't need "Tomori:" in the content — and including it causes the model
-		// to try generating partial/garbled name prefixes (e.g., "Tomo", "Tomorleasing").
+		// By default, strip the bot's speaker label from assistant turns:
+		// the <|assistant|> tag already identifies who's speaking, and including
+		// "Tomori:" in the content causes the model to try re-generating partial/garbled
+		// name prefixes (e.g., "Tomo", "Tomorleasing").
+		// When NAI_GLM_CHAR_PREFIX_ENABLED is enabled, the prefix is kept to mirror how other
+		// providers format context (sample dialogues + history both include "{char}: message"),
+		// which may help the model adopt the persona voice more consistently.
 		const botNamePrefixPattern = new RegExp(
 			`^${escapeRegExp(botName)}:\\s*`,
 			"i",
@@ -2119,18 +2148,19 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		for (const turn of dialogueTurns) {
 			if (turn.role === "user") {
-				// User turns keep speaker labels for multi-user disambiguation
+				// User turns always keep speaker labels for multi-user disambiguation
 				promptParts.push("<|user|>");
 				promptParts.push(turn.content);
 			} else if (turn.role === "model") {
-				// Assistant turns: strip bot name prefix — <|assistant|> is sufficient
-				const strippedContent = turn.content.replace(
-					botNamePrefixPattern,
-					"",
-				);
 				promptParts.push("<|assistant|>");
 				promptParts.push(thinkDirective);
-				promptParts.push(strippedContent);
+				if (NAI_GLM_CHAR_PREFIX_ENABLED) {
+					// Debug: keep "BotName:" prefix to test persona-voice consistency
+					promptParts.push(turn.content);
+				} else {
+					// Default: strip prefix — <|assistant|> tag is the structural signal
+					promptParts.push(turn.content.replace(botNamePrefixPattern, ""));
+				}
 			}
 		}
 
@@ -2158,6 +2188,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// thinkDirective is either <think></think> (seeds thinking format) or /nothink (disables reasoning).
 		promptParts.push("<|assistant|>");
 		promptParts.push(thinkDirective);
+
+		// Debug: append "{botName}:" as a true prefill after the think directive, mirroring how
+		// Kayra (flat prompt) appends the bot name at the end. This steers the model to respond
+		// in the persona's voice from the very first token.
+		if (NAI_GLM_CHAR_PREFIX_ENABLED) {
+			promptParts.push(`${botName}:`);
+		}
 
 		return promptParts.join("\n");
 	}

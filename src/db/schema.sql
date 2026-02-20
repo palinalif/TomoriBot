@@ -487,6 +487,18 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 -- Channels in this list always suppress emojis and stickers regardless of global settings
 SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
+-- Add LLM sampling parameter columns (February 2026)
+-- llm_top_p: Nucleus sampling — probability mass threshold (1.0=neutral/disabled, 0.0=most restricted)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_top_p', 'REAL', '1.0');
+-- llm_top_k: Top-K sampling — candidate token count (0=neutral/disabled, max 40)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_top_k', 'INTEGER', '0');
+-- llm_frequency_penalty: Penalize frequently used tokens (-2.0 to 2.0, 0.0=neutral)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_frequency_penalty', 'REAL', '0.0');
+-- llm_presence_penalty: Penalize already-used topics (-2.0 to 2.0, 0.0=neutral)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_presence_penalty', 'REAL', '0.0');
+-- llm_min_p: Minimum probability threshold sampling (0.0=neutral/disabled, 1.0=most restricted)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_min_p', 'REAL', '0.0');
+
 -- Add foreign key constraint if the column was just created
 DO $$
 BEGIN

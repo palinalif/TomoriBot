@@ -348,8 +348,10 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 			],
 			generationConfig: {
 				temperature: tomoriState.config.llm_temperature,
-				topK: 1,
-				topP: 0.95,
+				// Only include topK/topP if user has configured non-neutral values
+				// Neutral: topK=0 (disabled) and topP=1.0 (full probability distribution)
+				...(tomoriState.config.llm_top_k > 0 && { topK: tomoriState.config.llm_top_k }),
+				...(tomoriState.config.llm_top_p < 1.0 && { topP: tomoriState.config.llm_top_p }),
 				maxOutputTokens: 8192,
 				stopSequences: [],
 			},

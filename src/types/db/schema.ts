@@ -134,6 +134,11 @@ export const tomoriConfigSchema = z.object({
 	embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
 	diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
 	llm_temperature: z.number().min(1.0).max(2.0).default(1.5),
+	llm_top_p: z.number().min(0.0).max(1.0).default(1.0), // Added February 2026 - Nucleus sampling (1.0=disabled)
+	llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
+	llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
+	llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
+	llm_min_p: z.number().min(0.0).max(1.0).default(0.0), // Added February 2026 - Min-P sampling (0.0=disabled)
 	api_key: z.instanceof(Buffer).nullable(),
 	key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
 	trigger_words: z.array(z.string()).default([]),

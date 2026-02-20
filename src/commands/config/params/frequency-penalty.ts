@@ -4,45 +4,47 @@ import {
 	type Client,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
+import { localizer } from "../../../utils/text/localizer";
+import { log, ColorCode } from "../../../utils/misc/logger";
+import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import {
 	type UserRow,
 	type ErrorContext,
 	tomoriConfigSchema,
-} from "../../types/db/schema";
+} from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
-// Define constants at the top (Rule #20)
-const TEMPERATURE_MIN = 1.0;
-const TEMPERATURE_MAX = 2.0;
-const TEMPERATURE_DEFAULT = 1.5;
+// Neutral value: 0.0 = no penalty applied
+const FREQUENCY_PENALTY_MIN = -2.0;
+const FREQUENCY_PENALTY_MAX = 2.0;
+const FREQUENCY_PENALTY_DEFAULT = 0.0;
 
 // Configure the subcommand
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("temperature")
+		.setName("frequency-penalty")
 		.setDescription(
-			localizer("en-US", "commands.config.temperature.description"),
+			localizer("en-US", "commands.config.params.frequency-penalty.description"),
 		)
 		.addNumberOption((option) =>
 			option
 				.setName("value")
 				.setDescription(
-					localizer("en-US", "commands.config.temperature.value_description"),
+					localizer("en-US", "commands.config.params.frequency-penalty.value_description"),
 				)
-				.setMinValue(TEMPERATURE_MIN)
-				.setMaxValue(TEMPERATURE_MAX)
+				.setMinValue(FREQUENCY_PENALTY_MIN)
+				.setMaxValue(FREQUENCY_PENALTY_MAX)
 				.setRequired(true),
 		);
 
 /**
- * Sets the temperature parameter for Tomori's LLM
- * Higher values make output more random, lower values make it more deterministic
+ * Sets the frequency penalty for Tomori's LLM
+ * Positive values penalize tokens that appear frequently in the output so far
+ * Only applied by OpenRouter (Google and NovelAI use different penalty systems)
+ * Neutral at 0.0 (no penalty)
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -64,31 +66,28 @@ export async function execute(
 		return;
 	}
 
-	// 1.5. Defer the interaction before async work to prevent timeout
+	// 2. Defer the interaction before async work to prevent timeout
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	try {
-		// 2. Get the temperature value from options
-		const temperatureValue = interaction.options.getNumber("value", true);
+		// 3. Get the value from options
+		const newValue = interaction.options.getNumber("value", true);
 
-		// 3. Additional validation (Discord already handles min/max, but just in case)
-		if (
-			temperatureValue < TEMPERATURE_MIN ||
-			temperatureValue > TEMPERATURE_MAX
-		) {
+		// 4. Additional validation (Discord already handles min/max, but just in case)
+		if (newValue < FREQUENCY_PENALTY_MIN || newValue > FREQUENCY_PENALTY_MAX) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.temperature.invalid_value_title",
-				descriptionKey: "commands.config.temperature.invalid_value_description",
+				titleKey: "commands.config.params.frequency-penalty.invalid_value_title",
+				descriptionKey: "commands.config.params.frequency-penalty.invalid_value_description",
 				descriptionVars: {
-					min: TEMPERATURE_MIN.toFixed(1), // Format for display
-					max: TEMPERATURE_MAX.toFixed(1), // Format for display
+					min: FREQUENCY_PENALTY_MIN.toFixed(1),
+					max: FREQUENCY_PENALTY_MAX.toFixed(1),
 				},
 				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
-		// 4. Load the Tomori state for this server - let helper functions manage interaction state
+		// 5. Load the Tomori state for this server
 		const tomoriState = await getCachedTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
@@ -99,31 +98,29 @@ export async function execute(
 			return;
 		}
 
-		// 6. Check if this is the same as the current temperature
-		const currentTemperature =
-			tomoriState.config.llm_temperature ?? TEMPERATURE_DEFAULT; // Use default if null
-		if (Math.abs(temperatureValue - currentTemperature) < 0.01) {
-			// Using a small epsilon for floating point comparison
+		// 6. Check if the value is already set to the same value
+		const currentValue = tomoriState.config.llm_frequency_penalty ?? FREQUENCY_PENALTY_DEFAULT;
+		if (Math.abs(newValue - currentValue) < 0.001) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.temperature.already_set_title",
-				descriptionKey: "commands.config.temperature.already_set_description",
+				titleKey: "commands.config.params.frequency-penalty.already_set_title",
+				descriptionKey: "commands.config.params.frequency-penalty.already_set_description",
 				descriptionVars: {
-					temperature: temperatureValue.toFixed(1),
+					frequency_penalty: newValue.toFixed(2),
 				},
 				color: ColorCode.WARN,
 			});
 			return;
 		}
 
-		// 7. Update the config in the database using direct SQL (Rule #4, #15)
+		// 7. Update the config in the database
 		const [updatedRow] = await sql`
             UPDATE tomori_configs
-            SET llm_temperature = ${temperatureValue}
+            SET llm_frequency_penalty = ${newValue}
             WHERE server_id = ${tomoriState.server_id}
             RETURNING *
         `;
 
-		// 8. Validate the returned data (Rules #3, #5)
+		// 8. Validate the returned data
 		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
 
 		if (!validatedConfig.success || !updatedRow) {
@@ -133,16 +130,16 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config temperature",
+					command: "config params frequency-penalty",
 					guildId: interaction.guild?.id,
-					temperatureValue,
+					newValue,
 					validationErrors: validatedConfig.success
 						? null
 						: validatedConfig.error.flatten(),
 				},
 			};
 			await log.error(
-				"Failed to update or validate llm_temperature config",
+				"Failed to update or validate llm_frequency_penalty config",
 				validatedConfig.success
 					? new Error("Database update returned no rows or unexpected data")
 					: new Error("Updated config data failed validation"),
@@ -160,18 +157,18 @@ export async function execute(
 		// 9. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(interaction.guild.id);
 
-		// 10. Success message with explanation of the temperature effect
+		// 10. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.temperature.success_title",
-			descriptionKey: "commands.config.temperature.success_description",
+			titleKey: "commands.config.params.frequency-penalty.success_title",
+			descriptionKey: "commands.config.params.frequency-penalty.success_description",
 			descriptionVars: {
-				temperature: temperatureValue.toFixed(1),
-				previous_temperature: currentTemperature.toFixed(1),
+				frequency_penalty: newValue.toFixed(2),
+				previous_frequency_penalty: currentValue.toFixed(2),
 			},
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		// 11. Log error with context (Rule #22)
+		// 11. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
@@ -186,20 +183,18 @@ export async function execute(
 			tomoriId: tomoriIdForError,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config temperature",
+				command: "config params frequency-penalty",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				valueAttempted: interaction.options.getNumber("value"),
 			},
 		};
 		await log.error(
-			`Error executing /config temperature for user ${userData.user_disc_id}`,
+			`Error executing /config params frequency-penalty for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 11. Inform user of unknown error
-		// Use followUp since deferReply was used
 		if (interaction.deferred && !interaction.replied) {
 			await interaction.followUp({
 				content: localizer(locale, "general.errors.unknown_error_description"),
