@@ -1,6 +1,6 @@
 {
 	"name": "tomoribot",
-	"version": "0.7.875",
+	"version": "0.7.876",
 	"description": "Customizable AI Assistant Discord Bot",
 	"main": "./src/index.ts",
 	"type": "module",
@@ -48,6 +48,7 @@
 		"hono": "^4.12.0",
 		"jszip": "^3.10.1",
 		"libsodium-wrappers": "^0.7.16",
+		"matrix-appservice-bridge": "^11.2.0",
 		"matrix-js-sdk": "^41.0.0-rc.0",
 		"pdf-parse": "^1.1.4",
 		"pg": "^8.18.0",

@@ -1,28 +1,29 @@
 /**
- * Matrix Bridge Manager
- * Singleton Matrix client that provides bidirectional message relay between
- * Discord channels and Matrix rooms via matrix-js-sdk.
+ * Matrix Bridge Manager (Appservice Edition)
+ * Manages the Matrix Appservice bridge, giving each TomoriBot persona its own
+ * virtual Matrix user identity (e.g., @_tomori_lilya:yourdomain.com).
  *
  * Architecture:
- *   Matrix Room ─[sync]─> setupMatrixSyncListener ─[webhook]─> Discord Channel
- *   Discord Channel ─[matrixRelay.ts]─> sendToMatrixRoom ─> Matrix Room
+ *   Matrix Room ─[push]─> appservice HTTP server ─[onEvent]─> Discord Channel
+ *   Discord Channel ─[matrixRelay.ts]─> sendToMatrixRoom ─[Intent]─> Matrix Room
  *
  * Loop prevention:
- *   - Matrix→Discord: webhook username is "[Matrix|@user:host] Name" (never matches a persona nickname)
- *   - Discord→Matrix: sync listener filters event.getSender() === MATRIX_BOT_USER_ID
+ *   - Matrix→Discord: onEvent filters sender === botUserId OR startsWith("@_tomori_")
+ *   - Discord→Matrix: persona Intents send under virtual user IDs, not the bot account
  */
 
+import { Bridge, AppServiceRegistration } from "matrix-appservice-bridge";
+import type {
+	Intent,
+	WeakEvent,
+	Request as BridgeRequest,
+} from "matrix-appservice-bridge";
 import {
-	createClient,
-	ClientEvent,
-	RoomEvent,
-	EventType,
-	MsgType,
-	getHttpUriForMxc,
-	type MatrixClient,
-} from "matrix-js-sdk";
-import type { RoomMessageEventContent } from "matrix-js-sdk/lib/@types/events";
-import { EmbedBuilder, MessageFlags, type BaseGuildTextChannel, type Client } from "discord.js";
+	EmbedBuilder,
+	MessageFlags,
+	type BaseGuildTextChannel,
+	type Client,
+} from "discord.js";
 import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { getOrCreateWebhook } from "@/utils/discord/webhookManager";
@@ -31,12 +32,15 @@ import { localizer } from "@/utils/text/localizer";
 
 // ─── Module-level state ────────────────────────────────────────────────────
 
-/** Matrix event type for text messages (concatenated to avoid locale-key scanner false-positive). */
+/**
+ * Matrix event type for room messages (the "m.room" + ".message" string, kept split
+ * so the locale-key scanner does not treat it as a missing locale key reference).
+ */
 // eslint-disable-next-line prefer-template
 const MATRIX_TEXT_MSG_TYPE = "m.room" + ".message";
 
-/** Initialized Matrix client, or null if Matrix is not configured. */
-let matrixClient: MatrixClient | null = null;
+/** Initialized Matrix Bridge, or null if Matrix is not configured. */
+let matrixBridge: Bridge | null = null;
 
 /**
  * Cache TTL for channel-room link DB lookups.
@@ -49,8 +53,9 @@ const CACHE_TTL_MS =
  * Maximum attachment size (in bytes) to relay in either direction.
  * Files larger than this threshold are replaced with a text notice.
  * Configurable via MATRIX_MAX_ATTACHMENT_MB (default: 8 MB).
+ * Exported so matrixRelay.ts can enforce the same limit on Discord→Matrix uploads.
  */
-const MATRIX_MAX_ATTACHMENT_BYTES =
+export const MATRIX_MAX_ATTACHMENT_BYTES =
 	Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) * 1024 * 1024;
 
 /**
@@ -72,92 +77,237 @@ const roomLinkCache = new Map<
 	{ channelDiscId: string | null; cachedAt: number }
 >();
 
+/**
+ * In-memory cache of provisioned persona intents.
+ * Key: localpart (e.g., "_tomori_lilya"), Value: the avatarUrl that was used when provisioned.
+ * Avoids redundant display-name/avatar API calls within a single bot session.
+ */
+const provisionedIntents = new Map<string, { avatarUrl: string | null }>();
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
- * Initialize the Matrix client from environment variables.
- * No-op and silent if MATRIX_HOMESERVER_URL / MATRIX_ACCESS_TOKEN / MATRIX_BOT_USER_ID
- * are not set — the bot starts normally without Matrix support.
+ * Initialize the Matrix Appservice bridge from environment variables.
+ * Silent no-op if any required credential is absent — bot starts without Matrix support.
  *
- * @param discordClient - The Discord.js client, passed to the sync listener for channel lookups
+ * Required env vars:
+ *   MATRIX_HOMESERVER_URL  — e.g., http://localhost:8448
+ *   MATRIX_ACCESS_TOKEN    — as_token (appservice → homeserver auth)
+ *   MATRIX_HS_TOKEN        — hs_token (homeserver → appservice auth)
+ *   MATRIX_BOT_USER_ID     — e.g., @tomoribot:yourdomain.com
+ *   MATRIX_SERVER_NAME     — domain portion, e.g., localhost or yourdomain.com
+ *
+ * @param discordClient - Discord.js client, forwarded to the event handler for channel lookups
  */
 export async function initializeMatrixClient(discordClient: Client): Promise<void> {
 	const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
-	const accessToken   = process.env.MATRIX_ACCESS_TOKEN;
+	const asToken       = process.env.MATRIX_ACCESS_TOKEN; // appservice → homeserver
+	const hsToken       = process.env.MATRIX_HS_TOKEN;     // homeserver → appservice
 	const botUserId     = process.env.MATRIX_BOT_USER_ID;
+	const serverName    = process.env.MATRIX_SERVER_NAME;
 
-	// Silently skip initialization if any required Matrix credential is absent
-	if (!homeserverUrl || !accessToken || !botUserId) {
+	// Silently skip initialization if any required credential is absent
+	if (!homeserverUrl || !asToken || !hsToken || !botUserId || !serverName) {
 		log.info("Matrix bridge: credentials not configured — bridge disabled");
 		return;
 	}
 
+	const port = Number.parseInt(process.env.MATRIX_APPSERVICE_PORT || "9993", 10);
+
 	try {
-		// 1. Create Matrix client (no-op store: we only need sync + send)
-		matrixClient = createClient({
-			baseUrl:     homeserverUrl,
-			accessToken: accessToken,
-			userId:      botUserId,
+		// 1. Build the AppServiceRegistration from environment credentials
+		const registration = AppServiceRegistration.fromObject({
+			id:               "tomoribot-appservice",
+			hs_token:         hsToken,
+			as_token:         asToken,
+			url:              `http://localhost:${port}`,
+			sender_localpart: "tomoribot",
+			namespaces: {
+				// Exclusive: only this appservice may create/use @_tomori_*:serverName users
+				users:   [{ exclusive: true, regex: `@_tomori_.*:${serverName}` }],
+				aliases: [],
+				rooms:   [],
+			},
+			rate_limited: false,
 		});
 
-		// 2. Register timeline listener BEFORE starting the client so we don't miss events
-		setupMatrixSyncListener(discordClient, botUserId);
-
-		// 3. Start client with initialSyncLimit=0 to skip replaying historical messages
-		matrixClient.startClient({ initialSyncLimit: 0 });
-
-		// 4. Wait until the initial sync is "PREPARED" before reporting success
-		await new Promise<void>((resolve) => {
-			matrixClient?.once(ClientEvent.Sync, (state) => {
-				if (state === "PREPARED") resolve();
-			});
+		// 2. Create Bridge with onEvent controller
+		//    disableStores: true  — we use PostgreSQL, not the built-in NeDB file stores
+		//    disableContext: true — disableStores makes context lookups meaningless anyway
+		matrixBridge = new Bridge({
+			homeserverUrl,
+			domain:         serverName,
+			registration,
+			disableStores:  true,
+			disableContext: true,
+			controller: {
+				// onEvent is typed void (not Promise<void>) — fire-and-forget the async handler
+				onEvent: (request: BridgeRequest<WeakEvent>): void => {
+					void handleMatrixEvent(request, discordClient, botUserId).catch((error) => {
+						log.warn("Matrix bridge: uncaught error in event handler", error);
+					});
+				},
+				// Route bridge internal logs through our logger (errors only to reduce noise)
+				onLog: (_text: string, isError: boolean): void => {
+					if (isError) {
+						log.warn(`[matrix-appservice-bridge] ${_text}`);
+					}
+				},
+			},
 		});
+
+		// 3. Run the bridge: calls initialise() internally, then starts the HTTP server
+		//    The homeserver will push events to http://localhost:{port}
+		await matrixBridge.run(port);
 
 		log.success(
-			`Matrix bridge initialized — connected as ${botUserId} @ ${homeserverUrl}`,
+			`Matrix appservice initialized — ${botUserId} @ ${homeserverUrl} (listening on port ${port})`,
 		);
 	} catch (error) {
-		log.error("Matrix bridge: failed to initialize client", error as Error);
-		matrixClient = null;
+		log.error("Matrix bridge: failed to initialize appservice", error as Error);
+		matrixBridge = null;
 	}
 }
 
 /**
- * Returns the initialized Matrix client, or null if Matrix is not configured.
- * Callers should check for null before using the client.
+ * Returns true if the Matrix bridge is configured and running.
+ * Used as a fast "is Matrix enabled?" check in commands and event handlers.
  */
-export function getMatrixClient(): MatrixClient | null {
-	return matrixClient;
+export function isMatrixConfigured(): boolean {
+	return matrixBridge !== null;
 }
 
 /**
- * Send a plain-text message to a Matrix room.
- * Silently no-ops if the Matrix client is not configured.
+ * Join a Matrix room as the bot's own account.
+ * Called by /server matrix link after persisting the DB link.
  *
- * @param roomId - The Matrix room ID (e.g., "!abc:matrix.org")
- * @param text   - The message content to send
+ * @param roomId - The Matrix room ID to join (e.g., "!abc:matrix.org")
  */
-export async function sendToMatrixRoom(roomId: string, text: string): Promise<void> {
-	if (!matrixClient) return;
+export async function joinMatrixRoom(roomId: string): Promise<void> {
+	if (!matrixBridge) return;
+
+	// getIntent() with no args returns the bot account's Intent
+	const botIntent = matrixBridge.getIntent();
+	await botIntent.join(roomId);
+}
+
+/**
+ * Get (and lazily provision) the Matrix Intent for a given persona virtual user.
+ *
+ * On first use per session (or when avatarUrl changes), the virtual user is:
+ *   1. Registered on the homeserver (idempotent)
+ *   2. Given the persona's display name
+ *   3. Given the persona's avatar (uploaded from Discord CDN)
+ *
+ * Subsequent calls with the same avatarUrl return immediately from the in-memory cache.
+ * The cache is session-scoped (cleared on bot restart), so avatar changes take effect
+ * at the next restart.
+ *
+ * @param personaName - Display name for the virtual user (e.g., "Lilya")
+ * @param avatarUrl   - CDN URL of the persona's avatar image, or null if none
+ * @returns The provisioned Intent, or null if the bridge is not configured
+ */
+export async function getPersonaIntent(
+	personaName: string,
+	avatarUrl: string | null,
+): Promise<Intent | null> {
+	if (!matrixBridge) return null;
+
+	const serverName = process.env.MATRIX_SERVER_NAME;
+	if (!serverName) return null;
+
+	// Build virtual user localpart: lowercase, only alphanumerics and underscores
+	const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+	const userId    = `@${localpart}:${serverName}`;
+	const intent    = matrixBridge.getIntent(userId);
+
+	// Return cached intent if avatar URL is unchanged (no need to re-provision)
+	const cached = provisionedIntents.get(localpart);
+	if (cached && cached.avatarUrl === avatarUrl) {
+		return intent;
+	}
+
+	// Optimistic cache write BEFORE the async provisioning chain.
+	// This prevents a race condition where two messages for the same persona arrive
+	// simultaneously: both would see cached=undefined and race through ensureRegistered()
+	// / setDisplayName() / setAvatarUrl(). With the optimistic write, the second caller
+	// hits the cache and returns early while the first is still awaiting.
+	provisionedIntents.set(localpart, { avatarUrl });
 
 	try {
-		await matrixClient.sendTextMessage(roomId, text);
+		// 1. Register the virtual user (safe to call repeatedly — idempotent)
+		await intent.ensureRegistered();
+
+		// 2. Set the display name to the persona's nickname
+		await intent.setDisplayName(personaName);
+
+		// 3. Upload and set the avatar if an avatar URL is available
+		if (avatarUrl) {
+			const media = await downloadAvatar(avatarUrl);
+			if (media) {
+				// uploadContent returns the mxc:// URI directly as a string
+				const mxcUri = await intent.uploadContent(media.buffer, {
+					type: media.mimeType,
+					name: "avatar.png",
+				});
+				await intent.setAvatarUrl(mxcUri);
+			}
+		}
+
+		log.info(`Matrix appservice: provisioned virtual user ${userId}`);
 	} catch (error) {
-		// Non-critical: log warning but don't propagate to avoid disrupting Discord flow
+		// Roll back the optimistic entry so the next message retries provisioning
+		provisionedIntents.delete(localpart);
+		// Non-fatal: still return the intent so message sending can proceed
+		log.warn(`Matrix appservice: failed to provision ${userId}`, error);
+	}
+
+	return intent;
+}
+
+/**
+ * Send a plain-text message to a Matrix room as the given persona virtual user.
+ * Falls back to the bot's own account if no persona intent can be resolved.
+ * Silent no-op if the Matrix bridge is not configured.
+ *
+ * @param roomId      - The Matrix room ID (e.g., "!abc:matrix.org")
+ * @param text        - The message content to send
+ * @param personaName - Optional persona name; resolves a virtual user Intent when provided
+ * @param avatarUrl   - Optional avatar URL for the persona's virtual user
+ */
+export async function sendToMatrixRoom(
+	roomId: string,
+	text: string,
+	personaName?: string,
+	avatarUrl?: string | null,
+): Promise<void> {
+	if (!matrixBridge) return;
+
+	try {
+		// Resolve the correct Intent: persona virtual user if available, else bot account
+		const intent = personaName
+			? (await getPersonaIntent(personaName, avatarUrl ?? null)) ?? matrixBridge.getIntent()
+			: matrixBridge.getIntent();
+
+		// sendText() auto-joins the room if the virtual user is not yet a member
+		await intent.sendText(roomId, text);
+	} catch (error) {
 		log.warn(`Matrix bridge: failed to send message to room ${roomId}`, error);
 	}
 }
 
 /**
  * Upload a file to Matrix and send it as a media event in the given room.
- * Silently no-ops if the Matrix client is not configured.
- * Uses `m.image` msgtype for image/* MIME types, `m.video` for video/*, else `m.file`.
+ * Uses m.image for images, m.video for video, m.file for everything else.
+ * Silent no-op if the Matrix bridge is not configured.
  *
- * @param roomId   - The Matrix room ID (e.g., "!abc:matrix.org")
- * @param data     - Raw file bytes as an ArrayBuffer (avoids Node.js Buffer ↔ Blob friction)
- * @param filename - Original filename (used as the event `body`)
- * @param mimeType - MIME type string (e.g., "image/png")
- * @param size     - File size in bytes (included in the event `info` block)
+ * @param roomId      - The Matrix room ID (e.g., "!abc:matrix.org")
+ * @param data        - Raw file bytes as an ArrayBuffer
+ * @param filename    - Original filename (used as the event body)
+ * @param mimeType    - MIME type string (e.g., "image/png")
+ * @param size        - File size in bytes (included in the event info block)
+ * @param personaName - Optional persona name for virtual user routing
+ * @param avatarUrl   - Optional avatar URL for the persona's virtual user
  */
 export async function sendAttachmentToMatrixRoom(
 	roomId: string,
@@ -165,39 +315,43 @@ export async function sendAttachmentToMatrixRoom(
 	filename: string,
 	mimeType: string,
 	size: number,
+	personaName?: string,
+	avatarUrl?: string | null,
 ): Promise<void> {
-	if (!matrixClient) return;
+	if (!matrixBridge) return;
 
 	try {
-		// 1. Wrap in Blob for uploadContent() — Blob (not Buffer) satisfies
-		//    XMLHttpRequestBodyInit (FileType), and ArrayBuffer is a valid BlobPart
-		const blob           = new Blob([data], { type: mimeType });
-		const uploadResponse = await matrixClient.uploadContent(blob, {
-			name: filename,
-			type: mimeType,
-		});
-		const mxcUri = uploadResponse.content_uri;
-		const info   = { mimetype: mimeType, size };
+		const intent = personaName
+			? (await getPersonaIntent(personaName, avatarUrl ?? null)) ?? matrixBridge.getIntent()
+			: matrixBridge.getIntent();
 
-		// 2. Route to the appropriate typed send method based on MIME type.
-		//    sendImageMessage() exists in the SDK; for video/file we use sendEvent()
-		//    with an explicit type assertion since the sendMessage() union is too narrow.
+		// 1. Upload the file bytes to the homeserver's media repository
+		const buffer = Buffer.from(data);
+		const mxcUri = await intent.uploadContent(buffer, {
+			type: mimeType,
+			name: filename,
+		});
+
+		const info = { mimetype: mimeType, size };
+
+		// 2. Send the appropriate media event type based on MIME type
 		if (mimeType.startsWith("image/")) {
-			await matrixClient.sendImageMessage(roomId, mxcUri, info, filename);
+			await intent.sendMessage(roomId, {
+				msgtype: "m.image",
+				body:    filename,
+				url:     mxcUri,
+				info,
+			});
 		} else {
-			const msgtype = mimeType.startsWith("video/") ? MsgType.Video : MsgType.File;
-			// sendMessage()'s union type (RoomMessageEventContent) is overly strict for
-			// dynamic msgtype values — use sendEvent() with a double cast as the escape hatch
-			const mediaContent = {
+			const msgtype = mimeType.startsWith("video/") ? "m.video" : "m.file";
+			await intent.sendMessage(roomId, {
 				msgtype,
 				body: filename,
-				url: mxcUri,
+				url:  mxcUri,
 				info,
-			} as unknown as RoomMessageEventContent;
-			await matrixClient.sendEvent(roomId, EventType.RoomMessage, mediaContent);
+			});
 		}
 	} catch (error) {
-		// Non-critical: log warning but don't propagate to avoid disrupting Discord flow
 		log.warn(`Matrix bridge: failed to send attachment to room ${roomId}`, error);
 	}
 }
@@ -214,12 +368,10 @@ export async function getLinkedMatrixRoom(channelDiscId: string): Promise<string
 	const now    = Date.now();
 	const cached = channelLinkCache.get(channelDiscId);
 
-	// Return cached result if still fresh
 	if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
 		return cached.roomId;
 	}
 
-	// Query DB for link
 	const [row] = await sql<{ matrix_room_id: string }[]>`
 		SELECT matrix_room_id
 		FROM matrix_channel_links
@@ -245,12 +397,10 @@ export async function getDiscordChannelForRoom(matrixRoomId: string): Promise<st
 	const now    = Date.now();
 	const cached = roomLinkCache.get(matrixRoomId);
 
-	// Return cached result if still fresh
 	if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
 		return cached.channelDiscId;
 	}
 
-	// Query DB for link
 	const [row] = await sql<{ channel_disc_id: string }[]>`
 		SELECT channel_disc_id
 		FROM matrix_channel_links
@@ -268,8 +418,8 @@ export async function getDiscordChannelForRoom(matrixRoomId: string): Promise<st
  * Invalidate both link caches for a given Discord channel (and optionally its Matrix room).
  * Must be called after any INSERT/UPDATE/DELETE on matrix_channel_links to prevent stale data.
  *
- * @param channelDiscId  - The Discord channel ID whose cache entry to clear
- * @param matrixRoomId   - Optional: the Matrix room ID whose cache entry to also clear
+ * @param channelDiscId - The Discord channel ID whose cache entry to clear
+ * @param matrixRoomId  - Optional: the Matrix room ID whose cache entry to also clear
  */
 export function invalidateMatrixLinkCache(
 	channelDiscId: string,
@@ -284,39 +434,80 @@ export function invalidateMatrixLinkCache(
 // ─── Private helpers ───────────────────────────────────────────────────────
 
 /**
- * Download a Matrix media file identified by an `mxc://` URL.
- * Handles authenticated media (MSC3916) by sending the bot's access token.
- * Returns null and logs a warning on any failure (network, size, or parse error).
+ * Convert an mxc:// URI to an authenticated HTTP download URL.
+ * Format: {homeserverUrl}/_matrix/media/v3/download/{serverHost}/{mediaId}
+ * Returns null if the URI format is invalid.
  *
- * @param mxcUrl        - The `mxc://` media URL from the Matrix event content
+ * @param mxcUrl        - The mxc:// media URI from the Matrix event content
  * @param homeserverUrl - The homeserver base URL used to resolve the HTTP download URL
- * @param accessToken   - The bot's access token for authenticated media endpoints
- * @param knownSize     - Optional pre-flight size from the event's `info.size` field
- * @returns             - `{ buffer, mimeType }` on success, or null on failure
+ */
+function mxcToHttp(mxcUrl: string, homeserverUrl: string): string | null {
+	const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
+	if (!match) return null;
+	const [, serverHost, mediaId] = match;
+	return `${homeserverUrl}/_matrix/media/v3/download/${serverHost}/${mediaId}`;
+}
+
+/**
+ * Fetch an avatar image from a CDN URL (e.g., Discord's media proxy).
+ * Returns null on any error — avatar provisioning is non-critical.
+ *
+ * @param url - The HTTP(S) URL of the avatar image to download
+ * @returns `{ buffer, mimeType }` on success, null on failure
+ */
+async function downloadAvatar(
+	url: string,
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+	try {
+		const response = await fetch(url, {
+			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+		});
+		if (!response.ok) {
+			log.warn(`Matrix appservice: avatar fetch failed (${response.status}) for ${url}`);
+			return null;
+		}
+		const arrayBuffer = await response.arrayBuffer();
+		const mimeType    = response.headers.get("content-type") ?? "image/png";
+		return { buffer: Buffer.from(arrayBuffer), mimeType };
+	} catch (error) {
+		log.warn(`Matrix appservice: failed to download avatar from ${url}`, error);
+		return null;
+	}
+}
+
+/**
+ * Download a Matrix media file identified by an mxc:// URL.
+ * Returns null and logs a warning on any failure (network, size limit, etc.).
+ *
+ * @param mxcUrl        - The mxc:// media URL from the Matrix event content
+ * @param homeserverUrl - The homeserver base URL to resolve the HTTP download URL
+ * @param asToken       - The appservice token for authenticated media (MSC3916)
+ * @param knownSize     - Optional pre-flight size from the event's info.size field
+ * @returns `{ buffer, mimeType }` on success, null on failure
  */
 async function downloadMatrixMedia(
 	mxcUrl: string,
 	homeserverUrl: string,
-	accessToken: string,
+	asToken: string,
 	knownSize?: number,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
-	// 1. Pre-flight size guard: reject oversized files before even fetching
+	// 1. Pre-flight size guard: reject oversized files before fetching
 	if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
 		return null;
 	}
 
-	// 2. Convert mxc:// URI to a standard HTTP(S) download URL
-	const httpUrl = getHttpUriForMxc(homeserverUrl, mxcUrl);
+	// 2. Convert mxc:// URI to an HTTP(S) download URL
+	const httpUrl = mxcToHttp(mxcUrl, homeserverUrl);
 	if (!httpUrl) {
 		log.warn(`Matrix bridge: could not resolve mxc URL: ${mxcUrl}`);
 		return null;
 	}
 
 	try {
-		// 3. Fetch with auth header and a timeout (MSC3916 authenticated media)
+		// 3. Fetch with auth header and timeout (MSC3916 authenticated media)
 		const response = await fetch(httpUrl, {
-			headers: { Authorization: `Bearer ${accessToken}` },
-			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+			headers: { Authorization: `Bearer ${asToken}` },
+			signal:  AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
 		});
 
 		if (!response.ok) {
@@ -333,11 +524,9 @@ async function downloadMatrixMedia(
 			return null;
 		}
 
-		// 5. Buffer the response body
+		// 5. Buffer the response body and final size guard
 		const arrayBuffer = await response.arrayBuffer();
-		const buffer = Buffer.from(arrayBuffer);
-
-		// 6. Final size guard on the actual downloaded bytes
+		const buffer      = Buffer.from(arrayBuffer);
 		if (buffer.length > MATRIX_MAX_ATTACHMENT_BYTES) {
 			return null;
 		}
@@ -351,12 +540,12 @@ async function downloadMatrixMedia(
 }
 
 /**
- * Handles the Matrix `/refresh` command.
- * Posts the standard refresh embed to the Discord channel (triggering history reset in tomoriChat)
+ * Handles the Matrix /refresh command.
+ * Posts the standard refresh embed to the Discord channel (triggering history reset)
  * and clears the short-term memory cache for the channel.
  *
  * The embed title matches `commands.tool.refresh.title` — the exact marker that
- * `checkTargetEmbedTitle()` in tomoriChat.ts detects as a conversation history reset point.
+ * checkTargetEmbedTitle() in tomoriChat.ts detects as a conversation reset point.
  *
  * @param channel       - The Discord text channel to post the embed to
  * @param channelDiscId - The Discord channel ID (for cache invalidation)
@@ -369,165 +558,145 @@ async function handleMatrixRefresh(
 	clearShortTermMemoryForChannel(channelDiscId);
 	log.info(`Matrix /refresh: cleared short-term memories for channel ${channelDiscId}`);
 
-	// 2. Build the refresh embed using en-US locale as the canonical reset marker.
-	//    tomoriChat checks all supported locales, so this will be detected regardless of
-	//    the server's configured locale.
+	// 2. Build the refresh embed using en-US locale as the canonical reset marker
 	const embed = new EmbedBuilder()
 		.setTitle(localizer("en-US", "commands.tool.refresh.title"))
 		.setDescription(localizer("en-US", "commands.tool.refresh.response"))
 		.setColor(ColorCode.SECTION);
 
-	// 3. Send the embed to Discord (suppress notifications to avoid pinging everyone)
+	// 3. Send the embed (suppress notifications to avoid pinging everyone)
 	await channel.send({
-		embeds:  [embed],
-		flags:   MessageFlags.SuppressNotifications,
+		embeds: [embed],
+		flags:  MessageFlags.SuppressNotifications,
 	});
 }
 
 /**
- * Attach the RoomEvent.Timeline listener that relays Matrix messages to Discord.
- * Called during initialization before startClient() so no events are missed.
+ * Handle an incoming Matrix event pushed by the homeserver.
+ * Replaces the old RoomEvent.Timeline sync listener.
+ * Relays Matrix messages to the linked Discord channel via webhook.
  *
- * Loop prevention: events sent by the bot's own Matrix account are filtered
- * using event.getSender() === botUserId.
+ * Loop prevention:
+ *   - Skip events sent by the bot account itself
+ *   - Skip events sent by any @_tomori_* virtual persona user
  *
+ * @param request       - The bridge request wrapping the raw Matrix event
  * @param discordClient - Discord.js client for channel/webhook resolution
- * @param botUserId     - The bot's Matrix user ID (e.g., "@tomoribot:matrix.org")
+ * @param botUserId     - The bot's Matrix user ID for loop prevention
  */
-function setupMatrixSyncListener(discordClient: Client, botUserId: string): void {
-	if (!matrixClient) return;
+async function handleMatrixEvent(
+	request: BridgeRequest<WeakEvent>,
+	discordClient: Client,
+	botUserId: string,
+): Promise<void> {
+	const event = request.getData();
 
-	matrixClient.on(RoomEvent.Timeline, async (event, room, toStartOfTimeline) => {
-		try {
-			// DEBUG: log every timeline event so we can see what's being received
-			log.info(
-				`[Matrix debug] event type=${event.getType()} room=${room?.roomId} sender=${event.getSender()} toStartOfTimeline=${toStartOfTimeline}`,
-			);
+	// 1. Only relay room message events
+	if (event.type !== MATRIX_TEXT_MSG_TYPE) return;
 
-			// 1. Skip historical events replayed from start of timeline
-			if (toStartOfTimeline) {
-				log.info("[Matrix debug] skipped: toStartOfTimeline=true");
-				return;
-			}
+	// 2. Loop prevention: ignore messages from the bot account or any persona virtual user.
+	//    The domain suffix check prevents a remote user named @_tomori_*:evil.org from
+	//    accidentally (or maliciously) matching our appservice's virtual user namespace.
+	const serverName = process.env.MATRIX_SERVER_NAME ?? "";
+	const isOwnVirtualUser =
+		event.sender.startsWith("@_tomori_") && event.sender.endsWith(`:${serverName}`);
+	if (event.sender === botUserId || isOwnVirtualUser) return;
 
-			// 2. Only relay text messages
-			if (event.getType() !== MATRIX_TEXT_MSG_TYPE) {
-				log.info(`[Matrix debug] skipped: event type ${event.getType()} is not m.room.message`);
-				return;
-			}
+	// 3. Look up the linked Discord channel (cached DB query)
+	const channelDiscId = await getDiscordChannelForRoom(event.room_id);
+	if (!channelDiscId) return;
 
-			// 3. Loop prevention: ignore messages sent by the bot itself
-			if (event.getSender() === botUserId) {
-				log.info("[Matrix debug] skipped: sender is bot itself");
-				return;
-			}
+	// 4. Fetch the Discord channel
+	const channel = await discordClient.channels.fetch(channelDiscId).catch(() => null);
+	if (!channel?.isTextBased() || channel.isDMBased()) return;
 
-			if (!room) {
-				log.info("[Matrix debug] skipped: room is undefined");
-				return;
-			}
+	// 5. Build the webhook username from the sender's Matrix ID
+	//    Format: "[Matrix|@user:host] localpart" (max 80 chars per Discord webhook limit)
+	const senderLocalpart = event.sender.split(":")[0].replace("@", "");
+	const rawUsername     = `[Matrix|${event.sender}] ${senderLocalpart}`;
+	const username        = rawUsername.length > 80
+		? `${rawUsername.slice(0, 77)}...`
+		: rawUsername;
 
-			// 4. Look up the linked Discord channel (cached DB query)
-			const channelDiscId = await getDiscordChannelForRoom(room.roomId);
-			log.info(`[Matrix debug] getDiscordChannelForRoom(${room.roomId}) = ${channelDiscId}`);
-			if (!channelDiscId) return;
+	// 6. Extract content fields
+	const content  = event.content;
+	const msgtype  = (content.msgtype as string | undefined) ?? "m.text";
+	const bodyText = (content.body as string | undefined)?.trim();
 
-			// 5. Fetch the Discord channel
-			const channel = await discordClient.channels.fetch(channelDiscId).catch(() => null);
-			if (!channel?.isTextBased() || channel.isDMBased()) return;
+	// 7. Branch on msgtype: relay media events as Discord file attachments
+	const isMediaMsg =
+		msgtype === "m.image" ||
+		msgtype === "m.video" ||
+		msgtype === "m.file"  ||
+		msgtype === "m.audio";
 
-			// 6. Build the webhook username from Matrix sender info
-			const sender      = event.getSender() ?? "unknown";
-			const displayName = room.getMember(sender)?.name ?? sender;
-			const rawUsername = `[Matrix|${sender}] ${displayName}`;
-			// Discord limits webhook usernames to 80 characters
-			const username    = rawUsername.length > 80
-				? `${rawUsername.slice(0, 77)}...`
-				: rawUsername;
+	if (isMediaMsg) {
+		const { webhook: mediaWebhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
+		if (!mediaWebhook) return;
 
-			// 7. Extract content and msgtype
-			const content  = event.getContent();
-			const msgtype  = (content.msgtype as string | undefined) ?? "m.text";
-			const bodyText = (content.body as string | undefined)?.trim();
+		const mxcUrl    = content.url as string | undefined;
+		const info      = content.info as Record<string, unknown> | undefined;
+		const knownSize = typeof info?.size === "number" ? info.size : undefined;
+		const filename  = bodyText ?? "attachment";
 
-			// 8. Branch on msgtype: media events relay as Discord file attachments
-			const isMediaMsg =
-				msgtype === "m.image" ||
-				msgtype === "m.video" ||
-				msgtype === "m.file"  ||
-				msgtype === "m.audio";
+		// 7a. Reject oversized attachments with a text notice
+		if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
+			const sizeMb = (knownSize / (1024 * 1024)).toFixed(1);
+			await mediaWebhook.send({
+				content:         `[Matrix: attachment too large to relay (${sizeMb} MB)]`,
+				username,
+				allowedMentions: { parse: [] },
+			});
+			return;
+		}
 
-			if (isMediaMsg) {
-				// 8a. Resolve the webhook first (needed for both success and fallback paths)
-				const { webhook: mediaWebhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
-				if (!mediaWebhook) return;
+		// 7b. Attempt to download and relay the media file
+		if (mxcUrl) {
+			const homeserverUrl = process.env.MATRIX_HOMESERVER_URL ?? "";
+			const asToken       = process.env.MATRIX_ACCESS_TOKEN   ?? "";
+			const media = await downloadMatrixMedia(mxcUrl, homeserverUrl, asToken, knownSize);
 
-				const mxcUrl    = content.url as string | undefined;
-				const info      = content.info as Record<string, unknown> | undefined;
-				const knownSize = typeof info?.size === "number" ? info.size : undefined;
-				const filename  = bodyText ?? "attachment";
-
-				// 8b. Reject oversized attachments with a text notice rather than silently dropping
-				if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
-					const sizeMb = (knownSize / (1024 * 1024)).toFixed(1);
-					await mediaWebhook.send({
-						content: `[Matrix: attachment too large to relay (${sizeMb} MB)]`,
-						username,
-						allowedMentions: { parse: [] },
-					});
-					return;
-				}
-
-				// 8c. Attempt to download and relay the media file
-				if (mxcUrl) {
-					const homeserverUrl = process.env.MATRIX_HOMESERVER_URL ?? "";
-					const accessToken   = process.env.MATRIX_ACCESS_TOKEN   ?? "";
-					const media = await downloadMatrixMedia(mxcUrl, homeserverUrl, accessToken, knownSize);
-
-					if (media) {
-						await mediaWebhook.send({
-							files: [{ attachment: media.buffer, name: filename }],
-							username,
-							allowedMentions: { parse: [] },
-						});
-						return;
-					}
-				}
-
-				// 8d. Fallback: media unavailable (bad URL, download failure, etc.)
+			if (media) {
 				await mediaWebhook.send({
-					content: `[Matrix: attachment unavailable — ${filename}]`,
+					files:           [{ attachment: media.buffer, name: filename }],
 					username,
 					allowedMentions: { parse: [] },
 				});
 				return;
 			}
-
-			// 9. Text / emote / unknown: relay as plain text
-			//    Skip m.notice (bot/automated messages) to prevent relay loops with other bots
-			if (msgtype === "m.notice") return;
-
-			if (!bodyText) return;
-
-			// 10. Special command: /refresh — post the standard reset embed to Discord
-			//     instead of relaying the raw text. The embed title is the exact marker
-			//     that checkTargetEmbedTitle() in tomoriChat.ts detects as a history reset point.
-			if (bodyText === "/refresh") {
-				await handleMatrixRefresh(channel as BaseGuildTextChannel, channelDiscId);
-				return;
-			}
-
-			// 11. Send via webhook so the sender identity appears correctly in Discord
-			const { webhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
-			if (!webhook) return;
-
-			await webhook.send({
-				content: bodyText,
-				username,
-				allowedMentions: { parse: [] }, // Prevent accidental Discord @mentions from Matrix text
-			});
-		} catch (error) {
-			log.warn("Matrix bridge: error relaying Matrix message to Discord", error);
 		}
+
+		// 7c. Fallback: media unavailable
+		await mediaWebhook.send({
+			content:         `[Matrix: attachment unavailable — ${filename}]`,
+			username,
+			allowedMentions: { parse: [] },
+		});
+		return;
+	}
+
+	// 8. Skip m.notice (bot/system automated messages) to prevent relay loops
+	if (msgtype === "m.notice") return;
+
+	if (!bodyText) return;
+
+	// 9. Special command: /refresh — trigger conversation history reset in Discord
+	if (bodyText === "/refresh") {
+		await handleMatrixRefresh(channel as BaseGuildTextChannel, channelDiscId);
+		return;
+	}
+
+	// 10. Relay as text via Discord webhook.
+	//     m.emote (/me actions) are prefixed with "* " to match IRC/Matrix convention —
+	//     e.g., Matrix: /me waves → Discord: "* waves" (webhook username provides the name context)
+	const relayContent = msgtype === "m.emote" ? `* ${bodyText}` : bodyText;
+
+	const { webhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
+	if (!webhook) return;
+
+	await webhook.send({
+		content:         relayContent,
+		username,
+		allowedMentions: { parse: [] }, // Prevent accidental Discord @mentions from Matrix text
 	});
 }

@@ -5,9 +5,13 @@
  * Relays TomoriBot's own messages (main persona + alter persona webhooks) to
  * the linked Matrix room, if one exists for the channel.
  *
+ * Each message is sent as the persona's own Matrix virtual user
+ * (e.g., @_tomori_lilya:yourdomain.com), so Matrix users see the correct
+ * display name and avatar without any text prefix.
+ *
  * Exit conditions (checked first to minimize overhead):
- *   1. Matrix client not configured → immediate return
- *   2. Message not from this server (no guild)
+ *   1. Matrix bridge not configured → immediate return
+ *   2. Message not from a guild
  *   3. Message is NOT from TomoriBot itself (checked via isSelfTriggerMessage)
  *   4. Channel has no linked Matrix room
  */
@@ -16,10 +20,11 @@ import type { Client, Message } from "discord.js";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { isSelfTriggerMessage } from "./tomoriChat";
 import {
-	getMatrixClient,
+	isMatrixConfigured,
 	getLinkedMatrixRoom,
 	sendToMatrixRoom,
 	sendAttachmentToMatrixRoom,
+	MATRIX_MAX_ATTACHMENT_BYTES,
 } from "@/utils/matrix";
 import { log } from "@/utils/misc/logger";
 import type { TomoriState } from "@/types/db/schema";
@@ -33,7 +38,7 @@ import type { TomoriState } from "@/types/db/schema";
  */
 const handler = async (client: Client, message: Message): Promise<void> => {
 	// 1. Fast exit: skip if Matrix bridge is not configured (common case)
-	if (!getMatrixClient()) return;
+	if (!isMatrixConfigured()) return;
 
 	// 2. Only process guild messages (Matrix bridge is server-scoped)
 	if (!message.guild) return;
@@ -47,28 +52,42 @@ const handler = async (client: Client, message: Message): Promise<void> => {
 	const roomId = await getLinkedMatrixRoom(message.channelId);
 	if (!roomId) return;
 
-	// 5. Determine which persona sent this message for proper formatting in Matrix
-	let personaName: string;
+	// 5. Identify which persona sent this message and retrieve its avatar URL.
+	//    The persona's virtual Matrix user will be provisioned with this identity.
+	let persona: TomoriState | undefined;
 
 	if (message.author.id === client.user?.id) {
-		// Main bot account — find the main (non-alter) persona name
-		personaName =
-			allPersonas.find((p) => !p.is_alter)?.tomori_nickname ??
-			message.author.username;
+		// Main bot account — find the main (non-alter) persona
+		persona = allPersonas.find((p) => !p.is_alter);
 	} else {
 		// Alter persona webhook — match by username (case-insensitive)
 		const authornameLower = message.author.username.toLowerCase();
-		personaName =
-			allPersonas.find(
-				(p) => p.tomori_nickname?.toLowerCase() === authornameLower,
-			)?.tomori_nickname ?? message.author.username;
+		persona = allPersonas.find(
+			(p) => p.tomori_nickname?.toLowerCase() === authornameLower,
+		);
+
+		// Warn if no persona matched — the fallback uses the webhook username as the
+		// virtual user localpart, which may create an orphaned Matrix user
+		if (!persona) {
+			log.warn(
+				`Matrix relay: no persona found for alter webhook "${message.author.username}" ` +
+				`— using webhook username as Matrix virtual user fallback`,
+			);
+		}
 	}
 
-	// 6. Build Matrix message text and relay it (skip if content is empty)
-	const text = `**${personaName}:** ${message.content}`.trim();
-	if (text !== `**${personaName}:**`) {
+	// Fall back to username and no avatar if no matching persona is found
+	const personaName = persona?.tomori_nickname ?? message.author.username;
+	// webhook_avatar_url holds the S3 CDN URL used for Discord persona avatars —
+	// reused here as the source for the Matrix virtual user's avatar
+	const avatarUrl   = persona?.webhook_avatar_url ?? null;
+
+	// 6. Relay the text content (skip if empty after trim)
+	//    Identity is conveyed by the virtual Matrix user — no bold prefix needed
+	const text = message.content.trim();
+	if (text) {
 		try {
-			await sendToMatrixRoom(roomId, text);
+			await sendToMatrixRoom(roomId, text, personaName, avatarUrl);
 		} catch (error) {
 			log.warn(`Matrix relay: failed to relay message to room ${roomId}`, error);
 		}
@@ -76,12 +95,12 @@ const handler = async (client: Client, message: Message): Promise<void> => {
 
 	// 7. Relay each file attachment as a Matrix media event
 	//    Uses proxyURL for stability (Discord CDN proxy avoids expiry issues)
-	const maxBytes =
-		Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) * 1024 * 1024;
+	const mediaTimeoutMs = Number.parseInt(process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000", 10);
 
 	for (const attachment of message.attachments.values()) {
-		// 7a. Skip attachments that exceed the configured size limit
-		if (attachment.size > maxBytes) {
+		// 7a. Skip attachments that exceed the configured size limit (shared constant
+		//    with matrixManager.ts so both sides enforce the same threshold)
+		if (attachment.size > MATRIX_MAX_ATTACHMENT_BYTES) {
 			log.warn(
 				`Matrix relay: skipping oversized attachment "${attachment.name}" ` +
 				`(${(attachment.size / (1024 * 1024)).toFixed(1)} MB) for room ${roomId}`,
@@ -90,20 +109,29 @@ const handler = async (client: Client, message: Message): Promise<void> => {
 		}
 
 		try {
-			// 7b. Fetch the file from Discord's proxy CDN
-			const response = await fetch(attachment.proxyURL);
+			// 7b. Fetch the file from Discord's proxy CDN (timeout prevents stalls)
+			const response = await fetch(attachment.proxyURL, {
+				signal: AbortSignal.timeout(mediaTimeoutMs),
+			});
 			if (!response.ok) {
 				log.warn(`Matrix relay: failed to fetch attachment "${attachment.name}" (${response.status})`);
 				continue;
 			}
 
-			// Use ArrayBuffer directly — sendAttachmentToMatrixRoom wraps in Blob internally
 			const arrayBuffer = await response.arrayBuffer();
 			const mimeType    = attachment.contentType ?? "application/octet-stream";
 			const filename    = attachment.name ?? "attachment";
 
-			// 7c. Upload to Matrix and send as a media event
-			await sendAttachmentToMatrixRoom(roomId, arrayBuffer, filename, mimeType, attachment.size);
+			// 7c. Upload to Matrix and send as a media event under the persona's virtual user
+			await sendAttachmentToMatrixRoom(
+				roomId,
+				arrayBuffer,
+				filename,
+				mimeType,
+				attachment.size,
+				personaName,
+				avatarUrl,
+			);
 		} catch (error) {
 			log.warn(`Matrix relay: failed to relay attachment "${attachment.name}" to room ${roomId}`, error);
 		}

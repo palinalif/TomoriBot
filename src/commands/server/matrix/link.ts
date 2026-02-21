@@ -18,7 +18,8 @@ import {
 import { sql } from "@/utils/db/client";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import {
-	getMatrixClient,
+	isMatrixConfigured,
+	joinMatrixRoom,
 	invalidateMatrixLinkCache,
 } from "@/utils/matrix";
 import { localizer } from "@/utils/text/localizer";
@@ -103,7 +104,7 @@ export async function execute(
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 4. Check Matrix bridge is configured
-		if (!getMatrixClient()) {
+		if (!isMatrixConfigured()) {
 			await replyInfoEmbed(interaction, locale, {
 				color:          ColorCode.ERROR,
 				titleKey:       "commands.server.matrix.link.matrix_not_configured_title",
@@ -161,19 +162,16 @@ export async function execute(
 		invalidateMatrixLinkCache(channel.id, oldRoomId);
 		invalidateMatrixLinkCache(channel.id, roomId);
 
-		// 11. Attempt to join the Matrix room (non-critical — room may already be joined)
-		const matrixClient = getMatrixClient();
-		let joinFailed     = false;
-		if (matrixClient) {
-			try {
-				await matrixClient.joinRoom(roomId);
-			} catch (joinError) {
-				log.warn(
-					`Matrix link: could not auto-join room ${roomId} — user must invite the bot`,
-					joinError,
-				);
-				joinFailed = true;
-			}
+		// 11. Attempt to join the Matrix room as the bot account (non-critical)
+		let joinFailed = false;
+		try {
+			await joinMatrixRoom(roomId);
+		} catch (joinError) {
+			log.warn(
+				`Matrix link: could not auto-join room ${roomId} — user must invite the bot`,
+				joinError,
+			);
+			joinFailed = true;
 		}
 
 		// 12. Reply success (with note if join failed)

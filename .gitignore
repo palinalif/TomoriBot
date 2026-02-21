@@ -2,6 +2,8 @@ nul
 .venv*
 *.backup
 .tmp
+# Matrix Appservice registration file — contains hs_token / as_token secrets
+appservice-registration.yaml
 
 # Local Monitoring
 grafana_data/

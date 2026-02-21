@@ -54,7 +54,7 @@ if (secrets.AVATAR_PUBLIC_BASE_URL) {
 	process.env.AVATAR_PUBLIC_BASE_URL = secrets.AVATAR_PUBLIC_BASE_URL;
 }
 
-// Optional Matrix bridge credentials
+// Optional Matrix Appservice Bridge credentials
 if (secrets.MATRIX_HOMESERVER_URL) {
 	process.env.MATRIX_HOMESERVER_URL = secrets.MATRIX_HOMESERVER_URL;
 }
@@ -63,6 +63,12 @@ if (secrets.MATRIX_ACCESS_TOKEN) {
 }
 if (secrets.MATRIX_BOT_USER_ID) {
 	process.env.MATRIX_BOT_USER_ID = secrets.MATRIX_BOT_USER_ID;
+}
+if (secrets.MATRIX_SERVER_NAME) {
+	process.env.MATRIX_SERVER_NAME = secrets.MATRIX_SERVER_NAME;
+}
+if (secrets.MATRIX_HS_TOKEN) {
+	process.env.MATRIX_HS_TOKEN = secrets.MATRIX_HS_TOKEN;
 }
 
 log.success(

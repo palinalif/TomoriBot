@@ -6,10 +6,12 @@
 export { isMatrixUserId, stripMatrixWebhookPrefix } from "./isMatrixUserId";
 export {
 	initializeMatrixClient,
-	getMatrixClient,
+	isMatrixConfigured,
+	joinMatrixRoom,
 	sendToMatrixRoom,
 	sendAttachmentToMatrixRoom,
 	getLinkedMatrixRoom,
 	getDiscordChannelForRoom,
 	invalidateMatrixLinkCache,
+	MATRIX_MAX_ATTACHMENT_BYTES,
 } from "./matrixManager";
