@@ -19,7 +19,8 @@ import {
 	formatUTCOffset,
 	formatTimeWithOffset,
 } from "../../utils/text/timezoneHelper";
-import { isMatrixUserId } from "../../utils/matrix/isMatrixUserId";
+import { isMatrixUserId, normalizeMatrixUserId } from "../../utils/matrix/isMatrixUserId";
+import { getMatrixIdForDisplayName } from "../../utils/matrix";
 
 /**
  * Tool for setting user reminders that will trigger messages at specific times
@@ -230,6 +231,36 @@ export class ReminderTool extends BaseTool {
 			}
 		}
 
+		// Matrix ID recovery: LLMs occasionally drop or mangle the Matrix user ID.
+		// Two failure modes are handled here in order:
+		//   1. Missing "@" prefix — e.g., "bred:localhost" instead of "@bred:localhost".
+		//      normalizeMatrixUserId() restores the prefix if the value looks like localpart:host.
+		//   2. Plain display name — e.g., "bred" instead of "@bred:localhost".
+		//      getMatrixIdForDisplayName() resolves it from the session-scoped display-name map.
+		if (
+			targetUserDiscordIdArg &&
+			!isMatrixUserId(targetUserDiscordIdArg) &&
+			!/^\d+$/.test(targetUserDiscordIdArg)
+		) {
+			// 1. Attempt @ prefix recovery for "localpart:host" values
+			const normalized = normalizeMatrixUserId(targetUserDiscordIdArg);
+			if (normalized !== targetUserDiscordIdArg) {
+				log.info(
+					`Reminder tool: Restored missing @ prefix: "${targetUserDiscordIdArg}" → "${normalized}"`,
+				);
+				targetUserDiscordIdArg = normalized;
+			} else {
+				// 2. Attempt display name → Matrix ID resolution
+				const resolvedMatrixId = getMatrixIdForDisplayName(targetUserDiscordIdArg);
+				if (resolvedMatrixId) {
+					log.info(
+						`Reminder tool: Resolved Matrix display name "${targetUserDiscordIdArg}" → "${resolvedMatrixId}"`,
+					);
+					targetUserDiscordIdArg = resolvedMatrixId;
+				}
+			}
+		}
+
 		// NovelAI GLM recovery: normalize absolute time format.
 		// GLM may output "2025-09-05 15:30" (space), "2025-09-05T15:30" (ISO), or
 		// "2025/09/05_15:30" (slashes) instead of the expected "YYYY-MM-DD_HH:MM" format.
@@ -279,6 +310,15 @@ export class ReminderTool extends BaseTool {
 		// Get server and user context
 		const tomoriState = context.tomoriState;
 		const resolvedUserId = context.message?.author?.id || context.userId;
+
+		// Matrix relay messages arrive via Discord webhook (author = webhook bot).
+		// The webhook bot has no users table record, so loadUserRow returns null.
+		// Detect this case so we can relax the requestingUserRow guard below and
+		// store created_by_user_id = null (the column is nullable for this reason).
+		const isMatrixRelayRequester =
+			!!context.message?.webhookId &&
+			context.message?.author?.username?.startsWith("[Matrix|") === true;
+
 		const requestingUserRow = resolvedUserId
 			? await loadUserRow(resolvedUserId)
 			: null;
@@ -286,15 +326,17 @@ export class ReminderTool extends BaseTool {
 
 		if (
 			!tomoriState ||
-			!requestingUserRow ||
-			!requestingUserRow.user_id ||
+			// Allow null requestingUserRow for Matrix relay webhooks — they have no
+			// users table entry, so created_by_user_id will be stored as null
+			(!requestingUserRow && !isMatrixRelayRequester) ||
+			(requestingUserRow && !requestingUserRow.user_id) ||
 			!tomoriState.server_id ||
 			!resolvedUserId
 		) {
 			// Log which specific value is missing for diagnostics
 			const missing = [
 				!tomoriState && "tomoriState",
-				!requestingUserRow && "requestingUserRow",
+				!requestingUserRow && !isMatrixRelayRequester && "requestingUserRow",
 				requestingUserRow &&
 					!requestingUserRow.user_id &&
 					"requestingUserRow.user_id",
@@ -629,6 +671,14 @@ export class ReminderTool extends BaseTool {
 					tomoriState.tomori_nickname ||
 					context.client.user?.username ||
 					"Tomori";
+			} else if (isMatrixUserId(resolvedTargetUserId)) {
+				// Matrix users have no users table record — their ID is "@user:host" format.
+				// Trust the AI-provided nickname directly (verified by the context builder
+				// which injects their display name from matrixDisplayNameToId).
+				actualNicknameInDB = targetUserNickname;
+				log.info(
+					`Reminder: Target is a Matrix user (${resolvedTargetUserId}), skipping DB lookup and using provided nickname "${actualNicknameInDB}"`,
+				);
 			} else {
 				// Load target user to verify they exist
 				const targetUserRow = await loadUserRow(resolvedTargetUserId);
@@ -697,7 +747,7 @@ export class ReminderTool extends BaseTool {
 				reminder_time: finalReminderTime,
 				repetition_interval_hours: repetitionIntervalHours,
 				self_reminder: isSelfReminder,
-				created_by_user_id: requestingUserRow.user_id,
+				created_by_user_id: requestingUserRow?.user_id ?? null,
 				persona_id: context.tomoriState.tomori_id ?? null,
 			});
 

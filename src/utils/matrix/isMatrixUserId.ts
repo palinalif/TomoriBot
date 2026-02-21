@@ -15,6 +15,26 @@ export function isMatrixUserId(id: string): boolean {
 }
 
 /**
+ * Normalizes a value that is supposed to be a Matrix user ID.
+ * LLMs occasionally drop the leading "@" from Matrix IDs (e.g., passing
+ * "user:host" instead of "@user:host"). When the value contains ":" and is
+ * not already a valid Matrix ID, this function prepends "@" and re-validates.
+ * Non-Matrix values (plain display names, Discord snowflakes) are returned unchanged.
+ *
+ * @param id - The raw string to normalize (e.g., "bred:localhost" or "@bred:localhost")
+ * @returns A valid "@localpart:homeserver" Matrix ID if recoverable, otherwise the original string
+ */
+export function normalizeMatrixUserId(id: string): string {
+	if (!id || isMatrixUserId(id)) return id;
+	// If it contains ":" but not a leading "@", the LLM likely dropped the prefix
+	if (id.includes(":") && !id.startsWith("@")) {
+		const withAt = `@${id}`;
+		if (isMatrixUserId(withAt)) return withAt;
+	}
+	return id;
+}
+
+/**
  * Strips the Matrix bridge prefix from a webhook username.
  * Matrix bridge webhook usernames follow the format: "[Matrix|@user:host] DisplayName"
  * This function extracts just the human-readable display name portion.

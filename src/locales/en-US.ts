@@ -2442,6 +2442,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					invalid_room_title: `Invalid Room ID`,
 					invalid_room_description: `The Matrix room ID must start with \`!\` and contain a \`:\` (e.g., \`!abc:matrix.org\`). Please check the room ID and try again.`,
 					join_failed_description: `<#{channel_id}> has been linked to \`{room_id}\`, but I couldn't join the Matrix room automatically. Please invite \`{bot_user_id}\` to the room manually.`,
+					encrypted_room_title: `Cannot Link Encrypted Room`,
+					encrypted_room_description: `\`{room_id}\` has end-to-end encryption enabled. Matrix encryption cannot be disabled once set, so this room cannot be used for bridging. Please create a new Matrix room **without** encryption and invite \`{bot_user_id}\` to it instead.`,
 					matrix_not_configured_title: `Matrix Bridge Not Available`,
 					matrix_not_configured_description: `The Matrix bridge is not configured on this bot instance. Contact the bot owner to enable it.`,
 				},
@@ -3053,6 +3055,21 @@ You can change this anytime using \`/personal privacy\`.`,
 			quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
 			quota_resets_in_days: `Quota resets in {days} day(s).`,
 			quota_remaining: `You have {remaining} image(s) remaining for today.`,
+		},
+	},
+
+	// Matrix bridge — concise summaries of Discord embeds relayed to Matrix rooms.
+	// Discord embeds cannot be rendered natively in Matrix, so tool-result embeds are
+	// converted to short bracketed notices that convey the key information inline.
+	matrix: {
+		embed: {
+			server_memory_learned: `[🧠 I learned "{memory}"]`,
+			personal_memory_learned: `[💡 I learned something personal: "{memory}"]`,
+			server_memory_updated: `[📝 I updated a memory: "{memory}"]`,
+			personal_memory_updated: `[📝 I updated a personal memory: "{memory}"]`,
+			reminder_set: `[⏰ {description}]`,
+			task_set: `[✅ {description}]`,
+			recurring_task_set: `[🔁 {description}]`,
 		},
 	},
 };

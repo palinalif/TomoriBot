@@ -71,6 +71,8 @@ COPY --chown=tomori:tomori package.json ./
 COPY --chown=tomori:tomori tsconfig.json ./
 # Copy lockfile if it exists (Bun sometimes uses different names)
 COPY --chown=tomori:tomori bun.lock* ./
+# Copy patches directory for patchedDependencies (e.g. matrix-sdk-crypto-nodejs)
+COPY --chown=tomori:tomori patches/ ./patches/
 
 # Install dependencies
 # Think of this as "furnishing the apartment" with all the tools TomoriBot needs

@@ -20,6 +20,7 @@ import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import {
 	isMatrixConfigured,
 	joinMatrixRoom,
+	isRoomEncrypted,
 	invalidateMatrixLinkCache,
 } from "@/utils/matrix";
 import { localizer } from "@/utils/text/localizer";
@@ -141,7 +142,22 @@ export async function execute(
 			return;
 		}
 
-		// 8. Fetch previous room ID for this channel (to invalidate old cache entry)
+		// 8. Reject encrypted rooms — Matrix encryption is permanent and cannot be
+		//    disabled, so bridging would never work for this room.
+		if (await isRoomEncrypted(roomId)) {
+			await replyInfoEmbed(interaction, locale, {
+				color:          ColorCode.ERROR,
+				titleKey:       "commands.server.matrix.link.encrypted_room_title",
+				descriptionKey: "commands.server.matrix.link.encrypted_room_description",
+				descriptionVars: {
+					room_id:     roomId,
+					bot_user_id: process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account",
+				},
+			});
+			return;
+		}
+
+		// 10. Fetch previous room ID for this channel (to invalidate old cache entry)
 		const [existingLink] = await sql<{ matrix_room_id: string }[]>`
 			SELECT matrix_room_id
 			FROM matrix_channel_links
@@ -150,7 +166,7 @@ export async function execute(
 		`;
 		const oldRoomId = existingLink?.matrix_room_id;
 
-		// 9. Upsert: insert or replace existing link for this channel
+		// 11. Upsert: insert or replace existing link for this channel
 		await sql`
 			INSERT INTO matrix_channel_links (server_id, channel_disc_id, matrix_room_id)
 			VALUES (${tomoriState.server_id}, ${channel.id}, ${roomId})
@@ -158,11 +174,11 @@ export async function execute(
 				SET matrix_room_id = EXCLUDED.matrix_room_id
 		`;
 
-		// 10. Invalidate cache entries for both old and new room IDs
+		// 12. Invalidate cache entries for both old and new room IDs
 		invalidateMatrixLinkCache(channel.id, oldRoomId);
 		invalidateMatrixLinkCache(channel.id, roomId);
 
-		// 11. Attempt to join the Matrix room as the bot account (non-critical)
+		// 13. Attempt to join the Matrix room as the bot account (non-critical)
 		let joinFailed = false;
 		try {
 			await joinMatrixRoom(roomId);
@@ -174,7 +190,7 @@ export async function execute(
 			joinFailed = true;
 		}
 
-		// 12. Reply success (with note if join failed)
+		// 14. Reply success (with note if join failed)
 		const botUserId = process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
 
 		if (joinFailed) {

@@ -32,6 +32,8 @@ type ReminderSelectionRow = {
 	channel_disc_id: string;
 	created_by_user_id: number | null;
 	created_by_nickname: string | null;
+	user_discord_id: string;
+	user_nickname: string;
 };
 
 /**
@@ -184,6 +186,8 @@ export async function execute(
 				r.repetition_interval_hours,
 				r.channel_disc_id,
 				r.created_by_user_id,
+				r.user_discord_id,
+				r.user_nickname,
 				u.user_nickname AS created_by_nickname
 			FROM reminders r
 			LEFT JOIN users u
@@ -235,15 +239,24 @@ export async function execute(
 					reminder.repetition_interval_hours >= 1
 						? ` | repeats every ${reminder.repetition_interval_hours}h`
 						: "";
-				const creatorName =
-					reminder.created_by_nickname ??
-					(reminder.created_by_user_id
-						? `user #${reminder.created_by_user_id}`
-						: "unknown");
+				// For Matrix-originated reminders (created_by_user_id = null, user_discord_id
+				// is a Matrix ID like "@bred:localhost"), show who the reminder is for so
+				// server managers can identify and clean up "orphan" reminders.
+				const isMatrixReminder =
+					reminder.created_by_user_id === null &&
+					/^@[^:]+:[^:]+/.test(reminder.user_discord_id);
+				const creatorName = isMatrixReminder
+					? `${reminder.user_nickname} (Matrix)`
+					: (reminder.created_by_nickname ??
+						(reminder.created_by_user_id
+							? `user #${reminder.created_by_user_id}`
+							: "unknown"));
 				const managerCreatedByText =
 					hasManagePermission &&
 					reminder.created_by_user_id !== userData.user_id
-						? ` | created by ${creatorName}`
+						? isMatrixReminder
+							? ` | for ${creatorName}`
+							: ` | created by ${creatorName}`
 						: "";
 				const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}${managerCreatedByText}`;
 

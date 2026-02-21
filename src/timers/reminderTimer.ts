@@ -240,16 +240,16 @@ export class ReminderTimer {
 				`tomoriChat call completed for reminder ${reminder.reminder_id}`,
 			);
 
-			// For Matrix users, relay the reminder notification to the linked Matrix room
-			// instead of sending a Discord mention (Matrix users have no Discord ID to ping).
+			// For Matrix users, check if the AI response already mentioned the recipient.
+			// If not, send a proper Matrix mention ping (mirrors ensureReminderRecipientMention
+			// for Discord users but targets the linked Matrix room instead).
 			if (!isSelfReminder && isMatrixUserId(reminder.user_discord_id)) {
-				const matrixRoomId = await getLinkedMatrixRoom(reminder.channel_disc_id);
-				if (matrixRoomId) {
-					await sendToMatrixRoom(
-						matrixRoomId,
-						`Reminder for ${reminder.user_nickname}: ${reminder.reminder_purpose}`,
-					);
-				}
+				await this.ensureMatrixReminderMention(
+					channel,
+					reminder,
+					lastMessage.id,
+					reminderStartTime,
+				);
 			} else if (!isSelfReminder) {
 				await this.ensureReminderRecipientMention(
 					channel,
@@ -299,6 +299,90 @@ export class ReminderTimer {
 			await this.handleReminderExecutionFailure(
 				reminder,
 				error instanceof Error ? error.message : "Unknown error",
+			);
+		}
+	}
+
+	/**
+	 * Ensures the Matrix reminder recipient receives a mention ping after the AI responds.
+	 * Mirrors ensureReminderRecipientMention for Discord users, but targets the Matrix room.
+	 *
+	 * After tomoriChat() runs and its response is relayed to Matrix via matrixRelay.ts,
+	 * this method checks whether any recent bot/webhook Discord message contained the
+	 * @{displayName} placeholder the AI uses to mention users. If none is found, it sends
+	 * a proper Matrix mention directly to the room (plain @user:server body +
+	 * HTML anchor formatted_body + m.mentions field for MSC3952 notifications).
+	 *
+	 * @param channel          - The Discord channel the reminder was set in
+	 * @param reminder         - The due reminder row from the database
+	 * @param afterMessageId   - Fetch only messages sent after this Discord message ID
+	 * @param reminderStartTime - Unix timestamp of when reminder execution began (ms)
+	 */
+	private async ensureMatrixReminderMention(
+		channel: TextBasedChannel,
+		reminder: ReminderRow,
+		afterMessageId: string,
+		reminderStartTime: number,
+	): Promise<void> {
+		const matrixRoomId = await getLinkedMatrixRoom(reminder.channel_disc_id);
+		if (!matrixRoomId) return;
+
+		const botUserId = this.client.user?.id;
+		if (!botUserId || !("messages" in channel)) return;
+
+		// The AI uses @{localpart} format (e.g., "@{bred}") when mentioning Matrix users.
+		// The reminder context injects "Mention ID: @{localpart}" where localpart is derived
+		// from the Matrix user ID, NOT the user_nickname field (which may differ, e.g. "bredrumb"
+		// vs the localpart "bred"). Use the localpart from user_discord_id for reliable detection.
+		// matrixRelay.ts transforms @{localpart} to a proper Matrix mention on relay, so checking
+		// for the raw placeholder in the Discord message content is sufficient.
+		const matrixLocalpart = reminder.user_discord_id.split(":")[0].replace(/^@/, "");
+		const mentionPlaceholder = `@{${matrixLocalpart}}`;
+
+		try {
+			const recentMessages = await channel.messages.fetch({
+				after: afterMessageId,
+				limit: 100,
+			});
+
+			const relevantMessages = recentMessages.filter(
+				(message) =>
+					(message.author.id === botUserId || message.webhookId) &&
+					message.createdTimestamp >= reminderStartTime - 1000,
+			);
+
+			const hasMention = relevantMessages.some((message) =>
+				message.content.includes(mentionPlaceholder),
+			);
+
+			if (!hasMention) {
+				// AI did not mention the user — send a proper Matrix mention ping.
+				// Plain body: "@bred:localhost" (Matrix ID as fallback text)
+				// Formatted body: anchor tag rendered as a clickable, highlighted mention
+				// m.mentions: MSC3952 field so the homeserver notifies the user directly
+				const matrixId = reminder.user_discord_id; // e.g., "@bred:localhost"
+				const safeName = reminder.user_nickname
+					.replace(/&/g, "&amp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;");
+
+				await sendToMatrixRoom(
+					matrixRoomId,
+					matrixId,
+					undefined,
+					undefined,
+					`<a href="https://matrix.to/#/${matrixId}">${safeName}</a>`,
+					[matrixId],
+				);
+
+				log.info(
+					`Added fallback Matrix mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`,
+				);
+			}
+		} catch (error) {
+			log.warn(
+				`Failed to ensure Matrix mention for reminder ${reminder.reminder_id}:`,
+				error,
 			);
 		}
 	}

@@ -73,6 +73,11 @@ import {
 } from "../../utils/text/stringHelper";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
+import {
+	stripMatrixWebhookPrefix,
+	pendingMatrixReplyChannels,
+	isMatrixUserId,
+} from "@/utils/matrix";
 
 import type {
 	TomoriState,
@@ -2430,6 +2435,10 @@ export default async function tomoriChat(
 			// 10. Build the `SimplifiedMessageForContext` array and user list from relevant messages
 			const simplifiedMessages: SimplifiedMessageForContext[] = []; // Array for structured messages
 			const userListSet = new Set<string>(); // Still useful for fetching user-specific memories/data
+			// Matrix relay messages all share the same Discord webhook bot user ID, so they
+			// cannot be deduplication-safe in userListSet. Track them separately: Matrix user
+			// ID (e.g., "@bred:localhost") → stripped display name (e.g., "bred").
+			const matrixUserMap = new Map<string, string>();
 
 			// Find the most recent message with a reference (latest in the array)
 			let latestReferenceMessageIndex = -1;
@@ -2562,7 +2571,9 @@ export default async function tomoriChat(
 					authorType = "persona";
 					personaName = mainNickname;
 				} else if (isWebhookMessage) {
-					const webhookName = msg.author.username;
+					// Strip "[Matrix|@user:host] " prefix from Matrix bridge webhooks
+					// so TomoriBot sees just the display name (e.g., "bred") in context
+					const webhookName = stripMatrixWebhookPrefix(msg.author.username);
 					const matchedPersona = webhookName
 						? personaByNickname.get(webhookName.toLowerCase())
 						: undefined;
@@ -2574,13 +2585,32 @@ export default async function tomoriChat(
 						effectiveAuthorId = `persona:${matchedPersona.tomori_id ?? matchedPersona.tomori_nickname}`;
 					} else {
 						authorName = webhookName || `<@${authorId}>`;
+
+						// Matrix relay messages: register in the per-Matrix-user map so each
+						// Matrix user gets its own user list entry (they all share the same
+						// Discord webhook bot ID and would otherwise deduplicate to one entry).
+						// Extract the Matrix user ID from the "[Matrix|@user:host] name" format.
+						const matrixIdMatch = msg.author.username.match(
+							/^\[Matrix\|(@[^:\]]+:[^\]]+)\]/,
+						);
+						if (matrixIdMatch && webhookName) {
+							matrixUserMap.set(matrixIdMatch[1], webhookName);
+						}
 					}
 				} else {
 					authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
 				}
 
-				// Add to user list (Level 2 FULL privacy users already filtered out above)
-				userListSet.add(authorId);
+				// Add to user list (Level 2 FULL privacy users already filtered out above).
+				// Skip Matrix relay non-persona webhook messages — they are tracked in matrixUserMap
+				// instead, since all Matrix relays share the same Discord webhook bot user ID.
+				const isMatrixNonPersonaRelay =
+					isWebhookMessage &&
+					msg.author.username.startsWith("[Matrix|") &&
+					authorType === "user";
+				if (!isMatrixNonPersonaRelay) {
+					userListSet.add(authorId);
+				}
 
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
 					[];
@@ -3228,6 +3258,16 @@ export default async function tomoriChat(
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
 							}
+						} else if (reminderRecipientID && isMatrixUserId(reminderRecipientID)) {
+							// Matrix user IDs (@user:server) must not be wrapped in <@...> Discord mention
+							// format — that produces <@@user:server> (double @), which is malformed.
+							// Strip the server suffix for display; use @{localpart} as the mention
+							// placeholder (matrixRelay.ts converts this to a proper HTML Matrix mention).
+							const matrixLocalpart = reminderRecipientID.split(":")[0].replace(/^@/, "");
+							reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
+							if (reminderData.reminder_lateness) {
+								reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
+							}
 						} else {
 							reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
 							if (reminderData.reminder_lateness) {
@@ -3351,6 +3391,7 @@ export default async function tomoriChat(
 							// conversationHistory: conversationHistory, // This parameter will be removed
 							simplifiedMessageHistory: simplifiedMessages, // New parameter for structured history
 							userList,
+							matrixUsers: matrixUserMap,
 							channelDesc,
 							channelName,
 							channelId: channel.id, // For short-term memory context
@@ -4677,6 +4718,7 @@ export default async function tomoriChat(
 												serverDescription: serverDescription ?? null,
 												simplifiedMessageHistory: simplifiedMessages,
 												userList,
+												matrixUsers: matrixUserMap,
 												channelDesc,
 												channelName,
 												channelId: channel.id, // For short-term memory context
@@ -5790,13 +5832,21 @@ export function shouldBotReply(
 		currentCount % autoMsgThreshold === 0;
 
 	// 6. Determine if bot should reply:
-	// Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit
+	// Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit.
+	// isMatrixReplyToPersona: Matrix webhooks cannot carry Discord reply references, so
+	// matrixManager.ts registers the channel in pendingMatrixReplyChannels when it relays
+	// a Matrix reply to a bot persona. Set.delete() returns true if the key existed
+	// and removes it atomically — one-shot consumption prevents stale triggers.
+	const isMatrixReplyToPersona =
+		isMatrixRelayMessage && pendingMatrixReplyChannels.delete(message.channelId);
+
 	return (
 		isReplyToBot ||
 		isReplyToPersona ||
 		isBotMentioned ||
 		triggersActive ||
-		isAutoMsgHit
+		isAutoMsgHit ||
+		isMatrixReplyToPersona
 	);
 }
 

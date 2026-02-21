@@ -12,7 +12,7 @@ import {
 } from "../../types/tool/interfaces";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
-import { isMatrixUserId } from "../../utils/matrix/isMatrixUserId";
+import { isMatrixUserId, normalizeMatrixUserId } from "../../utils/matrix/isMatrixUserId";
 
 /**
  * Tool for remembering and learning new information during conversations
@@ -117,6 +117,11 @@ export class MemoryTool extends BaseTool {
 		let targetUserNicknameArg = args.target_user_nickname as
 			| string
 			| undefined;
+
+		// Normalize Matrix ID: LLMs sometimes drop the "@" prefix (e.g., "bred:localhost" → "@bred:localhost").
+		if (targetUserDiscordIdArg) {
+			targetUserDiscordIdArg = normalizeMatrixUserId(targetUserDiscordIdArg);
+		}
 
 		// Matrix users have no Discord user row — force server-wide memory scope to avoid crashes.
 		// Matrix user IDs follow @localpart:homeserver format and cannot be used for BigInt fuzzy-match.
