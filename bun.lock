@@ -42,9 +42,6 @@
       },
     },
   },
-  "patchedDependencies": {
-    "@matrix-org/matrix-sdk-crypto-nodejs@0.4.0": "patches/@matrix-org%2Fmatrix-sdk-crypto-nodejs@0.4.0.patch",
-  },
   "overrides": {
     "ajv": "^8.18.0",
     "body-parser": ">=2.2.1",
