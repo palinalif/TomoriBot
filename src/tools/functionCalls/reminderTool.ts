@@ -19,8 +19,8 @@ import {
 	formatUTCOffset,
 	formatTimeWithOffset,
 } from "../../utils/text/timezoneHelper";
-import { isMatrixUserId, normalizeMatrixUserId } from "../../utils/matrix/isMatrixUserId";
-import { getMatrixIdForDisplayName } from "../../utils/matrix";
+import { isBridgeUserId } from "../../utils/bridge";
+import { resolveBridgeUserId } from "../../utils/matrix";
 
 /**
  * Tool for setting user reminders that will trigger messages at specific times
@@ -162,7 +162,7 @@ export class ReminderTool extends BaseTool {
 			//    GLM often gets IDs wrong by a few digits due to floating-point precision loss
 			//    on large snowflake IDs (which exceed Number.MAX_SAFE_INTEGER).
 			//    Skip fuzzy-match entirely for Matrix user IDs (@user:host) — BigInt parsing would fail.
-			if (targetUserDiscordIdArg && !isMatrixUserId(targetUserDiscordIdArg)) {
+			if (targetUserDiscordIdArg && !isBridgeUserId(targetUserDiscordIdArg)) {
 				const guild = context.message.guild;
 				if (guild) {
 					const exactMember = guild.members.cache.get(
@@ -232,34 +232,9 @@ export class ReminderTool extends BaseTool {
 		}
 
 		// Matrix ID recovery: LLMs occasionally drop or mangle the Matrix user ID.
-		// Two failure modes are handled here in order:
-		//   1. Missing "@" prefix — e.g., "bred:localhost" instead of "@bred:localhost".
-		//      normalizeMatrixUserId() restores the prefix if the value looks like localpart:host.
-		//   2. Plain display name — e.g., "bred" instead of "@bred:localhost".
-		//      getMatrixIdForDisplayName() resolves it from the session-scoped display-name map.
-		if (
-			targetUserDiscordIdArg &&
-			!isMatrixUserId(targetUserDiscordIdArg) &&
-			!/^\d+$/.test(targetUserDiscordIdArg)
-		) {
-			// 1. Attempt @ prefix recovery for "localpart:host" values
-			const normalized = normalizeMatrixUserId(targetUserDiscordIdArg);
-			if (normalized !== targetUserDiscordIdArg) {
-				log.info(
-					`Reminder tool: Restored missing @ prefix: "${targetUserDiscordIdArg}" → "${normalized}"`,
-				);
-				targetUserDiscordIdArg = normalized;
-			} else {
-				// 2. Attempt display name → Matrix ID resolution
-				const resolvedMatrixId = getMatrixIdForDisplayName(targetUserDiscordIdArg);
-				if (resolvedMatrixId) {
-					log.info(
-						`Reminder tool: Resolved Matrix display name "${targetUserDiscordIdArg}" → "${resolvedMatrixId}"`,
-					);
-					targetUserDiscordIdArg = resolvedMatrixId;
-				}
-			}
-		}
+		// resolveBridgeUserId() handles both failure modes (missing "@" prefix and plain
+		// display name) and is a no-op for valid bridge IDs and Discord snowflakes.
+		targetUserDiscordIdArg = resolveBridgeUserId(targetUserDiscordIdArg);
 
 		// NovelAI GLM recovery: normalize absolute time format.
 		// GLM may output "2025-09-05 15:30" (space), "2025-09-05T15:30" (ISO), or
@@ -671,7 +646,7 @@ export class ReminderTool extends BaseTool {
 					tomoriState.tomori_nickname ||
 					context.client.user?.username ||
 					"Tomori";
-			} else if (isMatrixUserId(resolvedTargetUserId)) {
+			} else if (isBridgeUserId(resolvedTargetUserId)) {
 				// Matrix users have no users table record — their ID is "@user:host" format.
 				// Trust the AI-provided nickname directly (verified by the context builder
 				// which injects their display name from matrixDisplayNameToId).

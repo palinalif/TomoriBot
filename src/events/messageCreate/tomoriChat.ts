@@ -74,10 +74,9 @@ import {
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import {
-	stripMatrixWebhookPrefix,
 	pendingMatrixReplyChannels,
-	isMatrixUserId,
 } from "@/utils/matrix";
+import { isBridgeUserId, stripBridgePrefix, extractBridgeUserId } from "@/utils/bridge";
 
 import type {
 	TomoriState,
@@ -2573,7 +2572,7 @@ export default async function tomoriChat(
 				} else if (isWebhookMessage) {
 					// Strip "[Matrix|@user:host] " prefix from Matrix bridge webhooks
 					// so TomoriBot sees just the display name (e.g., "bred") in context
-					const webhookName = stripMatrixWebhookPrefix(msg.author.username);
+					const webhookName = stripBridgePrefix(msg.author.username);
 					const matchedPersona = webhookName
 						? personaByNickname.get(webhookName.toLowerCase())
 						: undefined;
@@ -2590,11 +2589,9 @@ export default async function tomoriChat(
 						// Matrix user gets its own user list entry (they all share the same
 						// Discord webhook bot ID and would otherwise deduplicate to one entry).
 						// Extract the Matrix user ID from the "[Matrix|@user:host] name" format.
-						const matrixIdMatch = msg.author.username.match(
-							/^\[Matrix\|(@[^:\]]+:[^\]]+)\]/,
-						);
-						if (matrixIdMatch && webhookName) {
-							matrixUserMap.set(matrixIdMatch[1], webhookName);
+						const matrixId = extractBridgeUserId(msg.author.username);
+						if (matrixId && webhookName) {
+							matrixUserMap.set(matrixId, webhookName);
 						}
 					}
 				} else {
@@ -3258,7 +3255,7 @@ export default async function tomoriChat(
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
 							}
-						} else if (reminderRecipientID && isMatrixUserId(reminderRecipientID)) {
+						} else if (reminderRecipientID && isBridgeUserId(reminderRecipientID)) {
 							// Matrix user IDs (@user:server) must not be wrapped in <@...> Discord mention
 							// format — that produces <@@user:server> (double @), which is malformed.
 							// Strip the server suffix for display; use @{localpart} as the mention

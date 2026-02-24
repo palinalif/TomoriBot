@@ -20,6 +20,7 @@ import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { deleteReminderById, loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { formatTimeWithOffset, formatUTCOffset } from "../../utils/text/timezoneHelper";
+import { isBridgeUserId } from "../../utils/bridge";
 
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_reminder_modal";
@@ -244,7 +245,7 @@ export async function execute(
 				// server managers can identify and clean up "orphan" reminders.
 				const isMatrixReminder =
 					reminder.created_by_user_id === null &&
-					/^@[^:]+:[^:]+/.test(reminder.user_discord_id);
+					isBridgeUserId(reminder.user_discord_id);
 				const creatorName = isMatrixReminder
 					? `${reminder.user_nickname} (Matrix)`
 					: (reminder.created_by_nickname ??

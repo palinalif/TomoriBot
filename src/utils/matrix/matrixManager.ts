@@ -32,7 +32,10 @@ import {
 	MessageFlags,
 	type BaseGuildTextChannel,
 	type Client,
+	type TextBasedChannel,
 } from "discord.js";
+import type { ReminderRow } from "@/types/db/schema";
+import { isBridgeUserId } from "@/utils/bridge";
 import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { getOrCreateWebhook } from "@/utils/discord/webhookManager";
@@ -688,6 +691,122 @@ export function invalidateMatrixLinkCache(
 	channelLinkCache.delete(channelDiscId);
 	if (matrixRoomId) {
 		roomLinkCache.delete(matrixRoomId);
+	}
+}
+
+/**
+ * Attempt to recover a bridge user ID from a potentially mangled value produced by an LLM.
+ * Handles two Matrix-specific failure modes in order:
+ *   1. Missing "@" prefix — e.g., "bred:localhost" instead of "@bred:localhost"
+ *   2. Plain display name — e.g., "bred" instead of "@bred:localhost"
+ *
+ * Pure Discord snowflakes (all digits) and already-valid bridge IDs are returned unchanged.
+ * This consolidates the defensive checks that reminder and memory tools need.
+ *
+ * @param rawId - The raw string from the LLM (may be mangled bridge ID, display name, or snowflake)
+ * @returns The resolved bridge user ID if recoverable, otherwise the original string unchanged
+ */
+export function resolveBridgeUserId(rawId: string): string {
+	// No-op for empty strings, already-valid bridge IDs, or pure Discord snowflakes
+	if (!rawId || isBridgeUserId(rawId) || /^\d+$/.test(rawId)) return rawId;
+
+	// 1. Matrix "@" prefix recovery: "bred:localhost" → "@bred:localhost"
+	if (rawId.includes(":") && !rawId.startsWith("@")) {
+		const withAt = `@${rawId}`;
+		if (isBridgeUserId(withAt)) {
+			log.info(`Bridge: Restored missing @ prefix in user ID: "${rawId}" → "${withAt}"`);
+			return withAt;
+		}
+	}
+
+	// 2. Attempt display name → full Matrix ID resolution via session-scoped map
+	const resolved = matrixDisplayNameToId.get(rawId);
+	if (resolved) {
+		log.info(`Bridge: Resolved display name "${rawId}" → "${resolved}"`);
+		return resolved;
+	}
+
+	return rawId;
+}
+
+/**
+ * Ensures the Matrix reminder recipient receives a mention ping after the AI responds.
+ * Called by reminderTimer after tomoriChat() runs for a Matrix-targeted reminder.
+ *
+ * Checks whether any recent bot/webhook Discord message contained the @{localpart}
+ * placeholder the AI uses to mention Matrix users. If none is found, sends a proper
+ * Matrix mention directly to the linked room (plain @user:server body + HTML anchor
+ * formatted_body + m.mentions field for MSC3952 homeserver notifications).
+ *
+ * @param channel          - The Discord channel the reminder was set in
+ * @param reminder         - The due reminder row from the database
+ * @param afterMessageId   - Fetch only messages sent after this Discord message ID
+ * @param reminderStartTime - Unix timestamp (ms) of when reminder execution began
+ * @param botUserId        - The Discord bot user ID for filtering relevant messages
+ */
+export async function sendMatrixReminderMention(
+	channel: TextBasedChannel,
+	reminder: ReminderRow,
+	afterMessageId: string,
+	reminderStartTime: number,
+	botUserId: string,
+): Promise<void> {
+	const matrixRoomId = await getLinkedMatrixRoom(reminder.channel_disc_id);
+	if (!matrixRoomId) return;
+
+	if (!botUserId || !("messages" in channel)) return;
+
+	// The AI uses @{localpart} format (e.g., "@{bred}") when mentioning Matrix users.
+	// Use the localpart from user_discord_id for reliable detection — the user_nickname
+	// field may differ from the localpart (e.g., "bredrumb" vs localpart "bred").
+	const matrixLocalpart = reminder.user_discord_id.split(":")[0].replace(/^@/, "");
+	const mentionPlaceholder = `@{${matrixLocalpart}}`;
+
+	try {
+		const recentMessages = await channel.messages.fetch({
+			after: afterMessageId,
+			limit: 100,
+		});
+
+		const relevantMessages = recentMessages.filter(
+			(message) =>
+				(message.author.id === botUserId || message.webhookId) &&
+				message.createdTimestamp >= reminderStartTime - 1000,
+		);
+
+		const hasMention = relevantMessages.some((message) =>
+			message.content.includes(mentionPlaceholder),
+		);
+
+		if (!hasMention) {
+			// AI did not mention the user — send a proper Matrix mention ping.
+			// Plain body: "@bred:localhost" (Matrix ID as fallback text)
+			// Formatted body: anchor tag rendered as a clickable, highlighted mention
+			// m.mentions: MSC3952 field so the homeserver notifies the user directly
+			const matrixId = reminder.user_discord_id;
+			const safeName = reminder.user_nickname
+				.replace(/&/g, "&amp;")
+				.replace(/</g, "&lt;")
+				.replace(/>/g, "&gt;");
+
+			await sendToMatrixRoom(
+				matrixRoomId,
+				matrixId,
+				undefined,
+				undefined,
+				`<a href="https://matrix.to/#/${matrixId}">${safeName}</a>`,
+				[matrixId],
+			);
+
+			log.info(
+				`Matrix: Added fallback mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`,
+			);
+		}
+	} catch (error) {
+		log.warn(
+			`Matrix: Failed to ensure mention for reminder ${reminder.reminder_id}:`,
+			error,
+		);
 	}
 }
 

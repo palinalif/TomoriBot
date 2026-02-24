@@ -8,7 +8,7 @@ import type { Message } from "discord.js";
 import { MessageType } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import { isRefreshMarkerEmbed } from "@/utils/discord/embedDetection";
-import { stripMatrixWebhookPrefix } from "@/utils/matrix";
+import { stripBridgePrefix } from "@/utils/bridge";
 
 /** Result of formatting messages for extraction */
 export interface FormattedHistoryResult {
@@ -149,7 +149,7 @@ export function formatMessagesForExtraction(
 		//    so TomoriBot sees just the display name (e.g., "Neko Neechan") in context
 		const rawAuthorName =
 			msg.member?.displayName ?? msg.author?.username ?? "Unknown";
-		const authorName = stripMatrixWebhookPrefix(rawAuthorName);
+		const authorName = stripBridgePrefix(rawAuthorName);
 
 		// 8. Build formatted line
 		lines.push(`[${timestamp}] ${authorName}: ${content}`);

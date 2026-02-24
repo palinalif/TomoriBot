@@ -1,9 +1,9 @@
 /**
- * Matrix utilities barrel export.
- * Import from "@/utils/matrix" to access all Matrix bridge utilities.
+ * Matrix appservice barrel export.
+ * Import from "@/utils/matrix" for Matrix-specific bridge operations.
+ * For generic bridge utilities (ID detection, webhook parsing), import from "@/utils/bridge".
  */
 
-export { isMatrixUserId, normalizeMatrixUserId, stripMatrixWebhookPrefix } from "./isMatrixUserId";
 export {
 	initializeMatrixClient,
 	isMatrixConfigured,
@@ -18,4 +18,6 @@ export {
 	pendingMatrixReplyChannels,
 	getMatrixIdForDisplayName,
 	sendMatrixTypingIndicator,
+	resolveBridgeUserId,
+	sendMatrixReminderMention,
 } from "./matrixManager";

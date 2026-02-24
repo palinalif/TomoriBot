@@ -12,7 +12,8 @@ import {
 } from "../../types/tool/interfaces";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
-import { isMatrixUserId, normalizeMatrixUserId } from "../../utils/matrix/isMatrixUserId";
+import { isBridgeUserId } from "../../utils/bridge";
+import { resolveBridgeUserId } from "../../utils/matrix";
 
 /**
  * Tool for remembering and learning new information during conversations
@@ -118,14 +119,15 @@ export class MemoryTool extends BaseTool {
 			| string
 			| undefined;
 
-		// Normalize Matrix ID: LLMs sometimes drop the "@" prefix (e.g., "bred:localhost" → "@bred:localhost").
+		// Bridge ID recovery: resolveBridgeUserId handles dropped "@" prefix and display
+		// name resolution in one call, and is a no-op for valid IDs and Discord snowflakes.
 		if (targetUserDiscordIdArg) {
-			targetUserDiscordIdArg = normalizeMatrixUserId(targetUserDiscordIdArg);
+			targetUserDiscordIdArg = resolveBridgeUserId(targetUserDiscordIdArg);
 		}
 
-		// Matrix users have no Discord user row — force server-wide memory scope to avoid crashes.
-		// Matrix user IDs follow @localpart:homeserver format and cannot be used for BigInt fuzzy-match.
-		if (memoryScopeArg === "target_user" && targetUserDiscordIdArg && isMatrixUserId(targetUserDiscordIdArg)) {
+		// Bridge users have no Discord user row — force server-wide memory scope to avoid crashes.
+		// Bridge user IDs (e.g., Matrix @localpart:homeserver) cannot be used for BigInt fuzzy-match.
+		if (memoryScopeArg === "target_user" && targetUserDiscordIdArg && isBridgeUserId(targetUserDiscordIdArg)) {
 			memoryScopeArg = "server_wide";
 			targetUserDiscordIdArg = undefined;
 			targetUserNicknameArg = undefined;
