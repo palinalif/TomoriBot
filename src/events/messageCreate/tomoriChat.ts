@@ -3149,8 +3149,13 @@ export default async function tomoriChat(
 				}
 			}
 
-			// Always add the bot's own ID to userList so it appears in context with its User ID
-			if (client.user?.id) {
+			// Add the bot's own Discord user ID only when no alter persona identity is
+			// active in this turn. When alters are present, exposing both the bot account
+			// ID and persona IDs can confuse tool targeting.
+			const hasPersonaSyntheticUser = Array.from(syntheticUserMap.values()).some(
+				(entry) => entry.type === "persona",
+			);
+			if (client.user?.id && !hasPersonaSyntheticUser) {
 				userListSet.add(client.user.id);
 			}
 

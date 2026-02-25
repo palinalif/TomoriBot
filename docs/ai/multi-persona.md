@@ -350,6 +350,8 @@ identity label).
 Responding alter personas are injected into that list each turn, so they can
 always self-target avatar tools with their own `tomori_id` even when no previous
 webhook message is present in the fetched history window.
+When alter personas are active, TomoriBot suppresses the extra bot-account user
+entry to avoid duplicate/confusing IDs in that list.
 
 ### Stickers (alter personas)
 
