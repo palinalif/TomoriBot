@@ -38,13 +38,38 @@ import type { TomoriState } from "@/types/db/schema";
  * its corresponding Matrix summary locale key and extraction mode.
  * Built once on first use and reused for all subsequent calls.
  */
-let embedTitleMap: Map<string, { matrixKey: string; mode: "memory" | "description" | "title" }> | null = null;
+type EmbedRelayConfig = {
+	matrixKey: string;
+	mode: "memory" | "description" | "title";
+};
+
+let embedTitleMap: Map<string, EmbedRelayConfig> | null = null;
+let embedTitlePatternMap: Array<{ pattern: RegExp; config: EmbedRelayConfig }> | null = null;
+
+/**
+ * Escape regex metacharacters so locale template text can be converted safely
+ * into a runtime-matching RegExp.
+ */
+function escapeRegex(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Build a regex that matches runtime-resolved embed titles from locale templates.
+ * Example: "💡 ... {user_nickname}!" => /^💡 ... .+?!$/.
+ */
+function buildTemplateTitlePattern(template: string): RegExp | null {
+	if (!template.includes("{")) return null;
+	const escaped = escapeRegex(template);
+	const withPlaceholders = escaped.replace(/\\\{[^}]+\\\}/g, ".+?");
+	return new RegExp(`^${withPlaceholders}$`);
+}
 
 /**
  * Return (building once) the title→summary-config map across all loaded locales.
  * Covers both en-US and ja so servers using either locale are handled correctly.
  */
-function getEmbedTitleMap(): Map<string, { matrixKey: string; mode: "memory" | "description" | "title" }> {
+function getEmbedTitleMap(): Map<string, EmbedRelayConfig> {
 	if (embedTitleMap) return embedTitleMap;
 
 	// Each entry: [Discord embed title locale key, Matrix summary key, extraction mode]
@@ -68,16 +93,40 @@ function getEmbedTitleMap(): Map<string, { matrixKey: string; mode: "memory" | "
 	];
 
 	embedTitleMap = new Map();
+	embedTitlePatternMap = [];
 	for (const locale of getSupportedLocales()) {
 		for (const [titleKey, matrixKey, mode] of mappings) {
 			// localizer falls back gracefully if the key is missing in this locale
 			const resolvedTitle = localizer(locale, titleKey);
 			if (resolvedTitle !== titleKey) {
-				embedTitleMap.set(resolvedTitle, { matrixKey, mode });
+				const config = { matrixKey, mode };
+				embedTitleMap.set(resolvedTitle, config);
+
+				const templatePattern = buildTemplateTitlePattern(resolvedTitle);
+				if (templatePattern) {
+					embedTitlePatternMap.push({ pattern: templatePattern, config });
+				}
 			}
 		}
 	}
 	return embedTitleMap;
+}
+
+/**
+ * Resolve embed relay config by exact title first, then by template pattern.
+ */
+function getEmbedRelayConfig(title: string): EmbedRelayConfig | null {
+	const exactMatch = getEmbedTitleMap().get(title);
+	if (exactMatch) return exactMatch;
+
+	if (!embedTitlePatternMap) return null;
+	for (const entry of embedTitlePatternMap) {
+		if (entry.pattern.test(title)) {
+			return entry.config;
+		}
+	}
+
+	return null;
 }
 
 /**
@@ -232,7 +281,7 @@ function resolveDiscordTextForMatrix(
 function embedToMatrixText(embed: Embed, serverLocale: string): string | null {
 	if (!embed.title) return null;
 
-	const config = getEmbedTitleMap().get(embed.title);
+	const config = getEmbedRelayConfig(embed.title);
 	if (!config) return null;
 
 	if (config.mode === "title") {

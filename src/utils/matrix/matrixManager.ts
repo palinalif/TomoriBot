@@ -168,6 +168,25 @@ export function getMatrixIdForDisplayName(
 	return matrixDisplayNameToId.get(displayName);
 }
 
+/**
+ * Resolve a Matrix user ID back to its most recently seen display name.
+ * Returns undefined if this Matrix user has not sent any messages in this session.
+ *
+ * @param matrixUserId - Full Matrix user ID (e.g., "@bred:localhost")
+ * @returns Display name/localpart used in context (e.g., "bred"), or undefined if unknown
+ */
+export function getDisplayNameForMatrixId(
+	matrixUserId: string,
+): string | undefined {
+	for (const [displayName, mappedId] of matrixDisplayNameToId.entries()) {
+		if (mappedId === matrixUserId) {
+			return displayName;
+		}
+	}
+
+	return undefined;
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**

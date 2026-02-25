@@ -1001,6 +1001,10 @@ export default async function tomoriChat(
 
 	// biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
 	const userDiscId = message.author!.id;
+	const matrixRelayUserId = isMatrixRelayMessage
+		? extractBridgeUserId(message.author.username)
+		: undefined;
+	const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
 
 	// Check if user is allowed to trigger bot (Level 2 FULL privacy users cannot trigger)
 	// Skip this check for manual triggers and reminders
@@ -1293,7 +1297,7 @@ export default async function tomoriChat(
 						const preQueueCooldownResult =
 							await checkMessageTriggerCooldownWithWhitelist(
 								guild?.id ?? message.author.id,
-								message.author.id,
+								cooldownUserDiscId,
 								message.channelId,
 								earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
 								message.member,
@@ -2097,7 +2101,7 @@ export default async function tomoriChat(
 			if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
 				const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
 					guild?.id ?? message.author.id,
-					message.author.id,
+					cooldownUserDiscId,
 					message.channelId,
 					tomoriState.config.cooldown_type ?? CooldownType.OFF,
 					message.member,
@@ -2121,7 +2125,7 @@ export default async function tomoriChat(
 					log.info(
 						`Message trigger cooldown active for ${
 							cooldownResult.cooldownType === CooldownType.PER_USER
-								? `user ${message.author.id}`
+								? `user ${cooldownUserDiscId}`
 								: cooldownResult.cooldownType === CooldownType.PER_CHANNEL
 									? `channel ${message.channelId}`
 									: `server ${serverDiscId}`
@@ -2138,7 +2142,7 @@ export default async function tomoriChat(
 			if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
 				await setMessageTriggerCooldownWithWhitelist(
 					guild?.id ?? message.author.id,
-					message.author.id,
+					cooldownUserDiscId,
 					message.channelId,
 					tomoriState.config.cooldown_type ?? CooldownType.OFF,
 					tomoriState.config.cooldown_length ?? 5,
@@ -3269,7 +3273,7 @@ export default async function tomoriChat(
 						let reminderContent = "";
 
 						if (isSelfReminder) {
-							reminderContent = `[System: A task reminder you set for yourself has triggered. Task: "${reminderData.reminder_purpose}". Please execute this task now.]`;
+							reminderContent = `[System: A task reminder you set for yourself has triggered. Task: "${reminderData.reminder_purpose}". Please execute this task now. Do NOT create, save, or schedule this reminder again.]`;
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
 							}
@@ -3284,12 +3288,12 @@ export default async function tomoriChat(
 							const matrixLocalpart = reminderRecipientID
 								.split(":")[0]
 								.replace(/^@/, "");
-							reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
+							reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
 							}
 						} else {
-							reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
+							reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
 							}

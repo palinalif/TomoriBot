@@ -17,6 +17,7 @@ export {
 	MATRIX_MAX_ATTACHMENT_BYTES,
 	pendingMatrixReplyChannels,
 	getMatrixIdForDisplayName,
+	getDisplayNameForMatrixId,
 	sendMatrixTypingIndicator,
 	resolveBridgeUserId,
 	sendMatrixReminderMention,

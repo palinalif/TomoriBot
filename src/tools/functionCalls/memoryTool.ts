@@ -13,7 +13,7 @@ import {
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 import { isBridgeUserId } from "../../utils/bridge";
-import { resolveBridgeUserId } from "../../utils/matrix";
+import { getDisplayNameForMatrixId, resolveBridgeUserId } from "../../utils/matrix";
 
 /**
  * Tool for remembering and learning new information during conversations
@@ -110,7 +110,7 @@ export class MemoryTool extends BaseTool {
 		}
 
 		// Extract arguments (from tomoriChat.ts:1070-1076)
-		const memoryContentArg = args.memory_content as string;
+		let memoryContentArg = args.memory_content as string;
 		let memoryScopeArg = args.memory_scope as "server_wide" | "target_user";
 		let targetUserDiscordIdArg = args.target_user_discord_id as
 			| string
@@ -128,6 +128,31 @@ export class MemoryTool extends BaseTool {
 		// Bridge users have no Discord user row — force server-wide memory scope to avoid crashes.
 		// Bridge user IDs (e.g., Matrix @localpart:homeserver) cannot be used for BigInt fuzzy-match.
 		if (memoryScopeArg === "target_user" && targetUserDiscordIdArg && isBridgeUserId(targetUserDiscordIdArg)) {
+			const displayNameFromArg = targetUserNicknameArg?.trim();
+			const displayNameFromMap =
+				getDisplayNameForMatrixId(targetUserDiscordIdArg);
+			const displayNameFromId = targetUserDiscordIdArg
+				.replace(/^@/, "")
+				.split(":")[0];
+			const resolvedDisplayName =
+				displayNameFromArg || displayNameFromMap || displayNameFromId;
+
+			if (
+				resolvedDisplayName &&
+				memoryContentArg.includes("{user}")
+			) {
+				const substitutedMemoryContent = memoryContentArg.replaceAll(
+					"{user}",
+					resolvedDisplayName,
+				);
+				if (substitutedMemoryContent !== memoryContentArg) {
+					memoryContentArg = substitutedMemoryContent;
+					log.info(
+						`Memory tool: Replaced {user} with "${resolvedDisplayName}" before Matrix target_user fallback to server_wide`,
+					);
+				}
+			}
+
 			memoryScopeArg = "server_wide";
 			targetUserDiscordIdArg = undefined;
 			targetUserNicknameArg = undefined;
