@@ -55,16 +55,16 @@ This table reflects the current state of feature support for Matrix users compar
 | Web search / URL fetch | MCP tools fire transparently |
 | Image generation | Image is generated and relayed as a Matrix media event |
 | Short-term memory | Cross-channel conversation summaries work passively |
-| Typing indicator | Shown under the persona's virtual Matrix user |
+| Typing indicator | Shown under the persona's virtual Matrix user and explicitly cleared on stream completion/interrupt |
 | Media relay | Bidirectional — images, video, and files |
 | `/refresh` (text command) | Resets conversation history and clears short-term memory |
+| `/kill` (text command) | Stops active stream, clears queued responses, and clears Matrix typing indicators |
 
 ### Broken / Degraded ⚠️
 
 | Feature | Status | Root Cause |
 |---|---|---|
 | **Personal memories** | Silently downgraded to server memory | Matrix users have no `users` table row; `target_user` scope is forced to `server_wide`. When downgraded, the `{user}` placeholder in the memory content should be resolved to the user's display name so attribution is not lost (e.g., `"bred likes cats"` instead of `"{user} likes cats"`). |
-| **`/kill`** (stop stream) | Not available | No text command equivalent yet — Matrix users cannot interrupt a long AI response or clear the message queue. Planned: recognize `/kill` as a plain text command, same as `/refresh`. |
 | **Cooldowns** | All Matrix users share one bucket | Cooldowns are keyed by Discord user ID; all Matrix relay messages share the same webhook bot user ID, so the per-user cooldown is effectively a per-channel cooldown for Matrix. |
 | **User language preference** | No-op | Stored in the `users` table; Matrix users have no row. Server locale is used as fallback. |
 | **User timezone** | No-op | Same — reminders use the server timezone as fallback. |
@@ -73,7 +73,6 @@ This table reflects the current state of feature support for Matrix users compar
 
 ### Known Gaps & Planned Work
 
-- **`/kill` text command** — Recognize `/kill` sent by a Matrix user as a plain message (same pattern as `/refresh`) and call `stopActiveStream(channelId)` + clear the queue for that channel.
 - **Personal memory display name resolution** — When `remember_this_fact` is forced from `target_user` → `server_wide` scope due to a Matrix user ID, resolve the `{user}` placeholder in the memory content to the user's actual display name before saving, so the memory remains attributable (e.g., store `"bred likes cats"` rather than `"{user} likes cats"`).
 - **Per-user cooldowns for Matrix** — Extract the Matrix user ID from the webhook username and key cooldowns against it instead of the shared webhook bot ID.
 

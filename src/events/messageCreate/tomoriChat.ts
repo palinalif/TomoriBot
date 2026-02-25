@@ -73,7 +73,11 @@ import {
 } from "../../utils/text/stringHelper";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
-import { pendingMatrixReplyChannels } from "@/utils/matrix";
+import {
+	getLinkedMatrixRoom,
+	pendingMatrixReplyChannels,
+	sendMatrixTypingIndicator,
+} from "@/utils/matrix";
 import {
 	isBridgeUserId,
 	stripBridgePrefix,
@@ -3137,6 +3141,9 @@ export default async function tomoriChat(
 				tomoriId?: number;
 				personaLineageId?: number | null;
 			}> = [];
+			const matrixTypingRoomId = isMatrixRelayMessage
+				? await getLinkedMatrixRoom(channel.id)
+				: null;
 
 			for (
 				let personaIndex = 0;
@@ -3160,6 +3167,18 @@ export default async function tomoriChat(
 				// Send typing indicator for each persona response
 				if (personaIndex > 0) {
 					await channel.sendTyping();
+				}
+				const matrixTypingTargetRoomId = matrixTypingRoomId;
+				const matrixTypingPersonaName =
+					currentPersona.tomori_nickname ??
+					process.env.DEFAULT_BOTNAME ??
+					"Tomori";
+				if (matrixTypingTargetRoomId) {
+					await sendMatrixTypingIndicator(
+						matrixTypingTargetRoomId,
+						matrixTypingPersonaName,
+						true,
+					);
 				}
 
 				try {
@@ -5314,6 +5333,14 @@ export default async function tomoriChat(
 					}).catch((embedError) =>
 						log.warn("Failed to send persona error embed", embedError),
 					);
+				} finally {
+					if (matrixTypingTargetRoomId) {
+						await sendMatrixTypingIndicator(
+							matrixTypingTargetRoomId,
+							matrixTypingPersonaName,
+							false,
+						);
+					}
 				}
 			} // END OF MULTI-PERSONA RESPONSE LOOP
 

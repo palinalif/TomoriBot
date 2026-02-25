@@ -36,7 +36,9 @@ import {
 } from "discord.js";
 import type { ReminderRow } from "@/types/db/schema";
 import { isBridgeUserId } from "@/utils/bridge";
+import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { sql } from "@/utils/db/client";
+import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { getOrCreateWebhook } from "@/utils/discord/webhookManager";
 import { clearShortTermMemoryForChannel } from "@/utils/cache/shortTermMemoryCache";
@@ -1081,6 +1083,46 @@ async function handleMatrixRefresh(
 }
 
 /**
+ * Clear Matrix typing indicators for all personas in a linked Discord channel.
+ * Used by Matrix /kill to aggressively clear any lingering typing state.
+ *
+ * @param channel - Linked Discord channel (guild text-based)
+ * @param roomId  - Matrix room ID where typing should be cleared
+ * @returns Number of persona typing indicators attempted
+ */
+async function clearMatrixTypingIndicatorsForChannel(
+	channel: BaseGuildTextChannel,
+	roomId: string,
+): Promise<number> {
+	const personaNames = new Set<string>();
+
+	try {
+		const personas = await getCachedAllPersonas(channel.guildId);
+		for (const persona of personas) {
+			const name = persona.tomori_nickname?.trim();
+			if (name) {
+				personaNames.add(name);
+			}
+		}
+	} catch (error) {
+		log.warn(
+			`Matrix /kill: failed to load personas for typing clear in channel ${channel.id}`,
+			error,
+		);
+	}
+
+	personaNames.add(process.env.DEFAULT_BOTNAME || "Tomori");
+
+	const names = Array.from(personaNames);
+	await Promise.all(
+		names.map((personaName) =>
+			sendMatrixTypingIndicator(roomId, personaName, false),
+		),
+	);
+	return names.length;
+}
+
+/**
  * Handle an incoming Matrix event pushed by the homeserver.
  * Replaces the old RoomEvent.Timeline sync listener.
  * Relays Matrix messages to the linked Discord channel via webhook.
@@ -1242,13 +1284,46 @@ async function handleMatrixEvent(
 
 	if (!bodyText) return;
 
-	// 10. Special command: /refresh — trigger conversation history reset in Discord
+	// 10. Special command: /kill — stop active stream + clear queue in linked Discord channel
+	if (bodyText === "/kill") {
+		let hasActiveStream = false;
+		let clearedQueueCount = 0;
+
+		try {
+			const { isChannelProcessingLocked, clearChannelProcessingQueue } =
+				await import("@/events/messageCreate/tomoriChat");
+
+			hasActiveStream = isChannelProcessingLocked(channelDiscId);
+			clearedQueueCount = clearChannelProcessingQueue(channelDiscId);
+
+			if (hasActiveStream) {
+				StreamOrchestrator.requestStop(channelDiscId, event.sender);
+			}
+		} catch (error) {
+			log.warn(
+				`Matrix /kill: failed to stop stream/clear queue for channel ${channelDiscId}`,
+				error,
+			);
+		}
+
+		const clearedTypingPersonaCount = await clearMatrixTypingIndicatorsForChannel(
+			channel as BaseGuildTextChannel,
+			event.room_id,
+		);
+
+		log.info(
+			`Stop/clear requested via Matrix /kill by user ${event.sender} in channel ${channelDiscId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s). Cleared Matrix typing for ${clearedTypingPersonaCount} persona(s).`,
+		);
+		return;
+	}
+
+	// 11. Special command: /refresh — trigger conversation history reset in Discord
 	if (bodyText === "/refresh") {
 		await handleMatrixRefresh(channel as BaseGuildTextChannel, channelDiscId);
 		return;
 	}
 
-	// 11. If this is a reply to a bot persona message, build a [System:] annotation
+	// 12. If this is a reply to a bot persona message, build a [System:] annotation
 	//     that mirrors the format tomoriChat.ts uses for Discord replies (line ~2539).
 	//     Also registers the Discord channel as a pending trigger so shouldBotReply()
 	//     fires — webhooks cannot carry Discord-native reply references.
@@ -1278,7 +1353,7 @@ async function handleMatrixEvent(
 		}
 	}
 
-	// 12. Relay as text via Discord webhook.
+	// 13. Relay as text via Discord webhook.
 	//     m.emote (/me actions) are prefixed with "* " to match IRC/Matrix convention —
 	//     e.g., Matrix: /me waves → Discord: "* waves" (webhook username provides the name context)
 	const relayContent =
