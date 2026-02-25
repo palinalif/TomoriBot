@@ -863,10 +863,10 @@ INSERT INTO server_emojis VALUES
 
 ## Related Documentation
 
-- **[5. Database Schema](5_DatabaseSchema.md)** - Full schema reference
-- **[6. Event System](6_EventSystem.md)** - Event handler architecture
-- **[8. AI Providers](8_AIProviders.md)** - LLM integration for metadata generation
-- **[11. Utils](11_Utils.md)** - String helper utilities
+- **[Database Schema](../systems/database-schema.md)** - Full schema reference
+- **[Event System](../systems/event-system.md)** - Event handler architecture
+- **[AI Providers](./providers.md)** - LLM integration for metadata generation
+- **[Utils](../systems/utils.md)** - String helper utilities
 
 ---
 

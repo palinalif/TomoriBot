@@ -42,6 +42,7 @@ crash*/
 .prompts/
 ACTIVECONTEXT.md
 GEMINI.md
+AGENTS.md
 
 # Logs
 logs

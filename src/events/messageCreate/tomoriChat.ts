@@ -73,10 +73,12 @@ import {
 } from "../../utils/text/stringHelper";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
+import { pendingMatrixReplyChannels } from "@/utils/matrix";
 import {
-	pendingMatrixReplyChannels,
-} from "@/utils/matrix";
-import { isBridgeUserId, stripBridgePrefix, extractBridgeUserId } from "@/utils/bridge";
+	isBridgeUserId,
+	stripBridgePrefix,
+	extractBridgeUserId,
+} from "@/utils/bridge";
 
 import type {
 	TomoriState,
@@ -131,9 +133,9 @@ const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
 	10,
 ); // Max consecutive tool failures before showing error embed (NAI GLM only)
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
-const DEFAULT_SELF_REPLY_LIMIT = 3;
+const DEFAULT_SELF_REPLY_LIMIT = 1;
 const MAX_SELF_REPLY_LIMIT = 10;
-const DEFAULT_TRIGGERED_PERSONA_LIMIT = 3;
+const DEFAULT_TRIGGERED_PERSONA_LIMIT = 1;
 const MIN_TRIGGERED_PERSONA_LIMIT = 1;
 const MAX_TRIGGERED_PERSONA_LIMIT = 10;
 const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 30 minutes of inactivity
@@ -3168,8 +3170,9 @@ export default async function tomoriChat(
 					let loadedStickers: ServerStickerRow[] | null = null;
 
 					// Check if current channel is designated as an RP channel (always suppresses emojis/stickers)
-					const isRpChannel =
-						tomoriState.config.rp_channel_ids.includes(channel.id);
+					const isRpChannel = tomoriState.config.rp_channel_ids.includes(
+						channel.id,
+					);
 					const effectiveEmojiEnabled = isRpChannel
 						? false
 						: tomoriState.config.emoji_usage_enabled;
@@ -3203,11 +3206,7 @@ export default async function tomoriChat(
 						loadedStickers = stickers;
 
 						// Process emojis for conversion (if emoji usage is effectively enabled for this channel)
-						if (
-							effectiveEmojiEnabled &&
-							emojis &&
-							emojis.length > 0
-						) {
+						if (effectiveEmojiEnabled && emojis && emojis.length > 0) {
 							// Sort emojis by created_at timestamp, then by ID
 							const sortedEmojis = [...emojis].sort((a, b) => {
 								const rawATime = a.created_at
@@ -3255,12 +3254,17 @@ export default async function tomoriChat(
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
 							}
-						} else if (reminderRecipientID && isBridgeUserId(reminderRecipientID)) {
+						} else if (
+							reminderRecipientID &&
+							isBridgeUserId(reminderRecipientID)
+						) {
 							// Matrix user IDs (@user:server) must not be wrapped in <@...> Discord mention
 							// format — that produces <@@user:server> (double @), which is malformed.
 							// Strip the server suffix for display; use @{localpart} as the mention
 							// placeholder (matrixRelay.ts converts this to a proper HTML Matrix mention).
-							const matrixLocalpart = reminderRecipientID.split(":")[0].replace(/^@/, "");
+							const matrixLocalpart = reminderRecipientID
+								.split(":")[0]
+								.replace(/^@/, "");
 							reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
@@ -3780,7 +3784,6 @@ export default async function tomoriChat(
 						tomoriState.llm.llm_codename = originalModelCodename;
 					}
 
-
 					log.info(
 						"Streaming mode enabled. Attempting to stream response to Discord.",
 					);
@@ -3827,7 +3830,9 @@ export default async function tomoriChat(
 								guild?.members.cache.get(impersonatedUserId);
 							const impersonatedUser =
 								impersonatedMember?.user ||
-								(await client.users.fetch(impersonatedUserId).catch(() => null));
+								(await client.users
+									.fetch(impersonatedUserId)
+									.catch(() => null));
 
 							// Force static PNG to avoid webhook avatar failures on animated profile pictures.
 							const impersonatedUserAvatar =
@@ -4380,7 +4385,9 @@ export default async function tomoriChat(
 									// Capture any text the model streamed to Discord before calling
 									// the tool, so it appears in the function interaction history
 									// and the model won't repeat itself on continuation.
-									const preToolText = (streamResult.accumulatedText ?? "").trim();
+									const preToolText = (
+										streamResult.accumulatedText ?? ""
+									).trim();
 									if (preToolText) {
 										accumulatedStreamedModelParts.push({
 											type: "text",
@@ -4762,11 +4769,12 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } = truncateDialogueHistory(
-														contextSegments,
-														tokenLimits.contextLength,
-														tokenLimits.maxCompletionTokens,
-													);
+													const { truncated, pairsDropped } =
+														truncateDialogueHistory(
+															contextSegments,
+															tokenLimits.contextLength,
+															tokenLimits.maxCompletionTokens,
+														);
 													if (pairsDropped > 0) {
 														log.warn(
 															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
@@ -4784,11 +4792,12 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } = truncateDialogueHistory(
-														contextSegments,
-														tokenLimits.contextLength,
-														tokenLimits.maxCompletionTokens,
-													);
+													const { truncated, pairsDropped } =
+														truncateDialogueHistory(
+															contextSegments,
+															tokenLimits.contextLength,
+															tokenLimits.maxCompletionTokens,
+														);
 													if (pairsDropped > 0) {
 														log.warn(
 															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
@@ -4806,11 +4815,12 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } = truncateDialogueHistory(
-														contextSegments,
-														tokenLimits.contextLength,
-														tokenLimits.maxCompletionTokens,
-													);
+													const { truncated, pairsDropped } =
+														truncateDialogueHistory(
+															contextSegments,
+															tokenLimits.contextLength,
+															tokenLimits.maxCompletionTokens,
+														);
 													if (pairsDropped > 0) {
 														log.warn(
 															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
@@ -4931,16 +4941,20 @@ export default async function tomoriChat(
 										);
 
 										// Case 2: NAI GLM tool failure with text already sent
-									// Suppress text output on retry so the model can re-attempt the tool
-									// without repeating the pre-tool text to Discord. After exceeding the
-									// retry threshold, show an error embed and end the turn.
-									const textAlreadySent = (streamResult.accumulatedText ?? "").trim().length > 0;
+										// Suppress text output on retry so the model can re-attempt the tool
+										// without repeating the pre-tool text to Discord. After exceeding the
+										// retry threshold, show an error embed and end the turn.
+										const textAlreadySent =
+											(streamResult.accumulatedText ?? "").trim().length > 0;
 										if (
 											textAlreadySent &&
 											provider.getInfo().name === "novelai"
 										) {
 											naiConsecutiveToolFailures++;
-											if (naiConsecutiveToolFailures >= NAI_TOOL_FAILURE_RETRY_THRESHOLD) {
+											if (
+												naiConsecutiveToolFailures >=
+												NAI_TOOL_FAILURE_RETRY_THRESHOLD
+											) {
 												log.warn(
 													`NovelAI GLM: Tool "${funcName}" failed ${naiConsecutiveToolFailures} consecutive times after text was sent — showing error embed and ending turn`,
 												);
@@ -4950,7 +4964,8 @@ export default async function tomoriChat(
 													{
 														color: ColorCode.ERROR,
 														titleKey: "genai.nai_tool_retry_exhausted_title",
-														descriptionKey: "genai.nai_tool_retry_exhausted_description",
+														descriptionKey:
+															"genai.nai_tool_retry_exhausted_description",
 													},
 													{
 														webhook: personaWebhook ?? undefined,
@@ -5687,7 +5702,8 @@ export function shouldBotReply(
 ): boolean {
 	const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
 	const isMatrixRelayMessage =
-		Boolean(message.webhookId) && message.author.username.startsWith("[Matrix|");
+		Boolean(message.webhookId) &&
+		message.author.username.startsWith("[Matrix|");
 	const rawSelfReplyLimit =
 		tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
 	const selfReplyLimit = Math.min(
@@ -5711,7 +5727,9 @@ export function shouldBotReply(
 		message.channel.type === ChannelType.GuildVoice ||
 		message.channel.type === ChannelType.GuildStageVoice;
 	if (
-		(message.author.bot && (!isSelfMessage || selfReplyLimit <= 0) && !isMatrixRelayMessage) ||
+		(message.author.bot &&
+			(!isSelfMessage || selfReplyLimit <= 0) &&
+			!isMatrixRelayMessage) ||
 		message.content.startsWith("!") || // Basic command prefix check
 		!(
 			message.channel instanceof TextChannel ||
@@ -5835,7 +5853,8 @@ export function shouldBotReply(
 	// a Matrix reply to a bot persona. Set.delete() returns true if the key existed
 	// and removes it atomically — one-shot consumption prevents stale triggers.
 	const isMatrixReplyToPersona =
-		isMatrixRelayMessage && pendingMatrixReplyChannels.delete(message.channelId);
+		isMatrixRelayMessage &&
+		pendingMatrixReplyChannels.delete(message.channelId);
 
 	return (
 		isReplyToBot ||
