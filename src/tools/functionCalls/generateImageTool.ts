@@ -8,6 +8,7 @@ import { AttachmentBuilder } from "discord.js";
 import { GoogleGenAI } from "@google/genai";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
 import {
 	BaseTool,
 	type ToolContext,
@@ -48,7 +49,7 @@ export class GenerateImageTool extends BaseTool {
 			user_id: {
 				type: "string",
 				description:
-					"Optional: Discord user ID whose profile picture should be used as a reference image. Useful for avatar-based edits. Pass your own ID to edit your own avatar. Can be combined with message_id references.",
+					"Optional: Discord ID whose profile picture/avatar should be used as a reference image. Accepts a normal user ID or a webhook ID (useful for alter persona webhooks). Pass your own ID to edit your own avatar. Can be combined with message_id references.",
 			},
 			aspect_ratio: {
 				type: "string",
@@ -686,7 +687,9 @@ export class GenerateImageTool extends BaseTool {
 				}
 
 				try {
-					const avatarData = await this.fetchUserAvatar(userId, context);
+					const avatarData = await resolveAvatarByDiscordId(userId, context, {
+						forceStatic: false,
+					});
 					const avatarBase64 = await this.fetchAndConvertImageToBase64(
 						avatarData.avatarUrl,
 					);
@@ -694,19 +697,21 @@ export class GenerateImageTool extends BaseTool {
 						mimeType: "image/png",
 						data: avatarBase64,
 					});
+					const avatarTypeLabel =
+						avatarData.sourceType === "webhook" ? "webhook" : "user";
 					log.info(
-						`Added profile picture reference for user ${avatarData.username} (${userId})`,
+						`Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${userId})`,
 					);
 				} catch (avatarErr) {
 					log.error(
-						`Failed to fetch profile picture for user ${userId}`,
+						`Failed to fetch profile picture for ID ${userId}`,
 						avatarErr as Error,
 					);
 					return {
 						success: false,
-						error: "Failed to fetch profile picture for user_id",
+						error: "Failed to fetch profile picture for user_id (user/webhook)",
 						message:
-							"Could not fetch that user's profile picture. Please confirm the user ID is correct and try again.",
+							"Could not fetch an avatar for that ID. Please confirm the ID is a valid Discord user or webhook ID and try again.",
 					};
 				}
 			}
@@ -880,58 +885,6 @@ export class GenerateImageTool extends BaseTool {
 	 */
 	private isValidDiscordId(userId: string): boolean {
 		return GenerateImageTool.DISCORD_ID_PATTERN.test(userId);
-	}
-
-	/**
-	 * Fetch Discord user and their avatar URL (prefers guild avatar when available)
-	 */
-	private async fetchUserAvatar(
-		userId: string,
-		context: ToolContext,
-	): Promise<{ username: string; avatarUrl: string; serverNickname?: string }> {
-		const user = await context.client.users.fetch(userId);
-
-		let avatarUrl: string;
-		let serverNickname: string | undefined;
-
-		if (context.guildId) {
-			const guild = context.client.guilds.cache.get(context.guildId);
-			if (guild) {
-				const member = await guild.members.fetch(userId).catch(() => null);
-				if (member) {
-					avatarUrl = member.displayAvatarURL({
-						size: 1024,
-						extension: "png",
-						forceStatic: false,
-					});
-					serverNickname = member.nickname ?? undefined;
-				} else {
-					avatarUrl = user.displayAvatarURL({
-						size: 1024,
-						extension: "png",
-						forceStatic: false,
-					});
-				}
-			} else {
-				avatarUrl = user.displayAvatarURL({
-					size: 1024,
-					extension: "png",
-					forceStatic: false,
-				});
-			}
-		} else {
-			avatarUrl = user.displayAvatarURL({
-				size: 1024,
-				extension: "png",
-				forceStatic: false,
-			});
-		}
-
-		return {
-			username: user.username,
-			avatarUrl,
-			serverNickname,
-		};
 	}
 
 	/**

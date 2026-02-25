@@ -126,14 +126,23 @@ const MAX_TRACKED_SENT_EVENTS = Number.parseInt(
 	process.env.MATRIX_MAX_TRACKED_SENT_EVENTS || "500",
 	10,
 );
+const MAX_REPLY_SNIPPET_CHARS = 120;
 
 /**
- * Map of recently sent Matrix event_id → persona display name.
- * Used to detect when a Matrix user replies to a bot persona message so we can
- * prepend the persona name (e.g., "Lilya: ") to the relayed Discord content
- * for human readability, and register a pending reply trigger (see below).
+ * Metadata tracked for a Matrix event sent by a bot persona.
  */
-const sentEventPersonas = new Map<string, string>();
+type SentPersonaReplyEvent = {
+	personaName: string;
+	replySnippet?: string;
+};
+
+/**
+ * Map of recently sent Matrix event_id → persona reply metadata.
+ * Used to detect when a Matrix user replies to a bot persona message so we can
+ * prepend a richer system annotation to relayed Discord content and register a
+ * pending reply trigger (see below).
+ */
+const sentEventPersonas = new Map<string, SentPersonaReplyEvent>();
 
 /**
  * Map of Matrix user display name → full Matrix user ID.
@@ -521,6 +530,7 @@ export async function sendToMatrixRoom(
 			trackSentMatrixEvent(
 				(response as { event_id: string }).event_id,
 				personaName,
+				text,
 			);
 		}
 	} catch (error) {
@@ -852,24 +862,50 @@ function mxcToHttp(mxcUrl: string, homeserverUrl: string): string | null {
 }
 
 /**
- * Fetch a Matrix event from the homeserver and check whether its sender is one
- * of TomoriBot's virtual persona users (@_tomori_*:serverName).
- * Used as a fallback when a reply's event_id is not in the sentEventPersonas Map
- * (i.e., the original message was sent in a previous bot session).
- * Returns false on any network or auth error so the reply is silently dropped.
+ * Normalize and clamp quoted reply snippets used in Matrix reply system annotations.
+ */
+function buildReplySnippet(rawText?: string | null): string | undefined {
+	if (!rawText) return undefined;
+
+	const normalized = rawText.replace(/\s+/g, " ").trim();
+	if (!normalized) return undefined;
+
+	// Keep outer annotation quoting stable: convert inner double quotes to single quotes.
+	const safeForQuote = normalized.replace(/"/g, "'");
+	if (safeForQuote.length <= MAX_REPLY_SNIPPET_CHARS) {
+		return safeForQuote;
+	}
+
+	return `${safeForQuote.slice(0, Math.max(0, MAX_REPLY_SNIPPET_CHARS - 3)).trimEnd()}...`;
+}
+
+type PersonaReplyLookup = {
+	isPersonaReply: boolean;
+	replySnippet?: string;
+};
+
+/**
+ * Fetch a Matrix event and detect whether it was sent by one of TomoriBot's
+ * virtual persona users (@_tomori_*:serverName).
+ *
+ * Used as a fallback when a reply's event_id is not in sentEventPersonas
+ * (e.g., replies to messages sent in a previous bot session). Also extracts a
+ * short body snippet for richer [System:] reply annotations.
  *
  * @param roomId      - The Matrix room ID containing the event
  * @param eventId     - The event_id to fetch
  * @param serverName  - The homeserver domain (used to scope virtual user matching)
  */
-async function isReplyToPersonaEvent(
+async function getPersonaReplyEventMetadata(
 	roomId: string,
 	eventId: string,
 	serverName: string,
-): Promise<boolean> {
+): Promise<PersonaReplyLookup> {
 	const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
 	const asToken = process.env.MATRIX_ACCESS_TOKEN;
-	if (!homeserverUrl || !asToken || !serverName) return false;
+	if (!homeserverUrl || !asToken || !serverName) {
+		return { isPersonaReply: false };
+	}
 
 	try {
 		const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`;
@@ -877,35 +913,53 @@ async function isReplyToPersonaEvent(
 			headers: { Authorization: `Bearer ${asToken}` },
 			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
 		});
-		if (!response.ok) return false;
+		if (!response.ok) return { isPersonaReply: false };
 
-		const data = (await response.json()) as { sender?: string };
+		const data = (await response.json()) as {
+			sender?: string;
+			content?: { body?: string };
+		};
 		// Virtual persona users follow the pattern @_tomori_*:serverName
-		return (
+		const isPersonaReply =
 			typeof data.sender === "string" &&
 			data.sender.startsWith("@_tomori_") &&
-			data.sender.endsWith(`:${serverName}`)
-		);
+			data.sender.endsWith(`:${serverName}`);
+		if (!isPersonaReply) {
+			return { isPersonaReply: false };
+		}
+
+		return {
+			isPersonaReply: true,
+			replySnippet: buildReplySnippet(data.content?.body),
+		};
 	} catch {
-		return false;
+		return { isPersonaReply: false };
 	}
 }
 
 /**
- * Store a sent Matrix event_id → persona display name mapping for reply detection.
+ * Store sent Matrix event metadata for reply detection.
  * Evicts the oldest entry when the MAX_TRACKED_SENT_EVENTS cap is reached.
  * Map iteration order is insertion order, so the first key is always the oldest.
  *
  * @param eventId     - The Matrix event_id returned by the homeserver after sending
  * @param personaName - The display name of the persona that sent the message
+ * @param sentText    - The plain message body sent to Matrix (used to build a reply snippet)
  */
-function trackSentMatrixEvent(eventId: string, personaName: string): void {
+function trackSentMatrixEvent(
+	eventId: string,
+	personaName: string,
+	sentText?: string,
+): void {
 	if (sentEventPersonas.size >= MAX_TRACKED_SENT_EVENTS) {
 		// Map preserves insertion order — first key is the oldest entry
 		const oldestKey = sentEventPersonas.keys().next().value;
 		if (oldestKey) sentEventPersonas.delete(oldestKey);
 	}
-	sentEventPersonas.set(eventId, personaName);
+	sentEventPersonas.set(eventId, {
+		personaName,
+		replySnippet: buildReplySnippet(sentText),
+	});
 }
 
 /**
@@ -1353,20 +1407,28 @@ async function handleMatrixEvent(
 	//        previous bot session whose event_id was never recorded in this Map
 	let replyContext = "";
 	if (replyEventId) {
-		const repliedPersona = sentEventPersonas.get(replyEventId);
-		if (repliedPersona) {
+		const repliedPersonaEvent = sentEventPersonas.get(replyEventId);
+		if (repliedPersonaEvent) {
 			// Fast path: event was sent in this session — persona name is known
-			replyContext = `[System: ${senderLocalpart} is replying to ${repliedPersona}'s message] `;
+			const quotedSnippet = repliedPersonaEvent.replySnippet
+				? ` "${repliedPersonaEvent.replySnippet}"`
+				: "";
+			replyContext =
+				`[System: ${senderLocalpart} is replying to ${repliedPersonaEvent.personaName}'s message${quotedSnippet}]: `;
 			pendingMatrixReplyChannels.add(channelDiscId);
 		} else {
 			// Slow path: fetch the original event and check if it was sent by a virtual persona user
-			const isPersonaReply = await isReplyToPersonaEvent(
+			const replyMetadata = await getPersonaReplyEventMetadata(
 				event.room_id,
 				replyEventId,
 				serverName,
 			);
-			if (isPersonaReply) {
-				replyContext = `[System: ${senderLocalpart} is replying to another person's message] `;
+			if (replyMetadata.isPersonaReply) {
+				const quotedSnippet = replyMetadata.replySnippet
+					? ` "${replyMetadata.replySnippet}"`
+					: "";
+				replyContext =
+					`[System: ${senderLocalpart} is replying to another person's message${quotedSnippet}]: `;
 				pendingMatrixReplyChannels.add(channelDiscId);
 			}
 		}

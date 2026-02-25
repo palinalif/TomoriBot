@@ -6,6 +6,7 @@
 
 import { log } from "../../utils/misc/logger";
 import type { EnhancedImageContent } from "@/types/tool/enhancedContextTypes";
+import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
 // import { sendStandardEmbed } from "../../utils/discord/embedHelper";
 import {
 	BaseTool,
@@ -40,7 +41,7 @@ export class PeekProfilePictureTool extends BaseTool {
 			user_id: {
 				type: "string",
 				description:
-					"The Discord user ID (snowflake) of the user whose profile picture to analyze. Must be a valid 17-19 digit Discord ID.",
+					"The Discord ID (snowflake) to analyze. Accepts a normal user ID or a webhook ID (useful for alter persona webhooks). Must be a valid 17-19 digit Discord ID.",
 			},
 			reason: {
 				type: "string",
@@ -170,8 +171,10 @@ export class PeekProfilePictureTool extends BaseTool {
 				};
 			}
 
-			// Fetch user and avatar URL
-			const avatarData = await this.fetchUserAvatar(userId, context);
+			// Resolve ID as either Discord user or webhook and get avatar URL
+			const avatarData = await resolveAvatarByDiscordId(userId, context, {
+				forceStatic: true,
+			});
 
 			// Fetch and convert the avatar image to base64
 			const base64ImageData = await this.fetchAndConvertImageToBase64(
@@ -182,18 +185,22 @@ export class PeekProfilePictureTool extends BaseTool {
 				`Profile picture processed for enhanced context restart: ${userId} (Username: ${avatarData.username})`,
 			);
 
-			// Build user display text with optional server nickname
+			// Build display text with optional server nickname
 			let userDisplayText = avatarData.username;
 			if (avatarData.serverNickname) {
 				userDisplayText += ` (Nickname: ${avatarData.serverNickname})`;
 			}
+			const targetTypeLabel =
+				avatarData.sourceType === "webhook" ? "webhook" : "user";
 
-			// Check if this is the bot's own profile picture
+			// Check if this is the bot's own profile picture (Discord user identity only)
 			const isBotSelf =
-				context.client.user && userId === context.client.user.id;
+				avatarData.sourceType === "user" &&
+				context.client.user &&
+				userId === context.client.user.id;
 			const contextText = isBotSelf
 				? "[This message contains profile picture content from a previous avatar analysis request you made for yourself]"
-				: `[This message contains profile picture content from a previous avatar analysis request you made for user: ${userDisplayText}]`;
+				: `[This message contains profile picture content from a previous avatar analysis request you made for ${targetTypeLabel}: ${userDisplayText}]`;
 
 			// Create artificial user message containing the profile picture Part
 			// This will be added to the context for the restart
@@ -233,12 +240,13 @@ export class PeekProfilePictureTool extends BaseTool {
 
 			return {
 				success: true,
-				message: `Profile picture analyzed for user: ${avatarData.username}. Image processing completed and ready for enhanced context restart.`,
+				message: `Profile picture analyzed for ${targetTypeLabel}: ${avatarData.username}. Image processing completed and ready for enhanced context restart.`,
 				data: {
 					type: "context_restart_with_image",
 					user_id: userId,
 					username: avatarData.username,
 					avatar_url: avatarData.avatarUrl,
+					avatar_source: avatarData.sourceType,
 					reason: reason,
 					// Clean metadata only - no base64 data anywhere in response
 					image_processed: true,
@@ -258,11 +266,12 @@ export class PeekProfilePictureTool extends BaseTool {
 
 			if (error instanceof Error) {
 				if (
-					error.message.includes("User with ID") &&
-					error.message.includes("not found")
+					error.message.includes("No Discord user or webhook found") ||
+					(error.message.includes("User with ID") &&
+						error.message.includes("not found"))
 				) {
-					errorMessage = `User with ID ${userId} was not found on Discord. Please check the user ID and try again.`;
-					errorStatus = "user_not_found";
+					errorMessage = `No Discord user or webhook with ID ${userId} was found. Please check the ID and try again.`;
+					errorStatus = "user_or_webhook_not_found";
 				} else if (error.message.includes("privacy settings")) {
 					errorMessage =
 						"Cannot access this user's profile due to privacy settings.";
@@ -301,98 +310,6 @@ export class PeekProfilePictureTool extends BaseTool {
 	 */
 	private isValidDiscordId(userId: string): boolean {
 		return PeekProfilePictureTool.DISCORD_ID_PATTERN.test(userId);
-	}
-
-	/**
-	 * Fetch Discord user and their avatar URL
-	 * @param userId - Discord user ID
-	 * @param context - Tool execution context containing Discord client
-	 * @returns Promise resolving to user data with avatar URL and optional server nickname
-	 */
-	private async fetchUserAvatar(
-		userId: string,
-		context: ToolContext,
-	): Promise<{ username: string; avatarUrl: string; serverNickname?: string }> {
-		try {
-			// Fetch user from Discord API
-			const user = await context.client.users.fetch(userId);
-
-			// Try to fetch guild member for guild-specific avatar and nickname
-			let serverNickname: string | undefined;
-			let avatarUrl: string;
-
-			if (context.guildId) {
-				try {
-					const guild = context.client.guilds.cache.get(context.guildId);
-					if (guild) {
-						const member = await guild.members.fetch(userId).catch(() => null);
-						if (member) {
-							// Prioritize guild-specific avatar over global avatar
-							avatarUrl = member.displayAvatarURL({
-								size: 1024,
-								extension: "png",
-								forceStatic: true, // Always get static PNG for analysis
-							});
-							serverNickname = member.nickname ?? undefined;
-							log.info(
-								`Using guild-specific avatar for user ${userId} in guild ${context.guildId}`,
-							);
-						} else {
-							// Fallback to global avatar if member not found
-							avatarUrl = user.displayAvatarURL({
-								size: 1024,
-								extension: "png",
-								forceStatic: true,
-							});
-						}
-					} else {
-						// Fallback to global avatar if guild not found
-						avatarUrl = user.displayAvatarURL({
-							size: 1024,
-							extension: "png",
-							forceStatic: true,
-						});
-					}
-				} catch (error) {
-					// Fallback to global avatar on error
-					log.warn(
-						`Could not fetch guild member for user ${userId}: ${error instanceof Error ? error.message : "Unknown error"}. Using global avatar.`,
-					);
-					avatarUrl = user.displayAvatarURL({
-						size: 1024,
-						extension: "png",
-						forceStatic: true,
-					});
-				}
-			} else {
-				// No guild context, use global avatar
-				avatarUrl = user.displayAvatarURL({
-					size: 1024,
-					extension: "png",
-					forceStatic: true,
-				});
-			}
-
-			return {
-				username: user.username,
-				avatarUrl: avatarUrl,
-				serverNickname,
-			};
-		} catch (error) {
-			if (error instanceof Error) {
-				// Handle specific Discord API errors
-				if (error.message.includes("Unknown User")) {
-					throw new Error(`User with ID ${userId} not found on Discord`);
-				}
-				if (error.message.includes("Missing Permissions")) {
-					throw new Error(
-						`Cannot access user ${userId} due to privacy settings`,
-					);
-				}
-				throw new Error(`Discord API error: ${error.message}`);
-			}
-			throw new Error("Unknown error while fetching user from Discord");
-		}
 	}
 
 	/**

@@ -337,6 +337,13 @@ Tools can send embeds via `sendStandardEmbed`. The tool execution context includ
 - If a webhook is available, embeds are sent through that webhook with persona name/avatar.
 - Otherwise, embeds are sent as normal bot messages.
 
+### Webhook IDs in context
+
+When webhook-authored messages are part of the recent chat context, TomoriBot now
+registers those participants using the **webhook ID** in the "users in conversation"
+section. This allows models to pass webhook IDs directly to tools that accept
+user-style IDs (for example, avatar reference tools).
+
 ### Stickers (alter personas)
 
 Discord webhooks cannot send actual stickers. For alters:

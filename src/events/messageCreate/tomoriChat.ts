@@ -2448,6 +2448,9 @@ export default async function tomoriChat(
 			// cannot be deduplication-safe in userListSet. Track them separately: Matrix user
 			// ID (e.g., "@bred:localhost") → stripped display name (e.g., "bred").
 			const matrixUserMap = new Map<string, string>();
+			// Track webhook participants by webhook ID so tools can target webhook avatars
+			// with user_id-style arguments (e.g., peek_profile_picture, generate_image).
+			const webhookUserMap = new Map<string, string>();
 
 			// Find the most recent message with a reference (latest in the array)
 			let latestReferenceMessageIndex = -1;
@@ -2615,8 +2618,19 @@ export default async function tomoriChat(
 					isWebhookMessage &&
 					msg.author.username.startsWith("[Matrix|") &&
 					authorType === "user";
+
+				// Register webhook identities for context so the model can reference
+				// webhook IDs directly in tool parameters when needed.
+				if (isWebhookMessage && msg.webhookId && !isMatrixNonPersonaRelay) {
+					webhookUserMap.set(msg.webhookId, authorName);
+				}
+
 				if (!isMatrixNonPersonaRelay) {
-					userListSet.add(authorId);
+					// For webhook-authored messages, include the webhook ID in user list
+					// instead of webhook bot user ID so context shows the actionable ID.
+					userListSet.add(
+						isWebhookMessage && msg.webhookId ? msg.webhookId : authorId,
+					);
 				}
 
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
@@ -3416,6 +3430,7 @@ export default async function tomoriChat(
 							simplifiedMessageHistory: simplifiedMessages, // New parameter for structured history
 							userList,
 							matrixUsers: matrixUserMap,
+							webhookUsers: webhookUserMap,
 							channelDesc,
 							channelName,
 							channelId: channel.id, // For short-term memory context
@@ -4746,6 +4761,7 @@ export default async function tomoriChat(
 												simplifiedMessageHistory: simplifiedMessages,
 												userList,
 												matrixUsers: matrixUserMap,
+												webhookUsers: webhookUserMap,
 												channelDesc,
 												channelName,
 												channelId: channel.id, // For short-term memory context
