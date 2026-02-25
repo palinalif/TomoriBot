@@ -2448,9 +2448,14 @@ export default async function tomoriChat(
 			// cannot be deduplication-safe in userListSet. Track them separately: Matrix user
 			// ID (e.g., "@bred:localhost") → stripped display name (e.g., "bred").
 			const matrixUserMap = new Map<string, string>();
-			// Track webhook participants by webhook ID so tools can target webhook avatars
-			// with user_id-style arguments (e.g., peek_profile_picture, generate_image).
-			const webhookUserMap = new Map<string, string>();
+			// Track synthetic participants that are not regular Discord users:
+			// - persona entries keyed by tomori_id (short numeric)
+			// - webhook entries keyed by webhook ID (snowflake)
+			// This lets tools consume stable persona IDs in production/local.
+			const syntheticUserMap = new Map<
+				string,
+				{ displayName: string; type: "persona" | "webhook" }
+			>();
 
 			// Find the most recent message with a reference (latest in the array)
 			let latestReferenceMessageIndex = -1;
@@ -2572,6 +2577,7 @@ export default async function tomoriChat(
 				let authorName: string;
 				let authorType: "user" | "persona" = "user";
 				let personaName: string | null = null;
+				let matchedPersonaId: number | null = null;
 				const isWebhookMessage = Boolean(msg.webhookId);
 
 				if (msg.author.id === client.user?.id || isDebugMessage) {
@@ -2594,6 +2600,7 @@ export default async function tomoriChat(
 						authorName = matchedPersona.tomori_nickname;
 						authorType = "persona";
 						personaName = matchedPersona.tomori_nickname;
+						matchedPersonaId = matchedPersona.tomori_id ?? null;
 						effectiveAuthorId = `persona:${matchedPersona.tomori_id ?? matchedPersona.tomori_nickname}`;
 					} else {
 						authorName = webhookName || `<@${authorId}>`;
@@ -2619,17 +2626,32 @@ export default async function tomoriChat(
 					msg.author.username.startsWith("[Matrix|") &&
 					authorType === "user";
 
-				// Register webhook identities for context so the model can reference
-				// webhook IDs directly in tool parameters when needed.
-				if (isWebhookMessage && msg.webhookId && !isMatrixNonPersonaRelay) {
-					webhookUserMap.set(msg.webhookId, authorName);
+				// Register synthetic identities for context:
+				// - matched alter persona => tomori_id (short numeric)
+				// - non-persona webhook => webhook snowflake
+				if (isWebhookMessage && !isMatrixNonPersonaRelay) {
+					if (matchedPersonaId !== null) {
+						syntheticUserMap.set(String(matchedPersonaId), {
+							displayName: authorName,
+							type: "persona",
+						});
+					} else if (msg.webhookId) {
+						syntheticUserMap.set(msg.webhookId, {
+							displayName: authorName,
+							type: "webhook",
+						});
+					}
 				}
 
 				if (!isMatrixNonPersonaRelay) {
-					// For webhook-authored messages, include the webhook ID in user list
-					// instead of webhook bot user ID so context shows the actionable ID.
+					// For persona webhooks, expose tomori_id (short numeric) as the
+					// actionable ID for avatar tools. Other webhooks keep webhook ID.
 					userListSet.add(
-						isWebhookMessage && msg.webhookId ? msg.webhookId : authorId,
+						matchedPersonaId !== null
+							? String(matchedPersonaId)
+							: isWebhookMessage && msg.webhookId
+								? msg.webhookId
+								: authorId,
 					);
 				}
 
@@ -3132,6 +3154,24 @@ export default async function tomoriChat(
 				userListSet.add(client.user.id);
 			}
 
+			// Ensure currently responding alter personas are always present as
+			// synthetic user entries so they can self-target avatar tools by tomori_id
+			// even if no prior webhook message exists in the fetched history window.
+			for (const respondingPersona of personasToRespond) {
+				if (!respondingPersona.is_alter || !respondingPersona.tomori_id) {
+					continue;
+				}
+
+				const personaId = String(respondingPersona.tomori_id);
+				userListSet.add(personaId);
+				if (!syntheticUserMap.has(personaId)) {
+					syntheticUserMap.set(personaId, {
+						displayName: respondingPersona.tomori_nickname,
+						type: "persona",
+					});
+				}
+			}
+
 			const userList = Array.from(userListSet);
 			const channelName = isDMChannel
 				? "Direct Message"
@@ -3430,7 +3470,7 @@ export default async function tomoriChat(
 							simplifiedMessageHistory: simplifiedMessages, // New parameter for structured history
 							userList,
 							matrixUsers: matrixUserMap,
-							webhookUsers: webhookUserMap,
+							syntheticUsers: syntheticUserMap,
 							channelDesc,
 							channelName,
 							channelId: channel.id, // For short-term memory context
@@ -4761,7 +4801,7 @@ export default async function tomoriChat(
 												simplifiedMessageHistory: simplifiedMessages,
 												userList,
 												matrixUsers: matrixUserMap,
-												webhookUsers: webhookUserMap,
+												syntheticUsers: syntheticUserMap,
 												channelDesc,
 												channelName,
 												channelId: channel.id, // For short-term memory context
@@ -4975,9 +5015,47 @@ export default async function tomoriChat(
 												"Tool execution failed without specific error",
 											tool_name: funcName,
 										};
-										log.error(
-											`Tool execution failed for ${funcName}: ${toolResult.error}`,
-										);
+
+										const toolResultData = toolResult.data as
+											| Record<string, unknown>
+											| undefined;
+										const toolStatus =
+											typeof toolResultData?.status === "string"
+												? toolResultData.status
+												: undefined;
+										const isRecoverableStickerMiss =
+											funcName === "select_sticker_for_response" &&
+											(toolStatus === "sticker_not_found" ||
+												toolStatus === "sticker_name_ambiguous" ||
+												toolStatus === "sticker_name_missing_retry");
+
+										if (isRecoverableStickerMiss) {
+											const stickerNameAttempted =
+												typeof toolResultData?.sticker_name_attempted === "string"
+													? toolResultData.sticker_name_attempted
+													: undefined;
+											const stickerIdAttempted =
+												typeof toolResultData?.sticker_id_attempted === "string"
+													? toolResultData.sticker_id_attempted
+													: undefined;
+
+											log.warn(
+												`Tool execution returned recoverable sticker miss for ${funcName}: ${toolResult.error}`,
+												{
+													status: toolStatus,
+													stickerNameAttempted,
+													stickerIdAttempted,
+													reason:
+														toolResult.message ||
+														toolResult.error ||
+														"Sticker selection retry suggested",
+												},
+											);
+										} else {
+											log.error(
+												`Tool execution failed for ${funcName}: ${toolResult.error}`,
+											);
+										}
 
 										// Case 2: NAI GLM tool failure with text already sent
 										// Suppress text output on retry so the model can re-attempt the tool

@@ -1,9 +1,10 @@
 import type { ToolContext } from "@/types/tool/interfaces";
 import type { Webhook } from "discord.js";
+import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { log } from "@/utils/misc/logger";
 
 export type ResolvedAvatarData = {
-	sourceType: "user" | "webhook";
+	sourceType: "user" | "webhook" | "persona";
 	username: string;
 	avatarUrl: string;
 	serverNickname?: string;
@@ -21,8 +22,20 @@ function isNotFoundError(error: Error): boolean {
 	return (
 		error.message.includes("Unknown User") ||
 		error.message.includes("Unknown Webhook") ||
+		error.message.includes("Unknown Message") ||
 		error.message.includes("not found")
 	);
+}
+
+function parsePersonaIdentifier(id: string): number | null {
+	const trimmed = id.trim();
+	const prefixed = /^persona:(\d+)$/i.exec(trimmed);
+	const rawNumeric = /^\d{1,10}$/.test(trimmed) ? trimmed : null;
+	const candidate = prefixed?.[1] ?? rawNumeric;
+	if (!candidate) return null;
+
+	const parsed = Number.parseInt(candidate, 10);
+	return Number.isFinite(parsed) ? parsed : null;
 }
 
 type WebhookFetchCapableChannel = {
@@ -228,6 +241,77 @@ async function resolveWebhookAvatar(
 	return null;
 }
 
+async function resolvePersonaAvatar(
+	personaId: number,
+	context: ToolContext,
+	options: AvatarResolverOptions,
+): Promise<ResolvedAvatarData | null> {
+	const guildId = context.guildId;
+	if (!guildId) {
+		return null;
+	}
+
+	const allPersonas = await getCachedAllPersonas(guildId).catch((error) => {
+		log.warn(
+			`[Avatar Resolver] Failed to load personas for guild ${guildId} while resolving persona:${personaId}`,
+			error,
+		);
+		return [];
+	});
+	const persona = allPersonas.find((entry) => entry.tomori_id === personaId);
+	if (!persona) {
+		return null;
+	}
+
+	let avatarUrl: string | null = null;
+
+	if (persona.is_alter) {
+		avatarUrl = persona.webhook_avatar_url ?? null;
+	} else {
+		const guild = context.client.guilds.cache.get(guildId);
+		avatarUrl =
+			guild?.iconURL({
+				size: 1024,
+				extension: "png",
+				forceStatic: options.forceStatic,
+			}) ??
+			persona.webhook_avatar_url ??
+			null;
+	}
+
+	if (!avatarUrl && context.personaUsername === persona.tomori_nickname) {
+		avatarUrl = context.personaAvatarUrl ?? null;
+	}
+
+	if (!avatarUrl && context.webhook && context.personaUsername === persona.tomori_nickname) {
+		avatarUrl =
+			context.webhook.avatarURL({
+				size: 1024,
+				extension: "png",
+				forceStatic: options.forceStatic,
+			}) ?? null;
+	}
+
+	if (!avatarUrl) {
+		avatarUrl =
+			context.client.user?.displayAvatarURL({
+				size: 1024,
+				extension: "png",
+				forceStatic: options.forceStatic,
+			}) ?? null;
+	}
+
+	if (!avatarUrl) {
+		return null;
+	}
+
+	return {
+		sourceType: "persona",
+		username: persona.tomori_nickname,
+		avatarUrl,
+	};
+}
+
 export async function resolveAvatarByDiscordId(
 	id: string,
 	context: ToolContext,
@@ -237,6 +321,22 @@ export async function resolveAvatarByDiscordId(
 		...DEFAULT_AVATAR_RESOLVER_OPTIONS,
 		...options,
 	};
+
+	const personaId = parsePersonaIdentifier(id);
+	if (personaId !== null) {
+		const personaAvatar = await resolvePersonaAvatar(
+			personaId,
+			context,
+			resolvedOptions,
+		);
+		if (personaAvatar) {
+			log.info(
+				`[Avatar Resolver] Resolved ID ${id} as persona avatar (${personaAvatar.username})`,
+			);
+			return personaAvatar;
+		}
+		throw new Error(`No persona found with tomori_id ${personaId}`);
+	}
 
 	try {
 		return await resolveUserAvatar(id, context, resolvedOptions);

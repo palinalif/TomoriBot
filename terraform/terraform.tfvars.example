@@ -42,6 +42,11 @@ bastion_ssh_cidr = "119.95.20.218/32"
 # ECS Configuration
 container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/tomoribot:latest"
 ecr_scan_on_push = false
+# Optional: expose Matrix appservice callback through Cloudflare Tunnel sidecar
+# Requires CLOUDFLARE_TUNNEL_TOKEN in secrets_manager_secret_name JSON.
+# enable_cloudflare_tunnel_sidecar = true
+# cloudflare_tunnel_image = "cloudflare/cloudflared:latest"
+# cloudflare_tunnel_token_secret_key = "CLOUDFLARE_TUNNEL_TOKEN"
 
 # GitHub Actions OIDC (set to current thumbprint for your account)
 github_actions_oidc_thumbprints = ["2b18947a6a9fc7764fd8b5fb18a863b0c6dac24f"]

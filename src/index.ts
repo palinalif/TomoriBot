@@ -70,6 +70,10 @@ if (secrets.MATRIX_SERVER_NAME) {
 if (secrets.MATRIX_HS_TOKEN) {
 	process.env.MATRIX_HS_TOKEN = secrets.MATRIX_HS_TOKEN;
 }
+if (secrets.MATRIX_APPSERVICE_PUBLIC_URL) {
+	process.env.MATRIX_APPSERVICE_PUBLIC_URL =
+		secrets.MATRIX_APPSERVICE_PUBLIC_URL;
+}
 
 log.success(
 	`Secrets loaded successfully from ${(process.env.RUN_ENV || "development") === "production" && process.env.TEST_PRODUCTION !== "true" ? "AWS Secrets Manager" : ".env file"}`,

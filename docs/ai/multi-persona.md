@@ -337,12 +337,19 @@ Tools can send embeds via `sendStandardEmbed`. The tool execution context includ
 - If a webhook is available, embeds are sent through that webhook with persona name/avatar.
 - Otherwise, embeds are sent as normal bot messages.
 
-### Webhook IDs in context
+### Persona IDs in context
 
-When webhook-authored messages are part of the recent chat context, TomoriBot now
-registers those participants using the **webhook ID** in the "users in conversation"
-section. This allows models to pass webhook IDs directly to tools that accept
-user-style IDs (for example, avatar reference tools).
+When alter persona webhook messages are part of recent chat context, TomoriBot
+surfaces those participants in "users in conversation" using the persona's
+database `tomori_id` (short numeric). This avoids production/local webhook ID
+differences and gives tools a stable ID for avatar targeting.
+
+Non-persona webhook participants (if any) are still surfaced by webhook ID.
+Both are rendered as regular conversation users in context (no explicit webhook/persona
+identity label).
+Responding alter personas are injected into that list each turn, so they can
+always self-target avatar tools with their own `tomori_id` even when no previous
+webhook message is present in the fetched history window.
 
 ### Stickers (alter personas)
 

@@ -41,7 +41,7 @@ export class PeekProfilePictureTool extends BaseTool {
 			user_id: {
 				type: "string",
 				description:
-					"The Discord ID (snowflake) to analyze. Accepts a normal user ID or a webhook ID (useful for alter persona webhooks). Must be a valid 17-19 digit Discord ID.",
+					"The target ID to analyze. Accepts a Discord/webhook ID (17-19 digits) or a persona DB ID (short numeric).",
 			},
 			reason: {
 				type: "string",
@@ -57,6 +57,7 @@ export class PeekProfilePictureTool extends BaseTool {
 	 * Discord IDs are 17-19 digit snowflakes
 	 */
 	private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
+	private static readonly PERSONA_ID_PATTERN = /^(?:persona:)?\d{1,10}$/i;
 
 	/**
 	 * Check if profile picture tool is available for the given provider.
@@ -160,13 +161,14 @@ export class PeekProfilePictureTool extends BaseTool {
 			if (!this.isValidDiscordId(userId)) {
 				return {
 					success: false,
-					error: "Invalid Discord user ID format",
+					error: "Invalid target ID format",
 					message:
-						"The provided user ID is not a valid Discord snowflake ID. Please provide a valid Discord user ID (17-19 digits).",
+						"The provided ID is invalid. Use a 17-19 digit Discord/webhook ID or a short numeric persona ID.",
 					data: {
 						status: "invalid_user_id",
 						provided_id: userId,
-						expected_format: "17-19 digit snowflake ID",
+						expected_format:
+							"17-19 digit Discord/webhook ID or short numeric persona ID",
 					},
 				};
 			}
@@ -191,7 +193,11 @@ export class PeekProfilePictureTool extends BaseTool {
 				userDisplayText += ` (Nickname: ${avatarData.serverNickname})`;
 			}
 			const targetTypeLabel =
-				avatarData.sourceType === "webhook" ? "webhook" : "user";
+				avatarData.sourceType === "persona"
+					? "persona"
+					: avatarData.sourceType === "webhook"
+						? "webhook"
+						: "user";
 
 			// Check if this is the bot's own profile picture (Discord user identity only)
 			const isBotSelf =
@@ -309,7 +315,10 @@ export class PeekProfilePictureTool extends BaseTool {
 	 * @returns True if ID matches Discord snowflake format
 	 */
 	private isValidDiscordId(userId: string): boolean {
-		return PeekProfilePictureTool.DISCORD_ID_PATTERN.test(userId);
+		return (
+			PeekProfilePictureTool.DISCORD_ID_PATTERN.test(userId) ||
+			PeekProfilePictureTool.PERSONA_ID_PATTERN.test(userId)
+		);
 	}
 
 	/**

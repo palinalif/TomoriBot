@@ -209,6 +209,11 @@ export function getDisplayNameForMatrixId(
  *   MATRIX_BOT_USER_ID     — e.g., @tomoribot:yourdomain.com
  *   MATRIX_SERVER_NAME     — domain portion, e.g., localhost or yourdomain.com
  *
+ * Optional env vars:
+ *   MATRIX_APPSERVICE_PUBLIC_URL — homeserver-facing appservice callback URL.
+ *     Use this when the homeserver is remote (e.g., Matrix on DigitalOcean and
+ *     TomoriBot on AWS). If absent, defaults to http://localhost:{port}.
+ *
  * @param discordClient - Discord.js client, forwarded to the event handler for channel lookups
  */
 export async function initializeMatrixClient(
@@ -230,6 +235,20 @@ export async function initializeMatrixClient(
 		process.env.MATRIX_APPSERVICE_PORT || "9993",
 		10,
 	);
+	const configuredPublicUrl = process.env.MATRIX_APPSERVICE_PUBLIC_URL?.trim();
+	const hasValidPublicUrl =
+		typeof configuredPublicUrl === "string" &&
+		/^https?:\/\//.test(configuredPublicUrl);
+	const registrationUrl = hasValidPublicUrl
+		? configuredPublicUrl
+		: `http://localhost:${port}`;
+
+	if (configuredPublicUrl && !hasValidPublicUrl) {
+		log.warn(
+			`Matrix bridge: invalid MATRIX_APPSERVICE_PUBLIC_URL "${configuredPublicUrl}" — ` +
+				`falling back to ${registrationUrl}`,
+		);
+	}
 
 	try {
 		// 1. Build the AppServiceRegistration from environment credentials
@@ -237,7 +256,7 @@ export async function initializeMatrixClient(
 			id: "tomoribot-appservice",
 			hs_token: hsToken,
 			as_token: asToken,
-			url: `http://localhost:${port}`,
+			url: registrationUrl,
 			sender_localpart: "tomoribot",
 			namespaces: {
 				// Exclusive: only this appservice may create/use @_tomori_*:serverName users
@@ -276,11 +295,13 @@ export async function initializeMatrixClient(
 		});
 
 		// 3. Run the bridge: calls initialise() internally, then starts the HTTP server
-		//    The homeserver will push events to http://localhost:{port}
+		//    The homeserver pushes events to `registrationUrl`, which should route
+		//    back to this local listener on MATRIX_APPSERVICE_PORT.
 		await matrixBridge.run(port);
 
 		log.success(
-			`Matrix appservice initialized — ${botUserId} @ ${homeserverUrl} (listening on port ${port})`,
+			`Matrix appservice initialized — ${botUserId} @ ${homeserverUrl} ` +
+				`(listening on port ${port}, callback ${registrationUrl})`,
 		);
 	} catch (error) {
 		// Safely extract message/stack — the bridge error has internal circular refs

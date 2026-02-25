@@ -26,6 +26,7 @@ This document describes TomoriBot's Matrix bridge implementation — what it doe
 - [Reminders for Matrix Users](#reminders-for-matrix-users)
 - [LLM Defensive Checks](#llm-defensive-checks)
 - [Setup & Configuration](#setup--configuration)
+- [Production Topology](#production-topology)
 - [Design Decisions](#design-decisions)
 
 ---
@@ -364,6 +365,7 @@ All configuration is via environment variables. The bridge is silently disabled 
 | `MATRIX_HS_TOKEN` | Yes | `hs_token` — homeserver → appservice auth |
 | `MATRIX_BOT_USER_ID` | Yes | e.g., `@tomoribot:yourdomain.com` |
 | `MATRIX_SERVER_NAME` | Yes | Domain portion, e.g., `yourdomain.com` |
+| `MATRIX_APPSERVICE_PUBLIC_URL` | No | Homeserver-facing callback URL in appservice registration. Use this when the homeserver cannot reach `localhost` on the bot host. |
 | `MATRIX_APPSERVICE_PORT` | No | HTTP listen port (default: `9993`) |
 | `MATRIX_MAX_ATTACHMENT_MB` | No | Max file size to relay in either direction (default: `8`) |
 | `MATRIX_MEDIA_TIMEOUT_MS` | No | Timeout for media download/upload requests (default: `15000`) |
@@ -372,6 +374,32 @@ All configuration is via environment variables. The bridge is silently disabled 
 | `MATRIX_MAX_TRACKED_SENT_EVENTS` | No | Max event IDs tracked for reply detection (default: `500`) |
 
 The homeserver's `registration.yaml` is generated programmatically from these environment variables — there is no separate registration file to maintain.
+
+---
+
+## Production Topology
+
+For local development, the appservice callback URL can remain `http://localhost:{MATRIX_APPSERVICE_PORT}`.  
+For production split-topology deployments (for example, homeserver on DigitalOcean and TomoriBot on AWS ECS), the homeserver must be able to reach TomoriBot's appservice callback URL over the network.
+
+### Remote homeserver callback requirements
+
+- Set `MATRIX_APPSERVICE_PUBLIC_URL` to a stable HTTPS endpoint that routes to TomoriBot's Matrix appservice listener (`MATRIX_APPSERVICE_PORT`, default `9993`).
+- Keep `MATRIX_HOMESERVER_URL` pointed at the homeserver base URL used by TomoriBot for Matrix API calls.
+- Keep `MATRIX_ACCESS_TOKEN` / `MATRIX_HS_TOKEN` secret and rotate if exposed.
+- Avoid exposing a plaintext public callback endpoint.
+
+### Federation requirements
+
+To support rooms hosted on `matrix.org` or other custom homeservers:
+
+- The homeserver must run with federation enabled.
+- `MATRIX_SERVER_NAME` should match the real homeserver domain used in Matrix IDs.
+- DNS/TLS should be configured so remote servers can federate reliably with your homeserver.
+
+### Encryption limitation (unchanged)
+
+Bridged rooms must remain non-encrypted. `/server matrix link` intentionally blocks rooms with `m.room.encryption` enabled because E2EE cannot be disabled once turned on in Matrix rooms.
 
 ---
 

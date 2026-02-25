@@ -38,6 +38,7 @@ export interface TomoriSecrets {
 	MATRIX_BOT_USER_ID?:    string; // e.g., @tomoribot:yourdomain.com
 	MATRIX_SERVER_NAME?:    string; // Homeserver domain (e.g., localhost or yourdomain.com)
 	MATRIX_HS_TOKEN?:       string; // Homeserver token (hs_token) — homeserver sends this to verify its identity
+	MATRIX_APPSERVICE_PUBLIC_URL?: string; // Optional callback URL used in appservice registration for remote homeservers
 	[key: string]: string | undefined; // Allow dynamic CRYPTO_SECRET_V* keys
 }
 
@@ -148,6 +149,10 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 		if (process.env.MATRIX_HS_TOKEN) {
 			secrets.MATRIX_HS_TOKEN = process.env.MATRIX_HS_TOKEN;
 		}
+		if (process.env.MATRIX_APPSERVICE_PUBLIC_URL) {
+			secrets.MATRIX_APPSERVICE_PUBLIC_URL =
+				process.env.MATRIX_APPSERVICE_PUBLIC_URL;
+		}
 
 		// Validate required fields
 		validateRequiredSecrets(secrets);
@@ -234,6 +239,10 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 		}
 		if (rawSecrets.MATRIX_HS_TOKEN) {
 			secrets.MATRIX_HS_TOKEN = rawSecrets.MATRIX_HS_TOKEN;
+		}
+		if (rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL) {
+			secrets.MATRIX_APPSERVICE_PUBLIC_URL =
+				rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL;
 		}
 
 		// 7. Validate required fields

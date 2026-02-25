@@ -634,7 +634,7 @@ export async function buildContext({
 	impersonatedUserId,
 	impersonatedUserNickname,
 	matrixUsers,
-	webhookUsers,
+	syntheticUsers,
 }: {
 	guildId: string;
 	serverName: string;
@@ -664,10 +664,12 @@ export async function buildContext({
 	 *  These cannot be looked up in the Discord guild, so they get lightweight entries
 	 *  with a plain-text mention handle instead of a Discord <@userId> ping. */
 	matrixUsers?: Map<string, string>;
-	/** Webhook participants: webhook ID → display name seen in message history.
-	 *  These are surfaced as user-like entries so models can pass webhook IDs to tools
-	 *  that accept user-style IDs (e.g., avatar tools). */
-	webhookUsers?: Map<string, string>;
+	/** Synthetic participants surfaced as user-like entries.
+	 *  Keys are either persona DB IDs (short numeric tomori_id) or webhook snowflakes. */
+	syntheticUsers?: Map<
+		string,
+		{ displayName: string; type: "persona" | "webhook" }
+	>;
 }): Promise<{
 	contextItems: StructuredContextItem[];
 	tailDirectives: string[];
@@ -1318,18 +1320,17 @@ export async function buildContext({
 			}
 
 			if (!userRow) {
-				const webhookDisplayName = webhookUsers?.get(userIdToProcess);
-				if (webhookDisplayName) {
+				const syntheticEntry = syntheticUsers?.get(userIdToProcess);
+				if (syntheticEntry) {
+					const syntheticAliasSet = new Set<string>();
+					addAlias(syntheticAliasSet, syntheticEntry.displayName);
 					userEntries.push({
 						userId: userIdToProcess,
-						displayName: `${webhookDisplayName} (Webhook)`,
-						detailLines: [
-							"- Identity Type: Discord webhook",
-							"- This ID is a webhook ID and can be used for webhook-avatar tool references.",
-						],
+						displayName: syntheticEntry.displayName,
+						detailLines: [],
 						isBot: false,
-						mentionAliases: [],
-						primaryAlias: null,
+						mentionAliases: Array.from(syntheticAliasSet),
+						primaryAlias: syntheticEntry.displayName || null,
 					});
 					continue;
 				}
