@@ -5,7 +5,7 @@
 
 resource "aws_security_group" "tomoribot_app" {
   name        = var.app_security_group_name
-  description = "Outbound-only SG for TomoriBot (DB + HTTPS + optional Cloudflare tunnel)"
+  description = "Outbound HTTPS only for TomoriBot"
   vpc_id      = aws_vpc.tomoribot.id
 }
 
