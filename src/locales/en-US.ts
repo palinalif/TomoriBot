@@ -1840,6 +1840,20 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					success_disabled_description: `Self-reply chain is now disabled.`,
 				},
 			},
+			maxmsgfetch: {
+				description: `Set how many recent messages I fetch for context (20-100).`,
+				limit_description: `Number of recent messages to fetch for context (20-100).`,
+				limit: {
+					description: `Set the maximum number of recent messages fetched for context.`,
+					limit_description: `Number of recent messages to fetch for context (20-100).`,
+					invalid_range_title: `Invalid Limit`,
+					invalid_range_description: `Limit must be between {min} and {max}.`,
+					already_set_title: `Already Set`,
+					already_set_description: `Message fetch limit is already set to **{limit}**.`,
+					success_title: `Message Fetch Limit Updated`,
+					success_description: `I will now fetch up to **{limit}** recent messages for context.`,
+				},
+			},
 			multitrigger: {
 				description: `Manage how many personas can trigger from a single message.`,
 				limit_description: `Maximum triggered personas allowed per message (1-10).`,

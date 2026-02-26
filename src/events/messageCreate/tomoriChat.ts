@@ -115,12 +115,7 @@ import {
 } from "../../utils/cache/openrouterCapabilityCache";
 import { getGeminiTokenLimits } from "../../utils/cache/geminiCapabilityCache";
 import { getNovelAITokenLimits } from "../../utils/cache/novelaiCapabilityCache";
-
-// Constants
-const MESSAGE_FETCH_LIMIT = Number.parseInt(
-	process.env.MESSAGE_FETCH_LIMIT || "80",
-	10,
-);
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -2539,8 +2534,11 @@ export default async function tomoriChat(
 			 * the most recent consecutive messages in correct order. Cache may contain gaps
 			 * or out-of-order messages from gateway events.
 			 */
+			const messageFetchLimit = normalizeMessageFetchLimit(
+				tomoriState.config.message_fetch_limit,
+			);
 			const fetchedMessages = await channel.messages.fetch({
-				limit: MESSAGE_FETCH_LIMIT,
+				limit: messageFetchLimit,
 			});
 
 			// Convert to array and reverse to get chronological order (oldest first)
@@ -2561,11 +2559,11 @@ export default async function tomoriChat(
 						`Queued message ${queuedMessageId} found in history at index ${indexOfQueuedMessage}. Respecting natural chronological order.`,
 					);
 				} else {
-					// 3. If not found (e.g., older than MESSAGE_FETCH_LIMIT or deleted), append the current 'message' object.
+					// 3. If not found (e.g., older than the configured fetch limit or deleted), append the current 'message' object.
 					// This ensures its content is present, though its original surrounding history might be incomplete.
 					messagesArray.push(message as Message<true>);
 					log.warn(
-						`Queued message ${queuedMessageId} not found in fetched history. Appending current message object directly. This might occur if it's older than MESSAGE_FETCH_LIMIT or was deleted.`,
+						`Queued message ${queuedMessageId} not found in fetched history. Appending current message object directly. This might occur if it's older than ${messageFetchLimit} messages or was deleted.`,
 					);
 				}
 			}

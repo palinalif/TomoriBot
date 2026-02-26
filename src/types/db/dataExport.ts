@@ -89,6 +89,7 @@ export const serverConfigExportSchema = z.object({
 	llm_temperature: z.number().min(1.0).max(2.0),
 	humanizer_degree: z.number().int().min(0).max(3),
 	timezone_offset: z.number().int().min(-12).max(14),
+	message_fetch_limit: z.number().int().min(20).max(100).default(80),
 	server_memteaching_enabled: z.boolean(),
 	attribute_memteaching_enabled: z.boolean(),
 	sampledialogue_memteaching_enabled: z.boolean(),

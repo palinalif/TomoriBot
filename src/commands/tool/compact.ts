@@ -41,11 +41,7 @@ import type {
 	CompactRoleplaySummary,
 	CompactSummaryMode,
 } from "@/types/misc/compact";
-
-const MESSAGE_FETCH_LIMIT = Number.parseInt(
-	process.env.MESSAGE_FETCH_LIMIT || "80",
-	10,
-);
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 
 const MODAL_CUSTOM_ID = "tool_compact_modal";
 const TYPE_FIELD_ID = "summary_type";
@@ -347,13 +343,14 @@ async function buildUserAvatarMap(params: {
 async function buildConversationContext(params: {
 	channel: TextBasedChannel;
 	includeImages: boolean;
+	maxMessages: number;
 }): Promise<{
 	conversationText: string;
 	imageReferences: ImageReference[];
 	userIds: string[];
 }> {
 	const fetchedMessages = await params.channel.messages.fetch({
-		limit: MESSAGE_FETCH_LIMIT,
+		limit: params.maxMessages,
 	});
 
 	const messagesArray = Array.from(fetchedMessages.values()).reverse();
@@ -902,6 +899,9 @@ export async function execute(
 	}
 
 	const providerName = tomoriState.llm.llm_provider.toLowerCase();
+	const messageFetchLimit = normalizeMessageFetchLimit(
+		tomoriState.config.message_fetch_limit,
+	);
 	const isGoogle = providerName === "google" || providerName === "gemini";
 	const isOpenrouter = providerName === "openrouter";
 
@@ -1038,6 +1038,7 @@ export async function execute(
 		await buildConversationContext({
 			channel: textChannel,
 			includeImages: analyzeImages,
+			maxMessages: messageFetchLimit,
 		});
 
 	const supplementaryContext = await buildSupplementaryContext({

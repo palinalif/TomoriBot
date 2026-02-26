@@ -205,6 +205,7 @@ export async function exportServerData(
 				COALESCE(tc_server.llm_temperature, tc_legacy.llm_temperature) as llm_temperature,
 				COALESCE(tc_server.humanizer_degree, tc_legacy.humanizer_degree) as humanizer_degree,
 				COALESCE(tc_server.timezone_offset, tc_legacy.timezone_offset) as timezone_offset,
+				COALESCE(tc_server.message_fetch_limit, tc_legacy.message_fetch_limit, 80) as message_fetch_limit,
 				COALESCE(tc_server.server_memteaching_enabled, tc_legacy.server_memteaching_enabled) as server_memteaching_enabled,
 				COALESCE(tc_server.attribute_memteaching_enabled, tc_legacy.attribute_memteaching_enabled) as attribute_memteaching_enabled,
 				COALESCE(tc_server.sampledialogue_memteaching_enabled, tc_legacy.sampledialogue_memteaching_enabled) as sampledialogue_memteaching_enabled,
@@ -322,6 +323,7 @@ export async function exportServerData(
 					llm_temperature: configData.llm_temperature,
 					humanizer_degree: configData.humanizer_degree,
 					timezone_offset: configData.timezone_offset,
+					message_fetch_limit: configData.message_fetch_limit,
 					server_memteaching_enabled: configData.server_memteaching_enabled,
 					attribute_memteaching_enabled:
 						configData.attribute_memteaching_enabled,

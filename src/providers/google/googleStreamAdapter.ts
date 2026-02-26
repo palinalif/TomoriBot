@@ -402,17 +402,28 @@ export class GoogleStreamAdapter implements StreamProvider {
 		const candidate = chunk.candidates?.[0];
 		const parts = candidate?.content?.parts ?? [];
 
-		const text = parts
+		const partText = parts
 			.map((part) => part.text)
 			.filter((value): value is string => typeof value === "string")
 			.join("");
+		const topLevelText = typeof chunk.text === "string" ? chunk.text : "";
+		const text = topLevelText || partText;
 
-		const functionCalls = parts
+		const partFunctionCalls = parts
 			.map((part) => part.functionCall)
 			.filter(
 				(value): value is GoogleFunctionCall =>
 					typeof value === "object" && value !== null,
 			);
+		const topLevelFunctionCalls =
+			chunk.functionCalls?.filter(
+				(value): value is GoogleFunctionCall =>
+					typeof value === "object" && value !== null,
+			) ?? [];
+		const functionCalls =
+			topLevelFunctionCalls.length > 0
+				? topLevelFunctionCalls
+				: partFunctionCalls;
 
 		return {
 			text: text.length > 0 ? text : undefined,

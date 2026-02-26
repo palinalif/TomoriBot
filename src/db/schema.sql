@@ -276,6 +276,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
   autoch_threshold INT DEFAULT 0, -- set to 0 for no autoch
+  message_fetch_limit INT DEFAULT 80,
 	server_memteaching_enabled BOOLEAN DEFAULT true,
 	attribute_memteaching_enabled BOOLEAN DEFAULT false,
   sampledialogue_memteaching_enabled BOOLEAN DEFAULT false,
@@ -473,6 +474,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'self_reply_limit', 'INTEGER',
 -- Per-message multi-persona trigger cap (February 2026)
 -- Minimum 1, default 3, max 10 enforced by command validation
 SELECT add_column_if_not_exists('tomori_configs', 'triggered_persona_limit', 'INTEGER', '3');
+
+-- Per-server history fetch limit for context building (February 2026)
+-- Min 20, max 100 enforced by command and schema validation
+SELECT add_column_if_not_exists('tomori_configs', 'message_fetch_limit', 'INTEGER', '80');
 
 -- Add custom endpoint URL for self-hosted OpenAI-compatible LLM endpoints (January 2026)
 -- Only used when llm_provider is 'custom', blocked in production environment

@@ -45,6 +45,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
 	"trigger_words",
 	"autoch_disc_ids",
 	"autoch_threshold",
+	"message_fetch_limit",
 	"server_memteaching_enabled",
 	"attribute_memteaching_enabled",
 	"sampledialogue_memteaching_enabled",

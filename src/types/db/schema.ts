@@ -147,6 +147,7 @@ export const tomoriConfigSchema = z.object({
 	autoch_threshold: z.number().default(0),
 	self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
 	triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message
+	message_fetch_limit: z.number().int().min(20).max(100).default(80), // Added February 2026 - Max recent messages fetched for context
 	server_memteaching_enabled: z.boolean().default(true),
 	attribute_memteaching_enabled: z.boolean().default(false),
 	sampledialogue_memteaching_enabled: z.boolean().default(false),

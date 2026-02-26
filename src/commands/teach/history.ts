@@ -60,15 +60,10 @@ import type {
 	TomoriState,
 	UserRow,
 } from "@/types/db/schema";
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 
 /** Maximum document name length */
 const MAX_DOCUMENT_NAME_LENGTH = 64;
-
-/** Message fetch limit from env (shared with tomoriChat and compact) */
-const MESSAGE_FETCH_LIMIT = Number.parseInt(
-	process.env.MESSAGE_FETCH_LIMIT || "80",
-	10,
-);
 
 /** Number of messages per LLM extraction window */
 const HISTORY_EXTRACTION_WINDOW_SIZE = Number.parseInt(
@@ -208,6 +203,7 @@ async function extractWindow(
  */
 async function runExtractionPipeline(params: {
 	channel: TextBasedChannel;
+	messageFetchLimit: number;
 	provider: string;
 	model: string;
 	apiKey: string;
@@ -240,7 +236,10 @@ async function runExtractionPipeline(params: {
 	});
 
 	// 2. Fetch messages
-	const fetchResult = await fetchHistoryUntilMarker(channel, MESSAGE_FETCH_LIMIT);
+	const fetchResult = await fetchHistoryUntilMarker(
+		channel,
+		params.messageFetchLimit,
+	);
 	if (fetchResult.messages.length === 0) {
 		await replyInteraction.editReply({
 			embeds: [
@@ -702,6 +701,9 @@ export async function execute(
 
 		const provider = tomoriState.llm.llm_provider.toLowerCase();
 		const model = tomoriState.llm.llm_codename;
+		const messageFetchLimit = normalizeMessageFetchLimit(
+			tomoriState.config.message_fetch_limit,
+		);
 
 		// Load all personas for formatting and detection
 		const allPersonas = await loadAllPersonasForServer(guildId);
@@ -798,6 +800,7 @@ export async function execute(
 			// Run extraction pipeline
 			const pipelineResult = await runExtractionPipeline({
 				channel: interaction.channel,
+				messageFetchLimit,
 				provider,
 				model,
 				apiKey: decryptedKey,
@@ -899,6 +902,7 @@ export async function execute(
 			// Run extraction pipeline
 			const pipelineResult = await runExtractionPipeline({
 				channel: interaction.channel,
+				messageFetchLimit,
 				provider,
 				model,
 				apiKey: decryptedKey,
@@ -964,6 +968,7 @@ export async function execute(
 		// Run extraction pipeline (extracts facts + detects personas)
 		const pipelineResult = await runExtractionPipeline({
 			channel: interaction.channel,
+			messageFetchLimit,
 			provider,
 			model,
 			apiKey: decryptedKey,

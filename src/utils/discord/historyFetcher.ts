@@ -34,7 +34,7 @@ export interface FetchedHistoryResult {
  * The refresh marker message itself is NOT included in the results.
  *
  * @param channel - The Discord text channel to fetch from
- * @param maxMessages - Maximum number of messages to fetch (from env MESSAGE_FETCH_LIMIT)
+ * @param maxMessages - Maximum number of messages to fetch
  * @returns Fetch result with messages, count, and stop reason
  */
 export async function fetchHistoryUntilMarker(

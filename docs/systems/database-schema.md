@@ -79,6 +79,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 - `tomori_configs.server_id` is the primary modern scope.
 - `tomori_configs.tomori_id` remains as a nullable legacy pointer.
+- `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config maxmsgfetch`).
 
 ### Memory split
 

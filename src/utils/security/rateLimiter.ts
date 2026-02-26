@@ -1,4 +1,5 @@
 import { log } from "@/utils/misc/logger";
+import { DEFAULT_MESSAGE_FETCH_LIMIT } from "@/utils/discord/messageFetchLimit";
 
 /**
  * ============================================================================
@@ -39,13 +40,11 @@ export const MESSAGE_RATE_LIMITS = {
 // -----------------------------------------------------------------------------
 export const MEDIA_LIMITS = {
 	/**
-	 * Total number of messages to fetch for context building
+	 * Default total number of messages fetched for context building.
+	 * Actual runtime limit is configurable per server via /config maxmsgfetch.
 	 * @default 80
 	 */
-	MESSAGE_FETCH_LIMIT: Number.parseInt(
-		process.env.MESSAGE_FETCH_LIMIT || "80",
-		10,
-	),
+	MESSAGE_FETCH_LIMIT: DEFAULT_MESSAGE_FETCH_LIMIT,
 
 	/**
 	 * Number of most recent messages that can contain full media (images, videos, GIFs)
@@ -758,7 +757,7 @@ export function logGuardConfiguration(): void {
 	log.info("\n--- Media Limits ---");
 	log.info(`Media Context Window: ${MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW}`);
 	log.info(
-		`Max Media Extend: ${MEDIA_LIMITS.MESSAGE_FETCH_LIMIT - MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW}`,
+		`Default Max Media Extend: ${MEDIA_LIMITS.MESSAGE_FETCH_LIMIT - MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW} (actual value depends on /config maxmsgfetch)`,
 	);
 	log.info(`Max Media Size: ${MEDIA_LIMITS.MAX_MEDIA_SIZE_MB} MB`);
 	log.info(`Max GIF Size: ${MEDIA_LIMITS.MAX_GIF_SIZE_MB} MB`);

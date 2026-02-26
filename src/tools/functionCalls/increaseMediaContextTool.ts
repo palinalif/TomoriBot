@@ -10,7 +10,8 @@
  */
 
 import { log } from "@/utils/misc/logger";
-import { memoryGuard, MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import { memoryGuard } from "@/utils/security/rateLimiter";
 import {
 	BaseTool,
 	type ToolContext,
@@ -37,7 +38,7 @@ export class IncreaseMediaContextTool extends BaseTool {
 			extend_by: {
 				type: "number",
 				description:
-					"Number of additional older messages to include with full media. The placeholder text shows the exact value needed (e.g., 'extend_by=15'). Default: 10, Max: calculated dynamically as MESSAGE_FETCH_LIMIT - current window.",
+					"Number of additional older messages to include with full media. The placeholder text shows the exact value needed (e.g., 'extend_by=15'). Default: 10, Max: calculated from the server's configured fetch limit.",
 			},
 		},
 		required: [],
@@ -110,8 +111,11 @@ export class IncreaseMediaContextTool extends BaseTool {
 		const extendBy = (args.extend_by as number | undefined) ?? 10; // Default 10 if not provided
 
 		// 2. Calculate maximum allowed extend_by
+		const configuredFetchLimit = normalizeMessageFetchLimit(
+			_context.tomoriState?.config.message_fetch_limit,
+		);
 		const currentMediaWindow = memoryGuard.getMediaWindow();
-		const maxExtendBy = MEDIA_LIMITS.MESSAGE_FETCH_LIMIT - currentMediaWindow;
+		const maxExtendBy = Math.max(0, configuredFetchLimit - currentMediaWindow);
 
 		if (typeof extendBy !== "number" || extendBy < 1) {
 			log.warn(
@@ -132,12 +136,12 @@ export class IncreaseMediaContextTool extends BaseTool {
 			return {
 				success: false,
 				error: "Parameter out of range",
-				message: `extend_by=${extendBy} exceeds maximum allowed value of ${maxExtendBy}. The current media window is ${currentMediaWindow} messages, and we've only fetched ${MEDIA_LIMITS.MESSAGE_FETCH_LIMIT} total messages.`,
+				message: `extend_by=${extendBy} exceeds maximum allowed value of ${maxExtendBy}. The current media window is ${currentMediaWindow} messages, and this server fetches up to ${configuredFetchLimit} total messages.`,
 				data: {
 					requested: extendBy,
 					maximum: maxExtendBy,
 					current_window: currentMediaWindow,
-					total_messages: MEDIA_LIMITS.MESSAGE_FETCH_LIMIT,
+					total_messages: configuredFetchLimit,
 				},
 			};
 		}

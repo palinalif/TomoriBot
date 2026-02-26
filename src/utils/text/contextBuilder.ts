@@ -39,7 +39,8 @@ import {
 	type ServerStickerRow,
 } from "@/types/db/schema";
 import { UNPAIRED_SAMPLE_DIALOGUE_SENTINEL } from "@/types/preset/presetExport";
-import { memoryGuard, MEDIA_LIMITS } from "../security/rateLimiter";
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import { memoryGuard } from "../security/rateLimiter";
 import { decryptApiKey } from "../security/crypto";
 import {
 	formatRetrievedChunksForPrompt,
@@ -1781,9 +1782,16 @@ export async function buildContext({
 	// 9. Conversation History (Main Dialogue)
 	// Calculate media windowing boundaries
 	const totalMessages = simplifiedMessageHistory.length;
+	const configuredMessageFetchLimit = normalizeMessageFetchLimit(
+		tomoriConfig.message_fetch_limit,
+	);
+	const requestedMediaWindow = mediaContextWindow ?? memoryGuard.getMediaWindow();
 	const effectiveMediaWindow =
-		mediaContextWindow ?? memoryGuard.getMediaWindow();
-	const maxExtendBy = MEDIA_LIMITS.MESSAGE_FETCH_LIMIT - effectiveMediaWindow;
+		Math.min(requestedMediaWindow, configuredMessageFetchLimit);
+	const maxExtendBy = Math.max(
+		0,
+		configuredMessageFetchLimit - effectiveMediaWindow,
+	);
 	const mediaWindowCutoff = totalMessages - effectiveMediaWindow;
 
 	const botNameLower = botName.toLowerCase();
