@@ -30,6 +30,10 @@ import {
 } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import {
+	buildPersonaSpeakerStopString,
+	mergeStopStrings,
+} from "../utils/stopStrings";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -65,6 +69,7 @@ interface GoogleStreamChunk {
 	}>;
 	thoughtSignature?: string | Uint8Array;
 	thoughtSummary?: string;
+	error?: unknown;
 }
 
 /**
@@ -76,6 +81,7 @@ interface GoogleStreamChunk {
  * - Enables the model to maintain reasoning context across function calls
  */
 export class GoogleStreamAdapter implements StreamProvider {
+	private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		ContextItemTag.SYSTEM_PERSONALITY,
@@ -85,6 +91,10 @@ export class GoogleStreamAdapter implements StreamProvider {
 		ContextItemTag.KNOWLEDGE_SERVER_MEMORIES,
 		// REMOVED: KNOWLEDGE_USER_MEMORIES, KNOWLEDGE_CURRENT_CONTEXT (now in KNOWLEDGE_USERS_IN_CONVERSATION)
 	];
+	private speakerGuardPendingTail = "";
+	private speakerGuardEnabled = false;
+	private activePersonaNameLower = "";
+	private knownSpeakerNamesLower = new Set<string>();
 
 	/**
 	 * Start streaming from Google's Gemini API
@@ -104,6 +114,28 @@ export class GoogleStreamAdapter implements StreamProvider {
 			...googleConfig.generationConfig,
 			safetySettings: googleConfig.safetySettings,
 		};
+
+		const personaSpeakerStop = buildPersonaSpeakerStopString(
+			context.tomoriState.tomori_nickname,
+		);
+		this.speakerGuardPendingTail = "";
+		this.speakerGuardEnabled = Boolean(personaSpeakerStop);
+		this.activePersonaNameLower = (
+			context.tomoriState.tomori_nickname ?? ""
+		).toLowerCase();
+		this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
+			context.contextItems,
+		);
+		if (this.activePersonaNameLower) {
+			this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
+		}
+		const mergedStopSequences = mergeStopStrings(
+			requestConfig.stopSequences,
+			personaSpeakerStop,
+		);
+		if (mergedStopSequences) {
+			requestConfig.stopSequences = mergedStopSequences;
+		}
 
 		// Add thinking configuration if provided
 		if (googleConfig.thinkingConfig) {
@@ -278,16 +310,80 @@ export class GoogleStreamAdapter implements StreamProvider {
 
 			// Yield each chunk
 			for await (const chunkResponse of stream) {
+				const normalizedChunk = this.normalizeGoogleStreamChunk(chunkResponse);
+				const chunksToEmit =
+					this.splitChunkWithTextAndFunctionCalls(normalizedChunk);
+
+				for (const chunkToEmit of chunksToEmit) {
+					const guardResult =
+						this.applySpeakerBoundaryFallbackGuard(chunkToEmit);
+
+					if (
+						this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
+							guardResult.chunk,
+						)
+					) {
+						yield {
+							data: {
+								text: this.speakerGuardPendingTail,
+							} satisfies GoogleStreamChunk,
+							provider: "google",
+							metadata: {
+								timestamp: Date.now(),
+								model: config.model,
+							},
+						};
+						this.speakerGuardPendingTail = "";
+					}
+
+					yield {
+						data: guardResult.chunk,
+						provider: "google",
+						metadata: {
+							timestamp: Date.now(),
+							model: config.model,
+						},
+					};
+
+					if (guardResult.stopTriggered) {
+						log.warn(
+							`Google speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
+						);
+						return;
+					}
+				}
+			}
+
+			if (
+				this.speakerGuardEnabled &&
+				this.speakerGuardPendingTail.length > 0
+			) {
 				yield {
-					data: chunkResponse,
+					data: { text: this.speakerGuardPendingTail } satisfies GoogleStreamChunk,
 					provider: "google",
 					metadata: {
 						timestamp: Date.now(),
 						model: config.model,
 					},
 				};
+				this.speakerGuardPendingTail = "";
 			}
 		} catch (error) {
+			if (
+				this.speakerGuardEnabled &&
+				this.speakerGuardPendingTail.length > 0
+			) {
+				yield {
+					data: { text: this.speakerGuardPendingTail } satisfies GoogleStreamChunk,
+					provider: "google",
+					metadata: {
+						timestamp: Date.now(),
+						model: config.model,
+					},
+				};
+				this.speakerGuardPendingTail = "";
+			}
+
 			// Convert Google API errors to our format
 			const providerError = this.handleProviderError(error);
 			yield {
@@ -299,6 +395,215 @@ export class GoogleStreamAdapter implements StreamProvider {
 				},
 			};
 		}
+	}
+
+	private normalizeGoogleStreamChunk(rawChunk: unknown): GoogleStreamChunk {
+		const chunk = rawChunk as GoogleStreamChunk;
+		const candidate = chunk.candidates?.[0];
+		const parts = candidate?.content?.parts ?? [];
+
+		const text = parts
+			.map((part) => part.text)
+			.filter((value): value is string => typeof value === "string")
+			.join("");
+
+		const functionCalls = parts
+			.map((part) => part.functionCall)
+			.filter(
+				(value): value is GoogleFunctionCall =>
+					typeof value === "object" && value !== null,
+			);
+
+		return {
+			text: text.length > 0 ? text : undefined,
+			functionCalls: functionCalls.length > 0 ? functionCalls : undefined,
+			promptFeedback: chunk.promptFeedback,
+			candidates: chunk.candidates,
+			thoughtSignature: chunk.thoughtSignature,
+			thoughtSummary: chunk.thoughtSummary,
+			error: chunk.error,
+		};
+	}
+
+	private splitChunkWithTextAndFunctionCalls(
+		chunk: GoogleStreamChunk,
+	): GoogleStreamChunk[] {
+		if (!chunk.text || !chunk.functionCalls || chunk.functionCalls.length === 0) {
+			return [chunk];
+		}
+
+		return [
+			{
+				text: chunk.text,
+			},
+			{
+				functionCalls: chunk.functionCalls,
+				promptFeedback: chunk.promptFeedback,
+				candidates: chunk.candidates,
+				thoughtSignature: chunk.thoughtSignature,
+				thoughtSummary: chunk.thoughtSummary,
+				error: chunk.error,
+			},
+		];
+	}
+
+	private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
+		chunk: GoogleStreamChunk,
+	): boolean {
+		if (
+			!this.speakerGuardEnabled ||
+			this.speakerGuardPendingTail.length === 0 ||
+			Boolean(chunk.text)
+		) {
+			return false;
+		}
+
+		if (chunk.error) {
+			return true;
+		}
+
+		if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+			return true;
+		}
+
+		if (
+			chunk.promptFeedback?.blockReason &&
+			chunk.promptFeedback.blockReason !==
+				BlockedReason.BLOCKED_REASON_UNSPECIFIED
+		) {
+			return true;
+		}
+
+		return Boolean(chunk.candidates?.[0]?.finishReason);
+	}
+
+	private collectKnownSpeakerNames(
+		contextItems: StructuredContextItem[],
+	): Set<string> {
+		const names = new Set<string>();
+
+		for (const item of contextItems) {
+			if (item.role !== "user" && item.role !== "model") continue;
+
+			for (const part of item.parts) {
+				if (part.type !== "text") continue;
+
+				const lines = part.text.split("\n");
+				for (const line of lines) {
+					const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
+					if (!match) continue;
+
+					const rawName = match[1].trim();
+					if (!rawName) continue;
+					if (rawName.startsWith("[") || rawName.startsWith("<")) continue;
+
+					names.add(rawName.toLowerCase());
+				}
+			}
+		}
+
+		return names;
+	}
+
+	private isLikelySpeakerLabel(rawLabel: string): boolean {
+		const label = rawLabel.trim();
+		if (!label) return false;
+		if (label.length > 48) return false;
+		if (label.startsWith("[") || label.startsWith("<")) return false;
+		if (label.includes("://")) return false;
+		if (!/[\p{L}]/u.test(label)) return false;
+
+		const normalized = label.toLowerCase();
+		if (this.knownSpeakerNamesLower.has(normalized)) {
+			return true;
+		}
+
+		// Fallback heuristic for unseen generated names.
+		return /^\p{Lu}/u.test(label);
+	}
+
+	private applySpeakerBoundaryFallbackGuard(
+		chunk: GoogleStreamChunk,
+	): {
+		chunk: GoogleStreamChunk;
+		stopTriggered: boolean;
+		matchedSpeaker?: string;
+	} {
+		if (!this.speakerGuardEnabled) {
+			return { chunk, stopTriggered: false };
+		}
+
+		const chunkText = chunk.text;
+		if (!chunkText) {
+			return { chunk, stopTriggered: false };
+		}
+
+		const combined = `${this.speakerGuardPendingTail}${chunkText}`;
+		const speakerPattern = /\n+([^\n:]{1,64}):\s*/g;
+		let match: RegExpExecArray | null = null;
+		let matchedSpeaker: string | undefined;
+		let transitionIndex = -1;
+
+		while (true) {
+			match = speakerPattern.exec(combined);
+			if (!match) break;
+
+			const rawLabel = match[1].trim();
+			if (!this.isLikelySpeakerLabel(rawLabel)) {
+				continue;
+			}
+
+			const normalizedLabel = rawLabel.toLowerCase();
+			if (
+				this.activePersonaNameLower &&
+				normalizedLabel === this.activePersonaNameLower
+			) {
+				continue;
+			}
+
+			transitionIndex = match.index;
+			matchedSpeaker = rawLabel;
+			break;
+		}
+
+		if (transitionIndex === -1) {
+			const holdback = GoogleStreamAdapter.SPEAKER_GUARD_HOLDBACK_CHARS;
+			if (combined.length <= holdback) {
+				this.speakerGuardPendingTail = combined;
+				return {
+					chunk: this.cloneChunkWithText(chunk, ""),
+					stopTriggered: false,
+				};
+			}
+
+			const emitEnd = combined.length - holdback;
+			this.speakerGuardPendingTail = combined.slice(emitEnd);
+			return {
+				chunk: this.cloneChunkWithText(chunk, combined.slice(0, emitEnd)),
+				stopTriggered: false,
+			};
+		}
+
+		this.speakerGuardPendingTail = "";
+		return {
+			chunk: this.cloneChunkWithText(chunk, combined.slice(0, transitionIndex)),
+			stopTriggered: true,
+			matchedSpeaker,
+		};
+	}
+
+	private cloneChunkWithText(
+		chunk: GoogleStreamChunk,
+		text: string,
+	): GoogleStreamChunk {
+		return {
+			text,
+			functionCalls: chunk.functionCalls,
+			promptFeedback: chunk.promptFeedback,
+			candidates: chunk.candidates,
+			thoughtSignature: chunk.thoughtSignature,
+			thoughtSummary: chunk.thoughtSummary,
+		};
 	}
 
 	/**

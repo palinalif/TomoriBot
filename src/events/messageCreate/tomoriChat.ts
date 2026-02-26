@@ -136,6 +136,12 @@ const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
 	process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3",
 	10,
 ); // Max consecutive tool failures before showing error embed (NAI GLM only)
+const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
+	"update_short_term_memory",
+	//"update_long_term_memory",
+	//"remember_this_fact",
+	//"set_channel_task_or_reminder",
+]);
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 const DEFAULT_SELF_REPLY_LIMIT = 1;
 const MAX_SELF_REPLY_LIMIT = 10;
@@ -3323,9 +3329,9 @@ export default async function tomoriChat(
 			// Add the bot's own Discord user ID only when no alter persona identity is
 			// active in this turn. When alters are present, exposing both the bot account
 			// ID and persona IDs can confuse tool targeting.
-			const hasPersonaSyntheticUser = Array.from(syntheticUserMap.values()).some(
-				(entry) => entry.type === "persona",
-			);
+			const hasPersonaSyntheticUser = Array.from(
+				syntheticUserMap.values(),
+			).some((entry) => entry.type === "persona");
 			if (client.user?.id && !hasPersonaSyntheticUser) {
 				userListSet.add(client.user.id);
 			}
@@ -4113,10 +4119,7 @@ export default async function tomoriChat(
 								reason: "TomoriBot user impersonation",
 							});
 
-							cacheUserImpersonationWebhook(
-								tempWebhook.id,
-								impersonatedUserId,
-							);
+							cacheUserImpersonationWebhook(tempWebhook.id, impersonatedUserId);
 							personaWebhook = tempWebhook;
 							log.info(
 								`Created temporary webhook for user impersonation: ${impersonatedUserDiscordName}`,
@@ -5212,7 +5215,8 @@ export default async function tomoriChat(
 
 										if (isRecoverableStickerMiss) {
 											const stickerNameAttempted =
-												typeof toolResultData?.sticker_name_attempted === "string"
+												typeof toolResultData?.sticker_name_attempted ===
+												"string"
 													? toolResultData.sticker_name_attempted
 													: undefined;
 											const stickerIdAttempted =
@@ -5319,13 +5323,13 @@ export default async function tomoriChat(
 
 									functionInteractionHistory.push(historyEntry);
 
+									const providerName = provider.getInfo().name;
+									const hasPreToolText = personaAccumulatedParts.length > 0;
+
 									// 4. NAI GLM follow-up control: decide whether to allow, suppress,
 									// or skip the next generation based on whether text was already sent
 									// and whether the tool requires a follow-up (e.g., search/fetch).
-									if (
-										provider.getInfo().name === "novelai" &&
-										personaAccumulatedParts.length > 0
-									) {
+									if (providerName === "novelai" && hasPreToolText) {
 										// STM is always a silent tool — end the turn immediately (unchanged)
 										if (funcName === "update_short_term_memory") {
 											log.info(
@@ -5342,7 +5346,7 @@ export default async function tomoriChat(
 											// Check if this tool needs a follow-up to present results
 											const needsFollowUp = await ToolRegistry.requiresFollowUp(
 												funcName,
-												"novelai",
+												providerName,
 											);
 
 											if (needsFollowUp) {
@@ -5363,15 +5367,25 @@ export default async function tomoriChat(
 										}
 										// Tool failure with pre-text is handled above in Case 2 block
 									} else if (
-										funcName === "update_short_term_memory" &&
-										personaAccumulatedParts.length > 0
+										hasPreToolText &&
+										TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT.has(funcName)
 									) {
-										// Non-NAI providers: keep existing STM early-stop behavior
-										log.info(
-											"Short-term memory updated after text was already streamed. Ending persona turn to prevent repetition.",
+										const needsFollowUp = await ToolRegistry.requiresFollowUp(
+											funcName,
+											providerName,
 										);
-										finalStreamCompleted = true;
-										break;
+
+										if (needsFollowUp) {
+											log.info(
+												`Tool "${funcName}" requires follow-up after pre-tool text — allowing next generation`,
+											);
+										} else {
+											log.info(
+												`Tool "${funcName}" executed after text was already streamed. Ending turn to prevent repetition.`,
+											);
+											finalStreamCompleted = true;
+											break;
+										}
 									}
 
 									// 5. Safety break if max iterations reached

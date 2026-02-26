@@ -84,6 +84,8 @@ export interface NovelAIGenerationRequest {
 	model: string;
 	parameters: NovelAIParameters;
 	prefix?: string;
+	/** Additional stop strings for OpenAI-compatible models (e.g., GLM-4.6). */
+	openAIStopStrings?: string[];
 }
 
 /**
@@ -310,7 +312,17 @@ export function usesOpenAIEndpoint(model: string): boolean {
  */
 function convertToOpenAIParams(
 	naiParams: NovelAIParameters,
+	additionalStopStrings?: string[],
 ): Partial<OpenAICompletionRequest> {
+	const defaultStops = ["<|user|>", "<|observation|>", "<|system|>", "</think>"];
+	const mergedStops = [...defaultStops];
+	for (const stop of additionalStopStrings ?? []) {
+		if (typeof stop !== "string" || stop.length === 0) continue;
+		if (!mergedStops.includes(stop)) {
+			mergedStops.push(stop);
+		}
+	}
+
 	return {
 		max_tokens: naiParams.max_length,
 		temperature: naiParams.temperature,
@@ -325,7 +337,7 @@ function convertToOpenAIParams(
 		//   speaker detection in the adapter handles primary turn-stopping).
 		// - </think> prevents the model from continuing past a stray closing think tag,
 		//   which causes garbage/out-of-character generation after visible text.
-		stop: ["<|user|>", "<|observation|>", "<|system|>", "</think>"],
+		stop: mergedStops,
 	};
 }
 
@@ -433,6 +445,7 @@ async function* novelaiGenerateStreamOpenAI(
 	model: string,
 	parameters: NovelAIParameters,
 	config: ApiRequestConfig,
+	additionalStopStrings?: string[],
 ): AsyncGenerator<NovelAIStreamChunk, void, unknown> {
 	const { apiKey, timeout = REQUEST_TIMEOUT } = config;
 
@@ -442,7 +455,10 @@ async function* novelaiGenerateStreamOpenAI(
 		log.info("Starting NovelAI streaming generation (OpenAI-compatible API)");
 
 		// Convert NovelAI parameters to OpenAI format
-		const openaiParams = convertToOpenAIParams(parameters);
+		const openaiParams = convertToOpenAIParams(
+			parameters,
+			additionalStopStrings,
+		);
 
 		// Build OpenAI-compatible request
 		const requestBody: OpenAICompletionRequest = {
@@ -759,6 +775,7 @@ export async function* novelaiGenerateStream(
 			request.model,
 			request.parameters,
 			config,
+			request.openAIStopStrings,
 		);
 	} else {
 		// Use native NovelAI endpoint

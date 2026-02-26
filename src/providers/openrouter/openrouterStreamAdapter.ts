@@ -29,6 +29,7 @@ import {
 	getOpenRouterTokenLimits,
 	isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
+import { buildPersonaSpeakerStopString } from "../utils/stopStrings";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -157,8 +158,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		"repetition_penalty",
 		"temperature",
 		"max_tokens",
+		"stop",
 		// "tools" intentionally omitted — goes last as an unlisted key
 	];
+	private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
 
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
@@ -176,6 +179,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 	// Accumulator for reasoning_details across streaming chunks (required for Gemini models)
 	// biome-ignore lint/suspicious/noExplicitAny: reasoning_details has complex nested structure that varies by provider
 	private reasoningDetailsAccumulator: any[] = [];
+	private speakerGuardPendingTail = "";
+	private speakerGuardEnabled = false;
+	private activePersonaNameLower = "";
+	private knownSpeakerNamesLower = new Set<string>();
 
 	private isOpenRouterParamSupported(
 		supportedParameters: ReadonlySet<string> | null,
@@ -304,6 +311,17 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		// Reset accumulators for this stream
 		this.toolCallAccumulator.clear();
 		this.reasoningDetailsAccumulator = [];
+		this.speakerGuardPendingTail = "";
+		this.speakerGuardEnabled = false;
+		this.activePersonaNameLower = (
+			context.tomoriState.tomori_nickname ?? ""
+		).toLowerCase();
+		this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
+			context.contextItems,
+		);
+		if (this.activePersonaNameLower) {
+			this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
+		}
 
 		// Cast config to OpenrouterStreamConfig to access provider-specific fields
 		const openrouterConfig = config as OpenrouterStreamConfig;
@@ -357,6 +375,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			const normalizedModel = (config.model ?? "").toLowerCase();
 			const omitTemperatureByModelOverride =
 				OpenrouterStreamAdapter.TEMPERATURE_OMIT_MODELS.has(normalizedModel);
+			const personaSpeakerStop = buildPersonaSpeakerStopString(
+				context.tomoriState.tomori_nickname,
+			);
+			let stopParamSupported = false;
 
 			// Build request body (OpenAI-compatible)
 			const requestBody: Record<string, unknown> = {
@@ -490,6 +512,25 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				} else {
 					skippedUnsupportedParams.push("min_p");
 				}
+			}
+
+			if (personaSpeakerStop) {
+				stopParamSupported = this.isOpenRouterParamSupported(
+					supportedParameters,
+					"stop",
+				);
+				if (stopParamSupported) {
+					requestBody.stop = [personaSpeakerStop];
+				} else {
+					skippedUnsupportedParams.push("stop");
+				}
+			}
+
+			this.speakerGuardEnabled = Boolean(personaSpeakerStop) && !stopParamSupported;
+			if (this.speakerGuardEnabled) {
+				log.info(
+					"OpenRouter: Speaker-boundary fallback guard enabled (stop parameter unsupported)",
+				);
 			}
 
 			if (supportedParameters && skippedUnsupportedParams.length > 0) {
@@ -742,24 +783,73 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 					const normalizedChunk = this.normalizeOpenrouterChunk(parsed);
 					if (!normalizedChunk) continue;
 
-					const hasMeaningfulData = Boolean(
-						normalizedChunk.error ||
-							normalizedChunk.usage ||
-							(normalizedChunk.choices && normalizedChunk.choices.length > 0),
-					);
+					const chunksToEmit =
+						this.splitChunkWithTextAndToolSignals(normalizedChunk);
 
-					if (!hasMeaningfulData) continue;
+					for (const chunkToEmit of chunksToEmit) {
+						const guardResult =
+							this.applySpeakerBoundaryFallbackGuard(chunkToEmit);
 
-					lastMeaningfulAt = Date.now();
+						if (
+							this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
+								guardResult.chunk,
+							)
+						) {
+							yield {
+								data: {
+									choices: [
+										{
+											index: 0,
+											delta: {
+												content: this.speakerGuardPendingTail,
+											},
+										},
+									],
+								} satisfies OpenrouterStreamChunk,
+								provider: "openrouter",
+								metadata: {
+									timestamp: Date.now(),
+									model: config.model,
+								},
+							};
+							this.speakerGuardPendingTail = "";
+						}
 
-					yield {
-						data: normalizedChunk,
-						provider: "openrouter",
-						metadata: {
-							timestamp: Date.now(),
-							model: config.model,
-						},
-					};
+						const hasMeaningfulData = Boolean(
+							guardResult.chunk.error ||
+								guardResult.chunk.usage ||
+								(guardResult.chunk.choices &&
+									guardResult.chunk.choices.length > 0),
+						);
+
+						if (!hasMeaningfulData) {
+							if (guardResult.stopTriggered) {
+								log.warn(
+									`OpenRouter speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
+								);
+								return;
+							}
+							continue;
+						}
+
+						lastMeaningfulAt = Date.now();
+
+						yield {
+							data: guardResult.chunk,
+							provider: "openrouter",
+							metadata: {
+								timestamp: Date.now(),
+								model: config.model,
+							},
+						};
+
+						if (guardResult.stopTriggered) {
+							log.warn(
+								`OpenRouter speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
+							);
+							return;
+						}
+					}
 				}
 
 				// Timeout based on meaningful chunks, even if keepalives are flowing
@@ -768,9 +858,56 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 					throw new Error("OpenRouter stream timed out due to inactivity");
 				}
 			}
+
+			if (
+				this.speakerGuardEnabled &&
+				this.speakerGuardPendingTail.length > 0
+			) {
+				yield {
+					data: {
+						choices: [
+							{
+								index: 0,
+								delta: {
+									content: this.speakerGuardPendingTail,
+								},
+							},
+						],
+					} satisfies OpenrouterStreamChunk,
+					provider: "openrouter",
+					metadata: {
+						timestamp: Date.now(),
+						model: config.model,
+					},
+				};
+				this.speakerGuardPendingTail = "";
+			}
 		} catch (error) {
 			if (controller) {
 				controller.abort();
+			}
+			if (
+				this.speakerGuardEnabled &&
+				this.speakerGuardPendingTail.length > 0
+			) {
+				yield {
+					data: {
+						choices: [
+							{
+								index: 0,
+								delta: {
+									content: this.speakerGuardPendingTail,
+								},
+							},
+						],
+					} satisfies OpenrouterStreamChunk,
+					provider: "openrouter",
+					metadata: {
+						timestamp: Date.now(),
+						model: config.model,
+					},
+				};
+				this.speakerGuardPendingTail = "";
 			}
 			// Convert OpenRouter API errors to our format
 			const providerError = this.handleProviderError(error);
@@ -783,6 +920,208 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				},
 			};
 		}
+	}
+
+	private collectKnownSpeakerNames(
+		contextItems: StructuredContextItem[],
+	): Set<string> {
+		const names = new Set<string>();
+
+		for (const item of contextItems) {
+			if (item.role !== "user" && item.role !== "model") continue;
+
+			for (const part of item.parts) {
+				if (part.type !== "text") continue;
+				const lines = part.text.split("\n");
+				for (const line of lines) {
+					const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
+					if (!match) continue;
+
+					const rawName = match[1].trim();
+					if (!rawName) continue;
+					if (rawName.startsWith("[") || rawName.startsWith("<")) continue;
+
+					names.add(rawName.toLowerCase());
+				}
+			}
+		}
+
+		return names;
+	}
+
+	private isLikelySpeakerLabel(rawLabel: string): boolean {
+		const label = rawLabel.trim();
+		if (!label) return false;
+		if (label.length > 48) return false;
+		if (label.startsWith("[") || label.startsWith("<")) return false;
+		if (label.includes("://")) return false;
+		if (!/[\p{L}]/u.test(label)) return false;
+
+		const normalized = label.toLowerCase();
+		if (this.knownSpeakerNamesLower.has(normalized)) {
+			return true;
+		}
+
+		// Fallback heuristic for unseen names generated by the model.
+		return /^\p{Lu}/u.test(label);
+	}
+
+	private applySpeakerBoundaryFallbackGuard(
+		chunk: OpenrouterStreamChunk,
+	): {
+		chunk: OpenrouterStreamChunk;
+		stopTriggered: boolean;
+		matchedSpeaker?: string;
+	} {
+		if (!this.speakerGuardEnabled) {
+			return { chunk, stopTriggered: false };
+		}
+
+		const firstChoice = chunk.choices?.[0];
+		const content = firstChoice?.delta?.content;
+		if (!firstChoice?.delta || !content) {
+			return { chunk, stopTriggered: false };
+		}
+
+		const chunkText = String(content);
+		const combined = `${this.speakerGuardPendingTail}${chunkText}`;
+
+		const speakerPattern = /\n+([^\n:]{1,64}):\s*/g;
+		let match: RegExpExecArray | null = null;
+		let matchedSpeaker: string | undefined;
+		let transitionIndex = -1;
+
+		while (true) {
+			match = speakerPattern.exec(combined);
+			if (!match) break;
+
+			const rawLabel = match[1].trim();
+			if (!this.isLikelySpeakerLabel(rawLabel)) {
+				continue;
+			}
+
+			const normalizedLabel = rawLabel.toLowerCase();
+			if (
+				this.activePersonaNameLower &&
+				normalizedLabel === this.activePersonaNameLower
+			) {
+				continue;
+			}
+
+			transitionIndex = match.index;
+			matchedSpeaker = rawLabel;
+			break;
+		}
+
+		if (transitionIndex === -1) {
+			const holdback = OpenrouterStreamAdapter.SPEAKER_GUARD_HOLDBACK_CHARS;
+			if (combined.length <= holdback) {
+				this.speakerGuardPendingTail = combined;
+				firstChoice.delta.content = "";
+				return { chunk, stopTriggered: false };
+			}
+
+			const emitEnd = combined.length - holdback;
+			firstChoice.delta.content = combined.slice(0, emitEnd);
+			this.speakerGuardPendingTail = combined.slice(emitEnd);
+			return { chunk, stopTriggered: false };
+		}
+
+		const safeText = combined.slice(0, transitionIndex);
+		firstChoice.delta.content = safeText;
+		this.speakerGuardPendingTail = "";
+		return {
+			chunk,
+			stopTriggered: true,
+			matchedSpeaker,
+		};
+	}
+
+	private splitChunkWithTextAndToolSignals(
+		chunk: OpenrouterStreamChunk,
+	): OpenrouterStreamChunk[] {
+		const firstChoice = chunk.choices?.[0];
+		if (!firstChoice?.delta) {
+			return [chunk];
+		}
+
+		const content = firstChoice.delta.content;
+		const hasTextContent =
+			typeof content === "string" && content.length > 0;
+		if (!hasTextContent) {
+			return [chunk];
+		}
+
+		const toolCalls = firstChoice.delta.toolCalls ?? firstChoice.delta.tool_calls;
+		const finishReason = firstChoice.finishReason ?? firstChoice.finish_reason;
+		const hasToolSignal =
+			Boolean(toolCalls && toolCalls.length > 0) ||
+			finishReason === "tool_calls";
+
+		if (!hasToolSignal) {
+			return [chunk];
+		}
+
+		const textOnlyChunk: OpenrouterStreamChunk = {
+			...chunk,
+			usage: undefined,
+			choices: [
+				{
+					...firstChoice,
+					delta: {
+						role: firstChoice.delta.role,
+						content,
+						reasoning: firstChoice.delta.reasoning,
+					},
+					finishReason: null,
+					finish_reason: null,
+				},
+			],
+		};
+
+		const toolSignalChunk: OpenrouterStreamChunk = {
+			...chunk,
+			choices: [
+				{
+					...firstChoice,
+					delta: {
+						...firstChoice.delta,
+						content: undefined,
+					},
+				},
+			],
+		};
+
+		return [textOnlyChunk, toolSignalChunk];
+	}
+
+	private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
+		chunk: OpenrouterStreamChunk,
+	): boolean {
+		if (
+			!this.speakerGuardEnabled ||
+			this.speakerGuardPendingTail.length === 0
+		) {
+			return false;
+		}
+
+		const firstChoice = chunk.choices?.[0];
+		const content = firstChoice?.delta?.content;
+		if (typeof content === "string" && content.length > 0) {
+			return false;
+		}
+
+		if (chunk.error || chunk.usage) {
+			return true;
+		}
+
+		const toolCalls = firstChoice?.delta?.toolCalls ?? firstChoice?.delta?.tool_calls;
+		if (toolCalls && toolCalls.length > 0) {
+			return true;
+		}
+
+		const finishReason = firstChoice?.finishReason ?? firstChoice?.finish_reason;
+		return Boolean(finishReason);
 	}
 
 	/**

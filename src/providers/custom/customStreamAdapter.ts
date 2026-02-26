@@ -24,6 +24,7 @@ import {
 } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import { buildPersonaSpeakerStopString } from "../utils/stopStrings";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -102,6 +103,7 @@ interface AccumulatedToolCall {
  * Custom provider streaming adapter implementation
  */
 export class CustomStreamAdapter implements StreamProvider {
+	private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		ContextItemTag.SYSTEM_PERSONALITY,
@@ -113,6 +115,10 @@ export class CustomStreamAdapter implements StreamProvider {
 
 	// Accumulator for tool calls across streaming chunks
 	private toolCallAccumulator: Map<number, AccumulatedToolCall> = new Map();
+	private speakerGuardPendingTail = "";
+	private speakerGuardEnabled = false;
+	private activePersonaNameLower = "";
+	private knownSpeakerNamesLower = new Set<string>();
 
 	/**
 	 * Start streaming from the custom endpoint
@@ -148,6 +154,17 @@ export class CustomStreamAdapter implements StreamProvider {
 
 		log.info(`CustomStreamAdapter: Using API URL: ${apiUrl}`);
 
+		this.speakerGuardPendingTail = "";
+		this.activePersonaNameLower = (
+			context.tomoriState.tomori_nickname ?? ""
+		).toLowerCase();
+		this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
+			context.contextItems,
+		);
+		if (this.activePersonaNameLower) {
+			this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
+		}
+
 		// Assemble context for OpenAI message format
 		const messages = await this.assembleOpenAIContext(
 			context.contextItems,
@@ -179,6 +196,17 @@ export class CustomStreamAdapter implements StreamProvider {
 				temperature: config.temperature,
 				stream: true,
 			};
+
+			const personaSpeakerStop = buildPersonaSpeakerStopString(
+				context.tomoriState.tomori_nickname,
+			);
+			this.speakerGuardEnabled = Boolean(personaSpeakerStop);
+			if (this.speakerGuardEnabled) {
+				log.info("CustomStreamAdapter: Speaker-boundary fallback guard enabled");
+			}
+			if (personaSpeakerStop) {
+				requestBody.stop = [personaSpeakerStop];
+			}
 
 			// Add optional parameters
 			if (config.maxOutputTokens !== undefined) {
@@ -221,14 +249,45 @@ export class CustomStreamAdapter implements StreamProvider {
 			);
 
 			// Make the streaming request
-			const response = await fetch(apiUrl, {
+			let response = await fetch(apiUrl, {
 				method: "POST",
 				headers,
 				body: JSON.stringify(requestBody),
 			});
 
+			let responseErrorText: string | null = null;
 			if (!response.ok) {
-				const errorText = await response.text();
+				responseErrorText = await response.text();
+
+				// Some self-hosted OpenAI-compatible servers reject `stop`.
+				// Retry once without `stop` to preserve compatibility.
+				if (
+					requestBody.stop &&
+					this.shouldRetryWithoutStop(response.status, responseErrorText)
+				) {
+					log.warn(
+						"CustomStreamAdapter: Endpoint rejected stop parameter; retrying request without stop",
+					);
+
+					const retryBody = { ...requestBody };
+					delete retryBody.stop;
+
+					response = await fetch(apiUrl, {
+						method: "POST",
+						headers,
+						body: JSON.stringify(retryBody),
+					});
+
+					if (!response.ok) {
+						responseErrorText = await response.text();
+					} else {
+						responseErrorText = null;
+					}
+				}
+			}
+
+			if (!response.ok) {
+				const errorText = responseErrorText ?? "";
 				let errorData: { error?: { message?: string } } | null = null;
 				try {
 					errorData = JSON.parse(errorText);
@@ -285,15 +344,70 @@ export class CustomStreamAdapter implements StreamProvider {
 
 						try {
 							const chunk = JSON.parse(data) as OpenAIStreamChunk;
+							const chunksToEmit =
+								this.splitChunkWithTextAndToolSignals(chunk);
 
-							yield {
-								data: chunk,
-								provider: "custom",
-								metadata: {
-									timestamp: Date.now(),
-									model: config.model,
-								},
-							};
+							for (const chunkToEmit of chunksToEmit) {
+								const guardResult =
+									this.applySpeakerBoundaryFallbackGuard(chunkToEmit);
+
+								if (
+									this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
+										guardResult.chunk,
+									)
+								) {
+									yield {
+										data: {
+											choices: [
+												{
+													index: 0,
+													delta: {
+														content: this.speakerGuardPendingTail,
+													},
+												},
+											],
+										} satisfies OpenAIStreamChunk,
+										provider: "custom",
+										metadata: {
+											timestamp: Date.now(),
+											model: config.model,
+										},
+									};
+									this.speakerGuardPendingTail = "";
+								}
+
+								const hasMeaningfulData = Boolean(
+									guardResult.chunk.error ||
+										guardResult.chunk.usage ||
+										(guardResult.chunk.choices &&
+											guardResult.chunk.choices.length > 0),
+								);
+								if (!hasMeaningfulData) {
+									if (guardResult.stopTriggered) {
+										log.warn(
+											`Custom speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
+										);
+										return;
+									}
+									continue;
+								}
+
+								yield {
+									data: guardResult.chunk,
+									provider: "custom",
+									metadata: {
+										timestamp: Date.now(),
+										model: config.model,
+									},
+								};
+
+								if (guardResult.stopTriggered) {
+									log.warn(
+										`Custom speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
+									);
+									return;
+								}
+							}
 						} catch (parseError) {
 							log.warn(
 								`CustomStreamAdapter: Failed to parse SSE data: ${data}`,
@@ -308,7 +422,55 @@ export class CustomStreamAdapter implements StreamProvider {
 					}
 				}
 			}
+
+			if (
+				this.speakerGuardEnabled &&
+				this.speakerGuardPendingTail.length > 0
+			) {
+				yield {
+					data: {
+						choices: [
+							{
+								index: 0,
+								delta: {
+									content: this.speakerGuardPendingTail,
+								},
+							},
+						],
+					} satisfies OpenAIStreamChunk,
+					provider: "custom",
+					metadata: {
+						timestamp: Date.now(),
+						model: config.model,
+					},
+				};
+				this.speakerGuardPendingTail = "";
+			}
 		} catch (error) {
+			if (
+				this.speakerGuardEnabled &&
+				this.speakerGuardPendingTail.length > 0
+			) {
+				yield {
+					data: {
+						choices: [
+							{
+								index: 0,
+								delta: {
+									content: this.speakerGuardPendingTail,
+								},
+							},
+						],
+					} satisfies OpenAIStreamChunk,
+					provider: "custom",
+					metadata: {
+						timestamp: Date.now(),
+						model: config.model,
+					},
+				};
+				this.speakerGuardPendingTail = "";
+			}
+
 			const providerError = this.handleProviderError(error);
 			yield {
 				data: { error: providerError },
@@ -319,6 +481,214 @@ export class CustomStreamAdapter implements StreamProvider {
 				},
 			};
 		}
+	}
+
+	private shouldRetryWithoutStop(statusCode: number, errorText: string): boolean {
+		if (statusCode !== 400 && statusCode !== 422) {
+			return false;
+		}
+
+		const normalized = errorText.toLowerCase();
+		const mentionsStop = normalized.includes("stop");
+		const indicatesUnsupportedParam =
+			normalized.includes("unsupported") ||
+			normalized.includes("unknown") ||
+			normalized.includes("invalid") ||
+			normalized.includes("not allowed") ||
+			normalized.includes("unrecognized");
+
+		return mentionsStop && indicatesUnsupportedParam;
+	}
+
+	private collectKnownSpeakerNames(
+		contextItems: StructuredContextItem[],
+	): Set<string> {
+		const names = new Set<string>();
+
+		for (const item of contextItems) {
+			if (item.role !== "user" && item.role !== "model") continue;
+
+			for (const part of item.parts) {
+				if (part.type !== "text") continue;
+				const lines = part.text.split("\n");
+				for (const line of lines) {
+					const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
+					if (!match) continue;
+
+					const rawName = match[1].trim();
+					if (!rawName) continue;
+					if (rawName.startsWith("[") || rawName.startsWith("<")) continue;
+					names.add(rawName.toLowerCase());
+				}
+			}
+		}
+
+		return names;
+	}
+
+	private isLikelySpeakerLabel(rawLabel: string): boolean {
+		const label = rawLabel.trim();
+		if (!label) return false;
+		if (label.length > 48) return false;
+		if (label.startsWith("[") || label.startsWith("<")) return false;
+		if (label.includes("://")) return false;
+		if (!/[\p{L}]/u.test(label)) return false;
+
+		const normalized = label.toLowerCase();
+		if (this.knownSpeakerNamesLower.has(normalized)) {
+			return true;
+		}
+
+		// Fallback heuristic for unseen generated names.
+		return /^\p{Lu}/u.test(label);
+	}
+
+	private applySpeakerBoundaryFallbackGuard(
+		chunk: OpenAIStreamChunk,
+	): { chunk: OpenAIStreamChunk; stopTriggered: boolean; matchedSpeaker?: string } {
+		if (!this.speakerGuardEnabled) {
+			return { chunk, stopTriggered: false };
+		}
+
+		const firstChoice = chunk.choices?.[0];
+		const content = firstChoice?.delta?.content;
+		if (!firstChoice?.delta || !content) {
+			return { chunk, stopTriggered: false };
+		}
+
+		const chunkText = String(content);
+		const combined = `${this.speakerGuardPendingTail}${chunkText}`;
+
+		const speakerPattern = /\n+([^\n:]{1,64}):\s*/g;
+		let match: RegExpExecArray | null = null;
+		let matchedSpeaker: string | undefined;
+		let transitionIndex = -1;
+
+		while (true) {
+			match = speakerPattern.exec(combined);
+			if (!match) break;
+
+			const rawLabel = match[1].trim();
+			if (!this.isLikelySpeakerLabel(rawLabel)) {
+				continue;
+			}
+
+			const normalizedLabel = rawLabel.toLowerCase();
+			if (
+				this.activePersonaNameLower &&
+				normalizedLabel === this.activePersonaNameLower
+			) {
+				continue;
+			}
+
+			transitionIndex = match.index;
+			matchedSpeaker = rawLabel;
+			break;
+		}
+
+		if (transitionIndex === -1) {
+			const holdback = CustomStreamAdapter.SPEAKER_GUARD_HOLDBACK_CHARS;
+			if (combined.length <= holdback) {
+				this.speakerGuardPendingTail = combined;
+				firstChoice.delta.content = "";
+				return { chunk, stopTriggered: false };
+			}
+
+			const emitEnd = combined.length - holdback;
+			firstChoice.delta.content = combined.slice(0, emitEnd);
+			this.speakerGuardPendingTail = combined.slice(emitEnd);
+			return { chunk, stopTriggered: false };
+		}
+
+		firstChoice.delta.content = combined.slice(0, transitionIndex);
+		this.speakerGuardPendingTail = "";
+		return {
+			chunk,
+			stopTriggered: true,
+			matchedSpeaker,
+		};
+	}
+
+	private splitChunkWithTextAndToolSignals(
+		chunk: OpenAIStreamChunk,
+	): OpenAIStreamChunk[] {
+		const firstChoice = chunk.choices?.[0];
+		if (!firstChoice?.delta) {
+			return [chunk];
+		}
+
+		const content = firstChoice.delta.content;
+		const hasTextContent =
+			typeof content === "string" && content.length > 0;
+		if (!hasTextContent) {
+			return [chunk];
+		}
+
+		const hasToolSignal =
+			Boolean(
+				firstChoice.delta.tool_calls &&
+				firstChoice.delta.tool_calls.length > 0,
+			) || firstChoice.finish_reason === "tool_calls";
+		if (!hasToolSignal) {
+			return [chunk];
+		}
+
+		const textOnlyChunk: OpenAIStreamChunk = {
+			...chunk,
+			usage: undefined,
+			choices: [
+				{
+					...firstChoice,
+					delta: {
+						role: firstChoice.delta.role,
+						content,
+					},
+					finish_reason: null,
+				},
+			],
+		};
+
+		const toolSignalChunk: OpenAIStreamChunk = {
+			...chunk,
+			choices: [
+				{
+					...firstChoice,
+					delta: {
+						...firstChoice.delta,
+						content: undefined,
+					},
+				},
+			],
+		};
+
+		return [textOnlyChunk, toolSignalChunk];
+	}
+
+	private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
+		chunk: OpenAIStreamChunk,
+	): boolean {
+		if (
+			!this.speakerGuardEnabled ||
+			this.speakerGuardPendingTail.length === 0
+		) {
+			return false;
+		}
+
+		const firstChoice = chunk.choices?.[0];
+		const content = firstChoice?.delta?.content;
+		if (typeof content === "string" && content.length > 0) {
+			return false;
+		}
+
+		if (chunk.error || chunk.usage) {
+			return true;
+		}
+
+		if (firstChoice?.delta?.tool_calls && firstChoice.delta.tool_calls.length > 0) {
+			return true;
+		}
+
+		return Boolean(firstChoice?.finish_reason);
 	}
 
 	/**
@@ -441,6 +811,13 @@ export class CustomStreamAdapter implements StreamProvider {
 
 		// Handle finish_reason "stop"
 		if (choice.finish_reason === "stop") {
+			if (choice.delta?.content) {
+				return {
+					type: "text",
+					content: choice.delta.content,
+					metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+				};
+			}
 			return {
 				type: "done",
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,

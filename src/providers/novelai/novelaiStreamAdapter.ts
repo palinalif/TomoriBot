@@ -43,6 +43,7 @@ import {
 	type NovelAIGenerationRequest,
 	type NovelAIStreamChunk,
 } from "./novelaiService";
+import { buildPersonaSpeakerStopString } from "@/providers/utils/stopStrings";
 
 /** Whether GLM 4.6 thinking (reasoning) is enabled. When disabled, /nothink is appended to suppress internal reasoning. */
 const NAI_GLM_THINKING_ENABLED =
@@ -372,10 +373,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		// Build request
+		const personaSpeakerStop = buildPersonaSpeakerStopString(
+			context.tomoriState.tomori_nickname,
+		);
 		const request: NovelAIGenerationRequest = {
 			input: prompt,
 			model: config.model,
 			parameters,
+			openAIStopStrings: personaSpeakerStop ? [personaSpeakerStop] : undefined,
 		};
 
 		// Log sanitized request for debugging

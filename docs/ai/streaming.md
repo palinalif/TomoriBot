@@ -139,6 +139,10 @@ When model emits `function_call`:
 - returns status `function_call`
 - caller executes tool and continues next stream iteration with updated context
 
+Provider adapter safeguards:
+- Google/OpenRouter/Custom adapters split mixed chunks (`text` + tool-call signal) into two raw chunks so text is processed first, then `function_call`.
+- Speaker-boundary holdback tails are force-flushed before non-text chunks (tool call/error/finish) to prevent truncated text when a stream exits early on tool execution.
+
 Loop control and max iterations are managed by `tomoriChat` (function-call safety loop).
 
 ## Error, Timeout, and Stop Handling

@@ -411,14 +411,37 @@ export async function sendMatrixTypingIndicator(
 export async function joinMatrixRoom(roomId: string): Promise<void> {
 	if (!matrixBridge) return;
 
-	const serverName = process.env.MATRIX_SERVER_NAME;
-
 	// getIntent() with no args returns the bot account's Intent
 	const botIntent = matrixBridge.getIntent();
 
-	// viaServers hint tells Conduit which server hosts the room, preventing
-	// "No server available to assist in joining" errors on local/unfederated setups
-	await botIntent.join(roomId, serverName ? [serverName] : undefined);
+	// Prefer the room's own server as the primary via hint, with local server fallback.
+	// This avoids false join failures when linking federated rooms (e.g., :matrix.org).
+	await botIntent.join(roomId, getJoinViaServers(roomId));
+}
+
+/**
+ * Build Matrix "via servers" hints for room joins.
+ * Uses the room ID's server as primary hint, and appends MATRIX_SERVER_NAME as fallback.
+ *
+ * @param roomId - Matrix room ID, e.g. "!abc:matrix.org" or "!abc:matrix.tomoribot.app"
+ * @returns Ordered unique via-server list, or undefined when no hint can be derived
+ */
+function getJoinViaServers(roomId: string): string[] | undefined {
+	const localServer = process.env.MATRIX_SERVER_NAME?.trim();
+	const roomDelimiter = roomId.indexOf(":");
+	const roomServer =
+		roomDelimiter === -1 ? undefined : roomId.slice(roomDelimiter + 1).trim();
+
+	const viaServers = new Set<string>();
+	if (roomServer) {
+		viaServers.add(roomServer);
+	}
+	if (localServer) {
+		viaServers.add(localServer);
+	}
+
+	const list = Array.from(viaServers);
+	return list.length > 0 ? list : undefined;
 }
 
 /**
@@ -1262,10 +1285,7 @@ async function handleMatrixEvent(
 		try {
 			const botIntent = matrixBridge?.getIntent();
 			if (!botIntent) return;
-			await botIntent.join(
-				event.room_id,
-				serverName ? [serverName] : undefined,
-			);
+			await botIntent.join(event.room_id, getJoinViaServers(event.room_id));
 			log.info(`Matrix bridge: auto-accepted invite to ${event.room_id}`);
 		} catch (err) {
 			const safeMsg = err instanceof Error ? err.message : String(err);
