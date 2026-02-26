@@ -633,6 +633,8 @@ export async function buildContext({
 	isUserImpersonation = false,
 	impersonatedUserId,
 	impersonatedUserNickname,
+	matrixUsers,
+	syntheticUsers,
 }: {
 	guildId: string;
 	serverName: string;
@@ -658,6 +660,16 @@ export async function buildContext({
 	isUserImpersonation?: boolean; // Added February 2026 - Flag for user impersonation mode
 	impersonatedUserId?: string; // Added February 2026 - User ID being impersonated
 	impersonatedUserNickname?: string; // Added February 2026 - Database nickname for impersonated user (optional)
+	/** Matrix bridge users: Matrix user ID (e.g. "@bred:localhost") → stripped display name.
+	 *  These cannot be looked up in the Discord guild, so they get lightweight entries
+	 *  with a plain-text mention handle instead of a Discord <@userId> ping. */
+	matrixUsers?: Map<string, string>;
+	/** Synthetic participants surfaced as user-like entries.
+	 *  Keys are either persona DB IDs (short numeric tomori_id) or webhook snowflakes. */
+	syntheticUsers?: Map<
+		string,
+		{ displayName: string; type: "persona" | "webhook" }
+	>;
 }): Promise<{
 	contextItems: StructuredContextItem[];
 	tailDirectives: string[];
@@ -1308,6 +1320,21 @@ export async function buildContext({
 			}
 
 			if (!userRow) {
+				const syntheticEntry = syntheticUsers?.get(userIdToProcess);
+				if (syntheticEntry) {
+					const syntheticAliasSet = new Set<string>();
+					addAlias(syntheticAliasSet, syntheticEntry.displayName);
+					userEntries.push({
+						userId: userIdToProcess,
+						displayName: syntheticEntry.displayName,
+						detailLines: [],
+						isBot: false,
+						mentionAliases: Array.from(syntheticAliasSet),
+						primaryAlias: syntheticEntry.displayName || null,
+					});
+					continue;
+				}
+
 				log.warn(`Skipping user ${userIdToProcess} - could not load user data`);
 				continue;
 			}
@@ -1528,6 +1555,17 @@ export async function buildContext({
 			}
 
 			usersInConversationText += "\n"; // Blank line between users
+		}
+
+		// Append Matrix bridge users after Discord users.
+		// Each Matrix user gets a plain-text mention handle (@{name}) since they have
+		// no Discord user ID — the @{} resolution will output the name as-is in the message.
+		if (matrixUsers && matrixUsers.size > 0) {
+			for (const [matrixId, displayName] of matrixUsers) {
+				usersInConversationText += `${displayName} (Matrix: ${matrixId}) (Mention: @{${displayName}})\n`;
+				usersInConversationText += "- Status: Online or status unknown\n";
+				usersInConversationText += "\n";
+			}
 		}
 
 		// Append channel/time context last to keep more stable prompt content up front.

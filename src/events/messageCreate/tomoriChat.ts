@@ -73,6 +73,16 @@ import {
 } from "../../utils/text/stringHelper";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
+import {
+	getLinkedMatrixRoom,
+	pendingMatrixReplyChannels,
+	sendMatrixTypingIndicator,
+} from "@/utils/matrix";
+import {
+	isBridgeUserId,
+	stripBridgePrefix,
+	extractBridgeUserId,
+} from "@/utils/bridge";
 
 import type {
 	TomoriState,
@@ -127,9 +137,9 @@ const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
 	10,
 ); // Max consecutive tool failures before showing error embed (NAI GLM only)
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
-const DEFAULT_SELF_REPLY_LIMIT = 3;
+const DEFAULT_SELF_REPLY_LIMIT = 1;
 const MAX_SELF_REPLY_LIMIT = 10;
-const DEFAULT_TRIGGERED_PERSONA_LIMIT = 3;
+const DEFAULT_TRIGGERED_PERSONA_LIMIT = 1;
 const MIN_TRIGGERED_PERSONA_LIMIT = 1;
 const MAX_TRIGGERED_PERSONA_LIMIT = 10;
 const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 30 minutes of inactivity
@@ -889,7 +899,13 @@ export default async function tomoriChat(
 	const isFromClientUser = Boolean(
 		client.user && message.author.id === client.user.id,
 	);
-	const isLikelySelfMessage = isFromClientUser || isWebhookMessage;
+	// Matrix relay messages arrive via a channel webhook but represent real user messages.
+	// They must not be treated as self-messages or persona jobs — exempt them from all
+	// webhook/bot guards so TomoriBot responds to them like regular user messages.
+	const isMatrixRelayMessage =
+		isWebhookMessage && message.author.username.startsWith("[Matrix|");
+	const isLikelySelfMessage =
+		!isMatrixRelayMessage && (isFromClientUser || isWebhookMessage);
 
 	const isSeedPlaceholderMessage =
 		isFromClientUser &&
@@ -985,6 +1001,10 @@ export default async function tomoriChat(
 
 	// biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
 	const userDiscId = message.author!.id;
+	const matrixRelayUserId = isMatrixRelayMessage
+		? extractBridgeUserId(message.author.username)
+		: undefined;
+	const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
 
 	// Check if user is allowed to trigger bot (Level 2 FULL privacy users cannot trigger)
 	// Skip this check for manual triggers and reminders
@@ -1277,7 +1297,7 @@ export default async function tomoriChat(
 						const preQueueCooldownResult =
 							await checkMessageTriggerCooldownWithWhitelist(
 								guild?.id ?? message.author.id,
-								message.author.id,
+								cooldownUserDiscId,
 								message.channelId,
 								earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
 								message.member,
@@ -1522,7 +1542,8 @@ export default async function tomoriChat(
 			if (
 				(message.author.bot || message.webhookId) &&
 				!isSelfMessage &&
-				!isManuallyTriggered
+				!isManuallyTriggered &&
+				!isMatrixRelayMessage
 			) {
 				return;
 			}
@@ -2080,7 +2101,7 @@ export default async function tomoriChat(
 			if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
 				const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
 					guild?.id ?? message.author.id,
-					message.author.id,
+					cooldownUserDiscId,
 					message.channelId,
 					tomoriState.config.cooldown_type ?? CooldownType.OFF,
 					message.member,
@@ -2104,7 +2125,7 @@ export default async function tomoriChat(
 					log.info(
 						`Message trigger cooldown active for ${
 							cooldownResult.cooldownType === CooldownType.PER_USER
-								? `user ${message.author.id}`
+								? `user ${cooldownUserDiscId}`
 								: cooldownResult.cooldownType === CooldownType.PER_CHANNEL
 									? `channel ${message.channelId}`
 									: `server ${serverDiscId}`
@@ -2121,7 +2142,7 @@ export default async function tomoriChat(
 			if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
 				await setMessageTriggerCooldownWithWhitelist(
 					guild?.id ?? message.author.id,
-					message.author.id,
+					cooldownUserDiscId,
 					message.channelId,
 					tomoriState.config.cooldown_type ?? CooldownType.OFF,
 					tomoriState.config.cooldown_length ?? 5,
@@ -2423,6 +2444,18 @@ export default async function tomoriChat(
 			// 10. Build the `SimplifiedMessageForContext` array and user list from relevant messages
 			const simplifiedMessages: SimplifiedMessageForContext[] = []; // Array for structured messages
 			const userListSet = new Set<string>(); // Still useful for fetching user-specific memories/data
+			// Matrix relay messages all share the same Discord webhook bot user ID, so they
+			// cannot be deduplication-safe in userListSet. Track them separately: Matrix user
+			// ID (e.g., "@bred:localhost") → stripped display name (e.g., "bred").
+			const matrixUserMap = new Map<string, string>();
+			// Track synthetic participants that are not regular Discord users:
+			// - persona entries keyed by tomori_id (short numeric)
+			// - webhook entries keyed by webhook ID (snowflake)
+			// This lets tools consume stable persona IDs in production/local.
+			const syntheticUserMap = new Map<
+				string,
+				{ displayName: string; type: "persona" | "webhook" }
+			>();
 
 			// Find the most recent message with a reference (latest in the array)
 			let latestReferenceMessageIndex = -1;
@@ -2544,6 +2577,7 @@ export default async function tomoriChat(
 				let authorName: string;
 				let authorType: "user" | "persona" = "user";
 				let personaName: string | null = null;
+				let matchedPersonaId: number | null = null;
 				const isWebhookMessage = Boolean(msg.webhookId);
 
 				if (msg.author.id === client.user?.id || isDebugMessage) {
@@ -2555,7 +2589,9 @@ export default async function tomoriChat(
 					authorType = "persona";
 					personaName = mainNickname;
 				} else if (isWebhookMessage) {
-					const webhookName = msg.author.username;
+					// Strip "[Matrix|@user:host] " prefix from Matrix bridge webhooks
+					// so TomoriBot sees just the display name (e.g., "bred") in context
+					const webhookName = stripBridgePrefix(msg.author.username);
 					const matchedPersona = webhookName
 						? personaByNickname.get(webhookName.toLowerCase())
 						: undefined;
@@ -2564,16 +2600,60 @@ export default async function tomoriChat(
 						authorName = matchedPersona.tomori_nickname;
 						authorType = "persona";
 						personaName = matchedPersona.tomori_nickname;
+						matchedPersonaId = matchedPersona.tomori_id ?? null;
 						effectiveAuthorId = `persona:${matchedPersona.tomori_id ?? matchedPersona.tomori_nickname}`;
 					} else {
 						authorName = webhookName || `<@${authorId}>`;
+
+						// Matrix relay messages: register in the per-Matrix-user map so each
+						// Matrix user gets its own user list entry (they all share the same
+						// Discord webhook bot ID and would otherwise deduplicate to one entry).
+						// Extract the Matrix user ID from the "[Matrix|@user:host] name" format.
+						const matrixId = extractBridgeUserId(msg.author.username);
+						if (matrixId && webhookName) {
+							matrixUserMap.set(matrixId, webhookName);
+						}
 					}
 				} else {
 					authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
 				}
 
-				// Add to user list (Level 2 FULL privacy users already filtered out above)
-				userListSet.add(authorId);
+				// Add to user list (Level 2 FULL privacy users already filtered out above).
+				// Skip Matrix relay non-persona webhook messages — they are tracked in matrixUserMap
+				// instead, since all Matrix relays share the same Discord webhook bot user ID.
+				const isMatrixNonPersonaRelay =
+					isWebhookMessage &&
+					msg.author.username.startsWith("[Matrix|") &&
+					authorType === "user";
+
+				// Register synthetic identities for context:
+				// - matched alter persona => tomori_id (short numeric)
+				// - non-persona webhook => webhook snowflake
+				if (isWebhookMessage && !isMatrixNonPersonaRelay) {
+					if (matchedPersonaId !== null) {
+						syntheticUserMap.set(String(matchedPersonaId), {
+							displayName: authorName,
+							type: "persona",
+						});
+					} else if (msg.webhookId) {
+						syntheticUserMap.set(msg.webhookId, {
+							displayName: authorName,
+							type: "webhook",
+						});
+					}
+				}
+
+				if (!isMatrixNonPersonaRelay) {
+					// For persona webhooks, expose tomori_id (short numeric) as the
+					// actionable ID for avatar tools. Other webhooks keep webhook ID.
+					userListSet.add(
+						matchedPersonaId !== null
+							? String(matchedPersonaId)
+							: isWebhookMessage && msg.webhookId
+								? msg.webhookId
+								: authorId,
+					);
+				}
 
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
 					[];
@@ -3069,9 +3149,32 @@ export default async function tomoriChat(
 				}
 			}
 
-			// Always add the bot's own ID to userList so it appears in context with its User ID
-			if (client.user?.id) {
+			// Add the bot's own Discord user ID only when no alter persona identity is
+			// active in this turn. When alters are present, exposing both the bot account
+			// ID and persona IDs can confuse tool targeting.
+			const hasPersonaSyntheticUser = Array.from(syntheticUserMap.values()).some(
+				(entry) => entry.type === "persona",
+			);
+			if (client.user?.id && !hasPersonaSyntheticUser) {
 				userListSet.add(client.user.id);
+			}
+
+			// Ensure currently responding alter personas are always present as
+			// synthetic user entries so they can self-target avatar tools by tomori_id
+			// even if no prior webhook message exists in the fetched history window.
+			for (const respondingPersona of personasToRespond) {
+				if (!respondingPersona.is_alter || !respondingPersona.tomori_id) {
+					continue;
+				}
+
+				const personaId = String(respondingPersona.tomori_id);
+				userListSet.add(personaId);
+				if (!syntheticUserMap.has(personaId)) {
+					syntheticUserMap.set(personaId, {
+						displayName: respondingPersona.tomori_nickname,
+						type: "persona",
+					});
+				}
 			}
 
 			const userList = Array.from(userListSet);
@@ -3101,6 +3204,9 @@ export default async function tomoriChat(
 				tomoriId?: number;
 				personaLineageId?: number | null;
 			}> = [];
+			const matrixTypingRoomId = isMatrixRelayMessage
+				? await getLinkedMatrixRoom(channel.id)
+				: null;
 
 			for (
 				let personaIndex = 0;
@@ -3125,6 +3231,18 @@ export default async function tomoriChat(
 				if (personaIndex > 0) {
 					await channel.sendTyping();
 				}
+				const matrixTypingTargetRoomId = matrixTypingRoomId;
+				const matrixTypingPersonaName =
+					currentPersona.tomori_nickname ??
+					process.env.DEFAULT_BOTNAME ??
+					"Tomori";
+				if (matrixTypingTargetRoomId) {
+					await sendMatrixTypingIndicator(
+						matrixTypingTargetRoomId,
+						matrixTypingPersonaName,
+						true,
+					);
+				}
 
 				try {
 					// Persona-specific response generation starts here
@@ -3134,8 +3252,9 @@ export default async function tomoriChat(
 					let loadedStickers: ServerStickerRow[] | null = null;
 
 					// Check if current channel is designated as an RP channel (always suppresses emojis/stickers)
-					const isRpChannel =
-						tomoriState.config.rp_channel_ids.includes(channel.id);
+					const isRpChannel = tomoriState.config.rp_channel_ids.includes(
+						channel.id,
+					);
 					const effectiveEmojiEnabled = isRpChannel
 						? false
 						: tomoriState.config.emoji_usage_enabled;
@@ -3169,11 +3288,7 @@ export default async function tomoriChat(
 						loadedStickers = stickers;
 
 						// Process emojis for conversion (if emoji usage is effectively enabled for this channel)
-						if (
-							effectiveEmojiEnabled &&
-							emojis &&
-							emojis.length > 0
-						) {
+						if (effectiveEmojiEnabled && emojis && emojis.length > 0) {
 							// Sort emojis by created_at timestamp, then by ID
 							const sortedEmojis = [...emojis].sort((a, b) => {
 								const rawATime = a.created_at
@@ -3217,12 +3332,27 @@ export default async function tomoriChat(
 						let reminderContent = "";
 
 						if (isSelfReminder) {
-							reminderContent = `[System: A task reminder you set for yourself has triggered. Task: "${reminderData.reminder_purpose}". Please execute this task now.]`;
+							reminderContent = `[System: A task reminder you set for yourself has triggered. Task: "${reminderData.reminder_purpose}". Please execute this task now. Do NOT create, save, or schedule this reminder again.]`;
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
 							}
+						} else if (
+							reminderRecipientID &&
+							isBridgeUserId(reminderRecipientID)
+						) {
+							// Matrix user IDs (@user:server) must not be wrapped in <@...> Discord mention
+							// format — that produces <@@user:server> (double @), which is malformed.
+							// Strip the server suffix for display; use @{localpart} as the mention
+							// placeholder (matrixRelay.ts converts this to a proper HTML Matrix mention).
+							const matrixLocalpart = reminderRecipientID
+								.split(":")[0]
+								.replace(/^@/, "");
+							reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
+							if (reminderData.reminder_lateness) {
+								reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
+							}
 						} else {
-							reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
+							reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
 							if (reminderData.reminder_lateness) {
 								reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
 							}
@@ -3344,6 +3474,8 @@ export default async function tomoriChat(
 							// conversationHistory: conversationHistory, // This parameter will be removed
 							simplifiedMessageHistory: simplifiedMessages, // New parameter for structured history
 							userList,
+							matrixUsers: matrixUserMap,
+							syntheticUsers: syntheticUserMap,
 							channelDesc,
 							channelName,
 							channelId: channel.id, // For short-term memory context
@@ -3735,7 +3867,6 @@ export default async function tomoriChat(
 						tomoriState.llm.llm_codename = originalModelCodename;
 					}
 
-
 					log.info(
 						"Streaming mode enabled. Attempting to stream response to Discord.",
 					);
@@ -3782,7 +3913,9 @@ export default async function tomoriChat(
 								guild?.members.cache.get(impersonatedUserId);
 							const impersonatedUser =
 								impersonatedMember?.user ||
-								(await client.users.fetch(impersonatedUserId).catch(() => null));
+								(await client.users
+									.fetch(impersonatedUserId)
+									.catch(() => null));
 
 							// Force static PNG to avoid webhook avatar failures on animated profile pictures.
 							const impersonatedUserAvatar =
@@ -4335,7 +4468,9 @@ export default async function tomoriChat(
 									// Capture any text the model streamed to Discord before calling
 									// the tool, so it appears in the function interaction history
 									// and the model won't repeat itself on continuation.
-									const preToolText = (streamResult.accumulatedText ?? "").trim();
+									const preToolText = (
+										streamResult.accumulatedText ?? ""
+									).trim();
 									if (preToolText) {
 										accumulatedStreamedModelParts.push({
 											type: "text",
@@ -4670,6 +4805,8 @@ export default async function tomoriChat(
 												serverDescription: serverDescription ?? null,
 												simplifiedMessageHistory: simplifiedMessages,
 												userList,
+												matrixUsers: matrixUserMap,
+												syntheticUsers: syntheticUserMap,
 												channelDesc,
 												channelName,
 												channelId: channel.id, // For short-term memory context
@@ -4716,11 +4853,12 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } = truncateDialogueHistory(
-														contextSegments,
-														tokenLimits.contextLength,
-														tokenLimits.maxCompletionTokens,
-													);
+													const { truncated, pairsDropped } =
+														truncateDialogueHistory(
+															contextSegments,
+															tokenLimits.contextLength,
+															tokenLimits.maxCompletionTokens,
+														);
 													if (pairsDropped > 0) {
 														log.warn(
 															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
@@ -4738,11 +4876,12 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } = truncateDialogueHistory(
-														contextSegments,
-														tokenLimits.contextLength,
-														tokenLimits.maxCompletionTokens,
-													);
+													const { truncated, pairsDropped } =
+														truncateDialogueHistory(
+															contextSegments,
+															tokenLimits.contextLength,
+															tokenLimits.maxCompletionTokens,
+														);
 													if (pairsDropped > 0) {
 														log.warn(
 															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
@@ -4760,11 +4899,12 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } = truncateDialogueHistory(
-														contextSegments,
-														tokenLimits.contextLength,
-														tokenLimits.maxCompletionTokens,
-													);
+													const { truncated, pairsDropped } =
+														truncateDialogueHistory(
+															contextSegments,
+															tokenLimits.contextLength,
+															tokenLimits.maxCompletionTokens,
+														);
 													if (pairsDropped > 0) {
 														log.warn(
 															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
@@ -4880,21 +5020,63 @@ export default async function tomoriChat(
 												"Tool execution failed without specific error",
 											tool_name: funcName,
 										};
-										log.error(
-											`Tool execution failed for ${funcName}: ${toolResult.error}`,
-										);
+
+										const toolResultData = toolResult.data as
+											| Record<string, unknown>
+											| undefined;
+										const toolStatus =
+											typeof toolResultData?.status === "string"
+												? toolResultData.status
+												: undefined;
+										const isRecoverableStickerMiss =
+											funcName === "select_sticker_for_response" &&
+											(toolStatus === "sticker_not_found" ||
+												toolStatus === "sticker_name_ambiguous" ||
+												toolStatus === "sticker_name_missing_retry");
+
+										if (isRecoverableStickerMiss) {
+											const stickerNameAttempted =
+												typeof toolResultData?.sticker_name_attempted === "string"
+													? toolResultData.sticker_name_attempted
+													: undefined;
+											const stickerIdAttempted =
+												typeof toolResultData?.sticker_id_attempted === "string"
+													? toolResultData.sticker_id_attempted
+													: undefined;
+
+											log.warn(
+												`Tool execution returned recoverable sticker miss for ${funcName}: ${toolResult.error}`,
+												{
+													status: toolStatus,
+													stickerNameAttempted,
+													stickerIdAttempted,
+													reason:
+														toolResult.message ||
+														toolResult.error ||
+														"Sticker selection retry suggested",
+												},
+											);
+										} else {
+											log.error(
+												`Tool execution failed for ${funcName}: ${toolResult.error}`,
+											);
+										}
 
 										// Case 2: NAI GLM tool failure with text already sent
-									// Suppress text output on retry so the model can re-attempt the tool
-									// without repeating the pre-tool text to Discord. After exceeding the
-									// retry threshold, show an error embed and end the turn.
-									const textAlreadySent = (streamResult.accumulatedText ?? "").trim().length > 0;
+										// Suppress text output on retry so the model can re-attempt the tool
+										// without repeating the pre-tool text to Discord. After exceeding the
+										// retry threshold, show an error embed and end the turn.
+										const textAlreadySent =
+											(streamResult.accumulatedText ?? "").trim().length > 0;
 										if (
 											textAlreadySent &&
 											provider.getInfo().name === "novelai"
 										) {
 											naiConsecutiveToolFailures++;
-											if (naiConsecutiveToolFailures >= NAI_TOOL_FAILURE_RETRY_THRESHOLD) {
+											if (
+												naiConsecutiveToolFailures >=
+												NAI_TOOL_FAILURE_RETRY_THRESHOLD
+											) {
 												log.warn(
 													`NovelAI GLM: Tool "${funcName}" failed ${naiConsecutiveToolFailures} consecutive times after text was sent — showing error embed and ending turn`,
 												);
@@ -4904,7 +5086,8 @@ export default async function tomoriChat(
 													{
 														color: ColorCode.ERROR,
 														titleKey: "genai.nai_tool_retry_exhausted_title",
-														descriptionKey: "genai.nai_tool_retry_exhausted_description",
+														descriptionKey:
+															"genai.nai_tool_retry_exhausted_description",
 													},
 													{
 														webhook: personaWebhook ?? undefined,
@@ -5253,6 +5436,14 @@ export default async function tomoriChat(
 					}).catch((embedError) =>
 						log.warn("Failed to send persona error embed", embedError),
 					);
+				} finally {
+					if (matrixTypingTargetRoomId) {
+						await sendMatrixTypingIndicator(
+							matrixTypingTargetRoomId,
+							matrixTypingPersonaName,
+							false,
+						);
+					}
 				}
 			} // END OF MULTI-PERSONA RESPONSE LOOP
 
@@ -5474,7 +5665,7 @@ export default async function tomoriChat(
 	}
 }
 
-function isSelfTriggerMessage(
+export function isSelfTriggerMessage(
 	message: Message,
 	allPersonas: TomoriState[],
 ): boolean {
@@ -5640,6 +5831,9 @@ export function shouldBotReply(
 	allPersonas: TomoriState[],
 ): boolean {
 	const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
+	const isMatrixRelayMessage =
+		Boolean(message.webhookId) &&
+		message.author.username.startsWith("[Matrix|");
 	const rawSelfReplyLimit =
 		tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
 	const selfReplyLimit = Math.min(
@@ -5647,7 +5841,7 @@ export function shouldBotReply(
 		MAX_SELF_REPLY_LIMIT,
 	);
 
-	if (message.webhookId && !isSelfMessage) {
+	if (message.webhookId && !isSelfMessage && !isMatrixRelayMessage) {
 		return false;
 	}
 	if (isSelfMessage && selfReplyLimit <= 0) {
@@ -5663,7 +5857,9 @@ export function shouldBotReply(
 		message.channel.type === ChannelType.GuildVoice ||
 		message.channel.type === ChannelType.GuildStageVoice;
 	if (
-		(message.author.bot && (!isSelfMessage || selfReplyLimit <= 0)) ||
+		(message.author.bot &&
+			(!isSelfMessage || selfReplyLimit <= 0) &&
+			!isMatrixRelayMessage) ||
 		message.content.startsWith("!") || // Basic command prefix check
 		!(
 			message.channel instanceof TextChannel ||
@@ -5781,13 +5977,22 @@ export function shouldBotReply(
 		currentCount % autoMsgThreshold === 0;
 
 	// 6. Determine if bot should reply:
-	// Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit
+	// Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit.
+	// isMatrixReplyToPersona: Matrix webhooks cannot carry Discord reply references, so
+	// matrixManager.ts registers the channel in pendingMatrixReplyChannels when it relays
+	// a Matrix reply to a bot persona. Set.delete() returns true if the key existed
+	// and removes it atomically — one-shot consumption prevents stale triggers.
+	const isMatrixReplyToPersona =
+		isMatrixRelayMessage &&
+		pendingMatrixReplyChannels.delete(message.channelId);
+
 	return (
 		isReplyToBot ||
 		isReplyToPersona ||
 		isBotMentioned ||
 		triggersActive ||
-		isAutoMsgHit
+		isAutoMsgHit ||
+		isMatrixReplyToPersona
 	);
 }
 

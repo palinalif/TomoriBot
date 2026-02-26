@@ -5,7 +5,7 @@
 
 resource "aws_security_group" "tomoribot_app" {
   name        = var.app_security_group_name
-  description = "Outbound HTTPS only for TomoriBot"
+  description = "Outbound-only SG for TomoriBot (DB + HTTPS + optional Cloudflare tunnel)"
   vpc_id      = aws_vpc.tomoribot.id
 }
 
@@ -33,8 +33,31 @@ resource "aws_security_group_rule" "tomoribot_app_egress_db" {
 
 resource "aws_security_group_rule" "tomoribot_app_egress_https" {
   type              = "egress"
+  description       = "Outbound HTTPS for provider APIs and Cloudflare tunnel fallback"
   from_port         = 443
   to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.tomoribot_app.id
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "tomoribot_app_egress_cloudflare_udp" {
+  count             = var.enable_cloudflare_tunnel_sidecar ? 1 : 0
+  type              = "egress"
+  description       = "Cloudflare Tunnel QUIC transport"
+  from_port         = 7844
+  to_port           = 7844
+  protocol          = "udp"
+  security_group_id = aws_security_group.tomoribot_app.id
+  cidr_blocks       = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "tomoribot_app_egress_cloudflare_tcp" {
+  count             = var.enable_cloudflare_tunnel_sidecar ? 1 : 0
+  type              = "egress"
+  description       = "Cloudflare Tunnel TCP transport fallback"
+  from_port         = 7844
+  to_port           = 7844
   protocol          = "tcp"
   security_group_id = aws_security_group.tomoribot_app.id
   cidr_blocks       = ["0.0.0.0/0"]

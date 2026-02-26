@@ -17,7 +17,7 @@ Primary implementation files:
 
 ## Why This Exists
 
-`docs/10_Streaming.md` explains streaming at a high level. This doc covers the low-level implementation details and edge-case handling that affect real Discord output shape.
+`docs/ai/streaming.md` explains streaming at a high level. This doc covers the low-level implementation details and edge-case handling that affect real Discord output shape.
 
 ## End-to-End Pipeline
 

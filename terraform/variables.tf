@@ -252,6 +252,30 @@ variable "run_env" {
   default     = "production"
 }
 
+variable "enable_cloudflare_tunnel_sidecar" {
+  description = "Enable Cloudflared sidecar for exposing Matrix appservice callback over HTTPS without an ALB"
+  type        = bool
+  default     = true
+}
+
+variable "cloudflare_tunnel_container_name" {
+  description = "Container name for the Cloudflared sidecar"
+  type        = string
+  default     = "cloudflared"
+}
+
+variable "cloudflare_tunnel_image" {
+  description = "Docker image for the Cloudflared sidecar"
+  type        = string
+  default     = "cloudflare/cloudflared:latest"
+}
+
+variable "cloudflare_tunnel_token_secret_key" {
+  description = "JSON key name inside tomoribot/production secret containing Cloudflare tunnel token"
+  type        = string
+  default     = "CLOUDFLARE_TUNNEL_TOKEN"
+}
+
 variable "postgres_user" {
   description = "Postgres username"
   type        = string

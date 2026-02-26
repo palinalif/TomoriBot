@@ -1221,7 +1221,7 @@ export async function addReminder(reminderData: {
 	reminder_time: Date;
 	repetition_interval_hours?: number | null;
 	self_reminder?: boolean | null;
-	created_by_user_id: number;
+	created_by_user_id: number | null;
 	persona_id?: number | null;
 }): Promise<ReminderRow | null> {
 	try {

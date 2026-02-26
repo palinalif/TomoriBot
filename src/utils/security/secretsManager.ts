@@ -32,6 +32,13 @@ export interface TomoriSecrets {
 	AVATAR_S3_REGION?: string;
 	AVATAR_S3_PREFIX?: string;
 	AVATAR_PUBLIC_BASE_URL?: string;
+	// Matrix Appservice Bridge (optional — leave unset to disable the bridge entirely)
+	MATRIX_HOMESERVER_URL?: string; // e.g., http://localhost:8448 or https://your-hs.example.com
+	MATRIX_ACCESS_TOKEN?:   string; // Appservice token (as_token) used to authenticate to the homeserver
+	MATRIX_BOT_USER_ID?:    string; // e.g., @tomoribot:yourdomain.com
+	MATRIX_SERVER_NAME?:    string; // Homeserver domain (e.g., localhost or yourdomain.com)
+	MATRIX_HS_TOKEN?:       string; // Homeserver token (hs_token) — homeserver sends this to verify its identity
+	MATRIX_APPSERVICE_PUBLIC_URL?: string; // Optional callback URL used in appservice registration for remote homeservers
 	[key: string]: string | undefined; // Allow dynamic CRYPTO_SECRET_V* keys
 }
 
@@ -126,6 +133,27 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 			secrets.AVATAR_PUBLIC_BASE_URL = process.env.AVATAR_PUBLIC_BASE_URL;
 		}
 
+		// Optional Matrix Appservice Bridge credentials
+		if (process.env.MATRIX_HOMESERVER_URL) {
+			secrets.MATRIX_HOMESERVER_URL = process.env.MATRIX_HOMESERVER_URL;
+		}
+		if (process.env.MATRIX_ACCESS_TOKEN) {
+			secrets.MATRIX_ACCESS_TOKEN = process.env.MATRIX_ACCESS_TOKEN;
+		}
+		if (process.env.MATRIX_BOT_USER_ID) {
+			secrets.MATRIX_BOT_USER_ID = process.env.MATRIX_BOT_USER_ID;
+		}
+		if (process.env.MATRIX_SERVER_NAME) {
+			secrets.MATRIX_SERVER_NAME = process.env.MATRIX_SERVER_NAME;
+		}
+		if (process.env.MATRIX_HS_TOKEN) {
+			secrets.MATRIX_HS_TOKEN = process.env.MATRIX_HS_TOKEN;
+		}
+		if (process.env.MATRIX_APPSERVICE_PUBLIC_URL) {
+			secrets.MATRIX_APPSERVICE_PUBLIC_URL =
+				process.env.MATRIX_APPSERVICE_PUBLIC_URL;
+		}
+
 		// Validate required fields
 		validateRequiredSecrets(secrets);
 
@@ -194,6 +222,27 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 		}
 		if (rawSecrets.AVATAR_PUBLIC_BASE_URL) {
 			secrets.AVATAR_PUBLIC_BASE_URL = rawSecrets.AVATAR_PUBLIC_BASE_URL;
+		}
+
+		// Optional Matrix Appservice Bridge credentials
+		if (rawSecrets.MATRIX_HOMESERVER_URL) {
+			secrets.MATRIX_HOMESERVER_URL = rawSecrets.MATRIX_HOMESERVER_URL;
+		}
+		if (rawSecrets.MATRIX_ACCESS_TOKEN) {
+			secrets.MATRIX_ACCESS_TOKEN = rawSecrets.MATRIX_ACCESS_TOKEN;
+		}
+		if (rawSecrets.MATRIX_BOT_USER_ID) {
+			secrets.MATRIX_BOT_USER_ID = rawSecrets.MATRIX_BOT_USER_ID;
+		}
+		if (rawSecrets.MATRIX_SERVER_NAME) {
+			secrets.MATRIX_SERVER_NAME = rawSecrets.MATRIX_SERVER_NAME;
+		}
+		if (rawSecrets.MATRIX_HS_TOKEN) {
+			secrets.MATRIX_HS_TOKEN = rawSecrets.MATRIX_HS_TOKEN;
+		}
+		if (rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL) {
+			secrets.MATRIX_APPSERVICE_PUBLIC_URL =
+				rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL;
 		}
 
 		// 7. Validate required fields

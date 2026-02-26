@@ -54,6 +54,27 @@ if (secrets.AVATAR_PUBLIC_BASE_URL) {
 	process.env.AVATAR_PUBLIC_BASE_URL = secrets.AVATAR_PUBLIC_BASE_URL;
 }
 
+// Optional Matrix Appservice Bridge credentials
+if (secrets.MATRIX_HOMESERVER_URL) {
+	process.env.MATRIX_HOMESERVER_URL = secrets.MATRIX_HOMESERVER_URL;
+}
+if (secrets.MATRIX_ACCESS_TOKEN) {
+	process.env.MATRIX_ACCESS_TOKEN = secrets.MATRIX_ACCESS_TOKEN;
+}
+if (secrets.MATRIX_BOT_USER_ID) {
+	process.env.MATRIX_BOT_USER_ID = secrets.MATRIX_BOT_USER_ID;
+}
+if (secrets.MATRIX_SERVER_NAME) {
+	process.env.MATRIX_SERVER_NAME = secrets.MATRIX_SERVER_NAME;
+}
+if (secrets.MATRIX_HS_TOKEN) {
+	process.env.MATRIX_HS_TOKEN = secrets.MATRIX_HS_TOKEN;
+}
+if (secrets.MATRIX_APPSERVICE_PUBLIC_URL) {
+	process.env.MATRIX_APPSERVICE_PUBLIC_URL =
+		secrets.MATRIX_APPSERVICE_PUBLIC_URL;
+}
+
 log.success(
 	`Secrets loaded successfully from ${(process.env.RUN_ENV || "development") === "production" && process.env.TEST_PRODUCTION !== "true" ? "AWS Secrets Manager" : ".env file"}`,
 );
@@ -357,6 +378,20 @@ try {
 } catch (error) {
 	log.warn("Failed to initialize preset avatar cache (non-critical)", error);
 	// Non-critical error - bot can still function without cached avatars
+}
+
+// Initialize Matrix bridge (optional — silent no-op if credentials not configured)
+log.section("Initializing Matrix Bridge...");
+try {
+	const { initializeMatrixClient } = await import("./utils/matrix");
+	await initializeMatrixClient(client);
+} catch (error) {
+	// Safely extract message/stack before passing to logger — the bridge error object
+	// contains circular references that crash JSON serialization inside log.warn()
+	const safeMsg = error instanceof Error ? error.message : String(error);
+	const safeStack = error instanceof Error ? error.stack : undefined;
+	log.warn(`Matrix bridge initialization failed (non-critical): ${safeMsg}\n${safeStack ?? ""}`);
+	// Non-critical error — bot functions normally without the Matrix bridge
 }
 
 // Starts the event handler, which also runs important 'ready' functions

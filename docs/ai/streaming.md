@@ -3,7 +3,7 @@
 This document explains the current streaming architecture for TomoriBot and how model output is transformed into Discord messages.
 
 > This file is the high-level guide.  
-> For low-level flush/chunk edge cases and exact boundary rules, see `docs/20_TextFlushingAndChunking.md`.
+> For low-level flush/chunk edge cases and exact boundary rules, see [`text-flushing-and-chunking.md`](./text-flushing-and-chunking.md).
 
 ## Overview
 
@@ -188,6 +188,6 @@ If output looks wrong:
 
 ## Related Docs
 
-- `docs/20_TextFlushingAndChunking.md` (low-level flush/chunk internals)
-- `docs/15_ExpressionHandling.md` (emoji/sticker conversion and metadata)
-- `docs/8_AIProviders.md` (provider architecture)
+- `docs/ai/text-flushing-and-chunking.md` (low-level flush/chunk internals)
+- `docs/ai/expression-handling.md` (emoji/sticker conversion and metadata)
+- `docs/ai/providers.md` (provider architecture)

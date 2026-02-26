@@ -26,6 +26,8 @@ import {
 	getOrCreateWebhook,
 	resolvePersonaAvatarURL,
 } from "../utils/discord/webhookManager";
+import { isBridgeUserId } from "../utils/bridge";
+import { sendMatrixReminderMention } from "../utils/matrix";
 
 /**
  * Class to manage the fallback reminder timer system
@@ -235,7 +237,18 @@ export class ReminderTimer {
 				`tomoriChat call completed for reminder ${reminder.reminder_id}`,
 			);
 
-			if (!isSelfReminder) {
+			// For Matrix users, check if the AI response already mentioned the recipient.
+			// If not, send a proper Matrix mention ping (mirrors ensureReminderRecipientMention
+			// for Discord users but targets the linked Matrix room instead).
+			if (!isSelfReminder && isBridgeUserId(reminder.user_discord_id)) {
+				await sendMatrixReminderMention(
+					channel,
+					reminder,
+					lastMessage.id,
+					reminderStartTime,
+					this.client.user?.id ?? "",
+				);
+			} else if (!isSelfReminder) {
 				await this.ensureReminderRecipientMention(
 					channel,
 					reminder,
@@ -298,6 +311,9 @@ export class ReminderTimer {
 		afterMessageId: string,
 		reminderStartTime: number,
 	): Promise<void> {
+		// Matrix user IDs cannot be mentioned in Discord — skip the mention step entirely.
+		if (isBridgeUserId(reminder.user_discord_id)) return;
+
 		type SendableChannel = TextBasedChannel & {
 			send: (options: {
 				content: string;

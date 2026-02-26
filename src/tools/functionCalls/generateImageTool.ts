@@ -8,6 +8,7 @@ import { AttachmentBuilder } from "discord.js";
 import { GoogleGenAI } from "@google/genai";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
 import {
 	BaseTool,
 	type ToolContext,
@@ -31,6 +32,7 @@ export class GenerateImageTool extends BaseTool {
 	category = "utility" as const;
 	requiresFeatureFlag = "image_gen";
 	private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
+	private static readonly PERSONA_ID_PATTERN = /^(?:persona:)?\d{1,10}$/i;
 
 	parameters: ToolParameterSchema = {
 		type: "object",
@@ -48,7 +50,7 @@ export class GenerateImageTool extends BaseTool {
 			user_id: {
 				type: "string",
 				description:
-					"Optional: Discord user ID whose profile picture should be used as a reference image. Useful for avatar-based edits. Pass your own ID to edit your own avatar. Can be combined with message_id references.",
+					"Optional: Target ID whose profile picture/avatar should be used as a reference image. Accepts a Discord/webhook ID (17-19 digits) or a persona DB ID (short numeric). Can be combined with message_id references.",
 			},
 			aspect_ratio: {
 				type: "string",
@@ -679,14 +681,16 @@ export class GenerateImageTool extends BaseTool {
 				if (!this.isValidDiscordId(userId)) {
 					return {
 						success: false,
-						error: "Invalid Discord user ID format",
+						error: "Invalid target ID format",
 						message:
-							"The provided user_id is not a valid Discord snowflake. Please supply a 17-19 digit Discord user ID.",
+							"The provided user_id is invalid. Use a 17-19 digit Discord/webhook ID or a short numeric persona ID.",
 					};
 				}
 
 				try {
-					const avatarData = await this.fetchUserAvatar(userId, context);
+					const avatarData = await resolveAvatarByDiscordId(userId, context, {
+						forceStatic: false,
+					});
 					const avatarBase64 = await this.fetchAndConvertImageToBase64(
 						avatarData.avatarUrl,
 					);
@@ -694,19 +698,26 @@ export class GenerateImageTool extends BaseTool {
 						mimeType: "image/png",
 						data: avatarBase64,
 					});
+					const avatarTypeLabel =
+						avatarData.sourceType === "persona"
+							? "persona"
+							: avatarData.sourceType === "webhook"
+								? "webhook"
+								: "user";
 					log.info(
-						`Added profile picture reference for user ${avatarData.username} (${userId})`,
+						`Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${userId})`,
 					);
 				} catch (avatarErr) {
 					log.error(
-						`Failed to fetch profile picture for user ${userId}`,
+						`Failed to fetch profile picture for ID ${userId}`,
 						avatarErr as Error,
 					);
 					return {
 						success: false,
-						error: "Failed to fetch profile picture for user_id",
+						error:
+							"Failed to fetch profile picture for user_id (user/webhook/persona)",
 						message:
-							"Could not fetch that user's profile picture. Please confirm the user ID is correct and try again.",
+							"Could not fetch an avatar for that ID. Please confirm it is a valid Discord/webhook ID or persona ID and try again.",
 					};
 				}
 			}
@@ -879,59 +890,10 @@ export class GenerateImageTool extends BaseTool {
 	 * Validate Discord snowflake format
 	 */
 	private isValidDiscordId(userId: string): boolean {
-		return GenerateImageTool.DISCORD_ID_PATTERN.test(userId);
-	}
-
-	/**
-	 * Fetch Discord user and their avatar URL (prefers guild avatar when available)
-	 */
-	private async fetchUserAvatar(
-		userId: string,
-		context: ToolContext,
-	): Promise<{ username: string; avatarUrl: string; serverNickname?: string }> {
-		const user = await context.client.users.fetch(userId);
-
-		let avatarUrl: string;
-		let serverNickname: string | undefined;
-
-		if (context.guildId) {
-			const guild = context.client.guilds.cache.get(context.guildId);
-			if (guild) {
-				const member = await guild.members.fetch(userId).catch(() => null);
-				if (member) {
-					avatarUrl = member.displayAvatarURL({
-						size: 1024,
-						extension: "png",
-						forceStatic: false,
-					});
-					serverNickname = member.nickname ?? undefined;
-				} else {
-					avatarUrl = user.displayAvatarURL({
-						size: 1024,
-						extension: "png",
-						forceStatic: false,
-					});
-				}
-			} else {
-				avatarUrl = user.displayAvatarURL({
-					size: 1024,
-					extension: "png",
-					forceStatic: false,
-				});
-			}
-		} else {
-			avatarUrl = user.displayAvatarURL({
-				size: 1024,
-				extension: "png",
-				forceStatic: false,
-			});
-		}
-
-		return {
-			username: user.username,
-			avatarUrl,
-			serverNickname,
-		};
+		return (
+			GenerateImageTool.DISCORD_ID_PATTERN.test(userId) ||
+			GenerateImageTool.PERSONA_ID_PATTERN.test(userId)
+		);
 	}
 
 	/**

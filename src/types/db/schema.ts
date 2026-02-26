@@ -498,6 +498,19 @@ export const serverwideQuotaSchema = z.object({
 export type ServerwideQuotaRow = z.infer<typeof serverwideQuotaSchema>;
 
 /**
+ * Schema for Matrix ↔ Discord channel bridge links.
+ * Enforces strict 1-to-1 mapping: one Discord channel per Matrix room and vice versa.
+ */
+export const matrixChannelLinkSchema = z.object({
+	link_id:         z.number().optional(),
+	server_id:       z.number(),
+	channel_disc_id: z.string(),
+	matrix_room_id:  z.string(),
+	created_at:      z.date().optional(),
+});
+export type MatrixChannelLinkRow = z.infer<typeof matrixChannelLinkSchema>;
+
+/**
  * Tomori's combined state (base config + LLM settings + LLM info)
  */
 export type TomoriState = TomoriRow & {
