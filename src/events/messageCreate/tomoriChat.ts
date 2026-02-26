@@ -145,6 +145,11 @@ const MAX_TRIGGERED_PERSONA_LIMIT = 10;
 const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 30 minutes of inactivity
 const SELF_REPLY_SUPPRESSION_TTL_MS = 5000;
 const selfReplySuppressionUntil = new Map<string, number>();
+const USER_IMPERSONATION_WEBHOOK_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const userImpersonationWebhookCache = new Map<
+	string,
+	{ userId: string; cachedAt: number }
+>();
 
 export function suppressNextSelfReply(
 	channelId: string,
@@ -178,6 +183,163 @@ function normalizeTailDirective(text: string): string {
 		trimmed = trimmed.slice(1, -1).trim();
 	}
 	return trimmed;
+}
+
+function cacheUserImpersonationWebhook(
+	webhookId: string,
+	userId: string,
+): void {
+	if (!webhookId || !userId) {
+		return;
+	}
+
+	userImpersonationWebhookCache.set(webhookId, {
+		userId,
+		cachedAt: Date.now(),
+	});
+}
+
+function getCachedImpersonatedUserIdForWebhook(
+	webhookId: string | null | undefined,
+): string | null {
+	if (!webhookId) {
+		return null;
+	}
+
+	const cached = userImpersonationWebhookCache.get(webhookId);
+	if (!cached) {
+		return null;
+	}
+
+	if (Date.now() - cached.cachedAt > USER_IMPERSONATION_WEBHOOK_CACHE_TTL_MS) {
+		userImpersonationWebhookCache.delete(webhookId);
+		return null;
+	}
+
+	return cached.userId;
+}
+
+function normalizeIdentityName(value?: string | null): string {
+	return value?.trim().toLowerCase() ?? "";
+}
+
+function normalizeAvatarUrlForMatch(value?: string | null): string | null {
+	if (!value) {
+		return null;
+	}
+
+	try {
+		const parsed = new URL(value);
+		parsed.search = "";
+		return parsed.toString();
+	} catch {
+		const trimmed = value.split("?")[0]?.trim();
+		return trimmed || null;
+	}
+}
+
+function resolveImpersonatedUserIdByWebhookIdentity(
+	guild: Guild | null | undefined,
+	webhookDisplayName: string,
+	webhookAvatarUrl?: string | null,
+): string | null {
+	if (!guild) {
+		return null;
+	}
+
+	const normalizedWebhookName = normalizeIdentityName(webhookDisplayName);
+	if (!normalizedWebhookName) {
+		return null;
+	}
+
+	const matchingMembers = Array.from(guild.members.cache.values()).filter(
+		(member) => {
+			const candidateNames = [
+				member.displayName,
+				member.user.displayName,
+				member.user.globalName,
+				member.user.username,
+			]
+				.map((name) => normalizeIdentityName(name))
+				.filter((name) => name.length > 0);
+
+			return candidateNames.includes(normalizedWebhookName);
+		},
+	);
+
+	if (matchingMembers.length === 1) {
+		return matchingMembers[0].id;
+	}
+
+	if (matchingMembers.length === 0) {
+		return null;
+	}
+
+	const normalizedWebhookAvatar = normalizeAvatarUrlForMatch(webhookAvatarUrl);
+	if (!normalizedWebhookAvatar) {
+		return null;
+	}
+
+	const avatarMatches = matchingMembers.filter((member) => {
+		const memberAvatarUrl = member.displayAvatarURL({
+			size: 1024,
+			extension: "png",
+			forceStatic: true,
+		});
+		return (
+			normalizeAvatarUrlForMatch(memberAvatarUrl) === normalizedWebhookAvatar
+		);
+	});
+
+	return avatarMatches.length === 1 ? avatarMatches[0].id : null;
+}
+
+function resolveReferencedWebhookTarget(
+	referenceMessage: Message,
+	personaByNickname: Map<string, TomoriState>,
+	guild: Guild | null | undefined,
+): { replyPersona: TomoriState | null; impersonatedUserId: string | null } {
+	if (!referenceMessage.webhookId) {
+		return { replyPersona: null, impersonatedUserId: null };
+	}
+
+	const cachedImpersonatedUserId = getCachedImpersonatedUserIdForWebhook(
+		referenceMessage.webhookId,
+	);
+	if (cachedImpersonatedUserId) {
+		return {
+			replyPersona: null,
+			impersonatedUserId: cachedImpersonatedUserId,
+		};
+	}
+
+	const rawWebhookName = referenceMessage.author.username;
+	if (!rawWebhookName || extractBridgeUserId(rawWebhookName)) {
+		return { replyPersona: null, impersonatedUserId: null };
+	}
+
+	const webhookName = stripBridgePrefix(rawWebhookName);
+	const matchedPersona = personaByNickname.get(webhookName.toLowerCase());
+	if (matchedPersona) {
+		return { replyPersona: matchedPersona, impersonatedUserId: null };
+	}
+
+	const webhookAvatarUrl = referenceMessage.author.displayAvatarURL({
+		size: 1024,
+		extension: "png",
+		forceStatic: true,
+	});
+
+	const impersonatedUserId = resolveImpersonatedUserIdByWebhookIdentity(
+		guild,
+		webhookName,
+		webhookAvatarUrl,
+	);
+
+	return {
+		replyPersona: null,
+		impersonatedUserId,
+	};
 }
 
 function buildCombinedTailDirectiveMessage(
@@ -1930,12 +2092,21 @@ export default async function tomoriChat(
 						if (referenceMessage.author.id === client.user?.id) {
 							isReplyToBot = true;
 						} else if (referenceMessage.webhookId) {
-							const webhookName = referenceMessage.author.username;
-							const matchedPersona = webhookName
-								? personaByNickname.get(webhookName.toLowerCase())
-								: undefined;
-							if (matchedPersona) {
-								replyPersona = matchedPersona;
+							const webhookReplyTarget = resolveReferencedWebhookTarget(
+								referenceMessage,
+								personaByNickname,
+								guild,
+							);
+
+							if (webhookReplyTarget.replyPersona) {
+								replyPersona = webhookReplyTarget.replyPersona;
+							} else if (webhookReplyTarget.impersonatedUserId) {
+								isReplyToBot = true;
+								isUserImpersonation = true;
+								impersonatedUserId = webhookReplyTarget.impersonatedUserId;
+								log.info(
+									`Reply ${message.id} matched user impersonation webhook. Target user: ${impersonatedUserId}`,
+								);
 							}
 						}
 					}
@@ -3942,6 +4113,10 @@ export default async function tomoriChat(
 								reason: "TomoriBot user impersonation",
 							});
 
+							cacheUserImpersonationWebhook(
+								tempWebhook.id,
+								impersonatedUserId,
+							);
 							personaWebhook = tempWebhook;
 							log.info(
 								`Created temporary webhook for user impersonation: ${impersonatedUserDiscordName}`,
@@ -3976,8 +4151,9 @@ export default async function tomoriChat(
 							guild?.members.cache.get(impersonatedUserId)?.displayName ||
 							guild?.members.cache.get(impersonatedUserId)?.user.displayName ||
 							"User";
-						// Prefix stripping: use database nickname if available (e.g., "bred")
-						prefixStrippingName = impersonatedUserDbNickname || personaUsername;
+						// Prefix stripping: prefer webhook/display identity to match the
+						// impersonation directive; fall back to DB nickname if needed.
+						prefixStrippingName = personaUsername || impersonatedUserDbNickname;
 					} else if (personaWebhook && currentPersona.is_alter) {
 						// For alter personas, use persona nickname for both
 						personaUsername = currentPersona.tomori_nickname;
@@ -5901,11 +6077,16 @@ export function shouldBotReply(
 			isReplyToBot = true;
 			isReplyToPersona = true;
 		} else if (referenceMessage?.webhookId) {
-			const webhookName = referenceMessage.author.username;
-			const matchedPersona = webhookName
-				? personaByNickname.get(webhookName.toLowerCase())
-				: undefined;
-			if (matchedPersona) {
+			const webhookReplyTarget = resolveReferencedWebhookTarget(
+				referenceMessage,
+				personaByNickname,
+				message.guild,
+			);
+			if (webhookReplyTarget.replyPersona) {
+				isReplyToPersona = true;
+			}
+			if (webhookReplyTarget.impersonatedUserId) {
+				isReplyToBot = true;
 				isReplyToPersona = true;
 			}
 		}

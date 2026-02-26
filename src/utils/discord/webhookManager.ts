@@ -107,6 +107,23 @@ function isValidHttpUrl(url: string): boolean {
 	}
 }
 
+function sanitizeAvatarUrl(url?: string | null): string | undefined {
+	if (!url) {
+		return undefined;
+	}
+
+	const trimmedUrl = url.trim();
+	if (trimmedUrl.length === 0) {
+		return undefined;
+	}
+
+	if (!isValidHttpUrl(trimmedUrl)) {
+		return undefined;
+	}
+
+	return trimmedUrl;
+}
+
 /**
  * Attempts to recover persona avatar by scanning guild for surviving webhooks.
  * Used when the stored webhook_avatar_url fails to download (Edge Case 2: last webhook deleted).
@@ -639,18 +656,9 @@ export async function sendAsPersona(
 ): Promise<Message | null> {
 	try {
 		// Resolve avatar URL based on persona type
-		let avatarURL = options?.avatarURL;
-
-		if (!avatarURL) {
-			if (persona.is_alter) {
-				// Alter persona: Use webhook_avatar_url from database
-				avatarURL = persona.webhook_avatar_url ?? undefined;
-			} else {
-				// Main persona: Try to get guild avatar
-				// Note: Guild avatar is set during persona swap, so we rely on webhook_avatar_url
-				avatarURL = persona.webhook_avatar_url ?? undefined;
-			}
-		}
+		const avatarURL =
+			sanitizeAvatarUrl(options?.avatarURL) ||
+			sanitizeAvatarUrl(persona.webhook_avatar_url);
 
 		// Fallback: If no avatar URL, webhook will use bot's global avatar automatically
 

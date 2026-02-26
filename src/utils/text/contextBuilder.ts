@@ -680,6 +680,17 @@ export async function buildContext({
 	let sameChannelMemoryDirective: string | undefined;
 	let uncensorDirective: string | undefined;
 	const botName = tomoriNickname;
+	const impersonatedMember =
+		isUserImpersonation && impersonatedUserId
+			? client.guilds.cache
+					.get(guildId)
+					?.members.cache.get(impersonatedUserId)
+			: null;
+	const impersonatedIdentityName =
+		impersonatedMember?.displayName ||
+		impersonatedMember?.user.displayName ||
+		impersonatedUserNickname ||
+		null;
 	const uncensorInputOptions = {
 		unicodeSpacesEnabled: tomoriConfig.uncensor_unicode_space_enabled,
 		sanitizeEnabled: tomoriConfig.uncensor_sanitize_enabled,
@@ -763,15 +774,15 @@ export async function buildContext({
 	let serverInfoContent = "";
 	if (isDMChannel) {
 		// For DMs, indicate the bot is in a direct message (user name will be in dialogue section)
-		if (isUserImpersonation && impersonatedUserNickname) {
-			serverInfoContent = `# Knowledge Base\nYou are ${impersonatedUserNickname}, currently in a Direct Message with User.\n`;
+		if (isUserImpersonation && impersonatedIdentityName) {
+			serverInfoContent = `# Knowledge Base\nYou are ${impersonatedIdentityName}, currently in a Direct Message with User.\n`;
 		} else {
 			serverInfoContent = `# Knowledge Base\n${botName} is currently in a Direct Message with User.\n`;
 		}
 	} else {
 		// For servers, show server name and description
-		if (isUserImpersonation && impersonatedUserNickname) {
-			serverInfoContent = `# Knowledge Base\nYou are ${impersonatedUserNickname}, currently in the Discord server named "${serverName}".\n`;
+		if (isUserImpersonation && impersonatedIdentityName) {
+			serverInfoContent = `# Knowledge Base\nYou are ${impersonatedIdentityName}, currently in the Discord server named "${serverName}".\n`;
 		} else {
 			serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
 		}
@@ -1994,18 +2005,7 @@ export async function buildContext({
 
 	// Inject user impersonation system prompt as the LAST message (February 2026)
 	if (isUserImpersonation && impersonatedUserId) {
-		// Prioritize database nickname over Discord display name for context/messages
-		// But webhook will still use Discord display name
-		let nameToUse: string;
-		if (impersonatedUserNickname) {
-			// Use database nickname if available (e.g., "bred")
-			nameToUse = impersonatedUserNickname;
-		} else {
-			// Fall back to Discord display name
-			const guild = client.guilds.cache.get(guildId);
-			const member = guild?.members.cache.get(impersonatedUserId);
-			nameToUse = member?.displayName || member?.user.displayName || "User";
-		}
+		const nameToUse = impersonatedIdentityName || "User";
 
 		tailDirectives.push(
 			`Imitate ${nameToUse}, start your message with ${nameToUse}:`,

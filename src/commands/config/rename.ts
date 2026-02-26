@@ -1,24 +1,36 @@
 import {
 	MessageFlags,
+	TextInputStyle,
 	type ChatInputCommandInteraction,
 	type Client,
+	type ModalSubmitInteraction,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
+} from "../../utils/discord/interactionHelper";
 import {
 	type UserRow,
 	type ErrorContext,
 	tomoriSchema,
 	personaConfigSchema,
+	type TomoriState,
 } from "../../types/db/schema";
+import type { ModalResult, SelectOption } from "../../types/discord/modal";
+import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { sql } from "@/utils/db/client";
 
 // Constants for validation
 const NICKNAME_MIN_LENGTH = 2;
 const NICKNAME_MAX_LENGTH = 32;
+const MODAL_CUSTOM_ID = "config_rename_modal";
+const PERSONA_SELECT_ID = "persona_select";
+const NEW_NAME_INPUT_ID = "new_name_input";
 
 function isUniqueViolation(error: unknown): boolean {
 	return (
@@ -35,17 +47,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("rename")
-		.setDescription(localizer("en-US", "commands.config.rename.description"))
-		.addStringOption((option) =>
-			option
-				.setName("name")
-				.setDescription(
-					localizer("en-US", "commands.config.rename.option_description"),
-				)
-				.setRequired(true)
-				.setMinLength(NICKNAME_MIN_LENGTH)
-				.setMaxLength(NICKNAME_MAX_LENGTH),
-		);
+		.setDescription(localizer("en-US", "commands.config.rename.description"));
 
 /**
  * Changes what Tomori refers to herself in context and in chat.
@@ -61,29 +63,116 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
+	const serverDiscId = interaction.guild?.id ?? interaction.user.id;
+	let modalResult: ModalResult | null = null;
+	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
+	let selectedPersona: TomoriState | null = null;
+	let attemptedNickname: string | null = null;
+
 	// 1. Ensure command is run in a channel
 	if (!interaction.channel) {
-		await replyInfoEmbed(interaction, userData.language_pref, {
+		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.channel_only_title",
 			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
-	// 1.5. Defer the interaction before async work to prevent timeout
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
 	try {
-		// 2. Get the new nickname from the command options
-		const newNickname = interaction.options.getString("name", true);
+		// 2. Resolve all personas for selector
+		const allPersonas = await loadAllPersonasForServer(serverDiscId);
+		if (allPersonas.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
 
-		// 3. Validate nickname length (redundant check for safety)
+		const personaSelectOptions: SelectOption[] = allPersonas
+			.filter((persona) => persona.tomori_id !== undefined)
+			.map((persona) => ({
+				label: safeSelectOptionText(persona.tomori_nickname),
+				value: persona.tomori_id?.toString() ?? "",
+				description: persona.is_alter
+					? localizer(locale, "commands.config.rename.alter_persona_description")
+					: localizer(locale, "commands.config.rename.main_persona_description"),
+			}))
+			.filter((option) => option.value !== "");
+		if (personaSelectOptions.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 3. Show modal (persona select + new name)
+		modalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: "commands.config.rename.modal_title",
+			components: [
+				{
+					customId: PERSONA_SELECT_ID,
+					labelKey: "commands.config.rename.persona_select_label",
+					descriptionKey: "commands.config.rename.persona_select_description",
+					placeholder: "commands.config.rename.persona_select_placeholder",
+					required: true,
+					options: personaSelectOptions,
+				},
+				{
+					customId: NEW_NAME_INPUT_ID,
+					labelKey: "commands.config.rename.new_name_input_label",
+					descriptionKey: "commands.config.rename.new_name_input_description",
+					placeholder: "commands.config.rename.new_name_input_placeholder",
+					style: TextInputStyle.Short,
+					required: true,
+					minLength: NICKNAME_MIN_LENGTH,
+					maxLength: NICKNAME_MAX_LENGTH,
+				},
+			],
+		});
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Rename modal ${modalResult.outcome} for user ${interaction.user.id}`,
+			);
+			return;
+		}
+
+		// biome-ignore lint/style/noNonNullAssertion: Modal submit outcome guarantees interaction exists
+		modalSubmitInteraction = modalResult.interaction!;
+		if (!modalSubmitInteraction.deferred && !modalSubmitInteraction.replied) {
+			await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+		}
+		const selectedPersonaId = modalResult.values?.[PERSONA_SELECT_ID];
+		attemptedNickname = modalResult.values?.[NEW_NAME_INPUT_ID] ?? "";
+		const newNickname = attemptedNickname.trim();
+
+		selectedPersona =
+			allPersonas.find(
+				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
+			) ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 4. Validate nickname length
 		if (
 			newNickname.length < NICKNAME_MIN_LENGTH ||
 			newNickname.length > NICKNAME_MAX_LENGTH
 		) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.config.rename.invalid_length_title",
 				descriptionKey: "commands.config.rename.invalid_length",
 				descriptionVars: {
@@ -95,25 +184,12 @@ export async function execute(
 			return;
 		}
 
-		// 4. Load the Tomori state for this server - let helper functions manage interaction state
-		const tomoriState = await getCachedTomoriState(
-			interaction.guild?.id ?? interaction.user.id,
-		);
-		if (!tomoriState) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+		// 5. Store the old nickname for the success message
+		const oldNickname = selectedPersona.tomori_nickname;
 
-		// 6. Store the old nickname for the success message
-		const oldNickname = tomoriState.tomori_nickname;
-
-		// 7. Check if the nickname is actually changing
+		// 6. Check if the nickname is actually changing
 		if (newNickname === oldNickname) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.config.rename.already_set_title",
 				descriptionKey: "commands.config.rename.already_set_description",
 				descriptionVars: {
@@ -127,13 +203,13 @@ export async function execute(
 		const duplicateNameRows = await sql<Array<{ tomori_id: number }>>`
 			SELECT tomori_id
 			FROM tomoris
-			WHERE server_id = ${tomoriState.server_id}
-			  AND tomori_id <> ${tomoriState.tomori_id}
+			WHERE server_id = ${selectedPersona.server_id}
+			  AND tomori_id <> ${selectedPersona.tomori_id}
 			  AND lower(btrim(tomori_nickname)) = lower(btrim(${newNickname}))
 			LIMIT 1
 		`;
 		if (duplicateNameRows.length > 0) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.persona.name_conflict_title",
 				descriptionKey: "commands.persona.name_conflict_description",
 				descriptionVars: { name: newNickname },
@@ -146,28 +222,28 @@ export async function execute(
 		// We perform two separate updates, but ideally this would be a transaction
 		// if the database supported it easily with Bun's current driver.
 
-		// 8. Update the nickname in the `tomoris` table using direct SQL (Rule #4, #15)
+		// 7. Update the nickname in the `tomoris` table
 		const [updatedTomoriRow] = await sql`
             UPDATE tomoris
             SET tomori_nickname = ${newNickname}
-            WHERE tomori_id = ${tomoriState.tomori_id}
+            WHERE tomori_id = ${selectedPersona.tomori_id}
             RETURNING *
         `;
 
-		// 9. Validate the returned `tomoris` data (Rules #3, #5)
+		// 8. Validate the returned `tomoris` data
 		const validatedTomori = tomoriSchema.safeParse(updatedTomoriRow);
 
 		if (!validatedTomori.success || !updatedTomoriRow) {
 			// Log error specific to tomoris update failure
 			const context: ErrorContext = {
-				tomoriId: tomoriState.tomori_id,
-				serverId: tomoriState.server_id,
+				tomoriId: selectedPersona.tomori_id,
+				serverId: selectedPersona.server_id,
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config nickname",
+					command: "config rename",
 					table: "tomoris",
-					guildId: interaction.guild?.id ?? interaction.user.id,
+					guildId: serverDiscId,
 					newNickname,
 					validationErrors: validatedTomori.success
 						? null
@@ -182,7 +258,7 @@ export async function execute(
 				context,
 			);
 
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "general.errors.update_failed_title",
 				descriptionKey: "general.errors.update_failed_description",
 				color: ColorCode.ERROR,
@@ -190,8 +266,8 @@ export async function execute(
 			return; // Stop if the primary update failed
 		}
 
-		// 10. Add new nickname to trigger words if not already present
-		const currentTriggers = tomoriState.trigger_words ?? [];
+		// 9. Add new nickname to trigger words if not already present
+		const currentTriggers = selectedPersona.trigger_words ?? [];
 		let triggerUpdateNeeded = false;
 		const updatedTriggers = [...currentTriggers]; // Create a mutable copy
 
@@ -204,40 +280,39 @@ export async function execute(
 			updatedTriggers.push(newNickname);
 			triggerUpdateNeeded = true;
 			log.info(
-				`Adding new nickname '${newNickname}' to trigger words for tomori ${tomoriState.tomori_id}`,
+				`Adding new nickname '${newNickname}' to trigger words for tomori ${selectedPersona.tomori_id}`,
 			);
 		} else {
 			log.info(
-				`Nickname '${newNickname}' already exists in trigger words for tomori ${tomoriState.tomori_id}. Skipping update.`,
+				`Nickname '${newNickname}' already exists in trigger words for tomori ${selectedPersona.tomori_id}. Skipping update.`,
 			);
 		}
 
-		// 11. Update trigger_words in `tomori_configs` if needed (Rule #4, #15, #23)
+		// 10. Update trigger_words in `persona_configs` if needed
 		if (triggerUpdateNeeded) {
-			// Construct properly escaped PostgreSQL array literal (Rule #23)
 			const [updatedConfigRow] = await sql`
 				INSERT INTO persona_configs (tomori_id, trigger_words)
-				VALUES (${tomoriState.tomori_id}, ARRAY[${newNickname}]::text[])
+				VALUES (${selectedPersona.tomori_id}, ARRAY[${newNickname}]::text[])
 				ON CONFLICT (tomori_id) DO UPDATE
 				SET trigger_words = array_append(persona_configs.trigger_words, ${newNickname})
 				RETURNING *
 			`;
 
-			// 12. Validate the returned `tomori_configs` data (Rules #3, #5)
+			// 11. Validate the returned `persona_configs` data
 			const validatedConfig = personaConfigSchema.safeParse(updatedConfigRow);
 
 			if (!validatedConfig.success || !updatedConfigRow) {
-				// Log error specific to tomori_configs update failure
+				// Log error specific to persona_configs update failure
 				const context: ErrorContext = {
-					tomoriId: tomoriState.tomori_id,
-					serverId: tomoriState.server_id,
+					tomoriId: selectedPersona.tomori_id,
+					serverId: selectedPersona.server_id,
 					userId: userData.user_id,
 					errorType: "DatabaseUpdateError",
 					metadata: {
-						command: "config nickname",
+						command: "config rename",
 						table: "persona_configs",
 						column: "trigger_words",
-						guildId: interaction.guild?.id ?? interaction.user.id,
+						guildId: serverDiscId,
 						newNickname,
 						updatedTriggers, // Log the array we tried to set
 						validationErrors: validatedConfig.success
@@ -256,7 +331,7 @@ export async function execute(
 				);
 
 				// Inform user about partial success
-				await replyInfoEmbed(interaction, locale, {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
 					titleKey: "commands.config.rename.partial_success_title",
 					descriptionKey: "commands.config.rename.partial_success_description",
 					descriptionVars: {
@@ -268,14 +343,16 @@ export async function execute(
 				return; // Stop execution after informing about partial success
 			}
 			log.success(
-				`Successfully updated trigger words for tomori ${tomoriState.tomori_id}`,
+				`Successfully updated trigger words for tomori ${selectedPersona.tomori_id}`,
 			);
 		}
 		// --- Transaction End (Conceptually) ---
 
-		// 13. Update bot's server nickname if in a guild
+		// 12. Update bot's server nickname only when renaming the main persona
 		let nicknameUpdateSuccess = false;
-		if (interaction.guild) {
+		const attemptedGuildNicknameSync =
+			Boolean(interaction.guild) && selectedPersona.is_alter !== true;
+		if (attemptedGuildNicknameSync && interaction.guild) {
 			try {
 				const botMember = await interaction.guild.members.fetchMe();
 				if (botMember) {
@@ -293,11 +370,11 @@ export async function execute(
 			}
 		}
 
-		// 14. Invalidate cache so next message gets fresh config
-		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+		// 13. Invalidate cache so next message gets fresh config
+		invalidateTomoriStateCache(serverDiscId);
 
-		// 15. Success! Show the nickname change (covers both nickname and trigger word update if applicable)
-		await replyInfoEmbed(interaction, locale, {
+		// 14. Success! Show the nickname change
+		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.config.rename.success_title",
 			descriptionKey: nicknameUpdateSuccess
 				? triggerUpdateNeeded
@@ -312,63 +389,54 @@ export async function execute(
 			},
 			color: ColorCode.SUCCESS,
 			footerKey:
-				!nicknameUpdateSuccess && interaction.guild
+				attemptedGuildNicknameSync && !nicknameUpdateSuccess
 					? "commands.config.rename.nickname_update_failed_footer"
 					: undefined,
 		});
 	} catch (error) {
+		const errorReplyInteraction = modalSubmitInteraction ?? interaction;
+
 		if (isUniqueViolation(error)) {
-			await replyInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(errorReplyInteraction, locale, {
 				titleKey: "commands.persona.name_conflict_title",
 				descriptionKey: "commands.persona.name_conflict_description",
 				descriptionVars: {
-					name: interaction.options.getString("name", true),
+					name:
+						attemptedNickname?.trim() ??
+						modalResult?.values?.[NEW_NAME_INPUT_ID] ??
+						"",
 				},
 				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
-		// 14. Log error with context (Rule #22)
-		// ... (error logging remains largely the same, maybe add which step failed if possible) ...
-		let serverIdForError: number | null = null;
-		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			const state = await getCachedTomoriState(interaction.guild.id);
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
-
+		// 15. Log error with context
 		const context: ErrorContext = {
 			userId: userData.user_id,
-			serverId: serverIdForError,
-			tomoriId: tomoriIdForError,
+			serverId: selectedPersona?.server_id ?? null,
+			tomoriId: selectedPersona?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config nickname",
-				guildId: interaction.guild?.id ?? interaction.user.id,
+				command: "config rename",
+				guildId: serverDiscId,
 				executorDiscordId: interaction.user.id,
-				nicknameAttempted: interaction.options.getString("name"),
-				// Consider adding a 'stepFailed' field here if easily trackable
+				selectedPersonaId: selectedPersona?.tomori_id ?? null,
+				nicknameAttempted: attemptedNickname,
 			},
 		};
 		await log.error(
-			`Error executing /config nickname for user ${userData.user_disc_id}`,
+			`Error executing /config rename for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 15. Inform user of unknown error
-		if (!interaction.replied && !interaction.deferred) {
-			await interaction.reply({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		}
+		// 16. Inform user of unknown error
+		await replyInfoEmbed(errorReplyInteraction, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

@@ -23,6 +23,8 @@ import {
 import { loadAllPersonasForServer, loadTomoriState } from "@/utils/db/dbRead";
 import {
 	getOrCreateWebhook,
+	getOrCreatePersonaWebhook,
+	resolvePersonaAvatarURL,
 	sendAsPersona,
 } from "@/utils/discord/webhookManager";
 import type { SelectOption } from "@/types/discord/modal";
@@ -320,7 +322,10 @@ async function handlePersonaImpersonation(
 			});
 		} else {
 			// Alter persona: Send via webhook with embeds
-			const { webhook, errorReason } = await getOrCreateWebhook(channel);
+			const usePersonaWebhooks = process.env.RUN_ENV !== "production";
+			const { webhook, errorReason } = usePersonaWebhooks
+				? await getOrCreatePersonaWebhook(channel, selectedPersona)
+				: await getOrCreateWebhook(channel);
 			if (!webhook) {
 				await replyInfoEmbed(modalResult.interaction, locale, {
 					titleKey: "commands.bot.impersonate.webhook_error_title",
@@ -331,8 +336,13 @@ async function handlePersonaImpersonation(
 				return;
 			}
 
+			const avatarURL = usePersonaWebhooks
+				? undefined
+				: resolvePersonaAvatarURL(selectedPersona, interaction.guild);
+
 			await sendAsPersona(webhook, selectedPersona, messageContent, {
 				embeds,
+				avatarURL,
 			});
 		}
 
