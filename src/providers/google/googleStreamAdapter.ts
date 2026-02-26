@@ -82,6 +82,8 @@ interface GoogleStreamChunk {
  */
 export class GoogleStreamAdapter implements StreamProvider {
 	private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
+	private static readonly STREAM_TEXT_TAIL_CHARS = 4096;
+	private static readonly STREAM_TEXT_MIN_DEDUP_CHARS = 8;
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		ContextItemTag.SYSTEM_PERSONALITY,
@@ -92,6 +94,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 		// REMOVED: KNOWLEDGE_USER_MEMORIES, KNOWLEDGE_CURRENT_CONTEXT (now in KNOWLEDGE_USERS_IN_CONVERSATION)
 	];
 	private speakerGuardPendingTail = "";
+	private streamedTextTail = "";
 	private speakerGuardEnabled = false;
 	private activePersonaNameLower = "";
 	private knownSpeakerNamesLower = new Set<string>();
@@ -119,6 +122,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 			context.tomoriState.tomori_nickname,
 		);
 		this.speakerGuardPendingTail = "";
+		this.streamedTextTail = "";
 		this.speakerGuardEnabled = Boolean(personaSpeakerStop);
 		this.activePersonaNameLower = (
 			context.tomoriState.tomori_nickname ?? ""
@@ -315,25 +319,29 @@ export class GoogleStreamAdapter implements StreamProvider {
 					this.splitChunkWithTextAndFunctionCalls(normalizedChunk);
 
 				for (const chunkToEmit of chunksToEmit) {
+					const deduplicatedChunk =
+						this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
 					const guardResult =
-						this.applySpeakerBoundaryFallbackGuard(chunkToEmit);
+						this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
 
 					if (
 						this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
 							guardResult.chunk,
 						)
 					) {
-						yield {
-							data: {
-								text: this.speakerGuardPendingTail,
-							} satisfies GoogleStreamChunk,
-							provider: "google",
-							metadata: {
-								timestamp: Date.now(),
-								model: config.model,
-							},
-						};
-						this.speakerGuardPendingTail = "";
+						const tailText = this.consumeSpeakerGuardPendingTail();
+						if (tailText) {
+							yield {
+								data: {
+									text: tailText,
+								} satisfies GoogleStreamChunk,
+								provider: "google",
+								metadata: {
+									timestamp: Date.now(),
+									model: config.model,
+								},
+							};
+						}
 					}
 
 					yield {
@@ -358,30 +366,34 @@ export class GoogleStreamAdapter implements StreamProvider {
 				this.speakerGuardEnabled &&
 				this.speakerGuardPendingTail.length > 0
 			) {
-				yield {
-					data: { text: this.speakerGuardPendingTail } satisfies GoogleStreamChunk,
-					provider: "google",
-					metadata: {
-						timestamp: Date.now(),
-						model: config.model,
-					},
-				};
-				this.speakerGuardPendingTail = "";
+				const tailText = this.consumeSpeakerGuardPendingTail();
+				if (tailText) {
+					yield {
+						data: { text: tailText } satisfies GoogleStreamChunk,
+						provider: "google",
+						metadata: {
+							timestamp: Date.now(),
+							model: config.model,
+						},
+					};
+				}
 			}
 		} catch (error) {
 			if (
 				this.speakerGuardEnabled &&
 				this.speakerGuardPendingTail.length > 0
 			) {
-				yield {
-					data: { text: this.speakerGuardPendingTail } satisfies GoogleStreamChunk,
-					provider: "google",
-					metadata: {
-						timestamp: Date.now(),
-						model: config.model,
-					},
-				};
-				this.speakerGuardPendingTail = "";
+				const tailText = this.consumeSpeakerGuardPendingTail();
+				if (tailText) {
+					yield {
+						data: { text: tailText } satisfies GoogleStreamChunk,
+						provider: "google",
+						metadata: {
+							timestamp: Date.now(),
+							model: config.model,
+						},
+					};
+				}
 			}
 
 			// Convert Google API errors to our format
@@ -397,33 +409,95 @@ export class GoogleStreamAdapter implements StreamProvider {
 		}
 	}
 
+	private consumeSpeakerGuardPendingTail(): string {
+		if (!this.speakerGuardPendingTail) {
+			return "";
+		}
+
+		const tail = this.speakerGuardPendingTail;
+		this.speakerGuardPendingTail = "";
+		return tail;
+	}
+
+	private deduplicateChunkTextAgainstRecentStream(
+		chunk: GoogleStreamChunk,
+	): GoogleStreamChunk {
+		if (!chunk.text) {
+			return chunk;
+		}
+
+		const deduplicatedText = this.getTextDelta(chunk.text);
+		if (deduplicatedText !== chunk.text) {
+			log.info(
+				`GoogleStreamAdapter: Trimmed overlapping streamed text (${chunk.text.length} -> ${deduplicatedText.length})`,
+			);
+		}
+
+		if (deduplicatedText.length > 0) {
+			this.appendToStreamedTextTail(deduplicatedText);
+		}
+
+		if (deduplicatedText === chunk.text) {
+			return chunk;
+		}
+
+		return this.cloneChunkWithText(chunk, deduplicatedText);
+	}
+
+	private getTextDelta(chunkText: string): string {
+		if (
+			!chunkText ||
+			chunkText.length < GoogleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS ||
+			!this.streamedTextTail
+		) {
+			return chunkText;
+		}
+
+		const seenTail = this.streamedTextTail;
+		if (seenTail.endsWith(chunkText)) {
+			return "";
+		}
+
+		const maxOverlap = Math.min(seenTail.length, chunkText.length);
+		for (
+			let overlap = maxOverlap;
+			overlap >= GoogleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS;
+			overlap--
+		) {
+			if (
+				seenTail.slice(seenTail.length - overlap) ===
+				chunkText.slice(0, overlap)
+			) {
+				return chunkText.slice(overlap);
+			}
+		}
+
+		return chunkText;
+	}
+
+	private appendToStreamedTextTail(text: string): void {
+		if (!text) {
+			return;
+		}
+
+		this.streamedTextTail += text;
+		if (
+			this.streamedTextTail.length >
+			GoogleStreamAdapter.STREAM_TEXT_TAIL_CHARS
+		) {
+			this.streamedTextTail = this.streamedTextTail.slice(
+				-GoogleStreamAdapter.STREAM_TEXT_TAIL_CHARS,
+			);
+		}
+	}
+
+	/**
+	 * Normalize raw Google streaming data into a simplified chunk shape.
+	 */
 	private normalizeGoogleStreamChunk(rawChunk: unknown): GoogleStreamChunk {
 		const chunk = rawChunk as GoogleStreamChunk;
-		const candidate = chunk.candidates?.[0];
-		const parts = candidate?.content?.parts ?? [];
-
-		const partText = parts
-			.map((part) => part.text)
-			.filter((value): value is string => typeof value === "string")
-			.join("");
-		const topLevelText = typeof chunk.text === "string" ? chunk.text : "";
-		const text = topLevelText || partText;
-
-		const partFunctionCalls = parts
-			.map((part) => part.functionCall)
-			.filter(
-				(value): value is GoogleFunctionCall =>
-					typeof value === "object" && value !== null,
-			);
-		const topLevelFunctionCalls =
-			chunk.functionCalls?.filter(
-				(value): value is GoogleFunctionCall =>
-					typeof value === "object" && value !== null,
-			) ?? [];
-		const functionCalls =
-			topLevelFunctionCalls.length > 0
-				? topLevelFunctionCalls
-				: partFunctionCalls;
+		const functionCalls = this.extractFunctionCallsFromChunk(chunk);
+		const text = this.extractTextFromChunk(chunk);
 
 		return {
 			text: text.length > 0 ? text : undefined,
@@ -432,8 +506,101 @@ export class GoogleStreamAdapter implements StreamProvider {
 			candidates: chunk.candidates,
 			thoughtSignature: chunk.thoughtSignature,
 			thoughtSummary: chunk.thoughtSummary,
-			error: chunk.error,
+			...(chunk.error ? { error: chunk.error } : {}),
 		};
+	}
+
+	private getCandidateParts(chunk: GoogleStreamChunk): unknown[] {
+		const parts = chunk.candidates?.[0]?.content?.parts;
+		return Array.isArray(parts) ? parts : [];
+	}
+
+	private extractTextFromParts(parts: unknown[]): string {
+		return parts
+			.map((part) => {
+				if (!part || typeof part !== "object") return "";
+				const text = (part as { text?: unknown }).text;
+				return typeof text === "string" ? text : "";
+			})
+			.join("");
+	}
+
+	private extractFunctionCallsFromParts(parts: unknown[]): GoogleFunctionCall[] {
+		const extracted: GoogleFunctionCall[] = [];
+
+		for (const part of parts) {
+			if (!part || typeof part !== "object") continue;
+
+			const partObj = part as {
+				functionCall?: unknown;
+				function_call?: unknown;
+			};
+			const call = partObj.functionCall ?? partObj.function_call;
+			if (call && typeof call === "object") {
+				extracted.push(call as GoogleFunctionCall);
+			}
+		}
+
+		return extracted;
+	}
+
+	private extractTopLevelFunctionCalls(
+		chunk: GoogleStreamChunk,
+	): GoogleFunctionCall[] {
+		const extracted: GoogleFunctionCall[] = [];
+		const chunkObj = chunk as {
+			functionCalls?: unknown;
+			function_calls?: unknown;
+			functionCall?: unknown;
+			function_call?: unknown;
+		};
+
+		const arraySources = [chunkObj.functionCalls, chunkObj.function_calls];
+		for (const source of arraySources) {
+			if (!Array.isArray(source)) continue;
+			for (const call of source) {
+				if (call && typeof call === "object") {
+					extracted.push(call as GoogleFunctionCall);
+				}
+			}
+		}
+
+		const singularSources = [chunkObj.functionCall, chunkObj.function_call];
+		for (const source of singularSources) {
+			if (source && typeof source === "object") {
+				extracted.push(source as GoogleFunctionCall);
+			}
+		}
+
+		return extracted;
+	}
+
+	private extractFunctionCallsFromChunk(
+		chunk: GoogleStreamChunk,
+	): GoogleFunctionCall[] {
+		const topLevelCalls = this.extractTopLevelFunctionCalls(chunk);
+		if (topLevelCalls.length > 0) {
+			return topLevelCalls;
+		}
+
+		const parts = this.getCandidateParts(chunk);
+		return this.extractFunctionCallsFromParts(parts);
+	}
+
+	private extractTextFromChunk(chunk: GoogleStreamChunk): string {
+		const parts = this.getCandidateParts(chunk);
+		const partText = this.extractTextFromParts(parts);
+		if (partText.length > 0) {
+			return partText;
+		}
+
+		// Fallback only when the chunk has no parts (avoids noisy SDK warnings
+		// when non-text parts are present alongside text helpers).
+		if (parts.length === 0 && typeof chunk.text === "string") {
+			return chunk.text;
+		}
+
+		return "";
 	}
 
 	private splitChunkWithTextAndFunctionCalls(
@@ -453,7 +620,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 				candidates: chunk.candidates,
 				thoughtSignature: chunk.thoughtSignature,
 				thoughtSummary: chunk.thoughtSummary,
-				error: chunk.error,
+				...(chunk.error ? { error: chunk.error } : {}),
 			},
 		];
 	}
@@ -624,7 +791,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 		const googleChunk = chunk.data as GoogleStreamChunk;
 
 		// Handle errors first
-		if ("error" in googleChunk) {
+		if ("error" in googleChunk && googleChunk.error) {
 			return {
 				type: "error",
 				error: googleChunk.error as ProviderError,
@@ -684,9 +851,10 @@ export class GoogleStreamAdapter implements StreamProvider {
 		}
 
 		// Check for function calls
-		if (googleChunk.functionCalls && googleChunk.functionCalls.length > 0) {
+		const functionCalls = this.extractFunctionCallsFromChunk(googleChunk);
+		if (functionCalls.length > 0) {
 			const functionCall = this.convertGoogleFunctionCall(
-				googleChunk.functionCalls[0],
+				functionCalls[0],
 			);
 			if (thoughtSignature) {
 				functionCall.thoughtSignature = thoughtSignature;
@@ -699,10 +867,11 @@ export class GoogleStreamAdapter implements StreamProvider {
 		}
 
 		// Check for text content
-		if (googleChunk.text) {
+		const textContent = this.extractTextFromChunk(googleChunk);
+		if (textContent) {
 			return {
 				type: "text",
-				content: googleChunk.text,
+				content: textContent,
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
 			};
 		}
@@ -729,9 +898,10 @@ export class GoogleStreamAdapter implements StreamProvider {
 	extractFunctionCall(chunk: RawStreamChunk): FunctionCall | null {
 		const googleChunk = chunk.data as GoogleStreamChunk;
 
-		if (googleChunk.functionCalls && googleChunk.functionCalls.length > 0) {
+		const functionCalls = this.extractFunctionCallsFromChunk(googleChunk);
+		if (functionCalls.length > 0) {
 			const functionCall = this.convertGoogleFunctionCall(
-				googleChunk.functionCalls[0],
+				functionCalls[0],
 			);
 			const thoughtSignature = this.extractThoughtSignature(googleChunk);
 			if (thoughtSignature) {

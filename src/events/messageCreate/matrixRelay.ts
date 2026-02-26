@@ -73,7 +73,7 @@ function getEmbedTitleMap(): Map<string, EmbedRelayConfig> {
 	if (embedTitleMap) return embedTitleMap;
 
 	// Each entry: [Discord embed title locale key, Matrix summary key, extraction mode]
-	//   mode "memory"      — description is "`content`"; strip backticks → {memory} variable
+	//   mode "memory"      — description contains memory text in backticks; extract code span → {memory} variable
 	//   mode "description" — description is prose; strip Discord markdown → {description} variable
 	//   mode "title"       — title is already the key info (e.g. search status); wrap in [...]
 	//                        no locale key needed — the title is already translated per server locale
@@ -294,8 +294,12 @@ function embedToMatrixText(embed: Embed, serverLocale: string): string | null {
 	if (!embed.description) return null;
 
 	if (config.mode === "memory") {
-		// Memory embed descriptions are "`memory content`" — strip outer backticks
-		const memory = embed.description.replace(/^`+|`+$/g, "").trim();
+		// Memory embed descriptions keep the actual memory text in backticks.
+		// Prefer extracting that code span so this works for both concise and prose formats.
+		const memoryMatch = embed.description.match(/`([^`]+)`/);
+		const memory = memoryMatch
+			? memoryMatch[1].trim()
+			: stripDiscordMarkdown(embed.description).trim();
 		return localizer(serverLocale, config.matrixKey, { memory });
 	}
 

@@ -331,6 +331,12 @@ export class ReminderTool extends BaseTool {
 			};
 		}
 
+		const personaNickname =
+			context.personaUsername ||
+			tomoriState.tomori_nickname ||
+			context.client.user?.username ||
+			"TomoriBot";
+
 		// Validate reminder purpose
 		if (typeof reminderPurposeArg !== "string" || !reminderPurposeArg.trim()) {
 			return {
@@ -780,6 +786,9 @@ export class ReminderTool extends BaseTool {
 							: useOneTimeTaskEmbed
 								? "reminders.task_set_title"
 								: "reminders.reminder_set_title",
+						titleVars: {
+							persona_nickname: personaNickname,
+						},
 						descriptionKey: useRecurringTaskEmbed
 							? "reminders.recurring_task_set_description"
 							: useOneTimeTaskEmbed

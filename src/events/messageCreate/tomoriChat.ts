@@ -1758,32 +1758,25 @@ export default async function tomoriChat(
 			} {
 				if (!embedTitle) return { isTarget: false, type: null };
 
+				const matchesLocalizedTitleTemplate = (
+					template: string,
+					actualTitle: string,
+				): boolean => {
+					if (!template.includes("{")) {
+						return actualTitle === template;
+					}
+
+					const pattern = new RegExp(
+						`^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`,
+					);
+					return pattern.test(actualTitle);
+				};
+
 				// Check against all supported locales to handle cross-locale scenarios
 				// (e.g., Japanese user creates reset embed, English user should still detect it)
 				for (const supportedLocale of getSupportedLocales()) {
-					const matchesUserNicknameTemplate = (
-						template: string,
-						actualTitle: string,
-					): boolean => {
-						const placeholder = "{user_nickname}";
-						const placeholderIndex = template.indexOf(placeholder);
-						if (placeholderIndex === -1) {
-							return actualTitle === template;
-						}
-
-						const prefix = template.slice(0, placeholderIndex);
-						const suffix = template.slice(
-							placeholderIndex + placeholder.length,
-						);
-						return (
-							actualTitle.startsWith(prefix) &&
-							actualTitle.endsWith(suffix) &&
-							actualTitle.length >= prefix.length + suffix.length
-						);
-					};
-
 					// Target localizer keys for memory learning embeds
-					const serverMemoryLearningTitles = [
+					const memoryLearningTitles = [
 						localizer(
 							supportedLocale,
 							"genai.self_teach.server_memory_learned_title",
@@ -1792,14 +1785,24 @@ export default async function tomoriChat(
 							supportedLocale,
 							"genai.self_teach.server_memory_updated_title",
 						),
+						localizer(
+							supportedLocale,
+							"genai.self_teach.personal_memory_learned_title",
+						),
+						localizer(
+							supportedLocale,
+							"genai.self_teach.personal_memory_updated_title",
+						),
 					];
-					const personalMemoryLearnedTitleTemplate = localizer(
-						supportedLocale,
-						"genai.self_teach.personal_memory_learned_title",
-					);
-					const personalMemoryUpdatedTitleTemplate = localizer(
-						supportedLocale,
-						"genai.self_teach.personal_memory_updated_title",
+
+					const reminderSetTitles = [
+						localizer(supportedLocale, "reminders.reminder_set_title"),
+						localizer(supportedLocale, "reminders.recurring_task_set_title"),
+						localizer(supportedLocale, "reminders.task_set_title"),
+					];
+
+					const isMemoryLearning = memoryLearningTitles.some((title) =>
+						matchesLocalizedTitleTemplate(title, embedTitle),
 					);
 
 					// Target localizer key for conversation reset
@@ -1808,12 +1811,6 @@ export default async function tomoriChat(
 						"commands.tool.refresh.title",
 					);
 
-					// Target localizer keys for reminder set confirmations (all types)
-					const reminderSetTitles = [
-						localizer(supportedLocale, "reminders.reminder_set_title"),
-						localizer(supportedLocale, "reminders.recurring_task_set_title"),
-						localizer(supportedLocale, "reminders.task_set_title"),
-					];
 					// Target localizer key for system message injection
 					const systemInjectionTitle = localizer(
 						supportedLocale,
@@ -1845,17 +1842,7 @@ export default async function tomoriChat(
 					);
 
 					// Check for memory learning embeds
-					if (
-						serverMemoryLearningTitles.some((title) => embedTitle === title) ||
-						matchesUserNicknameTemplate(
-							personalMemoryLearnedTitleTemplate,
-							embedTitle,
-						) ||
-						matchesUserNicknameTemplate(
-							personalMemoryUpdatedTitleTemplate,
-							embedTitle,
-						)
-					) {
+					if (isMemoryLearning) {
 						return { isTarget: true, type: "memory_learning" };
 					}
 
@@ -1896,7 +1883,11 @@ export default async function tomoriChat(
 					}
 
 					// Check for reminder set confirmation embeds (all types)
-					if (reminderSetTitles.some((title) => embedTitle === title)) {
+					if (
+						reminderSetTitles.some((title) =>
+							matchesLocalizedTitleTemplate(title, embedTitle),
+						)
+					) {
 						return { isTarget: true, type: "reminder_set" };
 					}
 				}
@@ -2965,11 +2956,19 @@ export default async function tomoriChat(
 									}
 								}
 
+								const includeTitleInEmbedContent =
+									embedCheck.type === "memory_learning" ||
+									embedCheck.type === "reminder_set";
+								const titleLine =
+									includeTitleInEmbedContent && embed.title
+										? `${embed.title}\n`
+										: "";
+								const embedBody = `${titleLine}${cleanedDescription}`;
 								const embedContent =
 									embedCheck.type === "memory_learning" ||
 									embedCheck.type === "reward_headpat"
-										? `[System: ${cleanedDescription}]`
-										: `[The following is a system-produced embed]\n${cleanedDescription}`;
+										? `[System: ${embedBody}]`
+										: `[The following is a system-produced embed]\n${embedBody}`;
 								messageContentForLlm = messageContentForLlm
 									? `${messageContentForLlm}\n${embedContent}`
 									: embedContent;
@@ -3691,19 +3690,33 @@ export default async function tomoriChat(
 							const tokenLimits = getOpenRouterTokenLimits(
 								tomoriState.llm.llm_codename,
 							);
+							const openrouterTruncationOutputCap = Number.parseInt(
+								process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
+								10,
+							);
 							if (
 								tokenLimits &&
 								tokenLimits.contextLength > 0 &&
 								tokenLimits.maxCompletionTokens
 							) {
-								const { truncated, pairsDropped } = truncateDialogueHistory(
+								const truncationMaxCompletionTokens = Math.min(
+									tokenLimits.maxCompletionTokens,
+									openrouterTruncationOutputCap,
+								);
+								const {
+									truncated,
+									historyPairsDropped,
+									sampleItemsDropped,
+									totalDropped,
+								} = truncateDialogueHistory(
 									contextSegments,
 									tokenLimits.contextLength,
-									tokenLimits.maxCompletionTokens,
+									truncationMaxCompletionTokens,
 								);
-								if (pairsDropped > 0) {
+								if (totalDropped > 0) {
 									log.warn(
-										`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+										`History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+											`${sampleItemsDropped} sample dialogue item(s) for ` +
 											`${tomoriState.llm.llm_codename} to preserve output budget`,
 									);
 									contextSegments = truncated;
@@ -3718,14 +3731,20 @@ export default async function tomoriChat(
 								tokenLimits.contextLength > 0 &&
 								tokenLimits.maxCompletionTokens
 							) {
-								const { truncated, pairsDropped } = truncateDialogueHistory(
+								const {
+									truncated,
+									historyPairsDropped,
+									sampleItemsDropped,
+									totalDropped,
+								} = truncateDialogueHistory(
 									contextSegments,
 									tokenLimits.contextLength,
 									tokenLimits.maxCompletionTokens,
 								);
-								if (pairsDropped > 0) {
+								if (totalDropped > 0) {
 									log.warn(
-										`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+										`History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+											`${sampleItemsDropped} sample dialogue item(s) for ` +
 											`${tomoriState.llm.llm_codename} to preserve output budget`,
 									);
 									contextSegments = truncated;
@@ -3740,14 +3759,20 @@ export default async function tomoriChat(
 								tokenLimits.contextLength > 0 &&
 								tokenLimits.maxCompletionTokens
 							) {
-								const { truncated, pairsDropped } = truncateDialogueHistory(
+								const {
+									truncated,
+									historyPairsDropped,
+									sampleItemsDropped,
+									totalDropped,
+								} = truncateDialogueHistory(
 									contextSegments,
 									tokenLimits.contextLength,
 									tokenLimits.maxCompletionTokens,
 								);
-								if (pairsDropped > 0) {
+								if (totalDropped > 0) {
 									log.warn(
-										`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+										`History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+											`${sampleItemsDropped} sample dialogue item(s) for ` +
 											`${tomoriState.llm.llm_codename} to preserve output budget`,
 									);
 									contextSegments = truncated;
@@ -5025,20 +5050,34 @@ export default async function tomoriChat(
 												const tokenLimits = getOpenRouterTokenLimits(
 													tomoriState.llm.llm_codename,
 												);
+												const openrouterTruncationOutputCap =
+													Number.parseInt(
+														process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
+														10,
+													);
 												if (
 													tokenLimits &&
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } =
-														truncateDialogueHistory(
-															contextSegments,
-															tokenLimits.contextLength,
-															tokenLimits.maxCompletionTokens,
-														);
-													if (pairsDropped > 0) {
+													const truncationMaxCompletionTokens = Math.min(
+														tokenLimits.maxCompletionTokens,
+														openrouterTruncationOutputCap,
+													);
+													const {
+														truncated,
+														historyPairsDropped,
+														sampleItemsDropped,
+														totalDropped,
+													} = truncateDialogueHistory(
+														contextSegments,
+														tokenLimits.contextLength,
+														truncationMaxCompletionTokens,
+													);
+													if (totalDropped > 0) {
 														log.warn(
-															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+															`History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+																`${sampleItemsDropped} sample dialogue item(s) for ` +
 																`${tomoriState.llm.llm_codename} to preserve output budget`,
 														);
 														contextSegments = truncated;
@@ -5053,15 +5092,20 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } =
-														truncateDialogueHistory(
-															contextSegments,
-															tokenLimits.contextLength,
-															tokenLimits.maxCompletionTokens,
-														);
-													if (pairsDropped > 0) {
+													const {
+														truncated,
+														historyPairsDropped,
+														sampleItemsDropped,
+														totalDropped,
+													} = truncateDialogueHistory(
+														contextSegments,
+														tokenLimits.contextLength,
+														tokenLimits.maxCompletionTokens,
+													);
+													if (totalDropped > 0) {
 														log.warn(
-															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+															`History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+																`${sampleItemsDropped} sample dialogue item(s) for ` +
 																`${tomoriState.llm.llm_codename} to preserve output budget`,
 														);
 														contextSegments = truncated;
@@ -5076,15 +5120,20 @@ export default async function tomoriChat(
 													tokenLimits.contextLength > 0 &&
 													tokenLimits.maxCompletionTokens
 												) {
-													const { truncated, pairsDropped } =
-														truncateDialogueHistory(
-															contextSegments,
-															tokenLimits.contextLength,
-															tokenLimits.maxCompletionTokens,
-														);
-													if (pairsDropped > 0) {
+													const {
+														truncated,
+														historyPairsDropped,
+														sampleItemsDropped,
+														totalDropped,
+													} = truncateDialogueHistory(
+														contextSegments,
+														tokenLimits.contextLength,
+														tokenLimits.maxCompletionTokens,
+													);
+													if (totalDropped > 0) {
 														log.warn(
-															`History truncation: dropped ${pairsDropped} exchange pair(s) for ` +
+															`History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+																`${sampleItemsDropped} sample dialogue item(s) for ` +
 																`${tomoriState.llm.llm_codename} to preserve output budget`,
 														);
 														contextSegments = truncated;

@@ -37,6 +37,7 @@ import {
 	generateConversationSummaryOpenrouter,
 	generateRoleplaySummaryOpenrouter,
 } from "@/providers/openrouter/compactGenerator";
+import { escapeRegExp } from "@/utils/text/stringHelper";
 import type {
 	CompactRoleplaySummary,
 	CompactSummaryMode,
@@ -104,6 +105,20 @@ function extractCustomEmojiImages(
 	return results;
 }
 
+function matchesLocalizedTitleTemplate(
+	template: string,
+	actualTitle: string,
+): boolean {
+	if (!template.includes("{")) {
+		return actualTitle === template;
+	}
+
+	const pattern = new RegExp(
+		`^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`,
+	);
+	return pattern.test(actualTitle);
+}
+
 function classifyEmbedTitle(embedTitle: string | null): {
 	isReset: boolean;
 	isSystemInjection: boolean;
@@ -139,10 +154,11 @@ function classifyEmbedTitle(embedTitle: string | null): {
 			),
 		];
 
-		const reminderSetTitle = localizer(
-			supportedLocale,
-			"reminders.reminder_set_title",
-		);
+		const reminderSetTitles = [
+			localizer(supportedLocale, "reminders.reminder_set_title"),
+			localizer(supportedLocale, "reminders.recurring_task_set_title"),
+			localizer(supportedLocale, "reminders.task_set_title"),
+		];
 
 		const systemInjectionTitle = localizer(
 			supportedLocale,
@@ -176,9 +192,11 @@ function classifyEmbedTitle(embedTitle: string | null): {
 		);
 
 		const isMemoryLearning = memoryLearningTitles.some(
-			(title) => embedTitle === title,
+			(title) => matchesLocalizedTitleTemplate(title, embedTitle),
 		);
-		const isReminderSet = embedTitle === reminderSetTitle;
+		const isReminderSet = reminderSetTitles.some((title) =>
+			matchesLocalizedTitleTemplate(title, embedTitle),
+		);
 		const isReset =
 			embedTitle === refreshTitle ||
 			embedTitle === compactSummaryTitleRefreshed ||
@@ -234,11 +252,11 @@ function appendEmbedContent(baseContent: string, embed: Embed): string {
 	}
 
 	if (classification.isMemoryLearning) {
-		const systemContent = `[System: ${description}]`;
+		const systemContent = `[System: ${embed.title}\n${description}]`;
 		return baseContent ? `${baseContent}\n${systemContent}` : systemContent;
 	}
 
-	const embedContent = `[The following is a system-produced embed]\n${description}`;
+	const embedContent = `[The following is a system-produced embed]\n${embed.title}\n${description}`;
 	return baseContent ? `${baseContent}\n${embedContent}` : embedContent;
 }
 

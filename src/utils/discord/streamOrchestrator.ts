@@ -112,6 +112,8 @@ function resolveWebhookThreadId(channel: StreamContext["channel"]):
 export class StreamOrchestrator implements IStreamOrchestrator {
 	// Static stop request management system
 	private static readonly PREFILL_WHITESPACE_SENTINEL = "\uE000";
+	private static readonly STREAM_CHUNK_DEDUP_TAIL_CHARS = 4096;
+	private static readonly STREAM_CHUNK_DEDUP_MIN_CHARS = 8;
 	private static activeStopRequests = new Map<
 		string,
 		{
@@ -478,6 +480,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 							textConfig,
 							typingConfig,
 							context,
+							true,
 						);
 					}
 					return {
@@ -525,9 +528,22 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	): Promise<void> {
 		log.info(`Stream API: Raw chunk received: "${textContent}"`);
 
+		const normalizedTextContent = this.deduplicateIncomingTextChunk(
+			textContent,
+			state,
+		);
+		if (normalizedTextContent !== textContent) {
+			log.info(
+				`Stream API: Trimmed overlapping chunk (${textContent.length} -> ${normalizedTextContent.length})`,
+			);
+		}
+		if (!normalizedTextContent) {
+			return;
+		}
+
 		// Add to current turn model parts for API continuity
-		if (textContent.trim() && context.currentTurnModelParts) {
-			context.currentTurnModelParts.push({ text: textContent });
+		if (normalizedTextContent.trim() && context.currentTurnModelParts) {
+			context.currentTurnModelParts.push({ text: normalizedTextContent });
 		}
 
 		// Suppress text output if flagged (NAI tool retry mode — model state is kept coherent above but nothing reaches Discord)
@@ -536,8 +552,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		}
 
 		// Add to buffer
-		state.buffer += textContent;
-		metrics.totalCharacters += textContent.length;
+		state.buffer += normalizedTextContent;
+		metrics.totalCharacters += normalizedTextContent.length;
 
 		// Process buffer iteratively
 		let processedSomething: boolean;
@@ -597,6 +613,58 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			);
 			state.buffer = updatedBuffer;
 		}
+	}
+
+	private deduplicateIncomingTextChunk(
+		textContent: string,
+		state: StreamState,
+	): string {
+		if (
+			!textContent ||
+			textContent.length < StreamOrchestrator.STREAM_CHUNK_DEDUP_MIN_CHARS
+		) {
+			return textContent;
+		}
+
+		const recentText = this.getRecentStreamTextTail(state);
+		if (!recentText) {
+			return textContent;
+		}
+
+		if (recentText.endsWith(textContent)) {
+			return "";
+		}
+
+		const maxOverlap = Math.min(recentText.length, textContent.length);
+		for (
+			let overlap = maxOverlap;
+			overlap >= StreamOrchestrator.STREAM_CHUNK_DEDUP_MIN_CHARS;
+			overlap--
+		) {
+			if (
+				recentText.slice(recentText.length - overlap) ===
+				textContent.slice(0, overlap)
+			) {
+				return textContent.slice(overlap);
+			}
+		}
+
+		return textContent;
+	}
+
+	private getRecentStreamTextTail(state: StreamState): string {
+		const combined = `${state.accumulatedText}${state.buffer}`;
+		if (!combined) {
+			return "";
+		}
+
+		if (
+			combined.length <= StreamOrchestrator.STREAM_CHUNK_DEDUP_TAIL_CHARS
+		) {
+			return combined;
+		}
+
+		return combined.slice(-StreamOrchestrator.STREAM_CHUNK_DEDUP_TAIL_CHARS);
 	}
 
 	private findRegularOverflowFlushIndex(
@@ -1810,6 +1878,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		textConfig: TextProcessingConfig,
 		typingConfig: TypingSimulationConfig,
 		context: StreamContext,
+		trimTrailingIncompleteClause: boolean = false,
 	): Promise<void> {
 		if (state.isInsideCodeBlock) {
 			log.warn(
@@ -1827,7 +1896,16 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			state.hasSemanticMarkers = false;
 		}
 
-		const segmentToProcess = state.buffer;
+		let segmentToProcess = state.buffer;
+		if (trimTrailingIncompleteClause) {
+			const trimmedSegment = this.trimTrailingIncompleteClause(segmentToProcess);
+			if (trimmedSegment !== segmentToProcess) {
+				log.info(
+					`Stream Seg: Removed trailing incomplete clause before function call (kept: ${trimmedSegment.length}, removed: ${segmentToProcess.length - trimmedSegment.length})`,
+				);
+				segmentToProcess = trimmedSegment;
+			}
+		}
 		log.info(
 			`Stream Seg: Flushing buffer for function call: "${segmentToProcess}"`,
 		);
@@ -1840,6 +1918,42 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			state,
 		);
 		state.buffer = "";
+	}
+
+	private trimTrailingIncompleteClause(text: string): string {
+		if (!text) {
+			return text;
+		}
+
+		const textWithoutTrailingWhitespace = text.replace(/\s+$/u, "");
+		if (!textWithoutTrailingWhitespace) {
+			return text;
+		}
+
+		// If text already ends at a sentence boundary, keep it as-is.
+		if (/[.!?。！？…](?:[)"'\]\u300d\u300f\u300b\u3011]+)?$/u.test(textWithoutTrailingWhitespace)) {
+			return text;
+		}
+
+		let lastBoundaryIndex = -1;
+		for (let i = textWithoutTrailingWhitespace.length - 1; i >= 0; i--) {
+			const ch = textWithoutTrailingWhitespace[i];
+			if (/[.!?。！？…\n]/u.test(ch)) {
+				lastBoundaryIndex = i;
+				break;
+			}
+		}
+
+		// No boundary found: avoid dropping the whole sentence.
+		if (lastBoundaryIndex === -1) {
+			return text;
+		}
+
+		const trimmedCore = textWithoutTrailingWhitespace.slice(0, lastBoundaryIndex + 1);
+		const originalTrailingWhitespace = text.slice(
+			textWithoutTrailingWhitespace.length,
+		);
+		return `${trimmedCore}${originalTrailingWhitespace}`;
 	}
 
 	/**

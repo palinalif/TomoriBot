@@ -402,15 +402,21 @@ export default {
 		},
 
 		self_teach: {
-			server_memory_learned_title: "🧠 I Learned Something New!",
-			server_memory_learned_description: "`{memory_content}`",
-			server_memory_updated_title: "📝 Updated a Memory!",
-			server_memory_updated_description: "`{memory_content}`",
+			server_memory_learned_title:
+				"🧠 {persona_nickname} Learned Something New!",
+			server_memory_learned_description:
+				"A server memory has been saved:\n`{memory_content}`",
+			server_memory_updated_title: "📝 {persona_nickname} Updated a Memory!",
+			server_memory_updated_description:
+				"A server memory has been updated:\n`{memory_content}`",
 			personal_memory_learned_title:
-				"💡 I Learned Something New about {user_nickname}!",
-			personal_memory_learned_description: "`{memory_content}`",
-			personal_memory_updated_title: "📝 Updated Memory about {user_nickname}!",
-			personal_memory_updated_description: "`{memory_content}`",
+				"💡 {persona_nickname} Learned Something New about {user_nickname}!",
+			personal_memory_learned_description:
+				"A personal memory about {user_nickname} has been saved:\n`{memory_content}`",
+			personal_memory_updated_title:
+				"📝 {persona_nickname} Updated Memory about {user_nickname}!",
+			personal_memory_updated_description:
+				"A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
 			server_memory_footer:
 				"Server managers can manage this memory using `/teach` and `/forget` commands.",
 			personal_memory_footer_manage:
@@ -3069,18 +3075,18 @@ You can change this anytime using \`/personal privacy\`.`,
 	// Reminder system messages
 	reminders: {
 		// Confirmation embed when reminder is set
-		reminder_set_title: `⏰ Reminder Set`,
+		reminder_set_title: `⏰ {persona_nickname} Set a Reminder`,
 		reminder_set_description: `I'll remind {user_nickname} about "**{reminder_purpose}**" at \`{reminder_time}\``,
 		reminder_set_footer: `A mention will be sent after {time_remaining} from now. Delete reminders with \`/forget reminder\`.`,
 		reminder_set_footer_recurring: `First mention in {time_remaining}. Repeats every {repetition_interval_hours} hour(s). Delete reminders with \`/forget reminder\`.`,
 
 		// Recurring task setup (self reminders)
-		recurring_task_set_title: `🔁 Recurrent Task Setup Successfully`,
+		recurring_task_set_title: `🔁 {persona_nickname} Set Up a Recurring Task`,
 		recurring_task_set_description: `I'll run "**{reminder_purpose}**" starting at \`{reminder_time}\`, then repeat every {repetition_interval_hours} hour(s).`,
 		recurring_task_set_footer: `You can delete reminders using \`/forget reminder\`.`,
 
 		// One-time task setup (self reminders, non-recurring)
-		task_set_title: `✅ Task Setup Successfully`,
+		task_set_title: `✅ {persona_nickname} Set Up a Task`,
 		task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
 		task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/forget reminder\`.`,
 

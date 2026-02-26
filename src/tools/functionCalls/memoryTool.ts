@@ -274,6 +274,12 @@ export class MemoryTool extends BaseTool {
 			};
 		}
 
+		const personaNickname =
+			context.personaUsername ||
+			tomoriState.tomori_nickname ||
+			context.client.user?.username ||
+			"TomoriBot";
+
 		// Validate memory content (from tomoriChat.ts:1105-1113)
 		if (typeof memoryContentArg !== "string" || !memoryContentArg.trim()) {
 			return {
@@ -403,6 +409,9 @@ export class MemoryTool extends BaseTool {
 						{
 							color: ColorCode.SUCCESS,
 							titleKey: "genai.self_teach.server_memory_learned_title",
+							titleVars: {
+								persona_nickname: personaNickname,
+							},
 							descriptionKey:
 								"genai.self_teach.server_memory_learned_description",
 							descriptionVars: {
@@ -683,6 +692,7 @@ export class MemoryTool extends BaseTool {
 								titleKey: "genai.self_teach.personal_memory_learned_title",
 								titleVars: {
 									user_nickname: targetUserNicknameArg,
+									persona_nickname: personaNickname,
 								},
 								descriptionKey:
 									"genai.self_teach.personal_memory_learned_description",

@@ -280,6 +280,12 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 			};
 		}
 
+		const personaNickname =
+			context.personaUsername ||
+			tomoriState.tomori_nickname ||
+			context.client.user?.username ||
+			"TomoriBot";
+
 		try {
 			if (!isPersonalUpdate) {
 				// 1) Server memory update (server_id + lineage scoped)
@@ -312,6 +318,9 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 						{
 							color: ColorCode.MEMORY_UPDATE,
 							titleKey: "genai.self_teach.server_memory_updated_title",
+							titleVars: {
+								persona_nickname: personaNickname,
+							},
 							descriptionKey:
 								"genai.self_teach.server_memory_updated_description",
 							descriptionVars: {
@@ -528,6 +537,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 					titleKey: "genai.self_teach.personal_memory_updated_title",
 					titleVars: {
 						user_nickname: userDisplayName,
+						persona_nickname: personaNickname,
 					},
 					descriptionKey:
 						"genai.self_teach.personal_memory_updated_description",

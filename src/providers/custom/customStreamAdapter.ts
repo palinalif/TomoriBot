@@ -104,6 +104,8 @@ interface AccumulatedToolCall {
  */
 export class CustomStreamAdapter implements StreamProvider {
 	private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
+	private static readonly STREAM_TEXT_TAIL_CHARS = 4096;
+	private static readonly STREAM_TEXT_MIN_DEDUP_CHARS = 8;
 	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 		ContextItemTag.SYSTEM_HUMANIZER_RULES,
 		ContextItemTag.SYSTEM_PERSONALITY,
@@ -116,6 +118,7 @@ export class CustomStreamAdapter implements StreamProvider {
 	// Accumulator for tool calls across streaming chunks
 	private toolCallAccumulator: Map<number, AccumulatedToolCall> = new Map();
 	private speakerGuardPendingTail = "";
+	private streamedTextTail = "";
 	private speakerGuardEnabled = false;
 	private activePersonaNameLower = "";
 	private knownSpeakerNamesLower = new Set<string>();
@@ -131,6 +134,7 @@ export class CustomStreamAdapter implements StreamProvider {
 
 		// Reset accumulators for this stream
 		this.toolCallAccumulator.clear();
+		this.streamedTextTail = "";
 
 		// Cast config to CustomStreamConfig
 		const customConfig = config as CustomStreamConfig;
@@ -348,8 +352,10 @@ export class CustomStreamAdapter implements StreamProvider {
 								this.splitChunkWithTextAndToolSignals(chunk);
 
 							for (const chunkToEmit of chunksToEmit) {
+								const deduplicatedChunk =
+									this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
 								const guardResult =
-									this.applySpeakerBoundaryFallbackGuard(chunkToEmit);
+									this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
 
 								if (
 									this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
@@ -541,6 +547,93 @@ export class CustomStreamAdapter implements StreamProvider {
 
 		// Fallback heuristic for unseen generated names.
 		return /^\p{Lu}/u.test(label);
+	}
+
+	private deduplicateChunkTextAgainstRecentStream(
+		chunk: OpenAIStreamChunk,
+	): OpenAIStreamChunk {
+		const firstChoice = chunk.choices?.[0];
+		const content = firstChoice?.delta?.content;
+		if (!firstChoice?.delta || typeof content !== "string" || content.length === 0) {
+			return chunk;
+		}
+
+		const deduplicatedText = this.getTextDelta(content);
+		if (deduplicatedText !== content) {
+			log.info(
+				`CustomStreamAdapter: Trimmed overlapping streamed text (${content.length} -> ${deduplicatedText.length})`,
+			);
+		}
+
+		if (deduplicatedText.length > 0) {
+			this.appendToStreamedTextTail(deduplicatedText);
+		}
+
+		if (deduplicatedText === content) {
+			return chunk;
+		}
+
+		const remainingChoices = chunk.choices?.slice(1) ?? [];
+		return {
+			...chunk,
+			choices: [
+				{
+					...firstChoice,
+					delta: {
+						...firstChoice.delta,
+						content: deduplicatedText,
+					},
+				},
+				...remainingChoices,
+			],
+		};
+	}
+
+	private getTextDelta(chunkText: string): string {
+		if (
+			!chunkText ||
+			chunkText.length < CustomStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS ||
+			!this.streamedTextTail
+		) {
+			return chunkText;
+		}
+
+		const seenTail = this.streamedTextTail;
+		if (seenTail.endsWith(chunkText)) {
+			return "";
+		}
+
+		const maxOverlap = Math.min(seenTail.length, chunkText.length);
+		for (
+			let overlap = maxOverlap;
+			overlap >= CustomStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS;
+			overlap--
+		) {
+			if (
+				seenTail.slice(seenTail.length - overlap) ===
+				chunkText.slice(0, overlap)
+			) {
+				return chunkText.slice(overlap);
+			}
+		}
+
+		return chunkText;
+	}
+
+	private appendToStreamedTextTail(text: string): void {
+		if (!text) {
+			return;
+		}
+
+		this.streamedTextTail += text;
+		if (
+			this.streamedTextTail.length >
+			CustomStreamAdapter.STREAM_TEXT_TAIL_CHARS
+		) {
+			this.streamedTextTail = this.streamedTextTail.slice(
+				-CustomStreamAdapter.STREAM_TEXT_TAIL_CHARS,
+			);
+		}
 	}
 
 	private applySpeakerBoundaryFallbackGuard(
