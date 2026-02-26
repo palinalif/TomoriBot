@@ -42,8 +42,9 @@ bastion_ssh_cidr = "119.95.20.218/32"
 # ECS Configuration
 container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/tomoribot:latest"
 ecr_scan_on_push = false
-# Optional: expose Matrix appservice callback through Cloudflare Tunnel sidecar
+# Expose Matrix appservice callback through Cloudflare Tunnel sidecar (enabled by default).
 # Requires CLOUDFLARE_TUNNEL_TOKEN in secrets_manager_secret_name JSON.
+# Set false only if you intentionally use another secure callback path.
 # enable_cloudflare_tunnel_sidecar = true
 # cloudflare_tunnel_image = "cloudflare/cloudflared:latest"
 # cloudflare_tunnel_token_secret_key = "CLOUDFLARE_TUNNEL_TOKEN"

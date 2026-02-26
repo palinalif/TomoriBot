@@ -22,7 +22,7 @@ resource "digitalocean_droplet" "matrix_homeserver" {
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	apt-get update
-	apt-get install -y docker.io docker-compose-plugin
+	apt-get install -y docker.io docker-compose caddy
 	systemctl enable --now docker
 	mkdir -p /opt/matrix-conduit
   EOT
@@ -49,6 +49,12 @@ resource "digitalocean_firewall" "matrix_homeserver" {
     protocol         = "tcp"
     port_range       = "22"
     source_addresses = var.ssh_ingress_cidrs
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "80"
+    source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
   inbound_rule {

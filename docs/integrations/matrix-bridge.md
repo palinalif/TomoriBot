@@ -365,7 +365,7 @@ All configuration is via environment variables. The bridge is silently disabled 
 | `MATRIX_HS_TOKEN` | Yes | `hs_token` — homeserver → appservice auth |
 | `MATRIX_BOT_USER_ID` | Yes | e.g., `@tomoribot:yourdomain.com` |
 | `MATRIX_SERVER_NAME` | Yes | Domain portion, e.g., `yourdomain.com` |
-| `MATRIX_APPSERVICE_PUBLIC_URL` | No | Homeserver-facing callback URL in appservice registration. Use this when the homeserver cannot reach `localhost` on the bot host. |
+| `MATRIX_APPSERVICE_PUBLIC_URL` | No | Homeserver-facing callback URL in appservice registration. Use this when the homeserver cannot reach `localhost` on the bot host. Non-local endpoints must use `https://` (`http://` is only accepted for localhost dev). |
 | `MATRIX_APPSERVICE_PORT` | No | HTTP listen port (default: `9993`) |
 | `MATRIX_MAX_ATTACHMENT_MB` | No | Max file size to relay in either direction (default: `8`) |
 | `MATRIX_MEDIA_TIMEOUT_MS` | No | Timeout for media download/upload requests (default: `15000`) |

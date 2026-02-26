@@ -255,7 +255,7 @@ variable "run_env" {
 variable "enable_cloudflare_tunnel_sidecar" {
   description = "Enable Cloudflared sidecar for exposing Matrix appservice callback over HTTPS without an ALB"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "cloudflare_tunnel_container_name" {

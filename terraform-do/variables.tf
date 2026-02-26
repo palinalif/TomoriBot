@@ -53,7 +53,19 @@ variable "ssh_key_fingerprints" {
 variable "ssh_ingress_cidrs" {
   description = "Allowed CIDR blocks for SSH access"
   type        = list(string)
-  default     = ["0.0.0.0/0", "::/0"]
+  default     = []
+
+  validation {
+    condition     = length(var.ssh_ingress_cidrs) > 0
+    error_message = "Set at least one trusted CIDR in ssh_ingress_cidrs (for example, your public IP /32)."
+  }
+
+  validation {
+    condition = alltrue([
+      for cidr in var.ssh_ingress_cidrs : cidr != "0.0.0.0/0" && cidr != "::/0"
+    ])
+    error_message = "Do not allow world-open SSH CIDRs (0.0.0.0/0 or ::/0). Use specific trusted IP ranges."
+  }
 }
 
 variable "volume_name" {

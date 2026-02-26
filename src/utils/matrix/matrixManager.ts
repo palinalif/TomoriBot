@@ -236,17 +236,30 @@ export async function initializeMatrixClient(
 		10,
 	);
 	const configuredPublicUrl = process.env.MATRIX_APPSERVICE_PUBLIC_URL?.trim();
-	const hasValidPublicUrl =
-		typeof configuredPublicUrl === "string" &&
-		/^https?:\/\//.test(configuredPublicUrl);
-	const registrationUrl = hasValidPublicUrl
-		? configuredPublicUrl
-		: `http://localhost:${port}`;
+	const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+	let hasValidPublicUrl = false;
+	let registrationUrl = `http://localhost:${port}`;
+
+	if (configuredPublicUrl) {
+		try {
+			const parsedUrl = new URL(configuredPublicUrl);
+			const isHttps = parsedUrl.protocol === "https:";
+			const isLocalHttp =
+				parsedUrl.protocol === "http:" && localhostHosts.has(parsedUrl.hostname);
+			hasValidPublicUrl = isHttps || isLocalHttp;
+			if (hasValidPublicUrl) {
+				registrationUrl = configuredPublicUrl;
+			}
+		} catch {
+			hasValidPublicUrl = false;
+		}
+	}
 
 	if (configuredPublicUrl && !hasValidPublicUrl) {
 		log.warn(
 			`Matrix bridge: invalid MATRIX_APPSERVICE_PUBLIC_URL "${configuredPublicUrl}" — ` +
-				`falling back to ${registrationUrl}`,
+				`must be https:// for remote endpoints (http:// allowed only for localhost). ` +
+				`Falling back to ${registrationUrl}`,
 		);
 	}
 
