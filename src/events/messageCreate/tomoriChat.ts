@@ -295,6 +295,45 @@ function resolveImpersonatedUserIdByWebhookIdentity(
 	return avatarMatches.length === 1 ? avatarMatches[0].id : null;
 }
 
+async function resolveImpersonatedIdentity(
+	client: Client,
+	guild: Guild | null | undefined,
+	userId: string,
+	fallbackName?: string | null,
+): Promise<{ displayName: string; avatarUrl?: string }> {
+	const guildMember = guild
+		? guild.members.cache.get(userId) ??
+			(await guild.members.fetch(userId).catch(() => null))
+		: null;
+	const discordUser =
+		guildMember?.user || (await client.users.fetch(userId).catch(() => null));
+
+	const displayName =
+		guildMember?.displayName ||
+		discordUser?.displayName ||
+		discordUser?.globalName ||
+		discordUser?.username ||
+		fallbackName ||
+		"User";
+	const avatarUrl =
+		guildMember?.displayAvatarURL({
+			size: 1024,
+			extension: "png",
+			forceStatic: true,
+		}) ||
+		discordUser?.displayAvatarURL({
+			size: 1024,
+			extension: "png",
+			forceStatic: true,
+		}) ||
+		undefined;
+
+	return {
+		displayName,
+		avatarUrl,
+	};
+}
+
 function resolveReferencedWebhookTarget(
 	referenceMessage: Message,
 	personaByNickname: Map<string, TomoriState>,
@@ -2622,6 +2661,22 @@ export default async function tomoriChat(
 				string,
 				{ displayName: string; type: "persona" | "webhook" }
 			>();
+			let impersonatedUserDbNickname: string | undefined;
+			let impersonatedIdentityName: string | undefined;
+			let impersonatedIdentityAvatarUrl: string | undefined;
+
+			if (isUserImpersonation && impersonatedUserId) {
+				const impersonatedUserRow = await getCachedUserRow(impersonatedUserId);
+				impersonatedUserDbNickname = impersonatedUserRow?.user_nickname;
+				const impersonatedIdentity = await resolveImpersonatedIdentity(
+					client,
+					guild,
+					impersonatedUserId,
+					impersonatedUserDbNickname,
+				);
+				impersonatedIdentityName = impersonatedIdentity.displayName;
+				impersonatedIdentityAvatarUrl = impersonatedIdentity.avatarUrl;
+			}
 
 			// Find the most recent message with a reference (latest in the array)
 			let latestReferenceMessageIndex = -1;
@@ -2744,6 +2799,7 @@ export default async function tomoriChat(
 				let authorType: "user" | "persona" = "user";
 				let personaName: string | null = null;
 				let matchedPersonaId: number | null = null;
+				let resolvedWebhookImpersonatedUserId: string | null = null;
 				const isWebhookMessage = Boolean(msg.webhookId);
 
 				if (msg.author.id === client.user?.id || isDebugMessage) {
@@ -2770,6 +2826,47 @@ export default async function tomoriChat(
 						effectiveAuthorId = `persona:${matchedPersona.tomori_id ?? matchedPersona.tomori_nickname}`;
 					} else {
 						authorName = webhookName || `<@${authorId}>`;
+						const webhookAvatarUrl = msg.author.displayAvatarURL({
+							size: 1024,
+							extension: "png",
+							forceStatic: true,
+						});
+						resolvedWebhookImpersonatedUserId =
+							(msg.webhookId
+								? getCachedImpersonatedUserIdForWebhook(msg.webhookId)
+								: null) ??
+							resolveImpersonatedUserIdByWebhookIdentity(
+								guild,
+								webhookName,
+								webhookAvatarUrl,
+							);
+						if (
+							!resolvedWebhookImpersonatedUserId &&
+							isUserImpersonation &&
+							impersonatedUserId &&
+							normalizeIdentityName(webhookName) ===
+								normalizeIdentityName(impersonatedIdentityName) &&
+							(!impersonatedIdentityAvatarUrl ||
+								normalizeAvatarUrlForMatch(webhookAvatarUrl) ===
+									normalizeAvatarUrlForMatch(impersonatedIdentityAvatarUrl))
+						) {
+							resolvedWebhookImpersonatedUserId = impersonatedUserId;
+						}
+
+						if (resolvedWebhookImpersonatedUserId && msg.webhookId) {
+							cacheUserImpersonationWebhook(
+								msg.webhookId,
+								resolvedWebhookImpersonatedUserId,
+							);
+							effectiveAuthorId = resolvedWebhookImpersonatedUserId;
+							if (
+								isUserImpersonation &&
+								impersonatedUserId === resolvedWebhookImpersonatedUserId &&
+								impersonatedIdentityName
+							) {
+								authorName = impersonatedIdentityName;
+							}
+						}
 
 						// Matrix relay messages: register in the per-Matrix-user map so each
 						// Matrix user gets its own user list entry (they all share the same
@@ -2781,7 +2878,15 @@ export default async function tomoriChat(
 						}
 					}
 				} else {
-					authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
+					if (
+						isUserImpersonation &&
+						impersonatedUserId === authorId &&
+						impersonatedIdentityName
+					) {
+						authorName = impersonatedIdentityName;
+					} else {
+						authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
+					}
 				}
 
 				// Add to user list (Level 2 FULL privacy users already filtered out above).
@@ -2791,11 +2896,19 @@ export default async function tomoriChat(
 					isWebhookMessage &&
 					msg.author.username.startsWith("[Matrix|") &&
 					authorType === "user";
+				const shouldTreatWebhookAsRealUser =
+					isWebhookMessage &&
+					authorType === "user" &&
+					!!resolvedWebhookImpersonatedUserId;
 
 				// Register synthetic identities for context:
 				// - matched alter persona => tomori_id (short numeric)
 				// - non-persona webhook => webhook snowflake
-				if (isWebhookMessage && !isMatrixNonPersonaRelay) {
+				if (
+					isWebhookMessage &&
+					!isMatrixNonPersonaRelay &&
+					!shouldTreatWebhookAsRealUser
+				) {
 					if (matchedPersonaId !== null) {
 						syntheticUserMap.set(String(matchedPersonaId), {
 							displayName: authorName,
@@ -2815,9 +2928,12 @@ export default async function tomoriChat(
 					userListSet.add(
 						matchedPersonaId !== null
 							? String(matchedPersonaId)
+							: shouldTreatWebhookAsRealUser &&
+									resolvedWebhookImpersonatedUserId
+								? resolvedWebhookImpersonatedUserId
 							: isWebhookMessage && msg.webhookId
 								? msg.webhookId
-								: authorId,
+								: effectiveAuthorId,
 					);
 				}
 
@@ -3329,7 +3445,7 @@ export default async function tomoriChat(
 			const hasPersonaSyntheticUser = Array.from(
 				syntheticUserMap.values(),
 			).some((entry) => entry.type === "persona");
-			if (client.user?.id && !hasPersonaSyntheticUser) {
+			if (client.user?.id && !hasPersonaSyntheticUser && !isUserImpersonation) {
 				userListSet.add(client.user.id);
 			}
 
@@ -3630,14 +3746,6 @@ export default async function tomoriChat(
 					// For now, its signature and output type (ContextSegment[]) remain, but we pass the new data.
 					let contextSegments: StructuredContextItem[] = [];
 					try {
-						// Query database nickname for user impersonation
-						let impersonatedUserNickname: string | undefined;
-						if (isUserImpersonation && impersonatedUserId) {
-							const impersonatedUserRow =
-								await getCachedUserRow(impersonatedUserId);
-							impersonatedUserNickname = impersonatedUserRow?.user_nickname;
-						}
-
 						// NOTE: The `buildContext` call signature will change.
 						// It will take `simplifiedMessageHistory: simplifiedMessages` instead of `conversationHistory`.
 						// It will also need `tomoriNickname`, `tomoriAttributes`, and `tomoriConfig` to build system instructions.
@@ -3673,7 +3781,8 @@ export default async function tomoriChat(
 							preloadedStickers: loadedStickers, // Pass pre-loaded sticker data to avoid redundant DB query
 							isUserImpersonation, // Pass user impersonation flag (February 2026)
 							impersonatedUserId, // Pass impersonated user ID (February 2026)
-							impersonatedUserNickname, // Pass database nickname for context (February 2026)
+							impersonatedUserNickname:
+								impersonatedIdentityName ?? impersonatedUserDbNickname, // Pass resolved identity name for context (February 2026)
 						});
 						contextSegments = contextBuild.contextItems;
 
@@ -4099,53 +4208,20 @@ export default async function tomoriChat(
 						}
 					}
 
-					// Query user data for impersonation (used for both webhook and prefix stripping)
-					let impersonatedUserDbNickname: string | undefined;
-					if (isUserImpersonation && impersonatedUserId) {
-						const userRow = await getCachedUserRow(impersonatedUserId);
-						impersonatedUserDbNickname = userRow?.user_nickname;
-					}
-
 					// Create temporary webhook for user impersonation
 					if (isUserImpersonation && impersonatedUserId && supportsWebhooks) {
 						try {
-							const impersonatedMember =
-								guild?.members.cache.get(impersonatedUserId);
-							const impersonatedUser =
-								impersonatedMember?.user ||
-								(await client.users
-									.fetch(impersonatedUserId)
-									.catch(() => null));
-
-							// Force static PNG to avoid webhook avatar failures on animated profile pictures.
-							const impersonatedUserAvatar =
-								impersonatedMember?.displayAvatarURL({
-									size: 1024,
-									extension: "png",
-									forceStatic: true,
-								}) ||
-								impersonatedUser?.displayAvatarURL({
-									size: 1024,
-									extension: "png",
-									forceStatic: true,
-								});
-							// Use Discord display name for webhook (what shows in Discord UI)
-							const impersonatedUserDiscordName =
-								impersonatedMember?.displayName ||
-								impersonatedUser?.displayName ||
-								"User";
-
 							// Create temporary webhook with impersonated user's Discord identity
 							const tempWebhook = await (channel as TextChannel).createWebhook({
-								name: impersonatedUserDiscordName,
-								avatar: impersonatedUserAvatar || undefined,
+								name: impersonatedIdentityName || "User",
+								avatar: impersonatedIdentityAvatarUrl || undefined,
 								reason: "TomoriBot user impersonation",
 							});
 
 							cacheUserImpersonationWebhook(tempWebhook.id, impersonatedUserId);
 							personaWebhook = tempWebhook;
 							log.info(
-								`Created temporary webhook for user impersonation: ${impersonatedUserDiscordName}`,
+								`Created temporary webhook for user impersonation: ${impersonatedIdentityName || "User"}`,
 							);
 						} catch (error) {
 							log.error(
@@ -4173,10 +4249,7 @@ export default async function tomoriChat(
 
 					if (isUserImpersonation && impersonatedUserId) {
 						// Webhook display: use Discord display name (e.g., "bredrumb")
-						personaUsername =
-							guild?.members.cache.get(impersonatedUserId)?.displayName ||
-							guild?.members.cache.get(impersonatedUserId)?.user.displayName ||
-							"User";
+						personaUsername = impersonatedIdentityName || "User";
 						// Prefix stripping: prefer webhook/display identity to match the
 						// impersonation directive; fall back to DB nickname if needed.
 						prefixStrippingName = personaUsername || impersonatedUserDbNickname;

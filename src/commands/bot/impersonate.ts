@@ -801,9 +801,6 @@ export async function execute(
 		case "persona":
 			await handlePersonaImpersonation(client, interaction, locale);
 			break;
-		case "me":
-			await handleUserImpersonation(client, interaction, locale);
-			break;
 		case "user":
 			await handleTargetUserImpersonation(client, interaction, locale);
 			break;

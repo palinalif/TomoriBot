@@ -1397,6 +1397,14 @@ export async function buildContext({
 				displayName = `<@${userRow.user_disc_id}>`;
 			}
 
+			if (
+				isUserImpersonation &&
+				userRow.user_disc_id === impersonatedUserId &&
+				impersonatedIdentityName
+			) {
+				displayName = impersonatedIdentityName;
+			}
+
 			const detailLines: string[] = [];
 
 			// 8. Add status (only for Level 0 MINIMAL privacy)
@@ -1509,13 +1517,26 @@ export async function buildContext({
 			}
 
 			const aliasSet = new Set<string>();
+			if (
+				isUserImpersonation &&
+				userRow.user_disc_id === impersonatedUserId &&
+				impersonatedIdentityName
+			) {
+				addAlias(aliasSet, impersonatedIdentityName);
+			}
 			if (shouldIncludeCustomNicknameAlias) addAlias(aliasSet, customNickname);
 			if (serverNickname) addAlias(aliasSet, serverNickname);
 			if (globalName) addAlias(aliasSet, globalName);
 			if (username) addAlias(aliasSet, username);
 
 			let primaryAlias: string | null = null;
-			if (canUseCustomNickname) primaryAlias = customNickname;
+			if (
+				isUserImpersonation &&
+				userRow.user_disc_id === impersonatedUserId &&
+				impersonatedIdentityName
+			) {
+				primaryAlias = impersonatedIdentityName;
+			} else if (canUseCustomNickname) primaryAlias = customNickname;
 			else if (serverNickname) primaryAlias = serverNickname;
 			else if (globalName) primaryAlias = globalName;
 			else if (username) primaryAlias = username;
@@ -1542,7 +1563,8 @@ export async function buildContext({
 
 		for (const entry of userEntries) {
 			if (entry.isBot) {
-				usersInConversationText += `${entry.displayName} (User ID: ${entry.userId}) (This is you!)\n`;
+				const selfSuffix = isUserImpersonation ? "" : " (This is you!)";
+				usersInConversationText += `${entry.displayName} (User ID: ${entry.userId})${selfSuffix}\n`;
 			} else {
 				const mentionParts: string[] = [];
 				if (entry.primaryAlias) {
