@@ -918,11 +918,6 @@ export async function execute(
 					selectedPersona.sample_dialogues_in.length,
 					selectedPersona.sample_dialogues_out.length,
 				);
-				const dialogueValue = localizer(
-					locale,
-					"commands.tool.status.field_slot_usage",
-					{ current: dialogueCount, max: limits.maxSampleDialogues },
-				);
 				const sampleDialoguesValue = formatSampleDialogues(
 					selectedPersona.sample_dialogues_in,
 					selectedPersona.sample_dialogues_out,
@@ -992,11 +987,6 @@ export async function execute(
 							inline: true,
 						},
 						{
-							nameKey: "commands.tool.status.field_dialogue_count",
-							value: dialogueValue,
-							inline: true,
-						},
-						{
 							nameKey: "commands.tool.status.field_alter_triggers",
 							value: alterTriggersValue,
 							inline: true,
@@ -1015,6 +1005,8 @@ export async function execute(
 					titleVars: { persona_name: personaName },
 					descriptionKey: "commands.tool.status.persona_page2_description",
 					color: ColorCode.INFO,
+					footerKey:
+						"commands.tool.status.export_footer_persona_attributes_and_dialogues",
 					fields: [
 						{
 							nameKey: "commands.tool.status.field_attributes_with_count",
@@ -1034,6 +1026,8 @@ export async function execute(
 					titleVars: { persona_name: personaName },
 					descriptionKey: "commands.tool.status.persona_page3_description",
 					color: ColorCode.INFO,
+					footerKey:
+						"commands.tool.status.export_footer_persona_attributes_and_dialogues",
 					fields: [
 						{
 							nameKey: "commands.tool.status.field_sample_dialogues_with_count",

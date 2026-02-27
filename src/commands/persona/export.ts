@@ -28,6 +28,9 @@ import { convertToPNG } from "@/utils/image/imageProcessor";
 
 const PERSONA_EXPORT_MODAL_ID = "persona_export_persona_modal";
 const PERSONA_EXPORT_SELECT_ID = "persona_select";
+const PERSONA_EXPORT_JSON_OPTION = "export_json";
+const PERSONA_EXPORT_JSON_FALSE = "false";
+const PERSONA_EXPORT_JSON_TRUE = "true";
 
 /**
  * Configure the 'export' subcommand
@@ -37,7 +40,31 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("export")
-		.setDescription(localizer("en-US", "commands.persona.export.description"));
+		.setDescription(localizer("en-US", "commands.persona.export.description"))
+		.addStringOption((option) =>
+			option
+				.setName(PERSONA_EXPORT_JSON_OPTION)
+				.setDescription(
+					localizer("en-US", "commands.persona.export.export_json_description"),
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: localizer(
+							"en-US",
+							"commands.persona.export.export_json_choice_false",
+						),
+						value: PERSONA_EXPORT_JSON_FALSE,
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.persona.export.export_json_choice_true",
+						),
+						value: PERSONA_EXPORT_JSON_TRUE,
+					},
+				),
+		);
 
 /**
  * Executes the 'export' command
@@ -53,6 +80,10 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
+	const exportJsonSelection =
+		interaction.options.getString(PERSONA_EXPORT_JSON_OPTION) ??
+		PERSONA_EXPORT_JSON_FALSE;
+	const exportJson = exportJsonSelection === PERSONA_EXPORT_JSON_TRUE;
 	let responseInteraction:
 		| ChatInputCommandInteraction
 		| ModalSubmitInteraction = interaction;
@@ -152,6 +183,75 @@ export async function execute(
 
 		// Type is now narrowed to success variant
 		const presetData = exportResult.data;
+		if (exportJson) {
+			const nickname = presetData.data.tomori_nickname;
+			const sanitizedNickname = nickname
+				.replace(/[^a-zA-Z0-9-_]/g, "_")
+				.slice(0, 50);
+			const timestamp = Date.now();
+			const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.json`;
+
+			const readableJsonExport = {
+				export_type: "persona_readable",
+				import_compatible: false,
+				exported_at: new Date().toISOString(),
+				note: localizer(
+					locale,
+					"commands.persona.export.json_non_importable_note",
+				),
+				persona: {
+					tomori_id: selectedPersona.tomori_id ?? null,
+					tomori_nickname: nickname,
+					is_alter: selectedPersona.is_alter === true,
+					persona_lineage_id: presetData.data.persona_lineage_id,
+					trigger_words: presetData.data.trigger_words,
+					persona_prompt: presetData.data.persona_prompt,
+					attribute_list: presetData.data.attribute_list,
+					sample_dialogues_in: presetData.data.sample_dialogues_in,
+					sample_dialogues_out: presetData.data.sample_dialogues_out,
+					sample_dialogues: presetData.data.sample_dialogues_in.map(
+						(input, index) => ({
+							user_input: input,
+							persona_output:
+								presetData.data.sample_dialogues_out[index] ?? "",
+						}),
+					),
+					webhook_avatar_url: selectedPersona.webhook_avatar_url ?? null,
+					alter_triggers: selectedPersona.alter_triggers ?? [],
+					nai_tags: selectedPersona.nai_tags ?? [],
+				},
+			};
+
+			const attachment = new AttachmentBuilder(
+				Buffer.from(`${JSON.stringify(readableJsonExport, null, 2)}\n`, "utf8"),
+				{
+					name: filename,
+				},
+			);
+
+			await responseInteraction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle(localizer(locale, "commands.persona.export.success_title"))
+						.setDescription(
+							localizer(
+								locale,
+								"commands.persona.export.success_description_json",
+								{
+									nickname,
+								},
+							),
+						)
+						.setColor(ColorCode.SUCCESS),
+				],
+				files: [attachment],
+			});
+
+			log.success(
+				`Successfully exported readable JSON preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`,
+			);
+			return;
+		}
 
 		// 4. Resolve avatar image (alter persona avatar when available, otherwise server avatar)
 		let avatarBuffer: Buffer;

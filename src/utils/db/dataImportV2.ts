@@ -255,6 +255,11 @@ export async function importServerConfig(
 			UPDATE tomori_configs
 			SET
 				llm_temperature = ${config.llm_temperature},
+				llm_top_p = ${config.llm_top_p},
+				llm_top_k = ${config.llm_top_k},
+				llm_frequency_penalty = ${config.llm_frequency_penalty},
+				llm_presence_penalty = ${config.llm_presence_penalty},
+				llm_min_p = ${config.llm_min_p},
 				humanizer_degree = ${config.humanizer_degree},
 				timezone_offset = ${config.timezone_offset},
 				message_fetch_limit = ${config.message_fetch_limit},
@@ -279,6 +284,11 @@ export async function importServerConfig(
 					UPDATE tomori_configs
 					SET
 						llm_temperature = ${config.llm_temperature},
+						llm_top_p = ${config.llm_top_p},
+						llm_top_k = ${config.llm_top_k},
+						llm_frequency_penalty = ${config.llm_frequency_penalty},
+						llm_presence_penalty = ${config.llm_presence_penalty},
+						llm_min_p = ${config.llm_min_p},
 						humanizer_degree = ${config.humanizer_degree},
 						timezone_offset = ${config.timezone_offset},
 						message_fetch_limit = ${config.message_fetch_limit},

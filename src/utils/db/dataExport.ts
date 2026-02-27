@@ -203,6 +203,11 @@ export async function exportServerData(
 		const configRows = await sql`
 			SELECT
 				COALESCE(tc_server.llm_temperature, tc_legacy.llm_temperature) as llm_temperature,
+				COALESCE(tc_server.llm_top_p, tc_legacy.llm_top_p, 1.0) as llm_top_p,
+				COALESCE(tc_server.llm_top_k, tc_legacy.llm_top_k, 0) as llm_top_k,
+				COALESCE(tc_server.llm_frequency_penalty, tc_legacy.llm_frequency_penalty, 0.0) as llm_frequency_penalty,
+				COALESCE(tc_server.llm_presence_penalty, tc_legacy.llm_presence_penalty, 0.0) as llm_presence_penalty,
+				COALESCE(tc_server.llm_min_p, tc_legacy.llm_min_p, 0.0) as llm_min_p,
 				COALESCE(tc_server.humanizer_degree, tc_legacy.humanizer_degree) as humanizer_degree,
 				COALESCE(tc_server.timezone_offset, tc_legacy.timezone_offset) as timezone_offset,
 				COALESCE(tc_server.message_fetch_limit, tc_legacy.message_fetch_limit, 80) as message_fetch_limit,
@@ -322,6 +327,11 @@ export async function exportServerData(
 			data: {
 				config: {
 					llm_temperature: configData.llm_temperature,
+					llm_top_p: configData.llm_top_p,
+					llm_top_k: configData.llm_top_k,
+					llm_frequency_penalty: configData.llm_frequency_penalty,
+					llm_presence_penalty: configData.llm_presence_penalty,
+					llm_min_p: configData.llm_min_p,
 					humanizer_degree: configData.humanizer_degree,
 					timezone_offset: configData.timezone_offset,
 					message_fetch_limit: configData.message_fetch_limit,
