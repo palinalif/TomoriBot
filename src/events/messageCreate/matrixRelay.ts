@@ -28,106 +28,24 @@ import {
 	getMatrixIdForDisplayName,
 } from "@/utils/matrix";
 import { log } from "@/utils/misc/logger";
-import { localizer, getSupportedLocales } from "@/utils/text/localizer";
 import type { TomoriState } from "@/types/db/schema";
 
 // ─── Embed relay helpers ────────────────────────────────────────────────────
 
-/**
- * Maps every resolved locale string for a known tool-result embed title to
- * its corresponding Matrix summary locale key and extraction mode.
- * Built once on first use and reused for all subsequent calls.
- */
-type EmbedRelayConfig = {
-	matrixKey: string;
-	mode: "memory" | "description" | "title";
-};
+const DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS = 3500;
 
-let embedTitleMap: Map<string, EmbedRelayConfig> | null = null;
-let embedTitlePatternMap: Array<{ pattern: RegExp; config: EmbedRelayConfig }> | null = null;
-
-/**
- * Escape regex metacharacters so locale template text can be converted safely
- * into a runtime-matching RegExp.
- */
-function escapeRegex(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function getMatrixEmbedChunkMaxChars(): number {
+	const parsed = Number.parseInt(
+		process.env.MATRIX_EMBED_CHUNK_MAX_CHARS ??
+			`${DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS}`,
+		10,
+	);
+	return Number.isFinite(parsed) && parsed > 0
+		? parsed
+		: DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS;
 }
 
-/**
- * Build a regex that matches runtime-resolved embed titles from locale templates.
- * Example: "💡 ... {user_nickname}!" => /^💡 ... .+?!$/.
- */
-function buildTemplateTitlePattern(template: string): RegExp | null {
-	if (!template.includes("{")) return null;
-	const escaped = escapeRegex(template);
-	const withPlaceholders = escaped.replace(/\\\{[^}]+\\\}/g, ".+?");
-	return new RegExp(`^${withPlaceholders}$`);
-}
-
-/**
- * Return (building once) the title→summary-config map across all loaded locales.
- * Covers both en-US and ja so servers using either locale are handled correctly.
- */
-function getEmbedTitleMap(): Map<string, EmbedRelayConfig> {
-	if (embedTitleMap) return embedTitleMap;
-
-	// Each entry: [Discord embed title locale key, Matrix summary key, extraction mode]
-	//   mode "memory"      — description contains memory text in backticks; extract code span → {memory} variable
-	//   mode "description" — description is prose; strip Discord markdown → {description} variable
-	//   mode "title"       — title is already the key info (e.g. search status); wrap in [...]
-	//                        no locale key needed — the title is already translated per server locale
-	const mappings: [string, string, "memory" | "description" | "title"][] = [
-		["genai.self_teach.server_memory_learned_title",   "matrix.embed.server_memory_learned",   "memory"],
-		["genai.self_teach.personal_memory_learned_title", "matrix.embed.personal_memory_learned", "memory"],
-		["genai.self_teach.server_memory_updated_title",   "matrix.embed.server_memory_updated",   "memory"],
-		["genai.self_teach.personal_memory_updated_title", "matrix.embed.personal_memory_updated", "memory"],
-		["reminders.reminder_set_title",                   "matrix.embed.reminder_set",            "description"],
-		["reminders.task_set_title",                       "matrix.embed.task_set",                "description"],
-		["reminders.recurring_task_set_title",             "matrix.embed.recurring_task_set",      "description"],
-		// Search status embeds — title already contains query + action; use as-is
-		["genai.search.web_search_title",                  "",                                     "title"],
-		["genai.search.image_search_title",                "",                                     "title"],
-		["genai.search.video_search_title",                "",                                     "title"],
-		["genai.search.news_search_title",                 "",                                     "title"],
-	];
-
-	embedTitleMap = new Map();
-	embedTitlePatternMap = [];
-	for (const locale of getSupportedLocales()) {
-		for (const [titleKey, matrixKey, mode] of mappings) {
-			// localizer falls back gracefully if the key is missing in this locale
-			const resolvedTitle = localizer(locale, titleKey);
-			if (resolvedTitle !== titleKey) {
-				const config = { matrixKey, mode };
-				embedTitleMap.set(resolvedTitle, config);
-
-				const templatePattern = buildTemplateTitlePattern(resolvedTitle);
-				if (templatePattern) {
-					embedTitlePatternMap.push({ pattern: templatePattern, config });
-				}
-			}
-		}
-	}
-	return embedTitleMap;
-}
-
-/**
- * Resolve embed relay config by exact title first, then by template pattern.
- */
-function getEmbedRelayConfig(title: string): EmbedRelayConfig | null {
-	const exactMatch = getEmbedTitleMap().get(title);
-	if (exactMatch) return exactMatch;
-
-	if (!embedTitlePatternMap) return null;
-	for (const entry of embedTitlePatternMap) {
-		if (entry.pattern.test(title)) {
-			return entry.config;
-		}
-	}
-
-	return null;
-}
+const MATRIX_EMBED_CHUNK_MAX_CHARS = getMatrixEmbedChunkMaxChars();
 
 /**
  * Strip Discord inline markdown from a string for plain-text Matrix relay.
@@ -144,6 +62,113 @@ function stripDiscordMarkdown(text: string): string {
 		.replace(/\*(.+?)\*/g, "$1")       // *italic*
 		.replace(/`(.+?)`/g, "$1")         // `code`
 		.trim();
+}
+
+/**
+ * Append a non-empty text fragment to the embed serialization output.
+ */
+function pushEmbedTextPart(parts: string[], value: string | null | undefined): void {
+	if (!value) return;
+	const normalized = stripDiscordMarkdown(value);
+	if (!normalized) return;
+	parts.push(normalized);
+}
+
+/**
+ * Append a URL-like fragment once while preserving source order.
+ */
+function pushEmbedUrlPart(
+	parts: string[],
+	seen: Set<string>,
+	value: string | null | undefined,
+): void {
+	if (!value) return;
+	const normalized = value.trim();
+	if (!normalized || seen.has(normalized)) return;
+	seen.add(normalized);
+	parts.push(normalized);
+}
+
+/**
+ * Serialize a Discord embed to plain text so Matrix can receive all useful content
+ * without relying on per-embed title detection.
+ */
+function serializeEmbedToText(embed: Embed): string {
+	const parts: string[] = [];
+	const seenUrls = new Set<string>();
+
+	pushEmbedTextPart(parts, embed.author?.name);
+	pushEmbedUrlPart(parts, seenUrls, embed.author?.url);
+	pushEmbedTextPart(parts, embed.title);
+	pushEmbedUrlPart(parts, seenUrls, embed.url);
+	pushEmbedTextPart(parts, embed.description);
+
+	for (const field of embed.fields) {
+		const name = stripDiscordMarkdown(field.name ?? "");
+		const value = stripDiscordMarkdown(field.value ?? "");
+		if (name && value) {
+			parts.push(`${name}\n${value}`);
+			continue;
+		}
+		if (name) parts.push(name);
+		if (value) parts.push(value);
+	}
+
+	pushEmbedUrlPart(parts, seenUrls, embed.image?.url);
+	pushEmbedUrlPart(parts, seenUrls, embed.thumbnail?.url);
+	pushEmbedUrlPart(parts, seenUrls, embed.video?.url);
+
+	if (embed.timestamp) {
+		const parsed = new Date(embed.timestamp);
+		parts.push(
+			Number.isNaN(parsed.getTime()) ? embed.timestamp : parsed.toISOString(),
+		);
+	}
+
+	pushEmbedTextPart(parts, embed.footer?.text);
+	pushEmbedUrlPart(parts, seenUrls, embed.footer?.iconURL);
+
+	return parts.join("\n\n").trim();
+}
+
+/**
+ * Split a long text block into newline-aware chunks so each Matrix event stays
+ * within the configured per-message size target.
+ */
+function splitTextIntoChunks(text: string, maxChars: number): string[] {
+	if (!text) return [];
+	if (text.length <= maxChars) return [text];
+
+	const chunks: string[] = [];
+	let current = "";
+
+	for (const line of text.split("\n")) {
+		if (line.length > maxChars) {
+			if (current) {
+				chunks.push(current);
+				current = "";
+			}
+			for (let index = 0; index < line.length; index += maxChars) {
+				chunks.push(line.slice(index, index + maxChars));
+			}
+			continue;
+		}
+
+		const candidate = current ? `${current}\n${line}` : line;
+		if (candidate.length <= maxChars) {
+			current = candidate;
+			continue;
+		}
+
+		chunks.push(current);
+		current = line;
+	}
+
+	if (current) {
+		chunks.push(current);
+	}
+
+	return chunks;
 }
 
 /**
@@ -271,41 +296,19 @@ function resolveDiscordTextForMatrix(
 }
 
 /**
- * Convert a Discord embed sent by TomoriBot into a concise Matrix text notice.
- * Returns null for embeds that are not recognised tool-result embeds (e.g. slash
- * command responses, refresh embeds) — those are silently skipped.
- *
- * @param embed        - The Discord Embed object from the message
- * @param serverLocale - The server's configured locale, used to localise the summary
+ * Convert a Discord embed to one or more Matrix text payloads.
+ * All embed types are relayed by serializing visible content to plain text.
  */
-function embedToMatrixText(embed: Embed, serverLocale: string): string | null {
-	if (!embed.title) return null;
+function embedToMatrixTextChunks(embed: Embed): string[] {
+	const serialized = serializeEmbedToText(embed);
+	if (!serialized) return [];
 
-	const config = getEmbedRelayConfig(embed.title);
-	if (!config) return null;
+	const chunks = splitTextIntoChunks(serialized, MATRIX_EMBED_CHUNK_MAX_CHARS);
+	if (chunks.length <= 1) return chunks;
 
-	if (config.mode === "title") {
-		// Search status embeds: the title is already the full info (e.g. "🔍 Searching for `query` on the web...")
-		// Strip backtick code spans from the query and wrap in brackets — no separate locale key needed
-		// since the title is already translated per the server's configured locale.
-		return `[${stripDiscordMarkdown(embed.title)}]`;
-	}
-
-	if (!embed.description) return null;
-
-	if (config.mode === "memory") {
-		// Memory embed descriptions keep the actual memory text in backticks.
-		// Prefer extracting that code span so this works for both concise and prose formats.
-		const memoryMatch = embed.description.match(/`([^`]+)`/);
-		const memory = memoryMatch
-			? memoryMatch[1].trim()
-			: stripDiscordMarkdown(embed.description).trim();
-		return localizer(serverLocale, config.matrixKey, { memory });
-	}
-
-	// Reminder/task embed descriptions are prose with Discord markdown formatting
-	const description = stripDiscordMarkdown(embed.description);
-	return localizer(serverLocale, config.matrixKey, { description });
+	return chunks.map(
+		(chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`,
+	);
 }
 
 /**
@@ -436,19 +439,30 @@ const handler = async (client: Client, message: Message): Promise<void> => {
 		}
 	}
 
-	// 8. Relay recognised tool-result embeds as concise bracketed Matrix notices.
-	//    Discord embeds (memory learned, reminder set, etc.) cannot be rendered in
-	//    Matrix, so we convert them to short inline text using matrix.embed.* locale keys.
-	//    The embed title is matched against all loaded locales so Japanese-locale servers
-	//    are handled correctly. Unknown embed types (e.g. slash command UI) are skipped.
+	// 8. Relay all embeds by serializing visible content (title/description/fields/urls)
+	//    into plain text Matrix messages. This avoids per-embed whitelists and prevents
+	//    silent drops when new embed shapes are introduced.
 	for (const embed of message.embeds) {
-		const matrixText = embedToMatrixText(embed, "en-US");
-		if (!matrixText) continue;
+		const chunks = embedToMatrixTextChunks(embed);
+		if (chunks.length === 0) continue;
 
-		try {
-			await sendToMatrixRoom(roomId, matrixText, personaName, avatarUrl);
-		} catch (error) {
-			log.warn(`Matrix relay: failed to relay embed to room ${roomId}`, error);
+		for (const [chunkIndex, chunk] of chunks.entries()) {
+			const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(chunk, message);
+			try {
+				await sendToMatrixRoom(
+					roomId,
+					body,
+					personaName,
+					avatarUrl,
+					formattedBody,
+					mentionedIds.length > 0 ? mentionedIds : undefined,
+				);
+			} catch (error) {
+				log.warn(
+					`Matrix relay: failed to relay embed chunk ${chunkIndex + 1}/${chunks.length} to room ${roomId}`,
+					error,
+				);
+			}
 		}
 	}
 };

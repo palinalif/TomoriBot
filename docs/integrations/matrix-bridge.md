@@ -215,8 +215,8 @@ Auto-discovered by the event handler system and invoked on every `messageCreate`
 When relaying, it:
 - Identifies which persona sent the message (main bot account or alter webhook) to select the correct Matrix virtual user
 - Resolves `<@discordId>` and `@{name}` mention placeholders to proper Matrix mention anchor tags (`<a href="https://matrix.to/#/@user:host">Name</a>`) with MSC3952 `m.mentions` fields
-- Converts recognized tool-result embeds (memory learned, reminder set, search status) to concise bracketed text notices using `matrix.embed.*` locale keys
-- Skips unknown embed types (slash command UI, refresh embeds)
+- Serializes every Discord embed into plain text and relays it (author/title/description/fields/footer/URLs)
+- Splits oversized serialized embeds into numbered chunks using `MATRIX_EMBED_CHUNK_MAX_CHARS` (default: `3500`) so relay remains deterministic
 
 ---
 
@@ -297,16 +297,18 @@ Both directions enforce the same size limit via the shared `MATRIX_MAX_ATTACHMEN
 
 ## Embed Relay
 
-Discord embeds cannot be rendered in Matrix, so `matrixRelay.ts` converts recognized tool-result embeds to concise plain-text notices using `matrix.embed.*` locale keys:
+Discord embeds cannot be rendered natively in Matrix. Instead, `matrixRelay.ts` serializes **all** visible embed content to plain text and relays it:
 
-| Embed type | Matrix output |
-|---|---|
-| Memory learned/updated | `[Tomori learned: "memory content"]` |
-| Reminder/task set | `[Reminder set: description]` |
-| Search status | `[🔍 Searching for query on the web...]` |
-| Unknown embed | Silently skipped |
+- Author name/url
+- Title/url
+- Description
+- Fields (name + value)
+- Image/thumbnail/video URLs
+- Timestamp/footer text/footer icon URL
 
-Embed titles are matched against all loaded locales (en-US and ja) so Japanese-locale servers work correctly.
+If the serialized text exceeds `MATRIX_EMBED_CHUNK_MAX_CHARS` (default: `3500`), it is split into numbered chunks (`[1/N]`, `[2/N]`, ...), each sent as its own Matrix message.
+
+This removed the old whitelist-title matching model and prevents silent drops when new embed formats are introduced.
 
 ---
 
@@ -321,7 +323,7 @@ actual reply text
 
 `matrixManager.ts` strips this fallback block before relaying to Discord, so TomoriBot only sees the actual reply text.
 
-When a Matrix user replies to a TomoriBot persona message, a `[System: user is replying to PersonaName's message]` annotation is prepended to the relayed Discord message. This annotation is processed by `tomoriChat.ts` as a reply trigger, since Discord webhooks cannot carry native reply references.
+When a Matrix user replies to a TomoriBot persona message, a `[System: user is replying to PersonaName's message]` annotation is appended to the relayed Discord message body. Reply triggering itself is handled by `pendingMatrixReplyChannels` in `matrixManager.ts`/`tomoriChat.ts`, since Discord webhooks cannot carry native reply references.
 
 The bot tracks sent Matrix event IDs → persona name in a bounded in-memory map (`sentEventPersonas`, capped at 500 entries). For replies to messages sent in a previous session (not in the map), it falls back to fetching the original event from the homeserver to check whether the sender was a `@_tomori_*` virtual user.
 
@@ -369,6 +371,7 @@ All configuration is via environment variables. The bridge is silently disabled 
 | `MATRIX_APPSERVICE_PORT` | No | HTTP listen port (default: `9993`) |
 | `MATRIX_MAX_ATTACHMENT_MB` | No | Max file size to relay in either direction (default: `8`) |
 | `MATRIX_MEDIA_TIMEOUT_MS` | No | Timeout for media download/upload requests (default: `15000`) |
+| `MATRIX_EMBED_CHUNK_MAX_CHARS` | No | Max characters per relayed embed message chunk before splitting (default: `3500`) |
 | `MATRIX_TYPING_TIMEOUT_MS` | No | Typing indicator auto-clear timeout (default: `60000`) |
 | `MATRIX_LINK_CACHE_TTL_MINUTES` | No | TTL for channel↔room link cache (default: `5`) |
 | `MATRIX_MAX_TRACKED_SENT_EVENTS` | No | Max event IDs tracked for reply detection (default: `500`) |

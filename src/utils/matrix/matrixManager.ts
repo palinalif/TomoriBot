@@ -1468,7 +1468,7 @@ async function handleMatrixEvent(
 				? ` "${repliedPersonaEvent.replySnippet}"`
 				: "";
 			replyContext =
-				`[System: ${senderLocalpart} is replying to ${repliedPersonaEvent.personaName}'s message${quotedSnippet}]: `;
+				`[System: ${senderLocalpart} is replying to ${repliedPersonaEvent.personaName}'s message${quotedSnippet}]`;
 			pendingMatrixReplyChannels.add(channelDiscId);
 		} else {
 			// Slow path: fetch the original event and check if it was sent by a virtual persona user
@@ -1482,19 +1482,19 @@ async function handleMatrixEvent(
 					? ` "${replyMetadata.replySnippet}"`
 					: "";
 				replyContext =
-					`[System: ${senderLocalpart} is replying to another person's message${quotedSnippet}]: `;
+					`[System: ${senderLocalpart} is replying to another person's message${quotedSnippet}]`;
 				pendingMatrixReplyChannels.add(channelDiscId);
 			}
 		}
 	}
 
 	// 13. Relay as text via Discord webhook.
-	//     m.emote (/me actions) are prefixed with "* " to match IRC/Matrix convention —
-	//     e.g., Matrix: /me waves → Discord: "* waves" (webhook username provides the name context)
-	const relayContent =
-		msgtype === "m.emote"
-			? `* ${replyContext}${bodyText}`
-			: `${replyContext}${bodyText}`;
+	//     m.emote (/me actions) are prefixed with "* " to match IRC/Matrix convention.
+	//     For reply annotations, append [System: ...] at the end of the relayed body.
+	let relayContent = msgtype === "m.emote" ? `* ${bodyText}` : bodyText;
+	if (replyContext) {
+		relayContent = `${relayContent} ${replyContext}`;
+	}
 
 	const { webhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
 	if (!webhook) return;
