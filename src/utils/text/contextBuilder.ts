@@ -1592,13 +1592,11 @@ export async function buildContext({
 		}
 
 		// Append Matrix bridge users after Discord users.
-		// Each Matrix user gets a plain-text mention handle (@{name}) since they have
-		// no Discord user ID — the @{} resolution will output the name as-is in the message.
+		// Include their bridge ID explicitly so tool calls can pass a concrete target ID
+		// (memory tool will safely downgrade target_user -> server_wide for bridge users).
 		if (matrixUsers && matrixUsers.size > 0) {
-			// Do not expose raw Matrix IDs in prompt context; display names are enough for
-			// mention handles and tool-side bridge ID recovery.
-			for (const displayName of matrixUsers.values()) {
-				usersInConversationText += `${displayName} (Mention: @{${displayName}})\n`;
+			for (const [matrixUserId, displayName] of matrixUsers.entries()) {
+				usersInConversationText += `${displayName} (User ID: ${matrixUserId}) (Mention: @{${displayName}})\n`;
 				usersInConversationText += "- Status: Online or status unknown\n";
 				usersInConversationText += "\n";
 			}

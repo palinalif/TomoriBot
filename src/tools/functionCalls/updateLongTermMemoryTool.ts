@@ -49,7 +49,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 			target_user_discord_id: {
 				type: "string",
 				description:
-					"If updating a personal memory, provide the target user's Discord ID (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
+					"If updating a personal memory, provide the target user's ID from context. This can be a Discord ID (e.g., '123456789012345678') or a bridge user ID (e.g., '@alice:matrix.org').",
 			},
 			target_user_nickname: {
 				type: "string",

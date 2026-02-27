@@ -42,7 +42,7 @@ export class MemoryTool extends BaseTool {
 			target_user_discord_id: {
 				type: "string",
 				description:
-					"If memory_scope is 'target_user', provide the unique Discord ID of the user this memory pertains to (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
+					"If memory_scope is 'target_user', provide the target user's ID from context. This can be a Discord ID (e.g., '123456789012345678') or a bridge user ID (e.g., '@alice:matrix.org').",
 			},
 			target_user_nickname: {
 				type: "string",

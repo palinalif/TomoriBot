@@ -235,6 +235,8 @@ This format serves three purposes:
 2. `extractBridgeUserId()` — extracts `@bred:localhost` for the `matrixUserMap` (used by `contextBuilder.ts` to inject Matrix users into the AI's context)
 3. `stripBridgePrefix()` — extracts `bred` as the display name for history formatting and persona matching
 
+When building context, Matrix users are listed with both display name and bridge ID (`User ID: @user:host`) so memory/reminder tools can target them using an explicit identifier.
+
 The outer bracket format `[BridgeName|userId]` is designed to be extensible — future bridges follow the same convention.
 
 ---
