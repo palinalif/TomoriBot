@@ -261,6 +261,75 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		return cloned;
 	}
 
+	/**
+	 * Estimate input tokens for context-window safety capping.
+	 *
+	 * This intentionally ignores inline base64 data-URI payloads (for image_url
+	 * parts) because their serialized character length does not map to text token
+	 * usage in multimodal models.
+	 */
+	private estimateInputTokensForSafetyCap(
+		messages: Array<Record<string, unknown>>,
+	): number {
+		const estimatedChars = messages.reduce(
+			(total, message) => total + this.estimateValueCharsForSafetyCap(message),
+			0,
+		);
+		return Math.ceil(estimatedChars / 4);
+	}
+
+	private estimateValueCharsForSafetyCap(
+		value: unknown,
+		parentKey?: string,
+	): number {
+		if (typeof value === "string") {
+			if (
+				parentKey === "url" &&
+				value.startsWith("data:") &&
+				value.includes(";base64,")
+			) {
+				return 0;
+			}
+			return value.length;
+		}
+
+		if (Array.isArray(value)) {
+			return value.reduce(
+				(total, item) =>
+					total + this.estimateValueCharsForSafetyCap(item, parentKey),
+				0,
+			);
+		}
+
+		if (!value || typeof value !== "object") {
+			return 0;
+		}
+
+		const record = value as Record<string, unknown>;
+		if (parentKey === "image_url" || parentKey === "imageUrl") {
+			const urlValue = record.url;
+			if (typeof urlValue !== "string") {
+				return 0;
+			}
+			if (urlValue.startsWith("data:") && urlValue.includes(";base64,")) {
+				return 0;
+			}
+			return urlValue.length;
+		}
+
+		let totalChars = 0;
+		for (const [key, childValue] of Object.entries(record)) {
+			if (key === "image_url" || key === "imageUrl") {
+				totalChars += this.estimateValueCharsForSafetyCap(childValue, key);
+				continue;
+			}
+			totalChars += key.length;
+			totalChars += this.estimateValueCharsForSafetyCap(childValue, key);
+		}
+
+		return totalChars;
+	}
+
 	private parseHttpErrorFromResponse(
 		responseStatus: number,
 		responseStatusText: string,
@@ -422,9 +491,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 			// OpenRouter follows OpenAI's snake_case for max_tokens.
 			// Apply a context-window safety cap so long conversations don't crowd out
-			// the output budget. The cap is: floor((contextLength - estimatedInputTokens) * 0.9)
-			// We rough-estimate input tokens as serialized-message chars / 4 (a standard
-			// approximation), then shrink by 10% to absorb tokenizer discrepancies.
+			// the output budget.
+			//   rawSafeOutputBudget = floor((contextLength - estimatedInputTokens) * OPENROUTER_OUTPUT_SAFETY_FACTOR)
+			// Input is estimated from message text fields (chars / 4). Inline base64
+			// image payloads are intentionally excluded from this estimate.
+			// To keep replies usable in tight windows, we also apply a best-effort
+			// minimum output floor (OPENROUTER_MIN_OUTPUT_TOKENS) when the remaining
+			// context can still fit that floor.
 			// If maxOutputTokens is undefined (unknown model), we skip max_tokens entirely
 			// and let OpenRouter use the model's natural limit.
 			let effectiveMaxOutputTokens = config.maxOutputTokens;
@@ -436,22 +509,63 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			) {
 				const tokenLimits = getOpenRouterTokenLimits(config.model);
 				if (tokenLimits && tokenLimits.contextLength > 0) {
-					// 1. Rough input token estimate: serialized message content chars / 4
-					const estimatedInputTokens = Math.ceil(
-						JSON.stringify(messages).length / 4,
+					const outputSafetyFactorRaw = Number.parseFloat(
+						process.env.OPENROUTER_OUTPUT_SAFETY_FACTOR || "0.9",
 					);
-					// 2. Budget = 90% of remaining context after input
-					const safeOutputBudget = Math.floor(
-						(tokenLimits.contextLength - estimatedInputTokens) * 0.9,
+					const outputSafetyFactor =
+						Number.isFinite(outputSafetyFactorRaw) &&
+						outputSafetyFactorRaw > 0 &&
+						outputSafetyFactorRaw < 1
+							? outputSafetyFactorRaw
+							: 0.9;
+					const minOutputTokensRaw = Number.parseInt(
+						process.env.OPENROUTER_MIN_OUTPUT_TOKENS || "256",
+						10,
 					);
+					const configuredMinOutputTokens =
+						Number.isFinite(minOutputTokensRaw) && minOutputTokensRaw > 0
+							? minOutputTokensRaw
+							: 256;
+					const minOutputTokensFloor = Math.min(
+						configuredMinOutputTokens,
+						effectiveMaxOutputTokens,
+					);
+					// 1. Rough input token estimate from textual message content
+					const estimatedInputTokens =
+						this.estimateInputTokensForSafetyCap(messages);
+					const remainingContextTokens =
+						tokenLimits.contextLength - estimatedInputTokens;
+					// 2. Budget = safety-factor of remaining context after input
+					const rawSafeOutputBudget = Math.floor(
+						remainingContextTokens * outputSafetyFactor,
+					);
+					let safeOutputBudget = Math.max(1, rawSafeOutputBudget);
+					let minOutputFloorApplied = false;
+
+					// 3. If margin makes output too small, lift to min floor when the
+					// remaining context can still fit it.
+					if (
+						safeOutputBudget < minOutputTokensFloor &&
+						remainingContextTokens >= minOutputTokensFloor
+					) {
+						safeOutputBudget = minOutputTokensFloor;
+						minOutputFloorApplied = true;
+					}
+
 					// 3. Cap max output to whichever is smaller: model limit or safe budget
 					if (safeOutputBudget < effectiveMaxOutputTokens) {
 						log.warn(
 							`Context-window safety cap applied for ${config.model}: ` +
 								`maxOutputTokens ${effectiveMaxOutputTokens} → ${safeOutputBudget} ` +
-								`(contextLength=${tokenLimits.contextLength}, estimatedInput≈${estimatedInputTokens})`,
+								`(contextLength=${tokenLimits.contextLength}, estimatedInput≈${estimatedInputTokens}, remaining=${remainingContextTokens}, rawBudget=${rawSafeOutputBudget}, safetyFactor=${outputSafetyFactor}, minFloor=${minOutputTokensFloor}, minFloorApplied=${minOutputFloorApplied})`,
 						);
-						effectiveMaxOutputTokens = Math.max(1, safeOutputBudget);
+						effectiveMaxOutputTokens = safeOutputBudget;
+					} else if (minOutputFloorApplied) {
+						log.info(
+							`Context-window minimum output floor preserved for ${config.model}: ` +
+								`maxOutputTokens remains ${effectiveMaxOutputTokens} ` +
+								`(contextLength=${tokenLimits.contextLength}, estimatedInput≈${estimatedInputTokens}, remaining=${remainingContextTokens}, rawBudget=${rawSafeOutputBudget}, safetyFactor=${outputSafetyFactor}, minFloor=${minOutputTokensFloor})`,
+						);
 					}
 				}
 			}
