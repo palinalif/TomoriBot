@@ -53,3 +53,17 @@ export function extractBridgeUserId(username: string): string | null {
 	const match = username.match(/^\[[^|]+\|([^\]]+)\]/);
 	return match ? match[1] : null;
 }
+
+/**
+ * Returns true if the provided webhook username encodes a Matrix bridge user.
+ * This is case-insensitive with respect to the bridge label (e.g., "[Matrix|",
+ * "[matrix|") because it relies on extracting the bracket payload instead of a
+ * hardcoded prefix match.
+ *
+ * @param username - The raw webhook username from Discord
+ * @returns true if the username is a bridge webhook and the embedded ID is Matrix-style
+ */
+export function isMatrixBridgeWebhookUsername(username: string): boolean {
+	const bridgeUserId = extractBridgeUserId(username);
+	return bridgeUserId !== null && isBridgeUserId(bridgeUserId);
+}

@@ -866,8 +866,16 @@ export class GoogleStreamAdapter implements StreamProvider {
 			};
 		}
 
-		// Check for text content
-		const textContent = this.extractTextFromChunk(googleChunk);
+		// Check for text content.
+		// Prefer the pre-processed `text` field over re-extracting from candidates:
+		// - normalizeGoogleStreamChunk() sets it to the authoritative extracted text.
+		// - deduplicateChunkTextAgainstRecentStream() may zero it to "" to suppress duplicates.
+		// Re-extracting via extractTextFromChunk() would bypass that dedup by reading raw candidates.
+		// Fall back only when `text` is undefined (un-normalized chunk, shouldn't occur in practice).
+		const textContent =
+			googleChunk.text !== undefined
+				? googleChunk.text
+				: this.extractTextFromChunk(googleChunk);
 		if (textContent) {
 			return {
 				type: "text",

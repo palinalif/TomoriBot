@@ -21,7 +21,7 @@ Discord Gateway
      -> messageCreate handlers (chat pipeline)
 
 chat pipeline
-  -> context builder + caches
+  -> message history preprocessing (references/media/reaction metadata) + context builder + caches
   -> provider factory -> selected provider
   -> stream adapter + orchestrator
   -> optional tool calls via ToolRegistry

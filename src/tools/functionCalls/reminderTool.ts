@@ -19,7 +19,7 @@ import {
 	formatUTCOffset,
 	formatTimeWithOffset,
 } from "../../utils/text/timezoneHelper";
-import { isBridgeUserId } from "../../utils/bridge";
+import { isBridgeUserId, isMatrixBridgeWebhookUsername } from "../../utils/bridge";
 import { resolveBridgeUserId } from "../../utils/matrix";
 
 /**
@@ -292,7 +292,7 @@ export class ReminderTool extends BaseTool {
 		// store created_by_user_id = null (the column is nullable for this reason).
 		const isMatrixRelayRequester =
 			!!context.message?.webhookId &&
-			context.message?.author?.username?.startsWith("[Matrix|") === true;
+			isMatrixBridgeWebhookUsername(context.message?.author?.username ?? "");
 
 		const requestingUserRow = resolvedUserId
 			? await loadUserRow(resolvedUserId)

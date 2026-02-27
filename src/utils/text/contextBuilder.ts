@@ -1595,8 +1595,10 @@ export async function buildContext({
 		// Each Matrix user gets a plain-text mention handle (@{name}) since they have
 		// no Discord user ID — the @{} resolution will output the name as-is in the message.
 		if (matrixUsers && matrixUsers.size > 0) {
-			for (const [matrixId, displayName] of matrixUsers) {
-				usersInConversationText += `${displayName} (Matrix: ${matrixId}) (Mention: @{${displayName}})\n`;
+			// Do not expose raw Matrix IDs in prompt context; display names are enough for
+			// mention handles and tool-side bridge ID recovery.
+			for (const displayName of matrixUsers.values()) {
+				usersInConversationText += `${displayName} (Mention: @{${displayName}})\n`;
 				usersInConversationText += "- Status: Online or status unknown\n";
 				usersInConversationText += "\n";
 			}
@@ -1843,16 +1845,12 @@ export async function buildContext({
 		// Determine if this message is within the media context window
 		const isWithinMediaWindow = index >= mediaWindowCutoff;
 
-		// Check if message has any media (for message ID exposure to tools)
-		const hasAnyMedia =
-			msg.imageAttachments.length > 0 || msg.videoAttachments.length > 0;
-
-		// Check if message has significant media (non-emoji images or videos)
-		// Emoji-only messages are excluded from "increase_media_context" flagging
-		// because emojis are common and the system flag message can flood context unnecessarily
-		const hasNonEmojiImages = msg.imageAttachments.some((att) => !att.isEmoji);
-		const hasVideos = msg.videoAttachments.length > 0;
-		const hasSignificantMedia = hasNonEmojiImages || hasVideos;
+			// Check if message has significant media (non-emoji images or videos)
+			// Emoji-only messages are excluded from "increase_media_context" flagging
+			// because emojis are common and the system flag message can flood context unnecessarily
+			const hasNonEmojiImages = msg.imageAttachments.some((att) => !att.isEmoji);
+			const hasVideos = msg.videoAttachments.length > 0;
+			const hasSignificantMedia = hasNonEmojiImages || hasVideos;
 		let mediaIdHintAdded = false;
 
 		// If message has significant media but is outside window, add placeholder
@@ -2011,7 +2009,7 @@ export async function buildContext({
 		}
 
 		// Expose message ID(s) for media messages so tools (generate_image, process_gif) can reference attachments
-		if (hasAnyMedia && !mediaIdHintAdded) {
+			if (hasSignificantMedia && !mediaIdHintAdded) {
 			const mediaMessageIds = msg.mediaSourceMessageIds ?? [msg.id];
 			const hintText =
 				mediaMessageIds.length === 1

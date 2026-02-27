@@ -37,6 +37,9 @@ import type { TomoriState } from "@/types/db/schema";
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
 const modalSelectValues = new Map<string, Record<string, string>>();
 
+// Storage for file upload attachment IDs keyed by modal component custom ID
+const modalFileUploadValues = new Map<string, Record<string, string[]>>();
+
 // Storage for resolved attachments from modal file uploads (Discord.js doesn't expose these)
 const modalResolvedAttachments = new Map<
 	string,
@@ -141,6 +144,7 @@ function setupWebSocketInterception(client: any) {
 						if (interactionId) {
 							// Store select values before Discord.js strips them
 							const selectValues: Record<string, string> = {};
+							const fileUploadValues: Record<string, string[]> = {};
 
 							for (const comp of packet.d.data.components) {
 								if (
@@ -152,12 +156,29 @@ function setupWebSocketInterception(client: any) {
 									selectValues[comp.component.custom_id] =
 										comp.component.values[0];
 								}
+
+								if (
+									comp.type === 18 &&
+									comp.component?.type === 19 &&
+									comp.component.custom_id &&
+									Array.isArray(comp.component.values)
+								) {
+									fileUploadValues[comp.component.custom_id] =
+										comp.component.values;
+								}
 							}
 
 							if (Object.keys(selectValues).length > 0) {
 								modalSelectValues.set(interactionId, selectValues);
 								log.info(
 									`Stored ${Object.keys(selectValues).length} select values for interaction`,
+								);
+							}
+
+							if (Object.keys(fileUploadValues).length > 0) {
+								modalFileUploadValues.set(interactionId, fileUploadValues);
+								log.info(
+									`Stored ${Object.keys(fileUploadValues).length} file upload value set(s) for interaction`,
 								);
 							}
 
@@ -1859,6 +1880,9 @@ export async function promptWithRawModal(
 			// Extract values using Discord.js methods and stored select values
 			const values: Record<string, string> = {};
 			const attachments: Record<string, APIAttachment> = {};
+			const fileUploadComponentCount = components.filter((component) =>
+				isModalFileUploadField(component),
+			).length;
 
 			for (const component of components) {
 				if (isModalInputField(component)) {
@@ -1896,18 +1920,37 @@ export async function promptWithRawModal(
 						const storedAttachments = modalResolvedAttachments.get(
 							submitted.id,
 						);
+						const storedFileUploadValues = modalFileUploadValues.get(
+							submitted.id,
+						);
 
 						if (storedAttachments) {
-							// Look through all stored attachments and match by component
-							// For single file upload modals, we assume the first attachment belongs to this component
-							for (const [attachmentId, attachment] of Object.entries(
-								storedAttachments,
-							)) {
-								attachments[component.customId] = attachment;
-								log.info(
-									`Extracted file upload for ${component.customId}: ${attachmentId} (${attachment.filename})`,
-								);
-								break; // For single file uploads, take the first one
+							const attachmentIds =
+								storedFileUploadValues?.[component.customId] ?? [];
+
+							if (attachmentIds.length > 0) {
+								for (const attachmentId of attachmentIds) {
+									const attachment = storedAttachments[attachmentId];
+									if (!attachment) {
+										continue;
+									}
+									attachments[component.customId] = attachment;
+									log.info(
+										`Extracted file upload for ${component.customId}: ${attachmentId} (${attachment.filename})`,
+									);
+									break; // ModalResult currently stores a single attachment per custom ID
+								}
+							} else if (fileUploadComponentCount === 1) {
+								// Backward-compatible fallback for older single-upload modals
+								const [firstAttachmentEntry] =
+									Object.entries(storedAttachments);
+								if (firstAttachmentEntry) {
+									const [attachmentId, attachment] = firstAttachmentEntry;
+									attachments[component.customId] = attachment;
+									log.info(
+										`Extracted fallback file upload for ${component.customId}: ${attachmentId} (${attachment.filename})`,
+									);
+								}
 							}
 						} else {
 							log.info(
@@ -1924,6 +1967,7 @@ export async function promptWithRawModal(
 
 			// Clean up stored values
 			modalSelectValues.delete(submitted.id);
+			modalFileUploadValues.delete(submitted.id);
 			modalResolvedAttachments.delete(submitted.id);
 
 			// Auto-defer reply if requested to prevent 3-second interaction timeout
@@ -2062,5 +2106,131 @@ export async function promptWithPaginatedModal(
 			error,
 		);
 		return { outcome: "timeout" };
+	}
+}
+
+// Custom ID suffixes for status pagination buttons (scoped per interaction ID)
+const STATUS_PREV_SUFFIX = "_status_prev";
+const STATUS_NEXT_SUFFIX = "_status_next";
+const STATUS_LABEL_SUFFIX = "_status_label";
+
+/**
+ * Displays an array of summary embed pages with previous/next navigation buttons.
+ * Used by the `/status` command to show paginated scoped status data.
+ * If only one page is provided, shows it directly with no buttons.
+ * On pagination timeout, removes buttons but preserves the last viewed embed.
+ * @param interaction - The slash command or button interaction to respond to
+ * @param locale - User locale for localization
+ * @param pages - Ordered array of SummaryEmbedOptions pages to display
+ * @param flags - Message flags (defaults to Ephemeral)
+ */
+export async function replyPaginatedStatusPages(
+	interaction: ChatInputCommandInteraction | ButtonInteraction,
+	locale: string,
+	pages: SummaryEmbedOptions[],
+	flags:
+		| MessageFlags.SuppressEmbeds
+		| MessageFlags.Ephemeral
+		| MessageFlags.SuppressNotifications
+		| undefined = MessageFlags.Ephemeral,
+): Promise<void> {
+	// 1. Guard: nothing to display
+	if (pages.length === 0) return;
+
+	// 2. Single page: skip navigation buttons entirely
+	if (pages.length === 1) {
+		await replySummaryEmbed(interaction, locale, pages[0], flags);
+		return;
+	}
+
+	let currentPage = 0;
+	const totalPages = pages.length;
+
+	// 3. Scope button IDs to this interaction to avoid cross-user conflicts
+	const prevId = `${interaction.id}${STATUS_PREV_SUFFIX}`;
+	const nextId = `${interaction.id}${STATUS_NEXT_SUFFIX}`;
+	const labelId = `${interaction.id}${STATUS_LABEL_SUFFIX}`;
+
+	/** Builds the navigation button row for the given page index */
+	function buildNavRow(
+		page: number,
+	): ActionRowBuilder<MessageActionRowComponentBuilder> {
+		return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+			new ButtonBuilder()
+				.setCustomId(prevId)
+				.setLabel(`◀ ${localizer(locale, "general.pagination.previous")}`)
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(page === 0),
+			new ButtonBuilder()
+				.setCustomId(labelId)
+				.setLabel(
+					localizer(locale, "general.pagination.page_info", {
+						current: page + 1,
+						total: totalPages,
+					}),
+				)
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(true),
+			new ButtonBuilder()
+				.setCustomId(nextId)
+				.setLabel(`${localizer(locale, "general.pagination.next")} ▶`)
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(page === totalPages - 1),
+		);
+	}
+
+	// 4. Send or update the initial reply with the first page and nav buttons
+	const embed = createSummaryEmbed(locale, pages[currentPage]);
+	const navRow = buildNavRow(currentPage);
+
+	let message: Message;
+	if (interaction.deferred || interaction.replied) {
+		message = await interaction.editReply({
+			embeds: [embed],
+			components: [navRow],
+		});
+	} else {
+		await interaction.reply({
+			embeds: [embed],
+			components: [navRow],
+			flags,
+		});
+		message = await interaction.fetchReply();
+	}
+
+	// 5. Pagination loop: keep collecting button presses until timeout
+	try {
+		while (true) {
+			const buttonInteraction = await message.awaitMessageComponent({
+				filter: (i) =>
+					i.user.id === interaction.user.id &&
+					(i.customId === prevId || i.customId === nextId),
+				componentType: ComponentType.Button,
+				time: PAGINATION_TIMEOUT_MS,
+			});
+
+			// 6. Advance or retreat page index based on which button was pressed
+			if (buttonInteraction.customId === prevId) {
+				currentPage = Math.max(0, currentPage - 1);
+			} else {
+				currentPage = Math.min(totalPages - 1, currentPage + 1);
+			}
+
+			// 7. Update the message with the new page embed and refreshed nav row
+			const newEmbed = createSummaryEmbed(locale, pages[currentPage]);
+			const newNavRow = buildNavRow(currentPage);
+			await buttonInteraction.update({
+				embeds: [newEmbed],
+				components: [newNavRow],
+			});
+		}
+	} catch {
+		// 8. Timeout: strip buttons from the last viewed page to keep it clean
+		try {
+			const timeoutEmbed = createSummaryEmbed(locale, pages[currentPage]);
+			await interaction.editReply({ embeds: [timeoutEmbed], components: [] });
+		} catch {
+			// Ignore follow-up edit errors (e.g. interaction token expired)
+		}
 	}
 }

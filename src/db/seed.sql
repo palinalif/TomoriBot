@@ -117,9 +117,12 @@ VALUES
    'Advanced image generation model with higher resolution support (1K/2K/4K) and enhanced quality',
    '高解像度対応（1K/2K/4K）と強化された品質を備えた高度な画像生成モデル'),
   -- OpenRouter Gemini Image Generation Models (via OpenRouter API)
-  ('openrouter', 'google/gemini-2.5-flash-image', true, false, false, false,
+  ('openrouter', 'google/gemini-2.5-flash-image', false, false, false, false,
    'Fast and efficient image generation via OpenRouter with balanced quality and speed',
    'OpenRouter経由の品質と速度のバランスが取れた高速で効率的な画像生成'),
+  ('openrouter', 'google/gemini-3.1-flash-image-preview', true, false, false, false,
+   'Latest fast image generation via OpenRouter with Gemini 3.1 Flash Image Preview',
+   'Gemini 3.1 Flash Image PreviewによるOpenRouter経由の最新高速画像生成'),
   ('openrouter', 'google/gemini-3-pro-image-preview', false, false, false, false,
    'Advanced image generation via OpenRouter with enhanced quality and resolution options',
    'OpenRouter経由の強化された品質と解像度オプションを備えた高度な画像生成'),

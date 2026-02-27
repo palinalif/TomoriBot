@@ -1,7 +1,8 @@
 /**
  * Image Generation Command
  * Allows users to generate AI images using Google Gemini or OpenRouter
- * Supports text-to-image and image-to-image generation with up to 10 reference images
+ * Supports text-to-image and image-to-image generation with up to 3 reference images
+ * (Discord modal limit: 5 components total)
  */
 
 import {
@@ -33,8 +34,12 @@ import {
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
 const PROMPT_INPUT_ID = "prompt_input";
-const IMAGE_UPLOAD_ID = "image_upload";
 const ASPECT_RATIO_SELECT_ID = "aspect_ratio_select";
+const REFERENCE_IMAGE_INPUT_IDS = [
+	"image_upload_1",
+	"image_upload_2",
+	"image_upload_3",
+] as const;
 
 /**
  * Configure the subcommand
@@ -429,12 +434,30 @@ export async function execute(
 				maxLength: 2000,
 			},
 			{
-				customId: IMAGE_UPLOAD_ID,
+				customId: REFERENCE_IMAGE_INPUT_IDS[0],
 				labelKey: "commands.generate.image.modal.image_upload_label",
 				descriptionKey:
 					"commands.generate.image.modal.image_upload_description",
 				minValues: 0,
-				maxValues: 1, // Current modal implementation supports single file only
+				maxValues: 1,
+				required: false,
+			},
+			{
+				customId: REFERENCE_IMAGE_INPUT_IDS[1],
+				labelKey: "commands.generate.image.modal.image_upload_2_label",
+				descriptionKey:
+					"commands.generate.image.modal.image_upload_description",
+				minValues: 0,
+				maxValues: 1,
+				required: false,
+			},
+			{
+				customId: REFERENCE_IMAGE_INPUT_IDS[2],
+				labelKey: "commands.generate.image.modal.image_upload_3_label",
+				descriptionKey:
+					"commands.generate.image.modal.image_upload_description",
+				minValues: 0,
+				maxValues: 1,
 				required: false,
 			},
 			{
@@ -480,7 +503,9 @@ export async function execute(
 		modalSubmitInteraction = modalResult.interaction;
 		const prompt = modalResult.values?.[PROMPT_INPUT_ID];
 		const aspectRatio = modalResult.values?.[ASPECT_RATIO_SELECT_ID];
-		const imageAttachments = modalResult.attachments?.[IMAGE_UPLOAD_ID];
+		const imageAttachments = REFERENCE_IMAGE_INPUT_IDS.map(
+			(customId) => modalResult.attachments?.[customId],
+		).filter((attachment): attachment is APIAttachment => Boolean(attachment));
 
 		// 12. Safety check for required values
 		if (!modalSubmitInteraction || !prompt || !aspectRatio) {
@@ -488,23 +513,23 @@ export async function execute(
 			return;
 		}
 
-		// 13. Process reference image (if provided)
+		// 13. Process reference image(s) (if provided)
 		const referenceImages: Array<{ mimeType: string; data: string }> = [];
 		let referenceImageUrl: string | undefined;
 
-		if (imageAttachments) {
-			log.info(
-				`Processing uploaded reference image: ${imageAttachments.filename}`,
-			);
-
+		for (const imageAttachment of imageAttachments) {
 			try {
-				const converted = await convertAttachmentToBase64(imageAttachments);
+				log.info(
+					`Processing uploaded reference image: ${imageAttachment.filename}`,
+				);
+				const converted = await convertAttachmentToBase64(imageAttachment);
 				referenceImages.push(converted);
-				referenceImageUrl = imageAttachments.url; // Store URL for thumbnail
-				log.info("Successfully processed reference image");
+				if (!referenceImageUrl) {
+					referenceImageUrl = imageAttachment.url; // Use first reference for thumbnail
+				}
 			} catch (error) {
 				log.warn(
-					`Failed to process attachment ${imageAttachments.id}:`,
+					`Failed to process attachment ${imageAttachment.id}:`,
 					error as Error,
 				);
 
@@ -529,6 +554,12 @@ export async function execute(
 				});
 				return;
 			}
+		}
+
+		if (referenceImages.length > 0) {
+			log.info(
+				`Successfully processed ${referenceImages.length} reference image(s)`,
+			);
 		}
 
 		// 14. Get model codename from database

@@ -38,6 +38,11 @@ TomoriBot routes Discord events through one dispatcher: `src/handlers/eventHandl
 
 `messageCreate` -> `events/messageCreate/*.ts` -> chat/context/tool/stream pipeline.
 
+Current message preprocessing in `tomoriChat.ts` enriches fetched history before `buildContext()`:
+- reply-reference system annotations (message ID + quoted content)
+- media extraction and media-source message IDs
+- reaction context annotations (emoji/counts plus budgeted reactor identity fetches with counts-only fallback)
+
 ### Slash command event
 
 `interactionCreate` -> `events/interactionCreate/handleCommands.ts` -> command lookup and execution.

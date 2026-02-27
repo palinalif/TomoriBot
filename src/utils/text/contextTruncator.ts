@@ -34,10 +34,10 @@ type TruncationResult = {
  * Trims context items until the estimated token count fits within the safe input budget:
  *   safeInputBudget = floor((contextLength - maxCompletionTokens) * 0.9)
  *
- * Drop order:
+ * Drop policy:
  * 1) Oldest DIALOGUE_HISTORY exchange pairs (oldest-first), but never remove the newest
  *    DIALOGUE_HISTORY user turn so the current user request remains visible to the model.
- * 2) If still over budget, drop DIALOGUE_SAMPLE items oldest-first.
+ * 2) DIALOGUE_SAMPLE items are protected and never truncated.
  *
  * @param contextItems - Full list of structured context items to truncate
  * @param contextLength - Total context window size (input + output tokens)
@@ -58,7 +58,7 @@ export function truncateDialogueHistory(
 	// 2. Work on a mutable copy to avoid modifying the caller's array
 	const items = [...contextItems];
 	let historyPairsDropped = 0;
-	let sampleItemsDropped = 0;
+	const sampleItemsDropped = 0;
 
 	const findNewestDialogueUserIndex = (): number => {
 		for (let i = items.length - 1; i >= 0; i--) {
@@ -118,24 +118,9 @@ export function truncateDialogueHistory(
 		return true;
 	};
 
-	const dropOldestSampleItem = (): boolean => {
-		const sampleIdx = items.findIndex(
-			(item) => item.metadataTag === ContextItemTag.DIALOGUE_SAMPLE,
-		);
-		if (sampleIdx === -1) {
-			return false;
-		}
-		items.splice(sampleIdx, 1);
-		sampleItemsDropped++;
-		return true;
-	};
-
 	// 3. Iteratively drop context until within budget (or no droppable content remains)
 	while (estimateInputTokens(items) > safeInputBudget) {
 		if (dropOldestDroppableHistoryExchange()) {
-			continue;
-		}
-		if (dropOldestSampleItem()) {
 			continue;
 		}
 		break;

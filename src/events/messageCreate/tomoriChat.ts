@@ -82,6 +82,7 @@ import {
 	isBridgeUserId,
 	stripBridgePrefix,
 	extractBridgeUserId,
+	isMatrixBridgeWebhookUsername,
 } from "@/utils/bridge";
 
 import type {
@@ -122,9 +123,65 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 	(word) => word.trim(),
 ) || ["tomori", "tomo", "トモリ", "ともり"];
 
+function parseBooleanEnvFlag(
+	value: string | undefined,
+	defaultValue: boolean,
+): boolean {
+	if (typeof value !== "string") return defaultValue;
+	const normalized = value.trim().toLowerCase();
+	if (!normalized) return defaultValue;
+	if (
+		normalized === "true" ||
+		normalized === "1" ||
+		normalized === "yes" ||
+		normalized === "on"
+	) {
+		return true;
+	}
+	if (
+		normalized === "false" ||
+		normalized === "0" ||
+		normalized === "no" ||
+		normalized === "off"
+	) {
+		return false;
+	}
+	return defaultValue;
+}
+
+function parseIntegerEnvFlag(
+	value: string | undefined,
+	defaultValue: number,
+	minimum: number,
+): number {
+	if (typeof value !== "string") return defaultValue;
+	const parsed = Number.parseInt(value, 10);
+	if (Number.isNaN(parsed)) return defaultValue;
+	return Math.max(minimum, parsed);
+}
+
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const WEBHOOK_ERROR_COOLDOWN_MS = 10 * 60 * 1000;
 const webhookErrorCooldowns = new Map<string, number>();
+const REACTION_CONTEXT_ENABLED = parseBooleanEnvFlag(
+	process.env.REACTION_CONTEXT_ENABLED,
+	true,
+);
+const REACTION_CONTEXT_MAX_API_CALLS_PER_TURN = parseIntegerEnvFlag(
+	process.env.REACTION_CONTEXT_MAX_API_CALLS_PER_TURN,
+	20,
+	0,
+);
+const REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE = parseIntegerEnvFlag(
+	process.env.REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE,
+	4,
+	1,
+);
+const REACTION_CONTEXT_MAX_USERS_PER_REACTION = parseIntegerEnvFlag(
+	process.env.REACTION_CONTEXT_MAX_USERS_PER_REACTION,
+	5,
+	0,
+);
 
 const MAX_FUNCTION_CALL_ITERATIONS = 8; // Safety break for function call loops
 const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
@@ -586,6 +643,118 @@ const SUPPORTED_VIDEO_MIME_TYPES = [
 // Includes % for URL-encoded characters (e.g., Japanese characters in slugs)
 const TENOR_GIF_REGEX =
 	/(https?:\/\/)?(www\.)?tenor\.com\/view\/[a-zA-Z0-9%-]+-gif-\d+(\?.*)?/gi;
+
+type ReactionContextBudgetState = {
+	callsUsed: number;
+	budgetExhaustedLogged: boolean;
+	messagesWithReactions: number;
+	fallbackCount: number;
+};
+
+function normalizeReactionEmojiLabel(
+	reaction: import("discord.js").MessageReaction,
+): string {
+	const emojiName = reaction.emoji.name;
+	const emojiId = reaction.emoji.id;
+
+	if (emojiId && emojiName) {
+		return `:${emojiName}:`;
+	}
+	if (emojiName) {
+		return emojiName;
+	}
+	if (emojiId) {
+		return `<emoji:${emojiId}>`;
+	}
+	return "unknown_emoji";
+}
+
+function formatReactionUserLabel(user: { globalName: string | null; username: string }) {
+	return user.globalName || user.username;
+}
+
+async function buildReactionContextAnnotation(
+	message: Message,
+	budgetState: ReactionContextBudgetState,
+): Promise<string | null> {
+	if (!REACTION_CONTEXT_ENABLED || REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE < 1) {
+		return null;
+	}
+
+	const availableReactions = Array.from(message.reactions.cache.values())
+		.filter((reaction) => (reaction.count ?? 0) > 0)
+		.sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
+
+	if (availableReactions.length === 0) {
+		return null;
+	}
+
+	budgetState.messagesWithReactions += 1;
+
+	const selectedReactions = availableReactions.slice(
+		0,
+		REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE,
+	);
+	const reactionSegments: string[] = [];
+
+	for (const reaction of selectedReactions) {
+		const count = reaction.count ?? 0;
+		const emojiLabel = normalizeReactionEmojiLabel(reaction);
+		let segment = `${emojiLabel} x${count}`;
+
+		if (count > 0 && REACTION_CONTEXT_MAX_USERS_PER_REACTION > 0) {
+			if (budgetState.callsUsed < REACTION_CONTEXT_MAX_API_CALLS_PER_TURN) {
+				try {
+					budgetState.callsUsed += 1;
+					const users = await reaction.users.fetch({
+						limit: REACTION_CONTEXT_MAX_USERS_PER_REACTION,
+					});
+					const userLabels = Array.from(users.values())
+						.map((user) => formatReactionUserLabel(user))
+						.filter((label): label is string => label.length > 0);
+
+					if (userLabels.length > 0) {
+						segment += ` by ${userLabels.join(", ")}`;
+						const remaining = Math.max(0, count - userLabels.length);
+						if (remaining > 0) {
+							segment += ` (+${remaining} more)`;
+						}
+					}
+				} catch (error) {
+					budgetState.fallbackCount += 1;
+					log.warn(
+						`Reaction context: Failed to fetch users for ${emojiLabel} on message ${message.id}. Using counts only.`,
+						error,
+					);
+				}
+			} else {
+				budgetState.fallbackCount += 1;
+				if (!budgetState.budgetExhaustedLogged) {
+					budgetState.budgetExhaustedLogged = true;
+					log.info(
+						`Reaction context: User fetch budget exhausted (${budgetState.callsUsed}/${REACTION_CONTEXT_MAX_API_CALLS_PER_TURN}). Falling back to counts-only reactions.`,
+					);
+				}
+			}
+		}
+
+		reactionSegments.push(segment);
+	}
+
+	const remainingReactionTypes =
+		availableReactions.length - selectedReactions.length;
+	if (remainingReactionTypes > 0) {
+		reactionSegments.push(
+			`+${remainingReactionTypes} more reaction type${remainingReactionTypes === 1 ? "" : "s"}`,
+		);
+	}
+
+	if (reactionSegments.length === 0) {
+		return null;
+	}
+
+	return `[System: Reactions on this message: ${reactionSegments.join("; ")}]`;
+}
 
 // Define a type for our simplified message structure.
 // This will be passed to buildContext, which will then convert it into StructuredContextItem[].
@@ -1105,7 +1274,8 @@ export default async function tomoriChat(
 	// They must not be treated as self-messages or persona jobs — exempt them from all
 	// webhook/bot guards so TomoriBot responds to them like regular user messages.
 	const isMatrixRelayMessage =
-		isWebhookMessage && message.author.username.startsWith("[Matrix|");
+		isWebhookMessage &&
+		isMatrixBridgeWebhookUsername(message.author.username);
 	const isLikelySelfMessage =
 		!isMatrixRelayMessage && (isFromClientUser || isWebhookMessage);
 
@@ -1675,13 +1845,16 @@ export default async function tomoriChat(
 			);
 			const serverPersonalizationDisabled =
 				tomoriState?.config.personal_memories_enabled === false;
+			const triggererDisplayName = isMatrixRelayMessage
+				? (stripBridgePrefix(message.author.username) || message.author.username)
+				: message.author.username;
 
 			// Use Discord username if user is blacklisted OR server personalization is disabled OR no custom nickname exists
 			const triggererName =
 				isUserBlacklisted ||
 				serverPersonalizationDisabled ||
 				!userRow?.user_nickname
-					? message.author.username
+					? triggererDisplayName
 					: userRow.user_nickname;
 
 			// Create per-request snapshot to avoid redundant DB queries and ensure consistency
@@ -2688,6 +2861,12 @@ export default async function tomoriChat(
 			}
 
 			const shouldExtractEmojiImages = tomoriState.llm.sees_images;
+			const reactionContextBudget: ReactionContextBudgetState = {
+				callsUsed: 0,
+				budgetExhaustedLogged: false,
+				messagesWithReactions: 0,
+				fallbackCount: 0,
+			};
 
 			for (const [index, msg] of relevantMessagesArray.entries()) {
 				const authorId = msg.author.id;
@@ -2894,7 +3073,7 @@ export default async function tomoriChat(
 				// instead, since all Matrix relays share the same Discord webhook bot user ID.
 				const isMatrixNonPersonaRelay =
 					isWebhookMessage &&
-					msg.author.username.startsWith("[Matrix|") &&
+					isMatrixBridgeWebhookUsername(msg.author.username) &&
 					authorType === "user";
 				const shouldTreatWebhookAsRealUser =
 					isWebhookMessage &&
@@ -2945,6 +3124,16 @@ export default async function tomoriChat(
 				let hasProcessedEmbed = false; // Track if this message contains a processed embed
 				const mediaSourceMessageIds: string[] = []; // Array to collect all message IDs with media
 				let hasLocalMedia = false;
+
+				const reactionContextLine = await buildReactionContextAnnotation(
+					msg,
+					reactionContextBudget,
+				);
+				if (reactionContextLine) {
+					messageContentForLlm = messageContentForLlm
+						? `${messageContentForLlm}\n${reactionContextLine}`
+						: reactionContextLine;
+				}
 
 				// Extract attachments from referenced message if it exists (after arrays are declared)
 				// Check if this is the message that got reference context injection and we have stored reference message data
@@ -3437,6 +3626,14 @@ export default async function tomoriChat(
 						videoAttachments,
 					});
 				}
+			}
+
+			if (REACTION_CONTEXT_ENABLED) {
+				log.info(
+					`Reaction context summary: messages_with_reactions=${reactionContextBudget.messagesWithReactions}, ` +
+						`api_calls_used=${reactionContextBudget.callsUsed}/${REACTION_CONTEXT_MAX_API_CALLS_PER_TURN}, ` +
+						`counts_only_fallbacks=${reactionContextBudget.fallbackCount}`,
+				);
 			}
 
 			// Add the bot's own Discord user ID only when no alter persona identity is
@@ -6143,7 +6340,7 @@ export function shouldBotReply(
 	const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
 	const isMatrixRelayMessage =
 		Boolean(message.webhookId) &&
-		message.author.username.startsWith("[Matrix|");
+		isMatrixBridgeWebhookUsername(message.author.username);
 	const rawSelfReplyLimit =
 		tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
 	const selfReplyLimit = Math.min(
