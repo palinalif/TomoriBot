@@ -1360,6 +1360,7 @@ CREATE TABLE IF NOT EXISTS random_triggers (
   channel_disc_id         TEXT NOT NULL,
   tomori_id               INT,                                -- NULL = "Random" persona selection
   timer_hours             INTEGER NOT NULL,                   -- How often to roll the dice (hours)
+  random_offset_range     INTEGER,                            -- Optional +/- random offset range in hours
   chance_percent          INTEGER NOT NULL,                   -- Probability of firing (1-100)
   silence_threshold_hours INTEGER,                           -- Skip if channel was active within N hours (NULL = no check)
   respond_to_self         BOOLEAN NOT NULL DEFAULT false,    -- Whether to fire if the persona spoke last
@@ -1370,6 +1371,7 @@ CREATE TABLE IF NOT EXISTS random_triggers (
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
 );
+SELECT add_column_if_not_exists('random_triggers', 'random_offset_range', 'INTEGER');
 
 -- Fast lookup for due triggers (primary polling query)
 CREATE INDEX IF NOT EXISTS idx_random_triggers_next ON random_triggers(next_trigger_at);

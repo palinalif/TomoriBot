@@ -28,7 +28,7 @@ import { convertToPNG } from "@/utils/image/imageProcessor";
 
 const PERSONA_EXPORT_MODAL_ID = "persona_export_persona_modal";
 const PERSONA_EXPORT_SELECT_ID = "persona_select";
-const PERSONA_EXPORT_JSON_OPTION = "export_json";
+const PERSONA_EXPORT_JSON_SELECT_ID = "export_json_select";
 const PERSONA_EXPORT_JSON_FALSE = "false";
 const PERSONA_EXPORT_JSON_TRUE = "true";
 
@@ -40,31 +40,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("export")
-		.setDescription(localizer("en-US", "commands.persona.export.description"))
-		.addStringOption((option) =>
-			option
-				.setName(PERSONA_EXPORT_JSON_OPTION)
-				.setDescription(
-					localizer("en-US", "commands.persona.export.export_json_description"),
-				)
-				.setRequired(false)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.persona.export.export_json_choice_false",
-						),
-						value: PERSONA_EXPORT_JSON_FALSE,
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.persona.export.export_json_choice_true",
-						),
-						value: PERSONA_EXPORT_JSON_TRUE,
-					},
-				),
-		);
+		.setDescription(localizer("en-US", "commands.persona.export.description"));
 
 /**
  * Executes the 'export' command
@@ -80,10 +56,6 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	const exportJsonSelection =
-		interaction.options.getString(PERSONA_EXPORT_JSON_OPTION) ??
-		PERSONA_EXPORT_JSON_FALSE;
-	const exportJson = exportJsonSelection === PERSONA_EXPORT_JSON_TRUE;
 	let responseInteraction:
 		| ChatInputCommandInteraction
 		| ModalSubmitInteraction = interaction;
@@ -131,6 +103,31 @@ export async function execute(
 					required: true,
 					options: personaSelectOptions,
 				},
+				{
+					customId: PERSONA_EXPORT_JSON_SELECT_ID,
+					labelKey: "commands.persona.export.export_json_select_label",
+					descriptionKey:
+						"commands.persona.export.export_json_select_description",
+					placeholder:
+						"commands.persona.export.export_json_select_placeholder",
+					required: false,
+					options: [
+						{
+							label: localizer(
+								locale,
+								"commands.persona.export.export_json_choice_false",
+							),
+							value: PERSONA_EXPORT_JSON_FALSE,
+						},
+						{
+							label: localizer(
+								locale,
+								"commands.persona.export.export_json_choice_true",
+							),
+							value: PERSONA_EXPORT_JSON_TRUE,
+						},
+					],
+				},
 			],
 		});
 		if (personaModalResult.outcome !== "submit") {
@@ -147,6 +144,10 @@ export async function execute(
 		responseInteraction = modalSubmitInteraction;
 
 		const selectedPersonaId = personaModalResult.values?.[PERSONA_EXPORT_SELECT_ID];
+		const exportJsonSelection =
+			personaModalResult.values?.[PERSONA_EXPORT_JSON_SELECT_ID] ??
+			PERSONA_EXPORT_JSON_FALSE;
+		const exportJson = exportJsonSelection === PERSONA_EXPORT_JSON_TRUE;
 		const selectedPersona =
 			allPersonas.find(
 				(persona) => persona.tomori_id?.toString() === selectedPersonaId,

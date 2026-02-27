@@ -302,9 +302,13 @@ async function formatRandomTriggers(
 							locale,
 							"commands.tool.status.random_trigger_persona_random",
 						);
+			const offsetSegment =
+				trigger.random_offset_range != null && trigger.random_offset_range > 0
+					? ` +/-${trigger.random_offset_range}h`
+					: "";
 
 			// 3. Format: "N. #channel · Persona · Xh · Y%"
-			return `${index + 1}. ${mention} · ${personaName} · ${trigger.timer_hours}h · ${trigger.chance_percent}%`;
+			return `${index + 1}. ${mention} · ${personaName} · ${trigger.timer_hours}h${offsetSegment} · ${trigger.chance_percent}%`;
 		}),
 	);
 

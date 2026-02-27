@@ -18,7 +18,10 @@ import {
 	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import {
+	getCachedTomoriState,
+	getCachedAllPersonas,
+} from "@/utils/cache/tomoriStateCache";
 import { getServerRandomTriggers } from "@/utils/db/dbRead";
 import { deleteRandomTrigger } from "@/utils/db/dbWrite";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
@@ -116,6 +119,13 @@ export async function execute(
 			locale,
 			"commands.config.randomtrigger.add.persona_random_label",
 		);
+		const allPersonas = await getCachedAllPersonas(interaction.guild.id);
+		const personaNameById = new Map<number, string>();
+		for (const persona of allPersonas) {
+			if (persona.tomori_id !== null && persona.tomori_id !== undefined) {
+				personaNameById.set(persona.tomori_id, persona.tomori_nickname);
+			}
+		}
 
 		const triggerOptions: SelectOption[] = triggers.map((trigger, index) => {
 			// Attempt to resolve channel name from the guild cache
@@ -128,10 +138,19 @@ export async function execute(
 
 			// Persona name: NULL tomori_id = "Random"
 			const personaName =
-				trigger.tomori_id === null ? randomLabel : `ID:${trigger.tomori_id}`;
+				trigger.tomori_id === null || trigger.tomori_id === undefined
+					? randomLabel
+					: (personaNameById.get(trigger.tomori_id) ??
+						`ID:${trigger.tomori_id}`);
+			const offsetSegment =
+				trigger.random_offset_range !== null &&
+				trigger.random_offset_range !== undefined &&
+				trigger.random_offset_range > 0
+					? ` +/-${trigger.random_offset_range}h`
+					: "";
 
 			const label = safeSelectOptionText(
-				`${channelName} | ${personaName} | ${trigger.timer_hours}h / ${trigger.chance_percent}%`,
+				`${channelName} | ${personaName} | ${trigger.timer_hours}h${offsetSegment} / ${trigger.chance_percent}%`,
 			);
 
 			return {

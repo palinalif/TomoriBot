@@ -127,7 +127,11 @@ export class RandomTriggerTimer {
 				log.info(
 					`Random trigger ${triggerId} missed the roll (${roll.toFixed(1)} >= ${trigger.chance_percent}) — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -140,7 +144,11 @@ export class RandomTriggerTimer {
 				log.warn(
 					`Random trigger ${triggerId}: channel ${trigger.channel_disc_id} not found — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -153,7 +161,11 @@ export class RandomTriggerTimer {
 				log.warn(
 					`Random trigger ${triggerId}: channel ${trigger.channel_disc_id} is not a guild text channel — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -179,7 +191,11 @@ export class RandomTriggerTimer {
 						log.info(
 							`Random trigger ${triggerId}: channel active ${ageHours.toFixed(2)}h ago, threshold is ${trigger.silence_threshold_hours}h — skipping & rescheduling`,
 						);
-						await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+						await this.rescheduleTrigger(
+							triggerId,
+							trigger.timer_hours,
+							trigger.random_offset_range ?? null,
+						);
 						return;
 					}
 				}
@@ -193,7 +209,11 @@ export class RandomTriggerTimer {
 				log.warn(
 					`Random trigger ${triggerId}: channel has no guild reference — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -204,7 +224,11 @@ export class RandomTriggerTimer {
 				log.warn(
 					`Random trigger ${triggerId}: no personas found for guild ${guildDiscId} — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -222,7 +246,11 @@ export class RandomTriggerTimer {
 				log.warn(
 					`Random trigger ${triggerId}: could not resolve persona (tomori_id=${trigger.tomori_id}) — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -238,7 +266,11 @@ export class RandomTriggerTimer {
 					log.info(
 						`Random trigger ${triggerId}: persona "${chosenPersona.tomori_nickname}" spoke last, respond_to_self=false — skipping & rescheduling`,
 					);
-					await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+					await this.rescheduleTrigger(
+						triggerId,
+						trigger.timer_hours,
+						trigger.random_offset_range ?? null,
+					);
 					return;
 				}
 			}
@@ -268,7 +300,11 @@ export class RandomTriggerTimer {
 				log.warn(
 					`Random trigger ${triggerId}: no messages in channel and seeding failed — rescheduling`,
 				);
-				await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+				await this.rescheduleTrigger(
+					triggerId,
+					trigger.timer_hours,
+					trigger.random_offset_range ?? null,
+				);
 				return;
 			}
 
@@ -310,7 +346,11 @@ export class RandomTriggerTimer {
 			);
 		} finally {
 			// ── Step 9: Always reschedule after processing (hit or miss) ──────────
-			await this.rescheduleTrigger(triggerId, trigger.timer_hours);
+			await this.rescheduleTrigger(
+				triggerId,
+				trigger.timer_hours,
+				trigger.random_offset_range ?? null,
+			);
 		}
 	}
 
@@ -318,13 +358,19 @@ export class RandomTriggerTimer {
 	 * Advances next_trigger_at by timer_hours from now.
 	 *
 	 * @param triggerId - The trigger_id to reschedule
-	 * @param timerHours - The configured interval
+	 * @param timerHours - The configured base interval
+	 * @param randomOffsetRange - Optional +/- jitter range for this reset
 	 */
 	private async rescheduleTrigger(
 		triggerId: number,
 		timerHours: number,
+		randomOffsetRange: number | null,
 	): Promise<void> {
-		const rescheduled = await rescheduleRandomTrigger(triggerId, timerHours);
+		const rescheduled = await rescheduleRandomTrigger(
+			triggerId,
+			timerHours,
+			randomOffsetRange,
+		);
 		if (!rescheduled) {
 			log.error(
 				`Failed to reschedule random trigger ${triggerId} — it may fire repeatedly until rescheduled`,

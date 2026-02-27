@@ -1389,6 +1389,7 @@ interface RandomTriggerData {
 	channelDiscId: string;
 	tomoriId: number | null;
 	timerHours: number;
+	randomOffsetRange: number | null;
 	chancePercent: number;
 	silenceThresholdHours: number | null;
 	respondToSelf: boolean;
@@ -1413,6 +1414,7 @@ export async function insertRandomTrigger(
 				channel_disc_id,
 				tomori_id,
 				timer_hours,
+				random_offset_range,
 				chance_percent,
 				silence_threshold_hours,
 				respond_to_self,
@@ -1423,6 +1425,7 @@ export async function insertRandomTrigger(
 				${data.channelDiscId},
 				${data.tomoriId},
 				${data.timerHours},
+				${data.randomOffsetRange},
 				${data.chancePercent},
 				${data.silenceThresholdHours},
 				${data.respondToSelf},
@@ -1479,6 +1482,7 @@ export async function upsertRandomTrigger(
 		const [row] = await sql`
 			UPDATE random_triggers SET
 				timer_hours             = ${data.timerHours},
+				random_offset_range     = ${data.randomOffsetRange},
 				chance_percent          = ${data.chancePercent},
 				silence_threshold_hours = ${data.silenceThresholdHours},
 				respond_to_self         = ${data.respondToSelf},
@@ -1550,22 +1554,32 @@ export async function deleteRandomTrigger(
 }
 
 /**
- * Reschedules a random trigger's next roll to NOW() + timer_hours.
+ * Reschedules a random trigger's next roll to NOW() + jittered hours.
  * Called by the timer after each execution (hit or miss).
  *
  * @param triggerId - The trigger_id to reschedule.
- * @param timerHours - The trigger's configured interval (hours).
+ * @param timerHours - The trigger's configured base interval (hours).
+ * @param randomOffsetRange - Optional +/- offset range applied per reset.
  * @returns True if rescheduled successfully, false otherwise.
  */
 export async function rescheduleRandomTrigger(
 	triggerId: number,
 	timerHours: number,
+	randomOffsetRange: number | null,
 ): Promise<boolean> {
 	try {
+		const normalizedOffsetRange = Math.max(0, randomOffsetRange ?? 0);
+		const randomOffset =
+			normalizedOffsetRange > 0
+				? Math.floor(Math.random() * (normalizedOffsetRange * 2 + 1)) -
+					normalizedOffsetRange
+				: 0;
+		const nextTimerHours = Math.max(1, timerHours + randomOffset);
+
 		// 1. Advance next_trigger_at by the configured interval from now
 		const [row] = await sql`
 			UPDATE random_triggers
-			SET next_trigger_at = NOW() + (${timerHours} * INTERVAL '1 hour')
+			SET next_trigger_at = NOW() + (${nextTimerHours} * INTERVAL '1 hour')
 			WHERE trigger_id = ${triggerId}
 			RETURNING trigger_id
 		`;
@@ -1579,7 +1593,12 @@ export async function rescheduleRandomTrigger(
 	} catch (error) {
 		const context: ErrorContext = {
 			errorType: "DatabaseUpdateError",
-			metadata: { operation: "rescheduleRandomTrigger", triggerId, timerHours },
+			metadata: {
+				operation: "rescheduleRandomTrigger",
+				triggerId,
+				timerHours,
+				randomOffsetRange,
+			},
 		};
 		await log.error(
 			`Error rescheduling random trigger ${triggerId}`,

@@ -517,6 +517,7 @@ export const randomTriggerSchema = z.object({
 	channel_disc_id: z.string(), // Discord channel ID where trigger fires
 	tomori_id: z.number().nullable().optional(), // NULL = "Random" persona selection
 	timer_hours: z.number().int().min(1), // How often to roll the dice (hours)
+	random_offset_range: z.number().int().min(0).nullable().optional(), // Optional +/- jitter range (hours)
 	chance_percent: z.number().int().min(1).max(100), // Probability of firing (1-100%)
 	silence_threshold_hours: z.number().int().nullable().optional(), // Skip if channel active within N hours
 	respond_to_self: z.boolean().default(false), // Whether to fire if persona spoke last

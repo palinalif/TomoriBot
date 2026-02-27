@@ -106,6 +106,18 @@ export const configureSubcommand = (
 		)
 		.addIntegerOption((option) =>
 			option
+				.setName("random_offset_range")
+				.setDescription(
+					localizer(
+						"en-US",
+						"commands.config.randomtrigger.add.random_offset_range_option",
+					),
+				)
+				.setMinValue(0)
+				.setRequired(false),
+		)
+		.addIntegerOption((option) =>
+			option
 				.setName("silence_threshold")
 				.setDescription(
 					localizer(
@@ -158,6 +170,8 @@ export async function execute(
 		// 2. Parse and validate slash options
 		const channel = interaction.options.getChannel("channel", true);
 		const timerHours = interaction.options.getInteger("timer_hours", true);
+		const randomOffsetRange =
+			interaction.options.getInteger("random_offset_range", false) ?? null;
 		const chance = interaction.options.getInteger("chance", true);
 		const silenceThreshold =
 			interaction.options.getInteger("silence_threshold", false) ?? null;
@@ -313,6 +327,7 @@ export async function execute(
 			channelDiscId: channel.id,
 			tomoriId,
 			timerHours,
+			randomOffsetRange,
 			chancePercent: chance,
 			silenceThresholdHours: silenceThreshold,
 			respondToSelf,
@@ -398,6 +413,14 @@ export async function execute(
 					{ silence_threshold: silenceThreshold.toString() },
 				)
 			: "";
+		const offsetSuffix =
+			randomOffsetRange !== null && randomOffsetRange > 0
+				? localizer(
+						locale,
+						"commands.config.randomtrigger.add.success_offset_suffix",
+						{ random_offset_range: randomOffsetRange.toString() },
+					)
+				: "";
 
 		// 13. Reply with success summary
 		await replyInfoEmbed(modalInteraction, locale, {
@@ -409,13 +432,14 @@ export async function execute(
 				timer_hours: timerHours.toString(),
 				chance: chance.toString(),
 				persona: personaDisplayName,
+				offset_suffix: offsetSuffix,
 				silence_suffix: silenceSuffix,
 			},
 			color: ColorCode.SUCCESS,
 		});
 
 		log.success(
-			`Random trigger created for channel ${channel.id} in server ${interaction.guild.id} (${timerHours}h, ${chance}%)`,
+			`Random trigger created for channel ${channel.id} in server ${interaction.guild.id} (${timerHours}h, +/-${randomOffsetRange ?? 0}h, ${chance}%)`,
 		);
 	} catch (error) {
 		const context: ErrorContext = {
