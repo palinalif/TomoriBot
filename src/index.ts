@@ -419,6 +419,23 @@ try {
 	// Non-critical error - reminders won't work but bot can still function
 }
 
+// Initialize random trigger timer system
+log.section("Initializing Random Trigger System...");
+try {
+	const { initializeRandomTriggerTimer } = await import(
+		"./timers/randomTriggerTimer"
+	);
+
+	// Start random trigger timer after client is ready
+	client.once("clientReady", () => {
+		initializeRandomTriggerTimer(client);
+		log.success("Random trigger system initialized with 1-minute polling");
+	});
+} catch (error) {
+	log.error("Failed to initialize random trigger system", error as Error);
+	// Non-critical error - random triggers won't fire but bot can still function
+}
+
 // Initialize memory monitoring system
 log.section("Initializing Memory Monitor...");
 try {

@@ -12,6 +12,8 @@ import {
 	personalMemorySchema,
 	reminderSchema,
 	type ReminderRow,
+	randomTriggerSchema,
+	type RandomTriggerRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import {
@@ -1374,5 +1376,216 @@ export async function rescheduleReminder(
 			context,
 		);
 		return null;
+	}
+}
+
+// ─── Random Trigger Write Functions ─────────────────────────────────────────
+
+/**
+ * Data shape for creating or updating a random trigger.
+ */
+interface RandomTriggerData {
+	serverId: number;
+	channelDiscId: string;
+	tomoriId: number | null;
+	timerHours: number;
+	chancePercent: number;
+	silenceThresholdHours: number | null;
+	respondToSelf: boolean;
+	customPrompt: string | null;
+}
+
+/**
+ * Inserts a new random trigger into the database.
+ * next_trigger_at is automatically set to NOW() + timer_hours.
+ *
+ * @param data - Trigger configuration data.
+ * @returns The inserted RandomTriggerRow, or null on failure.
+ */
+export async function insertRandomTrigger(
+	data: RandomTriggerData,
+): Promise<RandomTriggerRow | null> {
+	try {
+		// 1. Insert trigger; schedule first roll after one full timer cycle
+		const [row] = await sql`
+			INSERT INTO random_triggers (
+				server_id,
+				channel_disc_id,
+				tomori_id,
+				timer_hours,
+				chance_percent,
+				silence_threshold_hours,
+				respond_to_self,
+				custom_prompt,
+				next_trigger_at
+			) VALUES (
+				${data.serverId},
+				${data.channelDiscId},
+				${data.tomoriId},
+				${data.timerHours},
+				${data.chancePercent},
+				${data.silenceThresholdHours},
+				${data.respondToSelf},
+				${data.customPrompt},
+				NOW() + (${data.timerHours} * INTERVAL '1 hour')
+			)
+			RETURNING *
+		`;
+
+		if (!row) {
+			log.error("insertRandomTrigger: INSERT returned no rows");
+			return null;
+		}
+
+		// 2. Validate with schema
+		const parsed = randomTriggerSchema.safeParse(row);
+		if (!parsed.success) {
+			log.error(
+				"insertRandomTrigger: schema validation failed:",
+				parsed.error,
+			);
+			return null;
+		}
+
+		log.success(
+			`Random trigger created (id=${parsed.data.trigger_id}) for channel ${data.channelDiscId}`,
+		);
+		return parsed.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			serverId: data.serverId,
+			errorType: "DatabaseInsertError",
+			metadata: { operation: "insertRandomTrigger", ...data },
+		};
+		await log.error("Error inserting random trigger", error, context);
+		return null;
+	}
+}
+
+/**
+ * Updates an existing random trigger in-place (override case for named personas).
+ * next_trigger_at is rescheduled from now using the new timer_hours.
+ *
+ * @param triggerId - The trigger_id to update.
+ * @param data - New trigger configuration data.
+ * @returns The updated RandomTriggerRow, or null on failure.
+ */
+export async function upsertRandomTrigger(
+	triggerId: number,
+	data: RandomTriggerData,
+): Promise<RandomTriggerRow | null> {
+	try {
+		// 1. Update the trigger and reschedule the next roll from now
+		const [row] = await sql`
+			UPDATE random_triggers SET
+				timer_hours             = ${data.timerHours},
+				chance_percent          = ${data.chancePercent},
+				silence_threshold_hours = ${data.silenceThresholdHours},
+				respond_to_self         = ${data.respondToSelf},
+				custom_prompt           = ${data.customPrompt},
+				next_trigger_at         = NOW() + (${data.timerHours} * INTERVAL '1 hour')
+			WHERE trigger_id = ${triggerId}
+			RETURNING *
+		`;
+
+		if (!row) {
+			log.warn(
+				`upsertRandomTrigger: no row found for trigger_id=${triggerId}`,
+			);
+			return null;
+		}
+
+		// 2. Validate with schema
+		const parsed = randomTriggerSchema.safeParse(row);
+		if (!parsed.success) {
+			log.error(
+				"upsertRandomTrigger: schema validation failed:",
+				parsed.error,
+			);
+			return null;
+		}
+
+		log.success(`Random trigger updated (id=${triggerId})`);
+		return parsed.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			serverId: data.serverId,
+			errorType: "DatabaseUpdateError",
+			metadata: { operation: "upsertRandomTrigger", triggerId, ...data },
+		};
+		await log.error("Error updating random trigger", error, context);
+		return null;
+	}
+}
+
+/**
+ * Deletes a random trigger by its primary key.
+ *
+ * @param triggerId - The trigger_id to delete.
+ * @returns True if deleted successfully, false otherwise.
+ */
+export async function deleteRandomTrigger(
+	triggerId: number,
+): Promise<boolean> {
+	try {
+		// 1. Delete the trigger row
+		await sql`
+			DELETE FROM random_triggers
+			WHERE trigger_id = ${triggerId}
+		`;
+		log.success(`Random trigger deleted (id=${triggerId})`);
+		return true;
+	} catch (error) {
+		const context: ErrorContext = {
+			errorType: "DatabaseDeleteError",
+			metadata: { operation: "deleteRandomTrigger", triggerId },
+		};
+		await log.error(
+			`Error deleting random trigger ${triggerId}`,
+			error,
+			context,
+		);
+		return false;
+	}
+}
+
+/**
+ * Reschedules a random trigger's next roll to NOW() + timer_hours.
+ * Called by the timer after each execution (hit or miss).
+ *
+ * @param triggerId - The trigger_id to reschedule.
+ * @param timerHours - The trigger's configured interval (hours).
+ * @returns True if rescheduled successfully, false otherwise.
+ */
+export async function rescheduleRandomTrigger(
+	triggerId: number,
+	timerHours: number,
+): Promise<boolean> {
+	try {
+		// 1. Advance next_trigger_at by the configured interval from now
+		const [row] = await sql`
+			UPDATE random_triggers
+			SET next_trigger_at = NOW() + (${timerHours} * INTERVAL '1 hour')
+			WHERE trigger_id = ${triggerId}
+			RETURNING trigger_id
+		`;
+		if (!row) {
+			log.warn(
+				`rescheduleRandomTrigger: no row found for trigger_id=${triggerId}`,
+			);
+			return false;
+		}
+		return true;
+	} catch (error) {
+		const context: ErrorContext = {
+			errorType: "DatabaseUpdateError",
+			metadata: { operation: "rescheduleRandomTrigger", triggerId, timerHours },
+		};
+		await log.error(
+			`Error rescheduling random trigger ${triggerId}`,
+			error,
+			context,
+		);
+		return false;
 	}
 }

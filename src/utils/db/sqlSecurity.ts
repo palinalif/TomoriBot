@@ -57,6 +57,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
 	"sticker_usage_enabled",
 	"imagegen_enabled",
 	"timezone_offset",
+	"system_prompt",
 	// Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
 ]);
 

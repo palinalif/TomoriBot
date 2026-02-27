@@ -23,6 +23,8 @@ import {
 	type SystemPromptPresetRow,
 	type ApiKeyRotationRow,
 	apiKeyRotationSchema,
+	randomTriggerSchema,
+	type RandomTriggerRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
@@ -1886,5 +1888,155 @@ export async function getBlacklistedMemberIds(
 			error,
 		);
 		return [];
+	}
+}
+
+// ─── Random Trigger Functions ────────────────────────────────────────────────
+
+/**
+ * Fetches all random triggers whose next_trigger_at has passed (due for execution).
+ * Called by the RandomTriggerTimer every minute.
+ *
+ * @returns Array of due RandomTriggerRow records, or empty array on error.
+ */
+export async function getDueRandomTriggers(): Promise<RandomTriggerRow[]> {
+	try {
+		// 1. Fetch all triggers scheduled at or before now
+		const rows = await sql`
+			SELECT * FROM random_triggers
+			WHERE next_trigger_at <= NOW()
+			ORDER BY next_trigger_at ASC
+		`;
+
+		if (!rows.length) return [];
+
+		// 2. Validate and return each row
+		const validated: RandomTriggerRow[] = [];
+		for (const row of rows) {
+			const parsed = randomTriggerSchema.safeParse(row);
+			if (parsed.success) {
+				validated.push(parsed.data);
+			} else {
+				log.warn(
+					`Skipping invalid random trigger row (id=${row.trigger_id}):`,
+					parsed.error,
+				);
+			}
+		}
+		return validated;
+	} catch (error) {
+		log.error("Error fetching due random triggers:", error);
+		return [];
+	}
+}
+
+/**
+ * Fetches all random triggers configured for a given server.
+ * Used by the remove command to build the selection list.
+ *
+ * @param serverId - The database server_id.
+ * @returns Array of RandomTriggerRow records, or empty array on error.
+ */
+export async function getServerRandomTriggers(
+	serverId: number,
+): Promise<RandomTriggerRow[]> {
+	try {
+		// 1. Fetch all triggers for this server ordered by creation date
+		const rows = await sql`
+			SELECT * FROM random_triggers
+			WHERE server_id = ${serverId}
+			ORDER BY created_at ASC
+		`;
+
+		if (!rows.length) return [];
+
+		// 2. Validate and return
+		const validated: RandomTriggerRow[] = [];
+		for (const row of rows) {
+			const parsed = randomTriggerSchema.safeParse(row);
+			if (parsed.success) {
+				validated.push(parsed.data);
+			} else {
+				log.warn(
+					`Skipping invalid random trigger row (id=${row.trigger_id}):`,
+					parsed.error,
+				);
+			}
+		}
+		return validated;
+	} catch (error) {
+		log.error(`Error fetching random triggers for server ${serverId}:`, error);
+		return [];
+	}
+}
+
+/**
+ * Returns the count of random triggers for a server.
+ * Used to enforce the per-server cap before inserting a new trigger.
+ *
+ * @param serverId - The database server_id.
+ * @returns The count of triggers, or 0 on error.
+ */
+export async function getServerRandomTriggerCount(
+	serverId: number,
+): Promise<number> {
+	try {
+		// 1. Count triggers for this server
+		const [row] = await sql<Array<{ count: string | number }>>`
+			SELECT COUNT(*) AS count FROM random_triggers
+			WHERE server_id = ${serverId}
+		`;
+		return Number(row?.count ?? 0);
+	} catch (error) {
+		log.error(
+			`Error counting random triggers for server ${serverId}:`,
+			error,
+		);
+		return 0;
+	}
+}
+
+/**
+ * Looks up an existing trigger by the (server, channel, persona) triple.
+ * Used to detect override cases in the add command.
+ *
+ * @param serverId - The database server_id.
+ * @param channelDiscId - The Discord channel ID.
+ * @param tomoriId - The persona's tomori_id (non-null; Random uses INSERT always).
+ * @returns The existing RandomTriggerRow, or null if not found.
+ */
+export async function getRandomTriggerByPersonaAndChannel(
+	serverId: number,
+	channelDiscId: string,
+	tomoriId: number,
+): Promise<RandomTriggerRow | null> {
+	try {
+		// 1. Find matching trigger for the specific named persona in this channel
+		const [row] = await sql`
+			SELECT * FROM random_triggers
+			WHERE server_id = ${serverId}
+			  AND channel_disc_id = ${channelDiscId}
+			  AND tomori_id = ${tomoriId}
+			LIMIT 1
+		`;
+
+		if (!row) return null;
+
+		// 2. Validate and return
+		const parsed = randomTriggerSchema.safeParse(row);
+		if (!parsed.success) {
+			log.warn(
+				`Invalid random trigger row for persona ${tomoriId} in channel ${channelDiscId}:`,
+				parsed.error,
+			);
+			return null;
+		}
+		return parsed.data;
+	} catch (error) {
+		log.error(
+			`Error fetching random trigger for server ${serverId}, channel ${channelDiscId}, persona ${tomoriId}:`,
+			error,
+		);
+		return null;
 	}
 }

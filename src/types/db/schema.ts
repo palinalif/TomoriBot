@@ -511,6 +511,22 @@ export const matrixChannelLinkSchema = z.object({
 });
 export type MatrixChannelLinkRow = z.infer<typeof matrixChannelLinkSchema>;
 
+export const randomTriggerSchema = z.object({
+	trigger_id: z.number().optional(), // Primary key, auto-generated
+	server_id: z.number(), // Foreign key to servers table
+	channel_disc_id: z.string(), // Discord channel ID where trigger fires
+	tomori_id: z.number().nullable().optional(), // NULL = "Random" persona selection
+	timer_hours: z.number().int().min(1), // How often to roll the dice (hours)
+	chance_percent: z.number().int().min(1).max(100), // Probability of firing (1-100%)
+	silence_threshold_hours: z.number().int().nullable().optional(), // Skip if channel active within N hours
+	respond_to_self: z.boolean().default(false), // Whether to fire if persona spoke last
+	custom_prompt: z.string().nullable().optional(), // Optional injected system prompt
+	next_trigger_at: z.date(), // Scheduled time for next dice roll
+	created_at: z.date().optional(),
+	updated_at: z.date().optional(),
+});
+export type RandomTriggerRow = z.infer<typeof randomTriggerSchema>;
+
 /**
  * Tomori's combined state (base config + LLM settings + LLM info)
  */

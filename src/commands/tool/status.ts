@@ -13,37 +13,38 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
-import {
-	getCachedTomoriState,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState } from "../../utils/cache/tomoriStateCache";
 import {
 	getUserReminderCount,
 	getBraveApiKeyStatus,
 	getBlacklistedMemberIds,
 	loadPersonalMemoriesForUserLineage,
 	loadAllPersonasForServer,
+	getServerRandomTriggers,
 } from "../../utils/db/dbRead";
-import type { UserRow } from "../../types/db/schema";
+import { getAllWhitelistChannels } from "../../utils/db/channelWhitelist";
+import type { UserRow, ChannelWhitelistRow, RandomTriggerRow } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
-import { PrivacyLevel } from "../../types/db/schema";
+import { CooldownType, PrivacyLevel } from "../../types/db/schema";
 import { formatBooleanLocalized } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 
 // Constants
-const MAX_ITEMS_DISPLAY = 5; // Max items before switching to count-only display
+const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
 const MEMORY_TRUNCATE_LENGTH = 100; // Max chars per memory snippet
 const ATTRIBUTE_TRUNCATE_LENGTH = 200; // Max chars per attribute snippet
+const DIALOGUE_TRUNCATE_LENGTH = 140; // Max chars per sample dialogue side
 const MAX_PROMPT_PREVIEW = Number.parseInt(
 	process.env.SYSPROMPT_SHOW_MAX_PREVIEW || "3800",
 	10,
 ); // Max chars shown for system/persona prompts
 
 /**
- * Helper to get a user-friendly label for a privacy level.
+ * Returns a user-friendly label for a privacy level.
  * @param locale - User locale
  * @param level - Privacy level value
- * @returns Localized privacy label string
+ * @returns Localized privacy label
  */
 function getPrivacyLevelLabel(locale: string, level: PrivacyLevel): string {
 	switch (level) {
@@ -59,12 +60,52 @@ function getPrivacyLevelLabel(locale: string, level: PrivacyLevel): string {
 }
 
 /**
+ * Returns a localized label for a CooldownType value.
+ * Reuses the choice labels defined in commands.server.cooldown.
+ * @param locale - User locale
+ * @param type - CooldownType enum value
+ * @returns Localized cooldown type label
+ */
+function getCooldownTypeLabel(locale: string, type: CooldownType): string {
+	switch (type) {
+		case CooldownType.OFF:
+			return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
+		case CooldownType.PER_USER:
+			return localizer(
+				locale,
+				"commands.server.cooldown.triggers.type.choice_per_user",
+			);
+		case CooldownType.PER_CHANNEL:
+			return localizer(
+				locale,
+				"commands.server.cooldown.triggers.type.choice_per_channel",
+			);
+		case CooldownType.SERVER_WIDE:
+			return localizer(
+				locale,
+				"commands.server.cooldown.triggers.type.choice_server_wide",
+			);
+		case CooldownType.STRICT_SERVER_WIDE:
+			return localizer(
+				locale,
+				"commands.server.cooldown.triggers.type.choice_strict_server_wide",
+			);
+		default:
+			return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
+	}
+}
+
+function truncateText(input: string, maxLength: number): string {
+	return input.length > maxLength ? `${input.substring(0, maxLength)}...` : input;
+}
+
+/**
  * Formats an array of strings as a numbered list, truncating each item.
- * All items are shown (nothing is omitted).
+ * All items are included (nothing omitted).
  * @param items - Array of strings to format
  * @param locale - User locale
  * @param truncateLength - Max chars per item before truncation
- * @returns Formatted numbered list string, or localized "None" if empty
+ * @returns Formatted numbered list, or localized "None" if empty
  */
 function formatNumberedList(
 	items: string[],
@@ -74,25 +115,20 @@ function formatNumberedList(
 	if (items.length === 0) {
 		return localizer(locale, "commands.choices.none");
 	}
-
 	return items
 		.map((item, index) => {
-			const truncated =
-				item.length > truncateLength
-					? `${item.substring(0, truncateLength)}...`
-					: item;
-			return `${index + 1}. ${truncated}`;
+			return `${index + 1}. ${truncateText(item, truncateLength)}`;
 		})
 		.join("\n");
 }
 
 /**
  * Formats an array of strings as a bullet list, truncating each item.
- * All items are shown (nothing is omitted).
+ * All items are included (nothing omitted).
  * @param items - Array of strings to format
  * @param locale - User locale
  * @param truncateLength - Max chars per item before truncation
- * @returns Formatted bullet list string, or localized "None" if empty
+ * @returns Formatted bullet list, or localized "None" if empty
  */
 function formatBulletList(
 	items: string[],
@@ -102,16 +138,177 @@ function formatBulletList(
 	if (items.length === 0) {
 		return localizer(locale, "commands.choices.none");
 	}
-
 	return items
 		.map((item) => {
-			const truncated =
-				item.length > truncateLength
-					? `${item.substring(0, truncateLength)}...`
-					: item;
-			return `• ${truncated}`;
+			return `• ${truncateText(item, truncateLength)}`;
 		})
 		.join("\n");
+}
+
+/**
+ * Formats sample dialogue pairs as a numbered list with truncation on each side.
+ * @param dialoguesIn - User/input dialogue examples
+ * @param dialoguesOut - Persona/output dialogue examples
+ * @param locale - User locale
+ * @param truncateLength - Max chars per dialogue side before truncation
+ * @returns Formatted list, or localized "None" if empty
+ */
+function formatSampleDialogues(
+	dialoguesIn: string[],
+	dialoguesOut: string[],
+	locale: string,
+	truncateLength: number,
+): string {
+	const pairCount = Math.max(dialoguesIn.length, dialoguesOut.length);
+	if (pairCount === 0) {
+		return localizer(locale, "commands.choices.none");
+	}
+
+	return Array.from({ length: pairCount }, (_, index) => {
+		const input = truncateText(
+			dialoguesIn[index] ?? localizer(locale, "commands.choices.none"),
+			truncateLength,
+		);
+		const output = truncateText(
+			dialoguesOut[index] ?? localizer(locale, "commands.choices.none"),
+			truncateLength,
+		);
+		return `${index + 1}. ${input} -> ${output}`;
+	}).join("\n");
+}
+
+/**
+ * Resolves a Discord channel ID to a channel mention string.
+ * Falls back to a raw snowflake mention if the fetch fails.
+ * @param client - Discord client for channel fetch
+ * @param id - Discord channel snowflake ID
+ * @param locale - User locale (for unknown channel label)
+ * @returns Resolved channel mention string
+ */
+async function resolveChannelMention(
+	client: Client,
+	id: string,
+	locale: string,
+): Promise<string> {
+	try {
+		const channel = await client.channels.fetch(id);
+		return channel instanceof TextChannel ? channel.toString() : `<#${id}>`;
+	} catch {
+		return `*<${localizer(locale, "commands.tool.status.unknown_channel")} ${id}>*`;
+	}
+}
+
+/**
+ * Formats a list of channel IDs as mentions, collapsing to a count if over the max.
+ * @param client - Discord client
+ * @param ids - Array of channel Discord IDs
+ * @param locale - User locale
+ * @returns Formatted channel list string, or localized "None" if empty
+ */
+async function formatChannelList(
+	client: Client,
+	ids: string[],
+	locale: string,
+): Promise<string> {
+	if (ids.length === 0) {
+		return localizer(locale, "commands.choices.none");
+	}
+	const mentions = await Promise.all(
+		ids.map((id) => resolveChannelMention(client, id, locale)),
+	);
+	return mentions.length <= MAX_ITEMS_DISPLAY
+		? mentions.join(", ")
+		: localizer(locale, "commands.tool.status.item_count", {
+				count: mentions.length,
+			});
+}
+
+/**
+ * Formats the channel whitelist as a numbered list.
+ * Shows each whitelisted channel with its per-channel cooldown type and duration.
+ * When no entries exist, shows an "all channels allowed" message instead.
+ * @param client - Discord client for channel mentions
+ * @param entries - Array of whitelist rows from the database
+ * @param locale - User locale
+ * @returns Formatted whitelist string
+ */
+async function formatWhitelistEntries(
+	client: Client,
+	entries: ChannelWhitelistRow[],
+	locale: string,
+): Promise<string> {
+	// 1. No entries = whitelist is inactive (all channels can trigger)
+	if (entries.length === 0) {
+		return localizer(locale, "commands.tool.status.whitelist_all_allowed");
+	}
+
+	// 2. Resolve each channel mention and build formatted lines
+	const lines = await Promise.all(
+		entries.map(async (entry, index) => {
+			const mention = await resolveChannelMention(
+				client,
+				entry.channel_disc_id,
+				locale,
+			);
+			const cooldownType = entry.cooldown_type ?? CooldownType.OFF;
+			const typeLabel = getCooldownTypeLabel(locale, cooldownType);
+
+			// 3. Include duration only when a real cooldown is set
+			const detail =
+				cooldownType === CooldownType.OFF
+					? typeLabel
+					: `${typeLabel}, ${entry.cooldown_length}s`;
+
+			return `${index + 1}. ${mention} (${detail})`;
+		}),
+	);
+
+	return lines.join("\n");
+}
+
+/**
+ * Formats the list of random triggers as a numbered list.
+ * Each entry shows channel, persona name, timer interval, and trigger probability.
+ * @param client - Discord client for channel mentions
+ * @param triggers - Array of random trigger rows from the database
+ * @param personaNameMap - Map of tomori_id to persona nickname for name resolution
+ * @param locale - User locale
+ * @returns Formatted random trigger list string, or localized "None" if empty
+ */
+async function formatRandomTriggers(
+	client: Client,
+	triggers: RandomTriggerRow[],
+	personaNameMap: Map<number, string>,
+	locale: string,
+): Promise<string> {
+	if (triggers.length === 0) {
+		return localizer(locale, "commands.choices.none");
+	}
+
+	const lines = await Promise.all(
+		triggers.map(async (trigger, index) => {
+			// 1. Resolve the channel mention
+			const mention = await resolveChannelMention(
+				client,
+				trigger.channel_disc_id,
+				locale,
+			);
+
+			// 2. Resolve persona name (null tomori_id = random persona selection)
+			const personaName =
+				trigger.tomori_id != null
+					? (personaNameMap.get(trigger.tomori_id) ?? `ID:${trigger.tomori_id}`)
+					: localizer(
+							locale,
+							"commands.tool.status.random_trigger_persona_random",
+						);
+
+			// 3. Format: "N. #channel · Persona · Xh · Y%"
+			return `${index + 1}. ${mention} · ${personaName} · ${trigger.timer_hours}h · ${trigger.chance_percent}%`;
+		}),
+	);
+
+	return lines.join("\n");
 }
 
 /**
@@ -132,15 +329,24 @@ export const configureSubcommand = (
 				.setRequired(true)
 				.addChoices(
 					{
-						name: localizer("en-US", "commands.tool.status.scope_choice_personal"),
+						name: localizer(
+							"en-US",
+							"commands.tool.status.scope_choice_personal",
+						),
 						value: "personal",
 					},
 					{
-						name: localizer("en-US", "commands.tool.status.scope_choice_server"),
+						name: localizer(
+							"en-US",
+							"commands.tool.status.scope_choice_server",
+						),
 						value: "server",
 					},
 					{
-						name: localizer("en-US", "commands.tool.status.scope_choice_persona"),
+						name: localizer(
+							"en-US",
+							"commands.tool.status.scope_choice_persona",
+						),
 						value: "persona",
 					},
 				),
@@ -162,32 +368,31 @@ export async function execute(
 ): Promise<void> {
 	const serverDiscId = interaction.guildId ?? interaction.user.id;
 	const scope = interaction.options.getString("scope", true);
-
 	const limits = getMemoryLimits();
 
 	try {
 		switch (scope) {
 			case "personal": {
-				// 1. Resolve the active persona's lineage and load personal memories
-				let personalMemoryList: string[] = [];
+				// 1. Load global personal memories (lineage 0 only)
+				let globalPersonalMemoryList: string[] = [];
 				if (userData.user_id) {
-					const currentState = await getCachedTomoriState(serverDiscId);
-					const currentLineageId = currentState?.persona_lineage_id ?? 0;
 					const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
 						userData.user_id,
-						currentLineageId,
-						true,
+						0,
+						false,
 					);
-					personalMemoryList = personalMemoryRows.map((row) => row.content);
+					globalPersonalMemoryList = personalMemoryRows.map(
+						(row) => row.content,
+					);
 				}
 
-				// 2. Format personal memories as a numbered list (all shown, truncated)
-				const personalMemoriesValue = formatNumberedList(
-					personalMemoryList,
+				// 2. Format global personal memories (all shown, 100-char truncation each)
+				const globalPersonalMemoriesValue = formatNumberedList(
+					globalPersonalMemoryList,
 					locale,
 					MEMORY_TRUNCATE_LENGTH,
 				);
-				const personalMemoriesCount = personalMemoryList.length;
+				const globalPersonalMemoriesCount = globalPersonalMemoryList.length;
 
 				// 3. Get the user's active reminder count
 				const reminderCount = await getUserReminderCount(interaction.user.id);
@@ -197,7 +402,7 @@ export async function execute(
 					titleKey: "commands.tool.status.personal_title",
 					descriptionKey: "commands.tool.status.personal_description",
 					color: ColorCode.INFO,
-					footerKey: "commands.tool.status.export_footer",
+					footerKey: "commands.tool.status.export_footer_global_personal_memories",
 					fields: [
 						{
 							nameKey: "commands.tool.status.field_user_nickname",
@@ -223,12 +428,13 @@ export async function execute(
 							inline: true,
 						},
 						{
-							nameKey: "commands.tool.status.field_personal_memories_with_count",
+							nameKey:
+								"commands.tool.status.field_global_personal_memories_with_count",
 							nameVars: {
-								current: personalMemoriesCount,
+								current: globalPersonalMemoriesCount,
 								max: limits.maxPersonalMemories,
 							},
-							value: personalMemoriesValue,
+							value: globalPersonalMemoriesValue,
 							inline: false,
 						},
 					],
@@ -259,13 +465,30 @@ export async function execute(
 				const config = tomoriState.config;
 				const llm = tomoriState.llm;
 
-				// 2. Load supporting data
-				const braveApiKeySet = await getBraveApiKeyStatus(tomoriState.server_id);
-				const blacklistedMemberIds = await getBlacklistedMemberIds(
-					tomoriState.server_id,
-				);
+				// 2. Load all supporting data in parallel
+				const [
+					braveApiKeySet,
+					blacklistedMemberIds,
+					whitelistChannels,
+					randomTriggers,
+					allPersonas,
+				] = await Promise.all([
+					getBraveApiKeyStatus(tomoriState.server_id),
+					getBlacklistedMemberIds(tomoriState.server_id),
+					getAllWhitelistChannels(tomoriState.server_id),
+					getServerRandomTriggers(tomoriState.server_id),
+					loadAllPersonasForServer(serverDiscId),
+				]);
 
-				// 3. Format timezone (UTC+08:00 style)
+				// 3. Build a persona name map for random trigger display (tomori_id -> nickname)
+				const personaNameMap = new Map<number, string>();
+				for (const persona of allPersonas) {
+					if (persona.tomori_id) {
+						personaNameMap.set(persona.tomori_id, persona.tomori_nickname);
+					}
+				}
+
+				// 4. Format timezone (UTC+08:00 style)
 				const timezoneOffset = config.timezone_offset;
 				const timezoneSign = timezoneOffset >= 0 ? "+" : "-";
 				const timezoneHours = Math.abs(timezoneOffset)
@@ -273,32 +496,17 @@ export async function execute(
 					.padStart(2, "0");
 				const timezoneValue = `UTC${timezoneSign}${timezoneHours}:00`;
 
-				// 4. Format auto-chat channels
-				const autoChannelMentions = await Promise.all(
-					config.autoch_disc_ids.map(async (id) => {
-						try {
-							const channel = await client.channels.fetch(id);
-							return channel instanceof TextChannel ? channel.toString() : id;
-						} catch {
-							return `*<${localizer(locale, "commands.tool.status.unknown_channel")} ${id}>*`;
-						}
-					}),
-				);
-				const autoChannelsValue =
-					autoChannelMentions.length === 0
-						? localizer(locale, "commands.choices.none")
-						: autoChannelMentions.length <= MAX_ITEMS_DISPLAY
-							? autoChannelMentions.join(", ")
-							: localizer(locale, "commands.tool.status.item_count", {
-									count: autoChannelMentions.length,
-								});
-
-				// 5. Format trigger words with slot count
-				const triggerWordsCount = config.trigger_words.length;
-				const triggerWordsValue =
-					triggerWordsCount > 0
-						? config.trigger_words.map((w) => `\`${w}\``).join(", ")
-						: localizer(locale, "commands.choices.none");
+				// 5. Format cooldown type and duration
+				const cooldownType = config.cooldown_type ?? CooldownType.OFF;
+				const cooldownTypeLabel = getCooldownTypeLabel(locale, cooldownType);
+				const cooldownLengthValue =
+					cooldownType === CooldownType.OFF
+						? localizer(locale, "commands.choices.disabled")
+						: localizer(
+								locale,
+								"commands.tool.status.field_cooldown_length_value",
+								{ seconds: config.cooldown_length },
+							);
 
 				// 6. Format blacklisted members
 				const blacklistedCount = blacklistedMemberIds.length;
@@ -313,15 +521,20 @@ export async function execute(
 									{ current: blacklistedCount },
 								);
 
-				// 7. Format server memories (all shown, truncated to 100 chars each)
-				const serverMemoriesCount = tomoriState.server_memories.length;
-				const serverMemoriesValue = formatNumberedList(
-					tomoriState.server_memories,
-					locale,
-					MEMORY_TRUNCATE_LENGTH,
-				);
+				// 7. Format channel lists (auto-chat, RP, whitelist, random triggers)
+				const [
+					autoChannelsValue,
+					rpChannelsValue,
+					whitelistValue,
+					randomTriggersValue,
+				] = await Promise.all([
+					formatChannelList(client, config.autoch_disc_ids, locale),
+					formatChannelList(client, config.rp_channel_ids, locale),
+					formatWhitelistEntries(client, whitelistChannels, locale),
+					formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
+				]);
 
-				// 8. Format system prompt preview (truncated for readability)
+				// 8. Format system prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
 				const rawSystemPrompt = config.system_prompt ?? null;
 				const systemPromptText = rawSystemPrompt
 					? rawSystemPrompt.length > MAX_PROMPT_PREVIEW
@@ -330,7 +543,7 @@ export async function execute(
 					: DEFAULT_SYSTEM_PROMPT.trim();
 				const systemPromptValue = `\`\`\`\n${systemPromptText}\n\`\`\``;
 
-				// ── Page 1: Configuration ──────────────────────────────────────
+				// ── Page 1: Model & Sampling ───────────────────────────────────
 				const serverPage1: SummaryEmbedOptions = {
 					titleKey: "commands.tool.status.server_page1_title",
 					descriptionKey: "commands.tool.status.server_page1_description",
@@ -339,7 +552,7 @@ export async function execute(
 						{
 							nameKey: "commands.tool.status.field_model",
 							value: `\`${llm.llm_codename}\` (${llm.llm_provider})`,
-							inline: true,
+							inline: false,
 						},
 						{
 							nameKey: "commands.tool.status.field_temperature",
@@ -347,10 +560,44 @@ export async function execute(
 							inline: true,
 						},
 						{
+							nameKey: "commands.tool.status.field_top_p",
+							value: String(config.llm_top_p),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_top_k",
+							value: String(config.llm_top_k),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_min_p",
+							value: String(config.llm_min_p),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_frequency_penalty",
+							value: String(config.llm_frequency_penalty),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_presence_penalty",
+							value: String(config.llm_presence_penalty),
+							inline: true,
+						},
+						{
 							nameKey: "commands.tool.status.field_humanizer",
 							value: String(config.humanizer_degree),
 							inline: true,
 						},
+					],
+				};
+
+				// ── Page 2: Behavior ───────────────────────────────────────────
+				const serverPage2: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.server_page2_title",
+					descriptionKey: "commands.tool.status.server_page2_description",
+					color: ColorCode.INFO,
+					fields: [
 						{
 							nameKey: "commands.tool.status.field_timezone",
 							value: timezoneValue,
@@ -362,6 +609,26 @@ export async function execute(
 							inline: true,
 						},
 						{
+							nameKey: "commands.tool.status.field_self_reply_limit",
+							value: String(config.self_reply_limit),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_triggered_persona_limit",
+							value: String(config.triggered_persona_limit),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_cooldown_type",
+							value: cooldownTypeLabel,
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_cooldown_length",
+							value: cooldownLengthValue,
+							inline: true,
+						},
+						{
 							nameKey: "commands.tool.status.field_autoch_threshold",
 							value:
 								config.autoch_threshold > 0
@@ -369,27 +636,42 @@ export async function execute(
 									: localizer(locale, "commands.choices.disabled"),
 							inline: true,
 						},
+					],
+				};
+
+				// ── Page 3: Channels & Automation ──────────────────────────────
+				const serverPage3: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.server_page3_title",
+					descriptionKey: "commands.tool.status.server_page3_description",
+					color: ColorCode.INFO,
+					fields: [
 						{
 							nameKey: "commands.tool.status.field_autoch_channels",
 							value: autoChannelsValue,
 							inline: false,
 						},
 						{
-							nameKey: "commands.tool.status.field_trigger_words_with_count",
-							nameVars: {
-								current: triggerWordsCount,
-								max: limits.maxTriggerWords,
-							},
-							value: triggerWordsValue,
+							nameKey: "commands.tool.status.field_rp_channels",
+							value: rpChannelsValue,
+							inline: false,
+						},
+						{
+							nameKey: "commands.tool.status.field_whitelist_channels",
+							value: whitelistValue,
+							inline: false,
+						},
+						{
+							nameKey: "commands.tool.status.field_random_triggers",
+							value: randomTriggersValue,
 							inline: false,
 						},
 					],
 				};
 
-				// ── Page 2: Features & Moderation ─────────────────────────────
-				const serverPage2: SummaryEmbedOptions = {
-					titleKey: "commands.tool.status.server_page2_title",
-					descriptionKey: "commands.tool.status.server_page2_description",
+				// ── Page 4: Features & Moderation ─────────────────────────────
+				const serverPage4: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.server_page4_title",
+					descriptionKey: "commands.tool.status.server_page4_description",
 					color: ColorCode.INFO,
 					fields: [
 						{
@@ -422,6 +704,14 @@ export async function execute(
 							nameKey: "commands.tool.status.field_web_search",
 							value: formatBooleanLocalized(
 								config.web_search_enabled,
+								locale,
+							),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_pin_message",
+							value: formatBooleanLocalized(
+								config.pin_message_enabled,
 								locale,
 							),
 							inline: true,
@@ -485,6 +775,38 @@ export async function execute(
 							inline: true,
 						},
 						{
+							nameKey: "commands.tool.status.field_hide_respond_embed",
+							value: formatBooleanLocalized(
+								config.hide_respond_embed,
+								locale,
+							),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_uncensor_injection",
+							value: formatBooleanLocalized(
+								config.uncensor_injection_enabled,
+								locale,
+							),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_uncensor_unicode",
+							value: formatBooleanLocalized(
+								config.uncensor_unicode_space_enabled,
+								locale,
+							),
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_uncensor_sanitize",
+							value: formatBooleanLocalized(
+								config.uncensor_sanitize_enabled,
+								locale,
+							),
+							inline: true,
+						},
+						{
 							nameKey: "commands.tool.status.field_blacklisted_members",
 							value: blacklistedValue,
 							inline: blacklistedCount <= MAX_ITEMS_DISPLAY,
@@ -492,22 +814,13 @@ export async function execute(
 					],
 				};
 
-				// ── Page 3: Memory & Prompt ────────────────────────────────────
-				const serverPage3: SummaryEmbedOptions = {
-					titleKey: "commands.tool.status.server_page3_title",
-					descriptionKey: "commands.tool.status.server_page3_description",
+				// ── Page 5: System Prompt ───────────────────────────────────────
+				const serverPage5: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.server_page5_title",
+					descriptionKey: "commands.tool.status.server_page5_description",
 					color: ColorCode.INFO,
-					footerKey: "commands.tool.status.export_footer_full",
+					footerKey: "commands.tool.status.export_footer_server_config",
 					fields: [
-						{
-							nameKey: "commands.tool.status.field_server_memories_with_count",
-							nameVars: {
-								current: serverMemoriesCount,
-								max: limits.maxServerMemories,
-							},
-							value: serverMemoriesValue,
-							inline: false,
-						},
 						{
 							nameKey: "commands.tool.status.field_system_prompt",
 							value: systemPromptValue,
@@ -519,14 +832,14 @@ export async function execute(
 				await replyPaginatedStatusPages(
 					interaction,
 					locale,
-					[serverPage1, serverPage2, serverPage3],
+					[serverPage1, serverPage2, serverPage3, serverPage4, serverPage5],
 					MessageFlags.Ephemeral,
 				);
 				break;
 			}
 
 			case "persona": {
-				// 1. Load all personas for the persona picker
+				// 1. Load all personas for the picker
 				const allPersonas = await loadAllPersonasForServer(serverDiscId);
 
 				if (allPersonas.length === 0) {
@@ -573,8 +886,26 @@ export async function execute(
 				}
 
 				const personaName = selectedPersona.tomori_nickname;
+				const personaLineageId = selectedPersona.persona_lineage_id ?? 0;
 
-				// 3. Format attributes (all shown, truncated to 200 chars each)
+				// 3. Load persona-scoped personal memories for the requesting user
+				let personaPersonalMemoryList: string[] = [];
+				if (userData.user_id) {
+					const personaPersonalMemoryRows =
+						await loadPersonalMemoriesForUserLineage(
+							userData.user_id,
+							personaLineageId,
+							false,
+						);
+					personaPersonalMemoryList = personaPersonalMemoryRows.map(
+						(row) => row.content,
+					);
+				}
+
+				// 4. Persona-scoped server memories are already attached to the persona state
+				const personaServerMemoryList = selectedPersona.server_memories ?? [];
+
+				// 5. Format attributes (all shown, 200-char truncation each)
 				const attributesCount = selectedPersona.attribute_list.length;
 				const attributesValue = formatBulletList(
 					selectedPersona.attribute_list,
@@ -582,15 +913,38 @@ export async function execute(
 					ATTRIBUTE_TRUNCATE_LENGTH,
 				);
 
-				// 4. Format sample dialogues slot usage
-				const dialogueCount = selectedPersona.sample_dialogues_in.length;
+				// 6. Format sample dialogues with actual truncated content
+				const dialogueCount = Math.max(
+					selectedPersona.sample_dialogues_in.length,
+					selectedPersona.sample_dialogues_out.length,
+				);
 				const dialogueValue = localizer(
 					locale,
 					"commands.tool.status.field_slot_usage",
 					{ current: dialogueCount, max: limits.maxSampleDialogues },
 				);
+				const sampleDialoguesValue = formatSampleDialogues(
+					selectedPersona.sample_dialogues_in,
+					selectedPersona.sample_dialogues_out,
+					locale,
+					DIALOGUE_TRUNCATE_LENGTH,
+				);
 
-				// 5. Format alter/persona triggers
+				// 7. Format persona-scoped memory content
+				const personaPersonalMemoriesCount = personaPersonalMemoryList.length;
+				const personaPersonalMemoriesValue = formatNumberedList(
+					personaPersonalMemoryList,
+					locale,
+					MEMORY_TRUNCATE_LENGTH,
+				);
+				const personaServerMemoriesCount = personaServerMemoryList.length;
+				const personaServerMemoriesValue = formatNumberedList(
+					personaServerMemoryList,
+					locale,
+					MEMORY_TRUNCATE_LENGTH,
+				);
+
+				// 8. Format alter/persona trigger words
 				const alterTriggersValue =
 					selectedPersona.alter_triggers.length > 0
 						? selectedPersona.alter_triggers.map((t) => `\`${t}\``).join(", ")
@@ -601,13 +955,13 @@ export async function execute(
 						? selectedPersona.trigger_words.map((t) => `\`${t}\``).join(", ")
 						: localizer(locale, "commands.choices.none");
 
-				// 6. Format NAI tags
+				// 9. Format NAI tags
 				const naiTagsValue =
 					selectedPersona.nai_tags.length > 0
 						? selectedPersona.nai_tags.join(", ")
 						: localizer(locale, "commands.choices.none");
 
-				// 7. Format persona prompt preview (truncated for readability)
+				// 10. Format persona prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
 				const rawPersonaPrompt = selectedPersona.persona_prompt ?? null;
 				const personaPromptValue = rawPersonaPrompt
 					? `\`\`\`\n${
@@ -634,10 +988,7 @@ export async function execute(
 						},
 						{
 							nameKey: "commands.tool.status.field_is_alter",
-							value: formatBooleanLocalized(
-								selectedPersona.is_alter,
-								locale,
-							),
+							value: formatBooleanLocalized(selectedPersona.is_alter, locale),
 							inline: true,
 						},
 						{
@@ -655,6 +1006,16 @@ export async function execute(
 							value: personaTriggersValue,
 							inline: true,
 						},
+					],
+				};
+
+				// ── Page 2: Attributes ─────────────────────────────────────────
+				const personaPage2: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.persona_page2_title",
+					titleVars: { persona_name: personaName },
+					descriptionKey: "commands.tool.status.persona_page2_description",
+					color: ColorCode.INFO,
+					fields: [
 						{
 							nameKey: "commands.tool.status.field_attributes_with_count",
 							nameVars: {
@@ -667,11 +1028,61 @@ export async function execute(
 					],
 				};
 
-				// ── Page 2: Prompt & Tags ──────────────────────────────────────
-				const personaPage2: SummaryEmbedOptions = {
-					titleKey: "commands.tool.status.persona_page2_title",
+				// ── Page 3: Sample Dialogues ───────────────────────────────────
+				const personaPage3: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.persona_page3_title",
 					titleVars: { persona_name: personaName },
-					descriptionKey: "commands.tool.status.persona_page2_description",
+					descriptionKey: "commands.tool.status.persona_page3_description",
+					color: ColorCode.INFO,
+					fields: [
+						{
+							nameKey: "commands.tool.status.field_sample_dialogues_with_count",
+							nameVars: {
+								current: dialogueCount,
+								max: limits.maxSampleDialogues,
+							},
+							value: sampleDialoguesValue,
+							inline: false,
+						},
+					],
+				};
+
+				// ── Page 4: Memories ───────────────────────────────────────────
+				const personaPage4: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.persona_page4_title",
+					titleVars: { persona_name: personaName },
+					descriptionKey: "commands.tool.status.persona_page4_description",
+					color: ColorCode.INFO,
+					footerKey: "commands.tool.status.export_footer_persona_memories",
+					fields: [
+						{
+							nameKey:
+								"commands.tool.status.field_persona_personal_memories_with_count",
+							nameVars: {
+								current: personaPersonalMemoriesCount,
+								max: limits.maxPersonalMemories,
+							},
+							value: personaPersonalMemoriesValue,
+							inline: false,
+						},
+						{
+							nameKey:
+								"commands.tool.status.field_persona_server_memories_with_count",
+							nameVars: {
+								current: personaServerMemoriesCount,
+								max: limits.maxServerMemories,
+							},
+							value: personaServerMemoriesValue,
+							inline: false,
+						},
+					],
+				};
+
+				// ── Page 5: Prompt & Tags ──────────────────────────────────────
+				const personaPage5: SummaryEmbedOptions = {
+					titleKey: "commands.tool.status.persona_page5_title",
+					titleVars: { persona_name: personaName },
+					descriptionKey: "commands.tool.status.persona_page5_description",
 					color: ColorCode.INFO,
 					fields: [
 						{
@@ -687,11 +1098,17 @@ export async function execute(
 					],
 				};
 
-				// 8. Display 2-page persona status from the selected ButtonInteraction
+				// 11. Display paginated persona status from the preserved ButtonInteraction
 				await replyPaginatedStatusPages(
 					personaInteraction,
 					locale,
-					[personaPage1, personaPage2],
+					[
+						personaPage1,
+						personaPage2,
+						personaPage3,
+						personaPage4,
+						personaPage5,
+					],
 					MessageFlags.Ephemeral,
 				);
 				break;
@@ -707,18 +1124,14 @@ export async function execute(
 				return;
 		}
 	} catch (error) {
-		log.error(
-			`Error executing status command for scope ${scope}:`,
-			error,
-			{
-				errorType: "CommandExecutionError",
-				metadata: {
-					commandName: "status",
-					scope,
-					guildDiscordId: serverDiscId,
-				},
+		log.error(`Error executing status command for scope ${scope}:`, error, {
+			errorType: "CommandExecutionError",
+			metadata: {
+				commandName: "status",
+				scope,
+				guildDiscordId: serverDiscId,
 			},
-		);
+		});
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.unknown_error_title",
 			descriptionKey: "general.errors.unknown_error_description",

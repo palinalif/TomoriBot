@@ -1351,3 +1351,38 @@ CREATE TABLE IF NOT EXISTS matrix_channel_links (
 
 CREATE INDEX IF NOT EXISTS idx_matrix_links_channel ON matrix_channel_links(channel_disc_id);
 CREATE INDEX IF NOT EXISTS idx_matrix_links_room    ON matrix_channel_links(matrix_room_id);
+
+-- Random Trigger System (February 2026)
+-- Timer-based probabilistic auto-trigger: fires every N hours with P% probability
+CREATE TABLE IF NOT EXISTS random_triggers (
+  trigger_id              SERIAL PRIMARY KEY,
+  server_id               INT NOT NULL,
+  channel_disc_id         TEXT NOT NULL,
+  tomori_id               INT,                                -- NULL = "Random" persona selection
+  timer_hours             INTEGER NOT NULL,                   -- How often to roll the dice (hours)
+  chance_percent          INTEGER NOT NULL,                   -- Probability of firing (1-100)
+  silence_threshold_hours INTEGER,                           -- Skip if channel was active within N hours (NULL = no check)
+  respond_to_self         BOOLEAN NOT NULL DEFAULT false,    -- Whether to fire if the persona spoke last
+  custom_prompt           TEXT,                              -- Optional injected system prompt for this trigger
+  next_trigger_at         TIMESTAMP WITH TIME ZONE NOT NULL, -- When the next dice roll occurs
+  created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
+);
+
+-- Fast lookup for due triggers (primary polling query)
+CREATE INDEX IF NOT EXISTS idx_random_triggers_next ON random_triggers(next_trigger_at);
+-- Fast lookup for triggers by server (used in cap checks and remove command)
+CREATE INDEX IF NOT EXISTS idx_random_triggers_server ON random_triggers(server_id);
+-- Enforce uniqueness: a specific named persona can only have one trigger per channel
+-- NULL tomori_id (Random) is excluded and can have multiple triggers per channel
+CREATE UNIQUE INDEX IF NOT EXISTS idx_random_triggers_unique_persona
+  ON random_triggers(server_id, channel_disc_id, tomori_id)
+  WHERE tomori_id IS NOT NULL;
+
+-- updated_at trigger for random_triggers (DROP first for idempotency on re-run)
+DROP TRIGGER IF EXISTS update_random_triggers_timestamp ON random_triggers;
+CREATE TRIGGER update_random_triggers_timestamp
+  BEFORE UPDATE ON random_triggers
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
