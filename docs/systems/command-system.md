@@ -131,6 +131,7 @@ Rules:
 - run fast validation first
 - then defer before DB/API work
 - do not defer at function start if early-return validation can finish immediately
+- `/tool estimate cost` follows this pattern: it defers first, then fetches recent messages, builds context, and performs provider API token counting
 
 ### Pattern 3: Modal Command (No Initial Deferral)
 

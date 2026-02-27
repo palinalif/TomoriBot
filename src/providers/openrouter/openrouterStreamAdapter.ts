@@ -187,6 +187,23 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 	private activePersonaNameLower = "";
 	private knownSpeakerNamesLower = new Set<string>();
 
+	/**
+	 * Build OpenRouter chat messages from structured context.
+	 * Exposed so non-streaming callers (for example, token probes) can reuse
+	 * the exact same payload conversion path as runtime streaming.
+	 */
+	public async buildProbeMessages(
+		contextItems: StructuredContextItem[],
+		seesImages = true,
+	): Promise<Array<Record<string, unknown>>> {
+		return this.assembleOpenrouterContext(
+			contextItems,
+			[],
+			undefined,
+			seesImages,
+		);
+	}
+
 	private isOpenRouterParamSupported(
 		supportedParameters: ReadonlySet<string> | null,
 		param: string,

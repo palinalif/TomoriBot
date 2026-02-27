@@ -57,6 +57,9 @@ VALUES
   ('openrouter', 'mistralai/mistral-small-3.1-24b-instruct:free', false, false, false, false, true, true, true, false, false, false, false, 'Free multimodal model with enhanced reasoning and vision capabilities', '強化された推論とビジョン機能を備えた無料のマルチモーダルモデル'),
   ('openrouter', 'z-ai/glm-4.5-air:free', false, true, false, false, true, true, false, false, false, false, false, 'Free lightweight model with thinking mode for reasoning and agent tasks', '推論とエージェントタスク向けのシンキングモードを備えた無料軽量モデル'),
   ('openrouter', 'tngtech/tng-r1t-chimera:free', false, false, false, true, true, true, false, false, false, false, false, 'Free experimental model for creative storytelling and character interaction', '創作とキャラクター対話に特化した無料の実験モデル'),
+  ('openrouter', 'qwen/qwen3.5-35b-a3b', false, false, false, false, false, true, true, false, false, false, true, 'Qwen 3.5 35B A3B model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応したQwen 3.5 35B A3Bモデル'),
+  ('openrouter', 'qwen/qwen3.5-27b', false, false, false, false, false, true, true, false, false, false, true, 'Qwen 3.5 27B model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応したQwen 3.5 27Bモデル'),
+  ('openrouter', 'qwen/qwen3.5-flash-02-23', false, false, false, false, false, true, true, false, false, false, true, 'Fast Qwen 3.5 Flash (02-23) model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応した高速Qwen 3.5 Flash（02-23）モデル'),
   ('openrouter', 'account-setting', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Uses your OpenRouter account default model', '上級者向け：OpenRouterアカウントのデフォルトモデルを使用'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint

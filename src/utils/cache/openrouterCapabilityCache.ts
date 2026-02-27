@@ -25,6 +25,10 @@ interface OpenRouterModel {
 	description?: string;
 	context_length?: number; // Total context window size (input + output tokens)
 	supported_parameters?: string[];
+	pricing?: {
+		prompt?: string | number;
+		completion?: string | number;
+	};
 	architecture?: {
 		modality?: string;
 		tokenizer?: string;
@@ -56,6 +60,15 @@ export interface ModelTokenLimits {
 }
 
 /**
+ * Cached model pricing.
+ * Values are normalized to USD per million tokens for prompt/completion cost math.
+ */
+export interface ModelPricing {
+	promptPricePerMillion: number;
+	completionPricePerMillion: number;
+}
+
+/**
  * In-memory cache for OpenRouter model capabilities
  * Key: llm_codename (e.g., "anthropic/claude-3.5-sonnet")
  * Value: ModelCapabilities object
@@ -69,6 +82,7 @@ const supportedParametersCache = new Map<string, Set<string>>();
  * Value: ModelTokenLimits object
  */
 const tokenLimitsCache = new Map<string, ModelTokenLimits>();
+const pricingCache = new Map<string, ModelPricing>();
 
 /**
  * Cache initialization state
@@ -168,6 +182,16 @@ function detectStructuredOutputSupport(model: OpenRouterModel): boolean {
 	);
 }
 
+function parseUsdPerMillion(value: string | number | undefined): number | undefined {
+	if (value === undefined) return undefined;
+	const parsed =
+		typeof value === "number" ? value : Number.parseFloat(value.trim());
+	if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+
+	// OpenRouter /models pricing values are per-token USD.
+	return parsed * 1_000_000;
+}
+
 /**
  * Initializes the OpenRouter capability cache by fetching models from the API
  *
@@ -190,6 +214,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 		capabilityCache.clear();
 		supportedParametersCache.clear();
 		tokenLimitsCache.clear();
+		pricingCache.clear();
 		cacheReady = false;
 
 		// 2. Fetch models from OpenRouter API (no auth required - public endpoint)
@@ -232,6 +257,10 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 				contextLength: model.context_length ?? 0,
 				maxCompletionTokens: model.top_provider?.max_completion_tokens,
 			};
+			const promptPricePerMillion = parseUsdPerMillion(model.pricing?.prompt);
+			const completionPricePerMillion = parseUsdPerMillion(
+				model.pricing?.completion,
+			);
 
 			// Store in caches with model ID as key
 			capabilityCache.set(model.id, capabilities);
@@ -240,6 +269,15 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 				new Set(model.supported_parameters ?? []),
 			);
 			tokenLimitsCache.set(model.id, tokenLimits);
+			if (
+				promptPricePerMillion !== undefined &&
+				completionPricePerMillion !== undefined
+			) {
+				pricingCache.set(model.id, {
+					promptPricePerMillion,
+					completionPricePerMillion,
+				});
+			}
 		}
 
 		// 7. Mark cache as ready
@@ -255,10 +293,11 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 		const videoModels = Array.from(capabilityCache.values()).filter(
 			(c) => c.seesVideos,
 		).length;
+		const pricedModels = pricingCache.size;
 
 		log.success(
 			`OpenRouter capability cache initialized: ${capabilityCache.size} models ` +
-				`(${toolModels} with tools, ${visionModels} with vision, ${videoModels} with video)`,
+				`(${toolModels} with tools, ${visionModels} with vision, ${videoModels} with video, ${pricedModels} with pricing)`,
 		);
 	} catch (error) {
 		// Non-critical error - bot continues with database flags as fallback
@@ -272,6 +311,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 		capabilityCache.clear();
 		supportedParametersCache.clear();
 		tokenLimitsCache.clear();
+		pricingCache.clear();
 		cacheReady = false;
 	}
 }
@@ -350,4 +390,17 @@ export function getOpenRouterTokenLimits(
 ): ModelTokenLimits | undefined {
 	if (!cacheReady) return undefined;
 	return tokenLimitsCache.get(modelCodename);
+}
+
+/**
+ * Gets cached pricing for a specific OpenRouter model.
+ *
+ * @param modelCodename - Model codename (e.g., "google/gemini-2.0-flash-exp")
+ * @returns ModelPricing if found, undefined if cache/model not ready
+ */
+export function getOpenRouterPricing(
+	modelCodename: string,
+): ModelPricing | undefined {
+	if (!cacheReady) return undefined;
+	return pricingCache.get(modelCodename);
 }

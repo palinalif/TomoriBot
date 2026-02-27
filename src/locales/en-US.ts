@@ -456,6 +456,56 @@ export default {
 				response_fast: `Response Time: \`{response_time}ms\``,
 				response_slow: `Response Time: \`{response_time}ms\``,
 			},
+			estimate: {
+				description: `Estimate usage and costs`,
+				cost: {
+					description: `Estimate API costs for paid AI providers`,
+					title: `Estimated API Costs`,
+					embed_description: `Here are **VERY ROUGH** estimated costs per trigger in a Discord channel when using paid AI providers. Costs are estimated using example **{provider}** costs (Input: {inputPrice}/M tokens, Output: {outputPrice}/M tokens)`,
+					current_context_description: `Estimated cost for your **current context only**. Input tokens are measured by the provider API using your current setup and recent channel history on **{provider}** model **{model}**. Output tokens remain estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
+					current_input_title: `Measured Input Tokens (Current Context)`,
+					current_input_value: `**Input:** {inputTokens} tokens\n**Input cost only:** ~{inputCost} per trigger`,
+					current_output_short_title: `Estimated Output: Short`,
+					current_output_typical_title: `Estimated Output: Typical`,
+					current_output_long_title: `Estimated Output: Long`,
+					current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
+					current_footer: `Input token counts are provider-measured for supported providers (Google/OpenRouter). Output token counts are estimated only.`,
+					fallback_notice_title: `Live Counting Unavailable`,
+					fallback_notice_value: `Live provider token counting could not be used for your current setup, so this view is a rough fallback estimate.`,
+					minimum_scenario_title: `Minimum Scenario (Light Usage)`,
+					minimum_scenario_value: `**Context:** 1 user with 0 memories, 1 paragraph of persona, conversations are less than a sentence per message
+**Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total
+**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
+					average_scenario_title: `Average Scenario (Moderate Usage)`,
+					average_scenario_value: `**Context:** 3 users with 10 memories each, ~16 paragraphs of persona (includes attributes & dialogues), conversations are 1-2 sentences per message
+**Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total
+**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
+					maximum_scenario_title: `Maximum Scenario (Heavy Usage)`,
+					maximum_scenario_value: `**Context:** 5 users with 25 memories each, ~31 paragraphs of persona (includes attributes & dialogues), conversations are 2 paragraphs per message
+**Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total
+**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
+					breakdown_title: `What Affects Cost?`,
+					breakdown_value: `**Input tokens (context sent to AI):**
+- Persona paragraphs (includes attributes & sample dialogues)
+- Server & personal memories
+- Enabled tools (if any)
+- User statuses & reminders
+- Recent conversation history (includes images, videos, stickers, emojis, embeds if provider supports)
+- Server emojis (10 constant)
+
+**Output tokens (AI response):**
+- Response length varies by query complexity
+- More detailed questions = longer responses = higher cost
+
+**Tips to reduce costs:**
+I have built-in features to help reduce costs from abusers or spammers in your server, but here are some additional tips:
+- Use fewer persona paragraphs (attributes & dialogues)
+- Keep memories concise
+- Use free AI providers (Google Gemini free tier)
+- Limit auto-trigger channels`,
+					footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help apikey\` to learn more.`,
+				},
+			},
 			compact: {
 				description: `Summarize the recent conversation into a compact system memory.`,
 				modal: {
@@ -1137,6 +1187,16 @@ export default {
 				description: `Estimate API costs for paid AI providers`,
 				title: `Estimated API Costs`,
 				embed_description: `Here are **VERY ROUGH** estimated costs per trigger in a Discord channel when using paid AI providers. Costs are estimated using example **{provider}** costs (Input: {inputPrice}/M tokens, Output: {outputPrice}/M tokens)`,
+				current_context_description: `Estimated cost for your **current context only**. Input tokens are measured by the provider API using your current setup and recent channel history on **{provider}** model **{model}**. Output tokens remain estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
+				current_input_title: `Measured Input Tokens (Current Context)`,
+				current_input_value: `**Input:** {inputTokens} tokens\n**Input cost only:** ~{inputCost} per trigger`,
+				current_output_short_title: `Estimated Output: Short`,
+				current_output_typical_title: `Estimated Output: Typical`,
+				current_output_long_title: `Estimated Output: Long`,
+				current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
+				current_footer: `Input token counts are provider-measured for supported providers (Google/OpenRouter). Output token counts are estimated only.`,
+				fallback_notice_title: `Live Counting Unavailable`,
+				fallback_notice_value: `Live provider token counting could not be used for your current setup, so this view is a rough fallback estimate.`,
 				minimum_scenario_title: `Minimum Scenario (Light Usage)`,
 				minimum_scenario_value: `**Context:** 1 user with 0 memories, 1 paragraph of persona, conversations are less than a sentence per message
 **Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total

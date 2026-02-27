@@ -29,6 +29,11 @@ const NAI_NOISE_SCHEDULE = process.env.NAI_IMAGE_NOISE_SCHEDULE || "karras";
 const NAI_NEGATIVE_PROMPT =
 	process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
 	"blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page";
+// Disabled by default because the suggest-tags endpoint is currently unstable and
+// can hurt generation reliability; enable again once the API is consistently healthy.
+const NAI_IMAGE_ENABLE_TAG_RESOLUTION =
+	(process.env.NAI_IMAGE_ENABLE_TAG_RESOLUTION || "false").toLowerCase() ===
+	"true";
 
 /** Base URL for NovelAI's image generation API */
 const NAI_IMAGE_BASE_URL = "https://image.novelai.net";
@@ -423,7 +428,7 @@ export class GenerateImageNaiTool extends BaseTool {
 	 * 2. Check image quota
 	 * 3. Get diffusion model and decrypt API key
 	 * 4. Prepend persona character tags if self-portrait mode
-	 * 5. Normalize tags via suggest-tags API
+	 * 5. Resolve tags via suggest-tags API (optional; disabled by default)
 	 * 6. Generate image via NAI API
 	 * 7. Send image to Discord channel
 	 * 8. Increment quota and return success
@@ -595,15 +600,19 @@ export class GenerateImageNaiTool extends BaseTool {
 				}
 			}
 
-			// 5. Normalize only the model-provided tags via suggest-tags API
-			const normalizedModelTags = await this.normalizeTags(
-				modelTags,
-				modelCodename,
-				apiKey,
-			);
+			// 5. Resolve only the model-provided tags via suggest-tags API when enabled
+			const resolvedModelTags = NAI_IMAGE_ENABLE_TAG_RESOLUTION
+				? await this.normalizeTags(modelTags, modelCodename, apiKey)
+				: modelTags;
 
-			// Combine: trusted tags first (as-is), then normalized model tags
-			const normalizedTags = [...trustedTags, ...normalizedModelTags];
+			if (!NAI_IMAGE_ENABLE_TAG_RESOLUTION) {
+				log.info(
+					"[NAI] Tag resolution via suggest-tags is disabled; using raw model-provided tags",
+				);
+			}
+
+			// Combine: trusted tags first (as-is), then resolved/raw model tags
+			const normalizedTags = [...trustedTags, ...resolvedModelTags];
 
 			const normalizedPrompt = normalizedTags.join(", ");
 			log.info(

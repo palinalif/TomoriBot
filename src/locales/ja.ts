@@ -458,6 +458,56 @@ export default {
 				response_fast: `応答時間: \`{response_time}ms\``,
 				response_slow: `応答時間: \`{response_time}ms\``,
 			},
+			estimate: {
+				description: `利用量と費用の見積もり`,
+				cost: {
+					description: `有料AIプロバイダーのAPI費用を見積もる`,
+					title: `推定API費用`,
+					embed_description: `Discordチャンネルでのトリガーあたりの**非常におおまかな**推定費用です。費用は**{provider}**の例を使用して推定されています（入力：{inputPrice}/百万トークン、出力：{outputPrice}/百万トークン）`,
+					current_context_description: `あなたの**現在のコンテキストのみ**を対象にした推定費用です。入力トークンは、現在の設定と直近のチャンネル履歴を使って、**{provider}** のモデル **{model}** でプロバイダーAPI計測を行います。出力トークンは推定値です。使用価格: 入力 {inputPrice}/百万、出力 {outputPrice}/百万。`,
+					current_input_title: `計測済み入力トークン（現在のコンテキスト）`,
+					current_input_value: `**入力:** {inputTokens} トークン\n**入力コストのみ:** 1トリガーあたり約 {inputCost}`,
+					current_output_short_title: `推定出力: 短め`,
+					current_output_typical_title: `推定出力: 標準`,
+					current_output_long_title: `推定出力: 長め`,
+					current_output_band_value: `**出力推定:** {outputTokens} トークン\n**合計推定:** {totalTokens} トークン\n**費用:** 1トリガーあたり約 {costPerMessage}（100トリガーあたり約 {costPer100}）`,
+					current_footer: `対応プロバイダー（Google/OpenRouter）では入力トークンはプロバイダー計測値です。出力トークンは推定値です。`,
+					fallback_notice_title: `ライブ計測を利用できません`,
+					fallback_notice_value: `現在の設定ではライブのプロバイダートークン計測を利用できなかったため、この表示はおおまかな代替推定です。`,
+					minimum_scenario_title: `最小シナリオ（軽量使用）`,
+					minimum_scenario_value: `**コンテキスト：** 1ユーザー、メモリなし、1段落のペルソナ、会話は1メッセージあたり1文未満
+**トークン数：** {inputTokens} 入力 + {outputTokens} 出力 = {totalTokens} 合計
+**費用：** ~{costPerMessage} /トリガー（~{costPer100} /100トリガー）`,
+					average_scenario_title: `平均シナリオ（中程度使用）`,
+					average_scenario_value: `**コンテキスト：** 3ユーザー（各10メモリ）、~16段落のペルソナ（属性と対話を含む）、会話は1メッセージあたり1〜2文
+**トークン数：** {inputTokens} 入力 + {outputTokens} 出力 = {totalTokens} 合計
+**費用：** ~{costPerMessage} /トリガー（~{costPer100} /100トリガー）`,
+					maximum_scenario_title: `最大シナリオ（重量使用）`,
+					maximum_scenario_value: `**コンテキスト：** 5ユーザー（各25メモリ）、~31段落のペルソナ（属性と対話を含む）、会話は1メッセージあたり2段落
+**トークン数：** {inputTokens} 入力 + {outputTokens} 出力 = {totalTokens} 合計
+**費用：** ~{costPerMessage} /トリガー（~{costPer100} /100トリガー）`,
+					breakdown_title: `費用に影響する要因`,
+					breakdown_value: `**入力トークン（AIに送信されるコンテキスト）：**
+- ペルソナの段落数（属性とサンプル対話を含む）
+- サーバー＆個人メモリ
+- 有効化されたツール（ある場合）
+- ユーザーステータス＆リマインダー
+- 最近の会話履歴（プロバイダーがサポートしている場合、画像、動画、スタンプ、絵文字、埋め込みを含む）
+- サーバー絵文字（常に10個）
+
+**出力トークン（AI応答）：**
+- 応答の長さはクエリの複雑さによって異なります
+- より詳細な質問 = より長い応答 = より高い費用
+
+**費用を削減するヒント：**
+サーバー内の悪用者やスパマーによる費用を削減するための組み込み機能がありますが、以下の追加のヒントもあります：
+- ペルソナの段落数を少なくする（属性と対話）
+- メモリを簡潔に保つ
+- 無料のAIプロバイダーを使用する（Google Gemini無料プラン）
+- 自動トリガーチャンネルを制限する`,
+					footer: `Google Gemini（無料プラン）や一部のOpenRouterモデルなどの無料プロバイダーは費用がかかりません！NovelAIはサブスクリプション制で無制限に使用できます。プロバイダーの詳細は\`/help apikey\`をご覧ください。`,
+				},
+			},
 			compact: {
 				description: `最近の会話をコンパクトなシステム要約にまとめます。`,
 				modal: {
@@ -1138,6 +1188,16 @@ export default {
 				description: `有料AIプロバイダーのAPI費用を見積もる`,
 				title: `推定API費用`,
 				embed_description: `Discordチャンネルでのトリガーあたりの**非常におおまかな**推定費用です。費用は**{provider}**の例を使用して推定されています（入力：{inputPrice}/百万トークン、出力：{outputPrice}/百万トークン）`,
+				current_context_description: `あなたの**現在のコンテキストのみ**を対象にした推定費用です。入力トークンは、現在の設定と直近のチャンネル履歴を使って、**{provider}** のモデル **{model}** でプロバイダーAPI計測を行います。出力トークンは推定値です。使用価格: 入力 {inputPrice}/百万、出力 {outputPrice}/百万。`,
+				current_input_title: `計測済み入力トークン（現在のコンテキスト）`,
+				current_input_value: `**入力:** {inputTokens} トークン\n**入力コストのみ:** 1トリガーあたり約 {inputCost}`,
+				current_output_short_title: `推定出力: 短め`,
+				current_output_typical_title: `推定出力: 標準`,
+				current_output_long_title: `推定出力: 長め`,
+				current_output_band_value: `**出力推定:** {outputTokens} トークン\n**合計推定:** {totalTokens} トークン\n**費用:** 1トリガーあたり約 {costPerMessage}（100トリガーあたり約 {costPer100}）`,
+				current_footer: `対応プロバイダー（Google/OpenRouter）では入力トークンはプロバイダー計測値です。出力トークンは推定値です。`,
+				fallback_notice_title: `ライブ計測を利用できません`,
+				fallback_notice_value: `現在の設定ではライブのプロバイダートークン計測を利用できなかったため、この表示はおおまかな代替推定です。`,
 				minimum_scenario_title: `最小シナリオ（軽量使用）`,
 				minimum_scenario_value: `**コンテキスト：** 1ユーザー、メモリなし、1段落のペルソナ、会話は1メッセージあたり1文未満
 **トークン数：** {inputTokens} 入力 + {outputTokens} 出力 = {totalTokens} 合計

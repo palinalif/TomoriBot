@@ -151,29 +151,30 @@ export async function execute(
 		return;
 	}
 
-	// 2. Defer with ephemeral flag — async work follows before modal
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	// NOTE: No deferReply here — promptWithPaginatedModal must be the first
+	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
 
 	try {
-		// 3. Parse and validate slash options
+		// 2. Parse and validate slash options
 		const channel = interaction.options.getChannel("channel", true);
 		const timerHours = interaction.options.getInteger("timer_hours", true);
 		const chance = interaction.options.getInteger("chance", true);
 		const silenceThreshold =
 			interaction.options.getInteger("silence_threshold", false) ?? null;
 
-		// 4. Load Tomori state to verify the server is set up
+		// 3. Load Tomori state to verify the server is set up
 		const tomoriState = await getCachedTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 5. Check per-server trigger cap before proceeding
+		// 4. Check per-server trigger cap before proceeding
 		const triggerCount = await getServerRandomTriggerCount(
 			tomoriState.server_id,
 		);
@@ -184,14 +185,15 @@ export async function execute(
 					"commands.config.randomtrigger.add.cap_reached_description",
 				descriptionVars: { max: MAX_TRIGGERS_PER_SERVER.toString() },
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 6. Load all personas for this guild to build the select menu
+		// 5. Load all personas for this guild to build the select menu
 		const allPersonas = await getCachedAllPersonas(interaction.guild.id);
 
-		// 7. Build select options: "Random" first, then each named persona
+		// 6. Build select options: "Random" first, then each named persona
 		const personaOptions: SelectOption[] = [
 			{
 				label: safeSelectOptionText(
@@ -208,7 +210,8 @@ export async function execute(
 			})),
 		];
 
-		// 8. Show modal: persona select, respond_to_self select, optional prompt
+		// 7. Show modal: persona select, respond_to_self select, optional prompt
+		// (This is the first interaction acknowledgement — no deferReply before this)
 		const modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.config.randomtrigger.add.modal_title",
@@ -263,7 +266,7 @@ export async function execute(
 			],
 		});
 
-		// 9. Handle modal cancellation or timeout
+		// 8. Handle modal cancellation or timeout
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Randomtrigger add modal ${modalResult.outcome} for user ${interaction.user.id}`,
@@ -281,7 +284,7 @@ export async function execute(
 			await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 		}
 
-		// 10. Parse modal values
+		// 9. Parse modal values
 		const personaRawValue = values[PERSONA_SELECT_ID] ?? RANDOM_PERSONA_VALUE;
 		const respondToSelfRaw = values[RESPOND_TO_SELF_ID] ?? "no";
 		const customPromptRaw = values[PROMPT_INPUT_ID]?.trim() || null;
@@ -316,7 +319,7 @@ export async function execute(
 			customPrompt: customPromptRaw,
 		};
 
-		// 11. Override check: if a named persona already has a trigger for this channel, update it
+		// 10. Override check: if a named persona already has a trigger for this channel, update it
 		if (tomoriId !== null) {
 			const existing = await getRandomTriggerByPersonaAndChannel(
 				tomoriState.server_id,
@@ -365,7 +368,7 @@ export async function execute(
 			}
 		}
 
-		// 12. INSERT new trigger (includes all Random triggers regardless of duplicates)
+		// 11. INSERT new trigger (includes all Random triggers regardless of duplicates)
 		const inserted = await insertRandomTrigger(triggerData);
 
 		if (!inserted) {
@@ -387,7 +390,7 @@ export async function execute(
 			return;
 		}
 
-		// 13. Build silence suffix string (only shown if silence threshold was set)
+		// 12. Build silence suffix string (only shown if silence threshold was set)
 		const silenceSuffix = silenceThreshold
 			? localizer(
 					locale,
@@ -396,7 +399,7 @@ export async function execute(
 				)
 			: "";
 
-		// 14. Reply with success summary
+		// 13. Reply with success summary
 		await replyInfoEmbed(modalInteraction, locale, {
 			titleKey: "commands.config.randomtrigger.add.success_title",
 			descriptionKey:

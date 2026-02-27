@@ -80,22 +80,23 @@ export async function execute(
 		return;
 	}
 
-	// 2. Defer with ephemeral flag — async DB work precedes modal display
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	// NOTE: No deferReply here — promptWithPaginatedModal must be the first
+	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
 
 	try {
-		// 3. Load Tomori state to get database server_id
+		// 2. Load Tomori state to get database server_id
 		const tomoriState = await getCachedTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 4. Fetch all triggers for this server
+		// 3. Fetch all triggers for this server
 		const triggers = await getServerRandomTriggers(tomoriState.server_id);
 
 		if (triggers.length === 0) {
@@ -104,11 +105,12 @@ export async function execute(
 				descriptionKey:
 					"commands.config.randomtrigger.remove.none_description",
 				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 5. Fetch channel/persona names from Discord for readable labels
+		// 4. Fetch channel/persona names from Discord for readable labels
 		// Labels: "#channel-name | PersonaName | Xh / Y%"
 		const randomLabel = localizer(
 			locale,
@@ -139,7 +141,8 @@ export async function execute(
 			};
 		});
 
-		// 6. Show modal with trigger selection
+		// 5. Show modal with trigger selection
+		// (This is the first interaction acknowledgement — no deferReply before this)
 		const modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.config.randomtrigger.remove.modal_title",
@@ -155,7 +158,7 @@ export async function execute(
 			],
 		});
 
-		// 7. Handle modal cancellation or timeout
+		// 6. Handle modal cancellation or timeout
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Randomtrigger remove modal ${modalResult.outcome} for user ${interaction.user.id}`,
@@ -173,7 +176,7 @@ export async function execute(
 			await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 		}
 
-		// 8. Parse selected trigger index and resolve to actual trigger row
+		// 7. Parse selected trigger index and resolve to actual trigger row
 		const selectedIndexRaw = values[TRIGGER_SELECT_ID] ?? "0";
 		const selectedIndex = Number.parseInt(selectedIndexRaw, 10);
 		const selectedTrigger = triggers[selectedIndex];
@@ -187,7 +190,7 @@ export async function execute(
 			return;
 		}
 
-		// 9. Delete the selected trigger
+		// 8. Delete the selected trigger
 		const deleted = await deleteRandomTrigger(selectedTrigger.trigger_id);
 
 		if (!deleted) {
@@ -212,7 +215,7 @@ export async function execute(
 			return;
 		}
 
-		// 10. Reply with success
+		// 9. Reply with success
 		await replyInfoEmbed(modalInteraction, locale, {
 			titleKey: "commands.config.randomtrigger.remove.success_title",
 			descriptionKey:

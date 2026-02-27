@@ -54,6 +54,11 @@ export interface GoogleStreamConfig extends StreamConfig {
 	thinkingConfig?: ThinkingConfig;
 }
 
+export interface GoogleTokenCountPayload {
+	systemInstruction?: string;
+	contents: Content[];
+}
+
 /**
  * Raw chunk from Google's streaming API
  */
@@ -98,6 +103,37 @@ export class GoogleStreamAdapter implements StreamProvider {
 	private speakerGuardEnabled = false;
 	private activePersonaNameLower = "";
 	private knownSpeakerNamesLower = new Set<string>();
+
+	/**
+	 * Build a Gemini payload for token counting (or other non-stream requests)
+	 * using the exact same context transformation and system-instruction fallback
+	 * logic as streaming.
+	 */
+	public async buildTokenCountPayload(
+		contextItems: StructuredContextItem[],
+		model?: string,
+	): Promise<GoogleTokenCountPayload> {
+		const { systemInstruction, dialogueContents } = await this.assembleGoogleContext(
+			contextItems,
+			[],
+			undefined,
+		);
+
+		const contents = [...dialogueContents];
+		let finalSystemInstruction = systemInstruction;
+
+		if (systemInstruction && !this.supportsDeveloperInstruction(model)) {
+			contents.unshift(
+				this.createInBandSystemInstructionContent(systemInstruction),
+			);
+			finalSystemInstruction = undefined;
+		}
+
+		return {
+			systemInstruction: finalSystemInstruction,
+			contents,
+		};
+	}
 
 	/**
 	 * Start streaming from Google's Gemini API
@@ -147,31 +183,18 @@ export class GoogleStreamAdapter implements StreamProvider {
 			log.info("GoogleStreamAdapter: Thinking mode enabled");
 		}
 
-		// Assemble context for Google format
-		const { systemInstruction, dialogueContents } =
-			await this.assembleGoogleContext(
-				context.contextItems,
-				context.currentTurnModelParts,
-				context.functionInteractionHistory,
+		// Assemble context for Google format (shared with token counting path)
+		const payload = await this.buildTokenCountPayload(
+			context.contextItems,
+			config.model,
+		);
+		const finalContents = [...payload.contents];
+
+		if (payload.systemInstruction) {
+			requestConfig.systemInstruction = payload.systemInstruction;
+			log.info(
+				`Assembled system instruction. Length: ${payload.systemInstruction.length}`,
 			);
-
-		// Start with dialogue contents; may prepend in-band instruction fallback.
-		const finalContents = [...dialogueContents];
-
-		if (systemInstruction) {
-			if (this.supportsDeveloperInstruction(config.model)) {
-				requestConfig.systemInstruction = systemInstruction;
-				log.info(
-					`Assembled system instruction. Length: ${systemInstruction.length}`,
-				);
-			} else {
-				finalContents.unshift(
-					this.createInBandSystemInstructionContent(systemInstruction),
-				);
-				log.info(
-					`Model ${config.model} does not support developer instruction; injected in-band fallback (${systemInstruction.length} chars)`,
-				);
-			}
 		}
 
 		// Add tools if available
