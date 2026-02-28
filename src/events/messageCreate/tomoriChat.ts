@@ -160,12 +160,104 @@ function parseIntegerEnvFlag(
 	return Math.max(minimum, parsed);
 }
 
+function dropOldestHistoryExchangePairs(
+	contextItems: StructuredContextItem[],
+	pairsToDrop: number,
+): {
+	truncated: StructuredContextItem[];
+	historyPairsDropped: number;
+} {
+	if (pairsToDrop <= 0) {
+		return {
+			truncated: contextItems,
+			historyPairsDropped: 0,
+		};
+	}
+
+	const items = [...contextItems];
+	let historyPairsDropped = 0;
+
+	const findNewestDialogueUserIndex = (): number => {
+		for (let i = items.length - 1; i >= 0; i--) {
+			if (
+				items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
+				items[i].role === "user"
+			) {
+				return i;
+			}
+		}
+		return -1;
+	};
+
+	const dropOneOldestExchange = (): boolean => {
+		const newestDialogueUserIdx = findNewestDialogueUserIndex();
+		let oldestDroppableUserIdx = -1;
+
+		for (let i = 0; i < items.length; i++) {
+			if (
+				i !== newestDialogueUserIdx &&
+				items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
+				items[i].role === "user"
+			) {
+				oldestDroppableUserIdx = i;
+				break;
+			}
+		}
+
+		if (oldestDroppableUserIdx === -1) {
+			return false;
+		}
+
+		let followingModelIdx = -1;
+		for (let i = oldestDroppableUserIdx + 1; i < items.length; i++) {
+			if (i === newestDialogueUserIdx) {
+				break;
+			}
+			if (
+				items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
+				items[i].role === "model"
+			) {
+				followingModelIdx = i;
+				break;
+			}
+		}
+
+		if (followingModelIdx !== -1) {
+			items.splice(
+				oldestDroppableUserIdx,
+				followingModelIdx - oldestDroppableUserIdx + 1,
+			);
+		} else {
+			items.splice(oldestDroppableUserIdx, 1);
+		}
+
+		historyPairsDropped++;
+		return true;
+	};
+
+	while (historyPairsDropped < pairsToDrop) {
+		if (!dropOneOldestExchange()) {
+			break;
+		}
+	}
+
+	return {
+		truncated: items,
+		historyPairsDropped,
+	};
+}
+
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const WEBHOOK_ERROR_COOLDOWN_MS = 10 * 60 * 1000;
 const webhookErrorCooldowns = new Map<string, number>();
 const REACTION_CONTEXT_ENABLED = parseBooleanEnvFlag(
 	process.env.REACTION_CONTEXT_ENABLED,
 	true,
+);
+const OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS = parseIntegerEnvFlag(
+	process.env.OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS,
+	2,
+	1,
 );
 const REACTION_CONTEXT_MAX_API_CALLS_PER_TURN = parseIntegerEnvFlag(
 	process.env.REACTION_CONTEXT_MAX_API_CALLS_PER_TURN,
@@ -1234,6 +1326,8 @@ async function enforceGlobalRateLimit(params: {
  * @param naiContinuationPrefill - NAI GLM-4.6 only: incomplete trailing sentence from the previous stream,
  *   appended to the prompt so the model continues mid-sentence instead of restarting.
  *   Set automatically on empty-response retries when the provider surfaces a pending continuation fragment.
+ * @param emptyResponseFinishReason - Optional terminal finish reason captured from the previous empty-response attempt.
+ *   Currently used to apply extra history trimming on OpenRouter when finishReason="length".
  */
 export default async function tomoriChat(
 	client: Client,
@@ -1259,6 +1353,7 @@ export default async function tomoriChat(
 	manualSystemPrompt?: string,
 	manualPrefill?: string,
 	naiContinuationPrefill?: string,
+	emptyResponseFinishReason?: string,
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
@@ -4085,6 +4180,30 @@ export default async function tomoriChat(
 								}
 							}
 						}
+
+						const shouldApplyOpenRouterLengthRetryTrim =
+							emptyResponseFinishReason === "length" &&
+							retryCount > 0 &&
+							tomoriState.llm.llm_provider === "openrouter";
+						if (shouldApplyOpenRouterLengthRetryTrim) {
+							const requestedPairDrops =
+								OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS * retryCount;
+							const { truncated, historyPairsDropped } =
+								dropOldestHistoryExchangePairs(
+									contextSegments,
+									requestedPairDrops,
+								);
+							if (historyPairsDropped > 0) {
+								log.warn(
+									`OpenRouter length-empty retry trimming: dropped ${historyPairsDropped}/${requestedPairDrops} oldest history exchange pair(s) on retry ${retryCount}.`,
+								);
+								contextSegments = truncated;
+							} else {
+								log.warn(
+									`OpenRouter length-empty retry trimming requested ${requestedPairDrops} pair drop(s), but no droppable history remained on retry ${retryCount}.`,
+								);
+							}
+						}
 						const tailDirectives: string[] = [...contextBuild.tailDirectives];
 						const uncensorDirective = contextBuild.uncensorDirective;
 						if (manualContinuationDirective) {
@@ -4814,10 +4933,22 @@ export default async function tomoriChat(
 									// Handle empty response with fresh context retry
 									const MAX_EMPTY_RESPONSE_RETRIES = 2;
 									const RETRY_DELAY_MS = 1000;
+									const streamResultData =
+										streamResult.data &&
+										typeof streamResult.data === "object"
+											? (streamResult.data as Record<string, unknown>)
+											: undefined;
+									const terminalFinishReason =
+										typeof streamResultData?.finishReason === "string"
+											? streamResultData.finishReason
+											: undefined;
+									const isOpenRouterLengthEmptyResponse =
+										terminalFinishReason === "length";
 
 									if (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
 										log.info(
-											`Empty response detected (attempt ${retryCount + 1}/${MAX_EMPTY_RESPONSE_RETRIES + 1}). Retrying with fresh context in ${RETRY_DELAY_MS}ms...`,
+											`Empty response detected (attempt ${retryCount + 1}/${MAX_EMPTY_RESPONSE_RETRIES + 1}). ` +
+												`finishReason=${terminalFinishReason ?? "unknown"}. Retrying with fresh context in ${RETRY_DELAY_MS}ms...`,
 										);
 
 										// Wait before retry
@@ -4851,6 +4982,7 @@ export default async function tomoriChat(
 											manualPrefill,
 											// NAI GLM-4.6: pass trailing fragment so next call appends it to the prompt
 											streamResult.naiContinuationPrefill,
+											isOpenRouterLengthEmptyResponse ? "length" : undefined,
 										);
 									} else {
 										// Max retries reached, show error embed
@@ -5408,6 +5540,31 @@ export default async function tomoriChat(
 														);
 														contextSegments = truncated;
 													}
+												}
+											}
+
+											const shouldApplyOpenRouterLengthRetryTrim =
+												emptyResponseFinishReason === "length" &&
+												retryCount > 0 &&
+												tomoriState.llm.llm_provider === "openrouter";
+											if (shouldApplyOpenRouterLengthRetryTrim) {
+												const requestedPairDrops =
+													OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS *
+													retryCount;
+												const { truncated, historyPairsDropped } =
+													dropOldestHistoryExchangePairs(
+														contextSegments,
+														requestedPairDrops,
+													);
+												if (historyPairsDropped > 0) {
+													log.warn(
+														`OpenRouter length-empty retry trimming: dropped ${historyPairsDropped}/${requestedPairDrops} oldest history exchange pair(s) on retry ${retryCount}.`,
+													);
+													contextSegments = truncated;
+												} else {
+													log.warn(
+														`OpenRouter length-empty retry trimming requested ${requestedPairDrops} pair drop(s), but no droppable history remained on retry ${retryCount}.`,
+													);
 												}
 											}
 											const tailDirectives: string[] = [

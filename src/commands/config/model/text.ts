@@ -17,7 +17,7 @@ import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithRawModal,
+	promptWithPaginatedModal,
 	safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
 // Import TomoriConfigRow for validation and LlmRow for type hints
@@ -271,7 +271,7 @@ export async function execute(
 		}));
 
 		// 5. Show the modal with model selection
-		const modalResult = await promptWithRawModal(
+		const modalResult = await promptWithPaginatedModal(
 			interaction,
 			locale,
 			{
@@ -288,7 +288,6 @@ export async function execute(
 					},
 				],
 			},
-			MessageFlags.Ephemeral, // Auto-defer with ephemeral flag
 		);
 
 		// 6. Handle modal outcome

@@ -422,6 +422,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			context.currentTurnModelParts,
 			context.functionInteractionHistory,
 			openrouterConfig.seesImages ?? true, // Default to true for backward compatibility
+			context.tomoriState.tomori_nickname ?? "Assistant",
 		);
 
 		// Ensure model is provided
@@ -1864,6 +1865,42 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			};
 		}
 
+		// Handle finishReason "length" (output token cap reached)
+		// Make this explicit for diagnostics: this is a common failure mode when
+		// long multimodal context leaves too little output budget.
+		if (finishReason === "length") {
+			log.warn(
+				`OpenRouter: finish_reason is 'length' (max output tokens reached). ` +
+					`delta.content present: ${!!choice.delta?.content}`,
+			);
+
+			const lengthMetadata: Record<string, unknown> = {
+				...metadata,
+				finishReason: "length",
+				outputTruncated: true,
+			};
+
+			// If the provider bundled final text with the terminal length chunk,
+			// emit it so orchestrator can flush it before stream end.
+			if (choice.delta?.content) {
+				return {
+					type: "text",
+					content: choice.delta.content,
+					metadata: lengthMetadata,
+				};
+			}
+
+			// No final text payload in the terminal length chunk.
+			// End the stream cleanly and let upstream empty-response handling decide retry.
+			return {
+				type: "done",
+				metadata: {
+					...lengthMetadata,
+					emptyTerminalChunk: true,
+				},
+			};
+		}
+
 		// Now handle delta fields for chunks that don't have a finishReason yet
 		// Accumulate tool/function calls from delta (streaming tool calls arrive incrementally)
 		// In OpenAI/OpenRouter streaming format, tool calls come in multiple chunks:
@@ -2300,6 +2337,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			preToolCallTextParts?: Array<Record<string, unknown>>;
 		}>,
 		seesImages: boolean = true,
+		botName: string = "Assistant",
 	): Promise<Array<Record<string, unknown>>> {
 		const messages: Array<Record<string, unknown>> = [];
 		const systemInstructionParts: string[] = [];
@@ -2331,7 +2369,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
 				// Convert to OpenAI message format
 				const role = item.role === "user" ? "user" : "assistant";
-				const roleSupportsImageParts = role === "user";
+				// Collects resolved image parts from assistant turns for injection into a synthetic
+				// user turn, since OpenRouter only permits image content on user-role messages.
+				const pendingBotImageParts: Array<Record<string, unknown>> = [];
 				const contentParts: Array<Record<string, unknown>> = [];
 
 				// Process parts array
@@ -2342,18 +2382,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 							text: part.text,
 						});
 					} else if (part.type === "image") {
-						// OpenRouter chat input expects image parts on user/tool-context turns.
-						// Historical assistant turns can contain images in our local context, but
-						// those must be represented as text hints to avoid payload schema rejection.
-						if (!roleSupportsImageParts) {
-							contentParts.push({
-								type: "text",
-								text: item.messageId
-									? `[System: Assistant previously sent an image (message ID: ${item.messageId}).]`
-									: "[System: Assistant previously sent an image.]",
-							});
-							continue;
-						}
+						// OpenRouter only permits image parts on user-role messages. For assistant
+						// turns, images are resolved normally but staged in pendingBotImageParts,
+						// then emitted as a synthetic user turn right after the assistant message.
+						const imageTargetParts =
+							role === "assistant" ? pendingBotImageParts : contentParts;
 
 						// Only process images if the model supports them
 						if (!seesImages) {
@@ -2406,7 +2439,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 									} else {
 										// Regular image processing (non-GIF)
 										// Convert inlineData to OpenAI format
-										contentParts.push({
+										imageTargetParts.push({
 											type: "image_url",
 											image_url: {
 												url: `data:${inlineData.mimeType};base64,${inlineData.data}`,
@@ -2519,7 +2552,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 								}
 
 								// Add image as OpenAI format
-								contentParts.push({
+								imageTargetParts.push({
 									type: "image_url",
 									image_url: {
 										url: `data:${finalMimeType};base64,${base64ImageData}`,
@@ -2539,22 +2572,41 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 				}
 
 				// Add message
-				if (contentParts.length > 0) {
-					// OpenRouter compatibility: historical assistant turns are safest as plain text.
+				if (contentParts.length > 0 || pendingBotImageParts.length > 0) {
+					// OpenRouter only accepts plain-text content on assistant turns. Extract text
+					// parts; images were already staged in pendingBotImageParts above.
 					if (role === "assistant") {
 						const assistantText = contentParts
 							.filter((part) => part.type === "text")
 							.map((part) => (part as { type: "text"; text: string }).text)
 							.join("\n");
 
-						if (!assistantText) {
+						if (!assistantText && pendingBotImageParts.length === 0) {
 							continue;
 						}
 
-						messages.push({
-							role,
-							content: assistantText,
-						});
+						if (assistantText) {
+							messages.push({
+								role,
+								content: assistantText,
+							});
+						}
+
+						// Inject a synthetic user turn to carry the bot's images. OpenRouter only
+						// permits image parts on user-role messages, so we bridge the gap here.
+						if (pendingBotImageParts.length > 0) {
+							messages.push({
+								role: "user",
+								content: [
+									{
+										type: "text",
+										text: `[System: This image was sent by ${botName}.]`,
+									},
+									...pendingBotImageParts,
+								],
+							});
+						}
+
 						continue;
 					}
 

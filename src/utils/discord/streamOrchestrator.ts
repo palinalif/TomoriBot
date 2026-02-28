@@ -239,7 +239,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			log.info(
 				"Empty response detected. Returning empty_response status for retry at tomoriChat level.",
 			);
-			return { status: "empty_response" };
+			return {
+				status: "empty_response",
+				data: result.data,
+				naiContinuationPrefill: result.naiContinuationPrefill,
+			};
 		}
 
 		// Return result for non-empty responses or other statuses
@@ -262,6 +266,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		// Create processing configurations
 		const textConfig = this.createTextProcessingConfig(config, context);
 		const typingConfig = createTypingSimulationConfig(config.humanizerDegree);
+		let terminalDoneMetadata: Record<string, unknown> | undefined;
 
 		let lastError: Error | undefined;
 
@@ -331,6 +336,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 				// Convert raw chunk to normalized format
 				const processedChunk = provider.processChunk(rawChunk);
+				if (processedChunk.type === "done" && processedChunk.metadata) {
+					terminalDoneMetadata = processedChunk.metadata;
+				}
 
 				// Handle different chunk types
 				const result = await this.handleProcessedChunk(
@@ -391,6 +399,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				status: "completed",
 				messageSentCount: state.messageSentCount,
 				accumulatedText: state.accumulatedText, // Return accumulated text for short-term memory
+				data: terminalDoneMetadata,
 			};
 		} catch (error) {
 			this.clearInactivityTimer(state);
@@ -506,6 +515,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				break;
 
 			case "done":
+				{
+					const terminalFinishReason =
+						typeof chunk.metadata?.finishReason === "string"
+							? chunk.metadata.finishReason
+							: null;
+					if (terminalFinishReason === "length") {
+						log.warn(
+							`Stream ended with finish_reason=length (output token cap). ` +
+								`messageSentCount=${state.messageSentCount}, bufferChars=${state.buffer.length}, accumulatedChars=${state.accumulatedText.length}`,
+						);
+					}
+				}
 				// Stream finished, continue to final buffer flush
 				// Don't return immediately - let the loop exit naturally to flush remaining buffer
 				break;
