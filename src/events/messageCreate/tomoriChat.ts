@@ -48,7 +48,11 @@ import {
 	type WebhookCreateErrorReason,
 } from "../../utils/discord/webhookManager";
 import { ColorCode, log } from "../../utils/misc/logger";
-import { buildContext } from "../../utils/text/contextBuilder";
+import {
+	buildContext,
+	formatMessageTimestamp,
+	formatTimestampInline,
+} from "../../utils/text/contextBuilder";
 import { getEmojiPenaltyDirective } from "../../utils/text/emojiPenalty";
 import {
 	removeYouTubeUrls,
@@ -859,6 +863,7 @@ type SimplifiedMessageForContext = {
 	authorType: "user" | "persona"; // Whether this message is from a user or a persona
 	personaName?: string | null; // Persona nickname if authorType is "persona"
 	content: string | null; // Message text content
+	createdAt?: number; // Discord message creation timestamp in milliseconds (message.createdTimestamp)
 	mediaSourceMessageIds?: string[]; // Array of message IDs that host media (for combined messages)
 	imageAttachments: Array<{
 		url: string; // Original URL of the image
@@ -1460,6 +1465,8 @@ export default async function tomoriChat(
 		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
 		disableProfilePictureProcessing: false, // Will be set to true during enhanced context restart
 		disableGifProcessing: false, // Will be set to true during enhanced context restart
+		disableShortTermMemoryUpdate: false, // Will be set to true after first successful STM update to prevent duplicate calls
+		disableTimestampContext: false, // Will be set to true after context_restart_with_timestamps to prevent repeat restarts
 		forceReason, // Pass reasoning flag for enhanced AI responses
 		isManuallyTriggered, // Pass command flag to indicate manual triggering
 		disableAllTools: isUserImpersonation, // Disable tools for user impersonation
@@ -3716,6 +3723,7 @@ export default async function tomoriChat(
 						authorType,
 						personaName,
 						content: messageContentForLlm,
+						createdAt: msg.createdTimestamp, // Discord message creation timestamp (ms) for timestamp tool
 						mediaSourceMessageIds: resolvedMediaSourceMessageIds,
 						imageAttachments,
 						videoAttachments,
@@ -5661,6 +5669,78 @@ export default async function tomoriChat(
 											// This will restart the streaming with enhanced context
 											continue;
 										}
+
+										// Handle message timestamps restart signal (in-place context annotation)
+										if (
+											funcName === "refresh_message_timestamps" &&
+											toolResult.data &&
+											(toolResult.data as Record<string, unknown>).type ===
+												"context_restart_with_timestamps"
+										) {
+											log.info(
+												"Message timestamps restart signal detected. Injecting timestamp annotations into context.",
+											);
+
+											// Disable the tool for the remainder of this turn
+											streamingContext.disableTimestampContext = true;
+
+											// Build a mapping from message ID → creation timestamp
+											const timestampMap = new Map<string, number>();
+											for (const msg of simplifiedMessages) {
+												if (msg.createdAt) {
+													timestampMap.set(msg.id, msg.createdAt);
+												}
+											}
+
+											// Inject [System: Sent ...] annotations into existing DIALOGUE_HISTORY context items
+											let annotatedCount = 0;
+											for (const contextItem of contextSegments) {
+												if (
+													contextItem.messageId &&
+													timestampMap.has(contextItem.messageId)
+												) {
+													// biome-ignore lint/style/noNonNullAssertion: checked by has()
+													const createdAt = timestampMap.get(contextItem.messageId)!;
+													contextItem.parts.push({
+														type: "text",
+														text: formatMessageTimestamp(createdAt),
+													});
+													annotatedCount++;
+												}
+											}
+
+											// Also patch reply reference blocks to include the referenced message's timestamp.
+											// e.g. "(ID: 123456789)" becomes "(ID: 123456789, sent Feb 28, 2026 12:41 UTC, 20m ago)"
+											const replyRefPattern =
+												/\[System: This message is referring to a previous message \(ID: (\d+)\) by/g;
+											for (const contextItem of contextSegments) {
+												for (const part of contextItem.parts) {
+													if (
+														part.type === "text" &&
+														part.text.includes("This message is referring to")
+													) {
+														part.text = part.text.replace(
+															replyRefPattern,
+															(match, referencedId: string) => {
+																const refTimestamp = timestampMap.get(referencedId);
+																if (!refTimestamp) return match;
+																return match.replace(
+																	`(ID: ${referencedId})`,
+																	`(ID: ${referencedId}, sent ${formatTimestampInline(refTimestamp)})`,
+																);
+															},
+														);
+													}
+												}
+											}
+
+											log.success(
+												`Injected timestamp annotations into ${annotatedCount} context items.`,
+											);
+
+											// Continue to next iteration WITHOUT adding to function interaction history
+											continue;
+										}
 									} else {
 										// Tool execution failed — prefer `message` (detailed, actionable) over
 										// `error` (short label) so the model gets useful retry instructions
@@ -5796,6 +5876,17 @@ export default async function tomoriChat(
 									}
 
 									functionInteractionHistory.push(historyEntry);
+
+									// Disable STM after first successful call to prevent duplicate updates in one turn
+									if (
+										funcName === "update_short_term_memory" &&
+										toolResult.success
+									) {
+										streamingContext.disableShortTermMemoryUpdate = true;
+										log.info(
+											"Short-term memory updated — disabling further STM calls for this turn",
+										);
+									}
 
 									const providerName = provider.getInfo().name;
 									const hasPreToolText = personaAccumulatedParts.length > 0;

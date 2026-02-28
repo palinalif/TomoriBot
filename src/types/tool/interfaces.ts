@@ -48,6 +48,8 @@ export interface StreamingContext {
 	disableYouTubeProcessing: boolean; // Flag to temporarily disable YouTube function during enhanced context restart
 	disableProfilePictureProcessing?: boolean; // Flag to temporarily disable profile picture processing during enhanced context restart
 	disableGifProcessing?: boolean; // Flag to temporarily disable GIF processing during enhanced context restart
+	disableShortTermMemoryUpdate?: boolean; // Flag to prevent update_short_term_memory from being called more than once per turn
+	disableTimestampContext?: boolean; // Flag to prevent refresh_message_timestamps from being called more than once per turn
 	forceReason?: boolean; // Flag to indicate reasoning mode for enhanced AI responses
 	isManuallyTriggered?: boolean; // Flag to indicate this stream was triggered by a manual command
 	suppressUserErrors?: boolean; // Suppress user-facing error embeds during key-rotation retries

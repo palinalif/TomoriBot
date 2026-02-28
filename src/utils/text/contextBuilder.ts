@@ -92,6 +92,7 @@ type SimplifiedMessageForContext = {
 	authorType: "user" | "persona";
 	personaName?: string | null;
 	content: string | null;
+	createdAt?: number; // Discord message creation timestamp in milliseconds (message.createdTimestamp)
 	mediaSourceMessageIds?: string[]; // Array of message IDs that host media (for combined messages)
 	imageAttachments: Array<{
 		url: string;
@@ -609,6 +610,68 @@ async function buildShortTermMemoryContext(
 	}
 }
 
+// Month abbreviations for timestamp formatting (avoids locale-sensitive toLocaleString)
+const UTC_MONTHS = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
+] as const;
+
+/**
+ * Format a millisecond duration as a human-readable relative time string.
+ * @param diffMs - Time difference in milliseconds (positive = in the past)
+ * @returns e.g. "5s ago", "3m ago", "2h ago", "4d ago", "2w ago"
+ */
+export function formatRelativeTime(diffMs: number): string {
+	const seconds = Math.floor(diffMs / 1000);
+	if (seconds < 60) return `${seconds}s ago`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h ago`;
+	const days = Math.floor(hours / 24);
+	if (days < 7) return `${days}d ago`;
+	const weeks = Math.floor(days / 7);
+	return `${weeks}w ago`;
+}
+
+/**
+ * Format a Discord message timestamp as a short inline string suitable for
+ * embedding within an existing [System: ...] block (no outer wrapper).
+ * @param createdAt - Unix timestamp in milliseconds (message.createdTimestamp)
+ * @returns e.g. "Feb 28, 2026 14:32 UTC (3h ago)"
+ */
+export function formatTimestampInline(createdAt: number): string {
+	const date = new Date(createdAt);
+	const diffMs = Math.max(0, Date.now() - createdAt);
+	const month = UTC_MONTHS[date.getUTCMonth()];
+	const day = date.getUTCDate();
+	const year = date.getUTCFullYear();
+	const hours = String(date.getUTCHours()).padStart(2, "0");
+	const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+	return `${month} ${day}, ${year} ${hours}:${minutes} UTC (${formatRelativeTime(diffMs)})`;
+}
+
+/**
+ * Format a Discord message timestamp as a combined absolute + relative annotation.
+ * Relative time is computed at call time (i.e. when context is rebuilt), so it
+ * reflects how long ago the message was sent at the moment the LLM reads it.
+ * @param createdAt - Unix timestamp in milliseconds (message.createdTimestamp)
+ * @returns System annotation, e.g. "[System: Sent Feb 28, 2026 14:32 UTC (3h ago)]"
+ */
+export function formatMessageTimestamp(createdAt: number): string {
+	return `[System: Sent ${formatTimestampInline(createdAt)}]`;
+}
+
 export async function buildContext({
 	guildId,
 	serverName,
@@ -636,6 +699,7 @@ export async function buildContext({
 	impersonatedUserNickname,
 	matrixUsers,
 	syntheticUsers,
+	includeTimestamps = false,
 }: {
 	guildId: string;
 	serverName: string;
@@ -671,6 +735,8 @@ export async function buildContext({
 		string,
 		{ displayName: string; type: "persona" | "webhook" }
 	>;
+	/** When true, append a [System: Sent ...] timestamp annotation to every dialogue message. */
+	includeTimestamps?: boolean;
 }): Promise<{
 	contextItems: StructuredContextItem[];
 	tailDirectives: string[];
@@ -1851,9 +1917,17 @@ export async function buildContext({
 			const hasSignificantMedia = hasNonEmojiImages || hasVideos;
 		let mediaIdHintAdded = false;
 
-		// If message has significant media but is outside window, add placeholder
+		// Model capability flags (used for both the out-of-window hint and within-window rendering)
+		const seesImages = tomoriState?.llm.sees_images ?? false;
+		const seesVideos = tomoriState?.llm.sees_videos ?? false;
+
+		// If message has significant media but is outside window, add placeholder.
+		// Only shown if the model actually supports the relevant media type — no point
+		// suggesting increase_media_context if the model cannot see the media anyway.
 		// Messages with only emojis are not flagged, but messages with emojis + real media ARE flagged
-		if (hasSignificantMedia && !isWithinMediaWindow) {
+		const hasViewableMediaOutsideWindow =
+			(hasNonEmojiImages && seesImages) || (hasVideos && seesVideos);
+		if (hasViewableMediaOutsideWindow && !isWithinMediaWindow) {
 			// Calculate extend_by needed to reach this message, capped at maxExtendBy
 			const extendByNeeded = Math.min(mediaWindowCutoff - index, maxExtendBy);
 
@@ -1869,9 +1943,6 @@ export async function buildContext({
 		} else if (isWithinMediaWindow) {
 			// Within window: Add full media if model supports it, otherwise add placeholder
 			// Check model capability flags
-			const seesImages = tomoriState?.llm.sees_images ?? false;
-			const seesVideos = tomoriState?.llm.sees_videos ?? false;
-
 			// 9.a. Add image parts if attachments exist
 			if (msg.imageAttachments.length > 0) {
 				if (seesImages) {
@@ -2004,6 +2075,14 @@ export async function buildContext({
 				);
 			}
 			parts.push({ type: "text", text: processedContent });
+
+			// Append timestamp annotation when context was rebuilt with timestamps enabled
+			if (includeTimestamps && msg.createdAt) {
+				parts.push({
+					type: "text",
+					text: formatMessageTimestamp(msg.createdAt),
+				});
+			}
 		}
 
 		// Expose message ID(s) for media messages so tools (generate_image, process_gif) can reference attachments

@@ -58,12 +58,44 @@ export class UpdateShortTermMemoryTool extends BaseTool {
 	}
 
 	/**
+	 * Enhanced availability check that also considers per-turn disable flags.
+	 * Once STM has been updated once in a turn, the flag is set to prevent
+	 * the LLM from calling this tool again in the same turn.
+	 * @param provider - LLM provider name
+	 * @param context - Tool context that may contain streaming flags
+	 * @returns True if tool should be offered to the LLM
+	 */
+	isAvailableForContext(provider: string, context?: ToolContext): boolean {
+		if (!this.isAvailableFor(provider)) return false;
+
+		if (context?.streamContext?.disableShortTermMemoryUpdate) {
+			log.info(
+				"UpdateShortTermMemoryTool: Disabled for this turn — STM already updated once",
+			);
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
 	 * Execute the tool to update short-term memory summary
 	 */
 	async execute(
 		args: Record<string, unknown>,
 		context: ToolContext,
 	): Promise<ToolResult> {
+		// Defense-in-depth guard: block execution if STM was already updated this turn
+		if (context.streamContext?.disableShortTermMemoryUpdate) {
+			log.info(
+				"[updateShortTermMemoryTool] Execution blocked — STM already updated once this turn",
+			);
+			return {
+				success: false,
+				message: "Short-term memory was already updated this turn.",
+			};
+		}
+
 		log.info(
 			`[updateShortTermMemoryTool] Tool called - userId=${context.userId}, channelId=${context.channel?.id}`,
 		);

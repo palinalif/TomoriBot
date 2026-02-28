@@ -2610,11 +2610,15 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 						continue;
 					}
 
-					// For single text-only user messages, use string content; otherwise use array
-					const content =
-						contentParts.length === 1 && contentParts[0].type === "text"
-							? contentParts[0].text
-							: contentParts;
+					// Flatten to a plain string whenever all parts are text-only.
+					// Array format is only needed when the message genuinely mixes text + image parts.
+					// Sending an array to strict text-only models (e.g. aion-2.0) causes a 400 error.
+					const allTextOnly = contentParts.every((p) => p.type === "text");
+					const content = allTextOnly
+						? contentParts
+							.map((p) => (p as { type: "text"; text: string }).text)
+							.join("\n")
+						: contentParts;
 
 					messages.push({
 						role,
