@@ -903,3 +903,84 @@ export function isNovelAIRateLimitError(
 		rateLimitKeywords.some((keyword) => error.toLowerCase().includes(keyword))
 	);
 }
+
+// =============================================
+// Subscription API
+// =============================================
+
+/** Base URL for NovelAI account-management endpoints (distinct from the text generation URL) */
+const NOVELAI_ACCOUNT_API_BASE_URL = "https://api.novelai.net";
+
+/**
+ * Shape of the perks object returned by GET /user/subscription.
+ * Only contextTokens is used here — other perks are preserved for completeness.
+ */
+export interface NovelAISubscriptionPerks {
+	maxPriorityActions: number;
+	startPriority: number;
+	/** Maximum context size in tokens for this subscription tier */
+	contextTokens: number;
+	unlimitedMaxPriority: boolean;
+	moduleTrainingSteps: number;
+}
+
+/**
+ * Shape of the response returned by GET /user/subscription.
+ */
+export interface NovelAISubscription {
+	tier: number;
+	active: boolean;
+	expiresAt: number;
+	perks: NovelAISubscriptionPerks;
+	isGracePeriod: boolean;
+}
+
+/**
+ * Fetches the current NovelAI subscription for a given API key.
+ *
+ * Uses the account management API (api.novelai.net), which is separate from
+ * the text generation API (text.novelai.net).
+ *
+ * @param apiKey - Plaintext NovelAI API key
+ * @returns Subscription data including perks.contextTokens, or null on failure
+ */
+export async function fetchNovelAISubscription(
+	apiKey: string,
+): Promise<NovelAISubscription | null> {
+	const url = `${NOVELAI_ACCOUNT_API_BASE_URL}/user/subscription`;
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+	try {
+		const response = await fetch(url, {
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${apiKey}`,
+			},
+			signal: controller.signal,
+		});
+
+		clearTimeout(timeoutId);
+
+		if (!response.ok) {
+			log.warn(
+				`NovelAI subscription fetch failed with status ${response.status} — falling back to env var context limit`,
+			);
+			return null;
+		}
+
+		const data = (await response.json()) as NovelAISubscription;
+		log.info(
+			`NovelAI subscription: tier=${data.tier}, active=${data.active}, perks.contextTokens=${data.perks?.contextTokens ?? "unknown"} (note: contextTokens is NOT the context window — tier number determines that)`,
+		);
+		return data;
+	} catch (error) {
+		clearTimeout(timeoutId);
+		log.warn(
+			"NovelAI subscription fetch threw an error — falling back to env var context limit",
+			error,
+		);
+		return null;
+	}
+}

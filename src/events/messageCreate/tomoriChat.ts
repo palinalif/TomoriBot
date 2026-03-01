@@ -121,6 +121,11 @@ import {
 } from "../../utils/cache/openrouterCapabilityCache";
 import { getGeminiTokenLimits } from "../../utils/cache/geminiCapabilityCache";
 import { getNovelAITokenLimits } from "../../utils/cache/novelaiCapabilityCache";
+import {
+	getCachedContextTokens,
+	refreshNovelAISubscription,
+} from "../../utils/cache/novelaiSubscriptionCache";
+import type { NovelaiStreamConfig } from "../../providers/novelai/novelaiStreamAdapter";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 
 // Base trigger words that will always work (with or without spaces for English)
@@ -4118,7 +4123,7 @@ export default async function tomoriChat(
 						// the context window limit, ensuring the output budget is always preserved.
 						// OpenRouter: uses the live capability cache (fetched at startup from their API).
 						// Google:     uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
-						// NovelAI:    uses the static NOVELAI_TOKEN_LIMITS map (API does not expose limits).
+						// NovelAI:    uses perks.contextTokens from GET /user/subscription (cached per guild, 24h TTL).
 						if (
 							tomoriState.llm.llm_provider === "openrouter" &&
 							tomoriState.llm.llm_codename !== "account-setting" &&
@@ -4188,8 +4193,23 @@ export default async function tomoriChat(
 								}
 							}
 						} else if (tomoriState.llm.llm_provider === "novelai") {
+							// Look up subscription contextTokens for accurate tier-aware truncation.
+							// If cache is cold (e.g. after bot restart), decrypt the key early and fetch.
+							let naiSubscriptionTokens = getCachedContextTokens(serverDiscId);
+							if (naiSubscriptionTokens === undefined && tomoriState.config.api_key) {
+								try {
+									const tempKey = await decryptApiKey(
+										tomoriState.config.api_key,
+										tomoriState.config.key_version || 1,
+									);
+									naiSubscriptionTokens = await refreshNovelAISubscription(serverDiscId, tempKey);
+								} catch {
+									// Subscription fetch failed; getNovelAITokenLimits will use env var fallback
+								}
+							}
 							const tokenLimits = getNovelAITokenLimits(
 								tomoriState.llm.llm_codename,
+								naiSubscriptionTokens,
 							);
 							if (
 								tokenLimits &&
@@ -4522,6 +4542,16 @@ export default async function tomoriChat(
 						effectiveTomoriState,
 						decryptedApiKey,
 					);
+
+					// Thread the subscription-derived Kayra context limit into providerConfig so the
+					// secondary dynamic cap in novelaiStreamAdapter uses the correct tier limit
+					// (not the env var default of 8192) for Tablet users (4096) and others.
+					if (tomoriState.llm.llm_provider === "novelai") {
+						const cachedKayraLimit = getCachedContextTokens(serverDiscId);
+						if (cachedKayraLimit !== undefined) {
+							(providerConfig as NovelaiStreamConfig).kayraContextLimit = cachedKayraLimit;
+						}
+					}
 
 					// Restore original model if it was overridden
 					if (originalModelCodename) {
@@ -5479,7 +5509,7 @@ export default async function tomoriChat(
 											// the context window limit, ensuring the output budget is always preserved.
 											// OpenRouter: uses the live capability cache (fetched at startup from their API).
 											// Google:     uses the static GEMINI_TOKEN_LIMITS map (compile-time constant).
-											// NovelAI:    uses the static NOVELAI_TOKEN_LIMITS map (API does not expose limits).
+											// NovelAI:    uses perks.contextTokens from GET /user/subscription (cached per guild, 24h TTL).
 											if (
 												tomoriState.llm.llm_provider === "openrouter" &&
 												tomoriState.llm.llm_codename !== "account-setting" &&
@@ -5550,8 +5580,23 @@ export default async function tomoriChat(
 													}
 												}
 											} else if (tomoriState.llm.llm_provider === "novelai") {
+												// Look up subscription contextTokens for accurate tier-aware truncation.
+												// If cache is cold (e.g. after bot restart), decrypt the key early and fetch.
+												let naiSubscriptionTokens = getCachedContextTokens(serverDiscId);
+												if (naiSubscriptionTokens === undefined && tomoriState.config.api_key) {
+													try {
+														const tempKey = await decryptApiKey(
+															tomoriState.config.api_key,
+															tomoriState.config.key_version || 1,
+														);
+														naiSubscriptionTokens = await refreshNovelAISubscription(serverDiscId, tempKey);
+													} catch {
+														// Subscription fetch failed; getNovelAITokenLimits will use env var fallback
+													}
+												}
 												const tokenLimits = getNovelAITokenLimits(
 													tomoriState.llm.llm_codename,
+													naiSubscriptionTokens,
 												);
 												if (
 													tokenLimits &&

@@ -90,6 +90,32 @@ const NAI_GLM_CHARS_PER_TOKEN = Number.parseFloat(
  *
  * Configured via NAI_GLM_CONTEXT_LIMIT env var (default: "12288").
  */
+/**
+ * Characters-per-token ratio for Kayra/Erato context estimation.
+ *
+ * Kayra tokenizes at ~3.0–3.5 chars/token, denser than the 4 chars/token assumed by
+ * contextTruncator. This drives the secondary dynamic max_length cap below.
+ *
+ * Configured via NAI_KAYRA_CHARS_PER_TOKEN env var (default: "3.5").
+ */
+const NAI_KAYRA_CHARS_PER_TOKEN = Number.parseFloat(
+	process.env.NAI_KAYRA_CHARS_PER_TOKEN ?? "3.5",
+);
+
+/**
+ * Hard context window ceiling (input + output tokens combined) for Kayra/Erato.
+ *
+ * Matches the user's NovelAI subscription tier limit:
+ *   Tablet: 4096, Scroll: 8192, Opus: varies
+ *
+ * Configured via NAI_KAYRA_CONTEXT_LIMIT env var (default: "8192" for Scroll tier).
+ * Tablet users must set this to 4096. Used by the dynamic max_length cap below.
+ */
+const NAI_KAYRA_CONTEXT_LIMIT = Number.parseInt(
+	process.env.NAI_KAYRA_CONTEXT_LIMIT ?? "8192",
+	10,
+);
+
 const NAI_GLM_CONTEXT_LIMIT = Number.parseInt(
 	process.env.NAI_GLM_CONTEXT_LIMIT ?? "12288",
 	10,
@@ -147,7 +173,12 @@ interface NormalizedToolDefinition {
  * NovelAI-specific stream configuration
  */
 export interface NovelaiStreamConfig extends StreamConfig {
-	// NovelAI doesn't have provider-specific config beyond base StreamConfig
+	/**
+	 * Kayra context limit in tokens derived from the guild's subscription tier.
+	 * When present, overrides the NAI_KAYRA_CONTEXT_LIMIT env var in the secondary
+	 * dynamic max_length safety cap so Tablet users (4096) are protected correctly.
+	 */
+	kayraContextLimit?: number;
 }
 
 /**
@@ -427,6 +458,43 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					`NovelAI GLM: Clamping max_length ${currentMaxLength} → ${clampedMaxLength} ` +
 						`(prompt ${prompt.length} chars ≈ ${estimatedInputTokens} tokens, ` +
 						`context limit: ${NAI_GLM_CONTEXT_LIMIT})`,
+				);
+				parameters.max_length = clampedMaxLength;
+			}
+		} else {
+			// Dynamic max_length safety cap for Kayra/Erato.
+			//
+			// contextTruncator runs earlier using 4 chars/token. Kayra tokenizes at
+			// ~3.0–3.5 chars/token, so the assembled prompt may still overshoot the
+			// tier's token ceiling. We re-estimate here and:
+			//   - Clamp max_length when input fits but input+output would exceed the limit.
+			//   - Log a warning when the input alone already exceeds the limit (can't fix
+			//     with output clamping; the subscription cache should prevent this via
+			//     accurate contextTruncator budgeting, but this is a last-resort guard).
+			//
+			// Prefer the subscription-derived limit threaded in from tomoriChat.ts; fall back
+			// to the NAI_KAYRA_CONTEXT_LIMIT env var so the guard fires even when no cached
+			// value is present (e.g. key set but bot restarted before first message).
+			const effectiveKayraLimit =
+				(config as NovelaiStreamConfig).kayraContextLimit ?? NAI_KAYRA_CONTEXT_LIMIT;
+			const estimatedInputTokens = Math.ceil(
+				prompt.length / NAI_KAYRA_CHARS_PER_TOKEN,
+			);
+			const maxAllowedOutput = effectiveKayraLimit - estimatedInputTokens;
+			const currentMaxLength = parameters.max_length ?? 0;
+			if (maxAllowedOutput <= 0) {
+				log.warn(
+					`NovelAI Kayra: Prompt likely exceeds context limit — ` +
+						`prompt ${prompt.length} chars ≈ ${estimatedInputTokens} tokens, ` +
+						`limit: ${effectiveKayraLimit}. ` +
+						`Check your subscription tier or set NAI_KAYRA_CONTEXT_LIMIT explicitly.`,
+				);
+			} else if (maxAllowedOutput < currentMaxLength) {
+				const clampedMaxLength = Math.max(1, maxAllowedOutput);
+				log.warn(
+					`NovelAI Kayra: Clamping max_length ${currentMaxLength} → ${clampedMaxLength} ` +
+						`(prompt ${prompt.length} chars ≈ ${estimatedInputTokens} tokens, ` +
+						`context limit: ${effectiveKayraLimit})`,
 				);
 				parameters.max_length = clampedMaxLength;
 			}

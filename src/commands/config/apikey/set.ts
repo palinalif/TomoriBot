@@ -329,6 +329,23 @@ export async function execute(
 				return;
 			}
 
+			// For NovelAI: warm the subscription cache now (API key is plaintext here)
+			// so the first message uses the correct tier context limit without an extra decrypt.
+			if (normalizedProvider === "novelai" || normalizedProvider === "nai") {
+				const guildIdForSubscription = interaction.guildId;
+				if (guildIdForSubscription) {
+					const { refreshNovelAISubscription: refreshNAISub } = await import(
+						"../../../utils/cache/novelaiSubscriptionCache"
+					);
+					refreshNAISub(guildIdForSubscription, apiKey).catch((err) => {
+						log.warn(
+							"Non-critical: failed to warm NovelAI subscription cache during key set",
+							err,
+						);
+					});
+				}
+			}
+
 			// Encrypt and store the API key
 			const encryptionResult = await encryptApiKey(apiKey);
 			encrypted = encryptionResult.encrypted;
