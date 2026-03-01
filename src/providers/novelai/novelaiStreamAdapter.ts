@@ -229,7 +229,6 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	private static readonly SENTENCE_BOUNDARY_PATTERN =
 		/[.!?*~)\]"\u300D\u2026\u2014]\s*$/;
 
-
 	private getSystemInstructionTags(includeTools: boolean): ContextItemTag[] {
 		if (!includeTools) {
 			return NovelaiStreamAdapter.SYSTEM_INSTRUCTION_TAGS_BASE;
@@ -266,6 +265,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		this.sentenceTrailingBuffer = "";
 		this.hasEmittedVisibleText = false;
 		this.pendingContinuationPrefill = undefined;
+		this.kayraHoldBuffer = "";
+		this.kayraHoldBuffer = "";
 		this.toolDefinitions = this.normalizeToolDefinitions(config.tools ?? []);
 		this.toolsEnabled = this.toolDefinitions.length > 0;
 		this.resetToolParsingState();
@@ -300,10 +301,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		} else {
 			// Kayra: Flat text prompt with NAI prompt-convention formatting
 			// Build ATTG block from persona metadata (null if not configured)
-			const attgBlock = this.buildAttgBlock(
-				context.tomoriState,
-				config.model,
-				);
+			const attgBlock = this.buildAttgBlock(context.tomoriState, config.model);
 			const basePrompt = this.assembleNovelAIPrompt(
 				context.contextItems,
 				context.tomoriState.tomori_nickname,
@@ -333,11 +331,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			}
 			log.info(
 				`NovelAI GLM: Appended continuation prefill to prompt ` +
-				`(${prefill.length} chars): "${prefill.substring(0, 80)}"`,
+					`(${prefill.length} chars): "${prefill.substring(0, 80)}"`,
 			);
 		}
 
-		log.info(`Assembled NovelAI prompt (${isGlm ? "GLM" : "Kayra"}). Length: ${prompt.length} characters`);
+		log.info(
+			`Assembled NovelAI prompt (${isGlm ? "GLM" : "Kayra"}). Length: ${prompt.length} characters`,
+		);
 
 		// Log the full prompt for debugging
 		log.section("NovelAI Full Prompt");
@@ -378,8 +378,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			if (clampedMaxLength < currentMaxLength) {
 				log.warn(
 					`NovelAI GLM: Clamping max_length ${currentMaxLength} → ${clampedMaxLength} ` +
-					`(prompt ${prompt.length} chars ≈ ${estimatedInputTokens} tokens, ` +
-					`context limit: ${NAI_GLM_CONTEXT_LIMIT})`,
+						`(prompt ${prompt.length} chars ≈ ${estimatedInputTokens} tokens, ` +
+						`context limit: ${NAI_GLM_CONTEXT_LIMIT})`,
 				);
 				parameters.max_length = clampedMaxLength;
 			}
@@ -477,6 +477,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * We need to detect and strip this out
 	 */
 	private generationBuffer = "";
+	/** Buffer holding back text from the last 
+ onward, pending speaker-prefix resolution for Kayra. */
+	private kayraHoldBuffer = "";
 
 	/**
 	 * Process a raw NovelAI chunk into normalized format
@@ -516,10 +519,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// before generating </tool_call>), try to parse what we have. NAI's token limit
 			// often cuts off the closing tag, so we synthesize it from the accumulated buffer.
 			// Text preamble before the tool call is fine — it's already been emitted.
-			if (
-				this.toolCallMode === "tool_call" &&
-				this.toolCallBuffer.trim()
-			) {
+			if (this.toolCallMode === "tool_call" && this.toolCallBuffer.trim()) {
 				log.info(
 					"NovelAI GLM: Stream ended during tool call accumulation — attempting to parse without closing tag",
 				);
@@ -549,19 +549,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// GLM 4.6: If still in undecided mode with a prelude buffer that looks like
 			// an incomplete tool call (e.g., just the function name, waiting for <arg_key>),
 			// try to parse it as a tool call before discarding.
-			if (
-				this.toolCallMode === "undecided" &&
-				this.toolPreludeBuffer.trim()
-			) {
+			if (this.toolCallMode === "undecided" && this.toolPreludeBuffer.trim()) {
 				const trimmedPrelude = this.toolPreludeBuffer.trim();
 				const firstLine = trimmedPrelude.split("\n")[0].trim();
 				const normalizedName = firstLine
 					? this.normalizeToolName(firstLine)
 					: "";
 				const matchedTool = normalizedName
-					? this.toolDefinitions.find(
-							(t) => t.name === normalizedName,
-						)
+					? this.toolDefinitions.find((t) => t.name === normalizedName)
 					: undefined;
 
 				if (matchedTool && trimmedPrelude.includes("<arg_key>")) {
@@ -608,10 +603,17 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					this.pendingContinuationPrefill = this.sentenceTrailingBuffer;
 					log.info(
 						`NovelAI GLM: Trailing fragment saved for continuation ` +
-						`(${this.sentenceTrailingBuffer.length} chars): ` +
-						`"${this.sentenceTrailingBuffer.substring(0, 80)}..."`,
+							`(${this.sentenceTrailingBuffer.length} chars): ` +
+							`"${this.sentenceTrailingBuffer.substring(0, 80)}..."`,
 					);
 				}
+			}
+
+			// For Kayra: flush held-back speaker-prefix buffer if stream ended without a match.
+			// A pending fragment that never triggered a speaker stop is safe to emit.
+			let kayraFinalFlush = "";
+			if (!this.isGlmModel && this.kayraHoldBuffer.trim()) {
+				kayraFinalFlush = this.kayraHoldBuffer;
 			}
 
 			// Clear all buffers on completion
@@ -619,16 +621,15 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			this.sentenceTrailingBuffer = "";
 			this.hasEmittedVisibleText = false;
 			this.resetToolParsingState();
+			this.kayraHoldBuffer = "";
 
-			// If we have a final flush, emit it as text before done
-			if (finalFlush) {
-				// Return text — the orchestrator will get "done" on the next processChunk
-				// call (which won't happen since the stream ended). Instead, we need to
-				// signal both the text and done. Return text here; the stream's own
-				// termination will signal done to the orchestrator.
+			// If we have a final flush (Kayra hold-buffer or GLM trailing buffer), emit as text.
+			// The stream's own termination signals "done" to the orchestrator.
+			const flushContent = kayraFinalFlush || finalFlush;
+			if (flushContent) {
 				return {
 					type: "text",
-					content: finalFlush,
+					content: flushContent,
 				};
 			}
 
@@ -695,7 +696,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				const cleanBefore = text.slice(0, thinkCloseIdx).trim();
 				log.warn(
 					`NovelAI GLM: Stray </think> detected in visible text — stopping stream. ` +
-					`Clean text before tag: "${cleanBefore.substring(0, 80)}"`,
+						`Clean text before tag: "${cleanBefore.substring(0, 80)}"`,
 				);
 				// Clear buffers — stream will end naturally after this return
 				this.generationBuffer = "";
@@ -734,25 +735,39 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		if (!speakerMatch && this.knownSpeakers.size > 0) {
 			const escaped = [...this.knownSpeakers].map(escapeRegExp).join("|");
-			speakerMatch = this.generationBuffer.match(new RegExp(`\\n+(${escaped})\\s`));
+			speakerMatch = this.generationBuffer.match(
+				new RegExp(`\\n+(${escaped})\\s`),
+			);
 		}
 
 		if (speakerMatch) {
 			// Found a turn boundary — stop generation here
 			this.generationBuffer = "";
 			this.sentenceTrailingBuffer = "";
+			this.kayraHoldBuffer = "";
 			return {
 				type: "done",
 			};
 		}
 
-		// For Kayra: pass text through directly (no sentence buffering needed)
+		// For Kayra: hold-back buffering to prevent partial speaker-prefix leakage.
+		// Kayra streams one token at a time; Name" arrives before the space that
+		// would complete a knownSpeakers match. Without buffering, Name" is emitted
+		// before the regex fires on the following token.
+		// Strategy: always hold back from the last in the combined text, releasing
+		// it once the next token confirms it is NOT a speaker prefix (or stops if it is).
 		if (!this.isGlmModel) {
-			if (text.trim()) this.hasEmittedVisibleText = true;
-			return {
-				type: "text",
-				content: text,
-			};
+			const combined = this.kayraHoldBuffer + text;
+			this.kayraHoldBuffer = "";
+			const lastNewlineIdx = combined.lastIndexOf("");
+			if (lastNewlineIdx !== -1) {
+				const safeToEmit = combined.slice(0, lastNewlineIdx);
+				this.kayraHoldBuffer = combined.slice(lastNewlineIdx);
+				if (safeToEmit.trim()) this.hasEmittedVisibleText = true;
+				return { type: "text", content: safeToEmit };
+			}
+			if (combined.trim()) this.hasEmittedVisibleText = true;
+			return { type: "text", content: combined };
 		}
 
 		// GLM 4.6: Sentence-boundary buffering
@@ -813,7 +828,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				char === "~" ||
 				char === ")" ||
 				char === "]" ||
-				char === "\"" ||
+				char === '"' ||
 				char === "\u300D" || // 」
 				char === "\u2026" || // …
 				char === "\u2014" || // —
@@ -970,9 +985,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		//    GLM sometimes outputs text then switches to a tool call without <tool_call> wrapper.
 		//    Scan for "\n{tool_name}\n<arg_key>" pattern in the buffer.
 		if (this.isGlmModel && this.textScanBuffer.includes("<arg_key>")) {
-			const unwrappedMatch = this.detectUnwrappedToolCallInText(this.textScanBuffer);
+			const unwrappedMatch = this.detectUnwrappedToolCallInText(
+				this.textScanBuffer,
+			);
 			if (unwrappedMatch) {
-				const visiblePart = this.textScanBuffer.slice(0, unwrappedMatch.startIndex);
+				const visiblePart = this.textScanBuffer.slice(
+					0,
+					unwrappedMatch.startIndex,
+				);
 				const toolPart = this.textScanBuffer.slice(unwrappedMatch.startIndex);
 				this.textScanBuffer = "";
 
@@ -1056,7 +1076,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					if (remainingText.includes("<arg_key>")) {
 						// currentIndex points to the start of lines[i].
 						// Walk back one char to include the preceding newline separator.
-						const startIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex;
+						const startIndex =
+							currentIndex > 0 ? currentIndex - 1 : currentIndex;
 						return { startIndex, toolName: matchedTool.name };
 					}
 				}
@@ -1098,9 +1119,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					return { mode: "wait" };
 				}
 
-				buffer = trimmedStart.slice(
-					thinkEndIndex + "</think>".length,
-				);
+				buffer = trimmedStart.slice(thinkEndIndex + "</think>".length);
 				continue;
 			}
 
@@ -1256,24 +1275,26 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * @returns Text with all angle bracket variants replaced with ASCII equivalents
 	 */
 	private normalizeXmlBrackets(text: string): string {
-		return text
-			// Full-width angle brackets: ＜ (ï¼) → <, ＞ (ï¼) → >
-			.replace(/\uff1c/g, "<")
-			.replace(/\uff1e/g, ">")
-			// Angle brackets: 〈 〉 (deprecated but still used)
-			.replace(/\u2329/g, "<")
-			.replace(/\u232a/g, ">")
-			// Mathematical angle brackets: ⟨ ⟩
-			.replace(/\u27e8/g, "<")
-			.replace(/\u27e9/g, ">")
-			// Single angle quotation marks: ‹ › (sometimes confused by models)
-			.replace(/\u2039/g, "<")
-			.replace(/\u203a/g, ">")
-			// Strip zero-width characters that can appear adjacent to tags
-			.replace(/\u200b/g, "")
-			.replace(/\u200c/g, "")
-			.replace(/\u200d/g, "")
-			.replace(/\ufeff/g, "");
+		return (
+			text
+				// Full-width angle brackets: ＜ (ï¼) → <, ＞ (ï¼) → >
+				.replace(/\uff1c/g, "<")
+				.replace(/\uff1e/g, ">")
+				// Angle brackets: 〈 〉 (deprecated but still used)
+				.replace(/\u2329/g, "<")
+				.replace(/\u232a/g, ">")
+				// Mathematical angle brackets: ⟨ ⟩
+				.replace(/\u27e8/g, "<")
+				.replace(/\u27e9/g, ">")
+				// Single angle quotation marks: ‹ › (sometimes confused by models)
+				.replace(/\u2039/g, "<")
+				.replace(/\u203a/g, ">")
+				// Strip zero-width characters that can appear adjacent to tags
+				.replace(/\u200b/g, "")
+				.replace(/\u200c/g, "")
+				.replace(/\u200d/g, "")
+				.replace(/\ufeff/g, "")
+		);
 	}
 
 	/**
@@ -1399,8 +1420,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		//    Also try with underscore/hyphen normalization on both sides.
 		const candidates = [rawName, hyphenName, underscoreName];
 		const suffixMatches = this.toolDefinitions.filter((tool) =>
-			candidates.some((candidate) =>
-				tool.name.endsWith(candidate) && candidate.length >= 4,
+			candidates.some(
+				(candidate) => tool.name.endsWith(candidate) && candidate.length >= 4,
 			),
 		);
 		if (suffixMatches.length === 1) {
@@ -1429,7 +1450,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				secondBestDist = minDist;
 			}
 		}
-		if (bestLevMatch && (secondBestDist - bestLevDist >= 2 || this.toolDefinitions.length <= 2)) {
+		if (
+			bestLevMatch &&
+			(secondBestDist - bestLevDist >= 2 || this.toolDefinitions.length <= 2)
+		) {
 			log.info(
 				`NovelAI GLM: Fuzzy-matched tool name "${rawName}" → "${bestLevMatch.name}" (edit distance: ${bestLevDist})`,
 			);
@@ -1454,7 +1478,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * @param rawParamName - Parameter name as generated by the model
 	 * @returns Normalized parameter name, or rawParamName if no match
 	 */
-	private normalizeParamName(functionName: string, rawParamName: string): string {
+	private normalizeParamName(
+		functionName: string,
+		rawParamName: string,
+	): string {
 		const tool = this.toolDefinitions.find((t) => t.name === functionName);
 		if (!tool?.parameters?.properties) return rawParamName;
 
@@ -1537,7 +1564,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			}
 		}
 		// Only accept if there's a clear winner (best is at least 2 edits better than runner-up)
-		if (bestLevMatch && (secondBestDistance - bestLevDistance >= 2 || knownParams.length <= 2)) {
+		if (
+			bestLevMatch &&
+			(secondBestDistance - bestLevDistance >= 2 || knownParams.length <= 2)
+		) {
 			log.info(
 				`NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${bestLevMatch}" (edit distance: ${bestLevDistance})`,
 			);
@@ -1603,10 +1633,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// If tool schema expects a string but JSON parsed as number/boolean,
 			// coerce to string. GLM often outputs bare numbers for ID fields
 			// (e.g., discord_id: 684462114022490100 instead of "684462114022490100").
-			if (
-				expectedType === "string" &&
-				typeof parsed.value !== "string"
-			) {
+			if (expectedType === "string" && typeof parsed.value !== "string") {
 				return String(parsed.value);
 			}
 			return parsed.value;
@@ -1625,7 +1652,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		}
 
 		if (
-			(trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+			(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
 			(trimmed.startsWith("'") && trimmed.endsWith("'"))
 		) {
 			return trimmed.slice(1, -1);
@@ -1787,7 +1814,6 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		return lines.join("\n");
 	}
 
-
 	/**
 	 * Recursively strip fetch capability reminder fields from tool response objects.
 	 * GLM 4.6 has a strict prompt token budget, and these fields waste tokens on
@@ -1795,8 +1821,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * @param obj - The tool response object to sanitize
 	 * @returns A deep copy with agentInstructions and fetchCapabilityReminder removed
 	 */
-	private stripFetchReminderFields(obj: Record<string, unknown>): Record<string, unknown> {
-		const keysToStrip = new Set(["agentInstructions", "fetchCapabilityReminder"]);
+	private stripFetchReminderFields(
+		obj: Record<string, unknown>,
+	): Record<string, unknown> {
+		const keysToStrip = new Set([
+			"agentInstructions",
+			"fetchCapabilityReminder",
+		]);
 
 		const strip = (value: unknown): unknown => {
 			if (Array.isArray(value)) {
@@ -1832,7 +1863,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			lines.push(this.formatToolCallForPrompt(item.functionCall));
 
 			// Strip fetch capability reminder fields recursively to save tokens
-			const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
+			const sanitizedResponse = this.stripFetchReminderFields(
+				item.functionResponse,
+			);
 			lines.push(`[Tool Result] ${JSON.stringify(sanitizedResponse)}`);
 
 			if (item.imageMetadata?.messageIds?.length) {
@@ -1880,12 +1913,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			toolCallLines.push(`<tool_call>${item.functionCall.name}`);
 			const args = item.functionCall.args ?? {};
 			for (const [key, value] of Object.entries(args)) {
-				toolCallLines.push(
-					`<arg_key>${key}</arg_key>`,
-				);
-				toolCallLines.push(
-					`<arg_value>${JSON.stringify(value)}</arg_value>`,
-				);
+				toolCallLines.push(`<arg_key>${key}</arg_key>`);
+				toolCallLines.push(`<arg_value>${JSON.stringify(value)}</arg_value>`);
 			}
 			toolCallLines.push("</tool_call>");
 			assistantParts.push(toolCallLines.join("\n"));
@@ -1898,7 +1927,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// Observation turn with tool response
 			// Strip fetch capability reminder fields recursively to save tokens —
 			// GLM 4.6 has a strict prompt budget, and fetch MCP is disabled for NovelAI.
-			const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
+			const sanitizedResponse = this.stripFetchReminderFields(
+				item.functionResponse,
+			);
 			const responseLines: string[] = ["<tool_response>"];
 			responseLines.push(JSON.stringify(sanitizedResponse));
 			responseLines.push("</tool_response>");
@@ -2103,7 +2134,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * Username2: message2
 	 * BotName:
 	 */
-/**
+	/**
 	 * Builds the ATTG metadata block for Kayra/Erato prompts.
 	 *
 	 * Kayra was trained on stories prefixed with [ Author: X; Title: Y; Tags: Z; Genre: W ] blocks.
@@ -2145,8 +2176,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		return full || null;
 	}
 
-
-/**
+	/**
 	 * Assemble a Kayra/Erato prompt using NovelAI story-format conventions.
 	 *
 	 * These models were trained on story data that uses specific formatting tokens.
@@ -2206,7 +2236,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// so DIALOGUE_SAMPLE user turns can be labeled consistently (e.g. "Ellen: message").
 		let defaultSpeakerLabel = "User";
 		for (const scanItem of contextItems) {
-			if (scanItem.metadataTag === ContextItemTag.DIALOGUE_HISTORY && scanItem.role === "user") {
+			if (
+				scanItem.metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
+				scanItem.role === "user"
+			) {
 				const scanText = scanItem.parts
 					.filter((p) => p.type === "text")
 					.map((p) => (p as { type: "text"; text: string }).text)
@@ -2308,9 +2341,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		// 6. Build the full system header: ATTG block + formatted sections
 		const attgPrefix = options?.attgBlock ? `${options.attgBlock}\n` : "";
-		const systemHeader = systemBlocks.length > 0
-			? `${attgPrefix}${systemBlocks.join("\n")}`
-			: attgPrefix.trimEnd();
+		const systemHeader =
+			systemBlocks.length > 0
+				? `${attgPrefix}${systemBlocks.join("\n")}`
+				: attgPrefix.trimEnd();
 
 		// 7. Combine: system header + context + [ Style: chat ] + samples + *** + [ Style: chat ] + history.
 		//    Context injections (e.g. [System: users in conversation]) sit with the system header
@@ -2322,14 +2356,22 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		const historyText = historyParts.join("\n");
 
 		// 7a. System section: ATTG + character/instruction blocks + context injections (pre-dialogue).
-		const systemSection = [systemHeader, contextText].filter((p) => p?.trim()).join("\n***\n");
+		const systemSection = [systemHeader, contextText]
+			.filter((p) => p?.trim())
+			.join("\n***\n");
 
 		// 7b. Each dialogue block gets its own [ Style: chat ] tag so the model treats both
 		//     reference samples and live history as chat-format exchanges.
-		const styledSampleText = sampleText.trim() ? `[ Style: chat ]\n${sampleText}` : "";
-		const styledHistoryText = historyText.trim() ? `[ Style: chat ]\n${historyText}` : "";
+		const styledSampleText = sampleText.trim()
+			? `[ Style: chat ]\n${sampleText}`
+			: "";
+		const styledHistoryText = historyText.trim()
+			? `[ Style: chat ]\n${historyText}`
+			: "";
 
-		const parts = [systemSection, styledSampleText, styledHistoryText].filter((p) => p?.trim());
+		const parts = [systemSection, styledSampleText, styledHistoryText].filter(
+			(p) => p?.trim(),
+		);
 		return parts.join("\n***\n");
 	}
 
@@ -2411,8 +2453,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			// Dialogue turns (user/model items not in system tags)
 			if ((item.role === "user" || item.role === "model") && textContent) {
 				const isInSystemTags =
-					item.metadataTag &&
-					systemTags.includes(item.metadataTag);
+					item.metadataTag && systemTags.includes(item.metadataTag);
 
 				if (!isInSystemTags) {
 					dialogueTurns.push({
@@ -2531,9 +2572,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			`Parameters: temperature=${request.parameters.temperature}, max_length=${request.parameters.max_length}`,
 		);
 		if (this.toolsEnabled) {
-			log.info(
-				`Tool calling enabled (tools=${this.toolDefinitions.length})`,
-			);
+			log.info(`Tool calling enabled (tools=${this.toolDefinitions.length})`);
 		}
 	}
 }
