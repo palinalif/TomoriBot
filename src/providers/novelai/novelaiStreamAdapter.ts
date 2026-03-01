@@ -338,8 +338,22 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					attgBlock,
 				},
 			);
-			// Append bot name to signal it should generate the bot's response
-			prompt = `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
+			// Append bot name to signal it should generate the bot's response, unless
+			// /bot respond already injected a final assistant prefill turn as the tail.
+			// In that case, adding another "{botName}:" creates an extra empty turn and
+			// breaks true continuation for Kayra/Erato.
+			const outputPrefillTail = context.outputPrefill?.trim() ?? "";
+			const hasTailPrefill =
+				outputPrefillTail.length > 0 &&
+				basePrompt.trimEnd().endsWith(outputPrefillTail);
+			prompt = hasTailPrefill
+				? basePrompt
+				: `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
+			if (hasTailPrefill) {
+				log.info(
+					"NovelAI Kayra: Detected assistant prefill at prompt tail; skipping trailing bot-name cue",
+				);
+			}
 		}
 
 		// For GLM 4.6: if a previous stream was cut off mid-sentence, append the trailing

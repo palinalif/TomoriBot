@@ -4023,15 +4023,27 @@ export default async function tomoriChat(
 								"[The following is a system-produced embed]",
 							) ?? false;
 
+						const isNovelaiKayraOrErato =
+							tomoriState.llm.llm_provider === "novelai" &&
+							(tomoriState.llm.llm_codename === "kayra-v1" ||
+								tomoriState.llm.llm_codename === "llama-3-erato-v1");
+						const usePrefillContinuationDirective =
+							Boolean(trimmedPrefill) && !isNovelaiKayraOrErato;
+						if (Boolean(trimmedPrefill) && isNovelaiKayraOrErato) {
+							log.info(
+								"Manual prefill directive skipped for NovelAI Kayra/Erato; relying on assistant prefill tail",
+							);
+						}
+
 						const shouldInjectContinuation =
 							(isFromSelectedPersona && !isEmbedMessage) ||
-							Boolean(trimmedPrefill);
+							usePrefillContinuationDirective;
 
 						// 4. Only inject continuation if:
 						//    - Last message is from the selected persona (and not an embed), OR
 						//    - A manual prefill is provided (hybrid prefix)
 						if (shouldInjectContinuation) {
-							const continuationReason = trimmedPrefill
+							const continuationReason = usePrefillContinuationDirective
 								? "manual prefill"
 								: `${selectedPersona?.tomori_nickname} as last speaker`;
 							log.info(
@@ -4043,7 +4055,7 @@ export default async function tomoriChat(
 								tomoriState?.tomori_nickname ??
 								process.env.DEFAULT_BOTNAME ??
 								"Tomori";
-							const continuationText = trimmedPrefill
+							const continuationText = usePrefillContinuationDirective
 								? isFromSelectedPersona && !isEmbedMessage
 									? `[Continue your last message. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
 									: `[Begin your next reply with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
