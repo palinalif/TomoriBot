@@ -1430,3 +1430,28 @@ SELECT add_column_if_not_exists('tomoris', 'nai_attg_title',  'TEXT', NULL);
 SELECT add_column_if_not_exists('tomoris', 'nai_attg_tags',   'TEXT', NULL);
 SELECT add_column_if_not_exists('tomoris', 'nai_attg_genre',  'TEXT', NULL);
 SELECT add_column_if_not_exists('tomoris', 'nai_attg_stars',  'SMALLINT', NULL);
+-- ============================================================================
+-- NOVELAI SAMPLING PRESETS (March 2026)
+-- Stores per-model preset configs (Kayra and Erato) with human-readable
+-- descriptions. Schema-compatible fields (temperature, top_k, top_p, min_p)
+-- are written to tomori_configs; NAI-specific fields (order, tail_free_sampling,
+-- phrase_rep_pen, etc.) are merged at generation time via nai_preset_name lookup.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS nai_presets (
+    nai_preset_id   SERIAL PRIMARY KEY,
+    preset_name     TEXT NOT NULL,
+    model_target    TEXT NOT NULL,       -- "kayra" or "erato"
+    is_default      BOOLEAN DEFAULT FALSE,
+    preset_desc     TEXT NOT NULL,       -- EN human-readable description
+    ja_preset_desc  TEXT NOT NULL,       -- JA human-readable description
+    parameters      JSONB NOT NULL,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (preset_name, model_target)
+);
+
+-- Create index for fast model-target lookups
+CREATE INDEX IF NOT EXISTS idx_nai_presets_model_target ON nai_presets(model_target, is_default);
+
+-- Link active preset by name to server config (nullable for non-NAI providers)
+SELECT add_column_if_not_exists('tomori_configs', 'nai_preset_name', 'TEXT');

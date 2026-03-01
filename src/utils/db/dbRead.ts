@@ -25,9 +25,47 @@ import {
 	apiKeyRotationSchema,
 	randomTriggerSchema,
 	type RandomTriggerRow,
+	naiPresetSchema,
+	type NaiPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
+
+/**
+ * Loads all NovelAI sampling presets for a given model target.
+ * Results are ordered: defaults first, then alphabetically by preset_name.
+ *
+ * @param target - The model target: "kayra" or "erato"
+ * @returns Array of validated NaiPresetRow objects, or empty array on error
+ */
+export async function loadNaiPresetsForModel(
+	target: "kayra" | "erato",
+): Promise<NaiPresetRow[]> {
+	try {
+		const rows = await sql`
+			SELECT * FROM nai_presets
+			WHERE model_target = ${target}
+			ORDER BY is_default DESC, preset_name ASC
+		`;
+
+		const presets: NaiPresetRow[] = [];
+		for (const row of rows) {
+			const parsed = naiPresetSchema.safeParse(row);
+			if (parsed.success) {
+				presets.push(parsed.data);
+			} else {
+				log.warn(
+					`Invalid nai_preset row for target ${target}:`,
+					parsed.error.flatten(),
+				);
+			}
+		}
+		return presets;
+	} catch (error) {
+		log.error(`Error loading NAI presets for model target ${target}:`, error);
+		return [];
+	}
+}
 
 /**
  * Loads the complete Tomori state (base row + config + server memories) for a given server.
@@ -173,7 +211,29 @@ export async function loadTomoriState(
 			}
 		}
 
-		// 7. Combine and validate the full state
+		// 7. Load active NAI preset if one is configured for this server
+		let naiPreset: NaiPresetRow | undefined;
+		const presetName = configData.nai_preset_name;
+		if (presetName) {
+			const presetRows = await sql`
+				SELECT * FROM nai_presets
+				WHERE preset_name = ${presetName}
+				LIMIT 1
+			`;
+			if (presetRows.length > 0) {
+				const parsedPreset = naiPresetSchema.safeParse(presetRows[0]);
+				if (parsedPreset.success) {
+					naiPreset = parsedPreset.data;
+				} else {
+					log.warn(
+						`Invalid nai_preset row for preset "${presetName}":`,
+						parsedPreset.error.flatten(),
+					);
+				}
+			}
+		}
+
+		// 8. Combine and validate the full state
 		const fallbackTriggerWords =
 			tomoriData.is_alter === true
 				? (tomoriData.alter_triggers ?? [])
@@ -186,6 +246,7 @@ export async function loadTomoriState(
 			persona_prompt: personaConfig?.persona_prompt ?? null,
 			server_memories: serverMemories, // Add server memories to the state
 			rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
+			nai_preset: naiPreset, // Active NAI sampling preset (undefined when not configured)
 		};
 
 		// Use Zod to parse and validate the combined structure

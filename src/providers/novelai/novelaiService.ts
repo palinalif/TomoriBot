@@ -232,7 +232,7 @@ export function convertTemperatureToNovelAI(
 	geminiTemp: number,
 	model: string,
 ): number {
-	if (model === "kayra-v1") {
+	if (model === "kayra-v1" || model === "llama-3-erato-v1") {
 		// Kayra-v1: Simple offset conversion
 		// Gemini 1.5 (default) → Kayra 1.35 (default)
 		// Just subtract 0.15 from Gemini temperature
@@ -257,11 +257,18 @@ export function convertTemperatureToNovelAI(
  * Get parameters for a specific model with optional sampling overrides
  * DB values with neutral defaults are omitted (topK=0, topP=1.0, minP=0.0)
  * so the model preset values are preserved when the user hasn't configured them.
+ *
+ * Merge priority (lowest → highest):
+ * 1. Model hardcoded defaults (getKayraParameters / getGlmParameters)
+ * 2. NAI-specific preset overrides (order, tail_free_sampling, phrase_rep_pen, etc.)
+ * 3. DB schema values (temperature, topK, topP, minP) — always win if non-neutral
+ *
  * @param model - Model name
  * @param temperature - Optional temperature in Gemini scale (will be converted to NovelAI scale)
  * @param topK - Optional top-K sampling override (0 = use model preset)
  * @param topP - Optional top-P sampling override (1.0 = use model preset)
  * @param minP - Optional min-P sampling override (0.0 = use model preset)
+ * @param presetOverrides - Optional NAI-specific preset fields to merge (non-schema params only)
  */
 export function getParametersForModel(
 	model: string,
@@ -269,10 +276,21 @@ export function getParametersForModel(
 	topK?: number,
 	topP?: number,
 	minP?: number,
+	presetOverrides?: Partial<NovelAIParameters>,
 ): NovelAIParameters {
+	// 1. Start from model hardcoded defaults
 	const params =
-		model === "kayra-v1" ? getKayraParameters() : getGlmParameters();
+		model === "kayra-v1" || model === "llama-3-erato-v1"
+			? getKayraParameters()
+			: getGlmParameters();
 
+	// 2. Merge NAI-specific preset fields (order, TFS, phrase_rep_pen, mirostat, etc.)
+	//    These override the hardcoded defaults but are themselves overridden by DB schema values.
+	if (presetOverrides && Object.keys(presetOverrides).length > 0) {
+		Object.assign(params, presetOverrides);
+	}
+
+	// 3. Apply DB schema overrides (highest priority — always win if non-neutral)
 	// Override temperature if provided (convert from Gemini scale to NovelAI scale)
 	if (temperature !== undefined) {
 		params.temperature = convertTemperatureToNovelAI(temperature, model);

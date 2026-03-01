@@ -178,10 +178,29 @@ export const tomoriConfigSchema = z.object({
 	cooldown_length: z.number().int().min(1).max(86400).default(5), // Added January 2026 - Cooldown duration in seconds
 	custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
 	custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
+	nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
 export type TomoriConfigRow = z.infer<typeof tomoriConfigSchema>;
+
+/**
+ * Schema for a NovelAI sampling preset row.
+ * Stores the full parameter JSON alongside human-readable descriptions.
+ * Schema-compatible fields (temperature, top_k, top_p, min_p) are written
+ * to tomori_configs; NAI-specific fields are merged at generation time.
+ */
+export const naiPresetSchema = z.object({
+	nai_preset_id:   z.number(),
+	preset_name:     z.string(),
+	model_target:    z.string(), // "kayra" or "erato"
+	is_default:      z.boolean(),
+	preset_desc:     z.string(), // EN human-readable description
+	ja_preset_desc:  z.string(), // JA human-readable description
+	parameters:      z.record(z.string(), z.unknown()),
+	created_at:      z.date().optional(),
+});
+export type NaiPresetRow = z.infer<typeof naiPresetSchema>;
 
 export const personaConfigSchema = z.object({
 	tomori_id: z.number(),
@@ -558,6 +577,7 @@ export type TomoriState = TomoriRow & {
 	server_memories: string[]; // Changed to string array to match implementation
 	rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
 	persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
+	nai_preset?: NaiPresetRow; // Added March 2026 - Active NovelAI sampling preset (null when not using NAI)
 };
 
 /**
@@ -571,6 +591,7 @@ export const tomoriStateSchema = tomoriSchema.extend({
 	server_memories: z.array(z.string()).default([]), // Changed to array of strings
 	rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
 	persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
+	nai_preset: naiPresetSchema.optional(), // Added March 2026 - Active NovelAI sampling preset
 });
 
 /**

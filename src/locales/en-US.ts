@@ -1626,6 +1626,21 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 				cleared_title: `Character Tags Cleared`,
 				cleared_description: `Cleared all character tags for **{persona_name}**.`,
 			},
+			preset: {
+				text: {
+					description: `Apply a NovelAI sampling preset to this server's text generation settings.`,
+					not_novelai_title: `NovelAI Provider Required`,
+					not_novelai_description: `This command only works when your AI provider is set to NovelAI. Use \`/config apikey set\` to switch providers.`,
+					not_kayra_erato_title: `Kayra or Erato Required`,
+					not_kayra_erato_description: `Sampling presets are only available for the **kayra-v1** and **llama-3-erato-v1** models. Use \`/config model text\` to switch models.`,
+					modal_title: `Choose Sampling Preset`,
+					select_label: `Sampling Preset`,
+					select_description: `Select a preset to apply to text generation.`,
+					select_placeholder: `Choose a sampling preset...`,
+					success_title: `Preset Applied`,
+					success_description: `Sampling preset **{preset_name}** has been applied. Temperature, top-K, top-P, and min-P have been updated in your server config.`,
+				},
+			},
 			attg: {
 				description: `Configure Author/Title/Tags/Genre/Stars metadata for NovelAI Kayra and Erato prompts.`,
 				modal_title: `ATTG Configuration`,

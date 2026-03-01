@@ -42,6 +42,7 @@ import {
 	usesOpenAIEndpoint,
 	type NovelAIGenerationRequest,
 	type NovelAIStreamChunk,
+	type NovelAIParameters,
 } from "./novelaiService";
 import { buildPersonaSpeakerStopString } from "@/providers/utils/stopStrings";
 
@@ -93,6 +94,32 @@ const NAI_GLM_CONTEXT_LIMIT = Number.parseInt(
 	process.env.NAI_GLM_CONTEXT_LIMIT ?? "12288",
 	10,
 );
+
+/**
+ * Extracts non-schema preset parameters from a raw preset parameters record.
+ * Removes the four fields that are handled via tomori_configs schema columns
+ * (temperature, top_k, top_p, min_p) so they don't double-apply.
+ * The remaining fields (order, tail_free_sampling, phrase_rep_pen, mirostat_*,
+ * typical_p, top_a, repetition_penalty_*, etc.) are passed as preset overrides
+ * to getParametersForModel() for NAI-specific sampling behaviour.
+ *
+ * @param params - Raw parameters record from NaiPresetRow.parameters
+ * @returns Partial NovelAIParameters containing only non-schema fields
+ */
+function extractNonSchemaPresetParams(
+	params: Record<string, unknown>,
+): Partial<NovelAIParameters> {
+	// These four keys are written to tomori_configs and applied via the existing
+	// override logic in getParametersForModel — exclude them here to avoid conflicts.
+	const schemaKeys = new Set(["temperature", "top_k", "top_p", "min_p"]);
+	const result: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(params)) {
+		if (!schemaKeys.has(key)) {
+			result[key] = value;
+		}
+	}
+	return result as Partial<NovelAIParameters>;
+}
 
 type ToolParamType = "string" | "number" | "boolean" | "array" | "object";
 
@@ -266,7 +293,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		this.hasEmittedVisibleText = false;
 		this.pendingContinuationPrefill = undefined;
 		this.kayraHoldBuffer = "";
-		this.kayraHoldBuffer = "";
+		this.kayraSpeakerBoundaryStopPending = false;
 		this.toolDefinitions = this.normalizeToolDefinitions(config.tools ?? []);
 		this.toolsEnabled = this.toolDefinitions.length > 0;
 		this.resetToolParsingState();
@@ -345,13 +372,19 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
 		// Get generation parameters for the model, passing DB sampling overrides.
 		// Neutral values (topK=0, topP=1.0, minP=0.0) preserve the model preset defaults.
+		// Non-schema NAI preset fields (order, TFS, phrase_rep_pen, etc.) are extracted
+		// from the active preset and merged before DB schema overrides are applied.
 		const { llm_top_k, llm_top_p, llm_min_p } = context.tomoriState.config;
+		const naiPresetOverrides = extractNonSchemaPresetParams(
+			context.tomoriState.nai_preset?.parameters ?? {},
+		);
 		const parameters = getParametersForModel(
 			config.model,
 			config.temperature,
 			llm_top_k,
 			llm_top_p,
 			llm_min_p,
+			naiPresetOverrides,
 		);
 
 		// Dynamic max_length safety cap for GLM 4.6.
@@ -403,8 +436,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
 					.filter((p) => p.type === "text")
 					.map((p) => (p as { type: "text"; text: string }).text)
 					.join("\n");
-				const match = /^([^:\n]+):/.exec(text);
-				if (match) speakerSet.add(match[1].trim());
+				const speakerLinePattern = /^(?!\[System:)([^:\n]+):\s+/gm;
+				for (const match of text.matchAll(speakerLinePattern)) {
+					const speaker = match[1].trim();
+					if (speaker) speakerSet.add(speaker);
+				}
 			}
 			// Exclude the bot's own name — it may legitimately appear on new lines
 			// as it continues its own turn across multiple sentences.
@@ -477,9 +513,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * We need to detect and strip this out
 	 */
 	private generationBuffer = "";
-	/** Buffer holding back text from the last 
- onward, pending speaker-prefix resolution for Kayra. */
+	/** Buffer holding back text from the last "\n" onward, pending speaker-prefix resolution for Kayra. */
 	private kayraHoldBuffer = "";
+	/** When true, Kayra has already hit a held speaker boundary and should return done on next token. */
+	private kayraSpeakerBoundaryStopPending = false;
 
 	/**
 	 * Process a raw NovelAI chunk into normalized format
@@ -622,6 +659,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			this.hasEmittedVisibleText = false;
 			this.resetToolParsingState();
 			this.kayraHoldBuffer = "";
+			this.kayraSpeakerBoundaryStopPending = false;
 
 			// If we have a final flush (Kayra hold-buffer or GLM trailing buffer), emit as text.
 			// The stream's own termination signals "done" to the orchestrator.
@@ -685,6 +723,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			};
 		}
 
+		// Kayra: once we detect a held speaker boundary, stop on subsequent tokens.
+		if (!this.isGlmModel && this.kayraSpeakerBoundaryStopPending) {
+			this.generationBuffer = "";
+			this.sentenceTrailingBuffer = "";
+			this.kayraHoldBuffer = "";
+			return { type: "done" };
+		}
+
 		// GLM 4.6: Detect stray </think> tags in visible text.
 		// After the initial <think></think> block is consumed by stripThinkBlocks(),
 		// any subsequent </think> in the visible text phase indicates model debris —
@@ -745,9 +791,32 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			this.generationBuffer = "";
 			this.sentenceTrailingBuffer = "";
 			this.kayraHoldBuffer = "";
+			// Stream orchestrator continues reading until provider final;
+			// latch stop so subsequent Kayra/Erato tokens are ignored.
+			this.kayraSpeakerBoundaryStopPending = !this.isGlmModel;
 			return {
 				type: "done",
 			};
+		}
+
+		// Kayra/Erato: also treat sentence-colon boundaries as turn transitions.
+		// Example: "... It is not healthy.: Please, don't say that..."
+		// We stop on either:
+		// 1) A complete boundary with following speaker text in-buffer.
+		// 2) A trailing boundary ending in ":" (next token would start the other turn).
+		if (!this.isGlmModel) {
+			const sentenceColonBoundary = /[.!?…]["')\]]?\s*:\s+(?=[A-Z*"])/;
+			const trailingSentenceColonBoundary = /[.!?…]["')\]]?\s*:\s*$/;
+			if (
+				sentenceColonBoundary.test(this.generationBuffer) ||
+				trailingSentenceColonBoundary.test(this.generationBuffer)
+			) {
+				this.generationBuffer = "";
+				this.sentenceTrailingBuffer = "";
+				this.kayraHoldBuffer = "";
+				this.kayraSpeakerBoundaryStopPending = true;
+				return { type: "done" };
+			}
 		}
 
 		// For Kayra: hold-back buffering to prevent partial speaker-prefix leakage.
@@ -759,9 +828,29 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		if (!this.isGlmModel) {
 			const combined = this.kayraHoldBuffer + text;
 			this.kayraHoldBuffer = "";
-			const lastNewlineIdx = combined.lastIndexOf("");
+			const lastNewlineIdx = combined.lastIndexOf("\n");
 			if (lastNewlineIdx !== -1) {
 				const safeToEmit = combined.slice(0, lastNewlineIdx);
+				const trailingLine = combined.slice(lastNewlineIdx + 1);
+
+				// Line-aware speaker boundary stop:
+				// keep one trailing line held; if it starts with another speaker,
+				// emit everything before the newline and stop before flushing that line.
+				if (this.shouldStopAtKayraHeldLine(trailingLine)) {
+					this.generationBuffer = "";
+					this.sentenceTrailingBuffer = "";
+					this.kayraHoldBuffer = "";
+					// If there's text before the boundary, emit it now and stop on next token.
+					// Otherwise stop immediately.
+					if (safeToEmit.length > 0) {
+						this.kayraSpeakerBoundaryStopPending = true;
+						if (safeToEmit.trim()) this.hasEmittedVisibleText = true;
+						return { type: "text", content: safeToEmit };
+					}
+					this.kayraSpeakerBoundaryStopPending = true;
+					return { type: "done" };
+				}
+
 				this.kayraHoldBuffer = combined.slice(lastNewlineIdx);
 				if (safeToEmit.trim()) this.hasEmittedVisibleText = true;
 				return { type: "text", content: safeToEmit };
@@ -803,6 +892,31 @@ export class NovelaiStreamAdapter implements StreamProvider {
 			type: "text",
 			content: emitText,
 		};
+	}
+
+	private shouldStopAtKayraHeldLine(line: string): boolean {
+		const trimmed = line.trimStart();
+		if (!trimmed || trimmed.startsWith("[System:")) {
+			return false;
+		}
+
+		// Explicit "Name:" line.
+		if (/^[^\n:]{1,80}:\s*/.test(trimmed)) {
+			return true;
+		}
+
+		// Scene-break line.
+		if (trimmed.startsWith("***")) {
+			return true;
+		}
+
+		// Known no-colon speaker line (e.g., "Misuzu Sorry...").
+		if (this.knownSpeakers.size > 0) {
+			const escaped = [...this.knownSpeakers].map(escapeRegExp).join("|");
+			return new RegExp(`^(?:${escaped})(?:\\s|[.!?,:;\\-]|$)`).test(trimmed);
+		}
+
+		return false;
 	}
 
 	/**

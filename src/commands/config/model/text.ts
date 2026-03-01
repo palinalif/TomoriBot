@@ -9,10 +9,12 @@ import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import {
 	loadAvailableModelsForProvider,
+	loadNaiPresetsForModel,
 } from "../../../utils/db/dbRead";
 import {
 	setChannelLlmOverride,
 	setPersonaLlmOverride,
+	applyNaiPreset,
 } from "../../../utils/db/dbWrite";
 import {
 	getCachedTomoriState,
@@ -723,6 +725,34 @@ export async function execute(
 
 		// 11. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+
+		// 11.5. Auto-apply the default NAI preset when switching to Kayra or Erato
+		// (global scope only — channel/persona overrides do not carry preset state)
+		const naiDefaultPresets: Record<string, { name: string; target: "kayra" | "erato" }> = {
+			"kayra-v1":         { name: "Carefree-Kayra", target: "kayra" },
+			"llama-3-erato-v1": { name: "Erato-Shosetsu",  target: "erato" },
+		};
+		const defaultPresetEntry = naiDefaultPresets[selectedModel.llm_codename];
+		if (defaultPresetEntry) {
+			// Load presets and find the default, then apply silently
+			const naiPresets = await loadNaiPresetsForModel(defaultPresetEntry.target);
+			const defaultPreset = naiPresets.find(
+				(p) => p.preset_name === defaultPresetEntry.name,
+			);
+			if (defaultPreset) {
+				await applyNaiPreset(
+					tomoriState.server_id,
+					defaultPreset,
+					selectedModel.llm_codename,
+				);
+				// Cache already invalidated above; applyNaiPreset only writes to DB
+			} else {
+				log.warn(
+					`Default NAI preset "${defaultPresetEntry.name}" not found in DB — ` +
+					"was seed.sql run? Skipping auto-apply.",
+				);
+			}
+		}
 
 		// 12. Success message
 		// Find previous model name

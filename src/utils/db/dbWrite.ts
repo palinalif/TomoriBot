@@ -14,6 +14,7 @@ import {
 	type ReminderRow,
 	randomTriggerSchema,
 	type RandomTriggerRow,
+	type NaiPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import {
@@ -695,9 +696,11 @@ export async function updateTomoriConfig(
 		// Validate the partial data with Zod (Rule #7)
 		const validConfigData = tomoriConfigSchema.partial().parse(configData);
 
-		// Extract field names and values for the SQL query
+		// Extract field names and values for the SQL query.
+		// Filter to only keys that were in the original input — Zod injects defaults for all
+		// schema fields with .default(), which would incorrectly expand the SET clause.
 		const fields = Object.keys(validConfigData).filter(
-			(key) => key !== "tomori_id" && key !== "tomori_config_id",
+			(key) => key !== "tomori_id" && key !== "tomori_config_id" && key in configData,
 		);
 
 		if (fields.length === 0) {
@@ -728,8 +731,8 @@ export async function updateTomoriConfig(
 		const finalPlaceholderIndex = values.length + 1;
 		values.push(serverId);
 
-		// 5. Execute the UPDATE using sql.unsafe() but with proper placeholders and arguments
-		// Bun's sql will correctly handle parameterization for different types (including arrays) here.
+		// 5. Execute the UPDATE using sql.unsafe() with the values array (not spread —
+		// Bun SQL expects a single array argument, not individual arguments).
 		const result = await sql.unsafe(
 			`
 			UPDATE tomori_configs
@@ -737,7 +740,7 @@ export async function updateTomoriConfig(
 			WHERE server_id = $${finalPlaceholderIndex}
 			RETURNING *
 		`,
-			...values, // Pass the values array directly with spreading
+			values, // Pass values as a single array — sql.unsafe(query, valuesArray)
 		);
 
 		if (!result.length) {
@@ -792,6 +795,76 @@ export async function updateTomoriConfig(
 		);
 		return null;
 	}
+}
+
+/**
+ * Converts a NAI-scale temperature back to the Gemini scale used in tomori_configs.
+ * This is the inverse of convertTemperatureToNovelAI() in novelaiService.ts.
+ *
+ * @param naiTemp - Temperature in the NAI model's native scale
+ * @param model - The LLM codename (e.g. "kayra-v1", "llama-3-erato-v1")
+ * @returns Temperature clamped to the Gemini scale [1.0, 2.0]
+ */
+function invertNaiTemperature(naiTemp: number, model: string): number {
+	let geminiTemp: number;
+
+	if (model === "kayra-v1") {
+		// 1. Kayra: simple offset (Gemini 1.5 → Kayra 1.35), inverse is +0.15
+		geminiTemp = naiTemp + 0.15;
+	} else {
+		// 2. Erato / GLM piecewise linear inverse:
+		//    Forward low:  gemini [1.0,1.5] → nai = 0.6 + (gemini-1.0)*0.8
+		//    Inverse low:  nai ≤ 1.0 → gemini = 1.0 + (nai-0.6)/0.8
+		//    Forward high: gemini (1.5,2.0] → nai = 1.0 + (gemini-1.5)*1.2
+		//    Inverse high: nai > 1.0 → gemini = 1.5 + (nai-1.0)/1.2
+		if (naiTemp <= 1.0) {
+			geminiTemp = 1.0 + (naiTemp - 0.6) / 0.8;
+		} else {
+			geminiTemp = 1.5 + (naiTemp - 1.0) / 1.2;
+		}
+	}
+
+	// 3. Clamp to the valid tomori_configs range [1.0, 2.0]
+	return Math.min(2.0, Math.max(1.0, geminiTemp));
+}
+
+/**
+ * Applies a NovelAI sampling preset to a server's configuration.
+ *
+ * Extracts schema-compatible fields (temperature, top_k, top_p, min_p) from
+ * the preset's parameters, converts temperature back to Gemini scale, and
+ * writes them alongside nai_preset_name to tomori_configs. NAI-specific fields
+ * (order, tail_free_sampling, phrase_rep_pen, etc.) remain in the preset row
+ * and are merged at generation time via extractNonSchemaPresetParams().
+ *
+ * @param serverId - Database server_id of the server to update
+ * @param preset - The NaiPresetRow to apply
+ * @param model - LLM codename (e.g. "kayra-v1") for temperature conversion
+ * @returns The updated TomoriConfigRow, or null if the update failed
+ */
+export async function applyNaiPreset(
+	serverId: number,
+	preset: NaiPresetRow,
+	model: string,
+): Promise<TomoriConfigRow | null> {
+	const params = preset.parameters;
+
+	// 1. Extract schema-compatible sampling fields from the preset.
+	//    Absent values fall back to neutral/disabled DB defaults.
+	const naiTemp = typeof params.temperature === "number" ? params.temperature : 1.35;
+	const llm_temperature = invertNaiTemperature(naiTemp, model);
+	const llm_top_k      = typeof params.top_k === "number" ? Math.round(params.top_k) : 0;
+	const llm_top_p      = typeof params.top_p === "number" ? params.top_p : 1.0;
+	const llm_min_p      = typeof params.min_p === "number" ? params.min_p : 0.0;
+
+	// 2. Write to DB, linking the preset name for non-schema field lookup at generation time.
+	return updateTomoriConfig(serverId, {
+		llm_temperature,
+		llm_top_k,
+		llm_top_p,
+		llm_min_p,
+		nai_preset_name: preset.preset_name,
+	});
 }
 
 /**
