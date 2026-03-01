@@ -1665,3 +1665,51 @@ export async function setPersonaLlmOverride(
 		return false;
 	}
 }
+
+/**
+ * Deletes all channel-level LLM overrides for a server.
+ * Called when the server switches providers so stale model references are removed.
+ *
+ * @param serverId - The database server_id
+ * @returns True on success, false on failure
+ */
+export async function clearAllChannelLlmOverridesForServer(
+	serverId: number,
+): Promise<boolean> {
+	try {
+		await sql`
+			DELETE FROM channel_llm_overrides
+			WHERE server_id = ${serverId}
+		`;
+		return true;
+	} catch (error) {
+		log.error(`Error clearing channel LLM overrides for server ${serverId}:`, error);
+		return false;
+	}
+}
+
+/**
+ * Nulls out the llm_id override for every persona belonging to a server.
+ * Called when the server switches providers so stale model references are removed.
+ *
+ * @param serverId - The database server_id
+ * @returns True on success, false on failure
+ */
+export async function clearAllPersonaLlmOverridesForServer(
+	serverId: number,
+): Promise<boolean> {
+	try {
+		// Join via tomoris to scope the update to this server only
+		await sql`
+			UPDATE persona_configs
+			SET llm_id = NULL, updated_at = CURRENT_TIMESTAMP
+			WHERE tomori_id IN (
+				SELECT tomori_id FROM tomoris WHERE server_id = ${serverId}
+			)
+		`;
+		return true;
+	} catch (error) {
+		log.error(`Error clearing persona LLM overrides for server ${serverId}:`, error);
+		return false;
+	}
+}

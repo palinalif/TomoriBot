@@ -163,6 +163,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	private toolCallBuffer = "";
 	private insideThinkBlock = false;
 	private textScanBuffer = "";
+
+	/**
+	 * Speaker names extracted from DIALOGUE_HISTORY for no-colon turn detection.
+	 * Populated in startStream() and used by processVisibleText().
+	 * Contains only user/other-character names — never the bot's own name.
+	 */
+	private knownSpeakers: Set<string> = new Set();
 	private static readonly TOOL_CALL_TAG = "<tool_call>";
 	private static readonly TOOL_CALL_TAG_LENGTH =
 		NovelaiStreamAdapter.TOOL_CALL_TAG.length;
@@ -291,13 +298,19 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				},
 			);
 		} else {
-			// Kayra: Flat text prompt with "Username: message" format
+			// Kayra: Flat text prompt with NAI prompt-convention formatting
+			// Build ATTG block from persona metadata (null if not configured)
+			const attgBlock = this.buildAttgBlock(
+				context.tomoriState,
+				config.model,
+				);
 			const basePrompt = this.assembleNovelAIPrompt(
 				context.contextItems,
 				context.tomoriState.tomori_nickname,
 				{
 					toolDefinitions: this.toolDefinitions,
 					functionInteractionHistory: context.functionInteractionHistory,
+					attgBlock,
 				},
 			);
 			// Append bot name to signal it should generate the bot's response
@@ -370,6 +383,35 @@ export class NovelaiStreamAdapter implements StreamProvider {
 				);
 				parameters.max_length = clampedMaxLength;
 			}
+		}
+
+		// Collect unique user speaker names from DIALOGUE_HISTORY items.
+		// These are stored in this.knownSpeakers so processVisibleText() can use them
+		// to detect turn boundaries even when the model omits the colon (story format).
+		// DIALOGUE_HISTORY is the only tag guaranteeing the "AuthorName: message" prefix.
+		// NOTE: logit_bias_exp is intentionally NOT used here — despite use_string=true,
+		// logit_bias_exp[].sequence is interpreted as Kayra token IDs, not UTF-8 bytes.
+		// Passing byte values as token IDs produces garbage special tokens at generation
+		// start (e.g. <|reserved5|>, <|maskend|>). Turn stopping is handled entirely by
+		// the speaker-detection regex in processVisibleText() instead.
+		if (!isGlm) {
+			const speakerSet = new Set<string>();
+			for (const item of context.contextItems) {
+				if (item.metadataTag !== ContextItemTag.DIALOGUE_HISTORY) continue;
+				if (item.role !== "user") continue;
+				const text = item.parts
+					.filter((p) => p.type === "text")
+					.map((p) => (p as { type: "text"; text: string }).text)
+					.join("\n");
+				const match = /^([^:\n]+):/.exec(text);
+				if (match) speakerSet.add(match[1].trim());
+			}
+			// Exclude the bot's own name — it may legitimately appear on new lines
+			// as it continues its own turn across multiple sentences.
+			speakerSet.delete(context.tomoriState.tomori_nickname);
+			this.knownSpeakers = speakerSet;
+		} else {
+			this.knownSpeakers = new Set();
 		}
 
 		// Build request
@@ -675,11 +717,28 @@ export class NovelaiStreamAdapter implements StreamProvider {
 		// Detect speaker transitions — the model is generating another character's turn.
 		// Both Kayra and GLM 4.6 need this: Kayra has no API stop sequences, and GLM
 		// doesn't emit <|user|> tokens in completions mode (it just starts "Username: ...")
+		//
+		// Three stop conditions checked in order:
+		// 1. Dinkus (\n***): Kayra uses *** as a scene break between narrative zones.
+		//    When the model generates \n*** it considers its turn complete. Only triggered
+		//    after \n so ****-style censored words at response start are not clipped.
+		// 2. Generic colon-form (\nName:): any speaker label with a colon.
+		// 3. Known-name no-colon (\nName<space>): story-format turns where the model
+		//    writes "Name text" instead of "Name: text". Only fires for known speakers
+		//    from this.knownSpeakers to avoid false positives on mid-sentence proper nouns.
+		const dinkusPattern = /\n\*\*\*/;
 		const speakerPattern = /\n+([^\n:]+):\s*/;
-		const match = this.generationBuffer.match(speakerPattern);
+		let speakerMatch =
+			this.generationBuffer.match(dinkusPattern) ??
+			this.generationBuffer.match(speakerPattern);
 
-		if (match) {
-			// Found a speaker transition — stop generation here
+		if (!speakerMatch && this.knownSpeakers.size > 0) {
+			const escaped = [...this.knownSpeakers].map(escapeRegExp).join("|");
+			speakerMatch = this.generationBuffer.match(new RegExp(`\\n+(${escaped})\\s`));
+		}
+
+		if (speakerMatch) {
+			// Found a turn boundary — stop generation here
 			this.generationBuffer = "";
 			this.sentenceTrailingBuffer = "";
 			return {
@@ -2044,88 +2103,234 @@ export class NovelaiStreamAdapter implements StreamProvider {
 	 * Username2: message2
 	 * BotName:
 	 */
+/**
+	 * Builds the ATTG metadata block for Kayra/Erato prompts.
+	 *
+	 * Kayra was trained on stories prefixed with [ Author: X; Title: Y; Tags: Z; Genre: W ] blocks.
+	 * Erato additionally supports a [ S: N ] quality-star block.
+	 * Returns null when no ATTG metadata is configured on the persona.
+	 *
+	 * @param tomoriState - Current persona state with optional ATTG fields
+	 * @param model - NAI model codename (e.g. 'llama-3-erato-v1')
+	 * @returns Formatted ATTG string or null
+	 */
+	private buildAttgBlock(
+		tomoriState: import("@/types/db/schema").TomoriState,
+		model: string,
+	): string | null {
+		// 1. Collect non-empty main ATTG fields into a semicolon-separated block
+		const parts: string[] = [];
+		if (tomoriState.nai_attg_author?.trim())
+			parts.push(`Author: ${tomoriState.nai_attg_author.trim()}`);
+		if (tomoriState.nai_attg_title?.trim())
+			parts.push(`Title: ${tomoriState.nai_attg_title.trim()}`);
+		if (tomoriState.nai_attg_tags?.trim())
+			parts.push(`Tags: ${tomoriState.nai_attg_tags.trim()}`);
+		if (tomoriState.nai_attg_genre?.trim())
+			parts.push(`Genre: ${tomoriState.nai_attg_genre.trim()}`);
+
+		// 2. Build the main block only if at least one field is populated
+		const mainBlock = parts.length > 0 ? `[ ${parts.join("; ")} ]` : "";
+
+		// 3. Stars block is Erato-exclusive — inject only for llama-3-erato-v1
+		const isErato = model === "llama-3-erato-v1";
+		const stars = tomoriState.nai_attg_stars;
+		const starsBlock =
+			isErato && stars != null && stars >= 1 && stars <= 5
+				? `[ S: ${stars} ]`
+				: "";
+
+		// 4. Concatenate and return null when nothing is configured
+		const full = `${mainBlock}${starsBlock}`;
+		return full || null;
+	}
+
+
+/**
+	 * Assemble a Kayra/Erato prompt using NovelAI story-format conventions.
+	 *
+	 * These models were trained on story data that uses specific formatting tokens.
+	 * Matching that format improves coherence and persona consistency.
+	 *
+	 * Output structure:
+	 * ```
+	 * [ Tags: X; Genre: Y ][ S: N ]   ← ATTG block (if configured)
+	 *
+	 * ----
+	 * Characters:
+	 * {botName}
+	 * {SYSTEM_PERSONALITY text}
+	 * ----
+	 * {SYSTEM_INSTRUCTION_BLOCK / SYSTEM_HUMANIZER_RULES / KNOWLEDGE_SERVER_INFO text}
+	 * ----
+	 * Server Notes:
+	 * {KNOWLEDGE_SERVER_MEMORIES text}   ← only if non-empty
+	 * ***
+	 * {CONTEXT_INJECTION text}           ← e.g. [System: users in conversation]  (only if non-empty)
+	 * ***
+	 * [ Style: chat ]
+	 * {sample dialogue turns}            ← reference examples  (only if non-empty)
+	 * ***
+	 * [ Style: chat ]
+	 * {live history turns}
+	 * ```
+	 *
+	 * @param contextItems - Structured context items from context builder
+	 * @param botName - Current bot persona name
+	 * @param options - Tool definitions, function interaction history, and optional ATTG block
+	 * @returns Complete Kayra/Erato prompt string
+	 */
 	private assembleNovelAIPrompt(
 		contextItems: StructuredContextItem[],
-		_botName: string,
+		botName: string,
 		options?: {
 			toolDefinitions?: NormalizedToolDefinition[];
 			functionInteractionHistory?: StreamContext["functionInteractionHistory"];
+			attgBlock?: string | null;
 		},
 	): string {
-		const systemInstructionParts: string[] = [];
-		const dialogueParts: string[] = [];
+		// Separate sample dialogue (reference) from live history so a *** dinkus
+		// can be inserted between them in the assembled prompt.
+		const sampleDialogueParts: string[] = [];
+		const contextParts: string[] = []; // pre-chat injections (e.g. [System: users info])
+		const historyParts: string[] = [];
 		const includeTools = (options?.toolDefinitions?.length ?? 0) > 0;
 		const systemTags = this.getSystemInstructionTags(includeTools);
 
+		// Separate buckets for each section of the formatted prompt
+		let personalityText = "";
+		let memoriesText = "";
+		const instructionParts: string[] = [];
+
+		// Pre-scan: extract the primary user speaker label from DIALOGUE_HISTORY items
+		// so DIALOGUE_SAMPLE user turns can be labeled consistently (e.g. "Ellen: message").
+		let defaultSpeakerLabel = "User";
+		for (const scanItem of contextItems) {
+			if (scanItem.metadataTag === ContextItemTag.DIALOGUE_HISTORY && scanItem.role === "user") {
+				const scanText = scanItem.parts
+					.filter((p) => p.type === "text")
+					.map((p) => (p as { type: "text"; text: string }).text)
+					.join("\n");
+				const labelMatch = scanText.match(/^([^\n:]+):\s/);
+				if (labelMatch) {
+					defaultSpeakerLabel = labelMatch[1];
+					break;
+				}
+			}
+		}
+
 		for (const item of contextItems) {
-			// Extract text content from parts
+			// 1. Extract text content from parts (images/video unsupported in NAI)
 			const textContent = item.parts
 				.filter((p) => p.type === "text")
 				.map((p) => (p as { type: "text"; text: string }).text)
 				.join("\n");
 
-			if (!textContent) {
-				// Skip items with no text (e.g., images/videos - NovelAI doesn't support these)
-				continue;
-			}
+			if (!textContent) continue;
 
-			// Check if this should be system instruction
-			// If item has a metadataTag, it must be in the whitelist to be included
-			// If no metadataTag, include only if role is "system"
-			if (item.metadataTag) {
-				// Has a tag - only include if in whitelist
-				if (systemTags.includes(item.metadataTag)) {
-					systemInstructionParts.push(textContent);
+			// 2. Route each tagged system item to its formatted section
+			if (item.metadataTag && systemTags.includes(item.metadataTag)) {
+				switch (item.metadataTag) {
+					case ContextItemTag.SYSTEM_PERSONALITY:
+						// Characters block: includes bot name as header
+						personalityText = textContent;
+						break;
+					case ContextItemTag.KNOWLEDGE_SERVER_MEMORIES:
+						// Server Notes block: only appended when non-empty
+						memoriesText = textContent;
+						break;
+					default:
+						// All other system tags go into the general instruction block
+						instructionParts.push(textContent);
 				}
-				// Else: skip this item (not in whitelist)
-			} else if (item.role === "system") {
-				// No tag, but role is system - include it
-				systemInstructionParts.push(textContent);
+			} else if (!item.metadataTag && item.role === "system") {
+				// Untagged system items join the general instruction block
+				instructionParts.push(textContent);
 			}
 
-			// Handle dialogue turns
-			// CRITICAL: ALL user/model items go to dialogue (unless in SYSTEM_INSTRUCTION_TAGS)
-			// This handles DIALOGUE_HISTORY, DIALOGUE_SAMPLE, and new tags like KNOWLEDGE_USERS_IN_CONVERSATION
-			if ((item.role === "user" || item.role === "model") && textContent) {
-				// Check if this item is NOT in system instruction tags
-				const isInSystemTags =
-					item.metadataTag &&
-					systemTags.includes(item.metadataTag);
-
-				if (!isInSystemTags) {
-					// Dialogue turns - already formatted with speaker labels from contextBuilder
-					// The context builder formats these as "{username}: {message}"
-					dialogueParts.push(textContent);
+			// 3. Dialogue turns (user/model) that are not system-tagged go to dialogue.
+			//    DIALOGUE_SAMPLE  → sampleDialogueParts (reference material)
+			//    DIALOGUE_HISTORY → historyParts (live conversation turns)
+			//    Untagged items   → contextParts (e.g. [System: users in conversation];
+			//                       placed before samples so context precedes reference)
+			if (
+				(item.role === "user" || item.role === "model") &&
+				!(item.metadataTag && systemTags.includes(item.metadataTag))
+			) {
+				if (item.metadataTag === ContextItemTag.DIALOGUE_SAMPLE) {
+					// Prepend speaker label to user turns that lack one, matching DIALOGUE_HISTORY format
+					if (item.role === "user" && !/^[^\n:]+:\s/.test(textContent)) {
+						sampleDialogueParts.push(`${defaultSpeakerLabel}: ${textContent}`);
+					} else {
+						sampleDialogueParts.push(textContent);
+					}
+				} else if (item.metadataTag === ContextItemTag.DIALOGUE_HISTORY) {
+					historyParts.push(textContent);
+				} else {
+					// Untagged context injections (e.g. [System: users info]) precede samples
+					contextParts.push(textContent);
 				}
 			}
 		}
 
+		// 4. Append tool guide and history into the general instruction block
 		if (includeTools) {
 			const toolGuide = this.buildToolCallingGuide(
 				options?.toolDefinitions ?? [],
 			);
-			if (toolGuide) {
-				systemInstructionParts.push(toolGuide);
-			}
+			if (toolGuide) instructionParts.push(toolGuide);
 
 			const toolHistory = this.buildToolHistoryFlat(
 				options?.functionInteractionHistory ?? [],
 			);
-			if (toolHistory) {
-				systemInstructionParts.push(toolHistory);
-			}
+			if (toolHistory) instructionParts.push(toolHistory);
 		}
 
-		// Combine parts: system instructions first, then dialogue
-		// Use double newlines to separate system instructions, single newlines for dialogue
-		const systemText = systemInstructionParts.join("\n\n");
-		const dialogueText = dialogueParts.join("\n");
+		// 5. Assemble formatted blocks using NAI story-format conventions.
+		//    Each section is preceded by a '----' info divider.
+		const systemBlocks: string[] = [];
 
-		// Combine with double newline between system and dialogue sections
-		const parts = [systemText, dialogueText].filter((part) => part?.trim());
-		const prompt = parts.join("\n\n");
+		// 5a. Characters block (personality + bot name header)
+		if (personalityText) {
+			systemBlocks.push(`----\nCharacters:\n${botName}\n${personalityText}`);
+		}
 
-		return prompt;
+		// 5b. General instruction block (may span multiple sub-sections)
+		const instructionText = instructionParts.join("\n----\n");
+		if (instructionText) {
+			systemBlocks.push(`----\n${instructionText}`);
+		}
+
+		// 5c. Server Notes block (only when there are memories to show)
+		if (memoriesText) {
+			systemBlocks.push(`----\nServer Notes:\n${memoriesText}`);
+		}
+
+		// 6. Build the full system header: ATTG block + formatted sections
+		const attgPrefix = options?.attgBlock ? `${options.attgBlock}\n` : "";
+		const systemHeader = systemBlocks.length > 0
+			? `${attgPrefix}${systemBlocks.join("\n")}`
+			: attgPrefix.trimEnd();
+
+		// 7. Combine: system header + context + [ Style: chat ] + samples + *** + [ Style: chat ] + history.
+		//    Context injections (e.g. [System: users in conversation]) sit with the system header
+		//    so the model sees who's present before reading any dialogue.
+		//    [ Style: chat ] precedes BOTH the sample dialogues and the live history so Kayra/Erato
+		//    recognises each dialogue block independently as chat-format content.
+		const contextText = contextParts.join("\n");
+		const sampleText = sampleDialogueParts.join("\n");
+		const historyText = historyParts.join("\n");
+
+		// 7a. System section: ATTG + character/instruction blocks + context injections (pre-dialogue).
+		const systemSection = [systemHeader, contextText].filter((p) => p?.trim()).join("\n***\n");
+
+		// 7b. Each dialogue block gets its own [ Style: chat ] tag so the model treats both
+		//     reference samples and live history as chat-format exchanges.
+		const styledSampleText = sampleText.trim() ? `[ Style: chat ]\n${sampleText}` : "";
+		const styledHistoryText = historyText.trim() ? `[ Style: chat ]\n${historyText}` : "";
+
+		const parts = [systemSection, styledSampleText, styledHistoryText].filter((p) => p?.trim());
+		return parts.join("\n***\n");
 	}
 
 	/**

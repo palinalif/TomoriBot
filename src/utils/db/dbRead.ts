@@ -2095,3 +2095,45 @@ export async function getChannelLlmOverride(
 		return null;
 	}
 }
+
+
+/**
+ * Fetches all channel-level LLM overrides for a server, paired with their resolved LlmRow.
+ * Used by the status command to display per-channel model overrides.
+ *
+ * @param serverId - Database server ID (integer)
+ * @returns Array of objects containing channelDiscId and the resolved LlmRow
+ */
+export async function getAllChannelLlmOverridesForServer(
+	serverId: number,
+): Promise<{ channelDiscId: string; llm: LlmRow }[]> {
+	try {
+		// 1. Fetch all override rows for this server
+		const overrideRows = await sql`
+			SELECT channel_disc_id, llm_id
+			FROM channel_llm_overrides
+			WHERE server_id = ${serverId}
+			ORDER BY channel_disc_id
+		`;
+		if (!overrideRows.length) return [];
+
+		// 2. Resolve each override to a full LlmRow (cache-first)
+		const results: { channelDiscId: string; llm: LlmRow }[] = [];
+		for (const row of overrideRows) {
+			const llmId = row.llm_id as number;
+			const cached = getCachedLLM(llmId);
+			if (cached) {
+				results.push({ channelDiscId: row.channel_disc_id as string, llm: cached as LlmRow });
+				continue;
+			}
+			const llmRows = await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
+			if (llmRows.length) {
+				results.push({ channelDiscId: row.channel_disc_id as string, llm: llmRows[0] as LlmRow });
+			}
+		}
+		return results;
+	} catch (error) {
+		log.error(`Error fetching all channel LLM overrides for server ${serverId}:`, error);
+		return [];
+	}
+}

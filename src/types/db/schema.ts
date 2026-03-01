@@ -70,6 +70,11 @@ export const tomoriSchema = z.object({
 	webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Discord CDN URL for alter persona avatars from import embed
 	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
 	nai_tags: z.array(z.string()).default([]), // Imageboard-style character tags for NovelAI self-portrait generation
+	nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
+	nai_attg_title: z.string().nullable().optional(),  // Added March 2026 - ATTG: Story title
+	nai_attg_tags: z.string().nullable().optional(),   // Added March 2026 - ATTG: Genre/style tags
+	nai_attg_genre: z.string().nullable().optional(),  // Added March 2026 - ATTG: Genre categories
+	nai_attg_stars: z.number().int().min(1).max(5).nullable().optional(), // Added March 2026 - ATTG: Quality stars (Erato only)
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });

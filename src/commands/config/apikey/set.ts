@@ -9,6 +9,11 @@ import {
 	loadUniqueProviders,
 	loadDefaultModelForProvider,
 } from "../../../utils/db/dbRead";
+import {
+	clearAllChannelLlmOverridesForServer,
+	clearAllPersonaLlmOverridesForServer,
+} from "../../../utils/db/dbWrite";
+import { invalidateAllChannelLlmCacheForServer } from "../../../utils/cache/channelLlmCache";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -531,6 +536,19 @@ export async function execute(
 
 		// 14. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(serverId);
+
+		// 14.1. On provider change, clear scoped model overrides that reference
+		// models from the old provider — both channel and persona overrides.
+		// Non-critical: log failures but do not abort the key-set flow.
+		if (currentProvider !== newProvider) {
+			invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
+			const channelCleared = await clearAllChannelLlmOverridesForServer(tomoriState.server_id);
+			const personaCleared = await clearAllPersonaLlmOverridesForServer(tomoriState.server_id);
+			log.info(
+				`Provider change ${currentProvider}→${newProvider}: ` +
+				`channel overrides cleared=${channelCleared}, persona overrides cleared=${personaCleared}`,
+			);
+		}
 
 		// 14.3. NovelAI auto-disable: when switching TO NovelAI, flip emoji and sticker
 		// usage off. Both default to true on every config row, but NovelAI's token budget

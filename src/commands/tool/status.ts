@@ -21,9 +21,10 @@ import {
 	loadPersonalMemoriesForUserLineage,
 	loadAllPersonasForServer,
 	getServerRandomTriggers,
+	getAllChannelLlmOverridesForServer,
 } from "../../utils/db/dbRead";
 import { getAllWhitelistChannels } from "../../utils/db/channelWhitelist";
-import type { UserRow, ChannelWhitelistRow, RandomTriggerRow } from "../../types/db/schema";
+import type { UserRow, ChannelWhitelistRow, RandomTriggerRow, LlmRow } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
 import { CooldownType, PrivacyLevel } from "../../types/db/schema";
 import { formatBooleanLocalized } from "@/utils/text/stringHelper";
@@ -316,6 +317,35 @@ async function formatRandomTriggers(
 }
 
 /**
+ * Formats the list of channel-level LLM overrides as a numbered list.
+ * Each entry shows channel mention and the model codename + provider.
+ * @param client - Discord client for channel mentions
+ * @param overrides - Array of channel override objects from the database
+ * @param locale - User locale
+ * @returns Formatted channel LLM override list string, or localized "None" if empty
+ */
+async function formatChannelLlmOverrides(
+	client: Client,
+	overrides: { channelDiscId: string; llm: LlmRow }[],
+	locale: string,
+): Promise<string> {
+	if (overrides.length === 0) {
+		return localizer(locale, "commands.choices.none");
+	}
+
+	const lines = await Promise.all(
+		overrides.map(async (entry, index) => {
+			// 1. Resolve channel mention
+			const mention = await resolveChannelMention(client, entry.channelDiscId, locale);
+			// 2. Format: "N. #channel → model (provider)"
+			return `${index + 1}. ${mention} → \`${entry.llm.llm_codename}\` (${entry.llm.llm_provider})`;
+		}),
+	);
+
+	return lines.join("\n");
+}
+
+/**
  * Configures the 'status' subcommand with scope options.
  */
 export const configureSubcommand = (
@@ -476,12 +506,14 @@ export async function execute(
 					whitelistChannels,
 					randomTriggers,
 					allPersonas,
+					channelLlmOverrides,
 				] = await Promise.all([
 					getBraveApiKeyStatus(tomoriState.server_id),
 					getBlacklistedMemberIds(tomoriState.server_id),
 					getAllWhitelistChannels(tomoriState.server_id),
 					getServerRandomTriggers(tomoriState.server_id),
 					loadAllPersonasForServer(serverDiscId),
+					getAllChannelLlmOverridesForServer(tomoriState.server_id),
 				]);
 
 				// 3. Build a persona name map for random trigger display (tomori_id -> nickname)
@@ -525,17 +557,19 @@ export async function execute(
 									{ current: blacklistedCount },
 								);
 
-				// 7. Format channel lists (auto-chat, RP, whitelist, random triggers)
+				// 7. Format channel lists (auto-chat, RP, whitelist, random triggers, channel model overrides)
 				const [
 					autoChannelsValue,
 					rpChannelsValue,
 					whitelistValue,
 					randomTriggersValue,
+					channelLlmOverridesValue,
 				] = await Promise.all([
 					formatChannelList(client, config.autoch_disc_ids, locale),
 					formatChannelList(client, config.rp_channel_ids, locale),
 					formatWhitelistEntries(client, whitelistChannels, locale),
 					formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
+					formatChannelLlmOverrides(client, channelLlmOverrides, locale),
 				]);
 
 				// 8. Format system prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
@@ -667,6 +701,11 @@ export async function execute(
 						{
 							nameKey: "commands.tool.status.field_random_triggers",
 							value: randomTriggersValue,
+							inline: false,
+						},
+						{
+							nameKey: "commands.tool.status.field_channel_llm_overrides",
+							value: channelLlmOverridesValue,
 							inline: false,
 						},
 					],
@@ -960,7 +999,34 @@ export async function execute(
 						? selectedPersona.nai_tags.join(", ")
 						: localizer(locale, "commands.choices.none");
 
-				// 10. Format persona prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
+				// 10. Build persona model override value
+				//     Shows the persona-specific LLM if set, otherwise "Server default"
+				const personaModelValue = selectedPersona.persona_llm
+					? `\`${selectedPersona.persona_llm.llm_codename}\` (${selectedPersona.persona_llm.llm_provider})`
+					: localizer(locale, "commands.tool.status.persona_model_server_default");
+
+				// 11. Format ATTG metadata block
+				//     Each field is shown individually; null fields display as "None"
+				const noneLabel = localizer(locale, "commands.choices.none");
+				const attgAuthor = selectedPersona.nai_attg_author ?? noneLabel;
+				const attgTitle = selectedPersona.nai_attg_title ?? noneLabel;
+				const attgTags = selectedPersona.nai_attg_tags ?? noneLabel;
+				const attgGenre = selectedPersona.nai_attg_genre ?? noneLabel;
+				const attgStars =
+					selectedPersona.nai_attg_stars != null
+						? `${selectedPersona.nai_attg_stars}★`
+						: noneLabel;
+				const attgAllUnset =
+					!selectedPersona.nai_attg_author &&
+					!selectedPersona.nai_attg_title &&
+					!selectedPersona.nai_attg_tags &&
+					!selectedPersona.nai_attg_genre &&
+					selectedPersona.nai_attg_stars == null;
+				const attgValue = attgAllUnset
+					? localizer(locale, "commands.tool.status.nai_attg_not_set")
+					: `Author: ${attgAuthor}\nTitle: ${attgTitle}\nTags: ${attgTags}\nGenre: ${attgGenre}\nStars: ${attgStars}`;
+
+				// 13. Format persona prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
 				const rawPersonaPrompt = selectedPersona.persona_prompt ?? null;
 				const personaPromptValue = rawPersonaPrompt
 					? `\`\`\`\n${
@@ -998,6 +1064,11 @@ export async function execute(
 						{
 							nameKey: "commands.tool.status.field_persona_triggers",
 							value: personaTriggersValue,
+							inline: true,
+						},
+						{
+							nameKey: "commands.tool.status.field_persona_model",
+							value: personaModelValue,
 							inline: true,
 						},
 					],
@@ -1093,10 +1164,15 @@ export async function execute(
 							value: naiTagsValue,
 							inline: false,
 						},
+						{
+							nameKey: "commands.tool.status.field_nai_attg",
+							value: attgValue,
+							inline: false,
+						},
 					],
 				};
 
-				// 11. Display paginated persona status from the preserved ButtonInteraction
+				// 14. Display paginated persona status from the preserved ButtonInteraction
 				await replyPaginatedStatusPages(
 					personaInteraction,
 					locale,

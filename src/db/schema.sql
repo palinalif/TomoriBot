@@ -1417,3 +1417,16 @@ DROP TRIGGER IF EXISTS update_channel_llm_overrides_timestamp ON channel_llm_ove
 CREATE TRIGGER update_channel_llm_overrides_timestamp
     BEFORE UPDATE ON channel_llm_overrides
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+
+-- ============================================================================
+-- NOVELAI ATTG METADATA (March 2026)
+-- Per-persona Author/Title/Tags/Genre/Stars for Kayra/Erato prompt formatting.
+-- Stars are Erato-only (injected only when model = llama-3-erato-v1).
+-- ============================================================================
+
+SELECT add_column_if_not_exists('tomoris', 'nai_attg_author', 'TEXT', NULL);
+SELECT add_column_if_not_exists('tomoris', 'nai_attg_title',  'TEXT', NULL);
+SELECT add_column_if_not_exists('tomoris', 'nai_attg_tags',   'TEXT', NULL);
+SELECT add_column_if_not_exists('tomoris', 'nai_attg_genre',  'TEXT', NULL);
+SELECT add_column_if_not_exists('tomoris', 'nai_attg_stars',  'SMALLINT', NULL);
