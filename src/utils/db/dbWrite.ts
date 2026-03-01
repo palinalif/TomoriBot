@@ -1608,3 +1608,60 @@ export async function rescheduleRandomTrigger(
 		return false;
 	}
 }
+
+/**
+ * UPSERTs a channel-level LLM model override.
+ * After calling, invalidate channelLlmCache for this channel.
+ *
+ * @param serverId - Database server ID (integer)
+ * @param channelDiscId - Discord channel ID (snowflake string)
+ * @param llmId - The llm_id to set as the override
+ * @returns True on success, false on failure
+ */
+export async function setChannelLlmOverride(
+	serverId: number,
+	channelDiscId: string,
+	llmId: number,
+): Promise<boolean> {
+	try {
+		// UPSERT — insert or update the override for this (server, channel) pair
+		await sql`
+			INSERT INTO channel_llm_overrides (server_id, channel_disc_id, llm_id)
+			VALUES (${serverId}, ${channelDiscId}, ${llmId})
+			ON CONFLICT (server_id, channel_disc_id)
+			DO UPDATE SET llm_id = EXCLUDED.llm_id, updated_at = CURRENT_TIMESTAMP
+		`;
+		return true;
+	} catch (error) {
+		log.error(`Error setting channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
+		return false;
+	}
+}
+
+/**
+ * Sets a persona-specific LLM model override in persona_configs.
+ * Creates the persona_configs row if it does not yet exist.
+ * After calling, invalidate TomoriState cache for the server.
+ *
+ * @param tomoriId - The persona's tomori_id
+ * @param llmId - The llm_id to set as the override, or null to clear it
+ * @returns True on success, false on failure
+ */
+export async function setPersonaLlmOverride(
+	tomoriId: number,
+	llmId: number | null,
+): Promise<boolean> {
+	try {
+		// UPSERT — create or update the persona_configs row
+		await sql`
+			INSERT INTO persona_configs (tomori_id, llm_id)
+			VALUES (${tomoriId}, ${llmId})
+			ON CONFLICT (tomori_id)
+			DO UPDATE SET llm_id = EXCLUDED.llm_id, updated_at = CURRENT_TIMESTAMP
+		`;
+		return true;
+	} catch (error) {
+		log.error(`Error setting persona LLM override for tomori_id ${tomoriId}:`, error);
+		return false;
+	}
+}

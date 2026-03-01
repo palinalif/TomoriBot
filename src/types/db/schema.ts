@@ -182,10 +182,24 @@ export const personaConfigSchema = z.object({
 	tomori_id: z.number(),
 	trigger_words: z.array(z.string()).default([]),
 	persona_prompt: z.string().nullable().optional(),
+	llm_id: z.number().int().nullable().optional(), // Added March 2026 - Persona-specific LLM model override
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
 export type PersonaConfigRow = z.infer<typeof personaConfigSchema>;
+
+/**
+ * Schema for per-channel LLM model overrides.
+ * When set, overrides the global llm_id for all personas in that channel.
+ */
+export const channelLlmOverrideSchema = z.object({
+	server_id: z.number(),
+	channel_disc_id: z.string(),
+	llm_id: z.number(),
+	created_at: z.date().optional(),
+	updated_at: z.date().optional(),
+});
+export type ChannelLlmOverrideRow = z.infer<typeof channelLlmOverrideSchema>;
 
 export const tomoriPresetSchema = z.object({
 	tomori_preset_id: z.number(),
@@ -538,6 +552,7 @@ export type TomoriState = TomoriRow & {
 	persona_prompt: string | null; // Optional persona-specific prompt appended after system prompt
 	server_memories: string[]; // Changed to string array to match implementation
 	rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
+	persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
 };
 
 /**
@@ -550,6 +565,7 @@ export const tomoriStateSchema = tomoriSchema.extend({
 	persona_prompt: z.string().nullable().default(null),
 	server_memories: z.array(z.string()).default([]), // Changed to array of strings
 	rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
+	persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
 });
 
 /**

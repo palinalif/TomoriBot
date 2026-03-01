@@ -1,16 +1,25 @@
 import type {
 	ChatInputCommandInteraction,
+	ButtonInteraction,
 	Client,
 	SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 // Import sql
 import { sql } from "@/utils/db/client";
-import { loadAvailableModelsForProvider } from "../../../utils/db/dbRead";
+import {
+	loadAvailableModelsForProvider,
+} from "../../../utils/db/dbRead";
+import {
+	setChannelLlmOverride,
+	setPersonaLlmOverride,
+} from "../../../utils/db/dbWrite";
 import {
 	getCachedTomoriState,
+	getCachedAllPersonas,
 	invalidateTomoriStateCache,
 } from "../../../utils/cache/tomoriStateCache";
+import { setChannelLlmCache } from "../../../utils/cache/channelLlmCache";
 // Remove updateTomoriConfig import
 // import { updateTomoriConfig } from "../../../utils/db/dbWrite";
 import { localizer } from "../../../utils/text/localizer";
@@ -19,6 +28,7 @@ import {
 	replyInfoEmbed,
 	promptWithPaginatedModal,
 	safeSelectOptionText,
+	replyPaginatedPersonaChoicesV2,
 } from "../../../utils/discord/interactionHelper";
 // Import TomoriConfigRow for validation and LlmRow for type hints
 import {
@@ -84,7 +94,29 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("text")
-		.setDescription(localizer("en-US", "commands.config.model.text.description"));
+		.setDescription(localizer("en-US", "commands.config.model.text.description"))
+		.addStringOption((option) =>
+			option
+				.setName("scope")
+				.setDescription(
+					localizer("en-US", "commands.config.model.text.scope_description"),
+				)
+				.setRequired(false)
+				.addChoices(
+					{
+						name: localizer("en-US", "commands.config.model.text.scope_global"),
+						value: "global",
+					},
+					{
+						name: localizer("en-US", "commands.config.model.text.scope_channel"),
+						value: "channel",
+					},
+					{
+						name: localizer("en-US", "commands.config.model.text.scope_persona"),
+						value: "persona",
+					},
+				),
+		);
 
 /**
  * Changes Tomori's LLM model (Gemini)
@@ -240,7 +272,223 @@ export async function execute(
 		}
 	}
 
-	// 4. Load available models for the current provider from the database for modal options
+	// 4. Determine scope (global / channel / persona) — defaults to global
+	const scope = interaction.options.getString("scope") ?? "global";
+
+	// 4a. Channel-scope: show model picker, then write channel override
+	if (scope === "channel") {
+		const channelAvailableModels = await loadAvailableModelsForProvider(currentProvider);
+		if (!channelAvailableModels || channelAvailableModels.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.model.text.no_models_title",
+				descriptionKey: "commands.config.model.text.no_models_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+		const channelModelOptions = channelAvailableModels.map((m) => ({
+			label: safeSelectOptionText(m.llm_codename),
+			value: safeSelectOptionText(m.llm_codename),
+			description: safeSelectOptionText(
+				getLocalizedDescription(m, userData.language_pref),
+			),
+		}));
+		const channelModalResult = await promptWithPaginatedModal(
+			interaction,
+			locale,
+			{
+				modalCustomId: "config_model_text_channel_modal",
+				modalTitleKey: "commands.config.model.text.modal_title",
+				components: [
+					{
+						customId: MODEL_SELECT_ID,
+						labelKey: "commands.config.model.text.select_label",
+						descriptionKey: "commands.config.model.text.select_description",
+						placeholder: "commands.config.model.text.select_placeholder",
+						required: true,
+						options: channelModelOptions,
+					},
+				],
+			},
+		);
+		if (channelModalResult.outcome !== "submit") return;
+		// biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
+		const channelModalInteraction = channelModalResult.interaction!;
+		// biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
+		const selectedChannelCodename = channelModalResult.values![MODEL_SELECT_ID];
+		const selectedChannelModel =
+			channelAvailableModels.find(
+				(m) => m.llm_codename === selectedChannelCodename,
+			) ?? null;
+		if (!selectedChannelModel?.llm_id) {
+			await replyInfoEmbed(channelModalInteraction, locale, {
+				titleKey: "commands.config.model.text.invalid_model_title",
+				descriptionKey: "commands.config.model.text.invalid_model_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		// Write the channel override to DB
+		const channelWriteOk = await setChannelLlmOverride(
+			tomoriState.server_id,
+			interaction.channelId,
+			selectedChannelModel.llm_id,
+		);
+		if (!channelWriteOk) {
+			await replyInfoEmbed(channelModalInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		// Update cache immediately so next message uses the new model
+		setChannelLlmCache(
+			tomoriState.server_id,
+			interaction.channelId,
+			selectedChannelModel,
+		);
+		await replyInfoEmbed(channelModalInteraction, locale, {
+			titleKey: "commands.config.model.text.success_title",
+			descriptionKey: "commands.config.model.text.scope_set_channel_success",
+			descriptionVars: {
+				channel: interaction.channel?.toString() ?? interaction.channelId,
+				model: selectedChannelModel.llm_codename,
+			},
+			color: ColorCode.SUCCESS,
+		});
+		return;
+	}
+
+	// 4b. Persona-scope: persona picker → model picker → write persona override
+	if (scope === "persona") {
+		const allPersonas = await getCachedAllPersonas(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		if (!allPersonas.length) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+		// Show persona picker — preserveSelectedInteraction returns unacknowledged ButtonInteraction
+		const personaSelection = await replyPaginatedPersonaChoicesV2(
+			interaction,
+			locale,
+			{
+				personas: allPersonas,
+				color: ColorCode.INFO,
+				preserveSelectedInteraction: true,
+				onSelect: async () => {},
+			},
+		);
+		if (
+			!personaSelection.success ||
+			personaSelection.selectedIndex === undefined ||
+			!personaSelection.interaction
+		) {
+			return;
+		}
+		const personaButtonInteraction: ButtonInteraction =
+			personaSelection.interaction;
+		const selectedPersona =
+			allPersonas[personaSelection.selectedIndex] ?? null;
+		if (!selectedPersona?.tomori_id) {
+			await replyInfoEmbed(personaButtonInteraction, locale, {
+				titleKey: "general.errors.invalid_option_title",
+				descriptionKey: "general.errors.invalid_option_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		// Show model picker (ButtonInteraction → modal is valid in Discord)
+		const personaAvailableModels =
+			await loadAvailableModelsForProvider(currentProvider);
+		if (!personaAvailableModels || personaAvailableModels.length === 0) {
+			await replyInfoEmbed(personaButtonInteraction, locale, {
+				titleKey: "commands.config.model.text.no_models_title",
+				descriptionKey: "commands.config.model.text.no_models_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		const personaModelOptions = personaAvailableModels.map((m) => ({
+			label: safeSelectOptionText(m.llm_codename),
+			value: safeSelectOptionText(m.llm_codename),
+			description: safeSelectOptionText(
+				getLocalizedDescription(m, userData.language_pref),
+			),
+		}));
+		const personaModalResult = await promptWithPaginatedModal(
+			personaButtonInteraction,
+			locale,
+			{
+				modalCustomId: "config_model_text_persona_modal",
+				modalTitleKey: "commands.config.model.text.modal_title",
+				components: [
+					{
+						customId: MODEL_SELECT_ID,
+						labelKey: "commands.config.model.text.select_label",
+						descriptionKey: "commands.config.model.text.select_description",
+						placeholder: "commands.config.model.text.select_placeholder",
+						required: true,
+						options: personaModelOptions,
+					},
+				],
+			},
+		);
+		if (personaModalResult.outcome !== "submit") return;
+		// biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
+		const personaModalInteraction = personaModalResult.interaction!;
+		// biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
+		const selectedPersonaCodename = personaModalResult.values![MODEL_SELECT_ID];
+		const selectedPersonaModel =
+			personaAvailableModels.find(
+				(m) => m.llm_codename === selectedPersonaCodename,
+			) ?? null;
+		if (!selectedPersonaModel?.llm_id) {
+			await replyInfoEmbed(personaModalInteraction, locale, {
+				titleKey: "commands.config.model.text.invalid_model_title",
+				descriptionKey: "commands.config.model.text.invalid_model_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		// Write the persona override to DB
+		const personaWriteOk = await setPersonaLlmOverride(
+			selectedPersona.tomori_id,
+			selectedPersonaModel.llm_id,
+		);
+		if (!personaWriteOk) {
+			await replyInfoEmbed(personaModalInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+		// Invalidate server cache so next loadAllPersonasForServer picks up persona_llm
+		invalidateTomoriStateCache(
+			interaction.guild?.id ?? interaction.user.id,
+		);
+		await replyInfoEmbed(personaModalInteraction, locale, {
+			titleKey: "commands.config.model.text.success_title",
+			descriptionKey: "commands.config.model.text.scope_set_persona_success",
+			descriptionVars: {
+				persona: selectedPersona.tomori_nickname,
+				model: selectedPersonaModel.llm_codename,
+			},
+			color: ColorCode.SUCCESS,
+		});
+		return;
+	}
+
+	// 4c. Global scope (default) — existing behavior unchanged
+	// Load available models for the current provider from the database for modal options
 	// Provider name is already normalized to lowercase above
 	const availableModels = await loadAvailableModelsForProvider(currentProvider);
 	if (!availableModels || availableModels.length === 0) {

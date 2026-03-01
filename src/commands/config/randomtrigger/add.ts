@@ -73,7 +73,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.randomtrigger.add.channel_option",
+						"commands.config.randomtrigger.add.channel_description",
 					),
 				)
 				.addChannelTypes(ChannelType.GuildText)
@@ -85,7 +85,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.randomtrigger.add.timer_hours_option",
+						"commands.config.randomtrigger.add.timer_hours_description",
 					),
 				)
 				.setMinValue(1)
@@ -97,7 +97,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.randomtrigger.add.chance_option",
+						"commands.config.randomtrigger.add.chance_description",
 					),
 				)
 				.setMinValue(1)
@@ -110,7 +110,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.randomtrigger.add.random_offset_range_option",
+						"commands.config.randomtrigger.add.random_offset_range_description",
 					),
 				)
 				.setMinValue(0)
@@ -122,7 +122,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.randomtrigger.add.silence_threshold_option",
+						"commands.config.randomtrigger.add.silence_threshold_description",
 					),
 				)
 				.setMinValue(1)

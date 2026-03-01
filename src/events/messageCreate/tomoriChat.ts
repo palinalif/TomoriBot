@@ -33,6 +33,7 @@ import {
 	getCachedBlacklistStatus,
 } from "../../utils/cache/userCache";
 import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
+import { getCachedChannelLlm } from "../../utils/cache/channelLlmCache";
 import { storeShortTermMemory } from "../../utils/cache/shortTermMemoryCache";
 import { incrementTomoriCounter, registerUser } from "@/utils/db/dbWrite";
 import {
@@ -3816,6 +3817,21 @@ export default async function tomoriChat(
 				// Assign currentPersona to tomoriState for this iteration
 				// This allows all existing code to work without modification
 				tomoriState = currentPersona;
+
+				// Resolve effective LLM by priority chain:
+				//   1. persona_llm  — persona-specific override (set via /config model text scope:persona)
+				//   2. channel LLM  — channel-level override (set via /config model text scope:channel)
+				//   3. global llm   — server-wide default in tomori_configs
+				const channelLlmOverride = await getCachedChannelLlm(
+					currentPersona.server_id,
+					channel.id,
+				);
+				const effectiveLlm =
+					currentPersona.persona_llm ?? channelLlmOverride ?? currentPersona.llm;
+				if (effectiveLlm !== currentPersona.llm) {
+					// Shallow-copy so the cached TomoriState is never mutated
+					tomoriState = { ...tomoriState, llm: effectiveLlm };
+				}
 
 				// Send typing indicator for each persona response
 				if (personaIndex > 0) {

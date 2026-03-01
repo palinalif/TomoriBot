@@ -38,6 +38,7 @@ CLAUDE
 tmpclaude*
 *PLAN*.md
 *HANDOVER*.md
+*REFERENCES*.md
 crash*/
 .prompts/
 ACTIVECONTEXT.md

@@ -2030,6 +2030,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 					// Custom provider reconfiguration messages
 					custom_updated_title: `Custom Model Capabilities Updated`,
 					custom_updated_description: `Your custom model has been reconfigured.\n\n**Model Name:** \`{model_name}\`\n**Enabled Capabilities:** {capabilities}`,
+					// Scope option labels and success messages (scope = global | channel | persona)
+					scope_description: `Set the scope for this model change (global, channel, or persona).`,
+					scope_global: `Global (server default)`,
+					scope_channel: `Channel (this channel only)`,
+					scope_persona: `Persona (specific persona only)`,
+					scope_set_channel_success: `Model for {channel} set to **{model}**`,
+					scope_set_persona_success: `Model for **{persona}** set to **{model}**`,
 				},
 				embedding: {
 					description: `Change the embedding model used for document retrieval.`,
@@ -2328,11 +2335,11 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 			randomtrigger: {
 				add: {
 					description: `Add a probabilistic timer-based auto-trigger for a channel.`,
-					channel_option: `The channel where spontaneous messages will be sent.`,
-					timer_hours_option: `How often to roll the dice (in hours, minimum 1).`,
-					random_offset_range_option: `Optional +/- random offset range in hours for each timer reset (minimum 0).`,
-					chance_option: `Probability of firing each roll (1–100%).`,
-					silence_threshold_option: `Skip if channel had activity within this many hours (optional).`,
+					channel_description: `The channel where spontaneous messages will be sent.`,
+					timer_hours_description: `How often to roll the dice (in hours, minimum 1).`,
+					random_offset_range_description: `Optional +/- random offset range in hours for each timer reset (minimum 0).`,
+					chance_description: `Probability of firing each roll (1–100%).`,
+					silence_threshold_description: `Skip if channel had activity within this many hours (optional).`,
 					modal_title: `Configure Random Trigger`,
 					persona_select_label: `Persona`,
 					persona_select_description: `Which persona will speak. "Random" picks one each time.`,

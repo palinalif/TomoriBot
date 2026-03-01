@@ -377,6 +377,21 @@ export async function loadAllPersonasForServer(
 					}
 
 					const personaConfig = personaConfigMap.get(tomoriId);
+
+					// Resolve persona-specific LLM override if set (cache first, DB fallback)
+					let personaLlm: LlmRow | undefined ;
+					if (personaConfig?.llm_id) {
+						personaLlm = getCachedLLM(personaConfig.llm_id) as LlmRow | undefined;
+						if (!personaLlm) {
+							const personaLlmRows = await sql`
+								SELECT * FROM llms WHERE llm_id = ${personaConfig.llm_id} LIMIT 1
+							`;
+							if (personaLlmRows.length) {
+								personaLlm = personaLlmRows[0] as LlmRow;
+							}
+						}
+					}
+
 					const fallbackTriggerWords =
 						tomoriRow.is_alter === true
 							? (tomoriRow.alter_triggers ?? [])
@@ -402,6 +417,7 @@ export async function loadAllPersonasForServer(
 						persona_prompt: personaConfig?.persona_prompt ?? null,
 						server_memories: serverMemories,
 						rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
+						persona_llm: personaLlm, // undefined if no override set
 					};
 
 					const parsedState = tomoriStateSchema.safeParse(combinedState);
@@ -2037,6 +2053,45 @@ export async function getRandomTriggerByPersonaAndChannel(
 			`Error fetching random trigger for server ${serverId}, channel ${channelDiscId}, persona ${tomoriId}:`,
 			error,
 		);
+		return null;
+	}
+}
+
+/**
+ * Fetches the channel-level LLM override for a specific server channel.
+ * Returns null if no override is configured.
+ *
+ * @param serverId - Database server ID (integer)
+ * @param channelDiscId - Discord channel ID (snowflake string)
+ * @returns Resolved LlmRow for the override, or null if not set
+ */
+export async function getChannelLlmOverride(
+	serverId: number,
+	channelDiscId: string,
+): Promise<LlmRow | null> {
+	try {
+		// 1. Query channel override row
+		const overrideRows = await sql`
+			SELECT llm_id
+			FROM channel_llm_overrides
+			WHERE server_id = ${serverId}
+			  AND channel_disc_id = ${channelDiscId}
+			LIMIT 1
+		`;
+		if (!overrideRows.length) return null;
+
+		const llmId = overrideRows[0].llm_id as number;
+
+		// 2. Resolve LlmRow — check cache first, then fall back to DB
+		const cached = getCachedLLM(llmId);
+		if (cached) return cached as LlmRow;
+
+		const llmRows = await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
+		if (!llmRows.length) return null;
+
+		return llmRows[0] as LlmRow;
+	} catch (error) {
+		log.error(`Error fetching channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
 		return null;
 	}
 }

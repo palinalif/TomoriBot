@@ -1388,3 +1388,32 @@ DROP TRIGGER IF EXISTS update_random_triggers_timestamp ON random_triggers;
 CREATE TRIGGER update_random_triggers_timestamp
   BEFORE UPDATE ON random_triggers
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================================
+-- SCOPED MODEL OVERRIDES (March 2026)
+-- Allows per-channel and per-persona LLM model overrides.
+-- Priority chain: persona_llm > channel_llm_override > global llm.
+-- ============================================================================
+
+-- Add optional persona-specific LLM override column to persona_configs
+ALTER TABLE persona_configs ADD COLUMN IF NOT EXISTS llm_id INT NULL REFERENCES llms(llm_id) ON DELETE SET NULL;
+
+-- Channel-level LLM override table
+-- When set, overrides the global llm_id for all personas in that channel.
+CREATE TABLE IF NOT EXISTS channel_llm_overrides (
+    server_id INT NOT NULL REFERENCES servers(server_id) ON DELETE CASCADE,
+    channel_disc_id TEXT NOT NULL,
+    llm_id INT NOT NULL REFERENCES llms(llm_id) ON DELETE RESTRICT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (server_id, channel_disc_id)
+);
+
+-- Index for fast channel override lookups
+CREATE INDEX IF NOT EXISTS idx_channel_llm_overrides_server ON channel_llm_overrides(server_id);
+
+-- updated_at trigger for channel_llm_overrides (DROP first for idempotency)
+DROP TRIGGER IF EXISTS update_channel_llm_overrides_timestamp ON channel_llm_overrides;
+CREATE TRIGGER update_channel_llm_overrides_timestamp
+    BEFORE UPDATE ON channel_llm_overrides
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
