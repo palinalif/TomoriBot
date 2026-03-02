@@ -19,7 +19,7 @@ import { calculateLateness } from "../utils/text/stringHelper";
 import tomoriChat, {
 	suppressNextSelfReply,
 } from "../events/messageCreate/tomoriChat";
-import { sendStandardEmbed } from "../utils/discord/embedHelper";
+import { createStandardEmbed } from "../utils/discord/embedHelper";
 import { getCachedAllPersonas } from "../utils/cache/tomoriStateCache";
 import {
 	getOrCreatePersonaWebhook,
@@ -481,38 +481,49 @@ export class ReminderTimer {
 				await deleteReminderById(reminder.reminder_id);
 			}
 
-			// Try to send an error embed to the channel mentioning the user
+			// Try to send an info embed showing the raw reminder/task content
 			try {
 				const channel = await this.client.channels.fetch(
 					reminder.channel_disc_id,
 				);
 				if (channel?.isTextBased() && "send" in channel) {
-					const currentTime = new Date();
-					const lateness = calculateLateness(
-						reminder.reminder_time,
-						currentTime,
-					);
+					const isSelfReminder = reminder.self_reminder === true;
 
-					await sendStandardEmbed(
-						channel as import("discord.js").TextChannel,
-						"en-US",
-						{
-							color: ColorCode.ERROR,
-							titleKey: "reminders.reminder_error_title",
-							descriptionKey: "reminders.reminder_error_description",
-							descriptionVars: {
-								user_mention: `<@${reminder.user_discord_id}>`,
-								reminder_purpose: reminder.reminder_purpose,
-								error_reason: errorReason,
-								lateness: lateness || "on time",
-							},
-							footerKey: "reminders.reminder_error_footer",
-						},
-					);
+					// 1. Build the info embed with the raw reminder/task content
+					const embed = createStandardEmbed("en-US", {
+						color: ColorCode.INFO,
+						titleKey: isSelfReminder
+							? "reminders.task_triggered_title"
+							: "reminders.reminder_triggered_title",
+						descriptionKey: "reminders.triggered_description",
+						descriptionVars: { reminder_purpose: reminder.reminder_purpose },
+						footerKey: "reminders.triggered_footer",
+					});
+
+					// 2. For non-self reminders: include a content mention so Discord
+					//    actually pings the recipient (embed text alone does not ping)
+					const mentionContent =
+						!isSelfReminder && !isBridgeUserId(reminder.user_discord_id)
+							? `<@${reminder.user_discord_id}>`
+							: undefined;
+
+					await (channel as import("discord.js").TextChannel).send({
+						...(mentionContent ? { content: mentionContent } : {}),
+						embeds: [embed],
+						...(mentionContent
+							? {
+									allowedMentions: {
+										users: [reminder.user_discord_id],
+										roles: [],
+										parse: [],
+									},
+								}
+							: {}),
+					});
 				}
 			} catch (fallbackError) {
 				log.error(
-					`Failed to send fallback reminder error embed for reminder ${reminder.reminder_id}:`,
+					`Failed to send fallback reminder info embed for reminder ${reminder.reminder_id}:`,
 					fallbackError,
 				);
 			}

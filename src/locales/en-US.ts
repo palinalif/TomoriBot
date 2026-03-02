@@ -3293,10 +3293,11 @@ You can change this anytime using \`/personal privacy\`.`,
 		task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
 		task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/forget reminder\`.`,
 
-		// Error embed when reminder delivery fails (only user-facing embed during execution)
-		reminder_error_title: `Reminder Delivery Failed`,
-		reminder_error_description: `{user_mention}'s reminder for "**{reminder_purpose}**" encountered an issue: {error_reason}. {lateness}.`,
-		reminder_error_footer: `The reminder has been delivered manually instead because of a technical issue.`,
+		// Fallback info embed when AI generation fails — shows the raw reminder/task content
+		reminder_triggered_title: `🔵 Reminder Triggered`,
+		task_triggered_title: `🔵 Task Triggered`,
+		triggered_description: `{reminder_purpose}`,
+		triggered_footer: `An error occurred during generation, so the raw reminder has been sent instead`,
 	},
 
 	// Tool messages
