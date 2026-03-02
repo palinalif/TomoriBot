@@ -45,6 +45,7 @@ import type {
 export interface OpenrouterStreamConfig extends StreamConfig {
 	// OpenRouter uses OpenAI-compatible config, simple structure
 	seesImages?: boolean; // Whether the model supports image inputs
+	seesVideos?: boolean; // Whether the model supports video inputs
 	// Sampling parameters to control output quality
 	topP?: number; // Nucleus sampling (0.0-1.0)
 	topK?: number; // Top-k sampling
@@ -195,12 +196,15 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 	public async buildProbeMessages(
 		contextItems: StructuredContextItem[],
 		seesImages = true,
+		seesVideos = false,
 	): Promise<Array<Record<string, unknown>>> {
 		return this.assembleOpenrouterContext(
 			contextItems,
 			[],
 			undefined,
 			seesImages,
+			"Assistant",
+			seesVideos,
 		);
 	}
 
@@ -423,6 +427,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 			context.functionInteractionHistory,
 			openrouterConfig.seesImages ?? true, // Default to true for backward compatibility
 			context.tomoriState.tomori_nickname ?? "Assistant",
+			openrouterConfig.seesVideos ?? false, // Default false — videos are strictly opt-in per model
 		);
 
 		// Ensure model is provided
@@ -2338,6 +2343,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 		}>,
 		seesImages: boolean = true,
 		botName: string = "Assistant",
+		seesVideos: boolean = false,
 	): Promise<Array<Record<string, unknown>>> {
 		const messages: Array<Record<string, unknown>> = [];
 		const systemInstructionParts: string[] = [];
@@ -2567,8 +2573,54 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 								});
 							}
 						}
+					} else if (part.type === "video") {
+						// Videos follow the same role restriction as images - only user-role messages.
+						// For assistant turns, stage in pendingBotImageParts for a synthetic user turn.
+						const videoTargetParts =
+							role === "assistant" ? pendingBotImageParts : contentParts;
+
+						if (!seesVideos) {
+							log.info(
+								`Skipping video (model doesn't support videos): ${part.uri}`,
+							);
+							continue;
+						}
+
+						try {
+							const isHttpUrl =
+								part.uri.startsWith("http://") ||
+								part.uri.startsWith("https://");
+							const isDataUrl = part.uri.startsWith("data:");
+							if (!isHttpUrl && !isDataUrl) {
+								log.warn(
+									`Skipping unsupported video URI format for OpenRouter: ${part.uri}`,
+								);
+								continue;
+							}
+
+							// OpenRouter accepts direct public URLs and data URLs for video_url.
+							// Prefer direct URLs to avoid unnecessary fetch/encode overhead.
+							videoTargetParts.push({
+								type: "video_url",
+								video_url: { url: part.uri },
+							});
+
+							if (part.isYouTubeLink) {
+								log.success(`Added YouTube video to message: ${part.uri}`);
+							} else if (isHttpUrl) {
+								log.success(`Added direct video URL to message: ${part.uri}`);
+							} else {
+								log.success(`Added video data URL to message`);
+							}
+						} catch (videoErr) {
+							log.warn(`Error processing video: ${part.uri}`, {
+								error:
+									videoErr instanceof Error
+										? videoErr.message
+										: String(videoErr),
+							});
+						}
 					}
-					// Note: OpenRouter doesn't widely support video yet, skip video parts
 				}
 
 				// Add message

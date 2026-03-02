@@ -1386,7 +1386,8 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 				openrouter_model_selection_description: `OpenRouter offers access to many different AI models.
 	- Currently available models are based on popularity and performance, with tags for distinction:
 	  - (TOOLS) = Supports tool usage (web search, self-learning, stickers, etc.)
-	  - (IMAGES) = Sees images
+	  - (IMG) = Sees images
+	  - (VID) = Sees videos
 	  - (STRUCT) = Supports structured output (needed for persona generation and expression initialization)
 	  - (FREE) = No cost, but may have rate limits
 	- If you can't find what you want, try using the \`account-setting\` provider option

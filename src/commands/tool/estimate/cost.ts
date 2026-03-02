@@ -1054,6 +1054,7 @@ async function measureOpenRouterInputTokens(
 	const messages = await adapter.buildProbeMessages(
 		contextItems,
 		providerConfig.seesImages ?? true,
+		providerConfig.seesVideos ?? false,
 	);
 	const requestBody = buildOpenRouterProbeRequest(providerConfig, messages);
 

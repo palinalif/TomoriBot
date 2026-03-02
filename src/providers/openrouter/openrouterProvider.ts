@@ -119,6 +119,7 @@ async function getDefaultOpenrouterModel(): Promise<string> {
 export interface OpenrouterProviderConfig extends ProviderConfig {
 	// OpenRouter uses OpenAI-compatible API, simple configuration
 	seesImages?: boolean; // Whether the model supports image inputs
+	seesVideos?: boolean; // Whether the model supports video inputs
 	// Sampling parameters to control output quality
 	topP?: number; // Nucleus sampling (0.0-1.0)
 	topK?: number; // Top-k sampling
@@ -145,7 +146,7 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 			supportsStreaming: true,
 			supportsFunctionCalling: true,
 			supportsImages: true, // Depends on specific models
-			supportsVideos: false, // Most models don't support video yet
+			supportsVideos: true, // Supported on video-capable models (e.g. Gemini via OpenRouter)
 		};
 	}
 
@@ -489,6 +490,7 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
 			temperature: adjustedTemperature,
 			maxOutputTokens: resolvedMaxOutputTokens,
 			seesImages: effectiveSeesImages, // Use effective value (may be overridden)
+			seesVideos: effectiveSeesVideos, // Wire through video capability flag
 			// repetitionPenalty is hardcoded as a general token repetition dampener
 			repetitionPenalty: 1.1,
 			// Conditionally include user-configured sampling params (neutral = omit entirely)
