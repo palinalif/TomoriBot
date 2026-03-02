@@ -137,6 +137,9 @@ VALUES
   ('openrouter', 'openai/gpt-5-image-mini', false, false, false, false,
    'Lightweight OpenAI image generation model via OpenRouter',
    'OpenRouter経由の軽量なOpenAI画像生成モデル'),
+  ('openrouter', 'bytedance-seed/seedream-4.5', false, false, false, false,
+   'Latest in-house image generation model developed by ByteDance. Cheap and high performance',
+   'ByteDanceが開発した最新の自社製画像生成モデル。低コストかつ高性能'),
   -- NovelAI Diffusion Models
   ('novelai', 'nai-diffusion-3-furry', false, false, false, true,
    'NovelAI furry-specialized diffusion model',

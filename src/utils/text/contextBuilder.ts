@@ -749,9 +749,7 @@ export async function buildContext({
 	const botName = tomoriNickname;
 	const impersonatedMember =
 		isUserImpersonation && impersonatedUserId
-			? client.guilds.cache
-					.get(guildId)
-					?.members.cache.get(impersonatedUserId)
+			? client.guilds.cache.get(guildId)?.members.cache.get(impersonatedUserId)
 			: null;
 	const impersonatedIdentityName =
 		impersonatedMember?.displayName ||
@@ -1873,9 +1871,12 @@ export async function buildContext({
 	const configuredMessageFetchLimit = normalizeMessageFetchLimit(
 		tomoriConfig.message_fetch_limit,
 	);
-	const requestedMediaWindow = mediaContextWindow ?? memoryGuard.getMediaWindow();
-	const effectiveMediaWindow =
-		Math.min(requestedMediaWindow, configuredMessageFetchLimit);
+	const requestedMediaWindow =
+		mediaContextWindow ?? memoryGuard.getMediaWindow();
+	const effectiveMediaWindow = Math.min(
+		requestedMediaWindow,
+		configuredMessageFetchLimit,
+	);
 	const maxExtendBy = Math.max(
 		0,
 		configuredMessageFetchLimit - effectiveMediaWindow,
@@ -1909,12 +1910,12 @@ export async function buildContext({
 		// Determine if this message is within the media context window
 		const isWithinMediaWindow = index >= mediaWindowCutoff;
 
-			// Check if message has significant media (non-emoji images or videos)
-			// Emoji-only messages are excluded from "increase_media_context" flagging
-			// because emojis are common and the system flag message can flood context unnecessarily
-			const hasNonEmojiImages = msg.imageAttachments.some((att) => !att.isEmoji);
-			const hasVideos = msg.videoAttachments.length > 0;
-			const hasSignificantMedia = hasNonEmojiImages || hasVideos;
+		// Check if message has significant media (non-emoji images or videos)
+		// Emoji-only messages are excluded from "increase_media_context" flagging
+		// because emojis are common and the system flag message can flood context unnecessarily
+		const hasNonEmojiImages = msg.imageAttachments.some((att) => !att.isEmoji);
+		const hasVideos = msg.videoAttachments.length > 0;
+		const hasSignificantMedia = hasNonEmojiImages || hasVideos;
 		let mediaIdHintAdded = false;
 
 		// Model capability flags (used for both the out-of-window hint and within-window rendering)
@@ -1978,7 +1979,7 @@ export async function buildContext({
 
 					parts.push({
 						type: "text",
-						text: `[System: This message contains ${imageDescription}. Current model does not support images.]`,
+						text: `[System: This message contains ${imageDescription}. Current model cannot see images, please do not describe or claim to see the image contents.]`,
 					});
 					log.info(
 						`Images skipped for message ${msg.id} - model does not support images`,
@@ -2014,7 +2015,7 @@ export async function buildContext({
 
 					parts.push({
 						type: "text",
-						text: `[System: This message contains ${videoDescription}. Current model does not support videos.]`,
+						text: `[System: This message contains ${videoDescription}. Current model cannot see videos, please do not describe or claim to see the video contents.]`,
 					});
 					log.info(
 						`Videos skipped for message ${msg.id} - model does not support videos`,
@@ -2086,7 +2087,7 @@ export async function buildContext({
 		}
 
 		// Expose message ID(s) for media messages so tools (generate_image, process_gif) can reference attachments
-			if (hasSignificantMedia && !mediaIdHintAdded) {
+		if (hasSignificantMedia && !mediaIdHintAdded) {
 			const mediaMessageIds = msg.mediaSourceMessageIds ?? [msg.id];
 			const hintText =
 				mediaMessageIds.length === 1
