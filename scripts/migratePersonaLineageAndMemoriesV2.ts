@@ -5,28 +5,28 @@ import { log } from "../src/utils/misc/logger";
 config();
 
 if (!process.env.DATABASE_URL) {
-	const host = process.env.POSTGRES_HOST || "localhost";
-	const port = process.env.POSTGRES_PORT || "5432";
-	const user = process.env.POSTGRES_USER || "postgres";
-	const password = process.env.POSTGRES_PASSWORD;
-	const database = process.env.POSTGRES_DB || "tomodb";
+  const host = process.env.POSTGRES_HOST || "localhost";
+  const port = process.env.POSTGRES_PORT || "5432";
+  const user = process.env.POSTGRES_USER || "postgres";
+  const password = process.env.POSTGRES_PASSWORD;
+  const database = process.env.POSTGRES_DB || "tomodb";
 
-	if (!password) {
-		log.error("POSTGRES_PASSWORD environment variable not found.");
-		process.exit(1);
-	}
+  if (!password) {
+    log.error("POSTGRES_PASSWORD environment variable not found.");
+    process.exit(1);
+  }
 
-	process.env.DATABASE_URL = `postgresql://${user}:${password}@${host}:${port}/${database}`;
+  process.env.DATABASE_URL = `postgresql://${user}:${password}@${host}:${port}/${database}`;
 }
 
 async function fetchMetrics(label: string): Promise<void> {
-	const [row] = await sql<{
-		tomoris_without_lineage: number;
-		persona_configs_total: number;
-		server_memories_without_tomori: number;
-		personal_memories_global_scope: number;
-		users_with_legacy_array: number;
-	}>`
+  const [row] = await sql<{
+    tomoris_without_lineage: number;
+    persona_configs_total: number;
+    server_memories_without_tomori: number;
+    personal_memories_global_scope: number;
+    users_with_legacy_array: number;
+  }>`
 		SELECT
 			(SELECT COUNT(*)::int FROM tomoris WHERE persona_lineage_id IS NULL) AS tomoris_without_lineage,
 			(SELECT COUNT(*)::int FROM persona_configs) AS persona_configs_total,
@@ -39,31 +39,31 @@ async function fetchMetrics(label: string): Promise<void> {
 			) AS users_with_legacy_array
 	`;
 
-	log.info(`[${label}] tomoris_without_lineage=${row.tomoris_without_lineage}`);
-	log.info(`[${label}] persona_configs_total=${row.persona_configs_total}`);
-	log.info(
-		`[${label}] server_memories_without_tomori=${row.server_memories_without_tomori}`,
-	);
-	log.info(
-		`[${label}] personal_memories_global_scope=${row.personal_memories_global_scope}`,
-	);
-	log.info(`[${label}] users_with_legacy_array=${row.users_with_legacy_array}`);
+  log.info(`[${label}] tomoris_without_lineage=${row.tomoris_without_lineage}`);
+  log.info(`[${label}] persona_configs_total=${row.persona_configs_total}`);
+  log.info(
+    `[${label}] server_memories_without_tomori=${row.server_memories_without_tomori}`,
+  );
+  log.info(
+    `[${label}] personal_memories_global_scope=${row.personal_memories_global_scope}`,
+  );
+  log.info(`[${label}] users_with_legacy_array=${row.users_with_legacy_array}`);
 }
 
 async function runMigration(): Promise<void> {
-	log.section("Persona Lineage + Memory Backfill v2");
-	await fetchMetrics("before");
+  log.section("Persona Lineage + Memory Backfill v2");
+  await fetchMetrics("before");
 
-	await sql.transaction(async (tx) => {
-		// 1) Backfill missing lineage IDs on existing personas.
-		await tx`
+  await sql.transaction(async (tx) => {
+    // 1) Backfill missing lineage IDs on existing personas.
+    await tx`
 			UPDATE tomoris
 			SET persona_lineage_id = nextval('persona_lineage_id_seq')
 			WHERE persona_lineage_id IS NULL
 		`;
 
-		// 2) Backfill persona_configs trigger words from legacy locations.
-		await tx`
+    // 2) Backfill persona_configs trigger words from legacy locations.
+    await tx`
 			INSERT INTO persona_configs (tomori_id, trigger_words)
 			SELECT
 				t.tomori_id,
@@ -89,8 +89,8 @@ async function runMigration(): Promise<void> {
 			ON CONFLICT (tomori_id) DO NOTHING
 		`;
 
-		// 3) Backfill server_memories.tomori_id to each server's current main persona.
-		await tx`
+    // 3) Backfill server_memories.tomori_id to each server's current main persona.
+    await tx`
 			UPDATE server_memories sm
 			SET tomori_id = main.tomori_id
 			FROM (
@@ -105,8 +105,8 @@ async function runMigration(): Promise<void> {
 			  AND sm.tomori_id IS NULL
 		`;
 
-		// 4) Backfill users.personal_memories into global personal namespace (lineage 0).
-		await tx`
+    // 4) Backfill users.personal_memories into global personal namespace (lineage 0).
+    await tx`
 			INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
 			SELECT
 				u.user_id,
@@ -124,17 +124,17 @@ async function runMigration(): Promise<void> {
 				  AND pm.content = legacy_memory
 			)
 		`;
-	});
+  });
 
-	await fetchMetrics("after");
-	log.success("Migration/backfill completed.");
+  await fetchMetrics("after");
+  log.success("Migration/backfill completed.");
 }
 
 runMigration()
-	.catch((error) => {
-		log.error("Migration/backfill failed.", error);
-		process.exit(1);
-	})
-	.finally(() => {
-		process.exit(0);
-	});
+  .catch((error) => {
+    log.error("Migration/backfill failed.", error);
+    process.exit(1);
+  })
+  .finally(() => {
+    process.exit(0);
+  });

@@ -5,17 +5,17 @@
  */
 
 import {
-	BaseTool,
-	type ToolContext,
-	type ToolResult,
+  BaseTool,
+  type ToolContext,
+  type ToolResult,
 } from "../../../types/tool/interfaces";
 import { log } from "../../../utils/misc/logger";
 import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
 import {
-	brave_web_search,
-	brave_image_search,
-	brave_video_search,
-	brave_news_search,
+  brave_web_search,
+  brave_image_search,
+  brave_video_search,
+  brave_news_search,
 } from "./toolImplementations";
 
 // =============================================
@@ -27,42 +27,42 @@ import {
  * Provides common functionality and error handling
  */
 abstract class BaseBraveSearchTool extends BaseTool {
-	category = "search" as const;
-	requiresFeatureFlag = "web_search";
-	requiresFollowUp = true; // Search tools always need a follow-up to present results to the user
+  category = "search" as const;
+  requiresFeatureFlag = "web_search";
+  requiresFollowUp = true; // Search tools always need a follow-up to present results to the user
 
-	// All Brave Search tools are available for all providers
-	isAvailableFor(_provider: string): boolean {
-		return true;
-	}
+  // All Brave Search tools are available for all providers
+  isAvailableFor(_provider: string): boolean {
+    return true;
+  }
 
-	/**
-	 * Check if web search functionality is enabled in Tomori config
-	 * @param context - Tool execution context
-	 * @returns True if web search is enabled
-	 */
-	protected isEnabled(context: ToolContext): boolean {
-		return context.tomoriState.config.web_search_enabled;
-	}
+  /**
+   * Check if web search functionality is enabled in Tomori config
+   * @param context - Tool execution context
+   * @returns True if web search is enabled
+   */
+  protected isEnabled(context: ToolContext): boolean {
+    return context.tomoriState.config.web_search_enabled;
+  }
 
-	/**
-	 * Helper method to extract server ID from tool context
-	 * @param context - Tool execution context
-	 * @returns Server ID from Tomori state
-	 */
-	protected getServerId(context: ToolContext): number | undefined {
-		return context.tomoriState?.server_id;
-	}
+  /**
+   * Helper method to extract server ID from tool context
+   * @param context - Tool execution context
+   * @returns Server ID from Tomori state
+   */
+  protected getServerId(context: ToolContext): number | undefined {
+    return context.tomoriState?.server_id;
+  }
 
-	/**
-	 * Convert function implementation result to ToolResult
-	 * @param result - Result from function implementation
-	 * @returns Standardized ToolResult
-	 */
-	protected convertToToolResult(result: ToolResult): ToolResult {
-		// If result already includes all ToolResult fields, pass it through
-		return result;
-	}
+  /**
+   * Convert function implementation result to ToolResult
+   * @param result - Result from function implementation
+   * @returns Standardized ToolResult
+   */
+  protected convertToToolResult(result: ToolResult): ToolResult {
+    // If result already includes all ToolResult fields, pass it through
+    return result;
+  }
 }
 
 // =============================================
@@ -74,95 +74,95 @@ abstract class BaseBraveSearchTool extends BaseTool {
  * HTTP-based implementation for web search functionality
  */
 export class BraveWebSearchTool extends BaseBraveSearchTool {
-	name = "brave_web_search";
-	description =
-		"Search the web using Brave Search API. Returns relevant web pages, articles, and information from across the internet.";
+  name = "brave_web_search";
+  description =
+    "Search the web using Brave Search API. Returns relevant web pages, articles, and information from across the internet.";
 
-	parameters = {
-		type: "object" as const,
-		properties: {
-			query: {
-				type: "string" as const,
-				description: "The search query to execute",
-			},
-			country: {
-				type: "string" as const,
-				description: "Country code for localized results (e.g., US, GB, JP)",
-			},
-			search_lang: {
-				type: "string" as const,
-				description: "Search language preference (e.g., en, es, jp)",
-			},
-			count: {
-				type: "number" as const,
-				description: "Number of results to return (max 20)",
-			},
-			offset: {
-				type: "number" as const,
-				description: "Offset for pagination (0-9)",
-			},
-			safesearch: {
-				type: "string" as const,
-				description: "Safe search level",
-				enum: ["off", "moderate", "strict"],
-			},
-			freshness: {
-				type: "string" as const,
-				description:
-					"Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
-			},
-		},
-		required: ["query"],
-	};
+  parameters = {
+    type: "object" as const,
+    properties: {
+      query: {
+        type: "string" as const,
+        description: "The search query to execute",
+      },
+      country: {
+        type: "string" as const,
+        description: "Country code for localized results (e.g., US, GB, JP)",
+      },
+      search_lang: {
+        type: "string" as const,
+        description: "Search language preference (e.g., en, es, jp)",
+      },
+      count: {
+        type: "number" as const,
+        description: "Number of results to return (max 20)",
+      },
+      offset: {
+        type: "number" as const,
+        description: "Offset for pagination (0-9)",
+      },
+      safesearch: {
+        type: "string" as const,
+        description: "Safe search level",
+        enum: ["off", "moderate", "strict"],
+      },
+      freshness: {
+        type: "string" as const,
+        description:
+          "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
+      },
+    },
+    required: ["query"],
+  };
 
-	async execute(
-		args: Record<string, unknown>,
-		context: ToolContext,
-	): Promise<ToolResult> {
-		try {
-			// Check if web search is enabled for this server
-			if (!this.isEnabled(context)) {
-				return {
-					success: false,
-					error: "Web search is disabled for this server",
-					message: "Web search functionality is not enabled for this server.",
-				};
-			}
+  async execute(
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult> {
+    try {
+      // Check if web search is enabled for this server
+      if (!this.isEnabled(context)) {
+        return {
+          success: false,
+          error: "Web search is disabled for this server",
+          message: "Web search functionality is not enabled for this server.",
+        };
+      }
 
-			log.info(`Executing ${this.name} with query: ${args.query}`);
+      log.info(`Executing ${this.name} with query: ${args.query}`);
 
-			// Send search status embed to Discord
-			await sendStandardEmbed(
-				context.channel,
-				context.locale,
-				{
-					titleKey: "genai.search.web_search_title",
-					titleVars: { query: args.query as string },
-					descriptionKey: "genai.search.disclaimer_description",
-				},
-				{
-					webhook: context.webhook,
-					personaUsername: context.personaUsername,
-					personaAvatarUrl: context.personaAvatarUrl,
-				},
-			);
+      // Send search status embed to Discord
+      await sendStandardEmbed(
+        context.channel,
+        context.locale,
+        {
+          titleKey: "genai.search.web_search_title",
+          titleVars: { query: args.query as string },
+          descriptionKey: "genai.search.disclaimer_description",
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+      );
 
-			// Add server ID from context
-			const enhancedContext = {
-				...context,
-				serverId: this.getServerId(context),
-			};
+      // Add server ID from context
+      const enhancedContext = {
+        ...context,
+        serverId: this.getServerId(context),
+      };
 
-			const result = await brave_web_search(args, enhancedContext);
-			return this.convertToToolResult(result);
-		} catch (error) {
-			log.error(`Error in ${this.name}:`, error as Error);
-			return {
-				success: false,
-				error: `Failed to execute web search: ${(error as Error).message}`,
-			};
-		}
-	}
+      const result = await brave_web_search(args, enhancedContext);
+      return this.convertToToolResult(result);
+    } catch (error) {
+      log.error(`Error in ${this.name}:`, error as Error);
+      return {
+        success: false,
+        error: `Failed to execute web search: ${(error as Error).message}`,
+      };
+    }
+  }
 }
 
 // =============================================
@@ -174,86 +174,86 @@ export class BraveWebSearchTool extends BaseBraveSearchTool {
  * HTTP-based implementation for image search functionality
  */
 export class BraveImageSearchTool extends BaseBraveSearchTool {
-	name = "brave_image_search";
-	description =
-		'Search for images using Brave Search API. Defaults to 3 images only if no `count` is given. Returns relevant images with metadata and source information. No need to add keywords such as "images", "pictures", or "イラスト" to your query because this tool is already specifically for image searches.';
+  name = "brave_image_search";
+  description =
+    'Search for images using Brave Search API. Defaults to 3 images only if no `count` is given. Returns relevant images with metadata and source information. No need to add keywords such as "images", "pictures", or "イラスト" to your query because this tool is already specifically for image searches.';
 
-	parameters = {
-		type: "object" as const,
-		properties: {
-			query: {
-				type: "string" as const,
-				description: "The image search query to execute",
-			},
-			country: {
-				type: "string" as const,
-				description: "Country code for localized results (e.g., US, GB, JP)",
-			},
-			search_lang: {
-				type: "string" as const,
-				description: "Search language preference (e.g., en, es, jp)",
-			},
-			count: {
-				type: "number" as const,
-				description: "Number of image results to return (max 200)",
-			},
-			safesearch: {
-				type: "string" as const,
-				description: "Safe search level for images",
-				enum: ["off", "strict"],
-			},
-		},
-		required: ["query"],
-	};
+  parameters = {
+    type: "object" as const,
+    properties: {
+      query: {
+        type: "string" as const,
+        description: "The image search query to execute",
+      },
+      country: {
+        type: "string" as const,
+        description: "Country code for localized results (e.g., US, GB, JP)",
+      },
+      search_lang: {
+        type: "string" as const,
+        description: "Search language preference (e.g., en, es, jp)",
+      },
+      count: {
+        type: "number" as const,
+        description: "Number of image results to return (max 200)",
+      },
+      safesearch: {
+        type: "string" as const,
+        description: "Safe search level for images",
+        enum: ["off", "strict"],
+      },
+    },
+    required: ["query"],
+  };
 
-	async execute(
-		args: Record<string, unknown>,
-		context: ToolContext,
-	): Promise<ToolResult> {
-		try {
-			// Check if web search is enabled for this server
-			if (!this.isEnabled(context)) {
-				return {
-					success: false,
-					error: "Web search is disabled for this server",
-					message: "Web search functionality is not enabled for this server.",
-				};
-			}
+  async execute(
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult> {
+    try {
+      // Check if web search is enabled for this server
+      if (!this.isEnabled(context)) {
+        return {
+          success: false,
+          error: "Web search is disabled for this server",
+          message: "Web search functionality is not enabled for this server.",
+        };
+      }
 
-			log.info(`Executing ${this.name} with query: ${args.query}`);
+      log.info(`Executing ${this.name} with query: ${args.query}`);
 
-			// Send search status embed to Discord
-			await sendStandardEmbed(
-				context.channel,
-				context.locale,
-				{
-					titleKey: "genai.search.image_search_title",
-					titleVars: { query: args.query as string },
-					descriptionKey: "genai.search.disclaimer_description",
-				},
-				{
-					webhook: context.webhook,
-					personaUsername: context.personaUsername,
-					personaAvatarUrl: context.personaAvatarUrl,
-				},
-			);
+      // Send search status embed to Discord
+      await sendStandardEmbed(
+        context.channel,
+        context.locale,
+        {
+          titleKey: "genai.search.image_search_title",
+          titleVars: { query: args.query as string },
+          descriptionKey: "genai.search.disclaimer_description",
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+      );
 
-			// Add server ID from context
-			const enhancedContext = {
-				...context,
-				serverId: this.getServerId(context),
-			};
+      // Add server ID from context
+      const enhancedContext = {
+        ...context,
+        serverId: this.getServerId(context),
+      };
 
-			const result = await brave_image_search(args, enhancedContext);
-			return this.convertToToolResult(result);
-		} catch (error) {
-			log.error(`Error in ${this.name}:`, error as Error);
-			return {
-				success: false,
-				error: `Failed to execute image search: ${(error as Error).message}`,
-			};
-		}
-	}
+      const result = await brave_image_search(args, enhancedContext);
+      return this.convertToToolResult(result);
+    } catch (error) {
+      log.error(`Error in ${this.name}:`, error as Error);
+      return {
+        success: false,
+        error: `Failed to execute image search: ${(error as Error).message}`,
+      };
+    }
+  }
 }
 
 // =============================================
@@ -265,95 +265,95 @@ export class BraveImageSearchTool extends BaseBraveSearchTool {
  * HTTP-based implementation for video search functionality
  */
 export class BraveVideoSearchTool extends BaseBraveSearchTool {
-	name = "brave_video_search";
-	description =
-		"Search for videos using Brave Search API. Returns relevant videos with metadata, duration, and source information.";
+  name = "brave_video_search";
+  description =
+    "Search for videos using Brave Search API. Returns relevant videos with metadata, duration, and source information.";
 
-	parameters = {
-		type: "object" as const,
-		properties: {
-			query: {
-				type: "string" as const,
-				description: "The video search query to execute",
-			},
-			country: {
-				type: "string" as const,
-				description: "Country code for localized results (e.g., US, GB, JP)",
-			},
-			search_lang: {
-				type: "string" as const,
-				description: "Search language preference (e.g., en, es, jp)",
-			},
-			count: {
-				type: "number" as const,
-				description: "Number of video results to return (max 50)",
-			},
-			offset: {
-				type: "number" as const,
-				description: "Offset for pagination (0-9)",
-			},
-			safesearch: {
-				type: "string" as const,
-				description: "Safe search level for videos",
-				enum: ["off", "moderate", "strict"],
-			},
-			freshness: {
-				type: "string" as const,
-				description:
-					"Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
-			},
-		},
-		required: ["query"],
-	};
+  parameters = {
+    type: "object" as const,
+    properties: {
+      query: {
+        type: "string" as const,
+        description: "The video search query to execute",
+      },
+      country: {
+        type: "string" as const,
+        description: "Country code for localized results (e.g., US, GB, JP)",
+      },
+      search_lang: {
+        type: "string" as const,
+        description: "Search language preference (e.g., en, es, jp)",
+      },
+      count: {
+        type: "number" as const,
+        description: "Number of video results to return (max 50)",
+      },
+      offset: {
+        type: "number" as const,
+        description: "Offset for pagination (0-9)",
+      },
+      safesearch: {
+        type: "string" as const,
+        description: "Safe search level for videos",
+        enum: ["off", "moderate", "strict"],
+      },
+      freshness: {
+        type: "string" as const,
+        description:
+          "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
+      },
+    },
+    required: ["query"],
+  };
 
-	async execute(
-		args: Record<string, unknown>,
-		context: ToolContext,
-	): Promise<ToolResult> {
-		try {
-			// Check if web search is enabled for this server
-			if (!this.isEnabled(context)) {
-				return {
-					success: false,
-					error: "Web search is disabled for this server",
-					message: "Web search functionality is not enabled for this server.",
-				};
-			}
+  async execute(
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult> {
+    try {
+      // Check if web search is enabled for this server
+      if (!this.isEnabled(context)) {
+        return {
+          success: false,
+          error: "Web search is disabled for this server",
+          message: "Web search functionality is not enabled for this server.",
+        };
+      }
 
-			log.info(`Executing ${this.name} with query: ${args.query}`);
+      log.info(`Executing ${this.name} with query: ${args.query}`);
 
-			// Send search status embed to Discord
-			await sendStandardEmbed(
-				context.channel,
-				context.locale,
-				{
-					titleKey: "genai.search.video_search_title",
-					titleVars: { query: args.query as string },
-					descriptionKey: "genai.search.disclaimer_description",
-				},
-				{
-					webhook: context.webhook,
-					personaUsername: context.personaUsername,
-					personaAvatarUrl: context.personaAvatarUrl,
-				},
-			);
+      // Send search status embed to Discord
+      await sendStandardEmbed(
+        context.channel,
+        context.locale,
+        {
+          titleKey: "genai.search.video_search_title",
+          titleVars: { query: args.query as string },
+          descriptionKey: "genai.search.disclaimer_description",
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+      );
 
-			// Add server ID from context
-			const enhancedContext = {
-				...context,
-				serverId: this.getServerId(context),
-			};
+      // Add server ID from context
+      const enhancedContext = {
+        ...context,
+        serverId: this.getServerId(context),
+      };
 
-			const result = await brave_video_search(args, enhancedContext);
-			return this.convertToToolResult(result);
-		} catch (error) {
-			log.error(`Error in ${this.name}:`, error as Error);
-			return {
-				success: false,
-				error: `Failed to execute video search: ${(error as Error).message}`,
-			};
-		}
-	}
+      const result = await brave_video_search(args, enhancedContext);
+      return this.convertToToolResult(result);
+    } catch (error) {
+      log.error(`Error in ${this.name}:`, error as Error);
+      return {
+        success: false,
+        error: `Failed to execute video search: ${(error as Error).message}`,
+      };
+    }
+  }
 }
 
 // =============================================
@@ -365,93 +365,93 @@ export class BraveVideoSearchTool extends BaseBraveSearchTool {
  * HTTP-based implementation for news search functionality
  */
 export class BraveNewsSearchTool extends BaseBraveSearchTool {
-	name = "brave_news_search";
-	description =
-		"Search for news articles using Brave Search API. Returns relevant news articles with metadata and publication information.";
+  name = "brave_news_search";
+  description =
+    "Search for news articles using Brave Search API. Returns relevant news articles with metadata and publication information.";
 
-	parameters = {
-		type: "object" as const,
-		properties: {
-			query: {
-				type: "string" as const,
-				description: "The news search query to execute",
-			},
-			country: {
-				type: "string" as const,
-				description: "Country code for localized results (e.g., US, GB, JP)",
-			},
-			search_lang: {
-				type: "string" as const,
-				description: "Search language preference (e.g., en, es, jp)",
-			},
-			count: {
-				type: "number" as const,
-				description: "Number of news results to return (max 50)",
-			},
-			offset: {
-				type: "number" as const,
-				description: "Offset for pagination (0-9)",
-			},
-			safesearch: {
-				type: "string" as const,
-				description: "Safe search level for news",
-				enum: ["off", "moderate", "strict"],
-			},
-			freshness: {
-				type: "string" as const,
-				description:
-					"Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
-			},
-		},
-		required: ["query"],
-	};
+  parameters = {
+    type: "object" as const,
+    properties: {
+      query: {
+        type: "string" as const,
+        description: "The news search query to execute",
+      },
+      country: {
+        type: "string" as const,
+        description: "Country code for localized results (e.g., US, GB, JP)",
+      },
+      search_lang: {
+        type: "string" as const,
+        description: "Search language preference (e.g., en, es, jp)",
+      },
+      count: {
+        type: "number" as const,
+        description: "Number of news results to return (max 50)",
+      },
+      offset: {
+        type: "number" as const,
+        description: "Offset for pagination (0-9)",
+      },
+      safesearch: {
+        type: "string" as const,
+        description: "Safe search level for news",
+        enum: ["off", "moderate", "strict"],
+      },
+      freshness: {
+        type: "string" as const,
+        description:
+          "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
+      },
+    },
+    required: ["query"],
+  };
 
-	async execute(
-		args: Record<string, unknown>,
-		context: ToolContext,
-	): Promise<ToolResult> {
-		try {
-			// Check if web search is enabled for this server
-			if (!this.isEnabled(context)) {
-				return {
-					success: false,
-					error: "Web search is disabled for this server",
-					message: "Web search functionality is not enabled for this server.",
-				};
-			}
+  async execute(
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<ToolResult> {
+    try {
+      // Check if web search is enabled for this server
+      if (!this.isEnabled(context)) {
+        return {
+          success: false,
+          error: "Web search is disabled for this server",
+          message: "Web search functionality is not enabled for this server.",
+        };
+      }
 
-			log.info(`Executing ${this.name} with query: ${args.query}`);
+      log.info(`Executing ${this.name} with query: ${args.query}`);
 
-			// Send search status embed to Discord
-			await sendStandardEmbed(
-				context.channel,
-				context.locale,
-				{
-					titleKey: "genai.search.news_search_title",
-					titleVars: { query: args.query as string },
-					descriptionKey: "genai.search.disclaimer_description",
-				},
-				{
-					webhook: context.webhook,
-					personaUsername: context.personaUsername,
-					personaAvatarUrl: context.personaAvatarUrl,
-				},
-			);
+      // Send search status embed to Discord
+      await sendStandardEmbed(
+        context.channel,
+        context.locale,
+        {
+          titleKey: "genai.search.news_search_title",
+          titleVars: { query: args.query as string },
+          descriptionKey: "genai.search.disclaimer_description",
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+      );
 
-			// Add server ID from context
-			const enhancedContext = {
-				...context,
-				serverId: this.getServerId(context),
-			};
+      // Add server ID from context
+      const enhancedContext = {
+        ...context,
+        serverId: this.getServerId(context),
+      };
 
-			const result = await brave_news_search(args, enhancedContext);
-			return this.convertToToolResult(result);
-		} catch (error) {
-			log.error(`Error in ${this.name}:`, error as Error);
-			return {
-				success: false,
-				error: `Failed to execute news search: ${(error as Error).message}`,
-			};
-		}
-	}
+      const result = await brave_news_search(args, enhancedContext);
+      return this.convertToToolResult(result);
+    } catch (error) {
+      log.error(`Error in ${this.name}:`, error as Error);
+      return {
+        success: false,
+        error: `Failed to execute news search: ${(error as Error).message}`,
+      };
+    }
+  }
 }

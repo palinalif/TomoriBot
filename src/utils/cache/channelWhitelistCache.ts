@@ -8,8 +8,8 @@ import { log } from "@/utils/misc/logger";
  * TTL: 5 minutes (whitelists change infrequently)
  */
 const whitelistCache = new Map<
-	string,
-	{ result: WhitelistCheckResult; expiresAt: number }
+  string,
+  { result: WhitelistCheckResult; expiresAt: number }
 >();
 
 /**
@@ -23,8 +23,8 @@ let cacheMisses = 0;
  * Default: 5 minutes
  */
 const CACHE_TTL_MINUTES = Number.parseInt(
-	process.env.CHANNEL_WHITELIST_CACHE_TTL_MINUTES || "5",
-	10,
+  process.env.CHANNEL_WHITELIST_CACHE_TTL_MINUTES || "5",
+  10,
 );
 const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
 
@@ -35,7 +35,7 @@ const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
  * @returns Cache key string
  */
 function getCacheKey(serverDiscId: string, channelDiscId: string): string {
-	return `${serverDiscId}:${channelDiscId}`;
+  return `${serverDiscId}:${channelDiscId}`;
 }
 
 /**
@@ -45,33 +45,37 @@ function getCacheKey(serverDiscId: string, channelDiscId: string): string {
  * @returns WhitelistCheckResult with whitelist status and settings
  */
 export async function getCachedWhitelistStatus(
-	serverDiscId: string,
-	channelDiscId: string,
+  serverDiscId: string,
+  channelDiscId: string,
 ): Promise<WhitelistCheckResult> {
-	const cacheKey = getCacheKey(serverDiscId, channelDiscId);
-	const now = Date.now();
+  const cacheKey = getCacheKey(serverDiscId, channelDiscId);
+  const now = Date.now();
 
-	// Check cache first
-	const cached = whitelistCache.get(cacheKey);
-	if (cached && cached.expiresAt > now) {
-		cacheHits++;
-		log.info(`[Whitelist Cache] HIT - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`);
-		return cached.result;
-	}
+  // Check cache first
+  const cached = whitelistCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    cacheHits++;
+    log.info(
+      `[Whitelist Cache] HIT - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`,
+    );
+    return cached.result;
+  }
 
-	// Cache miss - fetch from database
-	cacheMisses++;
-	log.info(`[Whitelist Cache] MISS - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`);
+  // Cache miss - fetch from database
+  cacheMisses++;
+  log.info(
+    `[Whitelist Cache] MISS - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`,
+  );
 
-	const result = await checkChannelWhitelist(serverDiscId, channelDiscId);
+  const result = await checkChannelWhitelist(serverDiscId, channelDiscId);
 
-	// Store in cache
-	whitelistCache.set(cacheKey, {
-		result,
-		expiresAt: now + CACHE_TTL_MS,
-	});
+  // Store in cache
+  whitelistCache.set(cacheKey, {
+    result,
+    expiresAt: now + CACHE_TTL_MS,
+  });
 
-	return result;
+  return result;
 }
 
 /**
@@ -82,28 +86,32 @@ export async function getCachedWhitelistStatus(
  * @param channelDiscId - Optional Discord channel ID (snowflake)
  */
 export function invalidateWhitelistCache(
-	serverDiscId: string,
-	channelDiscId?: string,
+  serverDiscId: string,
+  channelDiscId?: string,
 ): void {
-	if (channelDiscId) {
-		// Invalidate specific channel
-		const cacheKey = getCacheKey(serverDiscId, channelDiscId);
-		const deleted = whitelistCache.delete(cacheKey);
-		log.info(`[Whitelist Cache] Invalidated specific channel - ${cacheKey} (deleted: ${deleted})`);
-	} else {
-		// Invalidate all channels for this server
-		let deletedCount = 0;
-		const prefix = `${serverDiscId}:`;
+  if (channelDiscId) {
+    // Invalidate specific channel
+    const cacheKey = getCacheKey(serverDiscId, channelDiscId);
+    const deleted = whitelistCache.delete(cacheKey);
+    log.info(
+      `[Whitelist Cache] Invalidated specific channel - ${cacheKey} (deleted: ${deleted})`,
+    );
+  } else {
+    // Invalidate all channels for this server
+    let deletedCount = 0;
+    const prefix = `${serverDiscId}:`;
 
-		for (const key of whitelistCache.keys()) {
-			if (key.startsWith(prefix)) {
-				whitelistCache.delete(key);
-				deletedCount++;
-			}
-		}
+    for (const key of whitelistCache.keys()) {
+      if (key.startsWith(prefix)) {
+        whitelistCache.delete(key);
+        deletedCount++;
+      }
+    }
 
-		log.info(`[Whitelist Cache] Invalidated all channels for server ${serverDiscId} (deleted: ${deletedCount})`);
-	}
+    log.info(
+      `[Whitelist Cache] Invalidated all channels for server ${serverDiscId} (deleted: ${deletedCount})`,
+    );
+  }
 }
 
 /**
@@ -111,17 +119,17 @@ export function invalidateWhitelistCache(
  * @returns Object with cache stats (hits, misses, hit rate, size)
  */
 export function getWhitelistCacheStats(): {
-	hits: number;
-	misses: number;
-	hitRate: number;
-	size: number;
+  hits: number;
+  misses: number;
+  hitRate: number;
+  size: number;
 } {
-	return {
-		hits: cacheHits,
-		misses: cacheMisses,
-		hitRate: getCacheHitRate(),
-		size: whitelistCache.size,
-	};
+  return {
+    hits: cacheHits,
+    misses: cacheMisses,
+    hitRate: getCacheHitRate(),
+    size: whitelistCache.size,
+  };
 }
 
 /**
@@ -129,9 +137,9 @@ export function getWhitelistCacheStats(): {
  * @returns Hit rate as percentage (0-100)
  */
 function getCacheHitRate(): number {
-	const total = cacheHits + cacheMisses;
-	if (total === 0) return 0;
-	return (cacheHits / total) * 100;
+  const total = cacheHits + cacheMisses;
+  if (total === 0) return 0;
+  return (cacheHits / total) * 100;
 }
 
 /**
@@ -139,8 +147,8 @@ function getCacheHitRate(): number {
  * Useful for testing or manual cache refresh
  */
 export function clearWhitelistCache(): void {
-	whitelistCache.clear();
-	cacheHits = 0;
-	cacheMisses = 0;
-	log.info("[Whitelist Cache] Cache cleared and stats reset");
+  whitelistCache.clear();
+  cacheHits = 0;
+  cacheMisses = 0;
+  log.info("[Whitelist Cache] Cache cleared and stats reset");
 }

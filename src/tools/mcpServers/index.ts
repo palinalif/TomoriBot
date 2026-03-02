@@ -5,15 +5,15 @@
 
 // Import handlers for internal use
 import {
-	BraveSearchHandler,
-	getBraveSearchHandler,
+  BraveSearchHandler,
+  getBraveSearchHandler,
 } from "./brave-search/braveSearchHandler";
 
 import { FetchHandler, getFetchHandler } from "./fetch/fetchHandler";
 
 import {
-	DuckDuckGoHandler,
-	getDuckDuckGoHandler,
+  DuckDuckGoHandler,
+  getDuckDuckGoHandler,
 } from "./duckduckgo-search/duckduckgoHandler";
 
 import type { MCPServerBehaviorHandler } from "../../types/tool/mcpTypes";
@@ -27,35 +27,35 @@ export { DuckDuckGoHandler, getDuckDuckGoHandler };
 
 // Re-export common types for convenience
 export type {
-	Tool,
-	ToolContext,
-	ToolResult,
+  Tool,
+  ToolContext,
+  ToolResult,
 } from "../../types/tool/interfaces";
 
 // Re-export MCP-specific types
 export type {
-	MCPServerBehaviorHandler,
-	MCPExecutionContext,
-	TypedMCPToolResult,
-	EnhancedMCPServerConfig,
-	MCPServerResponse,
-	BraveSearchWebResult,
-	BraveImageSearchResponse,
-	FetchMCPResponse,
-	DuckDuckGoSearchResponse,
-	DuckDuckGoWebSearchResponse,
-	FeloAISearchResponse,
-	URLContentResponse,
-	URLMetadataResponse,
+  MCPServerBehaviorHandler,
+  MCPExecutionContext,
+  TypedMCPToolResult,
+  EnhancedMCPServerConfig,
+  MCPServerResponse,
+  BraveSearchWebResult,
+  BraveImageSearchResponse,
+  FetchMCPResponse,
+  DuckDuckGoSearchResponse,
+  DuckDuckGoWebSearchResponse,
+  FeloAISearchResponse,
+  URLContentResponse,
+  URLMetadataResponse,
 } from "../../types/tool/mcpTypes";
 
 // Re-export MCP utilities for convenience
 export {
-	getMCPExecutor,
-	getMCPHandlerRegistry,
-	isMCPFunction,
-	executeMCPFunction,
-	getAvailableMCPFunctions,
+  getMCPExecutor,
+  getMCPHandlerRegistry,
+  isMCPFunction,
+  executeMCPFunction,
+  getAvailableMCPFunctions,
 } from "../../utils/mcp/mcpExecutor";
 
 export { getMCPConfigManager } from "../../utils/mcp/mcpConfig";
@@ -67,7 +67,7 @@ export { getMCPManager } from "../../utils/mcp/mcpManager";
  * @returns Array of handler instances
  */
 export function getAllMCPHandlers(): MCPServerBehaviorHandler[] {
-	return [getBraveSearchHandler(), getFetchHandler(), getDuckDuckGoHandler()];
+  return [getBraveSearchHandler(), getFetchHandler(), getDuckDuckGoHandler()];
 }
 
 /**
@@ -76,8 +76,8 @@ export function getAllMCPHandlers(): MCPServerBehaviorHandler[] {
  * @returns Handler instance or null if not found
  */
 export function getMCPHandlerByName(
-	serverName: string,
+  serverName: string,
 ): MCPServerBehaviorHandler | null {
-	const handlers = getAllMCPHandlers();
-	return handlers.find((handler) => handler.serverName === serverName) || null;
+  const handlers = getAllMCPHandlers();
+  return handlers.find((handler) => handler.serverName === serverName) || null;
 }

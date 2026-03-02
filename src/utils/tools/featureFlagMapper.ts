@@ -10,24 +10,24 @@ import { log } from "../misc/logger";
  * Key: tool name, Value: required feature flag
  */
 export const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
-	// Sticker tools
-	select_sticker_for_response: "sticker_usage",
+  // Sticker tools
+  select_sticker_for_response: "sticker_usage",
 
-	// Memory/learning tools
-	remember_this_fact: "self_teaching",
-	update_long_term_memory: "self_teaching",
+  // Memory/learning tools
+  remember_this_fact: "self_teaching",
+  update_long_term_memory: "self_teaching",
 
-	// Discord interaction tools
-	pin_selected_message: "pin_message",
+  // Discord interaction tools
+  pin_selected_message: "pin_message",
 
-	// Image generation tools
-	generate_image: "image_gen",
+  // Image generation tools
+  generate_image: "image_gen",
 
-	// Brave Search tools (HTTP-based)
-	brave_web_search: "web_search",
-	brave_image_search: "web_search",
-	brave_video_search: "web_search",
-	brave_news_search: "web_search",
+  // Brave Search tools (HTTP-based)
+  brave_web_search: "web_search",
+  brave_image_search: "web_search",
+  brave_video_search: "web_search",
+  brave_news_search: "web_search",
 };
 
 /**
@@ -35,19 +35,19 @@ export const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
  * Key: MCP function name, Value: required feature flag
  */
 export const MCP_TOOL_FEATURE_FLAGS: Record<string, string> = {
-	// DuckDuckGo search functions
-	"web-search": "web_search",
-	"felo-search": "web_search",
-	"fetch-url": "web_search", // Related to web search functionality
-	"url-metadata": "web_search", // Related to web search functionality
+  // DuckDuckGo search functions
+  "web-search": "web_search",
+  "felo-search": "web_search",
+  "fetch-url": "web_search", // Related to web search functionality
+  "url-metadata": "web_search", // Related to web search functionality
 
-	// Brave Search MCP functions (if any)
-	brave_web_search: "web_search",
-	brave_image_search: "web_search",
-	brave_video_search: "web_search",
-	brave_news_search: "web_search",
-	brave_local_search: "web_search",
-	brave_summarizer: "web_search",
+  // Brave Search MCP functions (if any)
+  brave_web_search: "web_search",
+  brave_image_search: "web_search",
+  brave_video_search: "web_search",
+  brave_news_search: "web_search",
+  brave_local_search: "web_search",
+  brave_summarizer: "web_search",
 };
 
 /**
@@ -55,8 +55,8 @@ export const MCP_TOOL_FEATURE_FLAGS: Record<string, string> = {
  * Used for comprehensive tool filtering
  */
 export const ALL_TOOL_FEATURE_FLAGS = {
-	...BUILTIN_TOOL_FEATURE_FLAGS,
-	...MCP_TOOL_FEATURE_FLAGS,
+  ...BUILTIN_TOOL_FEATURE_FLAGS,
+  ...MCP_TOOL_FEATURE_FLAGS,
 };
 
 /**
@@ -65,7 +65,7 @@ export const ALL_TOOL_FEATURE_FLAGS = {
  * @returns Required feature flag or undefined if no flag required
  */
 export function getRequiredFeatureFlag(toolName: string): string | undefined {
-	return ALL_TOOL_FEATURE_FLAGS[toolName];
+  return ALL_TOOL_FEATURE_FLAGS[toolName];
 }
 
 /**
@@ -75,10 +75,10 @@ export function getRequiredFeatureFlag(toolName: string): string | undefined {
  * @returns True if the tool requires this feature flag
  */
 export function toolRequiresFeatureFlag(
-	toolName: string,
-	featureFlag: string,
+  toolName: string,
+  featureFlag: string,
 ): boolean {
-	return ALL_TOOL_FEATURE_FLAGS[toolName] === featureFlag;
+  return ALL_TOOL_FEATURE_FLAGS[toolName] === featureFlag;
 }
 
 /**
@@ -87,9 +87,9 @@ export function toolRequiresFeatureFlag(
  * @returns Array of tool names that require this feature flag
  */
 export function getToolsRequiringFeatureFlag(featureFlag: string): string[] {
-	return Object.entries(ALL_TOOL_FEATURE_FLAGS)
-		.filter(([_, requiredFlag]) => requiredFlag === featureFlag)
-		.map(([toolName]) => toolName);
+  return Object.entries(ALL_TOOL_FEATURE_FLAGS)
+    .filter(([_, requiredFlag]) => requiredFlag === featureFlag)
+    .map(([toolName]) => toolName);
 }
 
 /**
@@ -99,26 +99,26 @@ export function getToolsRequiringFeatureFlag(featureFlag: string): string[] {
  * @returns True if the tool should be filtered out (disabled)
  */
 export function shouldFilterTool(
-	toolName: string,
-	featureFlags: Record<string, boolean>,
+  toolName: string,
+  featureFlags: Record<string, boolean>,
 ): boolean {
-	const requiredFlag = getRequiredFeatureFlag(toolName);
+  const requiredFlag = getRequiredFeatureFlag(toolName);
 
-	// If no feature flag is required, don't filter
-	if (!requiredFlag) {
-		return false;
-	}
+  // If no feature flag is required, don't filter
+  if (!requiredFlag) {
+    return false;
+  }
 
-	// Filter out if the required feature flag is disabled
-	const isEnabled = featureFlags[requiredFlag] ?? false;
-	if (!isEnabled) {
-		log.info(
-			`Filtering out tool '${toolName}' (feature flag '${requiredFlag}' disabled)`,
-		);
-		return true;
-	}
+  // Filter out if the required feature flag is disabled
+  const isEnabled = featureFlags[requiredFlag] ?? false;
+  if (!isEnabled) {
+    log.info(
+      `Filtering out tool '${toolName}' (feature flag '${requiredFlag}' disabled)`,
+    );
+    return true;
+  }
 
-	return false;
+  return false;
 }
 
 /**
@@ -128,12 +128,12 @@ export function shouldFilterTool(
  * @returns Array of tool names that should be available (not filtered)
  */
 export function filterToolsByFeatureFlags(
-	toolNames: string[],
-	featureFlags: Record<string, boolean>,
+  toolNames: string[],
+  featureFlags: Record<string, boolean>,
 ): string[] {
-	return toolNames.filter(
-		(toolName) => !shouldFilterTool(toolName, featureFlags),
-	);
+  return toolNames.filter(
+    (toolName) => !shouldFilterTool(toolName, featureFlags),
+  );
 }
 
 /**
@@ -142,17 +142,17 @@ export function filterToolsByFeatureFlags(
  * @returns Feature flags object with consistent naming
  */
 export function configToFeatureFlags(config: {
-	sticker_usage_enabled: boolean;
-	web_search_enabled: boolean;
-	self_teaching_enabled: boolean;
-	pin_message_enabled: boolean;
-	imagegen_enabled: boolean;
+  sticker_usage_enabled: boolean;
+  web_search_enabled: boolean;
+  self_teaching_enabled: boolean;
+  pin_message_enabled: boolean;
+  imagegen_enabled: boolean;
 }): Record<string, boolean> {
-	return {
-		sticker_usage: config.sticker_usage_enabled,
-		web_search: config.web_search_enabled,
-		self_teaching: config.self_teaching_enabled,
-		pin_message: config.pin_message_enabled,
-		image_gen: config.imagegen_enabled,
-	};
+  return {
+    sticker_usage: config.sticker_usage_enabled,
+    web_search: config.web_search_enabled,
+    self_teaching: config.self_teaching_enabled,
+    pin_message: config.pin_message_enabled,
+    image_gen: config.imagegen_enabled,
+  };
 }

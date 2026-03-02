@@ -4,18 +4,18 @@
  */
 
 import type {
-	ChatInputCommandInteraction,
-	Client,
-	ModalSubmitInteraction,
-	SlashCommandSubcommandBuilder,
+  ChatInputCommandInteraction,
+  Client,
+  ModalSubmitInteraction,
+  SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
-	replyInfoEmbed,
-	promptWithPaginatedModal,
-	safeSelectOptionText,
+  replyInfoEmbed,
+  promptWithPaginatedModal,
+  safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { exportPresetData } from "../../utils/db/presetExport";
@@ -36,11 +36,11 @@ const PERSONA_EXPORT_JSON_TRUE = "true";
  * Configure the 'export' subcommand
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("export")
-		.setDescription(localizer("en-US", "commands.persona.export.description"));
+  subcommand
+    .setName("export")
+    .setDescription(localizer("en-US", "commands.persona.export.description"));
 
 /**
  * Executes the 'export' command
@@ -51,354 +51,363 @@ export const configureSubcommand = (
  * @param locale - The user's preferred locale
  */
 export async function execute(
-	client: Client,
-	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
-	locale: string,
+  client: Client,
+  interaction: ChatInputCommandInteraction,
+  _userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	let responseInteraction:
-		| ChatInputCommandInteraction
-		| ModalSubmitInteraction = interaction;
+  let responseInteraction:
+    | ChatInputCommandInteraction
+    | ModalSubmitInteraction = interaction;
 
-	try {
-		// 1. Resolve target persona via selector
-		const serverDiscId = interaction.guild?.id ?? interaction.user.id;
-		const allPersonas = await loadAllPersonasForServer(serverDiscId);
-		const personaSelectOptions: SelectOption[] = allPersonas
-			.filter((persona) => persona.tomori_id !== undefined)
-			.map((persona) => ({
-				label: safeSelectOptionText(persona.tomori_nickname),
-				value: persona.tomori_id?.toString() ?? "",
-				description: persona.is_alter
-					? localizer(
-							locale,
-							"commands.persona.export.alter_persona_description",
-						)
-					: localizer(
-							locale,
-							"commands.persona.export.main_persona_description",
-						),
-			}))
-			.filter((option) => option.value !== "");
+  try {
+    // 1. Resolve target persona via selector
+    const serverDiscId = interaction.guild?.id ?? interaction.user.id;
+    const allPersonas = await loadAllPersonasForServer(serverDiscId);
+    const personaSelectOptions: SelectOption[] = allPersonas
+      .filter((persona) => persona.tomori_id !== undefined)
+      .map((persona) => ({
+        label: safeSelectOptionText(persona.tomori_nickname),
+        value: persona.tomori_id?.toString() ?? "",
+        description: persona.is_alter
+          ? localizer(
+              locale,
+              "commands.persona.export.alter_persona_description",
+            )
+          : localizer(
+              locale,
+              "commands.persona.export.main_persona_description",
+            ),
+      }))
+      .filter((option) => option.value !== "");
 
-		if (personaSelectOptions.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+    if (personaSelectOptions.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		const personaModalResult = await promptWithPaginatedModal(interaction, locale, {
-			modalCustomId: PERSONA_EXPORT_MODAL_ID,
-			modalTitleKey: "commands.persona.export.persona_modal_title",
-			components: [
-				{
-					customId: PERSONA_EXPORT_SELECT_ID,
-					labelKey: "commands.persona.export.persona_select_label",
-					descriptionKey: "commands.persona.export.persona_select_description",
-					placeholder: "commands.persona.export.persona_select_placeholder",
-					required: true,
-					options: personaSelectOptions,
-				},
-				{
-					customId: PERSONA_EXPORT_JSON_SELECT_ID,
-					labelKey: "commands.persona.export.export_json_select_label",
-					descriptionKey:
-						"commands.persona.export.export_json_select_description",
-					placeholder:
-						"commands.persona.export.export_json_select_placeholder",
-					required: false,
-					options: [
-						{
-							label: localizer(
-								locale,
-								"commands.persona.export.export_json_choice_false",
-							),
-							value: PERSONA_EXPORT_JSON_FALSE,
-						},
-						{
-							label: localizer(
-								locale,
-								"commands.persona.export.export_json_choice_true",
-							),
-							value: PERSONA_EXPORT_JSON_TRUE,
-						},
-					],
-				},
-			],
-		});
-		if (personaModalResult.outcome !== "submit") {
-			log.info(
-				`Persona export select modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-			);
-			return;
-		}
+    const personaModalResult = await promptWithPaginatedModal(
+      interaction,
+      locale,
+      {
+        modalCustomId: PERSONA_EXPORT_MODAL_ID,
+        modalTitleKey: "commands.persona.export.persona_modal_title",
+        components: [
+          {
+            customId: PERSONA_EXPORT_SELECT_ID,
+            labelKey: "commands.persona.export.persona_select_label",
+            descriptionKey:
+              "commands.persona.export.persona_select_description",
+            placeholder: "commands.persona.export.persona_select_placeholder",
+            required: true,
+            options: personaSelectOptions,
+          },
+          {
+            customId: PERSONA_EXPORT_JSON_SELECT_ID,
+            labelKey: "commands.persona.export.export_json_select_label",
+            descriptionKey:
+              "commands.persona.export.export_json_select_description",
+            placeholder:
+              "commands.persona.export.export_json_select_placeholder",
+            required: false,
+            options: [
+              {
+                label: localizer(
+                  locale,
+                  "commands.persona.export.export_json_choice_false",
+                ),
+                value: PERSONA_EXPORT_JSON_FALSE,
+              },
+              {
+                label: localizer(
+                  locale,
+                  "commands.persona.export.export_json_choice_true",
+                ),
+                value: PERSONA_EXPORT_JSON_TRUE,
+              },
+            ],
+          },
+        ],
+      },
+    );
+    if (personaModalResult.outcome !== "submit") {
+      log.info(
+        `Persona export select modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
+      );
+      return;
+    }
 
-		const modalSubmitInteraction = personaModalResult.interaction;
-		if (!modalSubmitInteraction) {
-			return;
-		}
-		responseInteraction = modalSubmitInteraction;
+    const modalSubmitInteraction = personaModalResult.interaction;
+    if (!modalSubmitInteraction) {
+      return;
+    }
+    responseInteraction = modalSubmitInteraction;
 
-		const selectedPersonaId = personaModalResult.values?.[PERSONA_EXPORT_SELECT_ID];
-		const exportJsonSelection =
-			personaModalResult.values?.[PERSONA_EXPORT_JSON_SELECT_ID] ??
-			PERSONA_EXPORT_JSON_FALSE;
-		const exportJson = exportJsonSelection === PERSONA_EXPORT_JSON_TRUE;
-		const selectedPersona =
-			allPersonas.find(
-				(persona) => persona.tomori_id?.toString() === selectedPersonaId,
-			) ?? null;
-		if (!selectedPersona?.tomori_id) {
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+    const selectedPersonaId =
+      personaModalResult.values?.[PERSONA_EXPORT_SELECT_ID];
+    const exportJsonSelection =
+      personaModalResult.values?.[PERSONA_EXPORT_JSON_SELECT_ID] ??
+      PERSONA_EXPORT_JSON_FALSE;
+    const exportJson = exportJsonSelection === PERSONA_EXPORT_JSON_TRUE;
+    const selectedPersona =
+      allPersonas.find(
+        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
+      ) ?? null;
+    if (!selectedPersona?.tomori_id) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		// 2. Defer reply while we process (not ephemeral for transparency)
-		await responseInteraction.deferReply();
+    // 2. Defer reply while we process (not ephemeral for transparency)
+    await responseInteraction.deferReply();
 
-		// 3. Export selected persona data from database
-		const exportResult = await exportPresetData(
-			serverDiscId,
-			selectedPersona.tomori_id,
-		);
+    // 3. Export selected persona data from database
+    const exportResult = await exportPresetData(
+      serverDiscId,
+      selectedPersona.tomori_id,
+    );
 
-		if (!exportResult.success) {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "commands.persona.export.failed_title"))
-						.setDescription(localizer(locale, exportResult.error))
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
+    if (!exportResult.success) {
+      await responseInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(localizer(locale, "commands.persona.export.failed_title"))
+            .setDescription(localizer(locale, exportResult.error))
+            .setColor(ColorCode.ERROR),
+        ],
+      });
+      return;
+    }
 
-		// Type is now narrowed to success variant
-		const presetData = exportResult.data;
-		if (exportJson) {
-			const nickname = presetData.data.tomori_nickname;
-			const sanitizedNickname = nickname
-				.replace(/[^a-zA-Z0-9-_]/g, "_")
-				.slice(0, 50);
-			const timestamp = Date.now();
-			const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.json`;
+    // Type is now narrowed to success variant
+    const presetData = exportResult.data;
+    if (exportJson) {
+      const nickname = presetData.data.tomori_nickname;
+      const sanitizedNickname = nickname
+        .replace(/[^a-zA-Z0-9-_]/g, "_")
+        .slice(0, 50);
+      const timestamp = Date.now();
+      const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.json`;
 
-			const readableJsonExport = {
-				export_type: "persona_readable",
-				import_compatible: false,
-				exported_at: new Date().toISOString(),
-				note: localizer(
-					locale,
-					"commands.persona.export.json_non_importable_note",
-				),
-				persona: {
-					tomori_id: selectedPersona.tomori_id ?? null,
-					tomori_nickname: nickname,
-					is_alter: selectedPersona.is_alter === true,
-					persona_lineage_id: presetData.data.persona_lineage_id,
-					trigger_words: presetData.data.trigger_words,
-					persona_prompt: presetData.data.persona_prompt,
-					attribute_list: presetData.data.attribute_list,
-					sample_dialogues_in: presetData.data.sample_dialogues_in,
-					sample_dialogues_out: presetData.data.sample_dialogues_out,
-					sample_dialogues: presetData.data.sample_dialogues_in.map(
-						(input, index) => ({
-							user_input: input,
-							persona_output:
-								presetData.data.sample_dialogues_out[index] ?? "",
-						}),
-					),
-					webhook_avatar_url: selectedPersona.webhook_avatar_url ?? null,
-					alter_triggers: selectedPersona.alter_triggers ?? [],
-					nai_tags: selectedPersona.nai_tags ?? [],
-				},
-			};
+      const readableJsonExport = {
+        export_type: "persona_readable",
+        import_compatible: false,
+        exported_at: new Date().toISOString(),
+        note: localizer(
+          locale,
+          "commands.persona.export.json_non_importable_note",
+        ),
+        persona: {
+          tomori_id: selectedPersona.tomori_id ?? null,
+          tomori_nickname: nickname,
+          is_alter: selectedPersona.is_alter === true,
+          persona_lineage_id: presetData.data.persona_lineage_id,
+          trigger_words: presetData.data.trigger_words,
+          persona_prompt: presetData.data.persona_prompt,
+          attribute_list: presetData.data.attribute_list,
+          sample_dialogues_in: presetData.data.sample_dialogues_in,
+          sample_dialogues_out: presetData.data.sample_dialogues_out,
+          sample_dialogues: presetData.data.sample_dialogues_in.map(
+            (input, index) => ({
+              user_input: input,
+              persona_output: presetData.data.sample_dialogues_out[index] ?? "",
+            }),
+          ),
+          webhook_avatar_url: selectedPersona.webhook_avatar_url ?? null,
+          alter_triggers: selectedPersona.alter_triggers ?? [],
+          nai_tags: selectedPersona.nai_tags ?? [],
+        },
+      };
 
-			const attachment = new AttachmentBuilder(
-				Buffer.from(`${JSON.stringify(readableJsonExport, null, 2)}\n`, "utf8"),
-				{
-					name: filename,
-				},
-			);
+      const attachment = new AttachmentBuilder(
+        Buffer.from(`${JSON.stringify(readableJsonExport, null, 2)}\n`, "utf8"),
+        {
+          name: filename,
+        },
+      );
 
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "commands.persona.export.success_title"))
-						.setDescription(
-							localizer(
-								locale,
-								"commands.persona.export.success_description_json",
-								{
-									nickname,
-								},
-							),
-						)
-						.setColor(ColorCode.SUCCESS),
-				],
-				files: [attachment],
-			});
+      await responseInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(
+              localizer(locale, "commands.persona.export.success_title"),
+            )
+            .setDescription(
+              localizer(
+                locale,
+                "commands.persona.export.success_description_json",
+                {
+                  nickname,
+                },
+              ),
+            )
+            .setColor(ColorCode.SUCCESS),
+        ],
+        files: [attachment],
+      });
 
-			log.success(
-				`Successfully exported readable JSON preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`,
-			);
-			return;
-		}
+      log.success(
+        `Successfully exported readable JSON preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`,
+      );
+      return;
+    }
 
-		// 4. Resolve avatar image (alter persona avatar when available, otherwise server avatar)
-		let avatarBuffer: Buffer;
-		try {
-			let selectedAvatarBuffer: Buffer | null = null;
-			if (selectedPersona.is_alter && selectedPersona.webhook_avatar_url) {
-				const alterAvatarDownload = await safeDownload(
-					selectedPersona.webhook_avatar_url,
-					{
-						maxSizeMB: 8,
-						timeoutMs: 15000,
-					},
-				);
-				if (alterAvatarDownload.success && alterAvatarDownload.buffer) {
-					try {
-						selectedAvatarBuffer = await convertToPNG(alterAvatarDownload.buffer);
-					} catch (error) {
-						log.warn(
-							`Failed to convert alter avatar to PNG for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
-							error as Error,
-						);
-					}
-				} else {
-					log.warn(
-						`Failed to download alter avatar for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
-						{
-							metadata: {
-								error: alterAvatarDownload.error,
-								details: alterAvatarDownload.details,
-							},
-						},
-					);
-				}
-			}
+    // 4. Resolve avatar image (alter persona avatar when available, otherwise server avatar)
+    let avatarBuffer: Buffer;
+    try {
+      let selectedAvatarBuffer: Buffer | null = null;
+      if (selectedPersona.is_alter && selectedPersona.webhook_avatar_url) {
+        const alterAvatarDownload = await safeDownload(
+          selectedPersona.webhook_avatar_url,
+          {
+            maxSizeMB: 8,
+            timeoutMs: 15000,
+          },
+        );
+        if (alterAvatarDownload.success && alterAvatarDownload.buffer) {
+          try {
+            selectedAvatarBuffer = await convertToPNG(
+              alterAvatarDownload.buffer,
+            );
+          } catch (error) {
+            log.warn(
+              `Failed to convert alter avatar to PNG for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
+              error as Error,
+            );
+          }
+        } else {
+          log.warn(
+            `Failed to download alter avatar for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
+            {
+              metadata: {
+                error: alterAvatarDownload.error,
+                details: alterAvatarDownload.details,
+              },
+            },
+          );
+        }
+      }
 
-			avatarBuffer =
-				selectedAvatarBuffer ??
-				// In DMs, getServerAvatar will return bot's default avatar when guild is null
-				(await getServerAvatar(interaction.guild, client));
-		} catch (error) {
-			log.error(
-				`Failed to get avatar for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
-				error as Error,
-			);
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "commands.persona.export.avatar_failed_title"),
-						)
-						.setDescription(
-							localizer(
-								locale,
-								"commands.persona.export.avatar_failed_description",
-							),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
+      avatarBuffer =
+        selectedAvatarBuffer ??
+        // In DMs, getServerAvatar will return bot's default avatar when guild is null
+        (await getServerAvatar(interaction.guild, client));
+    } catch (error) {
+      log.error(
+        `Failed to get avatar for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
+        error as Error,
+      );
+      await responseInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(
+              localizer(locale, "commands.persona.export.avatar_failed_title"),
+            )
+            .setDescription(
+              localizer(
+                locale,
+                "commands.persona.export.avatar_failed_description",
+              ),
+            )
+            .setColor(ColorCode.ERROR),
+        ],
+      });
+      return;
+    }
 
-		// 5. Embed metadata into PNG
-		let pngWithMetadata: Buffer;
-		try {
-			pngWithMetadata = embedMetadataInPNG(avatarBuffer, presetData);
-		} catch (error) {
-			log.error(
-				`Failed to embed metadata into PNG for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
-				error as Error,
-			);
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "commands.persona.export.embed_failed_title"),
-						)
-						.setDescription(
-							localizer(
-								locale,
-								"commands.persona.export.embed_failed_description",
-							),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-			return;
-		}
+    // 5. Embed metadata into PNG
+    let pngWithMetadata: Buffer;
+    try {
+      pngWithMetadata = embedMetadataInPNG(avatarBuffer, presetData);
+    } catch (error) {
+      log.error(
+        `Failed to embed metadata into PNG for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
+        error as Error,
+      );
+      await responseInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(
+              localizer(locale, "commands.persona.export.embed_failed_title"),
+            )
+            .setDescription(
+              localizer(
+                locale,
+                "commands.persona.export.embed_failed_description",
+              ),
+            )
+            .setColor(ColorCode.ERROR),
+        ],
+      });
+      return;
+    }
 
-		// 6. Create filename with nickname and timestamp
-		const nickname = presetData.data.tomori_nickname;
-		const sanitizedNickname = nickname
-			.replace(/[^a-zA-Z0-9-_]/g, "_")
-			.slice(0, 50);
-		const timestamp = Date.now();
-		const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.png`;
+    // 6. Create filename with nickname and timestamp
+    const nickname = presetData.data.tomori_nickname;
+    const sanitizedNickname = nickname
+      .replace(/[^a-zA-Z0-9-_]/g, "_")
+      .slice(0, 50);
+    const timestamp = Date.now();
+    const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.png`;
 
-		// 7. Create attachment
-		const attachment = new AttachmentBuilder(pngWithMetadata, {
-			name: filename,
-		});
+    // 7. Create attachment
+    const attachment = new AttachmentBuilder(pngWithMetadata, {
+      name: filename,
+    });
 
-		// 8. Send to channel with embedded image (visible to everyone for transparency)
-		await responseInteraction.editReply({
-			embeds: [
-				new EmbedBuilder()
-					.setTitle(localizer(locale, "commands.persona.export.success_title"))
-					.setDescription(
-						localizer(locale, "commands.persona.export.success_description", {
-							nickname: nickname,
-						}),
-					)
-					.setColor(ColorCode.SUCCESS)
-					.setImage(`attachment://${filename}`),
-			],
-			files: [attachment],
-		});
+    // 8. Send to channel with embedded image (visible to everyone for transparency)
+    await responseInteraction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(localizer(locale, "commands.persona.export.success_title"))
+          .setDescription(
+            localizer(locale, "commands.persona.export.success_description", {
+              nickname: nickname,
+            }),
+          )
+          .setColor(ColorCode.SUCCESS)
+          .setImage(`attachment://${filename}`),
+      ],
+      files: [attachment],
+    });
 
-		log.success(
-			`Successfully exported preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`,
-		);
-	} catch (error) {
-		log.error("Error executing preset export command:", error, {
-			errorType: "CommandExecutionError",
-			metadata: { commandName: "preset export" },
-		});
+    log.success(
+      `Successfully exported preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`,
+    );
+  } catch (error) {
+    log.error("Error executing preset export command:", error, {
+      errorType: "CommandExecutionError",
+      metadata: { commandName: "preset export" },
+    });
 
-		// If we haven't replied yet, reply with error
-		if (!responseInteraction.replied && !responseInteraction.deferred) {
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await responseInteraction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(localizer(locale, "general.errors.unknown_error_title"))
-						.setDescription(
-							localizer(locale, "general.errors.unknown_error_description"),
-						)
-						.setColor(ColorCode.ERROR),
-				],
-			});
-		}
-	}
+    // If we haven't replied yet, reply with error
+    if (!responseInteraction.replied && !responseInteraction.deferred) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+    } else {
+      await responseInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(localizer(locale, "general.errors.unknown_error_title"))
+            .setDescription(
+              localizer(locale, "general.errors.unknown_error_description"),
+            )
+            .setColor(ColorCode.ERROR),
+        ],
+      });
+    }
+  }
 }

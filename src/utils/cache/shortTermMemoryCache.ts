@@ -23,72 +23,72 @@ import { log } from "@/utils/misc/logger";
  * A single message in a short-term memory conversation
  */
 interface ShortTermMessage {
-	role: "user" | "model";
-	content: string;
-	timestamp: number;
-	/** Original speaker name (persona name or username) for multi-persona labeling */
-	speakerName?: string;
+  role: "user" | "model";
+  content: string;
+  timestamp: number;
+  /** Original speaker name (persona name or username) for multi-persona labeling */
+  speakerName?: string;
 }
 
 /**
  * A short-term memory entry for a user in a specific channel
  */
 export interface ShortTermMemoryEntry {
-	/** Array of conversation messages (max 10 condensed turns) */
-	messages: ShortTermMessage[];
+  /** Array of conversation messages (max 10 condensed turns) */
+  messages: ShortTermMessage[];
 
-	/** Optional tool-generated summary (replaces crude conversation when present) */
-	summary?: string;
+  /** Optional tool-generated summary (replaces crude conversation when present) */
+  summary?: string;
 
-	/** Discord server ID (or "DM" for direct messages) */
-	serverId: string;
+  /** Discord server ID (or "DM" for direct messages) */
+  serverId: string;
 
-	/** Optional server name (for same-server channel mentions) */
-	serverName?: string;
+  /** Optional server name (for same-server channel mentions) */
+  serverName?: string;
 
-	/** Discord channel ID */
-	channelId: string;
+  /** Discord channel ID */
+  channelId: string;
 
-	/** Optional channel name (for same-server channel mentions) */
-	channelName?: string;
+  /** Optional channel name (for same-server channel mentions) */
+  channelName?: string;
 
-	/** Tomori persona ID for persona-scoped memory */
-	tomoriId?: number | null;
+  /** Tomori persona ID for persona-scoped memory */
+  tomoriId?: number | null;
 
-	/** Persona lineage ID for cross-server persona matching */
-	personaLineageId?: number | null;
+  /** Persona lineage ID for cross-server persona matching */
+  personaLineageId?: number | null;
 
-	/** Unix timestamp (ms) of last update */
-	lastUpdated: number;
+  /** Unix timestamp (ms) of last update */
+  lastUpdated: number;
 }
 
 /**
  * Cache statistics for monitoring performance
  */
 interface CacheStats {
-	hits: number;
-	misses: number;
-	stores: number;
-	invalidations: number;
-	expirations: number;
+  hits: number;
+  misses: number;
+  stores: number;
+  invalidations: number;
+  expirations: number;
 }
 
 // Environment variables for configuration
 const CRUDE_CONVERSATION_TTL_HOURS = Number.parseInt(
-	process.env.SHORT_TERM_MEMORY_TTL_HOURS || "12",
-	10,
+  process.env.SHORT_TERM_MEMORY_TTL_HOURS || "12",
+  10,
 );
 const SUMMARY_TTL_HOURS = Number.parseInt(
-	process.env.SHORT_TERM_MEMORY_SUMMARY_TTL_HOURS || "24",
-	10,
+  process.env.SHORT_TERM_MEMORY_SUMMARY_TTL_HOURS || "24",
+  10,
 );
 const MAX_SUMMARY_LENGTH = Number.parseInt(
-	process.env.SHORT_TERM_MEMORY_MAX_SUMMARY_LENGTH || "1500",
-	10,
+  process.env.SHORT_TERM_MEMORY_MAX_SUMMARY_LENGTH || "1500",
+  10,
 );
 const MAX_MESSAGES_PER_CHANNEL = Number.parseInt(
-	process.env.SHORT_TERM_MEMORY_MAX_MESSAGES_PER_CHANNEL || "10",
-	10,
+  process.env.SHORT_TERM_MEMORY_MAX_MESSAGES_PER_CHANNEL || "10",
+  10,
 );
 
 // Convert hours to milliseconds
@@ -103,11 +103,11 @@ const cache = new Map<string, ShortTermMemoryEntry>();
 
 // Cache statistics
 const stats: CacheStats = {
-	hits: 0,
-	misses: 0,
-	stores: 0,
-	invalidations: 0,
-	expirations: 0,
+  hits: 0,
+  misses: 0,
+  stores: 0,
+  invalidations: 0,
+  expirations: 0,
 };
 
 /**
@@ -116,9 +116,13 @@ const stats: CacheStats = {
  * @param channelId - Discord channel ID
  * @param tomoriId - Optional persona ID for persona-scoped memory
  */
-function getCacheKey(userId: string, channelId: string, tomoriId?: number | null): string {
-	if (tomoriId) return `shortterm:${userId}:${channelId}:${tomoriId}`;
-	return `shortterm:${userId}:${channelId}`;
+function getCacheKey(
+  userId: string,
+  channelId: string,
+  tomoriId?: number | null,
+): string {
+  if (tomoriId) return `shortterm:${userId}:${channelId}:${tomoriId}`;
+  return `shortterm:${userId}:${channelId}`;
 }
 
 /**
@@ -127,13 +131,13 @@ function getCacheKey(userId: string, channelId: string, tomoriId?: number | null
  * @returns True if expired, false otherwise
  */
 function isExpired(entry: ShortTermMemoryEntry): boolean {
-	const now = Date.now();
-	const age = now - entry.lastUpdated;
+  const now = Date.now();
+  const age = now - entry.lastUpdated;
 
-	// If summary exists, use summary TTL; otherwise use crude conversation TTL
-	const ttl = entry.summary ? SUMMARY_TTL_MS : CRUDE_CONVERSATION_TTL_MS;
+  // If summary exists, use summary TTL; otherwise use crude conversation TTL
+  const ttl = entry.summary ? SUMMARY_TTL_MS : CRUDE_CONVERSATION_TTL_MS;
 
-	return age > ttl;
+  return age > ttl;
 }
 
 /**
@@ -142,28 +146,28 @@ function isExpired(entry: ShortTermMemoryEntry): boolean {
  * @returns Human-readable relative time (e.g., "2 hours ago", "just now")
  */
 export function getRelativeTimestamp(timestamp: number): string {
-	const now = Date.now();
-	const diffMs = now - timestamp;
+  const now = Date.now();
+  const diffMs = now - timestamp;
 
-	// Convert to different units
-	const diffMinutes = Math.floor(diffMs / (60 * 1000));
-	const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
-	const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  // Convert to different units
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
 
-	// Format based on age
-	if (diffMinutes < 1) {
-		return "just now";
-	}
-	if (diffMinutes < 60) {
-		return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
-	}
-	if (diffHours < 24) {
-		return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-	}
-	if (diffDays < 7) {
-		return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-	}
-	return "over a week ago";
+  // Format based on age
+  if (diffMinutes < 1) {
+    return "just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  }
+  if (diffDays < 7) {
+    return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  }
+  return "over a week ago";
 }
 
 /**
@@ -179,72 +183,72 @@ export function getRelativeTimestamp(timestamp: number): string {
  * @param personaLineageId - Optional persona lineage ID for cross-server persona matching
  */
 export function storeShortTermMemory(
-	userId: string,
-	channelId: string,
-	messages: Array<{
-		role: "user" | "model";
-		content: string;
-		timestamp: number;
-		speakerName?: string;
-	}>,
-	serverId: string,
-	serverName?: string,
-	channelName?: string,
-	tomoriId?: number | null,
-	personaLineageId?: number | null,
+  userId: string,
+  channelId: string,
+  messages: Array<{
+    role: "user" | "model";
+    content: string;
+    timestamp: number;
+    speakerName?: string;
+  }>,
+  serverId: string,
+  serverName?: string,
+  channelName?: string,
+  tomoriId?: number | null,
+  personaLineageId?: number | null,
 ): void {
-	try {
-		// 1. Validate inputs
-		if (!userId || !channelId || !serverId) {
-			log.warn(
-				`[shortTermMemoryCache] Invalid parameters for storeShortTermMemory - userId=${!!userId}, channelId=${!!channelId}, serverId=${!!serverId}`,
-			);
-			return;
-		}
+  try {
+    // 1. Validate inputs
+    if (!userId || !channelId || !serverId) {
+      log.warn(
+        `[shortTermMemoryCache] Invalid parameters for storeShortTermMemory - userId=${!!userId}, channelId=${!!channelId}, serverId=${!!serverId}`,
+      );
+      return;
+    }
 
-		// 2. Limit messages to MAX_MESSAGES_PER_CHANNEL (take most recent)
-		const limitedMessages = messages.slice(-MAX_MESSAGES_PER_CHANNEL);
+    // 2. Limit messages to MAX_MESSAGES_PER_CHANNEL (take most recent)
+    const limitedMessages = messages.slice(-MAX_MESSAGES_PER_CHANNEL);
 
-		// 3. Get existing entry (preserve summary if exists)
-		const key = getCacheKey(userId, channelId, tomoriId);
-		const existing = cache.get(key);
+    // 3. Get existing entry (preserve summary if exists)
+    const key = getCacheKey(userId, channelId, tomoriId);
+    const existing = cache.get(key);
 
-		// 🔍 DEBUG: Log existing entry state BEFORE creating new entry
-		log.info(
-			`[shortTermMemoryCache] [STORAGE] Before store - key=${key}, existingEntry=${!!existing}, existingSummary=${!!existing?.summary}, existingSummaryLength=${existing?.summary?.length || 0}`,
-		);
+    // 🔍 DEBUG: Log existing entry state BEFORE creating new entry
+    log.info(
+      `[shortTermMemoryCache] [STORAGE] Before store - key=${key}, existingEntry=${!!existing}, existingSummary=${!!existing?.summary}, existingSummaryLength=${existing?.summary?.length || 0}`,
+    );
 
-		// 4. Create new entry
-		const entry: ShortTermMemoryEntry = {
-			messages: limitedMessages,
-			summary: existing?.summary, // Preserve existing summary
-			serverId,
-			serverName,
-			channelId,
-			channelName,
-			tomoriId,
-			personaLineageId,
-			lastUpdated: Date.now(),
-		};
+    // 4. Create new entry
+    const entry: ShortTermMemoryEntry = {
+      messages: limitedMessages,
+      summary: existing?.summary, // Preserve existing summary
+      serverId,
+      serverName,
+      channelId,
+      channelName,
+      tomoriId,
+      personaLineageId,
+      lastUpdated: Date.now(),
+    };
 
-		// 5. Store in cache
-		cache.set(key, entry);
-		stats.stores++;
+    // 5. Store in cache
+    cache.set(key, entry);
+    stats.stores++;
 
-		// 🔍 DEBUG: Log final entry state AFTER storing
-		log.info(
-			`[shortTermMemoryCache] [STORAGE] After store - key=${key}, messageCount=${limitedMessages.length}, hasSummary=${!!entry.summary}, summaryLength=${entry.summary?.length || 0}, summaryPreserved=${!!existing?.summary && !!entry.summary}`,
-		);
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to store short-term memory - userId=${userId}, channelId=${channelId}`,
-			error,
-			{
-				errorType: "CACHE_STORAGE_ERROR",
-				metadata: { userDiscId: userId, channelId },
-			},
-		);
-	}
+    // 🔍 DEBUG: Log final entry state AFTER storing
+    log.info(
+      `[shortTermMemoryCache] [STORAGE] After store - key=${key}, messageCount=${limitedMessages.length}, hasSummary=${!!entry.summary}, summaryLength=${entry.summary?.length || 0}, summaryPreserved=${!!existing?.summary && !!entry.summary}`,
+    );
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to store short-term memory - userId=${userId}, channelId=${channelId}`,
+      error,
+      {
+        errorType: "CACHE_STORAGE_ERROR",
+        metadata: { userDiscId: userId, channelId },
+      },
+    );
+  }
 }
 
 /**
@@ -256,61 +260,61 @@ export function storeShortTermMemory(
  * @returns Array of non-expired memory entries
  */
 export function getShortTermMemoriesForUser(
-	userId: string,
-	excludeChannelId?: string,
-	personaLineageId?: number | null,
+  userId: string,
+  excludeChannelId?: string,
+  personaLineageId?: number | null,
 ): ShortTermMemoryEntry[] {
-	try {
-		const memories: ShortTermMemoryEntry[] = [];
+  try {
+    const memories: ShortTermMemoryEntry[] = [];
 
-		// 1. Iterate through cache and find entries for this user
-		for (const [key, entry] of cache.entries()) {
-			// Check if key matches user
-			if (!key.startsWith(`shortterm:${userId}:`)) {
-				continue;
-			}
+    // 1. Iterate through cache and find entries for this user
+    for (const [key, entry] of cache.entries()) {
+      // Check if key matches user
+      if (!key.startsWith(`shortterm:${userId}:`)) {
+        continue;
+      }
 
-			// Exclude specified channel if provided
-			if (excludeChannelId && entry.channelId === excludeChannelId) {
-				continue;
-			}
+      // Exclude specified channel if provided
+      if (excludeChannelId && entry.channelId === excludeChannelId) {
+        continue;
+      }
 
-			// Filter by persona lineage if provided (persona-scoped cross-channel/cross-server)
-			// Only include entries that match the requesting persona's lineage
-			if (personaLineageId && entry.personaLineageId !== personaLineageId) {
-				continue;
-			}
+      // Filter by persona lineage if provided (persona-scoped cross-channel/cross-server)
+      // Only include entries that match the requesting persona's lineage
+      if (personaLineageId && entry.personaLineageId !== personaLineageId) {
+        continue;
+      }
 
-			// Check expiration
-			if (isExpired(entry)) {
-				// Mark for removal but don't remove during iteration
-				continue;
-			}
+      // Check expiration
+      if (isExpired(entry)) {
+        // Mark for removal but don't remove during iteration
+        continue;
+      }
 
-			// Add to results
-			memories.push(entry);
-			stats.hits++;
-		}
+      // Add to results
+      memories.push(entry);
+      stats.hits++;
+    }
 
-		// 2. Sort by lastUpdated (most recent first)
-		memories.sort((a, b) => b.lastUpdated - a.lastUpdated);
+    // 2. Sort by lastUpdated (most recent first)
+    memories.sort((a, b) => b.lastUpdated - a.lastUpdated);
 
-		log.info(
-			`[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
-		);
+    log.info(
+      `[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
+    );
 
-		return memories;
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to get short-term memories - userId=${userId}`,
-			error,
-			{
-				errorType: "CACHE_RETRIEVAL_ERROR",
-				metadata: { userDiscId: userId },
-			},
-		);
-		return [];
-	}
+    return memories;
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to get short-term memories - userId=${userId}`,
+      error,
+      {
+        errorType: "CACHE_RETRIEVAL_ERROR",
+        metadata: { userDiscId: userId },
+      },
+    );
+    return [];
+  }
 }
 
 /**
@@ -322,56 +326,56 @@ export function getShortTermMemoriesForUser(
  * @returns Memory entry if found and not expired, undefined otherwise
  */
 export function getShortTermMemoryForChannel(
-	userId: string,
-	channelId: string,
-	tomoriId?: number | null,
+  userId: string,
+  channelId: string,
+  tomoriId?: number | null,
 ): ShortTermMemoryEntry | undefined {
-	try {
-		const key = getCacheKey(userId, channelId, tomoriId);
-		const entry = cache.get(key);
+  try {
+    const key = getCacheKey(userId, channelId, tomoriId);
+    const entry = cache.get(key);
 
-		// 🔍 DEBUG: Log what we found in cache
-		log.info(
-			`[shortTermMemoryCache] [RETRIEVAL] Get memory for channel - key=${key}, entryFound=${!!entry}, hasSummary=${!!entry?.summary}, summaryLength=${entry?.summary?.length || 0}, messageCount=${entry?.messages.length || 0}`,
-		);
+    // 🔍 DEBUG: Log what we found in cache
+    log.info(
+      `[shortTermMemoryCache] [RETRIEVAL] Get memory for channel - key=${key}, entryFound=${!!entry}, hasSummary=${!!entry?.summary}, summaryLength=${entry?.summary?.length || 0}, messageCount=${entry?.messages.length || 0}`,
+    );
 
-		// Check if entry exists
-		if (!entry) {
-			stats.misses++;
-			log.info(
-				`[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`,
-			);
-			return undefined;
-		}
+    // Check if entry exists
+    if (!entry) {
+      stats.misses++;
+      log.info(
+        `[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`,
+      );
+      return undefined;
+    }
 
-		// Check expiration
-		if (isExpired(entry)) {
-			// Remove expired entry
-			cache.delete(key);
-			stats.expirations++;
-			stats.misses++;
-			log.info(
-				`[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`,
-			);
-			return undefined;
-		}
+    // Check expiration
+    if (isExpired(entry)) {
+      // Remove expired entry
+      cache.delete(key);
+      stats.expirations++;
+      stats.misses++;
+      log.info(
+        `[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`,
+      );
+      return undefined;
+    }
 
-		stats.hits++;
-		log.info(
-			`[shortTermMemoryCache] [RETRIEVAL] Cache hit - returning entry with summary=${!!entry.summary}, messages=${entry.messages.length}`,
-		);
-		return entry;
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to get short-term memory for channel - userId=${userId}, channelId=${channelId}`,
-			error,
-			{
-				errorType: "CACHE_RETRIEVAL_ERROR",
-				metadata: { userDiscId: userId, channelId },
-			},
-		);
-		return undefined;
-	}
+    stats.hits++;
+    log.info(
+      `[shortTermMemoryCache] [RETRIEVAL] Cache hit - returning entry with summary=${!!entry.summary}, messages=${entry.messages.length}`,
+    );
+    return entry;
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to get short-term memory for channel - userId=${userId}, channelId=${channelId}`,
+      error,
+      {
+        errorType: "CACHE_RETRIEVAL_ERROR",
+        metadata: { userDiscId: userId, channelId },
+      },
+    );
+    return undefined;
+  }
 }
 
 /**
@@ -387,83 +391,83 @@ export function getShortTermMemoryForChannel(
  * @param personaLineageId - Optional persona lineage ID for cross-server persona matching
  */
 export function updateShortTermMemorySummary(
-	userId: string,
-	channelId: string,
-	summary: string,
-	serverId?: string,
-	serverName?: string,
-	channelName?: string,
-	tomoriId?: number | null,
-	personaLineageId?: number | null,
+  userId: string,
+  channelId: string,
+  summary: string,
+  serverId?: string,
+  serverName?: string,
+  channelName?: string,
+  tomoriId?: number | null,
+  personaLineageId?: number | null,
 ): void {
-	try {
-		// 1. Validate inputs
-		if (!userId || !channelId || !summary) {
-			log.warn(
-				`[shortTermMemoryCache] Invalid parameters for updateShortTermMemorySummary - userId=${!!userId}, channelId=${!!channelId}, summary=${!!summary}`,
-			);
-			return;
-		}
+  try {
+    // 1. Validate inputs
+    if (!userId || !channelId || !summary) {
+      log.warn(
+        `[shortTermMemoryCache] Invalid parameters for updateShortTermMemorySummary - userId=${!!userId}, channelId=${!!channelId}, summary=${!!summary}`,
+      );
+      return;
+    }
 
-		// 2. Validate summary length (use configured max)
-		const truncatedSummary =
-			summary.length > MAX_SUMMARY_LENGTH
-				? summary.slice(0, MAX_SUMMARY_LENGTH)
-				: summary;
+    // 2. Validate summary length (use configured max)
+    const truncatedSummary =
+      summary.length > MAX_SUMMARY_LENGTH
+        ? summary.slice(0, MAX_SUMMARY_LENGTH)
+        : summary;
 
-		// 3. Get existing entry
-		const key = getCacheKey(userId, channelId, tomoriId);
-		let existing = cache.get(key);
+    // 3. Get existing entry
+    const key = getCacheKey(userId, channelId, tomoriId);
+    let existing = cache.get(key);
 
-		// 🔍 DEBUG: Log state BEFORE updating summary
-		log.info(
-			`[shortTermMemoryCache] [SUMMARY_UPDATE] Before update - key=${key}, existingEntry=${!!existing}, existingMessages=${existing?.messages.length || 0}, existingSummary=${!!existing?.summary}`,
-		);
+    // 🔍 DEBUG: Log state BEFORE updating summary
+    log.info(
+      `[shortTermMemoryCache] [SUMMARY_UPDATE] Before update - key=${key}, existingEntry=${!!existing}, existingMessages=${existing?.messages.length || 0}, existingSummary=${!!existing?.summary}`,
+    );
 
-		// 4. If no existing entry, create a minimal one (tool was called before conversation storage)
-		if (!existing) {
-			log.info(
-				`[shortTermMemoryCache] [SUMMARY_UPDATE] Creating new entry with summary - userId=${userId}, channelId=${channelId}, summaryLength=${truncatedSummary.length}`,
-			);
+    // 4. If no existing entry, create a minimal one (tool was called before conversation storage)
+    if (!existing) {
+      log.info(
+        `[shortTermMemoryCache] [SUMMARY_UPDATE] Creating new entry with summary - userId=${userId}, channelId=${channelId}, summaryLength=${truncatedSummary.length}`,
+      );
 
-			existing = {
-				messages: [], // Empty messages array - will be populated when conversation is stored
-				summary: truncatedSummary,
-				serverId: serverId || "unknown",
-				serverName,
-				channelId,
-				channelName,
-				tomoriId,
-				personaLineageId,
-				lastUpdated: Date.now(),
-			};
-		} else {
-			// Update existing entry
-			log.info(
-				`[shortTermMemoryCache] [SUMMARY_UPDATE] Updating existing entry - previousSummary=${!!existing.summary}, newSummaryLength=${truncatedSummary.length}`,
-			);
-			existing.summary = truncatedSummary;
-			existing.lastUpdated = Date.now();
-		}
+      existing = {
+        messages: [], // Empty messages array - will be populated when conversation is stored
+        summary: truncatedSummary,
+        serverId: serverId || "unknown",
+        serverName,
+        channelId,
+        channelName,
+        tomoriId,
+        personaLineageId,
+        lastUpdated: Date.now(),
+      };
+    } else {
+      // Update existing entry
+      log.info(
+        `[shortTermMemoryCache] [SUMMARY_UPDATE] Updating existing entry - previousSummary=${!!existing.summary}, newSummaryLength=${truncatedSummary.length}`,
+      );
+      existing.summary = truncatedSummary;
+      existing.lastUpdated = Date.now();
+    }
 
-		// 5. Store updated entry
-		cache.set(key, existing);
+    // 5. Store updated entry
+    cache.set(key, existing);
 
-		// 🔍 DEBUG: Verify entry was stored correctly
-		const stored = cache.get(key);
-		log.info(
-			`[shortTermMemoryCache] [SUMMARY_UPDATE] After update - key=${key}, storedEntry=${!!stored}, storedSummary=${!!stored?.summary}, storedSummaryLength=${stored?.summary?.length || 0}, storedMessages=${stored?.messages.length || 0}`,
-		);
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to update short-term memory summary - userId=${userId}, channelId=${channelId}`,
-			error,
-			{
-				errorType: "CACHE_UPDATE_ERROR",
-				metadata: { userDiscId: userId, channelId },
-			},
-		);
-	}
+    // 🔍 DEBUG: Verify entry was stored correctly
+    const stored = cache.get(key);
+    log.info(
+      `[shortTermMemoryCache] [SUMMARY_UPDATE] After update - key=${key}, storedEntry=${!!stored}, storedSummary=${!!stored?.summary}, storedSummaryLength=${stored?.summary?.length || 0}, storedMessages=${stored?.messages.length || 0}`,
+    );
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to update short-term memory summary - userId=${userId}, channelId=${channelId}`,
+      error,
+      {
+        errorType: "CACHE_UPDATE_ERROR",
+        metadata: { userDiscId: userId, channelId },
+      },
+    );
+  }
 }
 
 /**
@@ -474,30 +478,30 @@ export function updateShortTermMemorySummary(
  * @param tomoriId - Optional persona ID for persona-scoped memory
  */
 export function invalidateShortTermMemory(
-	userId: string,
-	channelId: string,
-	tomoriId?: number | null,
+  userId: string,
+  channelId: string,
+  tomoriId?: number | null,
 ): void {
-	try {
-		const key = getCacheKey(userId, channelId, tomoriId);
-		const deleted = cache.delete(key);
+  try {
+    const key = getCacheKey(userId, channelId, tomoriId);
+    const deleted = cache.delete(key);
 
-		if (deleted) {
-			stats.invalidations++;
-			log.info(
-				`[shortTermMemoryCache] Invalidated short-term memory - userId=${userId}, channelId=${channelId}`,
-			);
-		}
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to invalidate short-term memory - userId=${userId}, channelId=${channelId}`,
-			error,
-			{
-				errorType: "CACHE_INVALIDATION_ERROR",
-				metadata: { userDiscId: userId, channelId },
-			},
-		);
-	}
+    if (deleted) {
+      stats.invalidations++;
+      log.info(
+        `[shortTermMemoryCache] Invalidated short-term memory - userId=${userId}, channelId=${channelId}`,
+      );
+    }
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to invalidate short-term memory - userId=${userId}, channelId=${channelId}`,
+      error,
+      {
+        errorType: "CACHE_INVALIDATION_ERROR",
+        metadata: { userDiscId: userId, channelId },
+      },
+    );
+  }
 }
 
 /**
@@ -506,32 +510,32 @@ export function invalidateShortTermMemory(
  * @param channelId - Discord channel ID
  */
 export function clearShortTermMemoryForChannel(channelId: string): void {
-	try {
-		let clearedCount = 0;
+  try {
+    let clearedCount = 0;
 
-		// Find and delete all entries for this channel (across all users)
-		for (const [key, entry] of cache.entries()) {
-			if (entry.channelId === channelId) {
-				cache.delete(key);
-				clearedCount++;
-			}
-		}
+    // Find and delete all entries for this channel (across all users)
+    for (const [key, entry] of cache.entries()) {
+      if (entry.channelId === channelId) {
+        cache.delete(key);
+        clearedCount++;
+      }
+    }
 
-		stats.invalidations += clearedCount;
+    stats.invalidations += clearedCount;
 
-		log.info(
-			`[shortTermMemoryCache] Cleared all short-term memories for channel - channelId=${channelId}, clearedCount=${clearedCount}`,
-		);
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to clear short-term memories for channel - channelId=${channelId}`,
-			error,
-			{
-				errorType: "CACHE_CLEAR_ERROR",
-				metadata: { channelId },
-			},
-		);
-	}
+    log.info(
+      `[shortTermMemoryCache] Cleared all short-term memories for channel - channelId=${channelId}, clearedCount=${clearedCount}`,
+    );
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to clear short-term memories for channel - channelId=${channelId}`,
+      error,
+      {
+        errorType: "CACHE_CLEAR_ERROR",
+        metadata: { channelId },
+      },
+    );
+  }
 }
 
 /**
@@ -540,32 +544,32 @@ export function clearShortTermMemoryForChannel(channelId: string): void {
  * @param userId - Discord user ID
  */
 export function clearShortTermMemoryForUser(userId: string): void {
-	try {
-		let clearedCount = 0;
+  try {
+    let clearedCount = 0;
 
-		// Find and delete all entries for this user
-		for (const key of cache.keys()) {
-			if (key.startsWith(`shortterm:${userId}:`)) {
-				cache.delete(key);
-				clearedCount++;
-			}
-		}
+    // Find and delete all entries for this user
+    for (const key of cache.keys()) {
+      if (key.startsWith(`shortterm:${userId}:`)) {
+        cache.delete(key);
+        clearedCount++;
+      }
+    }
 
-		stats.invalidations += clearedCount;
+    stats.invalidations += clearedCount;
 
-		log.info(
-			`[shortTermMemoryCache] Cleared all short-term memories for user - userId=${userId}, clearedCount=${clearedCount}`,
-		);
-	} catch (error) {
-		log.error(
-			`[shortTermMemoryCache] Failed to clear short-term memories for user - userId=${userId}`,
-			error,
-			{
-				errorType: "CACHE_CLEAR_ERROR",
-				metadata: { userDiscId: userId },
-			},
-		);
-	}
+    log.info(
+      `[shortTermMemoryCache] Cleared all short-term memories for user - userId=${userId}, clearedCount=${clearedCount}`,
+    );
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to clear short-term memories for user - userId=${userId}`,
+      error,
+      {
+        errorType: "CACHE_CLEAR_ERROR",
+        metadata: { userDiscId: userId },
+      },
+    );
+  }
 }
 
 /**
@@ -573,29 +577,29 @@ export function clearShortTermMemoryForUser(userId: string): void {
  * Should be called periodically (e.g., every 30 minutes)
  */
 export function clearExpiredEntries(): void {
-	try {
-		let expiredCount = 0;
+  try {
+    let expiredCount = 0;
 
-		// Iterate and remove expired entries
-		for (const [key, entry] of cache.entries()) {
-			if (isExpired(entry)) {
-				cache.delete(key);
-				expiredCount++;
-			}
-		}
+    // Iterate and remove expired entries
+    for (const [key, entry] of cache.entries()) {
+      if (isExpired(entry)) {
+        cache.delete(key);
+        expiredCount++;
+      }
+    }
 
-		stats.expirations += expiredCount;
+    stats.expirations += expiredCount;
 
-		if (expiredCount > 0) {
-			log.info(
-				`[shortTermMemoryCache] Cleared expired short-term memories - expiredCount=${expiredCount}, remainingCount=${cache.size}`,
-			);
-		}
-	} catch (error) {
-		log.error("[shortTermMemoryCache] Failed to clear expired entries", error, {
-			errorType: "CACHE_CLEANUP_ERROR",
-		});
-	}
+    if (expiredCount > 0) {
+      log.info(
+        `[shortTermMemoryCache] Cleared expired short-term memories - expiredCount=${expiredCount}, remainingCount=${cache.size}`,
+      );
+    }
+  } catch (error) {
+    log.error("[shortTermMemoryCache] Failed to clear expired entries", error, {
+      errorType: "CACHE_CLEANUP_ERROR",
+    });
+  }
 }
 
 /**
@@ -604,18 +608,18 @@ export function clearExpiredEntries(): void {
  * @returns Cache hit/miss/store/invalidation/expiration stats
  */
 export function getShortTermMemoryCacheStats(): CacheStats & {
-	size: number;
-	hitRate: string;
+  size: number;
+  hitRate: string;
 } {
-	const totalRequests = stats.hits + stats.misses;
-	const hitRate =
-		totalRequests > 0
-			? `${((stats.hits / totalRequests) * 100).toFixed(1)}%`
-			: "0%";
+  const totalRequests = stats.hits + stats.misses;
+  const hitRate =
+    totalRequests > 0
+      ? `${((stats.hits / totalRequests) * 100).toFixed(1)}%`
+      : "0%";
 
-	return {
-		...stats,
-		size: cache.size,
-		hitRate,
-	};
+  return {
+    ...stats,
+    size: cache.size,
+    hitRate,
+  };
 }

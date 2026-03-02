@@ -20,12 +20,12 @@ import type { Client, Embed, Message } from "discord.js";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { isSelfTriggerMessage } from "./tomoriChat";
 import {
-	isMatrixConfigured,
-	getLinkedMatrixRoom,
-	sendToMatrixRoom,
-	sendAttachmentToMatrixRoom,
-	MATRIX_MAX_ATTACHMENT_BYTES,
-	getMatrixIdForDisplayName,
+  isMatrixConfigured,
+  getLinkedMatrixRoom,
+  sendToMatrixRoom,
+  sendAttachmentToMatrixRoom,
+  MATRIX_MAX_ATTACHMENT_BYTES,
+  getMatrixIdForDisplayName,
 } from "@/utils/matrix";
 import { log } from "@/utils/misc/logger";
 import type { TomoriState } from "@/types/db/schema";
@@ -35,14 +35,14 @@ import type { TomoriState } from "@/types/db/schema";
 const DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS = 3500;
 
 function getMatrixEmbedChunkMaxChars(): number {
-	const parsed = Number.parseInt(
-		process.env.MATRIX_EMBED_CHUNK_MAX_CHARS ??
-			`${DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS}`,
-		10,
-	);
-	return Number.isFinite(parsed) && parsed > 0
-		? parsed
-		: DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS;
+  const parsed = Number.parseInt(
+    process.env.MATRIX_EMBED_CHUNK_MAX_CHARS ??
+      `${DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS}`,
+    10,
+  );
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS;
 }
 
 const MATRIX_EMBED_CHUNK_MAX_CHARS = getMatrixEmbedChunkMaxChars();
@@ -55,38 +55,41 @@ const MATRIX_EMBED_CHUNK_MAX_CHARS = getMatrixEmbedChunkMaxChars();
  * @returns Plain text with inline formatting removed
  */
 function stripDiscordMarkdown(text: string): string {
-	return text
-		.replace(/\*\*(.+?)\*\*/g, "$1")  // **bold**
-		.replace(/__(.+?)__/g, "$1")       // __underline__
-		.replace(/~~(.+?)~~/g, "$1")       // ~~strikethrough~~
-		.replace(/\*(.+?)\*/g, "$1")       // *italic*
-		.replace(/`(.+?)`/g, "$1")         // `code`
-		.trim();
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1") // **bold**
+    .replace(/__(.+?)__/g, "$1") // __underline__
+    .replace(/~~(.+?)~~/g, "$1") // ~~strikethrough~~
+    .replace(/\*(.+?)\*/g, "$1") // *italic*
+    .replace(/`(.+?)`/g, "$1") // `code`
+    .trim();
 }
 
 /**
  * Append a non-empty text fragment to the embed serialization output.
  */
-function pushEmbedTextPart(parts: string[], value: string | null | undefined): void {
-	if (!value) return;
-	const normalized = stripDiscordMarkdown(value);
-	if (!normalized) return;
-	parts.push(normalized);
+function pushEmbedTextPart(
+  parts: string[],
+  value: string | null | undefined,
+): void {
+  if (!value) return;
+  const normalized = stripDiscordMarkdown(value);
+  if (!normalized) return;
+  parts.push(normalized);
 }
 
 /**
  * Append a URL-like fragment once while preserving source order.
  */
 function pushEmbedUrlPart(
-	parts: string[],
-	seen: Set<string>,
-	value: string | null | undefined,
+  parts: string[],
+  seen: Set<string>,
+  value: string | null | undefined,
 ): void {
-	if (!value) return;
-	const normalized = value.trim();
-	if (!normalized || seen.has(normalized)) return;
-	seen.add(normalized);
-	parts.push(normalized);
+  if (!value) return;
+  const normalized = value.trim();
+  if (!normalized || seen.has(normalized)) return;
+  seen.add(normalized);
+  parts.push(normalized);
 }
 
 /**
@@ -94,41 +97,41 @@ function pushEmbedUrlPart(
  * without relying on per-embed title detection.
  */
 function serializeEmbedToText(embed: Embed): string {
-	const parts: string[] = [];
-	const seenUrls = new Set<string>();
+  const parts: string[] = [];
+  const seenUrls = new Set<string>();
 
-	pushEmbedTextPart(parts, embed.author?.name);
-	pushEmbedUrlPart(parts, seenUrls, embed.author?.url);
-	pushEmbedTextPart(parts, embed.title);
-	pushEmbedUrlPart(parts, seenUrls, embed.url);
-	pushEmbedTextPart(parts, embed.description);
+  pushEmbedTextPart(parts, embed.author?.name);
+  pushEmbedUrlPart(parts, seenUrls, embed.author?.url);
+  pushEmbedTextPart(parts, embed.title);
+  pushEmbedUrlPart(parts, seenUrls, embed.url);
+  pushEmbedTextPart(parts, embed.description);
 
-	for (const field of embed.fields) {
-		const name = stripDiscordMarkdown(field.name ?? "");
-		const value = stripDiscordMarkdown(field.value ?? "");
-		if (name && value) {
-			parts.push(`${name}\n${value}`);
-			continue;
-		}
-		if (name) parts.push(name);
-		if (value) parts.push(value);
-	}
+  for (const field of embed.fields) {
+    const name = stripDiscordMarkdown(field.name ?? "");
+    const value = stripDiscordMarkdown(field.value ?? "");
+    if (name && value) {
+      parts.push(`${name}\n${value}`);
+      continue;
+    }
+    if (name) parts.push(name);
+    if (value) parts.push(value);
+  }
 
-	pushEmbedUrlPart(parts, seenUrls, embed.image?.url);
-	pushEmbedUrlPart(parts, seenUrls, embed.thumbnail?.url);
-	pushEmbedUrlPart(parts, seenUrls, embed.video?.url);
+  pushEmbedUrlPart(parts, seenUrls, embed.image?.url);
+  pushEmbedUrlPart(parts, seenUrls, embed.thumbnail?.url);
+  pushEmbedUrlPart(parts, seenUrls, embed.video?.url);
 
-	if (embed.timestamp) {
-		const parsed = new Date(embed.timestamp);
-		parts.push(
-			Number.isNaN(parsed.getTime()) ? embed.timestamp : parsed.toISOString(),
-		);
-	}
+  if (embed.timestamp) {
+    const parsed = new Date(embed.timestamp);
+    parts.push(
+      Number.isNaN(parsed.getTime()) ? embed.timestamp : parsed.toISOString(),
+    );
+  }
 
-	pushEmbedTextPart(parts, embed.footer?.text);
-	pushEmbedUrlPart(parts, seenUrls, embed.footer?.iconURL);
+  pushEmbedTextPart(parts, embed.footer?.text);
+  pushEmbedUrlPart(parts, seenUrls, embed.footer?.iconURL);
 
-	return parts.join("\n\n").trim();
+  return parts.join("\n\n").trim();
 }
 
 /**
@@ -136,39 +139,39 @@ function serializeEmbedToText(embed: Embed): string {
  * within the configured per-message size target.
  */
 function splitTextIntoChunks(text: string, maxChars: number): string[] {
-	if (!text) return [];
-	if (text.length <= maxChars) return [text];
+  if (!text) return [];
+  if (text.length <= maxChars) return [text];
 
-	const chunks: string[] = [];
-	let current = "";
+  const chunks: string[] = [];
+  let current = "";
 
-	for (const line of text.split("\n")) {
-		if (line.length > maxChars) {
-			if (current) {
-				chunks.push(current);
-				current = "";
-			}
-			for (let index = 0; index < line.length; index += maxChars) {
-				chunks.push(line.slice(index, index + maxChars));
-			}
-			continue;
-		}
+  for (const line of text.split("\n")) {
+    if (line.length > maxChars) {
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+      for (let index = 0; index < line.length; index += maxChars) {
+        chunks.push(line.slice(index, index + maxChars));
+      }
+      continue;
+    }
 
-		const candidate = current ? `${current}\n${line}` : line;
-		if (candidate.length <= maxChars) {
-			current = candidate;
-			continue;
-		}
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      continue;
+    }
 
-		chunks.push(current);
-		current = line;
-	}
+    chunks.push(current);
+    current = line;
+  }
 
-	if (current) {
-		chunks.push(current);
-	}
+  if (current) {
+    chunks.push(current);
+  }
 
-	return chunks;
+  return chunks;
 }
 
 /**
@@ -179,11 +182,11 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
  * @returns HTML-safe string with &, <, >, " replaced by their entity equivalents
  */
 function escapeHtml(text: string): string {
-	return text
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /**
@@ -210,89 +213,89 @@ function escapeHtml(text: string): string {
  *          mentions were resolved), and `mentionedIds` (Matrix user IDs for MSC3952 `m.mentions`)
  */
 function resolveDiscordTextForMatrix(
-	text: string,
-	message: Message,
+  text: string,
+  message: Message,
 ): { body: string; formattedBody: string | undefined; mentionedIds: string[] } {
-	// Matches both Discord snowflakes (<@id>, <@!id>) and internal @{name} placeholders
-	const pattern = /<@!?(\d+)>|@\{([^}]+)\}/g;
+  // Matches both Discord snowflakes (<@id>, <@!id>) and internal @{name} placeholders
+  const pattern = /<@!?(\d+)>|@\{([^}]+)\}/g;
 
-	// Fast path: skip expensive processing when no mention patterns are present
-	if (!pattern.test(text)) {
-		return { body: text, formattedBody: undefined, mentionedIds: [] };
-	}
-	pattern.lastIndex = 0;
+  // Fast path: skip expensive processing when no mention patterns are present
+  if (!pattern.test(text)) {
+    return { body: text, formattedBody: undefined, mentionedIds: [] };
+  }
+  pattern.lastIndex = 0;
 
-	const mentionedIds: string[] = [];
-	let hasMatrixMentions = false;
+  const mentionedIds: string[] = [];
+  let hasMatrixMentions = false;
 
-	// Build body (plain text) and htmlParts (formatted_body) in a single pass
-	// so we traverse the string once regardless of the number of patterns found
-	const bodyParts: string[] = [];
-	const htmlParts: string[] = [];
-	let lastIndex = 0;
+  // Build body (plain text) and htmlParts (formatted_body) in a single pass
+  // so we traverse the string once regardless of the number of patterns found
+  const bodyParts: string[] = [];
+  const htmlParts: string[] = [];
+  let lastIndex = 0;
 
-	for (const match of text.matchAll(pattern)) {
-		// 1. Append the literal text between the previous match and this one
-		const literal = text.slice(lastIndex, match.index);
-		bodyParts.push(literal);
-		htmlParts.push(escapeHtml(literal));
-		lastIndex = (match.index ?? 0) + match[0].length;
+  for (const match of text.matchAll(pattern)) {
+    // 1. Append the literal text between the previous match and this one
+    const literal = text.slice(lastIndex, match.index);
+    bodyParts.push(literal);
+    htmlParts.push(escapeHtml(literal));
+    lastIndex = (match.index ?? 0) + match[0].length;
 
-		const [, snowflake, internalName] = match;
+    const [, snowflake, internalName] = match;
 
-		if (snowflake) {
-			// Discord snowflake mention — resolve via message.mentions.users
-			const user = message.mentions.users.get(snowflake);
-			const displayName =
-				message.guild?.members.cache.get(snowflake)?.displayName ??
-				user?.displayName ??
-				user?.username ??
-				snowflake;
-			const matrixId = getMatrixIdForDisplayName(displayName);
+    if (snowflake) {
+      // Discord snowflake mention — resolve via message.mentions.users
+      const user = message.mentions.users.get(snowflake);
+      const displayName =
+        message.guild?.members.cache.get(snowflake)?.displayName ??
+        user?.displayName ??
+        user?.username ??
+        snowflake;
+      const matrixId = getMatrixIdForDisplayName(displayName);
 
-			if (matrixId) {
-				mentionedIds.push(matrixId);
-				hasMatrixMentions = true;
-				bodyParts.push(matrixId);
-				htmlParts.push(
-					`<a href="https://matrix.to/#/${matrixId}">${escapeHtml(displayName)}</a>`,
-				);
-			} else {
-				// Discord-only user — strip <@id>, keep their display name
-				bodyParts.push(displayName);
-				htmlParts.push(escapeHtml(displayName));
-			}
-		} else if (internalName) {
-			// @{name} internal format — resolve by display name directly
-			const matrixId = getMatrixIdForDisplayName(internalName);
+      if (matrixId) {
+        mentionedIds.push(matrixId);
+        hasMatrixMentions = true;
+        bodyParts.push(matrixId);
+        htmlParts.push(
+          `<a href="https://matrix.to/#/${matrixId}">${escapeHtml(displayName)}</a>`,
+        );
+      } else {
+        // Discord-only user — strip <@id>, keep their display name
+        bodyParts.push(displayName);
+        htmlParts.push(escapeHtml(displayName));
+      }
+    } else if (internalName) {
+      // @{name} internal format — resolve by display name directly
+      const matrixId = getMatrixIdForDisplayName(internalName);
 
-			if (matrixId) {
-				mentionedIds.push(matrixId);
-				hasMatrixMentions = true;
-				bodyParts.push(matrixId);
-				htmlParts.push(
-					`<a href="https://matrix.to/#/${matrixId}">${escapeHtml(internalName)}</a>`,
-				);
-			} else {
-				// Discord-only or unknown user — strip @{} wrapper, keep name
-				bodyParts.push(internalName);
-				htmlParts.push(escapeHtml(internalName));
-			}
-		}
-	}
+      if (matrixId) {
+        mentionedIds.push(matrixId);
+        hasMatrixMentions = true;
+        bodyParts.push(matrixId);
+        htmlParts.push(
+          `<a href="https://matrix.to/#/${matrixId}">${escapeHtml(internalName)}</a>`,
+        );
+      } else {
+        // Discord-only or unknown user — strip @{} wrapper, keep name
+        bodyParts.push(internalName);
+        htmlParts.push(escapeHtml(internalName));
+      }
+    }
+  }
 
-	// 2. Append any trailing literal text after the last match
-	const tail = text.slice(lastIndex);
-	bodyParts.push(tail);
-	htmlParts.push(escapeHtml(tail));
+  // 2. Append any trailing literal text after the last match
+  const tail = text.slice(lastIndex);
+  bodyParts.push(tail);
+  htmlParts.push(escapeHtml(tail));
 
-	return {
-		body: bodyParts.join(""),
-		// Only include formatted_body when at least one Matrix mention anchor was produced;
-		// plain name substitutions (Discord-only users) don't require HTML rendering
-		formattedBody: hasMatrixMentions ? htmlParts.join("") : undefined,
-		mentionedIds,
-	};
+  return {
+    body: bodyParts.join(""),
+    // Only include formatted_body when at least one Matrix mention anchor was produced;
+    // plain name substitutions (Discord-only users) don't require HTML rendering
+    formattedBody: hasMatrixMentions ? htmlParts.join("") : undefined,
+    mentionedIds,
+  };
 }
 
 /**
@@ -300,15 +303,15 @@ function resolveDiscordTextForMatrix(
  * All embed types are relayed by serializing visible content to plain text.
  */
 function embedToMatrixTextChunks(embed: Embed): string[] {
-	const serialized = serializeEmbedToText(embed);
-	if (!serialized) return [];
+  const serialized = serializeEmbedToText(embed);
+  if (!serialized) return [];
 
-	const chunks = splitTextIntoChunks(serialized, MATRIX_EMBED_CHUNK_MAX_CHARS);
-	if (chunks.length <= 1) return chunks;
+  const chunks = splitTextIntoChunks(serialized, MATRIX_EMBED_CHUNK_MAX_CHARS);
+  if (chunks.length <= 1) return chunks;
 
-	return chunks.map(
-		(chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`,
-	);
+  return chunks.map(
+    (chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`,
+  );
 }
 
 /**
@@ -319,152 +322,173 @@ function embedToMatrixTextChunks(embed: Embed): string[] {
  * @param message - The incoming Discord message
  */
 const handler = async (client: Client, message: Message): Promise<void> => {
-	// 1. Fast exit: skip if Matrix bridge is not configured (common case)
-	if (!isMatrixConfigured()) return;
+  // 1. Fast exit: skip if Matrix bridge is not configured (common case)
+  if (!isMatrixConfigured()) return;
 
-	// 2. Only process guild messages (Matrix bridge is server-scoped)
-	if (!message.guild) return;
+  // 2. Only process guild messages (Matrix bridge is server-scoped)
+  if (!message.guild) return;
 
-	// 3. Only relay messages that originate from TomoriBot itself
-	//    (main persona bot account OR alter persona webhook messages)
-	const allPersonas: TomoriState[] = await getCachedAllPersonas(message.guild.id);
-	if (!isSelfTriggerMessage(message, allPersonas)) return;
+  // 3. Only relay messages that originate from TomoriBot itself
+  //    (main persona bot account OR alter persona webhook messages)
+  const allPersonas: TomoriState[] = await getCachedAllPersonas(
+    message.guild.id,
+  );
+  if (!isSelfTriggerMessage(message, allPersonas)) return;
 
-	// 4. Check if this channel has a linked Matrix room (cached DB lookup)
-	const roomId = await getLinkedMatrixRoom(message.channelId);
-	if (!roomId) return;
+  // 4. Check if this channel has a linked Matrix room (cached DB lookup)
+  const roomId = await getLinkedMatrixRoom(message.channelId);
+  if (!roomId) return;
 
-	// 5. Identify which persona sent this message and retrieve its avatar URL.
-	//    The persona's virtual Matrix user will be provisioned with this identity.
-	let persona: TomoriState | undefined;
-	let avatarUrl: string | null;
+  // 5. Identify which persona sent this message and retrieve its avatar URL.
+  //    The persona's virtual Matrix user will be provisioned with this identity.
+  let persona: TomoriState | undefined;
+  let avatarUrl: string | null;
 
-	if (message.author.id === client.user?.id) {
-		// Main bot account — find the main (non-alter) persona
-		persona = allPersonas.find((p) => !p.is_alter);
+  if (message.author.id === client.user?.id) {
+    // Main bot account — find the main (non-alter) persona
+    persona = allPersonas.find((p) => !p.is_alter);
 
-		// The main persona sends as the bot account, not a webhook, so webhook_avatar_url
-		// is not set. Prefer the guild member avatar (set via /server avatar or persona swap),
-		// which is per-server and overrides the global Developer Portal avatar.
-		// GuildMember.displayAvatarURL() handles the priority chain automatically:
-		// guild avatar → global avatar.
-		avatarUrl =
-			message.guild?.members.me?.displayAvatarURL({ size: 256, extension: "png" }) ??
-			message.author.displayAvatarURL({ size: 256, extension: "png" });
-	} else {
-		// Alter persona webhook — match by username (case-insensitive)
-		const authornameLower = message.author.username.toLowerCase();
-		persona = allPersonas.find(
-			(p) => p.tomori_nickname?.toLowerCase() === authornameLower,
-		);
+    // The main persona sends as the bot account, not a webhook, so webhook_avatar_url
+    // is not set. Prefer the guild member avatar (set via /server avatar or persona swap),
+    // which is per-server and overrides the global Developer Portal avatar.
+    // GuildMember.displayAvatarURL() handles the priority chain automatically:
+    // guild avatar → global avatar.
+    avatarUrl =
+      message.guild?.members.me?.displayAvatarURL({
+        size: 256,
+        extension: "png",
+      }) ?? message.author.displayAvatarURL({ size: 256, extension: "png" });
+  } else {
+    // Alter persona webhook — match by username (case-insensitive)
+    const authornameLower = message.author.username.toLowerCase();
+    persona = allPersonas.find(
+      (p) => p.tomori_nickname?.toLowerCase() === authornameLower,
+    );
 
-		// Warn if no persona matched — the fallback uses the webhook username as the
-		// virtual user localpart, which may create an orphaned Matrix user
-		if (!persona) {
-			log.warn(
-				`Matrix relay: no persona found for alter webhook "${message.author.username}" ` +
-				`— using webhook username as Matrix virtual user fallback`,
-			);
-		}
+    // Warn if no persona matched — the fallback uses the webhook username as the
+    // virtual user localpart, which may create an orphaned Matrix user
+    if (!persona) {
+      log.warn(
+        `Matrix relay: no persona found for alter webhook "${message.author.username}" ` +
+          `— using webhook username as Matrix virtual user fallback`,
+      );
+    }
 
-		// webhook_avatar_url holds the S3 CDN URL used for Discord persona avatars
-		avatarUrl = persona?.webhook_avatar_url ?? null;
-	}
+    // webhook_avatar_url holds the S3 CDN URL used for Discord persona avatars
+    avatarUrl = persona?.webhook_avatar_url ?? null;
+  }
 
-	// Fall back to username if no matching persona is found
-	const personaName = persona?.tomori_nickname ?? message.author.username;
+  // Fall back to username if no matching persona is found
+  const personaName = persona?.tomori_nickname ?? message.author.username;
 
-	// 6. Relay the text content (skip if empty after trim)
-	//    Identity is conveyed by the virtual Matrix user — no bold prefix needed.
-	//    @{name} placeholders are transformed to proper Matrix mention links so
-	//    Matrix clients highlight and notify the mentioned user (MSC3952).
-	const rawText = message.content.trim();
-	if (rawText) {
-		const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(rawText, message);
-		try {
-			await sendToMatrixRoom(
-				roomId,
-				body,
-				personaName,
-				avatarUrl,
-				formattedBody,
-				mentionedIds.length > 0 ? mentionedIds : undefined,
-			);
-		} catch (error) {
-			log.warn(`Matrix relay: failed to relay message to room ${roomId}`, error);
-		}
-	}
+  // 6. Relay the text content (skip if empty after trim)
+  //    Identity is conveyed by the virtual Matrix user — no bold prefix needed.
+  //    @{name} placeholders are transformed to proper Matrix mention links so
+  //    Matrix clients highlight and notify the mentioned user (MSC3952).
+  const rawText = message.content.trim();
+  if (rawText) {
+    const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(
+      rawText,
+      message,
+    );
+    try {
+      await sendToMatrixRoom(
+        roomId,
+        body,
+        personaName,
+        avatarUrl,
+        formattedBody,
+        mentionedIds.length > 0 ? mentionedIds : undefined,
+      );
+    } catch (error) {
+      log.warn(
+        `Matrix relay: failed to relay message to room ${roomId}`,
+        error,
+      );
+    }
+  }
 
-	// 7. Relay each file attachment as a Matrix media event
-	//    Uses proxyURL for stability (Discord CDN proxy avoids expiry issues)
-	const mediaTimeoutMs = Number.parseInt(process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000", 10);
+  // 7. Relay each file attachment as a Matrix media event
+  //    Uses proxyURL for stability (Discord CDN proxy avoids expiry issues)
+  const mediaTimeoutMs = Number.parseInt(
+    process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000",
+    10,
+  );
 
-	for (const attachment of message.attachments.values()) {
-		// 7a. Skip attachments that exceed the configured size limit (shared constant
-		//    with matrixManager.ts so both sides enforce the same threshold)
-		if (attachment.size > MATRIX_MAX_ATTACHMENT_BYTES) {
-			log.warn(
-				`Matrix relay: skipping oversized attachment "${attachment.name}" ` +
-				`(${(attachment.size / (1024 * 1024)).toFixed(1)} MB) for room ${roomId}`,
-			);
-			continue;
-		}
+  for (const attachment of message.attachments.values()) {
+    // 7a. Skip attachments that exceed the configured size limit (shared constant
+    //    with matrixManager.ts so both sides enforce the same threshold)
+    if (attachment.size > MATRIX_MAX_ATTACHMENT_BYTES) {
+      log.warn(
+        `Matrix relay: skipping oversized attachment "${attachment.name}" ` +
+          `(${(attachment.size / (1024 * 1024)).toFixed(1)} MB) for room ${roomId}`,
+      );
+      continue;
+    }
 
-		try {
-			// 7b. Fetch the file from Discord's proxy CDN (timeout prevents stalls)
-			const response = await fetch(attachment.proxyURL, {
-				signal: AbortSignal.timeout(mediaTimeoutMs),
-			});
-			if (!response.ok) {
-				log.warn(`Matrix relay: failed to fetch attachment "${attachment.name}" (${response.status})`);
-				continue;
-			}
+    try {
+      // 7b. Fetch the file from Discord's proxy CDN (timeout prevents stalls)
+      const response = await fetch(attachment.proxyURL, {
+        signal: AbortSignal.timeout(mediaTimeoutMs),
+      });
+      if (!response.ok) {
+        log.warn(
+          `Matrix relay: failed to fetch attachment "${attachment.name}" (${response.status})`,
+        );
+        continue;
+      }
 
-			const arrayBuffer = await response.arrayBuffer();
-			const mimeType    = attachment.contentType ?? "application/octet-stream";
-			const filename    = attachment.name ?? "attachment";
+      const arrayBuffer = await response.arrayBuffer();
+      const mimeType = attachment.contentType ?? "application/octet-stream";
+      const filename = attachment.name ?? "attachment";
 
-			// 7c. Upload to Matrix and send as a media event under the persona's virtual user
-			await sendAttachmentToMatrixRoom(
-				roomId,
-				arrayBuffer,
-				filename,
-				mimeType,
-				attachment.size,
-				personaName,
-				avatarUrl,
-			);
-		} catch (error) {
-			log.warn(`Matrix relay: failed to relay attachment "${attachment.name}" to room ${roomId}`, error);
-		}
-	}
+      // 7c. Upload to Matrix and send as a media event under the persona's virtual user
+      await sendAttachmentToMatrixRoom(
+        roomId,
+        arrayBuffer,
+        filename,
+        mimeType,
+        attachment.size,
+        personaName,
+        avatarUrl,
+      );
+    } catch (error) {
+      log.warn(
+        `Matrix relay: failed to relay attachment "${attachment.name}" to room ${roomId}`,
+        error,
+      );
+    }
+  }
 
-	// 8. Relay all embeds by serializing visible content (title/description/fields/urls)
-	//    into plain text Matrix messages. This avoids per-embed whitelists and prevents
-	//    silent drops when new embed shapes are introduced.
-	for (const embed of message.embeds) {
-		const chunks = embedToMatrixTextChunks(embed);
-		if (chunks.length === 0) continue;
+  // 8. Relay all embeds by serializing visible content (title/description/fields/urls)
+  //    into plain text Matrix messages. This avoids per-embed whitelists and prevents
+  //    silent drops when new embed shapes are introduced.
+  for (const embed of message.embeds) {
+    const chunks = embedToMatrixTextChunks(embed);
+    if (chunks.length === 0) continue;
 
-		for (const [chunkIndex, chunk] of chunks.entries()) {
-			const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(chunk, message);
-			try {
-				await sendToMatrixRoom(
-					roomId,
-					body,
-					personaName,
-					avatarUrl,
-					formattedBody,
-					mentionedIds.length > 0 ? mentionedIds : undefined,
-				);
-			} catch (error) {
-				log.warn(
-					`Matrix relay: failed to relay embed chunk ${chunkIndex + 1}/${chunks.length} to room ${roomId}`,
-					error,
-				);
-			}
-		}
-	}
+    for (const [chunkIndex, chunk] of chunks.entries()) {
+      const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(
+        chunk,
+        message,
+      );
+      try {
+        await sendToMatrixRoom(
+          roomId,
+          body,
+          personaName,
+          avatarUrl,
+          formattedBody,
+          mentionedIds.length > 0 ? mentionedIds : undefined,
+        );
+      } catch (error) {
+        log.warn(
+          `Matrix relay: failed to relay embed chunk ${chunkIndex + 1}/${chunks.length} to room ${roomId}`,
+          error,
+        );
+      }
+    }
+  }
 };
 
 export default handler;

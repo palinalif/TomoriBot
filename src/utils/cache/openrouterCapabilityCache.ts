@@ -20,23 +20,23 @@ import { log } from "../misc/logger";
  * Based on https://openrouter.ai/api/v1/models endpoint
  */
 interface OpenRouterModel {
-	id: string;
-	name: string;
-	description?: string;
-	context_length?: number; // Total context window size (input + output tokens)
-	supported_parameters?: string[];
-	pricing?: {
-		prompt?: string | number;
-		completion?: string | number;
-	};
-	architecture?: {
-		modality?: string;
-		tokenizer?: string;
-		instruct_type?: string;
-	};
-	top_provider?: {
-		max_completion_tokens?: number; // Maximum output tokens the provider supports
-	};
+  id: string;
+  name: string;
+  description?: string;
+  context_length?: number; // Total context window size (input + output tokens)
+  supported_parameters?: string[];
+  pricing?: {
+    prompt?: string | number;
+    completion?: string | number;
+  };
+  architecture?: {
+    modality?: string;
+    tokenizer?: string;
+    instruct_type?: string;
+  };
+  top_provider?: {
+    max_completion_tokens?: number; // Maximum output tokens the provider supports
+  };
 }
 
 /**
@@ -44,10 +44,10 @@ interface OpenRouterModel {
  * Extracted from OpenRouter API's supported_parameters and architecture fields
  */
 export interface ModelCapabilities {
-	hasTools: boolean; // Function calling support
-	seesImages: boolean; // Vision/image input support
-	seesVideos: boolean; // Video input support
-	supportsStructuredOutput: boolean; // JSON mode / structured output support
+  hasTools: boolean; // Function calling support
+  seesImages: boolean; // Vision/image input support
+  seesVideos: boolean; // Video input support
+  supportsStructuredOutput: boolean; // JSON mode / structured output support
 }
 
 /**
@@ -55,8 +55,8 @@ export interface ModelCapabilities {
  * Extracted from OpenRouter API's context_length and top_provider fields
  */
 export interface ModelTokenLimits {
-	contextLength: number; // Total context window (input + output)
-	maxCompletionTokens: number | undefined; // Max output tokens, undefined if not reported
+  contextLength: number; // Total context window (input + output)
+  maxCompletionTokens: number | undefined; // Max output tokens, undefined if not reported
 }
 
 /**
@@ -64,8 +64,8 @@ export interface ModelTokenLimits {
  * Values are normalized to USD per million tokens for prompt/completion cost math.
  */
 export interface ModelPricing {
-	promptPricePerMillion: number;
-	completionPricePerMillion: number;
+  promptPricePerMillion: number;
+  completionPricePerMillion: number;
 }
 
 /**
@@ -100,19 +100,19 @@ let cacheReady = false;
  * @returns True if model supports function calling
  */
 function detectToolSupport(model: OpenRouterModel): boolean {
-	// 1. Check if supported_parameters exists and is an array
-	if (
-		!model.supported_parameters ||
-		!Array.isArray(model.supported_parameters)
-	) {
-		return false;
-	}
+  // 1. Check if supported_parameters exists and is an array
+  if (
+    !model.supported_parameters ||
+    !Array.isArray(model.supported_parameters)
+  ) {
+    return false;
+  }
 
-	// 2. Both "tools" AND "tool_choice" must be present for full tool support
-	const hasTools = model.supported_parameters.includes("tools");
-	const hasToolChoice = model.supported_parameters.includes("tool_choice");
+  // 2. Both "tools" AND "tool_choice" must be present for full tool support
+  const hasTools = model.supported_parameters.includes("tools");
+  const hasToolChoice = model.supported_parameters.includes("tool_choice");
 
-	return hasTools && hasToolChoice;
+  return hasTools && hasToolChoice;
 }
 
 /**
@@ -127,18 +127,18 @@ function detectToolSupport(model: OpenRouterModel): boolean {
  * @returns True if model supports image inputs
  */
 function detectImageSupport(model: OpenRouterModel): boolean {
-	// 1. Get modality string and convert to lowercase for comparison
-	const modality = model.architecture?.modality?.toLowerCase();
+  // 1. Get modality string and convert to lowercase for comparison
+  const modality = model.architecture?.modality?.toLowerCase();
 
-	// 2. Check for image capability indicators
-	// OpenRouter uses "text+image->text" notation — check for "image" as the primary signal,
-	// plus "vision" and "multimodal" for forward compatibility with any future API format changes
-	return (
-		modality?.includes("image") ||
-		modality?.includes("vision") ||
-		modality?.includes("multimodal") ||
-		false
-	);
+  // 2. Check for image capability indicators
+  // OpenRouter uses "text+image->text" notation — check for "image" as the primary signal,
+  // plus "vision" and "multimodal" for forward compatibility with any future API format changes
+  return (
+    modality?.includes("image") ||
+    modality?.includes("vision") ||
+    modality?.includes("multimodal") ||
+    false
+  );
 }
 
 /**
@@ -152,15 +152,15 @@ function detectImageSupport(model: OpenRouterModel): boolean {
  * @returns True if model supports video inputs
  */
 function detectVideoSupport(model: OpenRouterModel): boolean {
-	// 1. Check modality field for video indicator
-	const modality = model.architecture?.modality?.toLowerCase();
-	const hasVideoModality = modality?.includes("video") || false;
+  // 1. Check modality field for video indicator
+  const modality = model.architecture?.modality?.toLowerCase();
+  const hasVideoModality = modality?.includes("video") || false;
 
-	// 2. Check supported_parameters for explicit video parameter
-	const hasVideoParam = model.supported_parameters?.includes("video") || false;
+  // 2. Check supported_parameters for explicit video parameter
+  const hasVideoParam = model.supported_parameters?.includes("video") || false;
 
-	// 3. Model supports video if either indicator is present
-	return hasVideoModality || hasVideoParam;
+  // 3. Model supports video if either indicator is present
+  return hasVideoModality || hasVideoParam;
 }
 
 /**
@@ -174,22 +174,24 @@ function detectVideoSupport(model: OpenRouterModel): boolean {
  * @returns True if model supports structured output
  */
 function detectStructuredOutputSupport(model: OpenRouterModel): boolean {
-	// 1. Check if response_format parameter is supported
-	return (
-		model.supported_parameters?.includes("response_format") ||
-		model.supported_parameters?.includes("structured_outputs") ||
-		false
-	);
+  // 1. Check if response_format parameter is supported
+  return (
+    model.supported_parameters?.includes("response_format") ||
+    model.supported_parameters?.includes("structured_outputs") ||
+    false
+  );
 }
 
-function parseUsdPerMillion(value: string | number | undefined): number | undefined {
-	if (value === undefined) return undefined;
-	const parsed =
-		typeof value === "number" ? value : Number.parseFloat(value.trim());
-	if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+function parseUsdPerMillion(
+  value: string | number | undefined,
+): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed =
+    typeof value === "number" ? value : Number.parseFloat(value.trim());
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
 
-	// OpenRouter /models pricing values are per-token USD.
-	return parsed * 1_000_000;
+  // OpenRouter /models pricing values are per-token USD.
+  return parsed * 1_000_000;
 }
 
 /**
@@ -207,113 +209,113 @@ function parseUsdPerMillion(value: string | number | undefined): number | undefi
  * on API failure, allowing fallback to database flags.
  */
 export async function initializeOpenRouterCapabilityCache(): Promise<void> {
-	try {
-		log.info("Initializing OpenRouter capability cache...");
+  try {
+    log.info("Initializing OpenRouter capability cache...");
 
-		// 1. Clear existing caches
-		capabilityCache.clear();
-		supportedParametersCache.clear();
-		tokenLimitsCache.clear();
-		pricingCache.clear();
-		cacheReady = false;
+    // 1. Clear existing caches
+    capabilityCache.clear();
+    supportedParametersCache.clear();
+    tokenLimitsCache.clear();
+    pricingCache.clear();
+    cacheReady = false;
 
-		// 2. Fetch models from OpenRouter API (no auth required - public endpoint)
-		const response = await fetch("https://openrouter.ai/api/v1/models", {
-			headers: {
-				"Content-Type": "application/json",
-			},
-		});
+    // 2. Fetch models from OpenRouter API (no auth required - public endpoint)
+    const response = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-		// 3. Check response status
-		if (!response.ok) {
-			throw new Error(
-				`OpenRouter API returned ${response.status}: ${response.statusText}`,
-			);
-		}
+    // 3. Check response status
+    if (!response.ok) {
+      throw new Error(
+        `OpenRouter API returned ${response.status}: ${response.statusText}`,
+      );
+    }
 
-		// 4. Parse JSON response
-		const data = await response.json();
+    // 4. Parse JSON response
+    const data = await response.json();
 
-		// 5. Validate response structure
-		if (!data.data || !Array.isArray(data.data)) {
-			throw new Error("Unexpected API response format - missing data array");
-		}
+    // 5. Validate response structure
+    if (!data.data || !Array.isArray(data.data)) {
+      throw new Error("Unexpected API response format - missing data array");
+    }
 
-		const models: OpenRouterModel[] = data.data;
-		log.info(`Fetched ${models.length} models from OpenRouter API`);
+    const models: OpenRouterModel[] = data.data;
+    log.info(`Fetched ${models.length} models from OpenRouter API`);
 
-		// 6. Cache capabilities and token limits for each model
-		for (const model of models) {
-			// Extract capabilities using detection functions
-			const capabilities: ModelCapabilities = {
-				hasTools: detectToolSupport(model),
-				seesImages: detectImageSupport(model),
-				seesVideos: detectVideoSupport(model),
-				supportsStructuredOutput: detectStructuredOutputSupport(model),
-			};
+    // 6. Cache capabilities and token limits for each model
+    for (const model of models) {
+      // Extract capabilities using detection functions
+      const capabilities: ModelCapabilities = {
+        hasTools: detectToolSupport(model),
+        seesImages: detectImageSupport(model),
+        seesVideos: detectVideoSupport(model),
+        supportsStructuredOutput: detectStructuredOutputSupport(model),
+      };
 
-			// Extract token limits from API response fields
-			const tokenLimits: ModelTokenLimits = {
-				contextLength: model.context_length ?? 0,
-				maxCompletionTokens: model.top_provider?.max_completion_tokens,
-			};
-			const promptPricePerMillion = parseUsdPerMillion(model.pricing?.prompt);
-			const completionPricePerMillion = parseUsdPerMillion(
-				model.pricing?.completion,
-			);
+      // Extract token limits from API response fields
+      const tokenLimits: ModelTokenLimits = {
+        contextLength: model.context_length ?? 0,
+        maxCompletionTokens: model.top_provider?.max_completion_tokens,
+      };
+      const promptPricePerMillion = parseUsdPerMillion(model.pricing?.prompt);
+      const completionPricePerMillion = parseUsdPerMillion(
+        model.pricing?.completion,
+      );
 
-			// Store in caches with model ID as key
-			capabilityCache.set(model.id, capabilities);
-			supportedParametersCache.set(
-				model.id,
-				new Set(model.supported_parameters ?? []),
-			);
-			tokenLimitsCache.set(model.id, tokenLimits);
-			if (
-				promptPricePerMillion !== undefined &&
-				completionPricePerMillion !== undefined
-			) {
-				pricingCache.set(model.id, {
-					promptPricePerMillion,
-					completionPricePerMillion,
-				});
-			}
-		}
+      // Store in caches with model ID as key
+      capabilityCache.set(model.id, capabilities);
+      supportedParametersCache.set(
+        model.id,
+        new Set(model.supported_parameters ?? []),
+      );
+      tokenLimitsCache.set(model.id, tokenLimits);
+      if (
+        promptPricePerMillion !== undefined &&
+        completionPricePerMillion !== undefined
+      ) {
+        pricingCache.set(model.id, {
+          promptPricePerMillion,
+          completionPricePerMillion,
+        });
+      }
+    }
 
-		// 7. Mark cache as ready
-		cacheReady = true;
+    // 7. Mark cache as ready
+    cacheReady = true;
 
-		// 8. Log statistics
-		const toolModels = Array.from(capabilityCache.values()).filter(
-			(c) => c.hasTools,
-		).length;
-		const visionModels = Array.from(capabilityCache.values()).filter(
-			(c) => c.seesImages,
-		).length;
-		const videoModels = Array.from(capabilityCache.values()).filter(
-			(c) => c.seesVideos,
-		).length;
-		const pricedModels = pricingCache.size;
+    // 8. Log statistics
+    const toolModels = Array.from(capabilityCache.values()).filter(
+      (c) => c.hasTools,
+    ).length;
+    const visionModels = Array.from(capabilityCache.values()).filter(
+      (c) => c.seesImages,
+    ).length;
+    const videoModels = Array.from(capabilityCache.values()).filter(
+      (c) => c.seesVideos,
+    ).length;
+    const pricedModels = pricingCache.size;
 
-		log.success(
-			`OpenRouter capability cache initialized: ${capabilityCache.size} models ` +
-				`(${toolModels} with tools, ${visionModels} with vision, ${videoModels} with video, ${pricedModels} with pricing)`,
-		);
-	} catch (error) {
-		// Non-critical error - bot continues with database flags as fallback
-		log.warn(
-			"Failed to initialize OpenRouter capability cache (non-critical) - " +
-				"will fall back to database flags",
-			error as Error,
-		);
+    log.success(
+      `OpenRouter capability cache initialized: ${capabilityCache.size} models ` +
+        `(${toolModels} with tools, ${visionModels} with vision, ${videoModels} with video, ${pricedModels} with pricing)`,
+    );
+  } catch (error) {
+    // Non-critical error - bot continues with database flags as fallback
+    log.warn(
+      "Failed to initialize OpenRouter capability cache (non-critical) - " +
+        "will fall back to database flags",
+      error as Error,
+    );
 
-		// Ensure caches are in a clean state even on error
-		capabilityCache.clear();
-		supportedParametersCache.clear();
-		tokenLimitsCache.clear();
-		pricingCache.clear();
-		cacheReady = false;
-	}
+    // Ensure caches are in a clean state even on error
+    capabilityCache.clear();
+    supportedParametersCache.clear();
+    tokenLimitsCache.clear();
+    pricingCache.clear();
+    cacheReady = false;
+  }
 }
 
 /**
@@ -329,15 +331,15 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
  * }
  */
 export function getOpenRouterCapabilities(
-	modelCodename: string,
+  modelCodename: string,
 ): ModelCapabilities | undefined {
-	// 1. Return undefined if cache is not ready
-	if (!cacheReady) {
-		return undefined;
-	}
+  // 1. Return undefined if cache is not ready
+  if (!cacheReady) {
+    return undefined;
+  }
 
-	// 2. Look up capabilities in cache
-	return capabilityCache.get(modelCodename);
+  // 2. Look up capabilities in cache
+  return capabilityCache.get(modelCodename);
 }
 
 /**
@@ -347,13 +349,13 @@ export function getOpenRouterCapabilities(
  * @returns Set of supported parameter names, or undefined if cache/model not ready
  */
 export function getOpenRouterSupportedParameters(
-	modelCodename: string,
+  modelCodename: string,
 ): ReadonlySet<string> | undefined {
-	if (!cacheReady) {
-		return undefined;
-	}
+  if (!cacheReady) {
+    return undefined;
+  }
 
-	return supportedParametersCache.get(modelCodename);
+  return supportedParametersCache.get(modelCodename);
 }
 
 /**
@@ -365,7 +367,7 @@ export function getOpenRouterSupportedParameters(
  * Use getOpenRouterCapabilities() and check for undefined to handle cache misses.
  */
 export function isOpenRouterCapabilityCacheReady(): boolean {
-	return cacheReady;
+  return cacheReady;
 }
 
 /**
@@ -376,7 +378,7 @@ export function isOpenRouterCapabilityCacheReady(): boolean {
  * Useful for monitoring and debugging cache state.
  */
 export function getOpenRouterCapabilityCacheSize(): number {
-	return capabilityCache.size;
+  return capabilityCache.size;
 }
 
 /**
@@ -386,10 +388,10 @@ export function getOpenRouterCapabilityCacheSize(): number {
  * @returns ModelTokenLimits if found, undefined if not cached or cache not ready
  */
 export function getOpenRouterTokenLimits(
-	modelCodename: string,
+  modelCodename: string,
 ): ModelTokenLimits | undefined {
-	if (!cacheReady) return undefined;
-	return tokenLimitsCache.get(modelCodename);
+  if (!cacheReady) return undefined;
+  return tokenLimitsCache.get(modelCodename);
 }
 
 /**
@@ -399,8 +401,8 @@ export function getOpenRouterTokenLimits(
  * @returns ModelPricing if found, undefined if cache/model not ready
  */
 export function getOpenRouterPricing(
-	modelCodename: string,
+  modelCodename: string,
 ): ModelPricing | undefined {
-	if (!cacheReady) return undefined;
-	return pricingCache.get(modelCodename);
+  if (!cacheReady) return undefined;
+  return pricingCache.get(modelCodename);
 }

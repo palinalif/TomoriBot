@@ -11,11 +11,11 @@ import type { UserRow } from "@/types/db/schema";
  * @returns The configured subcommand
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("discord")
-		.setDescription(localizer("en-US", "commands.support.discord.description"));
+  subcommand
+    .setName("discord")
+    .setDescription(localizer("en-US", "commands.support.discord.description"));
 
 /**
  * Execute the support discord command - show Discord server link and support resources
@@ -25,33 +25,33 @@ export const configureSubcommand = (
  * @param locale - Locale of the interaction
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  _userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 0. Defer the interaction before async file I/O to prevent timeout
-	await interaction.deferReply();
+  // 0. Defer the interaction before async file I/O to prevent timeout
+  await interaction.deferReply();
 
-	// 1. Load tomobanner.png image as attachment
-	const bannerFile = Bun.file("img/tomobanner.png");
-	const bannerBuffer = await bannerFile.arrayBuffer();
-	const attachment = new AttachmentBuilder(Buffer.from(bannerBuffer), {
-		name: "tomobanner.png",
-	});
+  // 1. Load tomobanner.png image as attachment
+  const bannerFile = Bun.file("img/tomobanner.png");
+  const bannerBuffer = await bannerFile.arrayBuffer();
+  const attachment = new AttachmentBuilder(Buffer.from(bannerBuffer), {
+    name: "tomobanner.png",
+  });
 
-	// 2. Create embed with image attachment
-	const embed = new EmbedBuilder()
-		.setTitle(localizer(locale, "commands.support.discord.title"))
-		.setDescription(
-			localizer(locale, "commands.support.discord.description_text"),
-		)
-		.setColor(ColorCode.INFO)
-		.setImage("attachment://tomobanner.png");
+  // 2. Create embed with image attachment
+  const embed = new EmbedBuilder()
+    .setTitle(localizer(locale, "commands.support.discord.title"))
+    .setDescription(
+      localizer(locale, "commands.support.discord.description_text"),
+    )
+    .setColor(ColorCode.INFO)
+    .setImage("attachment://tomobanner.png");
 
-	// 3. Reply with embed and attachment (suppress notifications)
-	await interaction.editReply({
-		embeds: [embed],
-		files: [attachment],
-	});
+  // 3. Reply with embed and attachment (suppress notifications)
+  await interaction.editReply({
+    embeds: [embed],
+    files: [attachment],
+  });
 }

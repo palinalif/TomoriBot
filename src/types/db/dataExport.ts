@@ -12,99 +12,101 @@ export const EXPORT_VERSION = "1.0";
  * These map directly to user-facing export/delete choices.
  */
 export const DATA_EXPORT_TYPES = {
-	personal_memories: "personal_memories",
-	server_memories: "server_memories",
-	personal_settings: "personal_settings",
-	server_config: "server_config",
-	global_personal_memories: "global_personal_memories",
-	legacy_personal: "personal",
-	legacy_server: "server",
+  personal_memories: "personal_memories",
+  server_memories: "server_memories",
+  personal_settings: "personal_settings",
+  server_config: "server_config",
+  global_personal_memories: "global_personal_memories",
+  legacy_personal: "personal",
+  legacy_server: "server",
 } as const;
 
 export type DataExportType =
-	(typeof DATA_EXPORT_TYPES)[keyof typeof DATA_EXPORT_TYPES];
+  (typeof DATA_EXPORT_TYPES)[keyof typeof DATA_EXPORT_TYPES];
 
 /**
  * Get personal data export schema with dynamic memory limits from environment
  * Validates the structure of exported personal user data
  */
 export function getPersonalExportDataSchema() {
-	const limits = getMemoryLimits();
-	return z.object({
-		user_nickname: z.string().min(1).max(100),
-		language_pref: z.string().min(2).max(10),
-		personal_memories: z.array(z.string()).max(limits.maxPersonalMemories),
-	});
+  const limits = getMemoryLimits();
+  return z.object({
+    user_nickname: z.string().min(1).max(100),
+    language_pref: z.string().min(2).max(10),
+    personal_memories: z.array(z.string()).max(limits.maxPersonalMemories),
+  });
 }
 
 export type PersonalExportData = z.infer<
-	ReturnType<typeof getPersonalExportDataSchema>
+  ReturnType<typeof getPersonalExportDataSchema>
 >;
 
 /**
  * Personal settings-only export schema.
  */
 export const personalSettingsExportDataSchema = z.object({
-	user_nickname: z.string().min(1).max(100),
-	language_pref: z.string().min(2).max(10),
+  user_nickname: z.string().min(1).max(100),
+  language_pref: z.string().min(2).max(10),
 });
 
 export type PersonalSettingsExportData = z.infer<
-	typeof personalSettingsExportDataSchema
+  typeof personalSettingsExportDataSchema
 >;
 
 /**
  * Persona-scoped personal memories-only export schema.
  */
 export function getPersonalMemoriesExportDataSchema() {
-	const limits = getMemoryLimits();
-	return z.object({
-		personal_memories: z.array(z.string()).max(limits.maxPersonalMemories),
-	});
+  const limits = getMemoryLimits();
+  return z.object({
+    personal_memories: z.array(z.string()).max(limits.maxPersonalMemories),
+  });
 }
 
 export type PersonalMemoriesExportData = z.infer<
-	ReturnType<typeof getPersonalMemoriesExportDataSchema>
+  ReturnType<typeof getPersonalMemoriesExportDataSchema>
 >;
 
 /**
  * Get complete personal export file schema with dynamic limits
  */
 export function getPersonalExportSchema() {
-	return z.object({
-		version: z.literal(EXPORT_VERSION),
-		type: z.literal("personal"),
-		exported_at: z.string(),
-		data: getPersonalExportDataSchema(),
-	});
+  return z.object({
+    version: z.literal(EXPORT_VERSION),
+    type: z.literal("personal"),
+    exported_at: z.string(),
+    data: getPersonalExportDataSchema(),
+  });
 }
 
-export type PersonalExport = z.infer<ReturnType<typeof getPersonalExportSchema>>;
+export type PersonalExport = z.infer<
+  ReturnType<typeof getPersonalExportSchema>
+>;
 
 /**
  * Server configuration export schema
  * Excludes sensitive data (API keys) and data managed by other commands (trigger words, personality)
  */
 export const serverConfigExportSchema = z.object({
-	llm_temperature: z.number().min(1.0).max(2.0),
-	llm_top_p: z.number().min(0.0).max(1.0).default(1.0),
-	llm_top_k: z.number().int().min(0).max(40).default(0),
-	llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0),
-	llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0),
-	llm_min_p: z.number().min(0.0).max(1.0).default(0.0),
-	humanizer_degree: z.number().int().min(0).max(3),
-	timezone_offset: z.number().int().min(-12).max(14),
-	message_fetch_limit: z.number().int().min(20).max(100).default(80),
-	system_prompt: z.string().nullable().default(null),
-	server_memteaching_enabled: z.boolean(),
-	attribute_memteaching_enabled: z.boolean(),
-	sampledialogue_memteaching_enabled: z.boolean(),
-	self_teaching_enabled: z.boolean(),
-	web_search_enabled: z.boolean(),
-	personal_memories_enabled: z.boolean(),
-	emoji_usage_enabled: z.boolean(),
-	sticker_usage_enabled: z.boolean(),
-	imagegen_enabled: z.boolean().default(true),
+  llm_temperature: z.number().min(1.0).max(2.0),
+  llm_top_p: z.number().min(0.0).max(1.0).default(1.0),
+  llm_top_k: z.number().int().min(0).max(40).default(0),
+  llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0),
+  llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0),
+  llm_min_p: z.number().min(0.0).max(1.0).default(0.0),
+  humanizer_degree: z.number().int().min(0).max(3),
+  timezone_offset: z.number().int().min(-12).max(14),
+  message_fetch_limit: z.number().int().min(20).max(100).default(80),
+  system_prompt: z.string().nullable().default(null),
+  server_memteaching_enabled: z.boolean(),
+  attribute_memteaching_enabled: z.boolean(),
+  sampledialogue_memteaching_enabled: z.boolean(),
+  self_teaching_enabled: z.boolean(),
+  web_search_enabled: z.boolean(),
+  personal_memories_enabled: z.boolean(),
+  emoji_usage_enabled: z.boolean(),
+  sticker_usage_enabled: z.boolean(),
+  imagegen_enabled: z.boolean().default(true),
 });
 
 export type ServerConfigExport = z.infer<typeof serverConfigExportSchema>;
@@ -113,25 +115,25 @@ export type ServerConfigExport = z.infer<typeof serverConfigExportSchema>;
  * Persona-scoped server memories-only export schema.
  */
 export function getServerMemoriesExportDataSchema() {
-	const limits = getMemoryLimits();
-	return z.object({
-		server_memories: z.array(z.string()).max(limits.maxServerMemories),
-	});
+  const limits = getMemoryLimits();
+  return z.object({
+    server_memories: z.array(z.string()).max(limits.maxServerMemories),
+  });
 }
 
 export type ServerMemoriesExportData = z.infer<
-	ReturnType<typeof getServerMemoriesExportDataSchema>
+  ReturnType<typeof getServerMemoriesExportDataSchema>
 >;
 
 /**
  * Server config-only export schema.
  */
 export const serverConfigOnlyExportDataSchema = z.object({
-	config: serverConfigExportSchema,
+  config: serverConfigExportSchema,
 });
 
 export type ServerConfigOnlyExportData = z.infer<
-	typeof serverConfigOnlyExportDataSchema
+  typeof serverConfigOnlyExportDataSchema
 >;
 
 /**
@@ -139,27 +141,27 @@ export type ServerConfigOnlyExportData = z.infer<
  * Includes configuration and server memories
  */
 export function getServerExportDataSchema() {
-	const limits = getMemoryLimits();
-	return z.object({
-		config: serverConfigExportSchema,
-		server_memories: z.array(z.string()).max(limits.maxServerMemories),
-	});
+  const limits = getMemoryLimits();
+  return z.object({
+    config: serverConfigExportSchema,
+    server_memories: z.array(z.string()).max(limits.maxServerMemories),
+  });
 }
 
 export type ServerExportData = z.infer<
-	ReturnType<typeof getServerExportDataSchema>
+  ReturnType<typeof getServerExportDataSchema>
 >;
 
 /**
  * Get complete server export file schema with dynamic limits
  */
 export function getServerExportSchema() {
-	return z.object({
-		version: z.literal(EXPORT_VERSION),
-		type: z.literal("server"),
-		exported_at: z.string(),
-		data: getServerExportDataSchema(),
-	});
+  return z.object({
+    version: z.literal(EXPORT_VERSION),
+    type: z.literal("server"),
+    exported_at: z.string(),
+    data: getServerExportDataSchema(),
+  });
 }
 
 export type ServerExport = z.infer<ReturnType<typeof getServerExportSchema>>;
@@ -168,92 +170,96 @@ export type ServerExport = z.infer<ReturnType<typeof getServerExportSchema>>;
  * New explicit export formats used by /data command.
  */
 export const personalMemoriesExportSchema = z.object({
-	version: z.literal(EXPORT_VERSION),
-	type: z.literal(DATA_EXPORT_TYPES.personal_memories),
-	exported_at: z.string(),
-	data: getPersonalMemoriesExportDataSchema(),
+  version: z.literal(EXPORT_VERSION),
+  type: z.literal(DATA_EXPORT_TYPES.personal_memories),
+  exported_at: z.string(),
+  data: getPersonalMemoriesExportDataSchema(),
 });
 
 export type PersonalMemoriesExport = z.infer<
-	typeof personalMemoriesExportSchema
+  typeof personalMemoriesExportSchema
 >;
 
 export const globalPersonalMemoriesExportSchema = z.object({
-	version: z.literal(EXPORT_VERSION),
-	type: z.literal(DATA_EXPORT_TYPES.global_personal_memories),
-	exported_at: z.string(),
-	data: getPersonalMemoriesExportDataSchema(),
+  version: z.literal(EXPORT_VERSION),
+  type: z.literal(DATA_EXPORT_TYPES.global_personal_memories),
+  exported_at: z.string(),
+  data: getPersonalMemoriesExportDataSchema(),
 });
 
 export type GlobalPersonalMemoriesExport = z.infer<
-	typeof globalPersonalMemoriesExportSchema
+  typeof globalPersonalMemoriesExportSchema
 >;
 
 export const personalSettingsExportSchema = z.object({
-	version: z.literal(EXPORT_VERSION),
-	type: z.literal(DATA_EXPORT_TYPES.personal_settings),
-	exported_at: z.string(),
-	data: personalSettingsExportDataSchema,
+  version: z.literal(EXPORT_VERSION),
+  type: z.literal(DATA_EXPORT_TYPES.personal_settings),
+  exported_at: z.string(),
+  data: personalSettingsExportDataSchema,
 });
 
-export type PersonalSettingsExport = z.infer<typeof personalSettingsExportSchema>;
+export type PersonalSettingsExport = z.infer<
+  typeof personalSettingsExportSchema
+>;
 
 export const serverMemoriesExportSchema = z.object({
-	version: z.literal(EXPORT_VERSION),
-	type: z.literal(DATA_EXPORT_TYPES.server_memories),
-	exported_at: z.string(),
-	data: getServerMemoriesExportDataSchema(),
+  version: z.literal(EXPORT_VERSION),
+  type: z.literal(DATA_EXPORT_TYPES.server_memories),
+  exported_at: z.string(),
+  data: getServerMemoriesExportDataSchema(),
 });
 
 export type ServerMemoriesExport = z.infer<typeof serverMemoriesExportSchema>;
 
 export const serverConfigOnlyExportSchema = z.object({
-	version: z.literal(EXPORT_VERSION),
-	type: z.literal(DATA_EXPORT_TYPES.server_config),
-	exported_at: z.string(),
-	data: serverConfigOnlyExportDataSchema,
+  version: z.literal(EXPORT_VERSION),
+  type: z.literal(DATA_EXPORT_TYPES.server_config),
+  exported_at: z.string(),
+  data: serverConfigOnlyExportDataSchema,
 });
 
-export type ServerConfigOnlyExport = z.infer<typeof serverConfigOnlyExportSchema>;
+export type ServerConfigOnlyExport = z.infer<
+  typeof serverConfigOnlyExportSchema
+>;
 
 /**
  * Union type for all export formats
  */
 export type DataExport =
-	| PersonalMemoriesExport
-	| ServerMemoriesExport
-	| PersonalSettingsExport
-	| ServerConfigOnlyExport
-	| GlobalPersonalMemoriesExport
-	| PersonalExport
-	| ServerExport;
+  | PersonalMemoriesExport
+  | ServerMemoriesExport
+  | PersonalSettingsExport
+  | ServerConfigOnlyExport
+  | GlobalPersonalMemoriesExport
+  | PersonalExport
+  | ServerExport;
 
 /**
  * Result of export operation
  */
 export interface ExportResult {
-	success: boolean;
-	data?: DataExport;
-	error?: string;
+  success: boolean;
+  data?: DataExport;
+  error?: string;
 }
 
 /**
  * Result of personality text export operation
  */
 export interface PersonalityExportResult {
-	success: boolean;
-	text?: string;
-	error?: string;
+  success: boolean;
+  text?: string;
+  error?: string;
 }
 
 /**
  * Result of import operation
  */
 export interface ImportResult {
-	success: boolean;
-	itemsImported?: {
-		memoriesCount?: number;
-		configFieldsCount?: number;
-	};
-	error?: string;
+  success: boolean;
+  itemsImported?: {
+    memoriesCount?: number;
+    configFieldsCount?: number;
+  };
+  error?: string;
 }

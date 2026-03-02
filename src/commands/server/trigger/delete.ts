@@ -1,25 +1,25 @@
 import {
-	MessageFlags,
-	type ChatInputCommandInteraction,
-	type ButtonInteraction,
-	type Client,
-	type ModalSubmitInteraction,
-	type SlashCommandSubcommandBuilder,
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type ButtonInteraction,
+  type Client,
+  type ModalSubmitInteraction,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
-	replyInfoEmbed,
-	replyPaginatedPersonaChoicesV2,
-	promptWithPaginatedModal,
-	safeSelectOptionText,
+  replyInfoEmbed,
+  replyPaginatedPersonaChoicesV2,
+  promptWithPaginatedModal,
+  safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
 import { invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import {
-	type UserRow,
-	type ErrorContext,
-	personaConfigSchema,
-	type TomoriState,
+  type UserRow,
+  type ErrorContext,
+  personaConfigSchema,
+  type TomoriState,
 } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { sql } from "@/utils/db/client";
@@ -31,239 +31,240 @@ const TRIGGER_SELECT_ID = "trigger_select";
 
 // Configure the subcommand
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("delete")
-		.setDescription(
-			localizer("en-US", "commands.server.trigger.delete.description"),
-		);
+  subcommand
+    .setName("delete")
+    .setDescription(
+      localizer("en-US", "commands.server.trigger.delete.description"),
+    );
 
 /**
  * Removes a trigger word from a selected persona.
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	if (!interaction.guild || !interaction.channel) {
-		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
+  if (!interaction.guild || !interaction.channel) {
+    await replyInfoEmbed(interaction, userData.language_pref, {
+      titleKey: "general.errors.guild_only_title",
+      descriptionKey: "general.errors.guild_only_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
 
-	let tomoriState: TomoriState | null = null;
-	let responseInteraction:
-		| ChatInputCommandInteraction
-		| ButtonInteraction
-		| ModalSubmitInteraction = interaction;
-	let selectedPersona: TomoriState | null = null;
+  let tomoriState: TomoriState | null = null;
+  let responseInteraction:
+    | ChatInputCommandInteraction
+    | ButtonInteraction
+    | ModalSubmitInteraction = interaction;
+  let selectedPersona: TomoriState | null = null;
 
-	try {
-		const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
-		if (allPersonas.length === 0) {
-			await replyInfoEmbed(
-				interaction,
-				locale,
-				{
-					titleKey: "general.errors.tomori_not_setup_title",
-					descriptionKey: "general.errors.tomori_not_setup_description",
-					color: ColorCode.ERROR,
-				},
-				MessageFlags.Ephemeral,
-			);
-			return;
-		}
+  try {
+    const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
+    if (allPersonas.length === 0) {
+      await replyInfoEmbed(
+        interaction,
+        locale,
+        {
+          titleKey: "general.errors.tomori_not_setup_title",
+          descriptionKey: "general.errors.tomori_not_setup_description",
+          color: ColorCode.ERROR,
+        },
+        MessageFlags.Ephemeral,
+      );
+      return;
+    }
 
-		const personaSelection = await replyPaginatedPersonaChoicesV2(
-			interaction,
-			locale,
-			{
-				personas: allPersonas,
-				color: ColorCode.INFO,
-				preserveSelectedInteraction: true,
-				onSelect: async () => {},
-			},
-		);
+    const personaSelection = await replyPaginatedPersonaChoicesV2(
+      interaction,
+      locale,
+      {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      },
+    );
 
-		if (
-			!personaSelection.success ||
-			personaSelection.selectedIndex === undefined ||
-			!personaSelection.interaction
-		) {
-			return;
-		}
+    if (
+      !personaSelection.success ||
+      personaSelection.selectedIndex === undefined ||
+      !personaSelection.interaction
+    ) {
+      return;
+    }
 
-		responseInteraction = personaSelection.interaction;
-		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-		tomoriState = selectedPersona;
-		if (!selectedPersona?.tomori_id) {
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+    responseInteraction = personaSelection.interaction;
+    selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+    tomoriState = selectedPersona;
+    if (!selectedPersona?.tomori_id) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		const currentTriggerWords = selectedPersona.trigger_words ?? [];
-		if (currentTriggerWords.length === 0) {
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "commands.server.trigger.delete.no_triggers_title",
-				descriptionKey:
-					"commands.server.trigger.delete.no_triggers_description",
-				color: ColorCode.WARN,
-			});
-			return;
-		}
+    const currentTriggerWords = selectedPersona.trigger_words ?? [];
+    if (currentTriggerWords.length === 0) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.server.trigger.delete.no_triggers_title",
+        descriptionKey:
+          "commands.server.trigger.delete.no_triggers_description",
+        color: ColorCode.WARN,
+      });
+      return;
+    }
 
-		const triggerOptions: SelectOption[] = currentTriggerWords.map(
-			(trigger, index) => ({
-				label: safeSelectOptionText(trigger, 50),
-				value: index.toString(),
-				description: undefined,
-			}),
-		);
+    const triggerOptions: SelectOption[] = currentTriggerWords.map(
+      (trigger, index) => ({
+        label: safeSelectOptionText(trigger, 50),
+        value: index.toString(),
+        description: undefined,
+      }),
+    );
 
-		const triggerModalResult = await promptWithPaginatedModal(
-			responseInteraction,
-			locale,
-			{
-				modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.server.trigger.delete.modal_title",
-				components: [
-					{
-						customId: TRIGGER_SELECT_ID,
-						labelKey: "commands.server.trigger.delete.select_label",
-						descriptionKey:
-							"commands.server.trigger.delete.select_description",
-						placeholder:
-							"commands.server.trigger.delete.select_placeholder",
-						required: true,
-						options: triggerOptions,
-					},
-				],
-			},
-		);
+    const triggerModalResult = await promptWithPaginatedModal(
+      responseInteraction,
+      locale,
+      {
+        modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.server.trigger.delete.modal_title",
+        components: [
+          {
+            customId: TRIGGER_SELECT_ID,
+            labelKey: "commands.server.trigger.delete.select_label",
+            descriptionKey: "commands.server.trigger.delete.select_description",
+            placeholder: "commands.server.trigger.delete.select_placeholder",
+            required: true,
+            options: triggerOptions,
+          },
+        ],
+      },
+    );
 
-		if (triggerModalResult.outcome !== "submit") {
-			log.info(
-				`Trigger delete selection modal ${triggerModalResult.outcome} for user ${userData.user_id}`,
-			);
-			return;
-		}
+    if (triggerModalResult.outcome !== "submit") {
+      log.info(
+        `Trigger delete selection modal ${triggerModalResult.outcome} for user ${userData.user_id}`,
+      );
+      return;
+    }
 
-		const triggerModalInteraction = triggerModalResult.interaction;
-		const selectedTriggerIndex = triggerModalResult.values?.[TRIGGER_SELECT_ID];
-		if (!triggerModalInteraction || !selectedTriggerIndex) {
-			log.error("Trigger modal result unexpectedly missing interaction or values");
-			return;
-		}
-		responseInteraction = triggerModalInteraction;
+    const triggerModalInteraction = triggerModalResult.interaction;
+    const selectedTriggerIndex = triggerModalResult.values?.[TRIGGER_SELECT_ID];
+    if (!triggerModalInteraction || !selectedTriggerIndex) {
+      log.error(
+        "Trigger modal result unexpectedly missing interaction or values",
+      );
+      return;
+    }
+    responseInteraction = triggerModalInteraction;
 
-		const selectedWord =
-			currentTriggerWords[Number.parseInt(selectedTriggerIndex, 10)];
-		if (!selectedWord) {
-			await replyInfoEmbed(triggerModalInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.server.trigger.delete.no_triggers_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+    const selectedWord =
+      currentTriggerWords[Number.parseInt(selectedTriggerIndex, 10)];
+    if (!selectedWord) {
+      await replyInfoEmbed(triggerModalInteraction, locale, {
+        titleKey: "general.errors.operation_failed_title",
+        descriptionKey:
+          "commands.server.trigger.delete.no_triggers_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		// Ensure row exists even for legacy personas that only used old columns
-		await sql`
+    // Ensure row exists even for legacy personas that only used old columns
+    await sql`
 			INSERT INTO persona_configs (tomori_id, trigger_words)
 			VALUES (${selectedPersona.tomori_id}, ARRAY[]::text[])
 			ON CONFLICT (tomori_id) DO NOTHING
 		`;
 
-		const [updatedRow] = await sql`
+    const [updatedRow] = await sql`
 			UPDATE persona_configs
 			SET trigger_words = array_remove(trigger_words, ${selectedWord})
 			WHERE tomori_id = ${selectedPersona.tomori_id}
 			RETURNING *
 		`;
 
-		const validatedConfig = personaConfigSchema.safeParse(updatedRow);
-		if (!validatedConfig.success || !updatedRow) {
-			const context: ErrorContext = {
-				tomoriId: selectedPersona.tomori_id,
-				serverId: selectedPersona.server_id,
-				userId: userData.user_id,
-				errorType: "DatabaseUpdateError",
-				metadata: {
-					command: "server trigger delete",
-					guildId: interaction.guild.id,
-					triggerWord: selectedWord,
-					validationErrors: validatedConfig.success
-						? null
-						: validatedConfig.error.flatten(),
-				},
-			};
-			await log.error(
-				"Failed to update or validate trigger_words in persona_configs table",
-				validatedConfig.success
-					? new Error("Database update returned no rows")
-					: new Error("Updated config data failed validation"),
-				context,
-			);
+    const validatedConfig = personaConfigSchema.safeParse(updatedRow);
+    if (!validatedConfig.success || !updatedRow) {
+      const context: ErrorContext = {
+        tomoriId: selectedPersona.tomori_id,
+        serverId: selectedPersona.server_id,
+        userId: userData.user_id,
+        errorType: "DatabaseUpdateError",
+        metadata: {
+          command: "server trigger delete",
+          guildId: interaction.guild.id,
+          triggerWord: selectedWord,
+          validationErrors: validatedConfig.success
+            ? null
+            : validatedConfig.error.flatten(),
+        },
+      };
+      await log.error(
+        "Failed to update or validate trigger_words in persona_configs table",
+        validatedConfig.success
+          ? new Error("Database update returned no rows")
+          : new Error("Updated config data failed validation"),
+        context,
+      );
 
-			await replyInfoEmbed(triggerModalInteraction, locale, {
-				titleKey: "general.errors.update_failed_title",
-				descriptionKey: "general.errors.update_failed_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+      await replyInfoEmbed(triggerModalInteraction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		invalidateTomoriStateCache(interaction.guild.id);
+    invalidateTomoriStateCache(interaction.guild.id);
 
-		await replyInfoEmbed(triggerModalInteraction, locale, {
-			titleKey: "commands.server.trigger.delete.success_title",
-			descriptionKey: "commands.server.trigger.delete.success_description",
-			descriptionVars: {
-				triggerWord: selectedWord,
-			},
-			color: ColorCode.SUCCESS,
-		});
-	} catch (error) {
-		const context: ErrorContext = {
-			userId: userData.user_id,
-			serverId: selectedPersona?.server_id ?? tomoriState?.server_id,
-			tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
-			errorType: "CommandExecutionError",
-			metadata: {
-				command: "server trigger delete",
-				guildId: interaction.guild?.id,
-				executorDiscordId: interaction.user.id,
-			},
-		};
-		await log.error(
-			`Unexpected error in /server trigger delete for user ${userData.user_disc_id}`,
-			error as Error,
-			context,
-		);
+    await replyInfoEmbed(triggerModalInteraction, locale, {
+      titleKey: "commands.server.trigger.delete.success_title",
+      descriptionKey: "commands.server.trigger.delete.success_description",
+      descriptionVars: {
+        triggerWord: selectedWord,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  } catch (error) {
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: selectedPersona?.server_id ?? tomoriState?.server_id,
+      tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "server trigger delete",
+        guildId: interaction.guild?.id,
+        executorDiscordId: interaction.user.id,
+      },
+    };
+    await log.error(
+      `Unexpected error in /server trigger delete for user ${userData.user_disc_id}`,
+      error as Error,
+      context,
+    );
 
-		if (responseInteraction.deferred || responseInteraction.replied) {
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-			});
-		} else {
-			await replyInfoEmbed(responseInteraction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-	}
+    if (responseInteraction.deferred || responseInteraction.replied) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+    } else {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  }
 }

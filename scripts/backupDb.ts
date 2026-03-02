@@ -8,20 +8,20 @@ config();
 
 // Construct DATABASE_URL from individual env vars if not provided
 if (!process.env.DATABASE_URL) {
-	const host = process.env.POSTGRES_HOST || "localhost";
-	const port = process.env.POSTGRES_PORT || "5432";
-	const user = process.env.POSTGRES_USER || "postgres";
-	const password = process.env.POSTGRES_PASSWORD;
-	const database = process.env.POSTGRES_DB || "tomodb";
+  const host = process.env.POSTGRES_HOST || "localhost";
+  const port = process.env.POSTGRES_PORT || "5432";
+  const user = process.env.POSTGRES_USER || "postgres";
+  const password = process.env.POSTGRES_PASSWORD;
+  const database = process.env.POSTGRES_DB || "tomodb";
 
-	if (!password) {
-		log.error("POSTGRES_PASSWORD environment variable not found!");
-		process.exit(1);
-	}
+  if (!password) {
+    log.error("POSTGRES_PASSWORD environment variable not found!");
+    process.exit(1);
+  }
 
-	// URL-encode the password to safely handle special characters (@, /, #, etc.)
-	process.env.DATABASE_URL = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
-	log.info(`Constructed DATABASE_URL for connection`);
+  // URL-encode the password to safely handle special characters (@, /, #, etc.)
+  process.env.DATABASE_URL = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+  log.info(`Constructed DATABASE_URL for connection`);
 }
 
 /**
@@ -33,62 +33,62 @@ if (!process.env.DATABASE_URL) {
  * @returns {Promise<void>}
  */
 async function backupDatabase(): Promise<void> {
-	log.section("📦 DATABASE BACKUP SCRIPT");
+  log.section("📦 DATABASE BACKUP SCRIPT");
 
-	// 1. Ensure backups directory exists
-	const backupsDir = join(process.cwd(), "backups");
-	if (!existsSync(backupsDir)) {
-		mkdirSync(backupsDir, { recursive: true });
-		log.info(`Created backups directory: ${backupsDir}`);
-	}
+  // 1. Ensure backups directory exists
+  const backupsDir = join(process.cwd(), "backups");
+  if (!existsSync(backupsDir)) {
+    mkdirSync(backupsDir, { recursive: true });
+    log.info(`Created backups directory: ${backupsDir}`);
+  }
 
-	// 2. Generate timestamp for backup filename
-	const timestamp = new Date()
-		.toISOString()
-		.replace(/:/g, "-")
-		.replace(/\..+/, "")
-		.replace("T", "_");
+  // 2. Generate timestamp for backup filename
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/:/g, "-")
+    .replace(/\..+/, "")
+    .replace("T", "_");
 
-	const backupFilename = `tomoribot_backup_${timestamp}.sql`;
-	const backupPath = join(backupsDir, backupFilename);
+  const backupFilename = `tomoribot_backup_${timestamp}.sql`;
+  const backupPath = join(backupsDir, backupFilename);
 
-	// 3. Retrieve DATABASE_URL (guaranteed to exist from top-level initialization)
-	// biome-ignore lint/style/noNonNullAssertion: DATABASE_URL is assumed to be defined from .env vars
-	const dbUrl = process.env.DATABASE_URL!;
+  // 3. Retrieve DATABASE_URL (guaranteed to exist from top-level initialization)
+  // biome-ignore lint/style/noNonNullAssertion: DATABASE_URL is assumed to be defined from .env vars
+  const dbUrl = process.env.DATABASE_URL!;
 
-	log.info(`Backup will be saved to: ${backupPath}`);
-	log.info("Starting pg_dump...");
+  log.info(`Backup will be saved to: ${backupPath}`);
+  log.info("Starting pg_dump...");
 
-	try {
-		// 4. Execute pg_dump command
-		// Use DATABASE_URL directly - pg_dump supports postgresql:// URLs
-		await $`pg_dump ${dbUrl} -f ${backupPath}`;
+  try {
+    // 4. Execute pg_dump command
+    // Use DATABASE_URL directly - pg_dump supports postgresql:// URLs
+    await $`pg_dump ${dbUrl} -f ${backupPath}`;
 
-		log.success(`✅ Database backup completed successfully!`);
-		log.info(`Backup file: ${backupFilename}`);
-		log.info(`Full path: ${backupPath}`);
-	} catch (error) {
-		log.error("❌ Backup failed!");
+    log.success(`✅ Database backup completed successfully!`);
+    log.info(`Backup file: ${backupFilename}`);
+    log.info(`Full path: ${backupPath}`);
+  } catch (error) {
+    log.error("❌ Backup failed!");
 
-		if (error instanceof Error) {
-			log.error(error.message);
-		}
+    if (error instanceof Error) {
+      log.error(error.message);
+    }
 
-		// Check if pg_dump is available
-		try {
-			await $`pg_dump --version`;
-		} catch {
-			log.error("pg_dump command not found!");
-			log.info("Please install PostgreSQL command-line tools:");
-			log.info(
-				"  - Windows: Install PostgreSQL from https://www.postgresql.org/download/windows/",
-			);
-			log.info("  - macOS: brew install postgresql");
-			log.info("  - Linux: sudo apt-get install postgresql-client");
-		}
+    // Check if pg_dump is available
+    try {
+      await $`pg_dump --version`;
+    } catch {
+      log.error("pg_dump command not found!");
+      log.info("Please install PostgreSQL command-line tools:");
+      log.info(
+        "  - Windows: Install PostgreSQL from https://www.postgresql.org/download/windows/",
+      );
+      log.info("  - macOS: brew install postgresql");
+      log.info("  - Linux: sudo apt-get install postgresql-client");
+    }
 
-		process.exit(1);
-	}
+    process.exit(1);
+  }
 }
 
 backupDatabase();

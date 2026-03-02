@@ -10,11 +10,11 @@ import { clearShortTermMemoryForChannel } from "../../utils/cache/shortTermMemor
  * Configures the 'refresh' subcommand.
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("refresh")
-		.setDescription(localizer("en-US", "commands.tool.refresh.description"));
+  subcommand
+    .setName("refresh")
+    .setDescription(localizer("en-US", "commands.tool.refresh.description"));
 
 /**
  * Executes the 'refresh' command.
@@ -25,30 +25,30 @@ export const configureSubcommand = (
  * @param locale - The user's preferred locale.
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  _userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// Clear all short-term memories for this channel (for all users)
-	if (interaction.channel) {
-		clearShortTermMemoryForChannel(interaction.channel.id);
-		log.info(
-			`[refreshCommand] Cleared short-term memories for channel - channelId=${interaction.channel.id}`,
-		);
-	}
+  // Clear all short-term memories for this channel (for all users)
+  if (interaction.channel) {
+    clearShortTermMemoryForChannel(interaction.channel.id);
+    log.info(
+      `[refreshCommand] Cleared short-term memories for channel - channelId=${interaction.channel.id}`,
+    );
+  }
 
-	// Send an embed that includes the keyword "refresh" in the description
-	// This keyword is detected by the tomoriChat handler to reset context.
-	// Let helper functions manage interaction state
-	await replyInfoEmbed(
-		interaction,
-		locale,
-		{
-			titleKey: "commands.tool.refresh.title",
-			descriptionKey: "commands.tool.refresh.response", // Ensure this locale key contains "refresh"
-			color: ColorCode.SECTION, // Use SECTION color for visual separation
-		},
-		MessageFlags.SuppressNotifications,
-	); // Explicitly pass undefined to override ephemeral default
+  // Send an embed that includes the keyword "refresh" in the description
+  // This keyword is detected by the tomoriChat handler to reset context.
+  // Let helper functions manage interaction state
+  await replyInfoEmbed(
+    interaction,
+    locale,
+    {
+      titleKey: "commands.tool.refresh.title",
+      descriptionKey: "commands.tool.refresh.response", // Ensure this locale key contains "refresh"
+      color: ColorCode.SECTION, // Use SECTION color for visual separation
+    },
+    MessageFlags.SuppressNotifications,
+  ); // Explicitly pass undefined to override ephemeral default
 }

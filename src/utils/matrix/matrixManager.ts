@@ -15,9 +15,9 @@
 import { createRequire } from "node:module";
 import type * as MatrixAppserviceBridge from "matrix-appservice-bridge";
 import type {
-	Intent,
-	WeakEvent,
-	Request as BridgeRequest,
+  Intent,
+  WeakEvent,
+  Request as BridgeRequest,
 } from "matrix-appservice-bridge";
 
 // Bun's ESM→CJS static analyzer cannot resolve Object.defineProperty-based
@@ -25,14 +25,14 @@ import type {
 // and cast to the package's own types (which are resolved by import type above).
 const _require = createRequire(import.meta.url);
 const { Bridge, AppServiceRegistration } = _require(
-	"matrix-appservice-bridge",
+  "matrix-appservice-bridge",
 ) as typeof MatrixAppserviceBridge;
 import {
-	EmbedBuilder,
-	MessageFlags,
-	type BaseGuildTextChannel,
-	type Client,
-	type TextBasedChannel,
+  EmbedBuilder,
+  MessageFlags,
+  type BaseGuildTextChannel,
+  type Client,
+  type TextBasedChannel,
 } from "discord.js";
 import type { ReminderRow } from "@/types/db/schema";
 import { isBridgeUserId } from "@/utils/bridge";
@@ -68,8 +68,8 @@ let matrixBridge: MatrixAppserviceBridge.Bridge | null = null;
  * Configurable via MATRIX_LINK_CACHE_TTL_MINUTES (default: 5 minutes).
  */
 const CACHE_TTL_MS =
-	Number.parseInt(process.env.MATRIX_LINK_CACHE_TTL_MINUTES || "5", 10) *
-	60_000;
+  Number.parseInt(process.env.MATRIX_LINK_CACHE_TTL_MINUTES || "5", 10) *
+  60_000;
 
 /**
  * Maximum attachment size (in bytes) to relay in either direction.
@@ -78,29 +78,29 @@ const CACHE_TTL_MS =
  * Exported so matrixRelay.ts can enforce the same limit on Discord→Matrix uploads.
  */
 export const MATRIX_MAX_ATTACHMENT_BYTES =
-	Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) *
-	1024 *
-	1024;
+  Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) *
+  1024 *
+  1024;
 
 /**
  * Timeout in milliseconds for Matrix media download/upload requests.
  * Configurable via MATRIX_MEDIA_TIMEOUT_MS (default: 15 000 ms).
  */
 const MATRIX_MEDIA_TIMEOUT_MS = Number.parseInt(
-	process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000",
-	10,
+  process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000",
+  10,
 );
 
 /** Cache: Discord channel ID → linked Matrix room ID (null = known-not-linked). */
 const channelLinkCache = new Map<
-	string,
-	{ roomId: string | null; cachedAt: number }
+  string,
+  { roomId: string | null; cachedAt: number }
 >();
 
 /** Cache: Matrix room ID → linked Discord channel ID (null = known-not-linked). */
 const roomLinkCache = new Map<
-	string,
-	{ channelDiscId: string | null; cachedAt: number }
+  string,
+  { channelDiscId: string | null; cachedAt: number }
 >();
 
 /**
@@ -123,8 +123,8 @@ const ensuredRoomMemberships = new Set<string>();
  * 500 events ≈ the last ~500 bot messages per session — enough for any realistic reply chain.
  */
 const MAX_TRACKED_SENT_EVENTS = Number.parseInt(
-	process.env.MATRIX_MAX_TRACKED_SENT_EVENTS || "500",
-	10,
+  process.env.MATRIX_MAX_TRACKED_SENT_EVENTS || "500",
+  10,
 );
 const MAX_REPLY_SNIPPET_CHARS = 120;
 
@@ -132,8 +132,8 @@ const MAX_REPLY_SNIPPET_CHARS = 120;
  * Metadata tracked for a Matrix event sent by a bot persona.
  */
 type SentPersonaReplyEvent = {
-	personaName: string;
-	replySnippet?: string;
+  personaName: string;
+  replySnippet?: string;
 };
 
 /**
@@ -172,9 +172,9 @@ export const pendingMatrixReplyChannels = new Set<string>();
  * @returns The full Matrix ID (e.g., "@bred:localhost"), or undefined if unknown
  */
 export function getMatrixIdForDisplayName(
-	displayName: string,
+  displayName: string,
 ): string | undefined {
-	return matrixDisplayNameToId.get(displayName);
+  return matrixDisplayNameToId.get(displayName);
 }
 
 /**
@@ -185,15 +185,15 @@ export function getMatrixIdForDisplayName(
  * @returns Display name/localpart used in context (e.g., "bred"), or undefined if unknown
  */
 export function getDisplayNameForMatrixId(
-	matrixUserId: string,
+  matrixUserId: string,
 ): string | undefined {
-	for (const [displayName, mappedId] of matrixDisplayNameToId.entries()) {
-		if (mappedId === matrixUserId) {
-			return displayName;
-		}
-	}
+  for (const [displayName, mappedId] of matrixDisplayNameToId.entries()) {
+    if (mappedId === matrixUserId) {
+      return displayName;
+    }
+  }
 
-	return undefined;
+  return undefined;
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -217,115 +217,116 @@ export function getDisplayNameForMatrixId(
  * @param discordClient - Discord.js client, forwarded to the event handler for channel lookups
  */
 export async function initializeMatrixClient(
-	discordClient: Client,
+  discordClient: Client,
 ): Promise<void> {
-	const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
-	const asToken = process.env.MATRIX_ACCESS_TOKEN; // appservice → homeserver
-	const hsToken = process.env.MATRIX_HS_TOKEN; // homeserver → appservice
-	const botUserId = process.env.MATRIX_BOT_USER_ID;
-	const serverName = process.env.MATRIX_SERVER_NAME;
+  const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
+  const asToken = process.env.MATRIX_ACCESS_TOKEN; // appservice → homeserver
+  const hsToken = process.env.MATRIX_HS_TOKEN; // homeserver → appservice
+  const botUserId = process.env.MATRIX_BOT_USER_ID;
+  const serverName = process.env.MATRIX_SERVER_NAME;
 
-	// Silently skip initialization if any required credential is absent
-	if (!homeserverUrl || !asToken || !hsToken || !botUserId || !serverName) {
-		log.info("Matrix bridge: credentials not configured — bridge disabled");
-		return;
-	}
+  // Silently skip initialization if any required credential is absent
+  if (!homeserverUrl || !asToken || !hsToken || !botUserId || !serverName) {
+    log.info("Matrix bridge: credentials not configured — bridge disabled");
+    return;
+  }
 
-	const port = Number.parseInt(
-		process.env.MATRIX_APPSERVICE_PORT || "9993",
-		10,
-	);
-	const configuredPublicUrl = process.env.MATRIX_APPSERVICE_PUBLIC_URL?.trim();
-	const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-	let hasValidPublicUrl = false;
-	let registrationUrl = `http://localhost:${port}`;
+  const port = Number.parseInt(
+    process.env.MATRIX_APPSERVICE_PORT || "9993",
+    10,
+  );
+  const configuredPublicUrl = process.env.MATRIX_APPSERVICE_PUBLIC_URL?.trim();
+  const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+  let hasValidPublicUrl = false;
+  let registrationUrl = `http://localhost:${port}`;
 
-	if (configuredPublicUrl) {
-		try {
-			const parsedUrl = new URL(configuredPublicUrl);
-			const isHttps = parsedUrl.protocol === "https:";
-			const isLocalHttp =
-				parsedUrl.protocol === "http:" && localhostHosts.has(parsedUrl.hostname);
-			hasValidPublicUrl = isHttps || isLocalHttp;
-			if (hasValidPublicUrl) {
-				registrationUrl = configuredPublicUrl;
-			}
-		} catch {
-			hasValidPublicUrl = false;
-		}
-	}
+  if (configuredPublicUrl) {
+    try {
+      const parsedUrl = new URL(configuredPublicUrl);
+      const isHttps = parsedUrl.protocol === "https:";
+      const isLocalHttp =
+        parsedUrl.protocol === "http:" &&
+        localhostHosts.has(parsedUrl.hostname);
+      hasValidPublicUrl = isHttps || isLocalHttp;
+      if (hasValidPublicUrl) {
+        registrationUrl = configuredPublicUrl;
+      }
+    } catch {
+      hasValidPublicUrl = false;
+    }
+  }
 
-	if (configuredPublicUrl && !hasValidPublicUrl) {
-		log.warn(
-			`Matrix bridge: invalid MATRIX_APPSERVICE_PUBLIC_URL "${configuredPublicUrl}" — ` +
-				`must be https:// for remote endpoints (http:// allowed only for localhost). ` +
-				`Falling back to ${registrationUrl}`,
-		);
-	}
+  if (configuredPublicUrl && !hasValidPublicUrl) {
+    log.warn(
+      `Matrix bridge: invalid MATRIX_APPSERVICE_PUBLIC_URL "${configuredPublicUrl}" — ` +
+        `must be https:// for remote endpoints (http:// allowed only for localhost). ` +
+        `Falling back to ${registrationUrl}`,
+    );
+  }
 
-	try {
-		// 1. Build the AppServiceRegistration from environment credentials
-		const registration = AppServiceRegistration.fromObject({
-			id: "tomoribot-appservice",
-			hs_token: hsToken,
-			as_token: asToken,
-			url: registrationUrl,
-			sender_localpart: "tomoribot",
-			namespaces: {
-				// Exclusive: only this appservice may create/use @_tomori_*:serverName users
-				users: [{ exclusive: true, regex: `@_tomori_.*:${serverName}` }],
-				aliases: [],
-				rooms: [],
-			},
-			rate_limited: false,
-		});
+  try {
+    // 1. Build the AppServiceRegistration from environment credentials
+    const registration = AppServiceRegistration.fromObject({
+      id: "tomoribot-appservice",
+      hs_token: hsToken,
+      as_token: asToken,
+      url: registrationUrl,
+      sender_localpart: "tomoribot",
+      namespaces: {
+        // Exclusive: only this appservice may create/use @_tomori_*:serverName users
+        users: [{ exclusive: true, regex: `@_tomori_.*:${serverName}` }],
+        aliases: [],
+        rooms: [],
+      },
+      rate_limited: false,
+    });
 
-		// 2. Create Bridge with onEvent controller
-		//    disableStores: true  — we use PostgreSQL, not the built-in NeDB file stores
-		//    disableContext: true — disableStores makes context lookups meaningless anyway
-		matrixBridge = new Bridge({
-			homeserverUrl,
-			domain: serverName,
-			registration,
-			disableStores: true,
-			disableContext: true,
-			controller: {
-				// onEvent is typed void (not Promise<void>) — fire-and-forget the async handler
-				onEvent: (request: BridgeRequest<WeakEvent>): void => {
-					void handleMatrixEvent(request, discordClient, botUserId).catch(
-						(error) => {
-							log.warn("Matrix bridge: uncaught error in event handler", error);
-						},
-					);
-				},
-				// Route bridge internal logs through our logger (errors only to reduce noise)
-				onLog: (_text: string, isError: boolean): void => {
-					if (isError) {
-						log.warn(`[matrix-appservice-bridge] ${_text}`);
-					}
-				},
-			},
-		});
+    // 2. Create Bridge with onEvent controller
+    //    disableStores: true  — we use PostgreSQL, not the built-in NeDB file stores
+    //    disableContext: true — disableStores makes context lookups meaningless anyway
+    matrixBridge = new Bridge({
+      homeserverUrl,
+      domain: serverName,
+      registration,
+      disableStores: true,
+      disableContext: true,
+      controller: {
+        // onEvent is typed void (not Promise<void>) — fire-and-forget the async handler
+        onEvent: (request: BridgeRequest<WeakEvent>): void => {
+          void handleMatrixEvent(request, discordClient, botUserId).catch(
+            (error) => {
+              log.warn("Matrix bridge: uncaught error in event handler", error);
+            },
+          );
+        },
+        // Route bridge internal logs through our logger (errors only to reduce noise)
+        onLog: (_text: string, isError: boolean): void => {
+          if (isError) {
+            log.warn(`[matrix-appservice-bridge] ${_text}`);
+          }
+        },
+      },
+    });
 
-		// 3. Run the bridge: calls initialise() internally, then starts the HTTP server
-		//    The homeserver pushes events to `registrationUrl`, which should route
-		//    back to this local listener on MATRIX_APPSERVICE_PORT.
-		await matrixBridge.run(port);
+    // 3. Run the bridge: calls initialise() internally, then starts the HTTP server
+    //    The homeserver pushes events to `registrationUrl`, which should route
+    //    back to this local listener on MATRIX_APPSERVICE_PORT.
+    await matrixBridge.run(port);
 
-		log.success(
-			`Matrix appservice initialized — ${botUserId} @ ${homeserverUrl} ` +
-				`(listening on port ${port}, callback ${registrationUrl})`,
-		);
-	} catch (error) {
-		// Safely extract message/stack — the bridge error has internal circular refs
-		// that crash JSON serialization inside our logger
-		const safeMsg = error instanceof Error ? error.message : String(error);
-		const safeStack = error instanceof Error ? error.stack : undefined;
-		log.error(
-			`Matrix bridge: failed to initialize appservice: ${safeMsg}\n${safeStack ?? ""}`,
-		);
-		matrixBridge = null;
-	}
+    log.success(
+      `Matrix appservice initialized — ${botUserId} @ ${homeserverUrl} ` +
+        `(listening on port ${port}, callback ${registrationUrl})`,
+    );
+  } catch (error) {
+    // Safely extract message/stack — the bridge error has internal circular refs
+    // that crash JSON serialization inside our logger
+    const safeMsg = error instanceof Error ? error.message : String(error);
+    const safeStack = error instanceof Error ? error.stack : undefined;
+    log.error(
+      `Matrix bridge: failed to initialize appservice: ${safeMsg}\n${safeStack ?? ""}`,
+    );
+    matrixBridge = null;
+  }
 }
 
 /**
@@ -333,7 +334,7 @@ export async function initializeMatrixClient(
  * Used as a fast "is Matrix enabled?" check in commands and event handlers.
  */
 export function isMatrixConfigured(): boolean {
-	return matrixBridge !== null;
+  return matrixBridge !== null;
 }
 
 /**
@@ -343,8 +344,8 @@ export function isMatrixConfigured(): boolean {
  * Configurable via MATRIX_TYPING_TIMEOUT_MS (default: 60 000 ms).
  */
 const MATRIX_TYPING_TIMEOUT_MS = Number.parseInt(
-	process.env.MATRIX_TYPING_TIMEOUT_MS || "60000",
-	10,
+  process.env.MATRIX_TYPING_TIMEOUT_MS || "60000",
+  10,
 );
 
 /**
@@ -361,43 +362,43 @@ const MATRIX_TYPING_TIMEOUT_MS = Number.parseInt(
  * @param isTyping    - true to start typing, false to clear it immediately
  */
 export async function sendMatrixTypingIndicator(
-	roomId: string,
-	personaName: string,
-	isTyping: boolean,
+  roomId: string,
+  personaName: string,
+  isTyping: boolean,
 ): Promise<void> {
-	const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
-	const asToken = process.env.MATRIX_ACCESS_TOKEN;
-	const serverName = process.env.MATRIX_SERVER_NAME;
-	if (!homeserverUrl || !asToken || !serverName || !matrixBridge) return;
+  const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
+  const asToken = process.env.MATRIX_ACCESS_TOKEN;
+  const serverName = process.env.MATRIX_SERVER_NAME;
+  if (!homeserverUrl || !asToken || !serverName || !matrixBridge) return;
 
-	const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
-	const userId = `@${localpart}:${serverName}`;
-	const encodedRoomId = encodeURIComponent(roomId);
-	const encodedUserId = encodeURIComponent(userId);
+  const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+  const userId = `@${localpart}:${serverName}`;
+  const encodedRoomId = encodeURIComponent(roomId);
+  const encodedUserId = encodeURIComponent(userId);
 
-	try {
-		// PUT /_matrix/client/v3/rooms/{roomId}/typing/{userId}?user_id={userId}
-		// The ?user_id query param tells the homeserver to act as the virtual persona user
-		// (standard Matrix appservice masquerading protocol).
-		const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodedRoomId}/typing/${encodedUserId}?user_id=${encodedUserId}`;
-		const body = JSON.stringify(
-			isTyping
-				? { typing: true, timeout: MATRIX_TYPING_TIMEOUT_MS }
-				: { typing: false },
-		);
+  try {
+    // PUT /_matrix/client/v3/rooms/{roomId}/typing/{userId}?user_id={userId}
+    // The ?user_id query param tells the homeserver to act as the virtual persona user
+    // (standard Matrix appservice masquerading protocol).
+    const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodedRoomId}/typing/${encodedUserId}?user_id=${encodedUserId}`;
+    const body = JSON.stringify(
+      isTyping
+        ? { typing: true, timeout: MATRIX_TYPING_TIMEOUT_MS }
+        : { typing: false },
+    );
 
-		await fetch(url, {
-			method: "PUT",
-			headers: {
-				Authorization: `Bearer ${asToken}`,
-				"Content-Type": "application/json",
-			},
-			body,
-			signal: AbortSignal.timeout(5000),
-		});
-	} catch {
-		// Non-fatal: typing indicators are cosmetic; never block the main response flow
-	}
+    await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${asToken}`,
+        "Content-Type": "application/json",
+      },
+      body,
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    // Non-fatal: typing indicators are cosmetic; never block the main response flow
+  }
 }
 
 /**
@@ -409,14 +410,14 @@ export async function sendMatrixTypingIndicator(
  * @param roomId - The Matrix room ID to join (e.g., "!abc:matrix.org")
  */
 export async function joinMatrixRoom(roomId: string): Promise<void> {
-	if (!matrixBridge) return;
+  if (!matrixBridge) return;
 
-	// getIntent() with no args returns the bot account's Intent
-	const botIntent = matrixBridge.getIntent();
+  // getIntent() with no args returns the bot account's Intent
+  const botIntent = matrixBridge.getIntent();
 
-	// Prefer the room's own server as the primary via hint, with local server fallback.
-	// This avoids false join failures when linking federated rooms (e.g., :matrix.org).
-	await botIntent.join(roomId, getJoinViaServers(roomId));
+  // Prefer the room's own server as the primary via hint, with local server fallback.
+  // This avoids false join failures when linking federated rooms (e.g., :matrix.org).
+  await botIntent.join(roomId, getJoinViaServers(roomId));
 }
 
 /**
@@ -427,21 +428,21 @@ export async function joinMatrixRoom(roomId: string): Promise<void> {
  * @returns Ordered unique via-server list, or undefined when no hint can be derived
  */
 function getJoinViaServers(roomId: string): string[] | undefined {
-	const localServer = process.env.MATRIX_SERVER_NAME?.trim();
-	const roomDelimiter = roomId.indexOf(":");
-	const roomServer =
-		roomDelimiter === -1 ? undefined : roomId.slice(roomDelimiter + 1).trim();
+  const localServer = process.env.MATRIX_SERVER_NAME?.trim();
+  const roomDelimiter = roomId.indexOf(":");
+  const roomServer =
+    roomDelimiter === -1 ? undefined : roomId.slice(roomDelimiter + 1).trim();
 
-	const viaServers = new Set<string>();
-	if (roomServer) {
-		viaServers.add(roomServer);
-	}
-	if (localServer) {
-		viaServers.add(localServer);
-	}
+  const viaServers = new Set<string>();
+  if (roomServer) {
+    viaServers.add(roomServer);
+  }
+  if (localServer) {
+    viaServers.add(localServer);
+  }
 
-	const list = Array.from(viaServers);
-	return list.length > 0 ? list : undefined;
+  const list = Array.from(viaServers);
+  return list.length > 0 ? list : undefined;
 }
 
 /**
@@ -461,61 +462,61 @@ function getJoinViaServers(roomId: string): string[] | undefined {
  * @returns The provisioned Intent, or null if the bridge is not configured
  */
 export async function getPersonaIntent(
-	personaName: string,
-	avatarUrl: string | null,
+  personaName: string,
+  avatarUrl: string | null,
 ): Promise<Intent | null> {
-	if (!matrixBridge) return null;
+  if (!matrixBridge) return null;
 
-	const serverName = process.env.MATRIX_SERVER_NAME;
-	if (!serverName) return null;
+  const serverName = process.env.MATRIX_SERVER_NAME;
+  if (!serverName) return null;
 
-	// Build virtual user localpart: lowercase, only alphanumerics and underscores
-	const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
-	const userId = `@${localpart}:${serverName}`;
-	const intent = matrixBridge.getIntent(userId);
+  // Build virtual user localpart: lowercase, only alphanumerics and underscores
+  const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+  const userId = `@${localpart}:${serverName}`;
+  const intent = matrixBridge.getIntent(userId);
 
-	// Return cached intent if avatar URL is unchanged (no need to re-provision)
-	const cached = provisionedIntents.get(localpart);
-	if (cached && cached.avatarUrl === avatarUrl) {
-		return intent;
-	}
+  // Return cached intent if avatar URL is unchanged (no need to re-provision)
+  const cached = provisionedIntents.get(localpart);
+  if (cached && cached.avatarUrl === avatarUrl) {
+    return intent;
+  }
 
-	// Optimistic cache write BEFORE the async provisioning chain.
-	// This prevents a race condition where two messages for the same persona arrive
-	// simultaneously: both would see cached=undefined and race through ensureRegistered()
-	// / setDisplayName() / setAvatarUrl(). With the optimistic write, the second caller
-	// hits the cache and returns early while the first is still awaiting.
-	provisionedIntents.set(localpart, { avatarUrl });
+  // Optimistic cache write BEFORE the async provisioning chain.
+  // This prevents a race condition where two messages for the same persona arrive
+  // simultaneously: both would see cached=undefined and race through ensureRegistered()
+  // / setDisplayName() / setAvatarUrl(). With the optimistic write, the second caller
+  // hits the cache and returns early while the first is still awaiting.
+  provisionedIntents.set(localpart, { avatarUrl });
 
-	try {
-		// 1. Register the virtual user (safe to call repeatedly — idempotent)
-		await intent.ensureRegistered();
+  try {
+    // 1. Register the virtual user (safe to call repeatedly — idempotent)
+    await intent.ensureRegistered();
 
-		// 2. Set the display name to the persona's nickname
-		await intent.setDisplayName(personaName);
+    // 2. Set the display name to the persona's nickname
+    await intent.setDisplayName(personaName);
 
-		// 3. Upload and set the avatar if an avatar URL is available
-		if (avatarUrl) {
-			const media = await downloadAvatar(avatarUrl);
-			if (media) {
-				// uploadContent returns the mxc:// URI directly as a string
-				const mxcUri = await intent.uploadContent(media.buffer, {
-					type: media.mimeType,
-					name: "avatar.png",
-				});
-				await intent.setAvatarUrl(mxcUri);
-			}
-		}
+    // 3. Upload and set the avatar if an avatar URL is available
+    if (avatarUrl) {
+      const media = await downloadAvatar(avatarUrl);
+      if (media) {
+        // uploadContent returns the mxc:// URI directly as a string
+        const mxcUri = await intent.uploadContent(media.buffer, {
+          type: media.mimeType,
+          name: "avatar.png",
+        });
+        await intent.setAvatarUrl(mxcUri);
+      }
+    }
 
-		log.info(`Matrix appservice: provisioned virtual user ${userId}`);
-	} catch (error) {
-		// Roll back the optimistic entry so the next message retries provisioning
-		provisionedIntents.delete(localpart);
-		// Non-fatal: still return the intent so message sending can proceed
-		log.warn(`Matrix appservice: failed to provision ${userId}`, error);
-	}
+    log.info(`Matrix appservice: provisioned virtual user ${userId}`);
+  } catch (error) {
+    // Roll back the optimistic entry so the next message retries provisioning
+    provisionedIntents.delete(localpart);
+    // Non-fatal: still return the intent so message sending can proceed
+    log.warn(`Matrix appservice: failed to provision ${userId}`, error);
+  }
 
-	return intent;
+  return intent;
 }
 
 /**
@@ -536,63 +537,63 @@ export async function getPersonaIntent(
  * @param mentionedUserIds - Optional list of mentioned Matrix user IDs for MSC3952 notifications
  */
 export async function sendToMatrixRoom(
-	roomId: string,
-	text: string,
-	personaName?: string,
-	avatarUrl?: string | null,
-	formattedText?: string,
-	mentionedUserIds?: string[],
+  roomId: string,
+  text: string,
+  personaName?: string,
+  avatarUrl?: string | null,
+  formattedText?: string,
+  mentionedUserIds?: string[],
 ): Promise<void> {
-	if (!matrixBridge) return;
+  if (!matrixBridge) return;
 
-	try {
-		const serverName = process.env.MATRIX_SERVER_NAME ?? "";
+  try {
+    const serverName = process.env.MATRIX_SERVER_NAME ?? "";
 
-		// Resolve the correct Intent: persona virtual user if available, else bot account
-		let intent: Intent;
-		if (personaName) {
-			const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
-			const userId = `@${localpart}:${serverName}`;
-			intent =
-				(await getPersonaIntent(personaName, avatarUrl ?? null)) ??
-				matrixBridge.getIntent();
+    // Resolve the correct Intent: persona virtual user if available, else bot account
+    let intent: Intent;
+    if (personaName) {
+      const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+      const userId = `@${localpart}:${serverName}`;
+      intent =
+        (await getPersonaIntent(personaName, avatarUrl ?? null)) ??
+        matrixBridge.getIntent();
 
-			// Pre-invite and join before sending: private rooms reject auto-join without an invite
-			await ensurePersonaInRoom(intent, userId, localpart, roomId);
-		} else {
-			intent = matrixBridge.getIntent();
-		}
+      // Pre-invite and join before sending: private rooms reject auto-join without an invite
+      await ensurePersonaInRoom(intent, userId, localpart, roomId);
+    } else {
+      intent = matrixBridge.getIntent();
+    }
 
-		// Build the message content — plain text or rich HTML if mentions are present
-		const messageContent: Record<string, unknown> = {
-			msgtype: "m.text",
-			body: text,
-		};
+    // Build the message content — plain text or rich HTML if mentions are present
+    const messageContent: Record<string, unknown> = {
+      msgtype: "m.text",
+      body: text,
+    };
 
-		// Attach HTML formatted body when mention anchor tags are present
-		if (formattedText) {
-			messageContent.formatted_body = formattedText;
-			messageContent.format = "org.matrix.custom.html";
-		}
+    // Attach HTML formatted body when mention anchor tags are present
+    if (formattedText) {
+      messageContent.formatted_body = formattedText;
+      messageContent.format = "org.matrix.custom.html";
+    }
 
-		// MSC3952: explicit mention list lets the homeserver notify users without
-		// parsing message content — more reliable than content-based detection
-		if (mentionedUserIds && mentionedUserIds.length > 0) {
-			messageContent["m.mentions"] = { user_ids: mentionedUserIds };
-		}
+    // MSC3952: explicit mention list lets the homeserver notify users without
+    // parsing message content — more reliable than content-based detection
+    if (mentionedUserIds && mentionedUserIds.length > 0) {
+      messageContent["m.mentions"] = { user_ids: mentionedUserIds };
+    }
 
-		// Capture event_id so incoming Matrix replies to this message can be detected
-		const response = await intent.sendMessage(roomId, messageContent);
-		if (personaName && (response as { event_id?: string })?.event_id) {
-			trackSentMatrixEvent(
-				(response as { event_id: string }).event_id,
-				personaName,
-				text,
-			);
-		}
-	} catch (error) {
-		log.warn(`Matrix bridge: failed to send message to room ${roomId}`, error);
-	}
+    // Capture event_id so incoming Matrix replies to this message can be detected
+    const response = await intent.sendMessage(roomId, messageContent);
+    if (personaName && (response as { event_id?: string })?.event_id) {
+      trackSentMatrixEvent(
+        (response as { event_id: string }).event_id,
+        personaName,
+        text,
+      );
+    }
+  } catch (error) {
+    log.warn(`Matrix bridge: failed to send message to room ${roomId}`, error);
+  }
 }
 
 /**
@@ -609,71 +610,71 @@ export async function sendToMatrixRoom(
  * @param avatarUrl   - Optional avatar URL for the persona's virtual user
  */
 export async function sendAttachmentToMatrixRoom(
-	roomId: string,
-	data: ArrayBuffer,
-	filename: string,
-	mimeType: string,
-	size: number,
-	personaName?: string,
-	avatarUrl?: string | null,
+  roomId: string,
+  data: ArrayBuffer,
+  filename: string,
+  mimeType: string,
+  size: number,
+  personaName?: string,
+  avatarUrl?: string | null,
 ): Promise<void> {
-	if (!matrixBridge) return;
+  if (!matrixBridge) return;
 
-	try {
-		const serverName = process.env.MATRIX_SERVER_NAME ?? "";
+  try {
+    const serverName = process.env.MATRIX_SERVER_NAME ?? "";
 
-		let intent: Intent;
-		if (personaName) {
-			const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
-			const userId = `@${localpart}:${serverName}`;
-			intent =
-				(await getPersonaIntent(personaName, avatarUrl ?? null)) ??
-				matrixBridge.getIntent();
+    let intent: Intent;
+    if (personaName) {
+      const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
+      const userId = `@${localpart}:${serverName}`;
+      intent =
+        (await getPersonaIntent(personaName, avatarUrl ?? null)) ??
+        matrixBridge.getIntent();
 
-			// Pre-invite and join before uploading/sending (same as sendToMatrixRoom)
-			await ensurePersonaInRoom(intent, userId, localpart, roomId);
-		} else {
-			intent = matrixBridge.getIntent();
-		}
+      // Pre-invite and join before uploading/sending (same as sendToMatrixRoom)
+      await ensurePersonaInRoom(intent, userId, localpart, roomId);
+    } else {
+      intent = matrixBridge.getIntent();
+    }
 
-		// 1. Upload the file bytes to the homeserver's media repository
-		const buffer = Buffer.from(data);
-		const mxcUri = await intent.uploadContent(buffer, {
-			type: mimeType,
-			name: filename,
-		});
+    // 1. Upload the file bytes to the homeserver's media repository
+    const buffer = Buffer.from(data);
+    const mxcUri = await intent.uploadContent(buffer, {
+      type: mimeType,
+      name: filename,
+    });
 
-		const info = { mimetype: mimeType, size };
+    const info = { mimetype: mimeType, size };
 
-		// 2. Send the appropriate media event type based on MIME type and track event_id
-		let mediaResponse: { event_id: string } | undefined;
-		if (mimeType.startsWith("image/")) {
-			mediaResponse = await intent.sendMessage(roomId, {
-				msgtype: "m.image",
-				body: filename,
-				url: mxcUri,
-				info,
-			});
-		} else {
-			const msgtype = mimeType.startsWith("video/") ? "m.video" : "m.file";
-			mediaResponse = await intent.sendMessage(roomId, {
-				msgtype,
-				body: filename,
-				url: mxcUri,
-				info,
-			});
-		}
+    // 2. Send the appropriate media event type based on MIME type and track event_id
+    let mediaResponse: { event_id: string } | undefined;
+    if (mimeType.startsWith("image/")) {
+      mediaResponse = await intent.sendMessage(roomId, {
+        msgtype: "m.image",
+        body: filename,
+        url: mxcUri,
+        info,
+      });
+    } else {
+      const msgtype = mimeType.startsWith("video/") ? "m.video" : "m.file";
+      mediaResponse = await intent.sendMessage(roomId, {
+        msgtype,
+        body: filename,
+        url: mxcUri,
+        info,
+      });
+    }
 
-		// Track so replies to media messages also trigger the bot
-		if (personaName && mediaResponse?.event_id) {
-			trackSentMatrixEvent(mediaResponse.event_id, personaName);
-		}
-	} catch (error) {
-		log.warn(
-			`Matrix bridge: failed to send attachment to room ${roomId}`,
-			error,
-		);
-	}
+    // Track so replies to media messages also trigger the bot
+    if (personaName && mediaResponse?.event_id) {
+      trackSentMatrixEvent(mediaResponse.event_id, personaName);
+    }
+  } catch (error) {
+    log.warn(
+      `Matrix bridge: failed to send attachment to room ${roomId}`,
+      error,
+    );
+  }
 }
 
 /**
@@ -685,26 +686,26 @@ export async function sendAttachmentToMatrixRoom(
  * @returns The linked Matrix room ID, or null if not linked
  */
 export async function getLinkedMatrixRoom(
-	channelDiscId: string,
+  channelDiscId: string,
 ): Promise<string | null> {
-	const now = Date.now();
-	const cached = channelLinkCache.get(channelDiscId);
+  const now = Date.now();
+  const cached = channelLinkCache.get(channelDiscId);
 
-	if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
-		return cached.roomId;
-	}
+  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.roomId;
+  }
 
-	const [row] = await sql<{ matrix_room_id: string }[]>`
+  const [row] = await sql<{ matrix_room_id: string }[]>`
 		SELECT matrix_room_id
 		FROM matrix_channel_links
 		WHERE channel_disc_id = ${channelDiscId}
 		LIMIT 1
 	`;
 
-	const roomId = row?.matrix_room_id ?? null;
-	channelLinkCache.set(channelDiscId, { roomId, cachedAt: now });
+  const roomId = row?.matrix_room_id ?? null;
+  channelLinkCache.set(channelDiscId, { roomId, cachedAt: now });
 
-	return roomId;
+  return roomId;
 }
 
 /**
@@ -716,26 +717,26 @@ export async function getLinkedMatrixRoom(
  * @returns The linked Discord channel ID, or null if not linked
  */
 export async function getDiscordChannelForRoom(
-	matrixRoomId: string,
+  matrixRoomId: string,
 ): Promise<string | null> {
-	const now = Date.now();
-	const cached = roomLinkCache.get(matrixRoomId);
+  const now = Date.now();
+  const cached = roomLinkCache.get(matrixRoomId);
 
-	if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
-		return cached.channelDiscId;
-	}
+  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.channelDiscId;
+  }
 
-	const [row] = await sql<{ channel_disc_id: string }[]>`
+  const [row] = await sql<{ channel_disc_id: string }[]>`
 		SELECT channel_disc_id
 		FROM matrix_channel_links
 		WHERE matrix_room_id = ${matrixRoomId}
 		LIMIT 1
 	`;
 
-	const channelDiscId = row?.channel_disc_id ?? null;
-	roomLinkCache.set(matrixRoomId, { channelDiscId, cachedAt: now });
+  const channelDiscId = row?.channel_disc_id ?? null;
+  roomLinkCache.set(matrixRoomId, { channelDiscId, cachedAt: now });
 
-	return channelDiscId;
+  return channelDiscId;
 }
 
 /**
@@ -748,21 +749,21 @@ export async function getDiscordChannelForRoom(
  * @returns true if the room is encrypted, false if not or unknown
  */
 export async function isRoomEncrypted(roomId: string): Promise<boolean> {
-	const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
-	const asToken = process.env.MATRIX_ACCESS_TOKEN;
-	if (!homeserverUrl || !asToken) return false;
+  const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
+  const asToken = process.env.MATRIX_ACCESS_TOKEN;
+  if (!homeserverUrl || !asToken) return false;
 
-	try {
-		// Query the m.room.encryption state event — 200 means encrypted, 404 means not
-		const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.encryption`;
-		const response = await fetch(url, {
-			headers: { Authorization: `Bearer ${asToken}` },
-			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
-		});
-		return response.ok;
-	} catch {
-		return false;
-	}
+  try {
+    // Query the m.room.encryption state event — 200 means encrypted, 404 means not
+    const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.encryption`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${asToken}` },
+      signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -773,13 +774,13 @@ export async function isRoomEncrypted(roomId: string): Promise<boolean> {
  * @param matrixRoomId  - Optional: the Matrix room ID whose cache entry to also clear
  */
 export function invalidateMatrixLinkCache(
-	channelDiscId: string,
-	matrixRoomId?: string,
+  channelDiscId: string,
+  matrixRoomId?: string,
 ): void {
-	channelLinkCache.delete(channelDiscId);
-	if (matrixRoomId) {
-		roomLinkCache.delete(matrixRoomId);
-	}
+  channelLinkCache.delete(channelDiscId);
+  if (matrixRoomId) {
+    roomLinkCache.delete(matrixRoomId);
+  }
 }
 
 /**
@@ -795,26 +796,28 @@ export function invalidateMatrixLinkCache(
  * @returns The resolved bridge user ID if recoverable, otherwise the original string unchanged
  */
 export function resolveBridgeUserId(rawId: string): string {
-	// No-op for empty strings, already-valid bridge IDs, or pure Discord snowflakes
-	if (!rawId || isBridgeUserId(rawId) || /^\d+$/.test(rawId)) return rawId;
+  // No-op for empty strings, already-valid bridge IDs, or pure Discord snowflakes
+  if (!rawId || isBridgeUserId(rawId) || /^\d+$/.test(rawId)) return rawId;
 
-	// 1. Matrix "@" prefix recovery: "bred:localhost" → "@bred:localhost"
-	if (rawId.includes(":") && !rawId.startsWith("@")) {
-		const withAt = `@${rawId}`;
-		if (isBridgeUserId(withAt)) {
-			log.info(`Bridge: Restored missing @ prefix in user ID: "${rawId}" → "${withAt}"`);
-			return withAt;
-		}
-	}
+  // 1. Matrix "@" prefix recovery: "bred:localhost" → "@bred:localhost"
+  if (rawId.includes(":") && !rawId.startsWith("@")) {
+    const withAt = `@${rawId}`;
+    if (isBridgeUserId(withAt)) {
+      log.info(
+        `Bridge: Restored missing @ prefix in user ID: "${rawId}" → "${withAt}"`,
+      );
+      return withAt;
+    }
+  }
 
-	// 2. Attempt display name → full Matrix ID resolution via session-scoped map
-	const resolved = matrixDisplayNameToId.get(rawId);
-	if (resolved) {
-		log.info(`Bridge: Resolved display name "${rawId}" → "${resolved}"`);
-		return resolved;
-	}
+  // 2. Attempt display name → full Matrix ID resolution via session-scoped map
+  const resolved = matrixDisplayNameToId.get(rawId);
+  if (resolved) {
+    log.info(`Bridge: Resolved display name "${rawId}" → "${resolved}"`);
+    return resolved;
+  }
 
-	return rawId;
+  return rawId;
 }
 
 /**
@@ -833,69 +836,71 @@ export function resolveBridgeUserId(rawId: string): string {
  * @param botUserId        - The Discord bot user ID for filtering relevant messages
  */
 export async function sendMatrixReminderMention(
-	channel: TextBasedChannel,
-	reminder: ReminderRow,
-	afterMessageId: string,
-	reminderStartTime: number,
-	botUserId: string,
+  channel: TextBasedChannel,
+  reminder: ReminderRow,
+  afterMessageId: string,
+  reminderStartTime: number,
+  botUserId: string,
 ): Promise<void> {
-	const matrixRoomId = await getLinkedMatrixRoom(reminder.channel_disc_id);
-	if (!matrixRoomId) return;
+  const matrixRoomId = await getLinkedMatrixRoom(reminder.channel_disc_id);
+  if (!matrixRoomId) return;
 
-	if (!botUserId || !("messages" in channel)) return;
+  if (!botUserId || !("messages" in channel)) return;
 
-	// The AI uses @{localpart} format (e.g., "@{bred}") when mentioning Matrix users.
-	// Use the localpart from user_discord_id for reliable detection — the user_nickname
-	// field may differ from the localpart (e.g., "bredrumb" vs localpart "bred").
-	const matrixLocalpart = reminder.user_discord_id.split(":")[0].replace(/^@/, "");
-	const mentionPlaceholder = `@{${matrixLocalpart}}`;
+  // The AI uses @{localpart} format (e.g., "@{bred}") when mentioning Matrix users.
+  // Use the localpart from user_discord_id for reliable detection — the user_nickname
+  // field may differ from the localpart (e.g., "bredrumb" vs localpart "bred").
+  const matrixLocalpart = reminder.user_discord_id
+    .split(":")[0]
+    .replace(/^@/, "");
+  const mentionPlaceholder = `@{${matrixLocalpart}}`;
 
-	try {
-		const recentMessages = await channel.messages.fetch({
-			after: afterMessageId,
-			limit: 100,
-		});
+  try {
+    const recentMessages = await channel.messages.fetch({
+      after: afterMessageId,
+      limit: 100,
+    });
 
-		const relevantMessages = recentMessages.filter(
-			(message) =>
-				(message.author.id === botUserId || message.webhookId) &&
-				message.createdTimestamp >= reminderStartTime - 1000,
-		);
+    const relevantMessages = recentMessages.filter(
+      (message) =>
+        (message.author.id === botUserId || message.webhookId) &&
+        message.createdTimestamp >= reminderStartTime - 1000,
+    );
 
-		const hasMention = relevantMessages.some((message) =>
-			message.content.includes(mentionPlaceholder),
-		);
+    const hasMention = relevantMessages.some((message) =>
+      message.content.includes(mentionPlaceholder),
+    );
 
-		if (!hasMention) {
-			// AI did not mention the user — send a proper Matrix mention ping.
-			// Plain body: "@bred:localhost" (Matrix ID as fallback text)
-			// Formatted body: anchor tag rendered as a clickable, highlighted mention
-			// m.mentions: MSC3952 field so the homeserver notifies the user directly
-			const matrixId = reminder.user_discord_id;
-			const safeName = reminder.user_nickname
-				.replace(/&/g, "&amp;")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;");
+    if (!hasMention) {
+      // AI did not mention the user — send a proper Matrix mention ping.
+      // Plain body: "@bred:localhost" (Matrix ID as fallback text)
+      // Formatted body: anchor tag rendered as a clickable, highlighted mention
+      // m.mentions: MSC3952 field so the homeserver notifies the user directly
+      const matrixId = reminder.user_discord_id;
+      const safeName = reminder.user_nickname
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 
-			await sendToMatrixRoom(
-				matrixRoomId,
-				matrixId,
-				undefined,
-				undefined,
-				`<a href="https://matrix.to/#/${matrixId}">${safeName}</a>`,
-				[matrixId],
-			);
+      await sendToMatrixRoom(
+        matrixRoomId,
+        matrixId,
+        undefined,
+        undefined,
+        `<a href="https://matrix.to/#/${matrixId}">${safeName}</a>`,
+        [matrixId],
+      );
 
-			log.info(
-				`Matrix: Added fallback mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`,
-			);
-		}
-	} catch (error) {
-		log.warn(
-			`Matrix: Failed to ensure mention for reminder ${reminder.reminder_id}:`,
-			error,
-		);
-	}
+      log.info(
+        `Matrix: Added fallback mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`,
+      );
+    }
+  } catch (error) {
+    log.warn(
+      `Matrix: Failed to ensure mention for reminder ${reminder.reminder_id}:`,
+      error,
+    );
+  }
 }
 
 // ─── Private helpers ───────────────────────────────────────────────────────
@@ -911,34 +916,34 @@ export async function sendMatrixReminderMention(
  * @param homeserverUrl - The homeserver base URL used to resolve the HTTP download URL
  */
 function mxcToHttp(mxcUrl: string, homeserverUrl: string): string | null {
-	const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
-	if (!match) return null;
-	const [, serverHost, mediaId] = match;
-	// MSC3916 authenticated media endpoint (replaces legacy /_matrix/media/v3/download/)
-	return `${homeserverUrl}/_matrix/client/v1/media/download/${serverHost}/${mediaId}`;
+  const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  const [, serverHost, mediaId] = match;
+  // MSC3916 authenticated media endpoint (replaces legacy /_matrix/media/v3/download/)
+  return `${homeserverUrl}/_matrix/client/v1/media/download/${serverHost}/${mediaId}`;
 }
 
 /**
  * Normalize and clamp quoted reply snippets used in Matrix reply system annotations.
  */
 function buildReplySnippet(rawText?: string | null): string | undefined {
-	if (!rawText) return undefined;
+  if (!rawText) return undefined;
 
-	const normalized = rawText.replace(/\s+/g, " ").trim();
-	if (!normalized) return undefined;
+  const normalized = rawText.replace(/\s+/g, " ").trim();
+  if (!normalized) return undefined;
 
-	// Keep outer annotation quoting stable: convert inner double quotes to single quotes.
-	const safeForQuote = normalized.replace(/"/g, "'");
-	if (safeForQuote.length <= MAX_REPLY_SNIPPET_CHARS) {
-		return safeForQuote;
-	}
+  // Keep outer annotation quoting stable: convert inner double quotes to single quotes.
+  const safeForQuote = normalized.replace(/"/g, "'");
+  if (safeForQuote.length <= MAX_REPLY_SNIPPET_CHARS) {
+    return safeForQuote;
+  }
 
-	return `${safeForQuote.slice(0, Math.max(0, MAX_REPLY_SNIPPET_CHARS - 3)).trimEnd()}...`;
+  return `${safeForQuote.slice(0, Math.max(0, MAX_REPLY_SNIPPET_CHARS - 3)).trimEnd()}...`;
 }
 
 type PersonaReplyLookup = {
-	isPersonaReply: boolean;
-	replySnippet?: string;
+  isPersonaReply: boolean;
+  replySnippet?: string;
 };
 
 /**
@@ -954,44 +959,44 @@ type PersonaReplyLookup = {
  * @param serverName  - The homeserver domain (used to scope virtual user matching)
  */
 async function getPersonaReplyEventMetadata(
-	roomId: string,
-	eventId: string,
-	serverName: string,
+  roomId: string,
+  eventId: string,
+  serverName: string,
 ): Promise<PersonaReplyLookup> {
-	const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
-	const asToken = process.env.MATRIX_ACCESS_TOKEN;
-	if (!homeserverUrl || !asToken || !serverName) {
-		return { isPersonaReply: false };
-	}
+  const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
+  const asToken = process.env.MATRIX_ACCESS_TOKEN;
+  if (!homeserverUrl || !asToken || !serverName) {
+    return { isPersonaReply: false };
+  }
 
-	try {
-		const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`;
-		const response = await fetch(url, {
-			headers: { Authorization: `Bearer ${asToken}` },
-			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
-		});
-		if (!response.ok) return { isPersonaReply: false };
+  try {
+    const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${asToken}` },
+      signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+    });
+    if (!response.ok) return { isPersonaReply: false };
 
-		const data = (await response.json()) as {
-			sender?: string;
-			content?: { body?: string };
-		};
-		// Virtual persona users follow the pattern @_tomori_*:serverName
-		const isPersonaReply =
-			typeof data.sender === "string" &&
-			data.sender.startsWith("@_tomori_") &&
-			data.sender.endsWith(`:${serverName}`);
-		if (!isPersonaReply) {
-			return { isPersonaReply: false };
-		}
+    const data = (await response.json()) as {
+      sender?: string;
+      content?: { body?: string };
+    };
+    // Virtual persona users follow the pattern @_tomori_*:serverName
+    const isPersonaReply =
+      typeof data.sender === "string" &&
+      data.sender.startsWith("@_tomori_") &&
+      data.sender.endsWith(`:${serverName}`);
+    if (!isPersonaReply) {
+      return { isPersonaReply: false };
+    }
 
-		return {
-			isPersonaReply: true,
-			replySnippet: buildReplySnippet(data.content?.body),
-		};
-	} catch {
-		return { isPersonaReply: false };
-	}
+    return {
+      isPersonaReply: true,
+      replySnippet: buildReplySnippet(data.content?.body),
+    };
+  } catch {
+    return { isPersonaReply: false };
+  }
 }
 
 /**
@@ -1004,19 +1009,19 @@ async function getPersonaReplyEventMetadata(
  * @param sentText    - The plain message body sent to Matrix (used to build a reply snippet)
  */
 function trackSentMatrixEvent(
-	eventId: string,
-	personaName: string,
-	sentText?: string,
+  eventId: string,
+  personaName: string,
+  sentText?: string,
 ): void {
-	if (sentEventPersonas.size >= MAX_TRACKED_SENT_EVENTS) {
-		// Map preserves insertion order — first key is the oldest entry
-		const oldestKey = sentEventPersonas.keys().next().value;
-		if (oldestKey) sentEventPersonas.delete(oldestKey);
-	}
-	sentEventPersonas.set(eventId, {
-		personaName,
-		replySnippet: buildReplySnippet(sentText),
-	});
+  if (sentEventPersonas.size >= MAX_TRACKED_SENT_EVENTS) {
+    // Map preserves insertion order — first key is the oldest entry
+    const oldestKey = sentEventPersonas.keys().next().value;
+    if (oldestKey) sentEventPersonas.delete(oldestKey);
+  }
+  sentEventPersonas.set(eventId, {
+    personaName,
+    replySnippet: buildReplySnippet(sentText),
+  });
 }
 
 /**
@@ -1031,11 +1036,11 @@ function trackSentMatrixEvent(
  * @returns The body with any leading fallback quote stripped, or the original if none found
  */
 function stripMatrixReplyFallback(body: string): string {
-	if (!body.startsWith("> ")) return body;
-	// Fallback and reply are separated by a blank line (\n\n)
-	const blankLineIndex = body.indexOf("\n\n");
-	if (blankLineIndex === -1) return body;
-	return body.slice(blankLineIndex + 2).trim();
+  if (!body.startsWith("> ")) return body;
+  // Fallback and reply are separated by a blank line (\n\n)
+  const blankLineIndex = body.indexOf("\n\n");
+  if (blankLineIndex === -1) return body;
+  return body.slice(blankLineIndex + 2).trim();
 }
 
 /**
@@ -1049,37 +1054,37 @@ function stripMatrixReplyFallback(body: string): string {
  * @param roomId    - The Matrix room ID to ensure membership in
  */
 async function ensurePersonaInRoom(
-	intent: Intent,
-	userId: string,
-	localpart: string,
-	roomId: string,
+  intent: Intent,
+  userId: string,
+  localpart: string,
+  roomId: string,
 ): Promise<void> {
-	const cacheKey = `${roomId}:${localpart}`;
-	if (ensuredRoomMemberships.has(cacheKey)) return;
+  const cacheKey = `${roomId}:${localpart}`;
+  if (ensuredRoomMemberships.has(cacheKey)) return;
 
-	try {
-		// 1. Have the bot invite the virtual user (safe to call if already invited)
-		const botIntent = matrixBridge?.getIntent();
-		if (botIntent) {
-			try {
-				await botIntent.invite(roomId, userId);
-			} catch {
-				// Ignore: user may already be invited or the room is public
-			}
-		}
+  try {
+    // 1. Have the bot invite the virtual user (safe to call if already invited)
+    const botIntent = matrixBridge?.getIntent();
+    if (botIntent) {
+      try {
+        await botIntent.invite(roomId, userId);
+      } catch {
+        // Ignore: user may already be invited or the room is public
+      }
+    }
 
-		// 2. Virtual user joins (accepts the invite, or self-joins if public)
-		await intent.join(roomId);
+    // 2. Virtual user joins (accepts the invite, or self-joins if public)
+    await intent.join(roomId);
 
-		// 3. Cache successful membership so we skip on future messages
-		ensuredRoomMemberships.add(cacheKey);
-		log.info(`Matrix appservice: ${userId} joined room ${roomId}`);
-	} catch (error) {
-		const safeMsg = error instanceof Error ? error.message : String(error);
-		log.warn(
-			`Matrix appservice: failed to ensure ${userId} in ${roomId}: ${safeMsg}`,
-		);
-	}
+    // 3. Cache successful membership so we skip on future messages
+    ensuredRoomMemberships.add(cacheKey);
+    log.info(`Matrix appservice: ${userId} joined room ${roomId}`);
+  } catch (error) {
+    const safeMsg = error instanceof Error ? error.message : String(error);
+    log.warn(
+      `Matrix appservice: failed to ensure ${userId} in ${roomId}: ${safeMsg}`,
+    );
+  }
 }
 
 /**
@@ -1090,25 +1095,25 @@ async function ensurePersonaInRoom(
  * @returns `{ buffer, mimeType }` on success, null on failure
  */
 async function downloadAvatar(
-	url: string,
+  url: string,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
-	try {
-		const response = await fetch(url, {
-			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
-		});
-		if (!response.ok) {
-			log.warn(
-				`Matrix appservice: avatar fetch failed (${response.status}) for ${url}`,
-			);
-			return null;
-		}
-		const arrayBuffer = await response.arrayBuffer();
-		const mimeType = response.headers.get("content-type") ?? "image/png";
-		return { buffer: Buffer.from(arrayBuffer), mimeType };
-	} catch (error) {
-		log.warn(`Matrix appservice: failed to download avatar from ${url}`, error);
-		return null;
-	}
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      log.warn(
+        `Matrix appservice: avatar fetch failed (${response.status}) for ${url}`,
+      );
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const mimeType = response.headers.get("content-type") ?? "image/png";
+    return { buffer: Buffer.from(arrayBuffer), mimeType };
+  } catch (error) {
+    log.warn(`Matrix appservice: failed to download avatar from ${url}`, error);
+    return null;
+  }
 }
 
 /**
@@ -1122,60 +1127,60 @@ async function downloadAvatar(
  * @returns `{ buffer, mimeType }` on success, null on failure
  */
 async function downloadMatrixMedia(
-	mxcUrl: string,
-	homeserverUrl: string,
-	asToken: string,
-	knownSize?: number,
+  mxcUrl: string,
+  homeserverUrl: string,
+  asToken: string,
+  knownSize?: number,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
-	// 1. Pre-flight size guard: reject oversized files before fetching
-	if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
-		return null;
-	}
+  // 1. Pre-flight size guard: reject oversized files before fetching
+  if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
+    return null;
+  }
 
-	// 2. Convert mxc:// URI to an HTTP(S) download URL
-	const httpUrl = mxcToHttp(mxcUrl, homeserverUrl);
-	if (!httpUrl) {
-		log.warn(`Matrix bridge: could not resolve mxc URL: ${mxcUrl}`);
-		return null;
-	}
+  // 2. Convert mxc:// URI to an HTTP(S) download URL
+  const httpUrl = mxcToHttp(mxcUrl, homeserverUrl);
+  if (!httpUrl) {
+    log.warn(`Matrix bridge: could not resolve mxc URL: ${mxcUrl}`);
+    return null;
+  }
 
-	try {
-		// 3. Fetch with auth header and timeout (MSC3916 authenticated media)
-		const response = await fetch(httpUrl, {
-			headers: { Authorization: `Bearer ${asToken}` },
-			signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
-		});
+  try {
+    // 3. Fetch with auth header and timeout (MSC3916 authenticated media)
+    const response = await fetch(httpUrl, {
+      headers: { Authorization: `Bearer ${asToken}` },
+      signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
+    });
 
-		if (!response.ok) {
-			log.warn(
-				`Matrix bridge: media fetch failed (${response.status}) for ${httpUrl}`,
-			);
-			return null;
-		}
+    if (!response.ok) {
+      log.warn(
+        `Matrix bridge: media fetch failed (${response.status}) for ${httpUrl}`,
+      );
+      return null;
+    }
 
-		// 4. Secondary size guard via Content-Length header (if provided)
-		const contentLength = Number.parseInt(
-			response.headers.get("content-length") ?? "0",
-			10,
-		);
-		if (contentLength > MATRIX_MAX_ATTACHMENT_BYTES) {
-			return null;
-		}
+    // 4. Secondary size guard via Content-Length header (if provided)
+    const contentLength = Number.parseInt(
+      response.headers.get("content-length") ?? "0",
+      10,
+    );
+    if (contentLength > MATRIX_MAX_ATTACHMENT_BYTES) {
+      return null;
+    }
 
-		// 5. Buffer the response body and final size guard
-		const arrayBuffer = await response.arrayBuffer();
-		const buffer = Buffer.from(arrayBuffer);
-		if (buffer.length > MATRIX_MAX_ATTACHMENT_BYTES) {
-			return null;
-		}
+    // 5. Buffer the response body and final size guard
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length > MATRIX_MAX_ATTACHMENT_BYTES) {
+      return null;
+    }
 
-		const mimeType =
-			response.headers.get("content-type") ?? "application/octet-stream";
-		return { buffer, mimeType };
-	} catch (error) {
-		log.warn(`Matrix bridge: failed to download media from ${httpUrl}`, error);
-		return null;
-	}
+    const mimeType =
+      response.headers.get("content-type") ?? "application/octet-stream";
+    return { buffer, mimeType };
+  } catch (error) {
+    log.warn(`Matrix bridge: failed to download media from ${httpUrl}`, error);
+    return null;
+  }
 }
 
 /**
@@ -1190,26 +1195,26 @@ async function downloadMatrixMedia(
  * @param channelDiscId - The Discord channel ID (for cache invalidation)
  */
 async function handleMatrixRefresh(
-	channel: BaseGuildTextChannel,
-	channelDiscId: string,
+  channel: BaseGuildTextChannel,
+  channelDiscId: string,
 ): Promise<void> {
-	// 1. Clear short-term memory cache for this channel (same as /tool refresh does)
-	clearShortTermMemoryForChannel(channelDiscId);
-	log.info(
-		`Matrix /refresh: cleared short-term memories for channel ${channelDiscId}`,
-	);
+  // 1. Clear short-term memory cache for this channel (same as /tool refresh does)
+  clearShortTermMemoryForChannel(channelDiscId);
+  log.info(
+    `Matrix /refresh: cleared short-term memories for channel ${channelDiscId}`,
+  );
 
-	// 2. Build the refresh embed using en-US locale as the canonical reset marker
-	const embed = new EmbedBuilder()
-		.setTitle(localizer("en-US", "commands.tool.refresh.title"))
-		.setDescription(localizer("en-US", "commands.tool.refresh.response"))
-		.setColor(ColorCode.SECTION);
+  // 2. Build the refresh embed using en-US locale as the canonical reset marker
+  const embed = new EmbedBuilder()
+    .setTitle(localizer("en-US", "commands.tool.refresh.title"))
+    .setDescription(localizer("en-US", "commands.tool.refresh.response"))
+    .setColor(ColorCode.SECTION);
 
-	// 3. Send the embed (suppress notifications to avoid pinging everyone)
-	await channel.send({
-		embeds: [embed],
-		flags: MessageFlags.SuppressNotifications,
-	});
+  // 3. Send the embed (suppress notifications to avoid pinging everyone)
+  await channel.send({
+    embeds: [embed],
+    flags: MessageFlags.SuppressNotifications,
+  });
 }
 
 /**
@@ -1221,35 +1226,35 @@ async function handleMatrixRefresh(
  * @returns Number of persona typing indicators attempted
  */
 async function clearMatrixTypingIndicatorsForChannel(
-	channel: BaseGuildTextChannel,
-	roomId: string,
+  channel: BaseGuildTextChannel,
+  roomId: string,
 ): Promise<number> {
-	const personaNames = new Set<string>();
+  const personaNames = new Set<string>();
 
-	try {
-		const personas = await getCachedAllPersonas(channel.guildId);
-		for (const persona of personas) {
-			const name = persona.tomori_nickname?.trim();
-			if (name) {
-				personaNames.add(name);
-			}
-		}
-	} catch (error) {
-		log.warn(
-			`Matrix /kill: failed to load personas for typing clear in channel ${channel.id}`,
-			error,
-		);
-	}
+  try {
+    const personas = await getCachedAllPersonas(channel.guildId);
+    for (const persona of personas) {
+      const name = persona.tomori_nickname?.trim();
+      if (name) {
+        personaNames.add(name);
+      }
+    }
+  } catch (error) {
+    log.warn(
+      `Matrix /kill: failed to load personas for typing clear in channel ${channel.id}`,
+      error,
+    );
+  }
 
-	personaNames.add(process.env.DEFAULT_BOTNAME || "Tomori");
+  personaNames.add(process.env.DEFAULT_BOTNAME || "Tomori");
 
-	const names = Array.from(personaNames);
-	await Promise.all(
-		names.map((personaName) =>
-			sendMatrixTypingIndicator(roomId, personaName, false),
-		),
-	);
-	return names.length;
+  const names = Array.from(personaNames);
+  await Promise.all(
+    names.map((personaName) =>
+      sendMatrixTypingIndicator(roomId, personaName, false),
+    ),
+  );
+  return names.length;
 }
 
 /**
@@ -1266,242 +1271,241 @@ async function clearMatrixTypingIndicatorsForChannel(
  * @param botUserId     - The bot's Matrix user ID for loop prevention
  */
 async function handleMatrixEvent(
-	request: BridgeRequest<WeakEvent>,
-	discordClient: Client,
-	botUserId: string,
+  request: BridgeRequest<WeakEvent>,
+  discordClient: Client,
+  botUserId: string,
 ): Promise<void> {
-	const event = request.getData();
-	const serverName = process.env.MATRIX_SERVER_NAME ?? "";
+  const event = request.getData();
+  const serverName = process.env.MATRIX_SERVER_NAME ?? "";
 
-	// 1. Auto-accept invites sent to the bot account.
-	//    When a Matrix user invites @tomoribot:domain, Conduit pushes a m.room.member
-	//    event with membership="invite" and state_key=botUserId. We join immediately so
-	//    the bot is ready before the Discord admin runs /server matrix link.
-	if (
-		event.type === MATRIX_MEMBER_EVENT_TYPE &&
-		event.state_key === botUserId &&
-		(event.content as { membership?: string }).membership === "invite"
-	) {
-		try {
-			const botIntent = matrixBridge?.getIntent();
-			if (!botIntent) return;
-			await botIntent.join(event.room_id, getJoinViaServers(event.room_id));
-			log.info(`Matrix bridge: auto-accepted invite to ${event.room_id}`);
-		} catch (err) {
-			const safeMsg = err instanceof Error ? err.message : String(err);
-			log.warn(
-				`Matrix bridge: failed to auto-accept invite to ${event.room_id}: ${safeMsg}`,
-			);
-		}
-		return;
-	}
+  // 1. Auto-accept invites sent to the bot account.
+  //    When a Matrix user invites @tomoribot:domain, Conduit pushes a m.room.member
+  //    event with membership="invite" and state_key=botUserId. We join immediately so
+  //    the bot is ready before the Discord admin runs /server matrix link.
+  if (
+    event.type === MATRIX_MEMBER_EVENT_TYPE &&
+    event.state_key === botUserId &&
+    (event.content as { membership?: string }).membership === "invite"
+  ) {
+    try {
+      const botIntent = matrixBridge?.getIntent();
+      if (!botIntent) return;
+      await botIntent.join(event.room_id, getJoinViaServers(event.room_id));
+      log.info(`Matrix bridge: auto-accepted invite to ${event.room_id}`);
+    } catch (err) {
+      const safeMsg = err instanceof Error ? err.message : String(err);
+      log.warn(
+        `Matrix bridge: failed to auto-accept invite to ${event.room_id}: ${safeMsg}`,
+      );
+    }
+    return;
+  }
 
-	// 2. Only relay room message events
-	if (event.type !== MATRIX_TEXT_MSG_TYPE) return;
+  // 2. Only relay room message events
+  if (event.type !== MATRIX_TEXT_MSG_TYPE) return;
 
-	// 3. Loop prevention: ignore messages from the bot account or any persona virtual user.
-	//    The domain suffix check prevents a remote user named @_tomori_*:evil.org from
-	//    accidentally (or maliciously) matching our appservice's virtual user namespace.
-	const isOwnVirtualUser =
-		event.sender.startsWith("@_tomori_") &&
-		event.sender.endsWith(`:${serverName}`);
-	if (event.sender === botUserId || isOwnVirtualUser) return;
+  // 3. Loop prevention: ignore messages from the bot account or any persona virtual user.
+  //    The domain suffix check prevents a remote user named @_tomori_*:evil.org from
+  //    accidentally (or maliciously) matching our appservice's virtual user namespace.
+  const isOwnVirtualUser =
+    event.sender.startsWith("@_tomori_") &&
+    event.sender.endsWith(`:${serverName}`);
+  if (event.sender === botUserId || isOwnVirtualUser) return;
 
-	// 4. Look up the linked Discord channel (cached DB query)
-	const channelDiscId = await getDiscordChannelForRoom(event.room_id);
-	if (!channelDiscId) return;
+  // 4. Look up the linked Discord channel (cached DB query)
+  const channelDiscId = await getDiscordChannelForRoom(event.room_id);
+  if (!channelDiscId) return;
 
-	// 5. Fetch the Discord channel
-	const channel = await discordClient.channels
-		.fetch(channelDiscId)
-		.catch(() => null);
-	if (!channel?.isTextBased() || channel.isDMBased()) return;
+  // 5. Fetch the Discord channel
+  const channel = await discordClient.channels
+    .fetch(channelDiscId)
+    .catch(() => null);
+  if (!channel?.isTextBased() || channel.isDMBased()) return;
 
-	// 6. Build the webhook username from the sender's Matrix ID
-	//    Format: "[Matrix|@user:host] localpart" (max 80 chars per Discord webhook limit)
-	const senderLocalpart = event.sender.split(":")[0].replace("@", "");
-	const rawUsername = `[Matrix|${event.sender}] ${senderLocalpart}`;
+  // 6. Build the webhook username from the sender's Matrix ID
+  //    Format: "[Matrix|@user:host] localpart" (max 80 chars per Discord webhook limit)
+  const senderLocalpart = event.sender.split(":")[0].replace("@", "");
+  const rawUsername = `[Matrix|${event.sender}] ${senderLocalpart}`;
 
-	// Record the display name → Matrix ID mapping so matrixRelay.ts can resolve
-	// @{displayName} placeholders in bot responses to proper Matrix mention links.
-	// The localpart is what the AI sees as the display name after prefix stripping.
-	matrixDisplayNameToId.set(senderLocalpart, event.sender);
-	const username =
-		rawUsername.length > 80 ? `${rawUsername.slice(0, 77)}...` : rawUsername;
+  // Record the display name → Matrix ID mapping so matrixRelay.ts can resolve
+  // @{displayName} placeholders in bot responses to proper Matrix mention links.
+  // The localpart is what the AI sees as the display name after prefix stripping.
+  matrixDisplayNameToId.set(senderLocalpart, event.sender);
+  const username =
+    rawUsername.length > 80 ? `${rawUsername.slice(0, 77)}...` : rawUsername;
 
-	// 7. Extract content fields and detect Matrix reply structure
-	const content = event.content;
-	const msgtype = (content.msgtype as string | undefined) ?? "m.text";
-	const rawBody = (content.body as string | undefined)?.trim();
+  // 7. Extract content fields and detect Matrix reply structure
+  const content = event.content;
+  const msgtype = (content.msgtype as string | undefined) ?? "m.text";
+  const rawBody = (content.body as string | undefined)?.trim();
 
-	// Detect whether this is a Matrix reply (m.relates_to.m.in_reply_to)
-	const relatesTo = content["m.relates_to"] as
-		| Record<string, unknown>
-		| undefined;
-	const inReplyTo = relatesTo?.["m.in_reply_to"] as
-		| { event_id?: string }
-		| undefined;
-	const replyEventId = inReplyTo?.event_id;
+  // Detect whether this is a Matrix reply (m.relates_to.m.in_reply_to)
+  const relatesTo = content["m.relates_to"] as
+    | Record<string, unknown>
+    | undefined;
+  const inReplyTo = relatesTo?.["m.in_reply_to"] as
+    | { event_id?: string }
+    | undefined;
+  const replyEventId = inReplyTo?.event_id;
 
-	// Always strip the Matrix reply fallback quote block from the body.
-	// Matrix clients prepend "> <@sender> original\n\nactual reply" for non-rich-reply clients.
-	const bodyText = rawBody ? stripMatrixReplyFallback(rawBody) : rawBody;
+  // Always strip the Matrix reply fallback quote block from the body.
+  // Matrix clients prepend "> <@sender> original\n\nactual reply" for non-rich-reply clients.
+  const bodyText = rawBody ? stripMatrixReplyFallback(rawBody) : rawBody;
 
-	// 8. Branch on msgtype: relay media events as Discord file attachments
-	const isMediaMsg =
-		msgtype === "m.image" ||
-		msgtype === "m.video" ||
-		msgtype === "m.file" ||
-		msgtype === "m.audio";
+  // 8. Branch on msgtype: relay media events as Discord file attachments
+  const isMediaMsg =
+    msgtype === "m.image" ||
+    msgtype === "m.video" ||
+    msgtype === "m.file" ||
+    msgtype === "m.audio";
 
-	if (isMediaMsg) {
-		const { webhook: mediaWebhook } = await getOrCreateWebhook(
-			channel as BaseGuildTextChannel,
-		);
-		if (!mediaWebhook) return;
+  if (isMediaMsg) {
+    const { webhook: mediaWebhook } = await getOrCreateWebhook(
+      channel as BaseGuildTextChannel,
+    );
+    if (!mediaWebhook) return;
 
-		const mxcUrl = content.url as string | undefined;
-		const info = content.info as Record<string, unknown> | undefined;
-		const knownSize = typeof info?.size === "number" ? info.size : undefined;
-		const filename = bodyText ?? "attachment";
+    const mxcUrl = content.url as string | undefined;
+    const info = content.info as Record<string, unknown> | undefined;
+    const knownSize = typeof info?.size === "number" ? info.size : undefined;
+    const filename = bodyText ?? "attachment";
 
-		// 7a. Reject oversized attachments with a text notice
-		if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
-			const sizeMb = (knownSize / (1024 * 1024)).toFixed(1);
-			await mediaWebhook.send({
-				content: `[Matrix: attachment too large to relay (${sizeMb} MB)]`,
-				username,
-				allowedMentions: { parse: [] },
-			});
-			return;
-		}
+    // 7a. Reject oversized attachments with a text notice
+    if (knownSize !== undefined && knownSize > MATRIX_MAX_ATTACHMENT_BYTES) {
+      const sizeMb = (knownSize / (1024 * 1024)).toFixed(1);
+      await mediaWebhook.send({
+        content: `[Matrix: attachment too large to relay (${sizeMb} MB)]`,
+        username,
+        allowedMentions: { parse: [] },
+      });
+      return;
+    }
 
-		// 7b. Attempt to download and relay the media file
-		if (mxcUrl) {
-			const homeserverUrl = process.env.MATRIX_HOMESERVER_URL ?? "";
-			const asToken = process.env.MATRIX_ACCESS_TOKEN ?? "";
-			const media = await downloadMatrixMedia(
-				mxcUrl,
-				homeserverUrl,
-				asToken,
-				knownSize,
-			);
+    // 7b. Attempt to download and relay the media file
+    if (mxcUrl) {
+      const homeserverUrl = process.env.MATRIX_HOMESERVER_URL ?? "";
+      const asToken = process.env.MATRIX_ACCESS_TOKEN ?? "";
+      const media = await downloadMatrixMedia(
+        mxcUrl,
+        homeserverUrl,
+        asToken,
+        knownSize,
+      );
 
-			if (media) {
-				await mediaWebhook.send({
-					files: [{ attachment: media.buffer, name: filename }],
-					username,
-					allowedMentions: { parse: [] },
-				});
-				return;
-			}
-		}
+      if (media) {
+        await mediaWebhook.send({
+          files: [{ attachment: media.buffer, name: filename }],
+          username,
+          allowedMentions: { parse: [] },
+        });
+        return;
+      }
+    }
 
-		// 7c. Fallback: media unavailable
-		await mediaWebhook.send({
-			content: `[Matrix: attachment unavailable — ${filename}]`,
-			username,
-			allowedMentions: { parse: [] },
-		});
-		return;
-	}
+    // 7c. Fallback: media unavailable
+    await mediaWebhook.send({
+      content: `[Matrix: attachment unavailable — ${filename}]`,
+      username,
+      allowedMentions: { parse: [] },
+    });
+    return;
+  }
 
-	// 9. Skip m.notice (bot/system automated messages) to prevent relay loops
-	if (msgtype === "m.notice") return;
+  // 9. Skip m.notice (bot/system automated messages) to prevent relay loops
+  if (msgtype === "m.notice") return;
 
-	if (!bodyText) return;
+  if (!bodyText) return;
 
-	// 10. Special command: /kill — stop active stream + clear queue in linked Discord channel
-	if (bodyText === "/kill") {
-		let hasActiveStream = false;
-		let clearedQueueCount = 0;
+  // 10. Special command: /kill — stop active stream + clear queue in linked Discord channel
+  if (bodyText === "/kill") {
+    let hasActiveStream = false;
+    let clearedQueueCount = 0;
 
-		try {
-			const { isChannelProcessingLocked, clearChannelProcessingQueue } =
-				await import("@/events/messageCreate/tomoriChat");
+    try {
+      const { isChannelProcessingLocked, clearChannelProcessingQueue } =
+        await import("@/events/messageCreate/tomoriChat");
 
-			hasActiveStream = isChannelProcessingLocked(channelDiscId);
-			clearedQueueCount = clearChannelProcessingQueue(channelDiscId);
+      hasActiveStream = isChannelProcessingLocked(channelDiscId);
+      clearedQueueCount = clearChannelProcessingQueue(channelDiscId);
 
-			if (hasActiveStream) {
-				StreamOrchestrator.requestStop(channelDiscId, event.sender);
-			}
-		} catch (error) {
-			log.warn(
-				`Matrix /kill: failed to stop stream/clear queue for channel ${channelDiscId}`,
-				error,
-			);
-		}
+      if (hasActiveStream) {
+        StreamOrchestrator.requestStop(channelDiscId, event.sender);
+      }
+    } catch (error) {
+      log.warn(
+        `Matrix /kill: failed to stop stream/clear queue for channel ${channelDiscId}`,
+        error,
+      );
+    }
 
-		const clearedTypingPersonaCount = await clearMatrixTypingIndicatorsForChannel(
-			channel as BaseGuildTextChannel,
-			event.room_id,
-		);
+    const clearedTypingPersonaCount =
+      await clearMatrixTypingIndicatorsForChannel(
+        channel as BaseGuildTextChannel,
+        event.room_id,
+      );
 
-		log.info(
-			`Stop/clear requested via Matrix /kill by user ${event.sender} in channel ${channelDiscId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s). Cleared Matrix typing for ${clearedTypingPersonaCount} persona(s).`,
-		);
-		return;
-	}
+    log.info(
+      `Stop/clear requested via Matrix /kill by user ${event.sender} in channel ${channelDiscId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s). Cleared Matrix typing for ${clearedTypingPersonaCount} persona(s).`,
+    );
+    return;
+  }
 
-	// 11. Special command: /refresh — trigger conversation history reset in Discord
-	if (bodyText === "/refresh") {
-		await handleMatrixRefresh(channel as BaseGuildTextChannel, channelDiscId);
-		return;
-	}
+  // 11. Special command: /refresh — trigger conversation history reset in Discord
+  if (bodyText === "/refresh") {
+    await handleMatrixRefresh(channel as BaseGuildTextChannel, channelDiscId);
+    return;
+  }
 
-	// 12. If this is a reply to a bot persona message, build a [System:] annotation
-	//     that mirrors the format tomoriChat.ts uses for Discord replies (line ~2539).
-	//     Also registers the Discord channel as a pending trigger so shouldBotReply()
-	//     fires — webhooks cannot carry Discord-native reply references.
-	//
-	//     Two-layer lookup:
-	//     a) sentEventPersonas Map  — fast in-memory hit for same-session messages
-	//     b) homeserver event fetch — fallback for replies to messages sent in a
-	//        previous bot session whose event_id was never recorded in this Map
-	let replyContext = "";
-	if (replyEventId) {
-		const repliedPersonaEvent = sentEventPersonas.get(replyEventId);
-		if (repliedPersonaEvent) {
-			// Fast path: event was sent in this session — persona name is known
-			const quotedSnippet = repliedPersonaEvent.replySnippet
-				? ` "${repliedPersonaEvent.replySnippet}"`
-				: "";
-			replyContext =
-				`[System: ${senderLocalpart} is replying to ${repliedPersonaEvent.personaName}'s message${quotedSnippet}]`;
-			pendingMatrixReplyChannels.add(channelDiscId);
-		} else {
-			// Slow path: fetch the original event and check if it was sent by a virtual persona user
-			const replyMetadata = await getPersonaReplyEventMetadata(
-				event.room_id,
-				replyEventId,
-				serverName,
-			);
-			if (replyMetadata.isPersonaReply) {
-				const quotedSnippet = replyMetadata.replySnippet
-					? ` "${replyMetadata.replySnippet}"`
-					: "";
-				replyContext =
-					`[System: ${senderLocalpart} is replying to another person's message${quotedSnippet}]`;
-				pendingMatrixReplyChannels.add(channelDiscId);
-			}
-		}
-	}
+  // 12. If this is a reply to a bot persona message, build a [System:] annotation
+  //     that mirrors the format tomoriChat.ts uses for Discord replies (line ~2539).
+  //     Also registers the Discord channel as a pending trigger so shouldBotReply()
+  //     fires — webhooks cannot carry Discord-native reply references.
+  //
+  //     Two-layer lookup:
+  //     a) sentEventPersonas Map  — fast in-memory hit for same-session messages
+  //     b) homeserver event fetch — fallback for replies to messages sent in a
+  //        previous bot session whose event_id was never recorded in this Map
+  let replyContext = "";
+  if (replyEventId) {
+    const repliedPersonaEvent = sentEventPersonas.get(replyEventId);
+    if (repliedPersonaEvent) {
+      // Fast path: event was sent in this session — persona name is known
+      const quotedSnippet = repliedPersonaEvent.replySnippet
+        ? ` "${repliedPersonaEvent.replySnippet}"`
+        : "";
+      replyContext = `[System: ${senderLocalpart} is replying to ${repliedPersonaEvent.personaName}'s message${quotedSnippet}]`;
+      pendingMatrixReplyChannels.add(channelDiscId);
+    } else {
+      // Slow path: fetch the original event and check if it was sent by a virtual persona user
+      const replyMetadata = await getPersonaReplyEventMetadata(
+        event.room_id,
+        replyEventId,
+        serverName,
+      );
+      if (replyMetadata.isPersonaReply) {
+        const quotedSnippet = replyMetadata.replySnippet
+          ? ` "${replyMetadata.replySnippet}"`
+          : "";
+        replyContext = `[System: ${senderLocalpart} is replying to another person's message${quotedSnippet}]`;
+        pendingMatrixReplyChannels.add(channelDiscId);
+      }
+    }
+  }
 
-	// 13. Relay as text via Discord webhook.
-	//     m.emote (/me actions) are prefixed with "* " to match IRC/Matrix convention.
-	//     For reply annotations, append [System: ...] at the end of the relayed body.
-	let relayContent = msgtype === "m.emote" ? `* ${bodyText}` : bodyText;
-	if (replyContext) {
-		relayContent = `${relayContent} ${replyContext}`;
-	}
+  // 13. Relay as text via Discord webhook.
+  //     m.emote (/me actions) are prefixed with "* " to match IRC/Matrix convention.
+  //     For reply annotations, append [System: ...] at the end of the relayed body.
+  let relayContent = msgtype === "m.emote" ? `* ${bodyText}` : bodyText;
+  if (replyContext) {
+    relayContent = `${relayContent} ${replyContext}`;
+  }
 
-	const { webhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
-	if (!webhook) return;
+  const { webhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
+  if (!webhook) return;
 
-	await webhook.send({
-		content: relayContent,
-		username,
-		allowedMentions: { parse: [] }, // Prevent accidental Discord @mentions from Matrix text
-	});
+  await webhook.send({
+    content: relayContent,
+    username,
+    allowedMentions: { parse: [] }, // Prevent accidental Discord @mentions from Matrix text
+  });
 }

@@ -8,16 +8,16 @@ import { log } from "@/utils/misc/logger";
  * @param rateLimitData - Rate limit information from Discord API.
  */
 export default async (
-	_client: Client,
-	rateLimitData: RateLimitData,
+  _client: Client,
+  rateLimitData: RateLimitData,
 ): Promise<void> => {
-	// Log rate limit event with all relevant details
-	log.rateLimit("Discord API rate limit hit", {
-		timeToReset: `${rateLimitData.timeToReset}ms`,
-		limit: rateLimitData.limit,
-		method: rateLimitData.method,
-		url: rateLimitData.url,
-		route: rateLimitData.route,
-		global: rateLimitData.global,
-	});
+  // Log rate limit event with all relevant details
+  log.rateLimit("Discord API rate limit hit", {
+    timeToReset: `${rateLimitData.timeToReset}ms`,
+    limit: rateLimitData.limit,
+    method: rateLimitData.method,
+    url: rateLimitData.url,
+    route: rateLimitData.route,
+    global: rateLimitData.global,
+  });
 };

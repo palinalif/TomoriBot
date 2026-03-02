@@ -8,9 +8,9 @@ import { log } from "../misc/logger";
  * Includes timestamp for TTL (Time To Live) expiration tracking.
  */
 interface TomoriStateCacheEntry {
-	personas: TomoriState[]; // Array of all personas (main first, then alters)
-	mainPersona: TomoriState; // Quick reference to main persona (is_alter=false)
-	cachedAt: number; // Timestamp in milliseconds
+  personas: TomoriState[]; // Array of all personas (main first, then alters)
+  mainPersona: TomoriState; // Quick reference to main persona (is_alter=false)
+  cachedAt: number; // Timestamp in milliseconds
 }
 
 /**
@@ -24,7 +24,7 @@ const cache = new Map<string, TomoriStateCacheEntry>();
  * Longer TTL than emoji cache since config changes are less frequent.
  */
 const TOMORI_STATE_CACHE_DURATION_MS =
-	(Number(process.env.TOMORI_STATE_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
+  (Number(process.env.TOMORI_STATE_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
 
 /**
  * Cache statistics for monitoring
@@ -47,80 +47,80 @@ let cacheMisses = 0;
  * @returns Array of TomoriState objects (main first, then alters), or empty array if not found
  */
 export async function getCachedAllPersonas(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<TomoriState[]> {
-	// 1. Check in-memory cache
-	const now = Date.now();
-	const cachedEntry = cache.get(serverDiscId);
+  // 1. Check in-memory cache
+  const now = Date.now();
+  const cachedEntry = cache.get(serverDiscId);
 
-	if (cachedEntry) {
-		// Check if cache is still fresh (< 10 minutes old)
-		const cacheAge = now - cachedEntry.cachedAt;
-		if (cacheAge < TOMORI_STATE_CACHE_DURATION_MS) {
-			// Cache hit - return immediately
-			cacheHits++;
-			log.info(
-				`[TomoriState Cache] HIT for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s, ${cachedEntry.personas.length} personas)`,
-			);
-			return cachedEntry.personas;
-		}
+  if (cachedEntry) {
+    // Check if cache is still fresh (< 10 minutes old)
+    const cacheAge = now - cachedEntry.cachedAt;
+    if (cacheAge < TOMORI_STATE_CACHE_DURATION_MS) {
+      // Cache hit - return immediately
+      cacheHits++;
+      log.info(
+        `[TomoriState Cache] HIT for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s, ${cachedEntry.personas.length} personas)`,
+      );
+      return cachedEntry.personas;
+    }
 
-		// Cache stale - fall through to refresh
-		log.info(
-			`[TomoriState Cache] STALE for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s)`,
-		);
-	}
+    // Cache stale - fall through to refresh
+    log.info(
+      `[TomoriState Cache] STALE for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s)`,
+    );
+  }
 
-	// 2. Cache miss or stale - refresh from DB
-	cacheMisses++;
-	log.info(
-		`[TomoriState Cache] MISS for server ${serverDiscId} - loading all personas from DB`,
-	);
+  // 2. Cache miss or stale - refresh from DB
+  cacheMisses++;
+  log.info(
+    `[TomoriState Cache] MISS for server ${serverDiscId} - loading all personas from DB`,
+  );
 
-	try {
-		// 3. Load fresh data from database (all personas)
-		const personas = await loadAllPersonasForServer(serverDiscId);
+  try {
+    // 3. Load fresh data from database (all personas)
+    const personas = await loadAllPersonasForServer(serverDiscId);
 
-		if (personas.length > 0) {
-			// Find main persona (is_alter=false)
-			const mainPersona = personas.find((p) => !p.is_alter);
-			if (!mainPersona) {
-				log.error(
-					`[TomoriState Cache] No main persona found for server ${serverDiscId}`,
-				);
-				return personas; // Return alters anyway, but log error
-			}
+    if (personas.length > 0) {
+      // Find main persona (is_alter=false)
+      const mainPersona = personas.find((p) => !p.is_alter);
+      if (!mainPersona) {
+        log.error(
+          `[TomoriState Cache] No main persona found for server ${serverDiscId}`,
+        );
+        return personas; // Return alters anyway, but log error
+      }
 
-			// 4. Cache the loaded data
-			cache.set(serverDiscId, {
-				personas,
-				mainPersona,
-				cachedAt: now,
-			});
+      // 4. Cache the loaded data
+      cache.set(serverDiscId, {
+        personas,
+        mainPersona,
+        cachedAt: now,
+      });
 
-			log.success(
-				`[TomoriState Cache] Cached ${personas.length} persona(s) for server ${serverDiscId} (main: ${mainPersona.tomori_nickname})`,
-			);
-		}
+      log.success(
+        `[TomoriState Cache] Cached ${personas.length} persona(s) for server ${serverDiscId} (main: ${mainPersona.tomori_nickname})`,
+      );
+    }
 
-		return personas;
-	} catch (error) {
-		log.error(
-			`[TomoriState Cache] Error loading personas for server ${serverDiscId}:`,
-			error,
-		);
+    return personas;
+  } catch (error) {
+    log.error(
+      `[TomoriState Cache] Error loading personas for server ${serverDiscId}:`,
+      error,
+    );
 
-		// Return stale cache if available (graceful fallback)
-		if (cachedEntry) {
-			log.warn(
-				`[TomoriState Cache] Returning stale cache for server ${serverDiscId} due to error`,
-			);
-			return cachedEntry.personas;
-		}
+    // Return stale cache if available (graceful fallback)
+    if (cachedEntry) {
+      log.warn(
+        `[TomoriState Cache] Returning stale cache for server ${serverDiscId} due to error`,
+      );
+      return cachedEntry.personas;
+    }
 
-		// No cache available, return empty array
-		return [];
-	}
+    // No cache available, return empty array
+    return [];
+  }
 }
 
 /**
@@ -131,29 +131,29 @@ export async function getCachedAllPersonas(
  * @returns Main TomoriState or null if not found
  */
 export async function getCachedMainPersona(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<TomoriState | null> {
-	// 1. Check in-memory cache first for quick lookup
-	const cachedEntry = cache.get(serverDiscId);
-	if (cachedEntry) {
-		const cacheAge = Date.now() - cachedEntry.cachedAt;
-		if (cacheAge < TOMORI_STATE_CACHE_DURATION_MS) {
-			// Cache hit - return main persona immediately
-			cacheHits++;
-			return cachedEntry.mainPersona;
-		}
-	}
+  // 1. Check in-memory cache first for quick lookup
+  const cachedEntry = cache.get(serverDiscId);
+  if (cachedEntry) {
+    const cacheAge = Date.now() - cachedEntry.cachedAt;
+    if (cacheAge < TOMORI_STATE_CACHE_DURATION_MS) {
+      // Cache hit - return main persona immediately
+      cacheHits++;
+      return cachedEntry.mainPersona;
+    }
+  }
 
-	// 2. Cache miss or stale - load all personas
-	const personas = await getCachedAllPersonas(serverDiscId);
+  // 2. Cache miss or stale - load all personas
+  const personas = await getCachedAllPersonas(serverDiscId);
 
-	if (personas.length === 0) {
-		return null;
-	}
+  if (personas.length === 0) {
+    return null;
+  }
 
-	// Return main persona (is_alter=false)
-	const mainPersona = personas.find((p) => !p.is_alter);
-	return mainPersona || null;
+  // Return main persona (is_alter=false)
+  const mainPersona = personas.find((p) => !p.is_alter);
+  return mainPersona || null;
 }
 
 /**
@@ -163,9 +163,9 @@ export async function getCachedMainPersona(
  * @deprecated Use getCachedMainPersona() for main persona only, or getCachedAllPersonas() for all personas.
  */
 export async function getCachedTomoriState(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<TomoriState | null> {
-	return getCachedMainPersona(serverDiscId);
+  return getCachedMainPersona(serverDiscId);
 }
 
 /**
@@ -175,14 +175,14 @@ export async function getCachedTomoriState(
  * @param serverDiscId - Discord server ID to invalidate
  */
 export function invalidateTomoriStateCache(serverDiscId: string): void {
-	const hadCache = cache.has(serverDiscId);
-	cache.delete(serverDiscId);
+  const hadCache = cache.has(serverDiscId);
+  cache.delete(serverDiscId);
 
-	if (hadCache) {
-		log.info(
-			`[TomoriState Cache] Invalidated cache for server ${serverDiscId}`,
-		);
-	}
+  if (hadCache) {
+    log.info(
+      `[TomoriState Cache] Invalidated cache for server ${serverDiscId}`,
+    );
+  }
 }
 
 /**
@@ -190,14 +190,14 @@ export function invalidateTomoriStateCache(serverDiscId: string): void {
  * Useful for testing or manual refresh operations.
  */
 export function clearTomoriStateCache(): void {
-	const previousSize = cache.size;
-	cache.clear();
-	cacheHits = 0;
-	cacheMisses = 0;
+  const previousSize = cache.size;
+  cache.clear();
+  cacheHits = 0;
+  cacheMisses = 0;
 
-	log.info(
-		`[TomoriState Cache] Cleared entire cache (${previousSize} entries)`,
-	);
+  log.info(
+    `[TomoriState Cache] Cleared entire cache (${previousSize} entries)`,
+  );
 }
 
 /**
@@ -206,19 +206,19 @@ export function clearTomoriStateCache(): void {
  * @returns Object with cache hits, misses, hit rate percentage, and cache size
  */
 export function getTomoriStateCacheStats(): {
-	hits: number;
-	misses: number;
-	hitRate: string;
-	cacheSize: number;
+  hits: number;
+  misses: number;
+  hitRate: string;
+  cacheSize: number;
 } {
-	const total = cacheHits + cacheMisses;
-	const hitRate =
-		total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
+  const total = cacheHits + cacheMisses;
+  const hitRate =
+    total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
 
-	return {
-		hits: cacheHits,
-		misses: cacheMisses,
-		hitRate,
-		cacheSize: cache.size,
-	};
+  return {
+    hits: cacheHits,
+    misses: cacheMisses,
+    hitRate,
+    cacheSize: cache.size,
+  };
 }

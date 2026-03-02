@@ -8,178 +8,178 @@ const SAMPLE_USER_PREFIX = /^(?:\{user\}|\{\{user\}\})\s*:\s*(.+)$/i;
 const SAMPLE_BOT_PREFIX = /^(?:\{bot\}|\{\{char\}\})\s*:?\s*(.+)$/i;
 
 export type TxtUploadReadError =
-	| "invalid_format"
-	| "file_too_large"
-	| "download_failed";
+  | "invalid_format"
+  | "file_too_large"
+  | "download_failed";
 
 export interface TxtUploadReadResult {
-	isValid: boolean;
-	error?: TxtUploadReadError;
-	text?: string;
+  isValid: boolean;
+  error?: TxtUploadReadError;
+  text?: string;
 }
 
 export interface NumberedLine {
-	lineNumber: number;
-	content: string;
+  lineNumber: number;
+  content: string;
 }
 
 export interface SampleDialoguePair {
-	userInput: string;
-	botInput: string;
+  userInput: string;
+  botInput: string;
 }
 
 export interface SampleDialogueParseError {
-	code: "odd_line_count" | "invalid_user_prefix" | "invalid_bot_prefix";
-	lineNumber: number;
+  code: "odd_line_count" | "invalid_user_prefix" | "invalid_bot_prefix";
+  lineNumber: number;
 }
 
 export interface SampleDialogueParseResult {
-	isValid: boolean;
-	pairs: SampleDialoguePair[];
-	error?: SampleDialogueParseError;
+  isValid: boolean;
+  pairs: SampleDialoguePair[];
+  error?: SampleDialogueParseError;
 }
 
 export function formatTextArrayLiteral(items: string[]): string {
-	return `{${items.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+  return `{${items.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 }
 
 export function getNonEmptyNumberedLines(text: string): NumberedLine[] {
-	return text
-		.split(/\r?\n/)
-		.map((line, index) => ({
-			lineNumber: index + 1,
-			content: line.trim(),
-		}))
-		.filter((line) => line.content.length > 0);
+  return text
+    .split(/\r?\n/)
+    .map((line, index) => ({
+      lineNumber: index + 1,
+      content: line.trim(),
+    }))
+    .filter((line) => line.content.length > 0);
 }
 
 export function dedupeCaseInsensitive(items: string[]): string[] {
-	const deduped: string[] = [];
-	const seen = new Set<string>();
+  const deduped: string[] = [];
+  const seen = new Set<string>();
 
-	for (const item of items) {
-		const normalized = item.trim().toLowerCase();
-		if (!normalized || seen.has(normalized)) continue;
-		seen.add(normalized);
-		deduped.push(item.trim());
-	}
+  for (const item of items) {
+    const normalized = item.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    deduped.push(item.trim());
+  }
 
-	return deduped;
+  return deduped;
 }
 
 export function dedupeSampleDialoguePairs(
-	pairs: SampleDialoguePair[],
+  pairs: SampleDialoguePair[],
 ): SampleDialoguePair[] {
-	const deduped: SampleDialoguePair[] = [];
-	const seen = new Set<string>();
+  const deduped: SampleDialoguePair[] = [];
+  const seen = new Set<string>();
 
-	for (const pair of pairs) {
-		const key = `${pair.userInput.trim().toLowerCase()}|||${pair.botInput
-			.trim()
-			.toLowerCase()}`;
-		if (seen.has(key)) continue;
-		seen.add(key);
-		deduped.push({
-			userInput: pair.userInput.trim(),
-			botInput: pair.botInput.trim(),
-		});
-	}
+  for (const pair of pairs) {
+    const key = `${pair.userInput.trim().toLowerCase()}|||${pair.botInput
+      .trim()
+      .toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push({
+      userInput: pair.userInput.trim(),
+      botInput: pair.botInput.trim(),
+    });
+  }
 
-	return deduped;
+  return deduped;
 }
 
 export async function readTxtUpload(
-	attachment: APIAttachment,
+  attachment: APIAttachment,
 ): Promise<TxtUploadReadResult> {
-	const filename = attachment.filename?.toLowerCase() ?? "";
-	if (!filename.endsWith(".txt")) {
-		return {
-			isValid: false,
-			error: "invalid_format",
-		};
-	}
+  const filename = attachment.filename?.toLowerCase() ?? "";
+  if (!filename.endsWith(".txt")) {
+    return {
+      isValid: false,
+      error: "invalid_format",
+    };
+  }
 
-	const downloadResult = await safeDownload(attachment.url, {
-		maxSizeMB: BATCH_UPLOAD_MAX_SIZE_MB,
-		timeoutMs: 10000,
-		knownSize: attachment.size,
-	});
+  const downloadResult = await safeDownload(attachment.url, {
+    maxSizeMB: BATCH_UPLOAD_MAX_SIZE_MB,
+    timeoutMs: 10000,
+    knownSize: attachment.size,
+  });
 
-	if (!downloadResult.success || !downloadResult.buffer) {
-		return {
-			isValid: false,
-			error:
-				downloadResult.error === "size_exceeded"
-					? "file_too_large"
-					: "download_failed",
-		};
-	}
+  if (!downloadResult.success || !downloadResult.buffer) {
+    return {
+      isValid: false,
+      error:
+        downloadResult.error === "size_exceeded"
+          ? "file_too_large"
+          : "download_failed",
+    };
+  }
 
-	let text = downloadResult.buffer.toString("utf-8");
-	if (text.startsWith(UTF8_BOM)) {
-		text = text.slice(1);
-	}
+  let text = downloadResult.buffer.toString("utf-8");
+  if (text.startsWith(UTF8_BOM)) {
+    text = text.slice(1);
+  }
 
-	return {
-		isValid: true,
-		text,
-	};
+  return {
+    isValid: true,
+    text,
+  };
 }
 
 export function parseSampleDialogueBatch(
-	text: string,
+  text: string,
 ): SampleDialogueParseResult {
-	const lines = getNonEmptyNumberedLines(text);
+  const lines = getNonEmptyNumberedLines(text);
 
-	if (lines.length % 2 !== 0) {
-		const lastLine = lines[lines.length - 1];
-		return {
-			isValid: false,
-			pairs: [],
-			error: {
-				code: "odd_line_count",
-				lineNumber: lastLine?.lineNumber ?? 1,
-			},
-		};
-	}
+  if (lines.length % 2 !== 0) {
+    const lastLine = lines[lines.length - 1];
+    return {
+      isValid: false,
+      pairs: [],
+      error: {
+        code: "odd_line_count",
+        lineNumber: lastLine?.lineNumber ?? 1,
+      },
+    };
+  }
 
-	const pairs: SampleDialoguePair[] = [];
-	for (let i = 0; i < lines.length; i += 2) {
-		const userLine = lines[i];
-		const botLine = lines[i + 1];
+  const pairs: SampleDialoguePair[] = [];
+  for (let i = 0; i < lines.length; i += 2) {
+    const userLine = lines[i];
+    const botLine = lines[i + 1];
 
-		const userMatch = SAMPLE_USER_PREFIX.exec(userLine.content);
-		if (!userMatch) {
-			return {
-				isValid: false,
-				pairs: [],
-				error: {
-					code: "invalid_user_prefix",
-					lineNumber: userLine.lineNumber,
-				},
-			};
-		}
+    const userMatch = SAMPLE_USER_PREFIX.exec(userLine.content);
+    if (!userMatch) {
+      return {
+        isValid: false,
+        pairs: [],
+        error: {
+          code: "invalid_user_prefix",
+          lineNumber: userLine.lineNumber,
+        },
+      };
+    }
 
-		const botMatch = SAMPLE_BOT_PREFIX.exec(botLine.content);
-		if (!botMatch) {
-			return {
-				isValid: false,
-				pairs: [],
-				error: {
-					code: "invalid_bot_prefix",
-					lineNumber: botLine.lineNumber,
-				},
-			};
-		}
+    const botMatch = SAMPLE_BOT_PREFIX.exec(botLine.content);
+    if (!botMatch) {
+      return {
+        isValid: false,
+        pairs: [],
+        error: {
+          code: "invalid_bot_prefix",
+          lineNumber: botLine.lineNumber,
+        },
+      };
+    }
 
-		pairs.push({
-			userInput: userMatch[1]?.trim() ?? "",
-			botInput: botMatch[1]?.trim() ?? "",
-		});
-	}
+    pairs.push({
+      userInput: userMatch[1]?.trim() ?? "",
+      botInput: botMatch[1]?.trim() ?? "",
+    });
+  }
 
-	return {
-		isValid: true,
-		pairs,
-	};
+  return {
+    isValid: true,
+    pairs,
+  };
 }

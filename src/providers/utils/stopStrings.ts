@@ -13,18 +13,18 @@
  * of a response is not blocked.
  */
 export function buildPersonaSpeakerStopString(
-	personaName?: string | null,
+  personaName?: string | null,
 ): string | null {
-	if (!personaName) return null;
+  if (!personaName) return null;
 
-	const normalizedName = personaName
-		.replace(/[\r\n]+/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
+  const normalizedName = personaName
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-	if (!normalizedName) return null;
+  if (!normalizedName) return null;
 
-	return `\n${normalizedName}:`;
+  return `\n${normalizedName}:`;
 }
 
 /**
@@ -32,21 +32,20 @@ export function buildPersonaSpeakerStopString(
  * avoiding duplicates.
  */
 export function mergeStopStrings(
-	existingStops: string[] | undefined,
-	additionalStop: string | null,
+  existingStops: string[] | undefined,
+  additionalStop: string | null,
 ): string[] | undefined {
-	const sanitizedExisting = (existingStops ?? []).filter(
-		(stop): stop is string => typeof stop === "string" && stop.length > 0,
-	);
+  const sanitizedExisting = (existingStops ?? []).filter(
+    (stop): stop is string => typeof stop === "string" && stop.length > 0,
+  );
 
-	if (!additionalStop) {
-		return sanitizedExisting.length > 0 ? sanitizedExisting : undefined;
-	}
+  if (!additionalStop) {
+    return sanitizedExisting.length > 0 ? sanitizedExisting : undefined;
+  }
 
-	if (sanitizedExisting.includes(additionalStop)) {
-		return sanitizedExisting;
-	}
+  if (sanitizedExisting.includes(additionalStop)) {
+    return sanitizedExisting;
+  }
 
-	return [...sanitizedExisting, additionalStop];
+  return [...sanitizedExisting, additionalStop];
 }
-

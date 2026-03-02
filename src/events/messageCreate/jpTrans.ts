@@ -4,8 +4,8 @@ import { translate as googleTranslate } from "google-translate-api-x";
 import { log } from "../../utils/misc/logger";
 import { sendTranslationEmbed } from "../../utils/discord/embedHelper";
 import type {
-	BingResponse,
-	GoogleResponse,
+  BingResponse,
+  GoogleResponse,
 } from "../../types/misc/translation";
 import { TranslationProvider } from "../../types/discord/embed";
 
@@ -16,53 +16,53 @@ import { TranslationProvider } from "../../types/discord/embed";
  * @returns Promise<void>
  */
 const handler = async (_client: Client, message: Message): Promise<void> => {
-	//return;
-	try {
-		// Skip if message has translation flag or is from a bot
-		// EXPERIMENTAL FEATURE ONLY FOR TESTING
-		if (
-			message.content.includes("><") ||
-			message.author.bot ||
-			(message.guildId !== process.env.TESTSRV_ID &&
-				message.guildId !== process.env.HAVENSRV_ID) ||
-			message.channelId === process.env.TESTCH_ID
-		) {
-			return;
-		}
+  //return;
+  try {
+    // Skip if message has translation flag or is from a bot
+    // EXPERIMENTAL FEATURE ONLY FOR TESTING
+    if (
+      message.content.includes("><") ||
+      message.author.bot ||
+      (message.guildId !== process.env.TESTSRV_ID &&
+        message.guildId !== process.env.HAVENSRV_ID) ||
+      message.channelId === process.env.TESTCH_ID
+    ) {
+      return;
+    }
 
-		// Check for Japanese text using a native regex (matches Kanji, Hiragana, or Katakana)
-		// 1. Kanji: \u4E00-\u9FFF
-		// 2. Hiragana: \u3040-\u309F
-		// 3. Katakana: \u30A0-\u30FF
-		// This ensures we only proceed if any Japanese character is present.
-		if (!/[\u3040-\u30FF\u4E00-\u9FFF]/.test(message.content)) {
-			return;
-		}
+    // Check for Japanese text using a native regex (matches Kanji, Hiragana, or Katakana)
+    // 1. Kanji: \u4E00-\u9FFF
+    // 2. Hiragana: \u3040-\u309F
+    // 3. Katakana: \u30A0-\u30FF
+    // This ensures we only proceed if any Japanese character is present.
+    if (!/[\u3040-\u30FF\u4E00-\u9FFF]/.test(message.content)) {
+      return;
+    }
 
-		log.info("Japanese message detected, translating...");
+    log.info("Japanese message detected, translating...");
 
-		// Get translations from each provider
-		const [bingResult, googleResult] = await Promise.all([
-			translate(message.content, undefined, "en") as Promise<BingResponse>,
-			googleTranslate(message.content, {
-				to: "en",
-				forceBatch: false,
-			}) as Promise<GoogleResponse>,
-		]);
+    // Get translations from each provider
+    const [bingResult, googleResult] = await Promise.all([
+      translate(message.content, undefined, "en") as Promise<BingResponse>,
+      googleTranslate(message.content, {
+        to: "en",
+        forceBatch: false,
+      }) as Promise<GoogleResponse>,
+    ]);
 
-		// Show translations with swappable buttons
-		await sendTranslationEmbed(message, {
-			text: message.content,
-			translations: {
-				[TranslationProvider.GOOGLE]: googleResult.text,
-				[TranslationProvider.BING]: bingResult.translation,
-			},
-			initialProvider: TranslationProvider.GOOGLE,
-			timeout: 90000,
-		});
-	} catch (_error) {
-		log.error("Translation error");
-	}
+    // Show translations with swappable buttons
+    await sendTranslationEmbed(message, {
+      text: message.content,
+      translations: {
+        [TranslationProvider.GOOGLE]: googleResult.text,
+        [TranslationProvider.BING]: bingResult.translation,
+      },
+      initialProvider: TranslationProvider.GOOGLE,
+      timeout: 90000,
+    });
+  } catch (_error) {
+    log.error("Translation error");
+  }
 };
 
 export default handler;

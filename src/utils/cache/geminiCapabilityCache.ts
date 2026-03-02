@@ -10,30 +10,30 @@ import type { ModelTokenLimits } from "./openrouterCapabilityCache";
  * and truncation is silently skipped — a safe fallback for future or unknown models.
  */
 const GEMINI_TOKEN_LIMITS: Readonly<Record<string, ModelTokenLimits>> = {
-	"gemini-2.0-flash": { contextLength: 1_048_576, maxCompletionTokens: 8192 },
-	"gemini-2.5-flash-lite": {
-		contextLength: 1_048_576,
-		maxCompletionTokens: 8192,
-	},
-	"gemini-2.5-flash-preview-05-20": {
-		contextLength: 1_048_576,
-		maxCompletionTokens: 8192,
-	},
-	"gemini-2.5-flash-preview-09-2025": {
-		contextLength: 1_048_576,
-		maxCompletionTokens: 8192,
-	},
-	"gemini-2.5-flash": { contextLength: 1_048_576, maxCompletionTokens: 8192 },
-	"gemini-2.5-pro": { contextLength: 1_048_576, maxCompletionTokens: 8192 },
-	"gemini-3-flash-preview": {
-		contextLength: 1_048_576,
-		maxCompletionTokens: 8192,
-	},
-	"gemini-3-pro-preview": {
-		contextLength: 1_048_576,
-		maxCompletionTokens: 8192,
-	},
-	"gemma-3-27b-it": { contextLength: 131_072, maxCompletionTokens: 8192 },
+  "gemini-2.0-flash": { contextLength: 1_048_576, maxCompletionTokens: 8192 },
+  "gemini-2.5-flash-lite": {
+    contextLength: 1_048_576,
+    maxCompletionTokens: 8192,
+  },
+  "gemini-2.5-flash-preview-05-20": {
+    contextLength: 1_048_576,
+    maxCompletionTokens: 8192,
+  },
+  "gemini-2.5-flash-preview-09-2025": {
+    contextLength: 1_048_576,
+    maxCompletionTokens: 8192,
+  },
+  "gemini-2.5-flash": { contextLength: 1_048_576, maxCompletionTokens: 8192 },
+  "gemini-2.5-pro": { contextLength: 1_048_576, maxCompletionTokens: 8192 },
+  "gemini-3-flash-preview": {
+    contextLength: 1_048_576,
+    maxCompletionTokens: 8192,
+  },
+  "gemini-3-pro-preview": {
+    contextLength: 1_048_576,
+    maxCompletionTokens: 8192,
+  },
+  "gemma-3-27b-it": { contextLength: 131_072, maxCompletionTokens: 8192 },
 };
 
 /**
@@ -46,7 +46,7 @@ const GEMINI_TOKEN_LIMITS: Readonly<Record<string, ModelTokenLimits>> = {
  * @returns ModelTokenLimits if the model is known, undefined otherwise
  */
 export function getGeminiTokenLimits(
-	modelCodename: string,
+  modelCodename: string,
 ): ModelTokenLimits | undefined {
-	return GEMINI_TOKEN_LIMITS[modelCodename];
+  return GEMINI_TOKEN_LIMITS[modelCodename];
 }

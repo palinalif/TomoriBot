@@ -30,12 +30,12 @@ const METADATA_KEY = "TomoriPreset";
 const SILLY_TAVERN_METADATA_KEYS = new Set(["chara", "char"]);
 
 type PngTextChunk = {
-	key: string;
-	value: string;
-	type:
-		| typeof TEXT_CHUNK_TYPE
-		| typeof COMPRESSED_TEXT_CHUNK_TYPE
-		| typeof INTERNATIONAL_TEXT_CHUNK_TYPE;
+  key: string;
+  value: string;
+  type:
+    | typeof TEXT_CHUNK_TYPE
+    | typeof COMPRESSED_TEXT_CHUNK_TYPE
+    | typeof INTERNATIONAL_TEXT_CHUNK_TYPE;
 };
 
 /**
@@ -45,12 +45,12 @@ type PngTextChunk = {
  * @returns 32-bit unsigned integer
  */
 function readUint32(data: Uint8Array, offset: number): number {
-	return (
-		(data[offset] << 24) |
-		(data[offset + 1] << 16) |
-		(data[offset + 2] << 8) |
-		data[offset + 3]
-	);
+  return (
+    (data[offset] << 24) |
+    (data[offset + 1] << 16) |
+    (data[offset + 2] << 8) |
+    data[offset + 3]
+  );
 }
 
 /**
@@ -60,10 +60,10 @@ function readUint32(data: Uint8Array, offset: number): number {
  * @param value - 32-bit unsigned integer to write
  */
 function writeUint32(data: Uint8Array, offset: number, value: number): void {
-	data[offset] = (value >>> 24) & 0xff;
-	data[offset + 1] = (value >>> 16) & 0xff;
-	data[offset + 2] = (value >>> 8) & 0xff;
-	data[offset + 3] = value & 0xff;
+  data[offset] = (value >>> 24) & 0xff;
+  data[offset + 1] = (value >>> 16) & 0xff;
+  data[offset + 2] = (value >>> 8) & 0xff;
+  data[offset + 3] = value & 0xff;
 }
 
 /**
@@ -72,8 +72,8 @@ function writeUint32(data: Uint8Array, offset: number, value: number): void {
  * @returns Uint8Array containing UTF-8 encoded bytes
  */
 function stringToBytes(str: string): Uint8Array {
-	const encoder = new TextEncoder();
-	return encoder.encode(str);
+  const encoder = new TextEncoder();
+  return encoder.encode(str);
 }
 
 /**
@@ -85,28 +85,28 @@ function stringToBytes(str: string): Uint8Array {
  * @returns 32-bit CRC32 checksum
  */
 function calculateCRC(
-	data: Uint8Array,
-	offset: number,
-	length: number,
+  data: Uint8Array,
+  offset: number,
+  length: number,
 ): number {
-	// 1. Generate CRC32 lookup table (standard polynomial 0xEDB88320)
-	const crcTable: number[] = [];
-	for (let i = 0; i < 256; i++) {
-		let c = i;
-		for (let j = 0; j < 8; j++) {
-			c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-		}
-		crcTable[i] = c;
-	}
+  // 1. Generate CRC32 lookup table (standard polynomial 0xEDB88320)
+  const crcTable: number[] = [];
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    crcTable[i] = c;
+  }
 
-	// 2. Calculate CRC32 over the data
-	let crc = 0xffffffff;
-	for (let i = 0; i < length; i++) {
-		crc = crcTable[(crc ^ data[offset + i]) & 0xff] ^ (crc >>> 8);
-	}
+  // 2. Calculate CRC32 over the data
+  let crc = 0xffffffff;
+  for (let i = 0; i < length; i++) {
+    crc = crcTable[(crc ^ data[offset + i]) & 0xff] ^ (crc >>> 8);
+  }
 
-	// 3. Return final CRC (inverted)
-	return crc ^ 0xffffffff;
+  // 3. Return final CRC (inverted)
+  return crc ^ 0xffffffff;
 }
 
 /**
@@ -115,215 +115,219 @@ function calculateCRC(
  * @returns True if buffer starts with PNG signature
  */
 function verifyPNGSignature(data: Uint8Array): boolean {
-	// 1. Check if buffer is long enough to contain signature
-	if (data.length < PNG_SIGNATURE.length) {
-		return false;
-	}
+  // 1. Check if buffer is long enough to contain signature
+  if (data.length < PNG_SIGNATURE.length) {
+    return false;
+  }
 
-	// 2. Compare each byte of the signature
-	for (let i = 0; i < PNG_SIGNATURE.length; i++) {
-		if (data[i] !== PNG_SIGNATURE[i]) {
-			return false;
-		}
-	}
+  // 2. Compare each byte of the signature
+  for (let i = 0; i < PNG_SIGNATURE.length; i++) {
+    if (data[i] !== PNG_SIGNATURE[i]) {
+      return false;
+    }
+  }
 
-	return true;
+  return true;
 }
 
 function findNullByte(
-	data: Uint8Array,
-	start: number,
-	endExclusive: number,
+  data: Uint8Array,
+  start: number,
+  endExclusive: number,
 ): number {
-	for (let i = start; i < endExclusive; i++) {
-		if (data[i] === 0) {
-			return i;
-		}
-	}
+  for (let i = start; i < endExclusive; i++) {
+    if (data[i] === 0) {
+      return i;
+    }
+  }
 
-	return -1;
+  return -1;
 }
 
 function tryParseJSON(value: string): unknown | null {
-	try {
-		return JSON.parse(value);
-	} catch {
-		return null;
-	}
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 function decodeBase64ToUTF8(value: string): string | null {
-	const normalized = value
-		.trim()
-		.replace(/\s+/g, "")
-		.replace(/-/g, "+")
-		.replace(/_/g, "/");
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
 
-	if (!normalized) {
-		return null;
-	}
+  if (!normalized) {
+    return null;
+  }
 
-	const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-	if (!/^[A-Za-z0-9+/]+={0,2}$/.test(padded)) {
-		return null;
-	}
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(padded)) {
+    return null;
+  }
 
-	const decodedBuffer = Buffer.from(padded, "base64");
-	if (decodedBuffer.length === 0) {
-		return null;
-	}
+  const decodedBuffer = Buffer.from(padded, "base64");
+  if (decodedBuffer.length === 0) {
+    return null;
+  }
 
-	return decodedBuffer.toString("utf8");
+  return decodedBuffer.toString("utf8");
 }
 
-function parseTextChunk(data: Uint8Array, offset: number, length: number): PngTextChunk | null {
-	const chunkEnd = offset + length;
-	const keyEnd = findNullByte(data, offset, chunkEnd);
-	if (keyEnd <= offset) {
-		return null;
-	}
+function parseTextChunk(
+  data: Uint8Array,
+  offset: number,
+  length: number,
+): PngTextChunk | null {
+  const chunkEnd = offset + length;
+  const keyEnd = findNullByte(data, offset, chunkEnd);
+  if (keyEnd <= offset) {
+    return null;
+  }
 
-	const key = String.fromCharCode(...data.slice(offset, keyEnd));
-	if (keyEnd + 1 >= chunkEnd) {
-		return null;
-	}
+  const key = String.fromCharCode(...data.slice(offset, keyEnd));
+  if (keyEnd + 1 >= chunkEnd) {
+    return null;
+  }
 
-	const value = new TextDecoder().decode(data.slice(keyEnd + 1, chunkEnd));
-	return { key, value, type: TEXT_CHUNK_TYPE };
+  const value = new TextDecoder().decode(data.slice(keyEnd + 1, chunkEnd));
+  return { key, value, type: TEXT_CHUNK_TYPE };
 }
 
 function parseCompressedTextChunk(
-	data: Uint8Array,
-	offset: number,
-	length: number,
+  data: Uint8Array,
+  offset: number,
+  length: number,
 ): PngTextChunk | null {
-	const chunkEnd = offset + length;
-	const keyEnd = findNullByte(data, offset, chunkEnd);
-	if (keyEnd <= offset || keyEnd + 2 > chunkEnd) {
-		return null;
-	}
+  const chunkEnd = offset + length;
+  const keyEnd = findNullByte(data, offset, chunkEnd);
+  if (keyEnd <= offset || keyEnd + 2 > chunkEnd) {
+    return null;
+  }
 
-	const compressionMethod = data[keyEnd + 1];
-	if (compressionMethod !== 0) {
-		return null;
-	}
+  const compressionMethod = data[keyEnd + 1];
+  if (compressionMethod !== 0) {
+    return null;
+  }
 
-	const key = String.fromCharCode(...data.slice(offset, keyEnd));
-	const compressedText = data.slice(keyEnd + 2, chunkEnd);
-	if (compressedText.length === 0) {
-		return null;
-	}
+  const key = String.fromCharCode(...data.slice(offset, keyEnd));
+  const compressedText = data.slice(keyEnd + 2, chunkEnd);
+  if (compressedText.length === 0) {
+    return null;
+  }
 
-	try {
-		const value = new TextDecoder().decode(inflateSync(compressedText));
-		return { key, value, type: COMPRESSED_TEXT_CHUNK_TYPE };
-	} catch {
-		return null;
-	}
+  try {
+    const value = new TextDecoder().decode(inflateSync(compressedText));
+    return { key, value, type: COMPRESSED_TEXT_CHUNK_TYPE };
+  } catch {
+    return null;
+  }
 }
 
 function parseInternationalTextChunk(
-	data: Uint8Array,
-	offset: number,
-	length: number,
+  data: Uint8Array,
+  offset: number,
+  length: number,
 ): PngTextChunk | null {
-	const chunkEnd = offset + length;
-	const keyEnd = findNullByte(data, offset, chunkEnd);
-	if (keyEnd <= offset || keyEnd + 5 > chunkEnd) {
-		return null;
-	}
+  const chunkEnd = offset + length;
+  const keyEnd = findNullByte(data, offset, chunkEnd);
+  if (keyEnd <= offset || keyEnd + 5 > chunkEnd) {
+    return null;
+  }
 
-	const key = String.fromCharCode(...data.slice(offset, keyEnd));
-	let cursor = keyEnd + 1;
+  const key = String.fromCharCode(...data.slice(offset, keyEnd));
+  let cursor = keyEnd + 1;
 
-	const compressionFlag = data[cursor];
-	cursor += 1;
-	const compressionMethod = data[cursor];
-	cursor += 1;
+  const compressionFlag = data[cursor];
+  cursor += 1;
+  const compressionMethod = data[cursor];
+  cursor += 1;
 
-	const languageTagEnd = findNullByte(data, cursor, chunkEnd);
-	if (languageTagEnd === -1) {
-		return null;
-	}
-	cursor = languageTagEnd + 1;
+  const languageTagEnd = findNullByte(data, cursor, chunkEnd);
+  if (languageTagEnd === -1) {
+    return null;
+  }
+  cursor = languageTagEnd + 1;
 
-	const translatedKeywordEnd = findNullByte(data, cursor, chunkEnd);
-	if (translatedKeywordEnd === -1) {
-		return null;
-	}
-	cursor = translatedKeywordEnd + 1;
+  const translatedKeywordEnd = findNullByte(data, cursor, chunkEnd);
+  if (translatedKeywordEnd === -1) {
+    return null;
+  }
+  cursor = translatedKeywordEnd + 1;
 
-	let textBytes = data.slice(cursor, chunkEnd);
-	if (compressionFlag === 1) {
-		if (compressionMethod !== 0 || textBytes.length === 0) {
-			return null;
-		}
+  let textBytes = data.slice(cursor, chunkEnd);
+  if (compressionFlag === 1) {
+    if (compressionMethod !== 0 || textBytes.length === 0) {
+      return null;
+    }
 
-		try {
-			textBytes = inflateSync(textBytes);
-		} catch {
-			return null;
-		}
-	}
+    try {
+      textBytes = inflateSync(textBytes);
+    } catch {
+      return null;
+    }
+  }
 
-	const value = new TextDecoder().decode(textBytes);
-	return { key, value, type: INTERNATIONAL_TEXT_CHUNK_TYPE };
+  const value = new TextDecoder().decode(textBytes);
+  return { key, value, type: INTERNATIONAL_TEXT_CHUNK_TYPE };
 }
 
 function extractAllTextChunksFromPNGData(data: Uint8Array): PngTextChunk[] {
-	const chunks: PngTextChunk[] = [];
-	let offset = PNG_SIGNATURE.length;
+  const chunks: PngTextChunk[] = [];
+  let offset = PNG_SIGNATURE.length;
 
-	while (offset + 8 <= data.length) {
-		const length = readUint32(data, offset);
-		offset += 4;
+  while (offset + 8 <= data.length) {
+    const length = readUint32(data, offset);
+    offset += 4;
 
-		if (offset + 4 > data.length) {
-			break;
-		}
+    if (offset + 4 > data.length) {
+      break;
+    }
 
-		const chunkType = String.fromCharCode(
-			data[offset],
-			data[offset + 1],
-			data[offset + 2],
-			data[offset + 3],
-		);
-		offset += 4;
+    const chunkType = String.fromCharCode(
+      data[offset],
+      data[offset + 1],
+      data[offset + 2],
+      data[offset + 3],
+    );
+    offset += 4;
 
-		if (offset + length + 4 > data.length) {
-			break;
-		}
+    if (offset + length + 4 > data.length) {
+      break;
+    }
 
-		let parsedChunk: PngTextChunk | null = null;
-		if (chunkType === TEXT_CHUNK_TYPE) {
-			parsedChunk = parseTextChunk(data, offset, length);
-		} else if (chunkType === COMPRESSED_TEXT_CHUNK_TYPE) {
-			parsedChunk = parseCompressedTextChunk(data, offset, length);
-		} else if (chunkType === INTERNATIONAL_TEXT_CHUNK_TYPE) {
-			parsedChunk = parseInternationalTextChunk(data, offset, length);
-		}
+    let parsedChunk: PngTextChunk | null = null;
+    if (chunkType === TEXT_CHUNK_TYPE) {
+      parsedChunk = parseTextChunk(data, offset, length);
+    } else if (chunkType === COMPRESSED_TEXT_CHUNK_TYPE) {
+      parsedChunk = parseCompressedTextChunk(data, offset, length);
+    } else if (chunkType === INTERNATIONAL_TEXT_CHUNK_TYPE) {
+      parsedChunk = parseInternationalTextChunk(data, offset, length);
+    }
 
-		if (parsedChunk) {
-			chunks.push(parsedChunk);
-		}
+    if (parsedChunk) {
+      chunks.push(parsedChunk);
+    }
 
-		offset += length; // Skip chunk data
-		offset += 4; // Skip CRC
+    offset += length; // Skip chunk data
+    offset += 4; // Skip CRC
 
-		if (chunkType === IEND_CHUNK_TYPE) {
-			break;
-		}
-	}
+    if (chunkType === IEND_CHUNK_TYPE) {
+      break;
+    }
+  }
 
-	return chunks;
+  return chunks;
 }
 
 export interface SillyTavernCardMetadata {
-	metadataKey: string;
-	rawValue: string;
-	decodedValue: string;
-	decodedFromBase64: boolean;
-	parsedJson: unknown;
+  metadataKey: string;
+  rawValue: string;
+  decodedValue: string;
+  decodedFromBase64: boolean;
+  parsedJson: unknown;
 }
 
 /**
@@ -331,62 +335,62 @@ export interface SillyTavernCardMetadata {
  * Supports `tEXt`, `zTXt`, and `iTXt` chunks.
  */
 export function extractSillyTavernMetadataFromPNG(
-	pngBuffer: Buffer,
+  pngBuffer: Buffer,
 ): SillyTavernCardMetadata | null {
-	try {
-		const data = new Uint8Array(pngBuffer);
-		if (!verifyPNGSignature(data)) {
-			return null;
-		}
+  try {
+    const data = new Uint8Array(pngBuffer);
+    if (!verifyPNGSignature(data)) {
+      return null;
+    }
 
-		const textChunks = extractAllTextChunksFromPNGData(data);
-		const candidates = textChunks.filter((chunk) =>
-			SILLY_TAVERN_METADATA_KEYS.has(chunk.key.toLowerCase()),
-		);
+    const textChunks = extractAllTextChunksFromPNGData(data);
+    const candidates = textChunks.filter((chunk) =>
+      SILLY_TAVERN_METADATA_KEYS.has(chunk.key.toLowerCase()),
+    );
 
-		// Process in reverse order so newest metadata wins when duplicates exist.
-		for (const candidate of [...candidates].reverse()) {
-			const rawValue = candidate.value.trim();
-			if (!rawValue) {
-				continue;
-			}
+    // Process in reverse order so newest metadata wins when duplicates exist.
+    for (const candidate of [...candidates].reverse()) {
+      const rawValue = candidate.value.trim();
+      if (!rawValue) {
+        continue;
+      }
 
-			const directJson = tryParseJSON(rawValue);
-			if (directJson !== null) {
-				return {
-					metadataKey: candidate.key,
-					rawValue,
-					decodedValue: rawValue,
-					decodedFromBase64: false,
-					parsedJson: directJson,
-				};
-			}
+      const directJson = tryParseJSON(rawValue);
+      if (directJson !== null) {
+        return {
+          metadataKey: candidate.key,
+          rawValue,
+          decodedValue: rawValue,
+          decodedFromBase64: false,
+          parsedJson: directJson,
+        };
+      }
 
-			const decoded = decodeBase64ToUTF8(rawValue);
-			if (!decoded) {
-				continue;
-			}
+      const decoded = decodeBase64ToUTF8(rawValue);
+      if (!decoded) {
+        continue;
+      }
 
-			const decodedJson = tryParseJSON(decoded.replace(/^\uFEFF/, ""));
-			if (decodedJson !== null) {
-				return {
-					metadataKey: candidate.key,
-					rawValue,
-					decodedValue: decoded,
-					decodedFromBase64: true,
-					parsedJson: decodedJson,
-				};
-			}
-		}
+      const decodedJson = tryParseJSON(decoded.replace(/^\uFEFF/, ""));
+      if (decodedJson !== null) {
+        return {
+          metadataKey: candidate.key,
+          rawValue,
+          decodedValue: decoded,
+          decodedFromBase64: true,
+          parsedJson: decodedJson,
+        };
+      }
+    }
 
-		return null;
-	} catch (error) {
-		log.warn(
-			"Failed to extract SillyTavern metadata from PNG (continuing fallback path)",
-			error,
-		);
-		return null;
-	}
+    return null;
+  } catch (error) {
+    log.warn(
+      "Failed to extract SillyTavern metadata from PNG (continuing fallback path)",
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -395,50 +399,55 @@ export function extractSillyTavernMetadataFromPNG(
  * @returns PresetExport object if found, null otherwise
  */
 export function extractMetadataFromPNG(pngBuffer: Buffer): PresetExport | null {
-	try {
-		// 1. Convert Buffer to Uint8Array for processing
-		const data = new Uint8Array(pngBuffer);
+  try {
+    // 1. Convert Buffer to Uint8Array for processing
+    const data = new Uint8Array(pngBuffer);
 
-		// 2. Verify PNG signature
-		if (!verifyPNGSignature(data)) {
-			log.warn("Invalid PNG signature detected during metadata extraction");
-			return null;
-		}
+    // 2. Verify PNG signature
+    if (!verifyPNGSignature(data)) {
+      log.warn("Invalid PNG signature detected during metadata extraction");
+      return null;
+    }
 
-		// 3. Parse supported text chunks and pick TomoriPreset entries
-		const textChunks = extractAllTextChunksFromPNGData(data);
-		const presetChunks = textChunks.filter((chunk) => chunk.key === METADATA_KEY);
+    // 3. Parse supported text chunks and pick TomoriPreset entries
+    const textChunks = extractAllTextChunksFromPNGData(data);
+    const presetChunks = textChunks.filter(
+      (chunk) => chunk.key === METADATA_KEY,
+    );
 
-		let lastPreset: PresetExport | null = null;
-		let presetCount = 0;
-		for (const chunk of presetChunks) {
-			try {
-				const parsed = JSON.parse(chunk.value) as PresetExport;
-				lastPreset = parsed;
-				presetCount += 1;
-			} catch (error) {
-				log.error("Failed to parse TomoriPreset JSON metadata:", error as Error);
-			}
-		}
+    let lastPreset: PresetExport | null = null;
+    let presetCount = 0;
+    for (const chunk of presetChunks) {
+      try {
+        const parsed = JSON.parse(chunk.value) as PresetExport;
+        lastPreset = parsed;
+        presetCount += 1;
+      } catch (error) {
+        log.error(
+          "Failed to parse TomoriPreset JSON metadata:",
+          error as Error,
+        );
+      }
+    }
 
-		if (lastPreset) {
-			if (presetCount > 1) {
-				log.warn(
-					`Multiple TomoriPreset metadata chunks found (${presetCount}); using the last one.`,
-				);
-			} else {
-				log.success("Successfully extracted TomoriPreset metadata from PNG");
-			}
-			return lastPreset;
-		}
+    if (lastPreset) {
+      if (presetCount > 1) {
+        log.warn(
+          `Multiple TomoriPreset metadata chunks found (${presetCount}); using the last one.`,
+        );
+      } else {
+        log.success("Successfully extracted TomoriPreset metadata from PNG");
+      }
+      return lastPreset;
+    }
 
-		// No metadata found
-		log.info("No TomoriPreset metadata found in PNG");
-		return null;
-	} catch (error) {
-		log.error("Error extracting metadata from PNG:", error as Error);
-		return null;
-	}
+    // No metadata found
+    log.info("No TomoriPreset metadata found in PNG");
+    return null;
+  } catch (error) {
+    log.error("Error extracting metadata from PNG:", error as Error);
+    return null;
+  }
 }
 
 /**
@@ -449,105 +458,105 @@ export function extractMetadataFromPNG(pngBuffer: Buffer): PresetExport | null {
  * @returns New PNG Buffer with embedded metadata
  */
 export function embedMetadataInPNG(
-	pngBuffer: Buffer,
-	metadata: PresetExport,
+  pngBuffer: Buffer,
+  metadata: PresetExport,
 ): Buffer {
-	try {
-		// 1. Convert Buffer to Uint8Array for processing
-		const data = new Uint8Array(pngBuffer);
+  try {
+    // 1. Convert Buffer to Uint8Array for processing
+    const data = new Uint8Array(pngBuffer);
 
-		// 2. Verify PNG signature
-		if (!verifyPNGSignature(data)) {
-			throw new Error("Invalid PNG signature");
-		}
+    // 2. Verify PNG signature
+    if (!verifyPNGSignature(data)) {
+      throw new Error("Invalid PNG signature");
+    }
 
-		// 3. Find the IEND chunk position
-		// We need to insert our metadata chunk BEFORE IEND
-		let offset = PNG_SIGNATURE.length;
-		let iendOffset = -1;
+    // 3. Find the IEND chunk position
+    // We need to insert our metadata chunk BEFORE IEND
+    let offset = PNG_SIGNATURE.length;
+    let iendOffset = -1;
 
-		while (offset < data.length) {
-			const length = readUint32(data, offset);
-			offset += 4;
+    while (offset < data.length) {
+      const length = readUint32(data, offset);
+      offset += 4;
 
-			const chunkType = String.fromCharCode(
-				data[offset],
-				data[offset + 1],
-				data[offset + 2],
-				data[offset + 3],
-			);
+      const chunkType = String.fromCharCode(
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+      );
 
-			if (chunkType === IEND_CHUNK_TYPE) {
-				iendOffset = offset - 4; // Store position before IEND chunk
-				break;
-			}
+      if (chunkType === IEND_CHUNK_TYPE) {
+        iendOffset = offset - 4; // Store position before IEND chunk
+        break;
+      }
 
-			offset += 4; // Skip chunk type
-			offset += length; // Skip chunk data
-			offset += 4; // Skip CRC
-		}
+      offset += 4; // Skip chunk type
+      offset += length; // Skip chunk data
+      offset += 4; // Skip CRC
+    }
 
-		if (iendOffset === -1) {
-			throw new Error("Could not find IEND chunk in PNG");
-		}
+    if (iendOffset === -1) {
+      throw new Error("Could not find IEND chunk in PNG");
+    }
 
-		// 4. Prepare the metadata chunk
-		// Format: key (null-terminated) + JSON value
-		const metadataJSON = JSON.stringify(metadata);
-		const keyBytes = stringToBytes(`${METADATA_KEY}\0`); // Null terminator
-		const valueBytes = stringToBytes(metadataJSON);
+    // 4. Prepare the metadata chunk
+    // Format: key (null-terminated) + JSON value
+    const metadataJSON = JSON.stringify(metadata);
+    const keyBytes = stringToBytes(`${METADATA_KEY}\0`); // Null terminator
+    const valueBytes = stringToBytes(metadataJSON);
 
-		// Combine key and value into chunk data
-		const chunkData = new Uint8Array(keyBytes.length + valueBytes.length);
-		chunkData.set(keyBytes, 0);
-		chunkData.set(valueBytes, keyBytes.length);
+    // Combine key and value into chunk data
+    const chunkData = new Uint8Array(keyBytes.length + valueBytes.length);
+    chunkData.set(keyBytes, 0);
+    chunkData.set(valueBytes, keyBytes.length);
 
-		const chunkLength = chunkData.length;
+    const chunkLength = chunkData.length;
 
-		// 5. Calculate the new PNG size
-		// Original size + chunk header (4 bytes length + 4 bytes type) + chunk data + CRC (4 bytes)
-		const newPngSize = data.length + 12 + chunkLength;
-		const newPngData = new Uint8Array(newPngSize);
+    // 5. Calculate the new PNG size
+    // Original size + chunk header (4 bytes length + 4 bytes type) + chunk data + CRC (4 bytes)
+    const newPngSize = data.length + 12 + chunkLength;
+    const newPngData = new Uint8Array(newPngSize);
 
-		// 6. Build the new PNG file
-		// Copy everything up to the IEND chunk
-		newPngData.set(data.slice(0, iendOffset));
+    // 6. Build the new PNG file
+    // Copy everything up to the IEND chunk
+    newPngData.set(data.slice(0, iendOffset));
 
-		let writeOffset = iendOffset;
+    let writeOffset = iendOffset;
 
-		// Write chunk length
-		writeUint32(newPngData, writeOffset, chunkLength);
-		writeOffset += 4;
+    // Write chunk length
+    writeUint32(newPngData, writeOffset, chunkLength);
+    writeOffset += 4;
 
-		// Write chunk type (tEXt)
-		const typeBytes = stringToBytes(TEXT_CHUNK_TYPE);
-		newPngData.set(typeBytes, writeOffset);
-		writeOffset += 4;
+    // Write chunk type (tEXt)
+    const typeBytes = stringToBytes(TEXT_CHUNK_TYPE);
+    newPngData.set(typeBytes, writeOffset);
+    writeOffset += 4;
 
-		// Write chunk data
-		newPngData.set(chunkData, writeOffset);
-		writeOffset += chunkLength;
+    // Write chunk data
+    newPngData.set(chunkData, writeOffset);
+    writeOffset += chunkLength;
 
-		// 7. Calculate and write CRC for the chunk
-		// CRC is calculated over chunk type + chunk data
-		const crcData = new Uint8Array(4 + chunkLength);
-		crcData.set(typeBytes);
-		crcData.set(chunkData, 4);
-		const crc = calculateCRC(crcData, 0, crcData.length);
-		writeUint32(newPngData, writeOffset, crc);
-		writeOffset += 4;
+    // 7. Calculate and write CRC for the chunk
+    // CRC is calculated over chunk type + chunk data
+    const crcData = new Uint8Array(4 + chunkLength);
+    crcData.set(typeBytes);
+    crcData.set(chunkData, 4);
+    const crc = calculateCRC(crcData, 0, crcData.length);
+    writeUint32(newPngData, writeOffset, crc);
+    writeOffset += 4;
 
-		// 8. Copy IEND chunk and everything after
-		newPngData.set(data.slice(iendOffset), writeOffset);
+    // 8. Copy IEND chunk and everything after
+    newPngData.set(data.slice(iendOffset), writeOffset);
 
-		log.success(
-			`Successfully embedded TomoriPreset metadata (${metadataJSON.length} bytes) into PNG`,
-		);
+    log.success(
+      `Successfully embedded TomoriPreset metadata (${metadataJSON.length} bytes) into PNG`,
+    );
 
-		// 9. Convert back to Buffer and return
-		return Buffer.from(newPngData);
-	} catch (error) {
-		log.error("Error embedding metadata in PNG:", error as Error);
-		throw error;
-	}
+    // 9. Convert back to Buffer and return
+    return Buffer.from(newPngData);
+  } catch (error) {
+    log.error("Error embedding metadata in PNG:", error as Error);
+    throw error;
+  }
 }

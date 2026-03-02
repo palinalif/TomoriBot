@@ -1,31 +1,31 @@
 import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ComponentType,
-	EmbedBuilder,
-	type ButtonInteraction,
-	type TextChannel,
-	type NewsChannel,
-	type DMChannel,
-	type Message,
-	type APIEmbedField,
-	type BaseGuildTextChannel,
-	type BaseGuildVoiceChannel,
-	type AnyThreadChannel,
-	type Webhook,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ComponentType,
+  EmbedBuilder,
+  type ButtonInteraction,
+  type TextChannel,
+  type NewsChannel,
+  type DMChannel,
+  type Message,
+  type APIEmbedField,
+  type BaseGuildTextChannel,
+  type BaseGuildVoiceChannel,
+  type AnyThreadChannel,
+  type Webhook,
 } from "discord.js";
 import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { invalidateWebhookCache } from "./webhookManager";
 import type {
-	StandardEmbedOptions,
-	SummaryEmbedOptions,
-	TranslationEmbedOptions,
+  StandardEmbedOptions,
+  SummaryEmbedOptions,
+  TranslationEmbedOptions,
 } from "../../types/discord/embed";
 import {
-	TRANSLATOR_COLORS,
-	TRANSLATOR_STYLES,
-	TranslationProvider,
+  TRANSLATOR_COLORS,
+  TRANSLATOR_STYLES,
+  TranslationProvider,
 } from "../../types/discord/embed";
 
 type Provider = keyof typeof TRANSLATOR_COLORS;
@@ -36,19 +36,19 @@ type Provider = keyof typeof TRANSLATOR_COLORS;
 const MAX_FIELD_VALUE_LENGTH = 1024;
 
 export type WebhookEmbedContext = {
-	webhook?: Webhook;
-	personaUsername?: string;
-	personaAvatarUrl?: string;
+  webhook?: Webhook;
+  personaUsername?: string;
+  personaAvatarUrl?: string;
 };
 
 function isInvalidWebhookError(error: unknown): boolean {
-	const code = (error as { code?: number | string })?.code;
-	return (
-		code === 10015 || // Unknown Webhook
-		code === "10015" ||
-		code === 50027 || // Invalid Webhook Token
-		code === "50027"
-	);
+  const code = (error as { code?: number | string })?.code;
+  return (
+    code === 10015 || // Unknown Webhook
+    code === "10015" ||
+    code === 50027 || // Invalid Webhook Token
+    code === "50027"
+  );
 }
 
 /**
@@ -58,11 +58,11 @@ function isInvalidWebhookError(error: unknown): boolean {
  * @returns Truncated value that fits within Discord's limits
  */
 function truncateFieldValue(value: string): string {
-	if (value.length <= MAX_FIELD_VALUE_LENGTH) {
-		return value;
-	}
-	// Reserve 3 characters for ellipsis
-	return `${value.substring(0, MAX_FIELD_VALUE_LENGTH - 3)}...`;
+  if (value.length <= MAX_FIELD_VALUE_LENGTH) {
+    return value;
+  }
+  // Reserve 3 characters for ellipsis
+  return `${value.substring(0, MAX_FIELD_VALUE_LENGTH - 3)}...`;
 }
 
 /**
@@ -73,118 +73,118 @@ function truncateFieldValue(value: string): string {
  * @returns EmbedBuilder instance
  */
 export function createStandardEmbed(
-	locale: string,
-	options: StandardEmbedOptions,
+  locale: string,
+  options: StandardEmbedOptions,
 ): EmbedBuilder {
-	const {
-		titleKey,
-		titleVars = {},
-		descriptionKey,
-		description,
-		descriptionVars = {},
-		color = ColorCode.INFO,
-		footerKey,
-		footerVars = {},
-		thumbnailUrl,
-	} = options;
+  const {
+    titleKey,
+    titleVars = {},
+    descriptionKey,
+    description,
+    descriptionVars = {},
+    color = ColorCode.INFO,
+    footerKey,
+    footerVars = {},
+    thumbnailUrl,
+  } = options;
 
-	// Use raw description if provided, otherwise use descriptionKey with localization
-	const descriptionText = description
-		? description
-		: descriptionKey
-			? localizer(locale, descriptionKey, descriptionVars)
-			: "";
+  // Use raw description if provided, otherwise use descriptionKey with localization
+  const descriptionText = description
+    ? description
+    : descriptionKey
+      ? localizer(locale, descriptionKey, descriptionVars)
+      : "";
 
-	const embed = new EmbedBuilder()
-		.setColor(color)
-		.setTitle(localizer(locale, titleKey, titleVars))
-		.setDescription(descriptionText);
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(localizer(locale, titleKey, titleVars))
+    .setDescription(descriptionText);
 
-	if (footerKey) {
-		embed.setFooter({
-			text: localizer(locale, footerKey, footerVars),
-		});
-	}
+  if (footerKey) {
+    embed.setFooter({
+      text: localizer(locale, footerKey, footerVars),
+    });
+  }
 
-	if (thumbnailUrl) {
-		embed.setThumbnail(thumbnailUrl);
-	}
+  if (thumbnailUrl) {
+    embed.setThumbnail(thumbnailUrl);
+  }
 
-	return embed;
+  return embed;
 }
 
 export function createSummaryEmbed(
-	locale: string,
-	options: SummaryEmbedOptions,
+  locale: string,
+  options: SummaryEmbedOptions,
 ): EmbedBuilder {
-	const {
-		titleKey,
-		titleVars = {},
-		descriptionKey,
-		description,
-		descriptionVars = {},
-		color = ColorCode.INFO,
-		footerKey,
-		footerVars = {},
-		thumbnailUrl,
-		timestamp,
-		fields,
-	} = options;
+  const {
+    titleKey,
+    titleVars = {},
+    descriptionKey,
+    description,
+    descriptionVars = {},
+    color = ColorCode.INFO,
+    footerKey,
+    footerVars = {},
+    thumbnailUrl,
+    timestamp,
+    fields,
+  } = options;
 
-	// Use raw description if provided, otherwise use descriptionKey with localization
-	const descriptionText = description
-		? description
-		: descriptionKey
-			? localizer(locale, descriptionKey, descriptionVars)
-			: "";
+  // Use raw description if provided, otherwise use descriptionKey with localization
+  const descriptionText = description
+    ? description
+    : descriptionKey
+      ? localizer(locale, descriptionKey, descriptionVars)
+      : "";
 
-	const embed = new EmbedBuilder()
-		.setColor(color)
-		.setTitle(localizer(locale, titleKey, titleVars))
-		.setDescription(descriptionText)
-		.addFields(
-			// 1. Map over the fields provided in options
-			fields.map(
-				// 2. Define the transformation for each field
-				(field): APIEmbedField => {
-					// 3. Determine the field name: Use localized nameKey if present, otherwise use direct name, fallback to empty string
-					const name = field.nameKey
-						? localizer(locale, field.nameKey, field.nameVars) // Use nameVars for name
-						: (field.name ?? "");
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(localizer(locale, titleKey, titleVars))
+    .setDescription(descriptionText)
+    .addFields(
+      // 1. Map over the fields provided in options
+      fields.map(
+        // 2. Define the transformation for each field
+        (field): APIEmbedField => {
+          // 3. Determine the field name: Use localized nameKey if present, otherwise use direct name, fallback to empty string
+          const name = field.nameKey
+            ? localizer(locale, field.nameKey, field.nameVars) // Use nameVars for name
+            : (field.name ?? "");
 
-					// 4. Determine the field value: Use localized valueKey if present, otherwise use direct value
-					const rawValue = field.valueKey
-						? localizer(locale, field.valueKey, field.valueVars) // Localize valueKey using valueVars
-						: (field.value ?? ""); // Otherwise, use the value directly
+          // 4. Determine the field value: Use localized valueKey if present, otherwise use direct value
+          const rawValue = field.valueKey
+            ? localizer(locale, field.valueKey, field.valueVars) // Localize valueKey using valueVars
+            : (field.value ?? ""); // Otherwise, use the value directly
 
-					// 5. Truncate value to Discord's maximum field value length (1024 chars)
-					const value = truncateFieldValue(rawValue);
+          // 5. Truncate value to Discord's maximum field value length (1024 chars)
+          const value = truncateFieldValue(rawValue);
 
-					// 6. Return the structured APIEmbedField object
-					return {
-						name,
-						value,
-						inline: field.inline ?? false,
-					};
-				},
-			),
-		);
+          // 6. Return the structured APIEmbedField object
+          return {
+            name,
+            value,
+            inline: field.inline ?? false,
+          };
+        },
+      ),
+    );
 
-	if (footerKey) {
-		embed.setFooter({
-			text: localizer(locale, footerKey, footerVars),
-		});
-	}
+  if (footerKey) {
+    embed.setFooter({
+      text: localizer(locale, footerKey, footerVars),
+    });
+  }
 
-	if (thumbnailUrl) {
-		embed.setThumbnail(thumbnailUrl);
-	}
+  if (thumbnailUrl) {
+    embed.setThumbnail(thumbnailUrl);
+  }
 
-	if (timestamp) {
-		embed.setTimestamp();
-	}
+  if (timestamp) {
+    embed.setTimestamp();
+  }
 
-	return embed;
+  return embed;
 }
 
 /**
@@ -196,52 +196,52 @@ export function createSummaryEmbed(
  * @returns Promise<void>
  */
 export async function sendStandardEmbed(
-	channel:
-		| TextChannel
-		| NewsChannel
-		| DMChannel
-		| BaseGuildTextChannel
-		| AnyThreadChannel
-		| BaseGuildVoiceChannel,
-	locale: string,
-	options: StandardEmbedOptions,
-	webhookContext?: WebhookEmbedContext,
+  channel:
+    | TextChannel
+    | NewsChannel
+    | DMChannel
+    | BaseGuildTextChannel
+    | AnyThreadChannel
+    | BaseGuildVoiceChannel,
+  locale: string,
+  options: StandardEmbedOptions,
+  webhookContext?: WebhookEmbedContext,
 ): Promise<void> {
-	const embed = createStandardEmbed(locale, options);
-	if (webhookContext?.webhook && webhookContext.personaUsername) {
-		const threadId =
-			"isThread" in channel &&
-			typeof channel.isThread === "function" &&
-			channel.isThread()
-				? channel.id
-				: undefined;
-			try {
-				await webhookContext.webhook.send({
-					embeds: [embed],
-					username: webhookContext.personaUsername,
-					avatarURL: webhookContext.personaAvatarUrl,
-					...(threadId ? { threadId } : {}),
-				});
-				return;
-			} catch (error) {
-				if (isInvalidWebhookError(error)) {
-					const cacheChannelId =
-						"isThread" in channel &&
-						typeof channel.isThread === "function" &&
-						channel.isThread() &&
-						channel.parent
-							? channel.parent.id
-							: channel.id;
-					invalidateWebhookCache(cacheChannelId);
-				}
-				log.warn(
-					"Failed to send embed via webhook, falling back to bot message",
-					error as Error,
-				);
-			}
-		}
+  const embed = createStandardEmbed(locale, options);
+  if (webhookContext?.webhook && webhookContext.personaUsername) {
+    const threadId =
+      "isThread" in channel &&
+      typeof channel.isThread === "function" &&
+      channel.isThread()
+        ? channel.id
+        : undefined;
+    try {
+      await webhookContext.webhook.send({
+        embeds: [embed],
+        username: webhookContext.personaUsername,
+        avatarURL: webhookContext.personaAvatarUrl,
+        ...(threadId ? { threadId } : {}),
+      });
+      return;
+    } catch (error) {
+      if (isInvalidWebhookError(error)) {
+        const cacheChannelId =
+          "isThread" in channel &&
+          typeof channel.isThread === "function" &&
+          channel.isThread() &&
+          channel.parent
+            ? channel.parent.id
+            : channel.id;
+        invalidateWebhookCache(cacheChannelId);
+      }
+      log.warn(
+        "Failed to send embed via webhook, falling back to bot message",
+        error as Error,
+      );
+    }
+  }
 
-	await channel.send({ embeds: [embed] });
+  await channel.send({ embeds: [embed] });
 }
 
 const TRANSLATION_TIMEOUT = 90000;
@@ -253,65 +253,65 @@ const TRANSLATION_TIMEOUT = 90000;
  * @returns Promise<void>
  */
 export async function sendTranslationEmbed(
-	message: Message,
-	options: TranslationEmbedOptions,
+  message: Message,
+  options: TranslationEmbedOptions,
 ): Promise<void> {
-	const {
-		translations,
-		initialProvider = TranslationProvider.GOOGLE,
-		timeout = TRANSLATION_TIMEOUT,
-	} = options;
+  const {
+    translations,
+    initialProvider = TranslationProvider.GOOGLE,
+    timeout = TRANSLATION_TIMEOUT,
+  } = options;
 
-	// Create buttons for each provider with their brand colors
-	const createButtons = (activeProvider: Provider) => {
-		const buttons = Object.values(TranslationProvider).map((provider) => {
-			return new ButtonBuilder()
-				.setLabel(provider.charAt(0).toUpperCase() + provider.slice(1))
-				.setStyle(TRANSLATOR_STYLES[provider])
-				.setCustomId(`${provider}-trans`)
-				.setDisabled(provider === activeProvider);
-		});
-		return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
-	};
+  // Create buttons for each provider with their brand colors
+  const createButtons = (activeProvider: Provider) => {
+    const buttons = Object.values(TranslationProvider).map((provider) => {
+      return new ButtonBuilder()
+        .setLabel(provider.charAt(0).toUpperCase() + provider.slice(1))
+        .setStyle(TRANSLATOR_STYLES[provider])
+        .setCustomId(`${provider}-trans`)
+        .setDisabled(provider === activeProvider);
+    });
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
+  };
 
-	// Create embed with initial translation
-	const embed = new EmbedBuilder()
-		.setColor(TRANSLATOR_COLORS[initialProvider])
-		.setDescription(translations[initialProvider]);
+  // Create embed with initial translation
+  const embed = new EmbedBuilder()
+    .setColor(TRANSLATOR_COLORS[initialProvider])
+    .setDescription(translations[initialProvider]);
 
-	// Send initial message
-	const sentMessage = await message.reply({
-		embeds: [embed],
-		components: [createButtons(initialProvider)],
-	});
+  // Send initial message
+  const sentMessage = await message.reply({
+    embeds: [embed],
+    components: [createButtons(initialProvider)],
+  });
 
-	// Set up collector
-	const collector = sentMessage.createMessageComponentCollector({
-		componentType: ComponentType.Button,
-		time: timeout,
-	});
+  // Set up collector
+  const collector = sentMessage.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: timeout,
+  });
 
-	collector.on("collect", async (interaction: ButtonInteraction) => {
-		const provider = interaction.customId.split("-")[0] as Provider;
+  collector.on("collect", async (interaction: ButtonInteraction) => {
+    const provider = interaction.customId.split("-")[0] as Provider;
 
-		embed.setColor(TRANSLATOR_COLORS[provider]);
-		embed.setDescription(translations[provider]);
+    embed.setColor(TRANSLATOR_COLORS[provider]);
+    embed.setDescription(translations[provider]);
 
-		await interaction.update({
-			embeds: [embed],
-			components: [createButtons(provider)],
-		});
-	});
+    await interaction.update({
+      embeds: [embed],
+      components: [createButtons(provider)],
+    });
+  });
 
-	collector.on("end", async () => {
-		const disabledButtons = createButtons(initialProvider);
-		for (const button of disabledButtons.components) {
-			button.setDisabled(true);
-		}
+  collector.on("end", async () => {
+    const disabledButtons = createButtons(initialProvider);
+    for (const button of disabledButtons.components) {
+      button.setDisabled(true);
+    }
 
-		await sentMessage.edit({
-			embeds: [embed],
-			components: [disabledButtons],
-		});
-	});
+    await sentMessage.edit({
+      embeds: [embed],
+      components: [disabledButtons],
+    });
+  });
 }

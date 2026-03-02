@@ -1,121 +1,124 @@
 import {
-	MessageFlags,
-	type ChatInputCommandInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type Client,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache"; // Rule 17
+import {
+  getCachedTomoriState,
+  invalidateTomoriStateCache,
+} from "../../utils/cache/tomoriStateCache"; // Rule 17
 import { localizer } from "../../utils/text/localizer"; // Rule 9
 import { log, ColorCode } from "../../utils/misc/logger"; // Rule 18
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper"; // Rule 12, 19
 import {
-	type UserRow,
-	type ErrorContext,
-	tomoriConfigSchema, // Rule 6
+  type UserRow,
+  type ErrorContext,
+  tomoriConfigSchema, // Rule 6
 } from "../../types/db/schema";
 import { sql } from "@/utils/db/client"; // Rule 4
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("permissions")
-		.setDescription(
-			localizer("en-US", "commands.config.permissions.description"),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("permission")
-				.setDescription(
-					localizer("en-US", "commands.config.permissions.option_description"),
-				)
-				.setRequired(true)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.selfteaching_option",
-						),
-						value: "selfteaching",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.personalization_option",
-						),
-						value: "personalization",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.emojiusage_option",
-						),
-						value: "emojiusage",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.stickerusage_option",
-						),
-						value: "stickerusage",
-					},
-					// New: Added Google Search permission choice
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.websearch_option",
-						),
-						value: "websearch",
-					},
-					// New: Added Pin Message permission choice
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.pinmessage_option",
-						),
-						value: "pinmessage",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.imagegen_option",
-						),
-						value: "imagegen",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.hiderespondembed_option",
-						),
-						value: "hiderespondembed",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.permissions.hideimpersonationembeds_option",
-						),
-						value: "hideimpersonationembeds",
-					},
-				),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("set")
-				.setDescription(
-					localizer("en-US", "commands.config.permissions.set_description"),
-				)
-				.setRequired(true)
-				.addChoices(
-					{
-						name: localizer("en-US", "commands.config.options.enable"),
-						value: "enable",
-					},
-					{
-						name: localizer("en-US", "commands.config.options.disable"),
-						value: "disable",
-					},
-				),
-		);
+  subcommand
+    .setName("permissions")
+    .setDescription(
+      localizer("en-US", "commands.config.permissions.description"),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("permission")
+        .setDescription(
+          localizer("en-US", "commands.config.permissions.option_description"),
+        )
+        .setRequired(true)
+        .addChoices(
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.selfteaching_option",
+            ),
+            value: "selfteaching",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.personalization_option",
+            ),
+            value: "personalization",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.emojiusage_option",
+            ),
+            value: "emojiusage",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.stickerusage_option",
+            ),
+            value: "stickerusage",
+          },
+          // New: Added Google Search permission choice
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.websearch_option",
+            ),
+            value: "websearch",
+          },
+          // New: Added Pin Message permission choice
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.pinmessage_option",
+            ),
+            value: "pinmessage",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.imagegen_option",
+            ),
+            value: "imagegen",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.hiderespondembed_option",
+            ),
+            value: "hiderespondembed",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.config.permissions.hideimpersonationembeds_option",
+            ),
+            value: "hideimpersonationembeds",
+          },
+        ),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("set")
+        .setDescription(
+          localizer("en-US", "commands.config.permissions.set_description"),
+        )
+        .setRequired(true)
+        .addChoices(
+          {
+            name: localizer("en-US", "commands.config.options.enable"),
+            value: "enable",
+          },
+          {
+            name: localizer("en-US", "commands.config.options.disable"),
+            value: "disable",
+          },
+        ),
+    );
 
 /**
  * Rule 1: JSDoc comment
@@ -126,225 +129,227 @@ export const configureSubcommand = (
  * @param locale - Locale of the interaction
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a channel
-	if (!interaction.channel) {
-		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.channel_only_title",
-			descriptionKey: "general.errors.channel_only_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
+  // 1. Ensure command is run in a channel
+  if (!interaction.channel) {
+    await replyInfoEmbed(interaction, userData.language_pref, {
+      titleKey: "general.errors.channel_only_title",
+      descriptionKey: "general.errors.channel_only_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
 
-	// 1.5. Defer the interaction before async work to prevent timeout
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // 1.5. Defer the interaction before async work to prevent timeout
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-	try {
-		// 2. Get command options
-		const permissionChoice = interaction.options.getString("permission", true);
-		const setAction = interaction.options.getString("set", true);
-		const isEnabled = setAction === "enable";
+  try {
+    // 2. Get command options
+    const permissionChoice = interaction.options.getString("permission", true);
+    const setAction = interaction.options.getString("set", true);
+    const isEnabled = setAction === "enable";
 
-		// 3. Load the Tomori state for this server - let helper functions manage interaction state
-		const tomoriState = await getCachedTomoriState(
-			interaction.guild?.id ?? interaction.user.id,
-		);
-		if (!tomoriState) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+    // 3. Load the Tomori state for this server - let helper functions manage interaction state
+    const tomoriState = await getCachedTomoriState(
+      interaction.guild?.id ?? interaction.user.id,
+    );
+    if (!tomoriState) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		// 5. Determine the database column and localization key based on permission choice
-		let dbColumnName = "";
-		let permissionTypeKey = ""; // For user-facing permission name
-		let currentSetting: boolean | undefined;
+    // 5. Determine the database column and localization key based on permission choice
+    let dbColumnName = "";
+    let permissionTypeKey = ""; // For user-facing permission name
+    let currentSetting: boolean | undefined;
 
-		switch (permissionChoice) {
-			case "selfteaching":
-				dbColumnName = "self_teaching_enabled";
-				permissionTypeKey = "commands.config.permissions.selfteaching_option";
-				currentSetting = tomoriState.config.self_teaching_enabled;
-				break;
-			case "personalization":
-				dbColumnName = "personal_memories_enabled";
-				permissionTypeKey =
-					"commands.config.permissions.personalization_option";
-				currentSetting = tomoriState.config.personal_memories_enabled;
-				break;
-			case "emojiusage":
-				dbColumnName = "emoji_usage_enabled";
-				permissionTypeKey = "commands.config.permissions.emojiusage_option";
-				currentSetting = tomoriState.config.emoji_usage_enabled;
-				break;
-			case "stickerusage":
-				dbColumnName = "sticker_usage_enabled";
-				permissionTypeKey = "commands.config.permissions.stickerusage_option";
-				currentSetting = tomoriState.config.sticker_usage_enabled;
-				break;
-			// New: Handle Web Search permission (Brave Search)
-			case "websearch":
-				dbColumnName = "web_search_enabled";
-				permissionTypeKey = "commands.config.permissions.websearch_option";
-				currentSetting = tomoriState.config.web_search_enabled;
-				break;
-			// New: Handle Pin Message permission
-			case "pinmessage":
-				dbColumnName = "pin_message_enabled";
-				permissionTypeKey = "commands.config.permissions.pinmessage_option";
-				currentSetting = tomoriState.config.pin_message_enabled;
-				break;
-			case "imagegen":
-				dbColumnName = "imagegen_enabled";
-				permissionTypeKey = "commands.config.permissions.imagegen_option";
-				currentSetting = tomoriState.config.imagegen_enabled;
-				break;
-			case "hiderespondembed":
-				dbColumnName = "hide_respond_embed";
-				permissionTypeKey = "commands.config.permissions.hiderespondembed_option";
-				currentSetting = tomoriState.config.hide_respond_embed;
-				break;
-			case "hideimpersonationembeds":
-				dbColumnName = "hide_impersonation_embeds";
-				permissionTypeKey = "commands.config.permissions.hideimpersonationembeds_option";
-				currentSetting = tomoriState.config.hide_impersonation_embeds;
-				break;
-			default:
-				// This should not happen due to Discord's option validation
-				log.error(
-					`Invalid permissionChoice received in /config permissions: ${permissionChoice}`,
-				);
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "general.errors.invalid_option_title",
-					descriptionKey: "general.errors.invalid_option_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-		}
+    switch (permissionChoice) {
+      case "selfteaching":
+        dbColumnName = "self_teaching_enabled";
+        permissionTypeKey = "commands.config.permissions.selfteaching_option";
+        currentSetting = tomoriState.config.self_teaching_enabled;
+        break;
+      case "personalization":
+        dbColumnName = "personal_memories_enabled";
+        permissionTypeKey =
+          "commands.config.permissions.personalization_option";
+        currentSetting = tomoriState.config.personal_memories_enabled;
+        break;
+      case "emojiusage":
+        dbColumnName = "emoji_usage_enabled";
+        permissionTypeKey = "commands.config.permissions.emojiusage_option";
+        currentSetting = tomoriState.config.emoji_usage_enabled;
+        break;
+      case "stickerusage":
+        dbColumnName = "sticker_usage_enabled";
+        permissionTypeKey = "commands.config.permissions.stickerusage_option";
+        currentSetting = tomoriState.config.sticker_usage_enabled;
+        break;
+      // New: Handle Web Search permission (Brave Search)
+      case "websearch":
+        dbColumnName = "web_search_enabled";
+        permissionTypeKey = "commands.config.permissions.websearch_option";
+        currentSetting = tomoriState.config.web_search_enabled;
+        break;
+      // New: Handle Pin Message permission
+      case "pinmessage":
+        dbColumnName = "pin_message_enabled";
+        permissionTypeKey = "commands.config.permissions.pinmessage_option";
+        currentSetting = tomoriState.config.pin_message_enabled;
+        break;
+      case "imagegen":
+        dbColumnName = "imagegen_enabled";
+        permissionTypeKey = "commands.config.permissions.imagegen_option";
+        currentSetting = tomoriState.config.imagegen_enabled;
+        break;
+      case "hiderespondembed":
+        dbColumnName = "hide_respond_embed";
+        permissionTypeKey =
+          "commands.config.permissions.hiderespondembed_option";
+        currentSetting = tomoriState.config.hide_respond_embed;
+        break;
+      case "hideimpersonationembeds":
+        dbColumnName = "hide_impersonation_embeds";
+        permissionTypeKey =
+          "commands.config.permissions.hideimpersonationembeds_option";
+        currentSetting = tomoriState.config.hide_impersonation_embeds;
+        break;
+      default:
+        // This should not happen due to Discord's option validation
+        log.error(
+          `Invalid permissionChoice received in /config permissions: ${permissionChoice}`,
+        );
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+    }
 
-		// 6. Check if the setting is already the desired value
-		if (currentSetting === isEnabled) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.permissions.already_set_title",
-				descriptionKey: isEnabled
-					? "commands.config.permissions.already_enabled_description"
-					: "commands.config.permissions.already_disabled_description",
-				descriptionVars: {
-					permission_type: localizer(locale, permissionTypeKey),
-				},
-				color: ColorCode.WARN,
-			});
-			return;
-		}
+    // 6. Check if the setting is already the desired value
+    if (currentSetting === isEnabled) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.config.permissions.already_set_title",
+        descriptionKey: isEnabled
+          ? "commands.config.permissions.already_enabled_description"
+          : "commands.config.permissions.already_disabled_description",
+        descriptionVars: {
+          permission_type: localizer(locale, permissionTypeKey),
+        },
+        color: ColorCode.WARN,
+      });
+      return;
+    }
 
-		// 7. Update the config in the database using direct SQL (Rule #4, #15)
-		// sql.unsafe is used here because dbColumnName is dynamic.
-		// This is safe because dbColumnName is strictly controlled by the switch statement.
-		const [updatedRow] = await sql`
+    // 7. Update the config in the database using direct SQL (Rule #4, #15)
+    // sql.unsafe is used here because dbColumnName is dynamic.
+    // This is safe because dbColumnName is strictly controlled by the switch statement.
+    const [updatedRow] = await sql`
             UPDATE tomori_configs
             SET ${sql.unsafe(dbColumnName)} = ${isEnabled}
             WHERE server_id = ${tomoriState.server_id}
             RETURNING *
         `;
 
-		// 8. Validate the returned data (Rules #3, #5 - critical config change)
-		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+    // 8. Validate the returned data (Rules #3, #5 - critical config change)
+    const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
 
-		if (!validatedConfig.success || !updatedRow) {
-			const context: ErrorContext = {
-				tomoriId: tomoriState.tomori_id,
-				serverId: tomoriState.server_id,
-				userId: userData.user_id,
-				errorType: "DatabaseUpdateError",
-				metadata: {
-					command: "config permissions",
-					guildId: interaction.guild?.id ?? interaction.user.id,
-					permissionChoice,
-					dbColumnName,
-					isEnabled,
-					validationErrors: validatedConfig.success
-						? null
-						: validatedConfig.error.flatten(),
-				},
-			};
-			await log.error(
-				"Failed to update or validate Tomori permissions config",
-				validatedConfig.success
-					? new Error("Database update returned no rows or unexpected data")
-					: new Error("Updated config data failed validation"),
-				context,
-			);
+    if (!validatedConfig.success || !updatedRow) {
+      const context: ErrorContext = {
+        tomoriId: tomoriState.tomori_id,
+        serverId: tomoriState.server_id,
+        userId: userData.user_id,
+        errorType: "DatabaseUpdateError",
+        metadata: {
+          command: "config permissions",
+          guildId: interaction.guild?.id ?? interaction.user.id,
+          permissionChoice,
+          dbColumnName,
+          isEnabled,
+          validationErrors: validatedConfig.success
+            ? null
+            : validatedConfig.error.flatten(),
+        },
+      };
+      await log.error(
+        "Failed to update or validate Tomori permissions config",
+        validatedConfig.success
+          ? new Error("Database update returned no rows or unexpected data")
+          : new Error("Updated config data failed validation"),
+        context,
+      );
 
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.update_failed_title",
-				descriptionKey: "general.errors.update_failed_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		// 9. Invalidate cache so next message gets fresh config
-		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+    // 9. Invalidate cache so next message gets fresh config
+    invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-		// 10. Success! Show the permission change
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.permissions.success_title",
-			descriptionKey: isEnabled
-				? "commands.config.permissions.enabled_success"
-				: "commands.config.permissions.disabled_success",
-			descriptionVars: {
-				permission_type: localizer(locale, permissionTypeKey),
-			},
-			color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN, // WARN for disable
-		});
-	} catch (error) {
-		// 10. Log error with context (Rule #22)
-		let serverIdForError: number | null = null;
-		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			const state = await getCachedTomoriState(interaction.guild.id);
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
+    // 10. Success! Show the permission change
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.config.permissions.success_title",
+      descriptionKey: isEnabled
+        ? "commands.config.permissions.enabled_success"
+        : "commands.config.permissions.disabled_success",
+      descriptionVars: {
+        permission_type: localizer(locale, permissionTypeKey),
+      },
+      color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN, // WARN for disable
+    });
+  } catch (error) {
+    // 10. Log error with context (Rule #22)
+    let serverIdForError: number | null = null;
+    let tomoriIdForError: number | null = null;
+    if (interaction.guild?.id) {
+      const state = await getCachedTomoriState(interaction.guild.id);
+      serverIdForError = state?.server_id ?? null;
+      tomoriIdForError = state?.tomori_id ?? null;
+    }
 
-		const context: ErrorContext = {
-			userId: userData.user_id,
-			serverId: serverIdForError,
-			tomoriId: tomoriIdForError,
-			errorType: "CommandExecutionError",
-			metadata: {
-				command: "config permissions",
-				guildId: interaction.guild?.id ?? interaction.user.id,
-				executorDiscordId: interaction.user.id,
-				permissionAttempted: interaction.options.getString("permission"),
-				actionAttempted: interaction.options.getString("set"),
-			},
-		};
-		await log.error(
-			`Error executing /config permissions for user ${userData.user_disc_id}`,
-			error as Error,
-			context,
-		);
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: serverIdForError,
+      tomoriId: tomoriIdForError,
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "config permissions",
+        guildId: interaction.guild?.id ?? interaction.user.id,
+        executorDiscordId: interaction.user.id,
+        permissionAttempted: interaction.options.getString("permission"),
+        actionAttempted: interaction.options.getString("set"),
+      },
+    };
+    await log.error(
+      `Error executing /config permissions for user ${userData.user_disc_id}`,
+      error as Error,
+      context,
+    );
 
-		// 11. Inform user of unknown error
-		if (!interaction.replied && !interaction.deferred) {
-			await interaction.reply({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-	}
+    // 11. Inform user of unknown error
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: localizer(locale, "general.errors.unknown_error_description"),
+        flags: MessageFlags.Ephemeral,
+      });
+    } else {
+      await interaction.followUp({
+        content: localizer(locale, "general.errors.unknown_error_description"),
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  }
 }

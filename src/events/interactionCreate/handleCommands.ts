@@ -3,53 +3,32 @@ import { sql } from "@/utils/db/client";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import {
-	CooldownType,
-	userSchema,
-	type UserRow,
-	type ErrorContext,
+  CooldownType,
+  userSchema,
+  type UserRow,
+  type ErrorContext,
 } from "../../types/db/schema";
 import { registerUser } from "../../utils/db/dbWrite";
 import {
-	loadCommandData,
-	type CommandExecutionMap,
-	type CommandCooldownMap,
+  loadCommandData,
+  type CommandExecutionMap,
+  type CommandCooldownMap,
 } from "../../utils/discord/commandLoader";
 
 // Define constants at the top (Rule #20)
 const DEFAULT_COOLDOWN = Number.parseInt(
-	process.env.DEFAULT_COMMAND_COOLDOWN || "1600",
-	10,
+  process.env.DEFAULT_COMMAND_COOLDOWN || "1600",
+  10,
 ); // Default cooldown for all commands in milliseconds
 
 const COOLDOWN_MAP = new Map<string, number>([
-	[
-		"config",
-		Number.parseInt(process.env.COOLDOWN_CONFIG || "3000", 10),
-	],
-	[
-		"teach",
-		Number.parseInt(process.env.COOLDOWN_TEACH || "3000", 10),
-	],
-	[
-		"data",
-		Number.parseInt(process.env.COOLDOWN_DATA || "3000", 10),
-	],
-	[
-		"forget",
-		Number.parseInt(process.env.COOLDOWN_FORGET || "3000", 10),
-	],
-	[
-		"persona",
-		Number.parseInt(process.env.COOLDOWN_PERSONA || "10000", 10),
-	],
-	[
-		"server",
-		Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10),
-	],
-	[
-		"personal",
-		Number.parseInt(process.env.COOLDOWN_PERSONAL || "3000", 10),
-	],
+  ["config", Number.parseInt(process.env.COOLDOWN_CONFIG || "3000", 10)],
+  ["teach", Number.parseInt(process.env.COOLDOWN_TEACH || "3000", 10)],
+  ["data", Number.parseInt(process.env.COOLDOWN_DATA || "3000", 10)],
+  ["forget", Number.parseInt(process.env.COOLDOWN_FORGET || "3000", 10)],
+  ["persona", Number.parseInt(process.env.COOLDOWN_PERSONA || "10000", 10)],
+  ["server", Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10)],
+  ["personal", Number.parseInt(process.env.COOLDOWN_PERSONAL || "3000", 10)],
 ]);
 
 // Cache for command execution maps - stored at module level
@@ -63,11 +42,11 @@ let cooldownMap: CommandCooldownMap | null = null;
  * @returns Boolean indicating if command is on cooldown
  */
 async function checkCooldown(
-	userId: string,
-	category: string,
+  userId: string,
+  category: string,
 ): Promise<boolean> {
-	const now = Date.now();
-	const [cooldown] = await sql`
+  const now = Date.now();
+  const [cooldown] = await sql`
     SELECT expiry_time
     FROM cooldowns
     WHERE cooldown_type = ${CooldownType.COMMAND_CATEGORY}
@@ -76,7 +55,7 @@ async function checkCooldown(
     AND expiry_time > ${now}
   `;
 
-	return Boolean(cooldown);
+  return Boolean(cooldown);
 }
 
 /**
@@ -86,11 +65,11 @@ async function checkCooldown(
  * @returns Remaining cooldown time in seconds
  */
 async function getRemainingCooldown(
-	userId: string,
-	category: string,
+  userId: string,
+  category: string,
 ): Promise<number> {
-	const now = Date.now();
-	const [cooldown] = await sql`
+  const now = Date.now();
+  const [cooldown] = await sql`
     SELECT expiry_time
     FROM cooldowns
     WHERE cooldown_type = ${CooldownType.COMMAND_CATEGORY}
@@ -99,8 +78,8 @@ async function getRemainingCooldown(
     AND expiry_time > ${now}
   `;
 
-	if (!cooldown) return 0;
-	return Math.ceil((Number(cooldown.expiry_time) - now) / 1000);
+  if (!cooldown) return 0;
+  return Math.ceil((Number(cooldown.expiry_time) - now) / 1000);
 }
 
 /**
@@ -110,13 +89,13 @@ async function getRemainingCooldown(
  * @param duration - Cooldown duration in milliseconds
  */
 async function setCooldown(
-	userId: string,
-	category: string,
-	duration: number,
+  userId: string,
+  category: string,
+  duration: number,
 ): Promise<void> {
-	const expiryTime = Date.now() + duration;
+  const expiryTime = Date.now() + duration;
 
-	await sql`
+  await sql`
     INSERT INTO cooldowns (
       cooldown_type,
       user_disc_id,
@@ -135,242 +114,242 @@ async function setCooldown(
 }
 
 const handler = async (
-	client: Client,
-	interaction: Interaction,
+  client: Client,
+  interaction: Interaction,
 ): Promise<void> => {
-	if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand()) return;
 
-	// Determine locale early for potential error messages
-	const initialLocale =
-		interaction.locale ?? interaction.guildLocale ?? "en-US";
+  // Determine locale early for potential error messages
+  const initialLocale =
+    interaction.locale ?? interaction.guildLocale ?? "en-US";
 
-	try {
-		// 1. Load command data on first run if cache is empty
-		if (!executionMap || !cooldownMap) {
-			log.info("Initializing command execution maps...");
-			const loadedData = await loadCommandData();
-			executionMap = loadedData.executionMap;
-			cooldownMap = loadedData.cooldownMap;
+  try {
+    // 1. Load command data on first run if cache is empty
+    if (!executionMap || !cooldownMap) {
+      log.info("Initializing command execution maps...");
+      const loadedData = await loadCommandData();
+      executionMap = loadedData.executionMap;
+      cooldownMap = loadedData.cooldownMap;
 
-			// Use our existing cooldown values if none were provided from commands
-			if (cooldownMap.size === 0) {
-				for (const [category, duration] of COOLDOWN_MAP.entries()) {
-					cooldownMap.set(category, duration);
-				}
-			}
+      // Use our existing cooldown values if none were provided from commands
+      if (cooldownMap.size === 0) {
+        for (const [category, duration] of COOLDOWN_MAP.entries()) {
+          cooldownMap.set(category, duration);
+        }
+      }
 
-			log.success("Command execution maps initialized.");
-		}
+      log.success("Command execution maps initialized.");
+    }
 
-		// 2. Get command, group, and subcommand names
-		const commandName = interaction.commandName; // The top-level command (category)
-		const groupName = interaction.options.getSubcommandGroup(false); // The subcommand group (null for flat commands)
-		const subcommandName = interaction.options.getSubcommand(false); // The specific subcommand (may be null)
+    // 2. Get command, group, and subcommand names
+    const commandName = interaction.commandName; // The top-level command (category)
+    const groupName = interaction.options.getSubcommandGroup(false); // The subcommand group (null for flat commands)
+    const subcommandName = interaction.options.getSubcommand(false); // The specific subcommand (may be null)
 
-		// Guild-only subcommand restrictions are now handled at the Discord registration level
-		// Commands in guild-only categories (like "server") are automatically restricted to guilds
+    // Guild-only subcommand restrictions are now handled at the Discord registration level
+    // Commands in guild-only categories (like "server") are automatically restricted to guilds
 
-		// 3. Find the execute function
-		const subcommandMap = executionMap.get(commandName);
-		if (!subcommandMap) {
-			// Top-level command not found
-			log.warn(`Command category not found: ${commandName}`);
-			await replyInfoEmbed(
-				interaction,
-				initialLocale,
-				{
-					titleKey: "general.errors.unknown_error_title",
-					descriptionKey: "general.errors.unknown_error_description",
-					color: ColorCode.ERROR,
-				},
-				MessageFlags.Ephemeral,
-			);
-			return;
-		}
+    // 3. Find the execute function
+    const subcommandMap = executionMap.get(commandName);
+    if (!subcommandMap) {
+      // Top-level command not found
+      log.warn(`Command category not found: ${commandName}`);
+      await replyInfoEmbed(
+        interaction,
+        initialLocale,
+        {
+          titleKey: "general.errors.unknown_error_title",
+          descriptionKey: "general.errors.unknown_error_description",
+          color: ColorCode.ERROR,
+        },
+        MessageFlags.Ephemeral,
+      );
+      return;
+    }
 
-		// If no subcommand was specified but we require one
-		if (!subcommandName) {
-			log.warn(`No subcommand specified for category: ${commandName}`);
-			await replyInfoEmbed(
-				interaction,
-				initialLocale,
-				{
-					titleKey: "general.errors.unknown_error_title",
-					descriptionKey: "general.errors.unknown_error_description",
-					color: ColorCode.ERROR,
-				},
-				MessageFlags.Ephemeral,
-			);
-			return;
-		}
+    // If no subcommand was specified but we require one
+    if (!subcommandName) {
+      log.warn(`No subcommand specified for category: ${commandName}`);
+      await replyInfoEmbed(
+        interaction,
+        initialLocale,
+        {
+          titleKey: "general.errors.unknown_error_title",
+          descriptionKey: "general.errors.unknown_error_description",
+          color: ColorCode.ERROR,
+        },
+        MessageFlags.Ephemeral,
+      );
+      return;
+    }
 
-		// Build execution key based on whether command is grouped or flat
-		const executionKey = groupName
-			? `${groupName}.${subcommandName}`
-			: subcommandName;
+    // Build execution key based on whether command is grouped or flat
+    const executionKey = groupName
+      ? `${groupName}.${subcommandName}`
+      : subcommandName;
 
-		// Get the execute function for this subcommand
-		const executeFunction = subcommandMap.get(executionKey);
-		if (!executeFunction) {
-			const fullCommandPath = groupName
-				? `${commandName} ${groupName} ${subcommandName}`
-				: `${commandName} ${subcommandName}`;
-			log.warn(`Subcommand not found: ${fullCommandPath}`);
-			await replyInfoEmbed(
-				interaction,
-				initialLocale,
-				{
-					titleKey: "general.errors.unknown_error_title",
-					descriptionKey: "general.errors.unknown_error_description",
-					color: ColorCode.ERROR,
-				},
-				MessageFlags.Ephemeral,
-			);
-			return;
-		}
+    // Get the execute function for this subcommand
+    const executeFunction = subcommandMap.get(executionKey);
+    if (!executeFunction) {
+      const fullCommandPath = groupName
+        ? `${commandName} ${groupName} ${subcommandName}`
+        : `${commandName} ${subcommandName}`;
+      log.warn(`Subcommand not found: ${fullCommandPath}`);
+      await replyInfoEmbed(
+        interaction,
+        initialLocale,
+        {
+          titleKey: "general.errors.unknown_error_title",
+          descriptionKey: "general.errors.unknown_error_description",
+          color: ColorCode.ERROR,
+        },
+        MessageFlags.Ephemeral,
+      );
+      return;
+    }
 
-		// --- Start of main logic execution with timeout ---
-		const mainLogicPromise = async () => {
-			// 4. Check cooldowns based on the category (top-level command)
-			// Use DEFAULT_COOLDOWN if no specific cooldown is defined for this category
-			const cooldownDuration =
-				// biome-ignore lint/style/noNonNullAssertion: We've checked it's not null before entering this block
-				cooldownMap!.get(commandName) ?? DEFAULT_COOLDOWN;
+    // --- Start of main logic execution with timeout ---
+    const mainLogicPromise = async () => {
+      // 4. Check cooldowns based on the category (top-level command)
+      // Use DEFAULT_COOLDOWN if no specific cooldown is defined for this category
+      const cooldownDuration =
+        // biome-ignore lint/style/noNonNullAssertion: We've checked it's not null before entering this block
+        cooldownMap!.get(commandName) ?? DEFAULT_COOLDOWN;
 
-			// Check if user is on cooldown for this command category
-			const isOnCooldown = await checkCooldown(
-				interaction.user.id,
-				commandName,
-			);
-			if (isOnCooldown) {
-				const remainingSeconds = await getRemainingCooldown(
-					interaction.user.id,
-					commandName,
-				);
-				await replyInfoEmbed(
-					interaction,
-					initialLocale,
-					{
-						titleKey: "general.cooldown_title",
-						descriptionKey: "general.cooldown",
-						descriptionVars: {
-							seconds: remainingSeconds,
-							category: commandName,
-						},
-						color: ColorCode.WARN,
-					},
-					MessageFlags.Ephemeral,
-				);
-				return;
-			}
+      // Check if user is on cooldown for this command category
+      const isOnCooldown = await checkCooldown(
+        interaction.user.id,
+        commandName,
+      );
+      if (isOnCooldown) {
+        const remainingSeconds = await getRemainingCooldown(
+          interaction.user.id,
+          commandName,
+        );
+        await replyInfoEmbed(
+          interaction,
+          initialLocale,
+          {
+            titleKey: "general.cooldown_title",
+            descriptionKey: "general.cooldown",
+            descriptionVars: {
+              seconds: remainingSeconds,
+              category: commandName,
+            },
+            color: ColorCode.WARN,
+          },
+          MessageFlags.Ephemeral,
+        );
+        return;
+      }
 
-			// Set new cooldown for this command category
-			await setCooldown(interaction.user.id, commandName, cooldownDuration);
+      // Set new cooldown for this command category
+      await setCooldown(interaction.user.id, commandName, cooldownDuration);
 
-			// 5. Get or create user data
-			let userData: UserRow | undefined;
-			const [existingUser] = await sql`
+      // 5. Get or create user data
+      let userData: UserRow | undefined;
+      const [existingUser] = await sql`
         SELECT * FROM users WHERE user_disc_id = ${interaction.user.id}
       `;
 
-			if (existingUser) {
-				userData = userSchema.parse(existingUser);
-			} else {
-				// Get locale to use for new user (works for both guilds and DMs)
-				const userLanguage = interaction.locale;
+      if (existingUser) {
+        userData = userSchema.parse(existingUser);
+      } else {
+        // Get locale to use for new user (works for both guilds and DMs)
+        const userLanguage = interaction.locale;
 
-				// Use the registerUser helper (Rule #17) - works for both guild and DM contexts
-				const registeredUser = await registerUser(
-					interaction.user.id,
-					interaction.user.username,
-					userLanguage,
-				);
+        // Use the registerUser helper (Rule #17) - works for both guild and DM contexts
+        const registeredUser = await registerUser(
+          interaction.user.id,
+          interaction.user.username,
+          userLanguage,
+        );
 
-				if (registeredUser) {
-					userData = registeredUser;
-				}
-			}
+        if (registeredUser) {
+          userData = registeredUser;
+        }
+      }
 
-			// Get the final locale once user data is potentially available
-			const finalLocale =
-				userData?.language_pref ?? interaction.guildLocale ?? "en-US";
+      // Get the final locale once user data is potentially available
+      const finalLocale =
+        userData?.language_pref ?? interaction.guildLocale ?? "en-US";
 
-			// 6. Execute command
-			if (userData) {
-				await executeFunction(client, interaction, userData, finalLocale);
-			} else {
-				// Handle case where user data couldn't be obtained
-				const context: ErrorContext = {
-					errorType: "UserDataError",
-					metadata: {
-						userDiscordId: interaction.user.id,
-						command: `${commandName} ${subcommandName}`,
-					},
-				};
-				await log.error(
-					"User data unavailable for command execution",
-					undefined,
-					context,
-				);
+      // 6. Execute command
+      if (userData) {
+        await executeFunction(client, interaction, userData, finalLocale);
+      } else {
+        // Handle case where user data couldn't be obtained
+        const context: ErrorContext = {
+          errorType: "UserDataError",
+          metadata: {
+            userDiscordId: interaction.user.id,
+            command: `${commandName} ${subcommandName}`,
+          },
+        };
+        await log.error(
+          "User data unavailable for command execution",
+          undefined,
+          context,
+        );
 
-				await replyInfoEmbed(interaction, finalLocale, {
-					titleKey: "general.errors.unknown_error_title",
-					descriptionKey: "general.errors.unknown_error_description",
-					color: ColorCode.ERROR,
-				});
-			}
-		};
+        await replyInfoEmbed(interaction, finalLocale, {
+          titleKey: "general.errors.unknown_error_title",
+          descriptionKey: "general.errors.unknown_error_description",
+          color: ColorCode.ERROR,
+        });
+      }
+    };
 
-		// Execute main command logic
-		// Discord handles interaction timeouts natively, and helper functions
-		// (awaitModalSubmit, awaitMessageComponent) have their own timeouts
-		await mainLogicPromise();
-	} catch (error) {
-		// Log error with structured context (Rule #22)
-		const context: ErrorContext = {
-			errorType: "CommandHandlingError",
-			metadata: {
-				commandName: interaction.commandName,
-				groupName: interaction.options.getSubcommandGroup(false) ?? "none",
-				subcommandName: interaction.options.getSubcommand(false),
-				userDiscordId: interaction.user.id,
-				guildDiscordId: interaction.guild?.id ?? "DM",
-			},
-		};
-		await log.error(
-			`Error in command handler for: ${interaction.commandName}`,
-			error,
-			context,
-		);
+    // Execute main command logic
+    // Discord handles interaction timeouts natively, and helper functions
+    // (awaitModalSubmit, awaitMessageComponent) have their own timeouts
+    await mainLogicPromise();
+  } catch (error) {
+    // Log error with structured context (Rule #22)
+    const context: ErrorContext = {
+      errorType: "CommandHandlingError",
+      metadata: {
+        commandName: interaction.commandName,
+        groupName: interaction.options.getSubcommandGroup(false) ?? "none",
+        subcommandName: interaction.options.getSubcommand(false),
+        userDiscordId: interaction.user.id,
+        guildDiscordId: interaction.guild?.id ?? "DM",
+      },
+    };
+    await log.error(
+      `Error in command handler for: ${interaction.commandName}`,
+      error,
+      context,
+    );
 
-		// Reply to user with enhanced defensive error handling
-		// The improved replyInfoEmbed function can now handle various interaction states more robustly
-		try {
-			// Always attempt to use the helper function - it will handle the interaction state internally
-			await replyInfoEmbed(interaction, initialLocale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-			});
-		} catch (replyError) {
-			// If helper function completely fails, log comprehensive error information
-			log.error(
-				"Command handler error reply failed completely:",
-				{
-					originalError: error,
-					replyError: replyError,
-					interactionState: {
-						id: interaction.id,
-						commandName: interaction.commandName,
-						deferred: interaction.deferred,
-						replied: interaction.replied,
-						user: interaction.user.id,
-					},
-				},
-				context,
-			);
-		}
-	}
+    // Reply to user with enhanced defensive error handling
+    // The improved replyInfoEmbed function can now handle various interaction states more robustly
+    try {
+      // Always attempt to use the helper function - it will handle the interaction state internally
+      await replyInfoEmbed(interaction, initialLocale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+    } catch (replyError) {
+      // If helper function completely fails, log comprehensive error information
+      log.error(
+        "Command handler error reply failed completely:",
+        {
+          originalError: error,
+          replyError: replyError,
+          interactionState: {
+            id: interaction.id,
+            commandName: interaction.commandName,
+            deferred: interaction.deferred,
+            replied: interaction.replied,
+            user: interaction.user.id,
+          },
+        },
+        context,
+      );
+    }
+  }
 };
 
 export default handler;

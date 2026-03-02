@@ -1,32 +1,32 @@
 import { sql, withCachedPlanRetry } from "@/utils/db/client";
 import {
-	tomoriStateSchema,
-	userSchema,
-	serverEmojiSchema,
-	personalMemorySchema,
-	personaConfigSchema,
-	type TomoriState,
-	type TomoriRow,
-	type UserRow,
-	type ServerEmojiRow,
-	type LlmRow,
-	type PersonalMemoryRow,
-	type PersonaConfigRow,
-	llmSchema,
-	type EmbeddingModelRow,
-	embeddingModelSchema,
-	type ServerStickerRow,
-	serverStickerSchema,
-	reminderSchema,
-	type ReminderRow,
-	type TomoriPresetRow,
-	type SystemPromptPresetRow,
-	type ApiKeyRotationRow,
-	apiKeyRotationSchema,
-	randomTriggerSchema,
-	type RandomTriggerRow,
-	naiPresetSchema,
-	type NaiPresetRow,
+  tomoriStateSchema,
+  userSchema,
+  serverEmojiSchema,
+  personalMemorySchema,
+  personaConfigSchema,
+  type TomoriState,
+  type TomoriRow,
+  type UserRow,
+  type ServerEmojiRow,
+  type LlmRow,
+  type PersonalMemoryRow,
+  type PersonaConfigRow,
+  llmSchema,
+  type EmbeddingModelRow,
+  embeddingModelSchema,
+  type ServerStickerRow,
+  serverStickerSchema,
+  reminderSchema,
+  type ReminderRow,
+  type TomoriPresetRow,
+  type SystemPromptPresetRow,
+  type ApiKeyRotationRow,
+  apiKeyRotationSchema,
+  randomTriggerSchema,
+  type RandomTriggerRow,
+  naiPresetSchema,
+  type NaiPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
@@ -39,32 +39,32 @@ import { getCachedLLM } from "../cache/llmCache";
  * @returns Array of validated NaiPresetRow objects, or empty array on error
  */
 export async function loadNaiPresetsForModel(
-	target: "kayra" | "erato",
+  target: "kayra" | "erato",
 ): Promise<NaiPresetRow[]> {
-	try {
-		const rows = await sql`
+  try {
+    const rows = await sql`
 			SELECT * FROM nai_presets
 			WHERE model_target = ${target}
 			ORDER BY is_default DESC, preset_name ASC
 		`;
 
-		const presets: NaiPresetRow[] = [];
-		for (const row of rows) {
-			const parsed = naiPresetSchema.safeParse(row);
-			if (parsed.success) {
-				presets.push(parsed.data);
-			} else {
-				log.warn(
-					`Invalid nai_preset row for target ${target}:`,
-					parsed.error.flatten(),
-				);
-			}
-		}
-		return presets;
-	} catch (error) {
-		log.error(`Error loading NAI presets for model target ${target}:`, error);
-		return [];
-	}
+    const presets: NaiPresetRow[] = [];
+    for (const row of rows) {
+      const parsed = naiPresetSchema.safeParse(row);
+      if (parsed.success) {
+        presets.push(parsed.data);
+      } else {
+        log.warn(
+          `Invalid nai_preset row for target ${target}:`,
+          parsed.error.flatten(),
+        );
+      }
+    }
+    return presets;
+  } catch (error) {
+    log.error(`Error loading NAI presets for model target ${target}:`, error);
+    return [];
+  }
 }
 
 /**
@@ -74,11 +74,11 @@ export async function loadNaiPresetsForModel(
  * @returns The validated TomoriState object, or null if not found or invalid.
  */
 export async function loadTomoriState(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<TomoriState | null> {
-	try {
-		// 1. Load main persona row using server Discord ID
-		const tomoriRows = await sql`
+  try {
+    // 1. Load main persona row using server Discord ID
+    const tomoriRows = await sql`
 			SELECT t.* 
 			FROM tomoris t
 			JOIN servers s ON t.server_id = s.server_id
@@ -87,97 +87,97 @@ export async function loadTomoriState(
 			LIMIT 1
 		`;
 
-		if (!tomoriRows.length) {
-			log.warn(`No Tomori instance found for server ${serverDiscId}`);
-			return null;
-		}
-		const tomoriData = tomoriRows[0];
+    if (!tomoriRows.length) {
+      log.warn(`No Tomori instance found for server ${serverDiscId}`);
+      return null;
+    }
+    const tomoriData = tomoriRows[0];
 
-		// 2. Load associated config using server_id (server-scoped config)
-		// biome-ignore lint/style/noNonNullAssertion: Row existence checked above, ID is guaranteed by DB schema.
-		const tomoriId = tomoriData.tomori_id!;
-		const serverId = tomoriData.server_id;
-		let configRows = await sql`
+    // 2. Load associated config using server_id (server-scoped config)
+    // biome-ignore lint/style/noNonNullAssertion: Row existence checked above, ID is guaranteed by DB schema.
+    const tomoriId = tomoriData.tomori_id!;
+    const serverId = tomoriData.server_id;
+    let configRows = await sql`
 			SELECT * FROM tomori_configs
 			WHERE server_id = ${serverId}
 			LIMIT 1
 		`;
 
-		// Backward compatibility: fall back to tomori_id if server_id config missing
-		if (!configRows.length) {
-			log.warn(
-				`No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${tomoriId}`,
-			);
-			configRows = await sql`
+    // Backward compatibility: fall back to tomori_id if server_id config missing
+    if (!configRows.length) {
+      log.warn(
+        `No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${tomoriId}`,
+      );
+      configRows = await sql`
 				SELECT * FROM tomori_configs
 				WHERE tomori_id = ${tomoriId}
 				LIMIT 1
 			`;
-		}
+    }
 
-		if (!configRows.length) {
-			log.error(
-				`Found Tomori (${tomoriId}) but no config for server ${serverDiscId}`,
-			);
-			return null;
-		}
-		const configData = configRows[0];
+    if (!configRows.length) {
+      log.error(
+        `Found Tomori (${tomoriId}) but no config for server ${serverDiscId}`,
+      );
+      return null;
+    }
+    const configData = configRows[0];
 
-		// 3. Load LLM data using the llm_id from the config (with cache fallback)
-		let llmData = getCachedLLM(configData.llm_id);
+    // 3. Load LLM data using the llm_id from the config (with cache fallback)
+    let llmData = getCachedLLM(configData.llm_id);
 
-		// Fallback to database if cache miss (cache not initialized or LLM not found)
-		if (!llmData) {
-			log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
-			const llmRows = await sql`
+    // Fallback to database if cache miss (cache not initialized or LLM not found)
+    if (!llmData) {
+      log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
+      const llmRows = await sql`
 				SELECT * FROM llms
 				WHERE llm_id = ${configData.llm_id}
 				LIMIT 1
 			`;
 
-			if (!llmRows.length) {
-				log.error(
-					`Found Tomori config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
-				);
-				return null;
-			}
-			llmData = llmRows[0] as LlmRow;
-		}
+      if (!llmRows.length) {
+        log.error(
+          `Found Tomori config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
+        );
+        return null;
+      }
+      llmData = llmRows[0] as LlmRow;
+    }
 
-		// 4. Load persona-scoped trigger words + optional persona prompt
-		const personaConfigRows = await sql`
+    // 4. Load persona-scoped trigger words + optional persona prompt
+    const personaConfigRows = await sql`
 			SELECT *
 			FROM persona_configs
 			WHERE tomori_id = ${tomoriId}
 			LIMIT 1
 		`;
-		let personaConfig: PersonaConfigRow | null = null;
-		if (personaConfigRows.length > 0) {
-			const parsedPersonaConfig = personaConfigSchema.safeParse(
-				personaConfigRows[0],
-			);
-			if (parsedPersonaConfig.success) {
-				personaConfig = parsedPersonaConfig.data;
-			} else {
-				log.warn(
-					`Invalid persona config row for tomori ${tomoriId}:`,
-					parsedPersonaConfig.error.flatten(),
-				);
-			}
-		}
+    let personaConfig: PersonaConfigRow | null = null;
+    if (personaConfigRows.length > 0) {
+      const parsedPersonaConfig = personaConfigSchema.safeParse(
+        personaConfigRows[0],
+      );
+      if (parsedPersonaConfig.success) {
+        personaConfig = parsedPersonaConfig.data;
+      } else {
+        log.warn(
+          `Invalid persona config row for tomori ${tomoriId}:`,
+          parsedPersonaConfig.error.flatten(),
+        );
+      }
+    }
 
-		// 5. Load server memories scoped by persona lineage.
-		const rawLineageId = tomoriData.persona_lineage_id;
-		const parsedPersonaLineageId =
-			typeof rawLineageId === "bigint"
-				? Number(rawLineageId)
-				: typeof rawLineageId === "string"
-					? Number(rawLineageId)
-					: (rawLineageId ?? 0);
-		const personaLineageId = Number.isFinite(parsedPersonaLineageId)
-			? parsedPersonaLineageId
-			: 0;
-		const serverMemoriesRows = await sql`
+    // 5. Load server memories scoped by persona lineage.
+    const rawLineageId = tomoriData.persona_lineage_id;
+    const parsedPersonaLineageId =
+      typeof rawLineageId === "bigint"
+        ? Number(rawLineageId)
+        : typeof rawLineageId === "string"
+          ? Number(rawLineageId)
+          : (rawLineageId ?? 0);
+    const personaLineageId = Number.isFinite(parsedPersonaLineageId)
+      ? parsedPersonaLineageId
+      : 0;
+    const serverMemoriesRows = await sql`
 			SELECT content
 			FROM server_memories
 			WHERE server_id = ${tomoriData.server_id}
@@ -185,87 +185,87 @@ export async function loadTomoriState(
 			ORDER BY created_at DESC
 		`;
 
-		// Extract memory content strings into an array
-		const serverMemories = serverMemoriesRows.map(
-			(row: { content: string }) => row.content,
-		);
+    // Extract memory content strings into an array
+    const serverMemories = serverMemoriesRows.map(
+      (row: { content: string }) => row.content,
+    );
 
-		// 6. Load API key rotation pool for this server (if any)
-		const rotationKeysRows = await sql`
+    // 6. Load API key rotation pool for this server (if any)
+    const rotationKeysRows = await sql`
 			SELECT * FROM api_key_rotation
 			WHERE server_id = ${tomoriData.server_id}
 			ORDER BY usage_count ASC, rotation_key_id ASC
 		`;
 
-		// Validate rotation keys
-		const rotationKeys: ApiKeyRotationRow[] = [];
-		for (const row of rotationKeysRows) {
-			const parsed = apiKeyRotationSchema.safeParse(row);
-			if (parsed.success) {
-				rotationKeys.push(parsed.data);
-			} else {
-				const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-				log.warn(
-					`Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
-				);
-			}
-		}
+    // Validate rotation keys
+    const rotationKeys: ApiKeyRotationRow[] = [];
+    for (const row of rotationKeysRows) {
+      const parsed = apiKeyRotationSchema.safeParse(row);
+      if (parsed.success) {
+        rotationKeys.push(parsed.data);
+      } else {
+        const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
+        log.warn(
+          `Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
+        );
+      }
+    }
 
-		// 7. Load active NAI preset if one is configured for this server
-		let naiPreset: NaiPresetRow | undefined;
-		const presetName = configData.nai_preset_name;
-		if (presetName) {
-			const presetRows = await sql`
+    // 7. Load active NAI preset if one is configured for this server
+    let naiPreset: NaiPresetRow | undefined;
+    const presetName = configData.nai_preset_name;
+    if (presetName) {
+      const presetRows = await sql`
 				SELECT * FROM nai_presets
 				WHERE preset_name = ${presetName}
 				LIMIT 1
 			`;
-			if (presetRows.length > 0) {
-				const parsedPreset = naiPresetSchema.safeParse(presetRows[0]);
-				if (parsedPreset.success) {
-					naiPreset = parsedPreset.data;
-				} else {
-					log.warn(
-						`Invalid nai_preset row for preset "${presetName}":`,
-						parsedPreset.error.flatten(),
-					);
-				}
-			}
-		}
+      if (presetRows.length > 0) {
+        const parsedPreset = naiPresetSchema.safeParse(presetRows[0]);
+        if (parsedPreset.success) {
+          naiPreset = parsedPreset.data;
+        } else {
+          log.warn(
+            `Invalid nai_preset row for preset "${presetName}":`,
+            parsedPreset.error.flatten(),
+          );
+        }
+      }
+    }
 
-		// 8. Combine and validate the full state
-		const fallbackTriggerWords =
-			tomoriData.is_alter === true
-				? (tomoriData.alter_triggers ?? [])
-				: (configData.trigger_words ?? []);
-		const combinedState = {
-			...tomoriData,
-			config: configData,
-			llm: llmData, // Add the LLM data to match schema
-			trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
-			persona_prompt: personaConfig?.persona_prompt ?? null,
-			server_memories: serverMemories, // Add server memories to the state
-			rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
-			nai_preset: naiPreset, // Active NAI sampling preset (undefined when not configured)
-		};
+    // 8. Combine and validate the full state
+    const fallbackTriggerWords =
+      tomoriData.is_alter === true
+        ? (tomoriData.alter_triggers ?? [])
+        : (configData.trigger_words ?? []);
+    const combinedState = {
+      ...tomoriData,
+      config: configData,
+      llm: llmData, // Add the LLM data to match schema
+      trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
+      persona_prompt: personaConfig?.persona_prompt ?? null,
+      server_memories: serverMemories, // Add server memories to the state
+      rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
+      nai_preset: naiPreset, // Active NAI sampling preset (undefined when not configured)
+    };
 
-		// Use Zod to parse and validate the combined structure
-		const parsedState = tomoriStateSchema.safeParse(combinedState);
+    // Use Zod to parse and validate the combined structure
+    const parsedState = tomoriStateSchema.safeParse(combinedState);
 
-		if (!parsedState.success) {
-			log.error(
-				`Failed to validate combined Tomori state for server ${serverDiscId}:`,
-				parsedState.error.flatten(),
-			);
-			return null;
-		}
+    if (!parsedState.success) {
+      log.error(
+        `Failed to validate combined Tomori state for server ${serverDiscId}:`,
+        parsedState.error.flatten(),
+      );
+      return null;
+    }
 
-		// Return the validated, combined state object
-		return parsedState.data;
-	} catch (error) {
-		log.error(`Error loading tomori state for server ${serverDiscId}:`, error);
-		return null;
-	}
+    // Return the validated, combined state object
+    return parsedState.data;
+  } catch (error) {
+    log.error(`Error loading tomori state for server ${serverDiscId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -277,13 +277,13 @@ export async function loadTomoriState(
  * @returns Array of validated TomoriState objects (main first, then alters), or empty array if error/not found.
  */
 export async function loadAllPersonasForServer(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<TomoriState[]> {
-	return (
-		(await withCachedPlanRetry(async () => {
-			try {
-				// 1. Load all Tomori persona rows for this server (main first, then alters)
-				const tomoriRows = await sql`
+  return (
+    (await withCachedPlanRetry(async () => {
+      try {
+        // 1. Load all Tomori persona rows for this server (main first, then alters)
+        const tomoriRows = await sql`
 					SELECT t.*
 					FROM tomoris t
 					JOIN servers s ON t.server_id = s.server_id
@@ -291,223 +291,229 @@ export async function loadAllPersonasForServer(
 					ORDER BY t.is_alter ASC, t.updated_at DESC NULLS LAST, t.tomori_id DESC
 				`;
 
-				if (!tomoriRows.length) {
-					log.warn(`No personas found for server ${serverDiscId}`);
-					return [];
-				}
+        if (!tomoriRows.length) {
+          log.warn(`No personas found for server ${serverDiscId}`);
+          return [];
+        }
 
-				const serverId = tomoriRows[0].server_id;
+        const serverId = tomoriRows[0].server_id;
 
-				// 2. Load server-scoped config once (fallback to main persona config)
-				let configRows = await sql`
+        // 2. Load server-scoped config once (fallback to main persona config)
+        let configRows = await sql`
 					SELECT * FROM tomori_configs
 					WHERE server_id = ${serverId}
 					LIMIT 1
 				`;
 
-				if (!configRows.length) {
-					const mainTomoriRow =
-						tomoriRows.find((row: TomoriRow) => row.is_alter === false) ??
-						tomoriRows[0];
-					const fallbackTomoriId = mainTomoriRow?.tomori_id;
-					if (fallbackTomoriId) {
-						log.warn(
-							`No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${fallbackTomoriId}`,
-						);
-						configRows = await sql`
+        if (!configRows.length) {
+          const mainTomoriRow =
+            tomoriRows.find((row: TomoriRow) => row.is_alter === false) ??
+            tomoriRows[0];
+          const fallbackTomoriId = mainTomoriRow?.tomori_id;
+          if (fallbackTomoriId) {
+            log.warn(
+              `No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${fallbackTomoriId}`,
+            );
+            configRows = await sql`
 							SELECT * FROM tomori_configs
 							WHERE tomori_id = ${fallbackTomoriId}
 							LIMIT 1
 						`;
-					}
-				}
+          }
+        }
 
-				if (!configRows.length) {
-					log.error(
-						`No config found for server ${serverDiscId}; cannot build persona states`,
-					);
-					return [];
-				}
-				const configData = configRows[0];
+        if (!configRows.length) {
+          log.error(
+            `No config found for server ${serverDiscId}; cannot build persona states`,
+          );
+          return [];
+        }
+        const configData = configRows[0];
 
-				// 3. Load LLM data once (with cache fallback)
-				let llmData = getCachedLLM(configData.llm_id);
-				if (!llmData) {
-					log.info(
-						`Cache miss for LLM ID ${configData.llm_id}, querying database`,
-					);
-					const llmRows = await sql`
+        // 3. Load LLM data once (with cache fallback)
+        let llmData = getCachedLLM(configData.llm_id);
+        if (!llmData) {
+          log.info(
+            `Cache miss for LLM ID ${configData.llm_id}, querying database`,
+          );
+          const llmRows = await sql`
 						SELECT * FROM llms
 						WHERE llm_id = ${configData.llm_id}
 						LIMIT 1
 					`;
 
-					if (!llmRows.length) {
-						log.error(
-							`Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
-						);
-						return [];
-					}
-					llmData = llmRows[0] as LlmRow;
-				}
+          if (!llmRows.length) {
+            log.error(
+              `Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
+            );
+            return [];
+          }
+          llmData = llmRows[0] as LlmRow;
+        }
 
-				// 4. Load rotation keys once (server-scoped)
-				const rotationKeysRows = await sql`
+        // 4. Load rotation keys once (server-scoped)
+        const rotationKeysRows = await sql`
 					SELECT * FROM api_key_rotation
 					WHERE server_id = ${serverId}
 					ORDER BY usage_count ASC, rotation_key_id ASC
 				`;
 
-				const rotationKeys: ApiKeyRotationRow[] = [];
-				for (const row of rotationKeysRows) {
-					const parsed = apiKeyRotationSchema.safeParse(row);
-					if (parsed.success) {
-						rotationKeys.push(parsed.data);
-					} else {
-						const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-						log.warn(
-							`Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
-						);
-					}
-				}
+        const rotationKeys: ApiKeyRotationRow[] = [];
+        for (const row of rotationKeysRows) {
+          const parsed = apiKeyRotationSchema.safeParse(row);
+          if (parsed.success) {
+            rotationKeys.push(parsed.data);
+          } else {
+            const errorDetails = JSON.stringify(
+              parsed.error.flatten(),
+              null,
+              2,
+            );
+            log.warn(
+              `Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
+            );
+          }
+        }
 
-				// 5. Load persona configs for all personas in this server
-				const personaConfigRows = await sql`
+        // 5. Load persona configs for all personas in this server
+        const personaConfigRows = await sql`
 					SELECT pc.*
 					FROM persona_configs pc
 					JOIN tomoris t ON t.tomori_id = pc.tomori_id
 					WHERE t.server_id = ${serverId}
 				`;
-				const personaConfigMap = new Map<number, PersonaConfigRow>();
-				for (const row of personaConfigRows) {
-					const parsed = personaConfigSchema.safeParse(row);
-					if (parsed.success) {
-						personaConfigMap.set(parsed.data.tomori_id, parsed.data);
-					} else {
-						log.warn(
-							`Invalid persona config row for server ${serverDiscId}:`,
-							parsed.error.flatten(),
-						);
-					}
-				}
+        const personaConfigMap = new Map<number, PersonaConfigRow>();
+        for (const row of personaConfigRows) {
+          const parsed = personaConfigSchema.safeParse(row);
+          if (parsed.success) {
+            personaConfigMap.set(parsed.data.tomori_id, parsed.data);
+          } else {
+            log.warn(
+              `Invalid persona config row for server ${serverDiscId}:`,
+              parsed.error.flatten(),
+            );
+          }
+        }
 
-				// 6. Load server memories once, grouped by persona_lineage_id
-				const memoryRows = await sql<
-					Array<{
-						persona_lineage_id: number | string | bigint | null;
-						content: string;
-					}>
-				>`
+        // 6. Load server memories once, grouped by persona_lineage_id
+        const memoryRows = await sql<
+          Array<{
+            persona_lineage_id: number | string | bigint | null;
+            content: string;
+          }>
+        >`
 					SELECT persona_lineage_id, content
 					FROM server_memories
 					WHERE server_id = ${serverId}
 					ORDER BY created_at DESC
 				`;
-				const memoriesByLineage = new Map<number, string[]>();
-				for (const row of memoryRows) {
-					const lineageId =
-						typeof row.persona_lineage_id === "bigint"
-							? Number(row.persona_lineage_id)
-							: typeof row.persona_lineage_id === "string"
-								? Number(row.persona_lineage_id)
-								: row.persona_lineage_id;
-					if (
-						typeof lineageId !== "number" ||
-						!Number.isFinite(lineageId) ||
-						lineageId < 0
-					) {
-						log.warn(
-							`Skipping server memory with invalid persona_lineage_id for server ${serverDiscId}`,
-						);
-						continue;
-					}
-					const existing = memoriesByLineage.get(lineageId) ?? [];
-					existing.push(row.content);
-					memoriesByLineage.set(lineageId, existing);
-				}
+        const memoriesByLineage = new Map<number, string[]>();
+        for (const row of memoryRows) {
+          const lineageId =
+            typeof row.persona_lineage_id === "bigint"
+              ? Number(row.persona_lineage_id)
+              : typeof row.persona_lineage_id === "string"
+                ? Number(row.persona_lineage_id)
+                : row.persona_lineage_id;
+          if (
+            typeof lineageId !== "number" ||
+            !Number.isFinite(lineageId) ||
+            lineageId < 0
+          ) {
+            log.warn(
+              `Skipping server memory with invalid persona_lineage_id for server ${serverDiscId}`,
+            );
+            continue;
+          }
+          const existing = memoriesByLineage.get(lineageId) ?? [];
+          existing.push(row.content);
+          memoriesByLineage.set(lineageId, existing);
+        }
 
-				// 7. Build persona states
-				const personas: TomoriState[] = [];
-				for (const tomoriRow of tomoriRows) {
-					const tomoriId = tomoriRow.tomori_id;
-					if (!tomoriId) {
-						log.warn(
-							`Skipping persona with missing tomori_id for server ${serverDiscId}`,
-						);
-						continue;
-					}
+        // 7. Build persona states
+        const personas: TomoriState[] = [];
+        for (const tomoriRow of tomoriRows) {
+          const tomoriId = tomoriRow.tomori_id;
+          if (!tomoriId) {
+            log.warn(
+              `Skipping persona with missing tomori_id for server ${serverDiscId}`,
+            );
+            continue;
+          }
 
-					const personaConfig = personaConfigMap.get(tomoriId);
+          const personaConfig = personaConfigMap.get(tomoriId);
 
-					// Resolve persona-specific LLM override if set (cache first, DB fallback)
-					let personaLlm: LlmRow | undefined ;
-					if (personaConfig?.llm_id) {
-						personaLlm = getCachedLLM(personaConfig.llm_id) as LlmRow | undefined;
-						if (!personaLlm) {
-							const personaLlmRows = await sql`
+          // Resolve persona-specific LLM override if set (cache first, DB fallback)
+          let personaLlm: LlmRow | undefined;
+          if (personaConfig?.llm_id) {
+            personaLlm = getCachedLLM(personaConfig.llm_id) as
+              | LlmRow
+              | undefined;
+            if (!personaLlm) {
+              const personaLlmRows = await sql`
 								SELECT * FROM llms WHERE llm_id = ${personaConfig.llm_id} LIMIT 1
 							`;
-							if (personaLlmRows.length) {
-								personaLlm = personaLlmRows[0] as LlmRow;
-							}
-						}
-					}
+              if (personaLlmRows.length) {
+                personaLlm = personaLlmRows[0] as LlmRow;
+              }
+            }
+          }
 
-					const fallbackTriggerWords =
-						tomoriRow.is_alter === true
-							? (tomoriRow.alter_triggers ?? [])
-							: (configData.trigger_words ?? []);
-					const rawPersonaLineageId = tomoriRow.persona_lineage_id;
-					const parsedPersonaLineageId =
-						typeof rawPersonaLineageId === "bigint"
-							? Number(rawPersonaLineageId)
-							: typeof rawPersonaLineageId === "string"
-								? Number(rawPersonaLineageId)
-								: (rawPersonaLineageId ?? 0);
-					const personaLineageId = Number.isFinite(parsedPersonaLineageId)
-						? parsedPersonaLineageId
-						: 0;
-					// Personas sharing lineage intentionally share server memories.
-					const serverMemories = memoriesByLineage.get(personaLineageId) ?? [];
+          const fallbackTriggerWords =
+            tomoriRow.is_alter === true
+              ? (tomoriRow.alter_triggers ?? [])
+              : (configData.trigger_words ?? []);
+          const rawPersonaLineageId = tomoriRow.persona_lineage_id;
+          const parsedPersonaLineageId =
+            typeof rawPersonaLineageId === "bigint"
+              ? Number(rawPersonaLineageId)
+              : typeof rawPersonaLineageId === "string"
+                ? Number(rawPersonaLineageId)
+                : (rawPersonaLineageId ?? 0);
+          const personaLineageId = Number.isFinite(parsedPersonaLineageId)
+            ? parsedPersonaLineageId
+            : 0;
+          // Personas sharing lineage intentionally share server memories.
+          const serverMemories = memoriesByLineage.get(personaLineageId) ?? [];
 
-					const combinedState = {
-						...tomoriRow,
-						config: configData,
-						llm: llmData,
-						trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
-						persona_prompt: personaConfig?.persona_prompt ?? null,
-						server_memories: serverMemories,
-						rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
-						persona_llm: personaLlm, // undefined if no override set
-					};
+          const combinedState = {
+            ...tomoriRow,
+            config: configData,
+            llm: llmData,
+            trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
+            persona_prompt: personaConfig?.persona_prompt ?? null,
+            server_memories: serverMemories,
+            rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
+            persona_llm: personaLlm, // undefined if no override set
+          };
 
-					const parsedState = tomoriStateSchema.safeParse(combinedState);
-					if (!parsedState.success) {
-						log.error(
-							`Failed to validate persona state for server ${serverDiscId}, tomori_id ${tomoriId}:`,
-							parsedState.error.flatten(),
-						);
-						continue;
-					}
+          const parsedState = tomoriStateSchema.safeParse(combinedState);
+          if (!parsedState.success) {
+            log.error(
+              `Failed to validate persona state for server ${serverDiscId}, tomori_id ${tomoriId}:`,
+              parsedState.error.flatten(),
+            );
+            continue;
+          }
 
-					personas.push(parsedState.data);
-				}
+          personas.push(parsedState.data);
+        }
 
-				if (personas.length === 0) {
-					log.warn(`No valid personas found for server ${serverDiscId}`);
-					return [];
-				}
+        if (personas.length === 0) {
+          log.warn(`No valid personas found for server ${serverDiscId}`);
+          return [];
+        }
 
-				return personas;
-		} catch (error) {
-			log.error(
-				`Error loading all personas for server ${serverDiscId}:`,
-				error,
-			);
-			return [];
-		}
-	}, `load all personas for server ${serverDiscId}`)) ?? []
-	);
+        return personas;
+      } catch (error) {
+        log.error(
+          `Error loading all personas for server ${serverDiscId}:`,
+          error,
+        );
+        return [];
+      }
+    }, `load all personas for server ${serverDiscId}`)) ?? []
+  );
 }
 
 /**
@@ -516,36 +522,36 @@ export async function loadAllPersonasForServer(
  * @returns UserRow object or null if not found or invalid.
  */
 export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
-	return await withCachedPlanRetry(async () => {
-		try {
-			const rows = await sql`
+  return await withCachedPlanRetry(async () => {
+    try {
+      const rows = await sql`
 				SELECT * FROM users
 				WHERE user_disc_id = ${userDiscId}
 				LIMIT 1
 			`;
 
-			if (!rows.length) {
-				// It's common for users not to exist yet, so use info level
-				log.info(`No user data found for ID ${userDiscId}.`);
-				return null;
-			}
+      if (!rows.length) {
+        // It's common for users not to exist yet, so use info level
+        log.info(`No user data found for ID ${userDiscId}.`);
+        return null;
+      }
 
-			// Validate the row against the schema
-			const parsedUser = userSchema.safeParse(rows[0]);
-			if (!parsedUser.success) {
-				log.error(
-					`Failed to validate user data for ID ${userDiscId}:`,
-					parsedUser.error.flatten(),
-				);
-				return null;
-			}
+      // Validate the row against the schema
+      const parsedUser = userSchema.safeParse(rows[0]);
+      if (!parsedUser.success) {
+        log.error(
+          `Failed to validate user data for ID ${userDiscId}:`,
+          parsedUser.error.flatten(),
+        );
+        return null;
+      }
 
-			return parsedUser.data;
-		} catch (error) {
-			log.error(`Error loading user row for ID ${userDiscId}:`, error);
-			return null;
-		}
-	}, `load user row for ID ${userDiscId}`);
+      return parsedUser.data;
+    } catch (error) {
+      log.error(`Error loading user row for ID ${userDiscId}:`, error);
+      return null;
+    }
+  }, `load user row for ID ${userDiscId}`);
 }
 
 /**
@@ -554,34 +560,34 @@ export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
  * @returns PersonaConfigRow or null if not found/invalid.
  */
 export async function loadPersonaConfigRow(
-	tomoriId: number,
+  tomoriId: number,
 ): Promise<PersonaConfigRow | null> {
-	try {
-		const rows = await sql`
+  try {
+    const rows = await sql`
 			SELECT *
 			FROM persona_configs
 			WHERE tomori_id = ${tomoriId}
 			LIMIT 1
 		`;
 
-		if (!rows.length) {
-			return null;
-		}
+    if (!rows.length) {
+      return null;
+    }
 
-		const parsed = personaConfigSchema.safeParse(rows[0]);
-		if (!parsed.success) {
-			log.warn(
-				`Failed to validate persona config for tomori ${tomoriId}:`,
-				parsed.error.flatten(),
-			);
-			return null;
-		}
+    const parsed = personaConfigSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(
+        `Failed to validate persona config for tomori ${tomoriId}:`,
+        parsed.error.flatten(),
+      );
+      return null;
+    }
 
-		return parsed.data;
-	} catch (error) {
-		log.error(`Error loading persona config for tomori ${tomoriId}:`, error);
-		return null;
-	}
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading persona config for tomori ${tomoriId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -594,14 +600,14 @@ export async function loadPersonaConfigRow(
  * @returns Array of validated personal memory rows, newest first.
  */
 export async function loadPersonalMemoriesForUserLineage(
-	userId: number,
-	personaLineageId: number,
-	includeGlobalMemories = true,
+  userId: number,
+  personaLineageId: number,
+  includeGlobalMemories = true,
 ): Promise<PersonalMemoryRow[]> {
-	try {
-		const rows =
-			includeGlobalMemories && personaLineageId !== 0
-				? await sql`
+  try {
+    const rows =
+      includeGlobalMemories && personaLineageId !== 0
+        ? await sql`
 					SELECT *
 					FROM personal_memories
 					WHERE user_id = ${userId}
@@ -611,7 +617,7 @@ export async function loadPersonalMemoriesForUserLineage(
 					  )
 					ORDER BY created_at DESC, personal_memory_id DESC
 				`
-				: await sql`
+        : await sql`
 					SELECT *
 					FROM personal_memories
 					WHERE user_id = ${userId}
@@ -619,27 +625,27 @@ export async function loadPersonalMemoriesForUserLineage(
 					ORDER BY created_at DESC, personal_memory_id DESC
 				`;
 
-		const parsedRows: PersonalMemoryRow[] = [];
-		for (const row of rows) {
-			const parsed = personalMemorySchema.safeParse(row);
-			if (parsed.success) {
-				parsedRows.push(parsed.data);
-			} else {
-				log.warn(
-					`Skipping invalid personal memory row for user ${userId}:`,
-					parsed.error.flatten(),
-				);
-			}
-		}
+    const parsedRows: PersonalMemoryRow[] = [];
+    for (const row of rows) {
+      const parsed = personalMemorySchema.safeParse(row);
+      if (parsed.success) {
+        parsedRows.push(parsed.data);
+      } else {
+        log.warn(
+          `Skipping invalid personal memory row for user ${userId}:`,
+          parsed.error.flatten(),
+        );
+      }
+    }
 
-		return parsedRows;
-	} catch (error) {
-		log.error(
-			`Error loading personal memories for user ${userId} and lineage ${personaLineageId}:`,
-			error,
-		);
-		return [];
-	}
+    return parsedRows;
+  } catch (error) {
+    log.error(
+      `Error loading personal memories for user ${userId} and lineage ${personaLineageId}:`,
+      error,
+    );
+    return [];
+  }
 }
 
 /**
@@ -649,12 +655,12 @@ export async function loadPersonalMemoriesForUserLineage(
  * @returns true if user is blacklisted, false otherwise.
  */
 export async function isBlacklisted(
-	serverDiscId: string,
-	userDiscId: string,
+  serverDiscId: string,
+  userDiscId: string,
 ): Promise<boolean> {
-	try {
-		// Use EXISTS for efficiency - now using user_disc_id directly
-		const result = await sql`
+  try {
+    // Use EXISTS for efficiency - now using user_disc_id directly
+    const result = await sql`
 			SELECT EXISTS (
 				SELECT 1
 				FROM personalization_blacklist pb
@@ -664,16 +670,16 @@ export async function isBlacklisted(
 			) as "exists";
 		`;
 
-		// Bun's sql returns [{ exists: true }] or [{ exists: false }]
-		// biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists
-		return result[0]!.exists;
-	} catch (error) {
-		log.error(
-			`Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`,
-			error,
-		);
-		return false; // Default to false on error to avoid blocking personalization unintentionally
-	}
+    // Bun's sql returns [{ exists: true }] or [{ exists: false }]
+    // biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists
+    return result[0]!.exists;
+  } catch (error) {
+    log.error(
+      `Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`,
+      error,
+    );
+    return false; // Default to false on error to avoid blocking personalization unintentionally
+  }
 }
 
 /**
@@ -689,42 +695,42 @@ export async function isBlacklisted(
  * @returns The user's privacy level (0, 1, or 2), defaults to 0 (MINIMAL) if user not found
  */
 export async function getPrivacyLevel(
-	userDiscId: string,
+  userDiscId: string,
 ): Promise<import("@/types/db/schema").PrivacyLevel> {
-	const { PrivacyLevel } = await import("@/types/db/schema");
+  const { PrivacyLevel } = await import("@/types/db/schema");
 
-	try {
-		// 1. Query user's privacy level
-		const result = await sql`
+  try {
+    // 1. Query user's privacy level
+    const result = await sql`
 			SELECT privacy_level
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
 		`;
 
-		// 2. If user doesn't exist, return MINIMAL (default - most permissive)
-		if (!result.length) {
-			log.info(
-				`User ${userDiscId} not found, defaulting to privacy level MINIMAL`,
-			);
-			return PrivacyLevel.MINIMAL;
-		}
+    // 2. If user doesn't exist, return MINIMAL (default - most permissive)
+    if (!result.length) {
+      log.info(
+        `User ${userDiscId} not found, defaulting to privacy level MINIMAL`,
+      );
+      return PrivacyLevel.MINIMAL;
+    }
 
-		// 3. Validate and return the privacy level
-		// biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists when length > 0
-		const level = result[0]!.privacy_level;
-		if (![0, 1, 2].includes(level)) {
-			log.warn(
-				`Invalid privacy level ${level} for user ${userDiscId}, defaulting to MINIMAL`,
-			);
-			return PrivacyLevel.MINIMAL;
-		}
+    // 3. Validate and return the privacy level
+    // biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists when length > 0
+    const level = result[0]!.privacy_level;
+    if (![0, 1, 2].includes(level)) {
+      log.warn(
+        `Invalid privacy level ${level} for user ${userDiscId}, defaulting to MINIMAL`,
+      );
+      return PrivacyLevel.MINIMAL;
+    }
 
-		return level as import("@/types/db/schema").PrivacyLevel;
-	} catch (error) {
-		log.error(`Error checking privacy level for user ${userDiscId}:`, error);
-		return PrivacyLevel.MINIMAL; // Default to most permissive on error
-	}
+    return level as import("@/types/db/schema").PrivacyLevel;
+  } catch (error) {
+    log.error(`Error checking privacy level for user ${userDiscId}:`, error);
+    return PrivacyLevel.MINIMAL; // Default to most permissive on error
+  }
 }
 
 /**
@@ -734,9 +740,9 @@ export async function getPrivacyLevel(
  * @returns True if user is at Level 2 (FULL privacy), false otherwise
  */
 export async function isPrivacyOptedOut(userDiscId: string): Promise<boolean> {
-	const { PrivacyLevel } = await import("@/types/db/schema");
-	const level = await getPrivacyLevel(userDiscId);
-	return level === PrivacyLevel.FULL;
+  const { PrivacyLevel } = await import("@/types/db/schema");
+  const level = await getPrivacyLevel(userDiscId);
+  return level === PrivacyLevel.FULL;
 }
 
 /**
@@ -748,31 +754,31 @@ export async function isPrivacyOptedOut(userDiscId: string): Promise<boolean> {
  * @returns True if user has opted in to cross-server sharing, false otherwise
  */
 export async function getCrossServerShortTermMemoryOptIn(
-	userDiscId: string,
+  userDiscId: string,
 ): Promise<boolean> {
-	try {
-		// 1. Try to get from user cache
-		const { getCachedUserRow } = await import("@/utils/cache/userCache");
-		const cached = await getCachedUserRow(userDiscId);
-		if (cached) {
-			return cached.shortterm_cache_crossserver_opt_in;
-		}
+  try {
+    // 1. Try to get from user cache
+    const { getCachedUserRow } = await import("@/utils/cache/userCache");
+    const cached = await getCachedUserRow(userDiscId);
+    if (cached) {
+      return cached.shortterm_cache_crossserver_opt_in;
+    }
 
-		// 2. Query database if not in cache
-		const [user] = await sql`
+    // 2. Query database if not in cache
+    const [user] = await sql`
 			SELECT shortterm_cache_crossserver_opt_in
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 		`;
 
-		return user?.shortterm_cache_crossserver_opt_in ?? false;
-	} catch (error) {
-		log.error(
-			`Error checking cross-server short-term memory opt-in for user ${userDiscId}:`,
-			error,
-		);
-		return false; // Default to disabled on error
-	}
+    return user?.shortterm_cache_crossserver_opt_in ?? false;
+  } catch (error) {
+    log.error(
+      `Error checking cross-server short-term memory opt-in for user ${userDiscId}:`,
+      error,
+    );
+    return false; // Default to disabled on error
+  }
 }
 
 /**
@@ -781,40 +787,46 @@ export async function getCrossServerShortTermMemoryOptIn(
  * @returns An array of validated ServerEmojiRow objects, or null if none found or error.
  */
 export async function loadServerEmojis(
-	internalServerId: number,
+  internalServerId: number,
 ): Promise<ServerEmojiRow[] | null> {
-	try {
-		log.info(`[loadServerEmojis] Querying emojis for server_id: ${internalServerId}`);
-		const emojiRows = await sql`
+  try {
+    log.info(
+      `[loadServerEmojis] Querying emojis for server_id: ${internalServerId}`,
+    );
+    const emojiRows = await sql`
 			SELECT *
 			FROM server_emojis
 			WHERE server_id = ${internalServerId}
 		`;
 
-		log.info(`[loadServerEmojis] Found ${emojiRows.length} emoji row(s) from query`);
+    log.info(
+      `[loadServerEmojis] Found ${emojiRows.length} emoji row(s) from query`,
+    );
 
-		if (!emojiRows || emojiRows.length === 0) {
-			log.info(`No custom emojis found for server ID ${internalServerId}.`);
-			return null;
-		}
+    if (!emojiRows || emojiRows.length === 0) {
+      log.info(`No custom emojis found for server ID ${internalServerId}.`);
+      return null;
+    }
 
-		// Validate the array of emojis
-		const parsedEmojis = serverEmojiSchema.array().safeParse(emojiRows);
+    // Validate the array of emojis
+    const parsedEmojis = serverEmojiSchema.array().safeParse(emojiRows);
 
-		if (!parsedEmojis.success) {
-			log.error(
-				`Failed to validate emojis for server ID ${internalServerId}:`,
-				parsedEmojis.error.flatten(),
-			);
-			return null;
-		}
+    if (!parsedEmojis.success) {
+      log.error(
+        `Failed to validate emojis for server ID ${internalServerId}:`,
+        parsedEmojis.error.flatten(),
+      );
+      return null;
+    }
 
-		log.info(`[loadServerEmojis] Validated ${parsedEmojis.data.length} emoji(s) successfully`);
-		return parsedEmojis.data;
-	} catch (error) {
-		log.error(`Error loading emojis for server ID ${internalServerId}:`, error);
-		return null;
-	}
+    log.info(
+      `[loadServerEmojis] Validated ${parsedEmojis.data.length} emoji(s) successfully`,
+    );
+    return parsedEmojis.data;
+  } catch (error) {
+    log.error(`Error loading emojis for server ID ${internalServerId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -823,46 +835,46 @@ export async function loadServerEmojis(
  * @returns An array of validated LlmRow objects, or null if none found or error.
  */
 export async function loadAvailableLlms(
-	includeDeprecated = false,
+  includeDeprecated = false,
 ): Promise<LlmRow[] | null> {
-	try {
-		// 1. Fetch rows from the llms table, filtering deprecated models unless explicitly included
-		const llmRows = includeDeprecated
-			? await sql`
+  try {
+    // 1. Fetch rows from the llms table, filtering deprecated models unless explicitly included
+    const llmRows = includeDeprecated
+      ? await sql`
 				SELECT * FROM llms
 				ORDER BY llm_id ASC
 			`
-			: await sql`
+      : await sql`
 				SELECT * FROM llms
 				WHERE is_deprecated = false
 				ORDER BY llm_id ASC
 			`;
 
-		// 2. Check if any rows were returned
-		if (!llmRows || llmRows.length === 0) {
-			log.warn("No LLM models found in the database.");
-			return null;
-		}
+    // 2. Check if any rows were returned
+    if (!llmRows || llmRows.length === 0) {
+      log.warn("No LLM models found in the database.");
+      return null;
+    }
 
-		// 3. Validate the array of LLM rows against the schema (Rule 5, Rule 6)
-		const parsedLlms = llmSchema.array().safeParse(llmRows);
+    // 3. Validate the array of LLM rows against the schema (Rule 5, Rule 6)
+    const parsedLlms = llmSchema.array().safeParse(llmRows);
 
-		// 4. Handle validation failure
-		if (!parsedLlms.success) {
-			log.error(
-				"Failed to validate LLM data from database:",
-				parsedLlms.error.flatten(),
-			);
-			return null;
-		}
+    // 4. Handle validation failure
+    if (!parsedLlms.success) {
+      log.error(
+        "Failed to validate LLM data from database:",
+        parsedLlms.error.flatten(),
+      );
+      return null;
+    }
 
-		// 5. Return the validated array of LLM rows
-		return parsedLlms.data;
-	} catch (error) {
-		// 6. Log any unexpected errors during the database query (Rule 22)
-		log.error("Error loading available LLMs from database:", error);
-		return null;
-	}
+    // 5. Return the validated array of LLM rows
+    return parsedLlms.data;
+  } catch (error) {
+    // 6. Log any unexpected errors during the database query (Rule 22)
+    log.error("Error loading available LLMs from database:", error);
+    return null;
+  }
 }
 
 /**
@@ -872,71 +884,71 @@ export async function loadAvailableLlms(
  * @returns An array of validated LlmRow objects for the provider, or null if none found.
  */
 export async function loadAvailableModelsForProvider(
-	providerName: string,
-	includeDeprecated = false,
+  providerName: string,
+  includeDeprecated = false,
 ): Promise<LlmRow[] | null> {
-	// Input validation
-	if (!providerName || providerName.trim().length === 0) {
-		log.error("Provider name cannot be empty");
-		return null;
-	}
+  // Input validation
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
 
-	// Validate provider name format (alphanumeric, hyphens, and underscores only)
-	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
-		log.error(`Invalid provider name format: ${providerName}`);
-		return null;
-	}
+  // Validate provider name format (alphanumeric, hyphens, and underscores only)
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
 
-	// Normalize provider name to lowercase to match database storage (all providers stored as lowercase)
-	const normalizedProviderName = providerName.trim().toLowerCase();
+  // Normalize provider name to lowercase to match database storage (all providers stored as lowercase)
+  const normalizedProviderName = providerName.trim().toLowerCase();
 
-	try {
-		// 1. Query for models for the specific provider, filtering deprecated unless explicitly included
-		const modelRows = includeDeprecated
-			? await sql`
+  try {
+    // 1. Query for models for the specific provider, filtering deprecated unless explicitly included
+    const modelRows = includeDeprecated
+      ? await sql`
 				SELECT * FROM llms
 				WHERE llm_provider = ${normalizedProviderName}
 				ORDER BY llm_id ASC
 			`
-			: await sql`
+      : await sql`
 				SELECT * FROM llms
 				WHERE llm_provider = ${normalizedProviderName} AND is_deprecated = false
 				ORDER BY llm_id ASC
 			`;
 
-		// 2. Check if any rows were returned
-		if (!modelRows || modelRows.length === 0) {
-			log.warn(
-				`No available models found for provider: ${normalizedProviderName}`,
-			);
-			return null;
-		}
+    // 2. Check if any rows were returned
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(
+        `No available models found for provider: ${normalizedProviderName}`,
+      );
+      return null;
+    }
 
-		// 3. Validate the array of LLM rows against the schema
-		const parsedModels = llmSchema.array().safeParse(modelRows);
+    // 3. Validate the array of LLM rows against the schema
+    const parsedModels = llmSchema.array().safeParse(modelRows);
 
-		// 4. Handle validation failure
-		if (!parsedModels.success) {
-			log.error(
-				`Failed to validate model data for provider ${normalizedProviderName}:`,
-				parsedModels.error.flatten(),
-			);
-			return null;
-		}
+    // 4. Handle validation failure
+    if (!parsedModels.success) {
+      log.error(
+        `Failed to validate model data for provider ${normalizedProviderName}:`,
+        parsedModels.error.flatten(),
+      );
+      return null;
+    }
 
-		// 5. Return the validated array of LLM rows
-		log.info(
-			`Found ${parsedModels.data.length} available models for ${normalizedProviderName}`,
-		);
-		return parsedModels.data;
-	} catch (error) {
-		// 6. Log any unexpected errors during the database query
-		log.error(
-			`Error loading available models for provider ${normalizedProviderName}:`,
-			error,
-		);
-		return null;
-	}
+    // 5. Return the validated array of LLM rows
+    log.info(
+      `Found ${parsedModels.data.length} available models for ${normalizedProviderName}`,
+    );
+    return parsedModels.data;
+  } catch (error) {
+    // 6. Log any unexpected errors during the database query
+    log.error(
+      `Error loading available models for provider ${normalizedProviderName}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -949,29 +961,29 @@ export async function loadAvailableModelsForProvider(
  * @returns The default or first available LlmRow for the provider, or null if none found.
  */
 export async function loadDefaultModelForProvider(
-	providerName: string,
-	includeDeprecated = false,
+  providerName: string,
+  includeDeprecated = false,
 ): Promise<LlmRow | null> {
-	// Input validation
-	if (!providerName || providerName.trim().length === 0) {
-		log.error("Provider name cannot be empty");
-		return null;
-	}
+  // Input validation
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
 
-	// Validate provider name format (alphanumeric, hyphens, and underscores only)
-	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
-		log.error(`Invalid provider name format: ${providerName}`);
-		return null;
-	}
+  // Validate provider name format (alphanumeric, hyphens, and underscores only)
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
 
-	// Normalize provider name to lowercase to match database storage (all providers stored as lowercase)
-	const normalizedProviderName = providerName.trim().toLowerCase();
+  // Normalize provider name to lowercase to match database storage (all providers stored as lowercase)
+  const normalizedProviderName = providerName.trim().toLowerCase();
 
-	try {
-		// 1. Single optimized query: prioritize default models, then fallback to any available model
-		// Uses CASE to create a priority column: default models get priority 1, others get priority 2
-		const modelQuery = includeDeprecated
-			? sql`
+  try {
+    // 1. Single optimized query: prioritize default models, then fallback to any available model
+    // Uses CASE to create a priority column: default models get priority 1, others get priority 2
+    const modelQuery = includeDeprecated
+      ? sql`
 				SELECT *, 
 					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
 				FROM llms
@@ -979,7 +991,7 @@ export async function loadDefaultModelForProvider(
 				ORDER BY priority ASC, llm_id ASC
 				LIMIT 1
 			`
-			: sql`
+      : sql`
 				SELECT *, 
 					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
 				FROM llms
@@ -988,49 +1000,49 @@ export async function loadDefaultModelForProvider(
 				LIMIT 1
 			`;
 
-		const modelRows = await modelQuery;
+    const modelRows = await modelQuery;
 
-		// 2. Check if any model was found
-		if (!modelRows || modelRows.length === 0) {
-			log.error(
-				`No available models found for provider: ${normalizedProviderName}`,
-			);
-			return null;
-		}
+    // 2. Check if any model was found
+    if (!modelRows || modelRows.length === 0) {
+      log.error(
+        `No available models found for provider: ${normalizedProviderName}`,
+      );
+      return null;
+    }
 
-		// 3. Validate the selected model
-		const selectedModel = modelRows[0];
-		const parsedModel = llmSchema.safeParse(selectedModel);
+    // 3. Validate the selected model
+    const selectedModel = modelRows[0];
+    const parsedModel = llmSchema.safeParse(selectedModel);
 
-		if (!parsedModel.success) {
-			log.error(
-				`Failed to validate model data for provider ${normalizedProviderName}:`,
-				parsedModel.error.flatten(),
-			);
-			return null;
-		}
+    if (!parsedModel.success) {
+      log.error(
+        `Failed to validate model data for provider ${normalizedProviderName}:`,
+        parsedModel.error.flatten(),
+      );
+      return null;
+    }
 
-		// 4. Log appropriate message based on whether we got the default or a fallback
-		const isDefaultModel = selectedModel.is_default === true;
-		if (isDefaultModel) {
-			log.info(
-				`Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
-			);
-		} else {
-			log.warn(
-				`No default model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.llm_codename}`,
-			);
-		}
+    // 4. Log appropriate message based on whether we got the default or a fallback
+    const isDefaultModel = selectedModel.is_default === true;
+    if (isDefaultModel) {
+      log.info(
+        `Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
+      );
+    } else {
+      log.warn(
+        `No default model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.llm_codename}`,
+      );
+    }
 
-		return parsedModel.data;
-	} catch (error) {
-		// 5. Log any unexpected errors during the database query
-		log.error(
-			`Error loading default model for provider ${normalizedProviderName}:`,
-			error,
-		);
-		return null;
-	}
+    return parsedModel.data;
+  } catch (error) {
+    // 5. Log any unexpected errors during the database query
+    log.error(
+      `Error loading default model for provider ${normalizedProviderName}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1040,61 +1052,61 @@ export async function loadDefaultModelForProvider(
  * @returns An array of validated EmbeddingModelRow objects for the provider, or null if none found.
  */
 export async function loadAvailableEmbeddingModelsForProvider(
-	providerName: string,
-	includeDeprecated = false,
+  providerName: string,
+  includeDeprecated = false,
 ): Promise<EmbeddingModelRow[] | null> {
-	if (!providerName || providerName.trim().length === 0) {
-		log.error("Provider name cannot be empty");
-		return null;
-	}
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
 
-	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
-		log.error(`Invalid provider name format: ${providerName}`);
-		return null;
-	}
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
 
-	const normalizedProviderName = providerName.trim().toLowerCase();
+  const normalizedProviderName = providerName.trim().toLowerCase();
 
-	try {
-		const modelRows = includeDeprecated
-			? await sql`
+  try {
+    const modelRows = includeDeprecated
+      ? await sql`
 				SELECT * FROM embedding_models
 				WHERE provider = ${normalizedProviderName}
 				ORDER BY embedding_model_id ASC
 			`
-			: await sql`
+      : await sql`
 				SELECT * FROM embedding_models
 				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
 				ORDER BY embedding_model_id ASC
 			`;
 
-		if (!modelRows || modelRows.length === 0) {
-			log.warn(
-				`No available embedding models found for provider: ${normalizedProviderName}`,
-			);
-			return null;
-		}
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(
+        `No available embedding models found for provider: ${normalizedProviderName}`,
+      );
+      return null;
+    }
 
-		const parsedModels = embeddingModelSchema.array().safeParse(modelRows);
-		if (!parsedModels.success) {
-			log.error(
-				`Failed to validate embedding model data for provider ${normalizedProviderName}:`,
-				parsedModels.error.flatten(),
-			);
-			return null;
-		}
+    const parsedModels = embeddingModelSchema.array().safeParse(modelRows);
+    if (!parsedModels.success) {
+      log.error(
+        `Failed to validate embedding model data for provider ${normalizedProviderName}:`,
+        parsedModels.error.flatten(),
+      );
+      return null;
+    }
 
-		log.info(
-			`Found ${parsedModels.data.length} embedding models for ${normalizedProviderName}`,
-		);
-		return parsedModels.data;
-	} catch (error) {
-		log.error(
-			`Error loading embedding models for provider ${normalizedProviderName}:`,
-			error,
-		);
-		return null;
-	}
+    log.info(
+      `Found ${parsedModels.data.length} embedding models for ${normalizedProviderName}`,
+    );
+    return parsedModels.data;
+  } catch (error) {
+    log.error(
+      `Error loading embedding models for provider ${normalizedProviderName}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1104,24 +1116,24 @@ export async function loadAvailableEmbeddingModelsForProvider(
  * @returns The default or first available EmbeddingModelRow for the provider, or null if none found.
  */
 export async function loadDefaultEmbeddingModelForProvider(
-	providerName: string,
-	includeDeprecated = false,
+  providerName: string,
+  includeDeprecated = false,
 ): Promise<EmbeddingModelRow | null> {
-	if (!providerName || providerName.trim().length === 0) {
-		log.error("Provider name cannot be empty");
-		return null;
-	}
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
 
-	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
-		log.error(`Invalid provider name format: ${providerName}`);
-		return null;
-	}
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
 
-	const normalizedProviderName = providerName.trim().toLowerCase();
+  const normalizedProviderName = providerName.trim().toLowerCase();
 
-	try {
-		const modelQuery = includeDeprecated
-			? sql`
+  try {
+    const modelQuery = includeDeprecated
+      ? sql`
 				SELECT *,
 					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
 				FROM embedding_models
@@ -1129,7 +1141,7 @@ export async function loadDefaultEmbeddingModelForProvider(
 				ORDER BY priority ASC, embedding_model_id ASC
 				LIMIT 1
 			`
-			: sql`
+      : sql`
 				SELECT *,
 					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
 				FROM embedding_models
@@ -1138,43 +1150,43 @@ export async function loadDefaultEmbeddingModelForProvider(
 				LIMIT 1
 			`;
 
-		const modelRows = await modelQuery;
-		if (!modelRows || modelRows.length === 0) {
-			log.error(
-				`No available embedding models found for provider: ${normalizedProviderName}`,
-			);
-			return null;
-		}
+    const modelRows = await modelQuery;
+    if (!modelRows || modelRows.length === 0) {
+      log.error(
+        `No available embedding models found for provider: ${normalizedProviderName}`,
+      );
+      return null;
+    }
 
-		const selectedModel = modelRows[0];
-		const parsedModel = embeddingModelSchema.safeParse(selectedModel);
-		if (!parsedModel.success) {
-			log.error(
-				`Failed to validate embedding model data for provider ${normalizedProviderName}:`,
-				parsedModel.error.flatten(),
-			);
-			return null;
-		}
+    const selectedModel = modelRows[0];
+    const parsedModel = embeddingModelSchema.safeParse(selectedModel);
+    if (!parsedModel.success) {
+      log.error(
+        `Failed to validate embedding model data for provider ${normalizedProviderName}:`,
+        parsedModel.error.flatten(),
+      );
+      return null;
+    }
 
-		const isDefaultModel = selectedModel.is_default === true;
-		if (isDefaultModel) {
-			log.info(
-				`Found default embedding model for ${normalizedProviderName}: ${parsedModel.data.codename}`,
-			);
-		} else {
-			log.warn(
-				`No default embedding model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.codename}`,
-			);
-		}
+    const isDefaultModel = selectedModel.is_default === true;
+    if (isDefaultModel) {
+      log.info(
+        `Found default embedding model for ${normalizedProviderName}: ${parsedModel.data.codename}`,
+      );
+    } else {
+      log.warn(
+        `No default embedding model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.codename}`,
+      );
+    }
 
-		return parsedModel.data;
-	} catch (error) {
-		log.error(
-			`Error loading default embedding model for provider ${normalizedProviderName}:`,
-			error,
-		);
-		return null;
-	}
+    return parsedModel.data;
+  } catch (error) {
+    log.error(
+      `Error loading default embedding model for provider ${normalizedProviderName}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1183,34 +1195,34 @@ export async function loadDefaultEmbeddingModelForProvider(
  * @returns The EmbeddingModelRow if found and valid, otherwise null.
  */
 export async function loadEmbeddingModelById(
-	embeddingModelId: number,
+  embeddingModelId: number,
 ): Promise<EmbeddingModelRow | null> {
-	try {
-		const rows = await sql`
+  try {
+    const rows = await sql`
 			SELECT * FROM embedding_models
 			WHERE embedding_model_id = ${embeddingModelId}
 			LIMIT 1
 		`;
 
-		if (!rows || rows.length === 0) {
-			log.warn(`No embedding model found with ID: ${embeddingModelId}`);
-			return null;
-		}
+    if (!rows || rows.length === 0) {
+      log.warn(`No embedding model found with ID: ${embeddingModelId}`);
+      return null;
+    }
 
-		const parsed = embeddingModelSchema.safeParse(rows[0]);
-		if (!parsed.success) {
-			log.error(
-				`Failed to validate embedding model data for ID ${embeddingModelId}:`,
-				parsed.error.flatten(),
-			);
-			return null;
-		}
+    const parsed = embeddingModelSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate embedding model data for ID ${embeddingModelId}:`,
+        parsed.error.flatten(),
+      );
+      return null;
+    }
 
-		return parsed.data;
-	} catch (error) {
-		log.error(`Error loading embedding model ${embeddingModelId}:`, error);
-		return null;
-	}
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading embedding model ${embeddingModelId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -1220,75 +1232,75 @@ export async function loadEmbeddingModelById(
  * @returns A promise that resolves to the first smartest LlmRow found, or null if none found.
  */
 export async function loadSmartestModel(
-	providerName: string,
-	includeDeprecated = false,
+  providerName: string,
+  includeDeprecated = false,
 ): Promise<LlmRow | null> {
-	// Input validation
-	if (!providerName || providerName.trim().length === 0) {
-		log.error("Provider name cannot be empty");
-		return null;
-	}
+  // Input validation
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
 
-	// Validate provider name format (alphanumeric, hyphens, and underscores only)
-	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
-		log.error(`Invalid provider name format: ${providerName}`);
-		return null;
-	}
+  // Validate provider name format (alphanumeric, hyphens, and underscores only)
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
 
-	// Normalize provider name to lowercase to match database storage (all providers stored as lowercase)
-	const normalizedProviderName = providerName.trim().toLowerCase();
+  // Normalize provider name to lowercase to match database storage (all providers stored as lowercase)
+  const normalizedProviderName = providerName.trim().toLowerCase();
 
-	try {
-		// 1. Query for smartest model for the specific provider, filtering deprecated unless explicitly included
-		const smartModelQuery = includeDeprecated
-			? sql`
+  try {
+    // 1. Query for smartest model for the specific provider, filtering deprecated unless explicitly included
+    const smartModelQuery = includeDeprecated
+      ? sql`
 				SELECT * FROM llms
 				WHERE llm_provider = ${normalizedProviderName} AND is_smartest = true
 				ORDER BY llm_id ASC
 				LIMIT 1
 			`
-			: sql`
+      : sql`
 				SELECT * FROM llms
 				WHERE llm_provider = ${normalizedProviderName} AND is_smartest = true AND is_deprecated = false
 				ORDER BY llm_id ASC
 				LIMIT 1
 			`;
 
-		const smartModelRows = await smartModelQuery;
+    const smartModelRows = await smartModelQuery;
 
-		// 2. Check if any row was returned
-		if (!smartModelRows || smartModelRows.length === 0) {
-			log.warn(
-				`No smartest model found for provider: ${normalizedProviderName}`,
-			);
-			return null;
-		}
+    // 2. Check if any row was returned
+    if (!smartModelRows || smartModelRows.length === 0) {
+      log.warn(
+        `No smartest model found for provider: ${normalizedProviderName}`,
+      );
+      return null;
+    }
 
-		// 3. Validate the single LLM row against the schema
-		const parsedModel = llmSchema.safeParse(smartModelRows[0]);
+    // 3. Validate the single LLM row against the schema
+    const parsedModel = llmSchema.safeParse(smartModelRows[0]);
 
-		// 4. Handle validation failure
-		if (!parsedModel.success) {
-			log.error(
-				`Failed to validate smartest model data for provider ${normalizedProviderName}:`,
-				parsedModel.error.flatten(),
-			);
-			return null;
-		}
+    // 4. Handle validation failure
+    if (!parsedModel.success) {
+      log.error(
+        `Failed to validate smartest model data for provider ${normalizedProviderName}:`,
+        parsedModel.error.flatten(),
+      );
+      return null;
+    }
 
-		// 5. Return the validated LLM row
-		log.info(
-			`Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
-		);
-		return parsedModel.data;
-	} catch (error) {
-		// 6. Log any unexpected errors during the database query
-		log.error(
-			`Error loading smartest model for provider ${normalizedProviderName}:`,
-			error,
-		);
-		return null;
-	}
+    // 5. Return the validated LLM row
+    log.info(
+      `Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
+    );
+    return parsedModel.data;
+  } catch (error) {
+    // 6. Log any unexpected errors during the database query
+    log.error(
+      `Error loading smartest model for provider ${normalizedProviderName}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1299,69 +1311,69 @@ export async function loadSmartestModel(
  * @returns An array of unique provider names, or null if error or none found.
  */
 export async function loadUniqueProviders(
-	includeDeprecated = false,
+  includeDeprecated = false,
 ): Promise<string[] | null> {
-	try {
-		// 1. Query for providers that have at least one available model (filtering deprecated unless explicitly included)
-		const providerQuery = includeDeprecated
-			? sql`
+  try {
+    // 1. Query for providers that have at least one available model (filtering deprecated unless explicitly included)
+    const providerQuery = includeDeprecated
+      ? sql`
 				SELECT DISTINCT llm_provider
 				FROM llms
 				ORDER BY llm_provider ASC
 			`
-			: sql`
+      : sql`
 				SELECT DISTINCT llm_provider
 				FROM llms
 				WHERE is_deprecated = false
 				ORDER BY llm_provider ASC
 			`;
 
-		const providerRows = await providerQuery;
+    const providerRows = await providerQuery;
 
-		// 2. Check if any rows were returned
-		if (!providerRows || providerRows.length === 0) {
-			log.warn("No LLM providers with available models found in the database.");
-			return null;
-		}
+    // 2. Check if any rows were returned
+    if (!providerRows || providerRows.length === 0) {
+      log.warn("No LLM providers with available models found in the database.");
+      return null;
+    }
 
-		// 3. Extract provider names and perform case-insensitive deduplication
-		const providerMap = new Map<string, string>();
+    // 3. Extract provider names and perform case-insensitive deduplication
+    const providerMap = new Map<string, string>();
 
-		for (const row of providerRows) {
-			const provider = row.llm_provider as string;
-			const lowerKey = provider.toLowerCase();
+    for (const row of providerRows) {
+      const provider = row.llm_provider as string;
+      const lowerKey = provider.toLowerCase();
 
-			// Keep the first occurrence (which will be alphabetically sorted)
-			// This ensures consistent capitalization (e.g., "Google" over "google")
-			if (!providerMap.has(lowerKey)) {
-				providerMap.set(lowerKey, provider);
-			}
-		}
+      // Keep the first occurrence (which will be alphabetically sorted)
+      // This ensures consistent capitalization (e.g., "Google" over "google")
+      if (!providerMap.has(lowerKey)) {
+        providerMap.set(lowerKey, provider);
+      }
+    }
 
-		// 4. Convert back to array, sorted by the normalized keys
-		let providers = Array.from(providerMap.values()).sort();
+    // 4. Convert back to array, sorted by the normalized keys
+    let providers = Array.from(providerMap.values()).sort();
 
-		// 5. Filter out 'custom' provider in production environment
-		// Custom provider is only available for self-hosted instances
-		if (process.env.RUN_ENV === "production") {
-			const beforeCount = providers.length;
-			providers = providers.filter((p) => p.toLowerCase() !== "custom");
-			if (beforeCount !== providers.length) {
-				log.info(
-					"Filtered out 'custom' provider (not available in production)",
-				);
-			}
-		}
+    // 5. Filter out 'custom' provider in production environment
+    // Custom provider is only available for self-hosted instances
+    if (process.env.RUN_ENV === "production") {
+      const beforeCount = providers.length;
+      providers = providers.filter((p) => p.toLowerCase() !== "custom");
+      if (beforeCount !== providers.length) {
+        log.info(
+          "Filtered out 'custom' provider (not available in production)",
+        );
+      }
+    }
 
-		log.info(
-			`Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`,
-		);
-		return providers;
-	} catch (error) {
-		// 5. Log any unexpected errors during the database query
-		log.error("Error loading unique LLM providers from database:", error);
-		return null;
-	}
+    log.info(
+      `Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`,
+    );
+    return providers;
+  } catch (error) {
+    // 5. Log any unexpected errors during the database query
+    log.error("Error loading unique LLM providers from database:", error);
+    return null;
+  }
 }
 
 /**
@@ -1370,45 +1382,45 @@ export async function loadUniqueProviders(
  * @returns An array of preset options with truncated descriptions, or null if error or none found.
  */
 export async function loadPresetOptions(
-	maxDescriptionLength = 100,
+  maxDescriptionLength = 100,
 ): Promise<Array<{ name: string; description: string }> | null> {
-	try {
-		// 1. Query for all presets with descriptions
-		const presetRows = await sql`
+  try {
+    // 1. Query for all presets with descriptions
+    const presetRows = await sql`
 			SELECT tomori_preset_name, tomori_preset_desc
 			FROM tomori_presets
 			ORDER BY tomori_preset_name ASC
 		`;
 
-		// 2. Check if any rows were returned
-		if (!presetRows || presetRows.length === 0) {
-			log.warn("No personality presets found in the database.");
-			return null;
-		}
+    // 2. Check if any rows were returned
+    if (!presetRows || presetRows.length === 0) {
+      log.warn("No personality presets found in the database.");
+      return null;
+    }
 
-		// 3. Process and truncate descriptions
-		const presetOptions = presetRows.map((row: Record<string, unknown>) => {
-			const description = row.tomori_preset_desc as string;
-			const truncatedDescription =
-				description.length > maxDescriptionLength
-					? `${description.substring(0, maxDescriptionLength - 3)}...`
-					: description;
+    // 3. Process and truncate descriptions
+    const presetOptions = presetRows.map((row: Record<string, unknown>) => {
+      const description = row.tomori_preset_desc as string;
+      const truncatedDescription =
+        description.length > maxDescriptionLength
+          ? `${description.substring(0, maxDescriptionLength - 3)}...`
+          : description;
 
-			return {
-				name: row.tomori_preset_name as string,
-				description: truncatedDescription,
-			};
-		});
+      return {
+        name: row.tomori_preset_name as string,
+        description: truncatedDescription,
+      };
+    });
 
-		log.info(
-			`Found ${presetOptions.length} personality presets for selection menu.`,
-		);
-		return presetOptions;
-	} catch (error) {
-		// 4. Log any unexpected errors during the database query
-		log.error("Error loading preset options from database:", error);
-		return null;
-	}
+    log.info(
+      `Found ${presetOptions.length} personality presets for selection menu.`,
+    );
+    return presetOptions;
+  } catch (error) {
+    // 4. Log any unexpected errors during the database query
+    log.error("Error loading preset options from database:", error);
+    return null;
+  }
 }
 
 /**
@@ -1419,85 +1431,85 @@ export async function loadPresetOptions(
  * @returns An array of preset options with truncated descriptions, or null if error or none found.
  */
 export async function loadPresetOptionsByLocale(
-	locale: string,
-	maxDescriptionLength = 100,
+  locale: string,
+  maxDescriptionLength = 100,
 ): Promise<Array<{ name: string; description: string }> | null> {
-	try {
-		// 1. Try exact locale match (e.g., 'ja')
-		let presetRows = await sql`
+  try {
+    // 1. Try exact locale match (e.g., 'ja')
+    let presetRows = await sql`
 			SELECT tomori_preset_name, tomori_preset_desc
 			FROM tomori_presets
 			WHERE preset_language = ${locale}
 			ORDER BY tomori_preset_name ASC
 		`;
 
-		// 2. If no exact match, try base language (e.g., 'ja' from 'ja-JP')
-		if (presetRows.length === 0) {
-			const baseLanguage = locale.split("-")[0];
-			presetRows = await sql`
+    // 2. If no exact match, try base language (e.g., 'ja' from 'ja-JP')
+    if (presetRows.length === 0) {
+      const baseLanguage = locale.split("-")[0];
+      presetRows = await sql`
 				SELECT tomori_preset_name, tomori_preset_desc
 				FROM tomori_presets
 				WHERE preset_language = ${baseLanguage}
 				ORDER BY tomori_preset_name ASC
 			`;
 
-			if (presetRows.length > 0) {
-				log.info(
-					`No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`,
-				);
-			}
-		}
+      if (presetRows.length > 0) {
+        log.info(
+          `No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`,
+        );
+      }
+    }
 
-		// 3. If still no presets, fall back to 'en-US'
-		if (presetRows.length === 0 && locale !== "en-US") {
-			presetRows = await sql`
+    // 3. If still no presets, fall back to 'en-US'
+    if (presetRows.length === 0 && locale !== "en-US") {
+      presetRows = await sql`
 				SELECT tomori_preset_name, tomori_preset_desc
 				FROM tomori_presets
 				WHERE preset_language = 'en-US'
 				ORDER BY tomori_preset_name ASC
 			`;
 
-			if (presetRows.length > 0) {
-				log.info(
-					`No presets found for locale '${locale}', falling back to English presets.`,
-				);
-			}
-		}
+      if (presetRows.length > 0) {
+        log.info(
+          `No presets found for locale '${locale}', falling back to English presets.`,
+        );
+      }
+    }
 
-		// 4. Check if any rows were returned after all fallback attempts
-		if (!presetRows || presetRows.length === 0) {
-			log.warn(
-				`No personality presets found for locale '${locale}' or any fallback language.`,
-			);
-			return null;
-		}
+    // 4. Check if any rows were returned after all fallback attempts
+    if (!presetRows || presetRows.length === 0) {
+      log.warn(
+        `No personality presets found for locale '${locale}' or any fallback language.`,
+      );
+      return null;
+    }
 
-		// 5. Process and truncate descriptions
-		const presetOptions = presetRows.map((row: Record<string, unknown>) => {
-			const description = row.tomori_preset_desc as string;
-			const truncatedDescription =
-				description.length > maxDescriptionLength
-					? `${description.substring(0, maxDescriptionLength - 3)}...`
-					: description;
+    // 5. Process and truncate descriptions
+    const presetOptions = presetRows.map((row: Record<string, unknown>) => {
+      const description = row.tomori_preset_desc as string;
+      const truncatedDescription =
+        description.length > maxDescriptionLength
+          ? `${description.substring(0, maxDescriptionLength - 3)}...`
+          : description;
 
-			return {
-				name: row.tomori_preset_name as string,
-				description: truncatedDescription,
-			};
-		});
+      return {
+        name: row.tomori_preset_name as string,
+        description: truncatedDescription,
+      };
+    });
 
-		log.info(
-			`Found ${presetOptions.length} personality presets for locale '${locale}' (selection menu).`,
-		);
-		return presetOptions;
-	} catch (error) {
-		// 6. Log any unexpected errors during the database query
-		log.error(
-			`Error loading preset options for locale '${locale}' from database:`,
-			error,
-		);
-		return null;
-	}
+    log.info(
+      `Found ${presetOptions.length} personality presets for locale '${locale}' (selection menu).`,
+    );
+    return presetOptions;
+  } catch (error) {
+    // 6. Log any unexpected errors during the database query
+    log.error(
+      `Error loading preset options for locale '${locale}' from database:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1508,67 +1520,67 @@ export async function loadPresetOptionsByLocale(
  * @returns An array of TomoriPresetRow objects, or null if error or none found.
  */
 export async function loadPresetRowsByLocale(
-	locale: string,
+  locale: string,
 ): Promise<TomoriPresetRow[] | null> {
-	try {
-		// 1. Try exact locale match (e.g., 'ja')
-		let presets = await sql`
+  try {
+    // 1. Try exact locale match (e.g., 'ja')
+    let presets = await sql`
 			SELECT * FROM tomori_presets
 			WHERE preset_language = ${locale}
 			ORDER BY tomori_preset_name ASC
 		`;
 
-		// 2. If no exact match, try base language (e.g., 'ja' from 'ja-JP')
-		if (presets.length === 0) {
-			const baseLanguage = locale.split("-")[0];
-			presets = await sql`
+    // 2. If no exact match, try base language (e.g., 'ja' from 'ja-JP')
+    if (presets.length === 0) {
+      const baseLanguage = locale.split("-")[0];
+      presets = await sql`
 				SELECT * FROM tomori_presets
 				WHERE preset_language = ${baseLanguage}
 				ORDER BY tomori_preset_name ASC
 			`;
 
-			if (presets.length > 0) {
-				log.info(
-					`No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`,
-				);
-			}
-		}
+      if (presets.length > 0) {
+        log.info(
+          `No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`,
+        );
+      }
+    }
 
-		// 3. If still no presets, fall back to 'en-US'
-		if (presets.length === 0 && locale !== "en-US") {
-			presets = await sql`
+    // 3. If still no presets, fall back to 'en-US'
+    if (presets.length === 0 && locale !== "en-US") {
+      presets = await sql`
 				SELECT * FROM tomori_presets
 				WHERE preset_language = 'en-US'
 				ORDER BY tomori_preset_name ASC
 			`;
 
-			if (presets.length > 0) {
-				log.info(
-					`No presets found for locale '${locale}', falling back to English presets.`,
-				);
-			}
-		}
+      if (presets.length > 0) {
+        log.info(
+          `No presets found for locale '${locale}', falling back to English presets.`,
+        );
+      }
+    }
 
-		// 4. Check if any rows were returned after all fallback attempts
-		if (!presets || presets.length === 0) {
-			log.warn(
-				`No personality presets found for locale '${locale}' or any fallback language.`,
-			);
-			return null;
-		}
+    // 4. Check if any rows were returned after all fallback attempts
+    if (!presets || presets.length === 0) {
+      log.warn(
+        `No personality presets found for locale '${locale}' or any fallback language.`,
+      );
+      return null;
+    }
 
-		log.info(
-			`Found ${presets.length} personality preset rows for locale '${locale}'.`,
-		);
-		return presets as TomoriPresetRow[];
-	} catch (error) {
-		// 5. Log any unexpected errors during the database query
-		log.error(
-			`Error loading preset rows for locale '${locale}' from database:`,
-			error,
-		);
-		return null;
-	}
+    log.info(
+      `Found ${presets.length} personality preset rows for locale '${locale}'.`,
+    );
+    return presets as TomoriPresetRow[];
+  } catch (error) {
+    // 5. Log any unexpected errors during the database query
+    log.error(
+      `Error loading preset rows for locale '${locale}' from database:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1577,23 +1589,23 @@ export async function loadPresetRowsByLocale(
  * @returns Promise that resolves to array of all preset rows or null on error
  */
 export async function loadAllPresets(): Promise<TomoriPresetRow[] | null> {
-	try {
-		const presets = await sql`
+  try {
+    const presets = await sql`
 			SELECT * FROM tomori_presets
 			ORDER BY tomori_preset_name ASC
 		`;
 
-		if (!presets || presets.length === 0) {
-			log.warn("No personality presets found in database.");
-			return null;
-		}
+    if (!presets || presets.length === 0) {
+      log.warn("No personality presets found in database.");
+      return null;
+    }
 
-		log.info(`Loaded ${presets.length} personality presets from database.`);
-		return presets as TomoriPresetRow[];
-	} catch (error) {
-		log.error("Error loading all presets from database:", error);
-		return null;
-	}
+    log.info(`Loaded ${presets.length} personality presets from database.`);
+    return presets as TomoriPresetRow[];
+  } catch (error) {
+    log.error("Error loading all presets from database:", error);
+    return null;
+  }
 }
 
 /**
@@ -1601,31 +1613,31 @@ export async function loadAllPresets(): Promise<TomoriPresetRow[] | null> {
  * @returns Promise that resolves to array of SystemPromptPresetRow or null on error
  */
 export async function loadSystemPromptPresets(): Promise<
-	SystemPromptPresetRow[] | null
+  SystemPromptPresetRow[] | null
 > {
-	try {
-		// 1. Query all system prompt presets ordered by ID
-		const presets = await sql`
+  try {
+    // 1. Query all system prompt presets ordered by ID
+    const presets = await sql`
 			SELECT * FROM system_prompt_presets
 			ORDER BY system_prompt_preset_id ASC
 		`;
 
-		// 2. Check if any presets were found
-		if (!presets || presets.length === 0) {
-			log.warn("No system prompt presets found in database.");
-			return null;
-		}
+    // 2. Check if any presets were found
+    if (!presets || presets.length === 0) {
+      log.warn("No system prompt presets found in database.");
+      return null;
+    }
 
-		// 3. Log successful load
-		log.info(`Loaded ${presets.length} system prompt presets from database.`);
+    // 3. Log successful load
+    log.info(`Loaded ${presets.length} system prompt presets from database.`);
 
-		// 4. Return the presets
-		return presets as SystemPromptPresetRow[];
-	} catch (error) {
-		// 5. Log any errors during the database query
-		log.error("Error loading system prompt presets from database:", error);
-		return null;
-	}
+    // 4. Return the presets
+    return presets as SystemPromptPresetRow[];
+  } catch (error) {
+    // 5. Log any errors during the database query
+    log.error("Error loading system prompt presets from database:", error);
+    return null;
+  }
 }
 
 /**
@@ -1635,68 +1647,68 @@ export async function loadSystemPromptPresets(): Promise<
  *          Returns an empty array if the server is found but has no stickers.
  */
 export async function loadServerStickers(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<ServerStickerRow[] | null> {
-	try {
-		// 1. Get the internal server_id from server_disc_id
-		const [server] = await sql`
+  try {
+    // 1. Get the internal server_id from server_disc_id
+    const [server] = await sql`
             SELECT server_id FROM servers WHERE server_disc_id = ${serverDiscId} LIMIT 1
         `;
 
-		if (!server || !server.server_id) {
-			log.warn(
-				`Server not found in DB with Discord ID: ${serverDiscId} when trying to load stickers.`,
-			);
-			return null; // Server itself not found
-		}
-		// biome-ignore lint/style/noNonNullAssertion: server check guarantees server_id (Rule 8)
-		const serverId = server.server_id!;
+    if (!server || !server.server_id) {
+      log.warn(
+        `Server not found in DB with Discord ID: ${serverDiscId} when trying to load stickers.`,
+      );
+      return null; // Server itself not found
+    }
+    // biome-ignore lint/style/noNonNullAssertion: server check guarantees server_id (Rule 8)
+    const serverId = server.server_id!;
 
-		// 2. Fetch all stickers for that server_id, selecting only necessary fields
-		const stickersData = await sql`
+    // 2. Fetch all stickers for that server_id, selecting only necessary fields
+    const stickersData = await sql`
             SELECT sticker_id, server_id, sticker_disc_id, sticker_name, sticker_desc, emotion_key, format_type, is_global, created_at, updated_at
             FROM server_stickers
             WHERE server_id = ${serverId}
         `; // Rule 16: Explicit columns
 
-		if (!stickersData) {
-			// This case should ideally not happen with current bun-postgres; an empty array is more likely.
-			log.warn(
-				`Stickers data was unexpectedly null for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
-			);
-			return []; // Treat as no stickers found
-		}
-		if (stickersData.length === 0) {
-			log.info(
-				`No stickers found in DB for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
-			);
-			return []; // Explicitly return empty array if no stickers
-		}
+    if (!stickersData) {
+      // This case should ideally not happen with current bun-postgres; an empty array is more likely.
+      log.warn(
+        `Stickers data was unexpectedly null for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
+      );
+      return []; // Treat as no stickers found
+    }
+    if (stickersData.length === 0) {
+      log.info(
+        `No stickers found in DB for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
+      );
+      return []; // Explicitly return empty array if no stickers
+    }
 
-		// 3. Validate each sticker row (Rule 6, Rule 5 - data integrity for function calling)
-		const validatedStickers: ServerStickerRow[] = [];
-		for (const sticker of stickersData) {
-			const parsed = serverStickerSchema.safeParse(sticker);
-			if (parsed.success) {
-				validatedStickers.push(parsed.data);
-			} else {
-				log.warn(
-					`Invalid sticker data found in DB for server ${serverId}, sticker_disc_id ${sticker.sticker_disc_id}: ${JSON.stringify(sticker)}. Errors: ${parsed.error.flatten()}`,
-				);
-				// Optionally skip adding invalid stickers
-			}
-		}
-		log.info(
-			`Loaded ${validatedStickers.length} stickers for server ID ${serverId}.`,
-		);
-		return validatedStickers;
-	} catch (error) {
-		log.error(
-			`Error loading stickers for server Discord ID ${serverDiscId}:`,
-			error,
-		);
-		return null; // Error during DB operation
-	}
+    // 3. Validate each sticker row (Rule 6, Rule 5 - data integrity for function calling)
+    const validatedStickers: ServerStickerRow[] = [];
+    for (const sticker of stickersData) {
+      const parsed = serverStickerSchema.safeParse(sticker);
+      if (parsed.success) {
+        validatedStickers.push(parsed.data);
+      } else {
+        log.warn(
+          `Invalid sticker data found in DB for server ${serverId}, sticker_disc_id ${sticker.sticker_disc_id}: ${JSON.stringify(sticker)}. Errors: ${parsed.error.flatten()}`,
+        );
+        // Optionally skip adding invalid stickers
+      }
+    }
+    log.info(
+      `Loaded ${validatedStickers.length} stickers for server ID ${serverId}.`,
+    );
+    return validatedStickers;
+  } catch (error) {
+    log.error(
+      `Error loading stickers for server Discord ID ${serverDiscId}:`,
+      error,
+    );
+    return null; // Error during DB operation
+  }
 }
 
 /**
@@ -1704,47 +1716,47 @@ export async function loadServerStickers(
  * @returns Array of due ReminderRow objects, or null if error
  */
 export async function getDueReminders(): Promise<ReminderRow[] | null> {
-	return await withCachedPlanRetry(async () => {
-		try {
-			// Query for reminders that are due (reminder_time <= now)
-			const reminderData = await sql`
+  return await withCachedPlanRetry(async () => {
+    try {
+      // Query for reminders that are due (reminder_time <= now)
+      const reminderData = await sql`
 				SELECT * FROM reminders
 				WHERE reminder_time <= CURRENT_TIMESTAMP
 				ORDER BY reminder_time ASC
 			`;
 
-			if (!reminderData) {
-				log.warn(
-					"Reminders data was unexpectedly null when fetching due reminders",
-				);
-				return [];
-			}
+      if (!reminderData) {
+        log.warn(
+          "Reminders data was unexpectedly null when fetching due reminders",
+        );
+        return [];
+      }
 
-			if (reminderData.length === 0) {
-				// log.info("No due reminders found");
-				return [];
-			}
+      if (reminderData.length === 0) {
+        // log.info("No due reminders found");
+        return [];
+      }
 
-			// Validate each reminder row
-			const validatedReminders: ReminderRow[] = [];
-			for (const reminder of reminderData) {
-				const parsed = reminderSchema.safeParse(reminder);
-				if (parsed.success) {
-					validatedReminders.push(parsed.data);
-				} else {
-					log.warn(
-						`Invalid reminder data found in DB for reminder_id ${reminder.reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`,
-					);
-				}
-			}
+      // Validate each reminder row
+      const validatedReminders: ReminderRow[] = [];
+      for (const reminder of reminderData) {
+        const parsed = reminderSchema.safeParse(reminder);
+        if (parsed.success) {
+          validatedReminders.push(parsed.data);
+        } else {
+          log.warn(
+            `Invalid reminder data found in DB for reminder_id ${reminder.reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`,
+          );
+        }
+      }
 
-			log.info(`Found ${validatedReminders.length} due reminders`);
-			return validatedReminders;
-		} catch (error) {
-			log.error("Error loading due reminders from database:", error);
-			return null;
-		}
-	}, "load due reminders");
+      log.info(`Found ${validatedReminders.length} due reminders`);
+      return validatedReminders;
+    } catch (error) {
+      log.error("Error loading due reminders from database:", error);
+      return null;
+    }
+  }, "load due reminders");
 }
 
 /**
@@ -1753,35 +1765,35 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
  * @returns The ReminderRow object if found, null otherwise
  */
 export async function getReminderById(
-	reminderId: number,
+  reminderId: number,
 ): Promise<ReminderRow | null> {
-	try {
-		const [reminderData] = await sql`
+  try {
+    const [reminderData] = await sql`
 			SELECT * FROM reminders
 			WHERE reminder_id = ${reminderId}
 			LIMIT 1
 		`;
 
-		if (!reminderData) {
-			log.info(`Reminder not found with ID: ${reminderId}`);
-			return null;
-		}
+    if (!reminderData) {
+      log.info(`Reminder not found with ID: ${reminderId}`);
+      return null;
+    }
 
-		// Validate the reminder data
-		const parsed = reminderSchema.safeParse(reminderData);
-		if (!parsed.success) {
-			log.warn(
-				`Invalid reminder data found in DB for reminder_id ${reminderId}: ${JSON.stringify(reminderData)}. Errors: ${parsed.error.flatten()}`,
-			);
-			return null;
-		}
+    // Validate the reminder data
+    const parsed = reminderSchema.safeParse(reminderData);
+    if (!parsed.success) {
+      log.warn(
+        `Invalid reminder data found in DB for reminder_id ${reminderId}: ${JSON.stringify(reminderData)}. Errors: ${parsed.error.flatten()}`,
+      );
+      return null;
+    }
 
-		log.info(`Loaded reminder with ID: ${reminderId}`);
-		return parsed.data;
-	} catch (error) {
-		log.error(`Error loading reminder with ID ${reminderId}:`, error);
-		return null;
-	}
+    log.info(`Loaded reminder with ID: ${reminderId}`);
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading reminder with ID ${reminderId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -1790,20 +1802,20 @@ export async function getReminderById(
  * @returns The count of active reminders for the user, or 0 if error
  */
 export async function getUserReminderCount(
-	userDiscordId: string,
+  userDiscordId: string,
 ): Promise<number> {
-	try {
-		const [result] = await sql`
+  try {
+    const [result] = await sql`
 			SELECT COUNT(*) as reminder_count
 			FROM reminders
 			WHERE user_discord_id = ${userDiscordId}
 		`;
 
-		return Number(result?.reminder_count || 0);
-	} catch (error) {
-		log.error(`Error counting reminders for user ${userDiscordId}:`, error);
-		return 0;
-	}
+    return Number(result?.reminder_count || 0);
+  } catch (error) {
+    log.error(`Error counting reminders for user ${userDiscordId}:`, error);
+    return 0;
+  }
 }
 
 /**
@@ -1812,24 +1824,24 @@ export async function getUserReminderCount(
  * @returns True if reminder was deleted, false otherwise
  */
 export async function deleteReminderById(reminderId: number): Promise<boolean> {
-	try {
-		const result = await sql`
+  try {
+    const result = await sql`
 			DELETE FROM reminders
 			WHERE reminder_id = ${reminderId}
 			RETURNING reminder_id
 		`;
 
-		if (result && result.length > 0) {
-			log.success(`Reminder deleted successfully (ID: ${reminderId})`);
-			return true;
-		} else {
-			log.warn(`No reminder found to delete with ID: ${reminderId}`);
-			return false;
-		}
-	} catch (error) {
-		log.error(`Error deleting reminder with ID ${reminderId}:`, error);
-		return false;
-	}
+    if (result && result.length > 0) {
+      log.success(`Reminder deleted successfully (ID: ${reminderId})`);
+      return true;
+    } else {
+      log.warn(`No reminder found to delete with ID: ${reminderId}`);
+      return false;
+    }
+  } catch (error) {
+    log.error(`Error deleting reminder with ID ${reminderId}:`, error);
+    return false;
+  }
 }
 
 /**
@@ -1839,16 +1851,16 @@ export async function deleteReminderById(reminderId: number): Promise<boolean> {
  * @returns Array of pending ReminderRow objects, or null if error
  */
 export async function getPendingRemindersForUser(
-	userDiscordId: string,
-	serverDiscId?: string,
+  userDiscordId: string,
+  serverDiscId?: string,
 ): Promise<ReminderRow[] | null> {
-	try {
-		// 1. Query for pending reminders (reminder_time > now) for the user
-		// If serverDiscId is provided, filter by that server as well
-		let reminderData: unknown[];
-		if (serverDiscId) {
-			// Join with servers table to filter by server_disc_id
-			reminderData = await sql`
+  try {
+    // 1. Query for pending reminders (reminder_time > now) for the user
+    // If serverDiscId is provided, filter by that server as well
+    let reminderData: unknown[];
+    if (serverDiscId) {
+      // Join with servers table to filter by server_disc_id
+      reminderData = await sql`
 				SELECT r.* FROM reminders r
 				JOIN servers s ON r.server_id = s.server_id
 				WHERE r.user_discord_id = ${userDiscordId}
@@ -1856,52 +1868,52 @@ export async function getPendingRemindersForUser(
 				AND r.reminder_time > CURRENT_TIMESTAMP
 				ORDER BY r.reminder_time ASC
 			`;
-		} else {
-			// Get all pending reminders for user across all servers
-			reminderData = await sql`
+    } else {
+      // Get all pending reminders for user across all servers
+      reminderData = await sql`
 				SELECT * FROM reminders
 				WHERE user_discord_id = ${userDiscordId}
 				AND reminder_time > CURRENT_TIMESTAMP
 				ORDER BY reminder_time ASC
 			`;
-		}
+    }
 
-		if (!reminderData) {
-			log.warn(
-				`Reminders data was unexpectedly null when fetching pending reminders for user ${userDiscordId}`,
-			);
-			return [];
-		}
+    if (!reminderData) {
+      log.warn(
+        `Reminders data was unexpectedly null when fetching pending reminders for user ${userDiscordId}`,
+      );
+      return [];
+    }
 
-		if (reminderData.length === 0) {
-			log.info(`No pending reminders found for user ${userDiscordId}`);
-			return [];
-		}
+    if (reminderData.length === 0) {
+      log.info(`No pending reminders found for user ${userDiscordId}`);
+      return [];
+    }
 
-		// 2. Validate each reminder row
-		const validatedReminders: ReminderRow[] = [];
-		for (const reminder of reminderData) {
-			const parsed = reminderSchema.safeParse(reminder);
-			if (parsed.success) {
-				validatedReminders.push(parsed.data);
-			} else {
-				log.warn(
-					`Invalid reminder data found in DB for reminder_id ${(reminder as Record<string, unknown>).reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`,
-				);
-			}
-		}
+    // 2. Validate each reminder row
+    const validatedReminders: ReminderRow[] = [];
+    for (const reminder of reminderData) {
+      const parsed = reminderSchema.safeParse(reminder);
+      if (parsed.success) {
+        validatedReminders.push(parsed.data);
+      } else {
+        log.warn(
+          `Invalid reminder data found in DB for reminder_id ${(reminder as Record<string, unknown>).reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`,
+        );
+      }
+    }
 
-		log.info(
-			`Found ${validatedReminders.length} pending reminders for user ${userDiscordId}`,
-		);
-		return validatedReminders;
-	} catch (error) {
-		log.error(
-			`Error loading pending reminders for user ${userDiscordId}:`,
-			error,
-		);
-		return null;
-	}
+    log.info(
+      `Found ${validatedReminders.length} pending reminders for user ${userDiscordId}`,
+    );
+    return validatedReminders;
+  } catch (error) {
+    log.error(
+      `Error loading pending reminders for user ${userDiscordId}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1910,24 +1922,24 @@ export async function getPendingRemindersForUser(
  * @returns True if Brave API key exists, false otherwise
  */
 export async function getBraveApiKeyStatus(serverId: number): Promise<boolean> {
-	try {
-		// 1. Query opt_api_keys table for Brave Search API key
-		const result = await sql`
+  try {
+    // 1. Query opt_api_keys table for Brave Search API key
+    const result = await sql`
 			SELECT api_key FROM opt_api_keys
 			WHERE server_id = ${serverId}
 			AND service_name = 'brave-search'
 			LIMIT 1
 		`;
 
-		// 2. Return true if key exists (even if encrypted), false otherwise
-		return result && result.length > 0;
-	} catch (error) {
-		log.error(
-			`Error checking Brave API key status for server ${serverId}:`,
-			error,
-		);
-		return false;
-	}
+    // 2. Return true if key exists (even if encrypted), false otherwise
+    return result && result.length > 0;
+  } catch (error) {
+    log.error(
+      `Error checking Brave API key status for server ${serverId}:`,
+      error,
+    );
+    return false;
+  }
 }
 
 /**
@@ -1936,36 +1948,36 @@ export async function getBraveApiKeyStatus(serverId: number): Promise<boolean> {
  * @returns Array of Discord user IDs, or empty array if none or error
  */
 export async function getBlacklistedMemberIds(
-	serverId: number,
+  serverId: number,
 ): Promise<string[]> {
-	try {
-		// 1. Query personalization_blacklist table for blacklisted members
-		const result = await sql`
+  try {
+    // 1. Query personalization_blacklist table for blacklisted members
+    const result = await sql`
 			SELECT user_disc_id FROM personalization_blacklist
 			WHERE server_id = ${serverId}
 			ORDER BY user_disc_id ASC
 		`;
 
-		// 2. Extract user_disc_id values from result
-		if (!result || result.length === 0) {
-			return [];
-		}
+    // 2. Extract user_disc_id values from result
+    if (!result || result.length === 0) {
+      return [];
+    }
 
-		// 3. Map to array of Discord IDs
-		const memberIds = result.map(
-			(row: unknown) => (row as { user_disc_id: string }).user_disc_id,
-		);
-		log.info(
-			`Found ${memberIds.length} blacklisted members for server ${serverId}`,
-		);
-		return memberIds;
-	} catch (error) {
-		log.error(
-			`Error loading blacklisted members for server ${serverId}:`,
-			error,
-		);
-		return [];
-	}
+    // 3. Map to array of Discord IDs
+    const memberIds = result.map(
+      (row: unknown) => (row as { user_disc_id: string }).user_disc_id,
+    );
+    log.info(
+      `Found ${memberIds.length} blacklisted members for server ${serverId}`,
+    );
+    return memberIds;
+  } catch (error) {
+    log.error(
+      `Error loading blacklisted members for server ${serverId}:`,
+      error,
+    );
+    return [];
+  }
 }
 
 // ─── Random Trigger Functions ────────────────────────────────────────────────
@@ -1977,34 +1989,34 @@ export async function getBlacklistedMemberIds(
  * @returns Array of due RandomTriggerRow records, or empty array on error.
  */
 export async function getDueRandomTriggers(): Promise<RandomTriggerRow[]> {
-	try {
-		// 1. Fetch all triggers scheduled at or before now
-		const rows = await sql`
+  try {
+    // 1. Fetch all triggers scheduled at or before now
+    const rows = await sql`
 			SELECT * FROM random_triggers
 			WHERE next_trigger_at <= NOW()
 			ORDER BY next_trigger_at ASC
 		`;
 
-		if (!rows.length) return [];
+    if (!rows.length) return [];
 
-		// 2. Validate and return each row
-		const validated: RandomTriggerRow[] = [];
-		for (const row of rows) {
-			const parsed = randomTriggerSchema.safeParse(row);
-			if (parsed.success) {
-				validated.push(parsed.data);
-			} else {
-				log.warn(
-					`Skipping invalid random trigger row (id=${row.trigger_id}):`,
-					parsed.error,
-				);
-			}
-		}
-		return validated;
-	} catch (error) {
-		log.error("Error fetching due random triggers:", error);
-		return [];
-	}
+    // 2. Validate and return each row
+    const validated: RandomTriggerRow[] = [];
+    for (const row of rows) {
+      const parsed = randomTriggerSchema.safeParse(row);
+      if (parsed.success) {
+        validated.push(parsed.data);
+      } else {
+        log.warn(
+          `Skipping invalid random trigger row (id=${row.trigger_id}):`,
+          parsed.error,
+        );
+      }
+    }
+    return validated;
+  } catch (error) {
+    log.error("Error fetching due random triggers:", error);
+    return [];
+  }
 }
 
 /**
@@ -2015,36 +2027,36 @@ export async function getDueRandomTriggers(): Promise<RandomTriggerRow[]> {
  * @returns Array of RandomTriggerRow records, or empty array on error.
  */
 export async function getServerRandomTriggers(
-	serverId: number,
+  serverId: number,
 ): Promise<RandomTriggerRow[]> {
-	try {
-		// 1. Fetch all triggers for this server ordered by creation date
-		const rows = await sql`
+  try {
+    // 1. Fetch all triggers for this server ordered by creation date
+    const rows = await sql`
 			SELECT * FROM random_triggers
 			WHERE server_id = ${serverId}
 			ORDER BY created_at ASC
 		`;
 
-		if (!rows.length) return [];
+    if (!rows.length) return [];
 
-		// 2. Validate and return
-		const validated: RandomTriggerRow[] = [];
-		for (const row of rows) {
-			const parsed = randomTriggerSchema.safeParse(row);
-			if (parsed.success) {
-				validated.push(parsed.data);
-			} else {
-				log.warn(
-					`Skipping invalid random trigger row (id=${row.trigger_id}):`,
-					parsed.error,
-				);
-			}
-		}
-		return validated;
-	} catch (error) {
-		log.error(`Error fetching random triggers for server ${serverId}:`, error);
-		return [];
-	}
+    // 2. Validate and return
+    const validated: RandomTriggerRow[] = [];
+    for (const row of rows) {
+      const parsed = randomTriggerSchema.safeParse(row);
+      if (parsed.success) {
+        validated.push(parsed.data);
+      } else {
+        log.warn(
+          `Skipping invalid random trigger row (id=${row.trigger_id}):`,
+          parsed.error,
+        );
+      }
+    }
+    return validated;
+  } catch (error) {
+    log.error(`Error fetching random triggers for server ${serverId}:`, error);
+    return [];
+  }
 }
 
 /**
@@ -2055,22 +2067,19 @@ export async function getServerRandomTriggers(
  * @returns The count of triggers, or 0 on error.
  */
 export async function getServerRandomTriggerCount(
-	serverId: number,
+  serverId: number,
 ): Promise<number> {
-	try {
-		// 1. Count triggers for this server
-		const [row] = await sql<Array<{ count: string | number }>>`
+  try {
+    // 1. Count triggers for this server
+    const [row] = await sql<Array<{ count: string | number }>>`
 			SELECT COUNT(*) AS count FROM random_triggers
 			WHERE server_id = ${serverId}
 		`;
-		return Number(row?.count ?? 0);
-	} catch (error) {
-		log.error(
-			`Error counting random triggers for server ${serverId}:`,
-			error,
-		);
-		return 0;
-	}
+    return Number(row?.count ?? 0);
+  } catch (error) {
+    log.error(`Error counting random triggers for server ${serverId}:`, error);
+    return 0;
+  }
 }
 
 /**
@@ -2083,13 +2092,13 @@ export async function getServerRandomTriggerCount(
  * @returns The existing RandomTriggerRow, or null if not found.
  */
 export async function getRandomTriggerByPersonaAndChannel(
-	serverId: number,
-	channelDiscId: string,
-	tomoriId: number,
+  serverId: number,
+  channelDiscId: string,
+  tomoriId: number,
 ): Promise<RandomTriggerRow | null> {
-	try {
-		// 1. Find matching trigger for the specific named persona in this channel
-		const [row] = await sql`
+  try {
+    // 1. Find matching trigger for the specific named persona in this channel
+    const [row] = await sql`
 			SELECT * FROM random_triggers
 			WHERE server_id = ${serverId}
 			  AND channel_disc_id = ${channelDiscId}
@@ -2097,25 +2106,25 @@ export async function getRandomTriggerByPersonaAndChannel(
 			LIMIT 1
 		`;
 
-		if (!row) return null;
+    if (!row) return null;
 
-		// 2. Validate and return
-		const parsed = randomTriggerSchema.safeParse(row);
-		if (!parsed.success) {
-			log.warn(
-				`Invalid random trigger row for persona ${tomoriId} in channel ${channelDiscId}:`,
-				parsed.error,
-			);
-			return null;
-		}
-		return parsed.data;
-	} catch (error) {
-		log.error(
-			`Error fetching random trigger for server ${serverId}, channel ${channelDiscId}, persona ${tomoriId}:`,
-			error,
-		);
-		return null;
-	}
+    // 2. Validate and return
+    const parsed = randomTriggerSchema.safeParse(row);
+    if (!parsed.success) {
+      log.warn(
+        `Invalid random trigger row for persona ${tomoriId} in channel ${channelDiscId}:`,
+        parsed.error,
+      );
+      return null;
+    }
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error fetching random trigger for server ${serverId}, channel ${channelDiscId}, persona ${tomoriId}:`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -2127,36 +2136,39 @@ export async function getRandomTriggerByPersonaAndChannel(
  * @returns Resolved LlmRow for the override, or null if not set
  */
 export async function getChannelLlmOverride(
-	serverId: number,
-	channelDiscId: string,
+  serverId: number,
+  channelDiscId: string,
 ): Promise<LlmRow | null> {
-	try {
-		// 1. Query channel override row
-		const overrideRows = await sql`
+  try {
+    // 1. Query channel override row
+    const overrideRows = await sql`
 			SELECT llm_id
 			FROM channel_llm_overrides
 			WHERE server_id = ${serverId}
 			  AND channel_disc_id = ${channelDiscId}
 			LIMIT 1
 		`;
-		if (!overrideRows.length) return null;
+    if (!overrideRows.length) return null;
 
-		const llmId = overrideRows[0].llm_id as number;
+    const llmId = overrideRows[0].llm_id as number;
 
-		// 2. Resolve LlmRow — check cache first, then fall back to DB
-		const cached = getCachedLLM(llmId);
-		if (cached) return cached as LlmRow;
+    // 2. Resolve LlmRow — check cache first, then fall back to DB
+    const cached = getCachedLLM(llmId);
+    if (cached) return cached as LlmRow;
 
-		const llmRows = await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
-		if (!llmRows.length) return null;
+    const llmRows =
+      await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
+    if (!llmRows.length) return null;
 
-		return llmRows[0] as LlmRow;
-	} catch (error) {
-		log.error(`Error fetching channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
-		return null;
-	}
+    return llmRows[0] as LlmRow;
+  } catch (error) {
+    log.error(
+      `Error fetching channel LLM override for server ${serverId} channel ${channelDiscId}:`,
+      error,
+    );
+    return null;
+  }
 }
-
 
 /**
  * Fetches all channel-level LLM overrides for a server, paired with their resolved LlmRow.
@@ -2166,35 +2178,45 @@ export async function getChannelLlmOverride(
  * @returns Array of objects containing channelDiscId and the resolved LlmRow
  */
 export async function getAllChannelLlmOverridesForServer(
-	serverId: number,
+  serverId: number,
 ): Promise<{ channelDiscId: string; llm: LlmRow }[]> {
-	try {
-		// 1. Fetch all override rows for this server
-		const overrideRows = await sql`
+  try {
+    // 1. Fetch all override rows for this server
+    const overrideRows = await sql`
 			SELECT channel_disc_id, llm_id
 			FROM channel_llm_overrides
 			WHERE server_id = ${serverId}
 			ORDER BY channel_disc_id
 		`;
-		if (!overrideRows.length) return [];
+    if (!overrideRows.length) return [];
 
-		// 2. Resolve each override to a full LlmRow (cache-first)
-		const results: { channelDiscId: string; llm: LlmRow }[] = [];
-		for (const row of overrideRows) {
-			const llmId = row.llm_id as number;
-			const cached = getCachedLLM(llmId);
-			if (cached) {
-				results.push({ channelDiscId: row.channel_disc_id as string, llm: cached as LlmRow });
-				continue;
-			}
-			const llmRows = await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
-			if (llmRows.length) {
-				results.push({ channelDiscId: row.channel_disc_id as string, llm: llmRows[0] as LlmRow });
-			}
-		}
-		return results;
-	} catch (error) {
-		log.error(`Error fetching all channel LLM overrides for server ${serverId}:`, error);
-		return [];
-	}
+    // 2. Resolve each override to a full LlmRow (cache-first)
+    const results: { channelDiscId: string; llm: LlmRow }[] = [];
+    for (const row of overrideRows) {
+      const llmId = row.llm_id as number;
+      const cached = getCachedLLM(llmId);
+      if (cached) {
+        results.push({
+          channelDiscId: row.channel_disc_id as string,
+          llm: cached as LlmRow,
+        });
+        continue;
+      }
+      const llmRows =
+        await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
+      if (llmRows.length) {
+        results.push({
+          channelDiscId: row.channel_disc_id as string,
+          llm: llmRows[0] as LlmRow,
+        });
+      }
+    }
+    return results;
+  } catch (error) {
+    log.error(
+      `Error fetching all channel LLM overrides for server ${serverId}:`,
+      error,
+    );
+    return [];
+  }
 }

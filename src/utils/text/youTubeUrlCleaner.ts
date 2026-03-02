@@ -11,10 +11,10 @@
  * Supports various YouTube URL formats
  */
 export const YOUTUBE_URL_PATTERNS = [
-	/(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/gi,
-	/(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})/gi,
-	/(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/gi,
-	/(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/gi,
+  /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/gi,
+  /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})/gi,
+  /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/gi,
+  /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/gi,
 ];
 
 /**
@@ -23,24 +23,24 @@ export const YOUTUBE_URL_PATTERNS = [
  * @returns Array of YouTube URLs found in the text
  */
 export function extractYouTubeUrls(text: string): string[] {
-	const urls: string[] = [];
+  const urls: string[] = [];
 
-	for (const pattern of YOUTUBE_URL_PATTERNS) {
-		// Reset regex lastIndex to ensure proper matching
-		pattern.lastIndex = 0;
+  for (const pattern of YOUTUBE_URL_PATTERNS) {
+    // Reset regex lastIndex to ensure proper matching
+    pattern.lastIndex = 0;
 
-		let match: RegExpExecArray | null;
-		// biome-ignore lint/suspicious/noAssignInExpressions: RegExp.exec() pattern requires assignment in expression
-		while ((match = pattern.exec(text)) !== null) {
-			urls.push(match[0]);
-		}
+    let match: RegExpExecArray | null;
+    // biome-ignore lint/suspicious/noAssignInExpressions: RegExp.exec() pattern requires assignment in expression
+    while ((match = pattern.exec(text)) !== null) {
+      urls.push(match[0]);
+    }
 
-		// Reset again after processing
-		pattern.lastIndex = 0;
-	}
+    // Reset again after processing
+    pattern.lastIndex = 0;
+  }
 
-	// Remove duplicates and return
-	return [...new Set(urls)];
+  // Remove duplicates and return
+  return [...new Set(urls)];
 }
 
 /**
@@ -49,26 +49,26 @@ export function extractYouTubeUrls(text: string): string[] {
  * @returns Array of unique YouTube video IDs
  */
 export function extractYouTubeVideoIds(text: string): string[] {
-	const videoIds: string[] = [];
+  const videoIds: string[] = [];
 
-	for (const pattern of YOUTUBE_URL_PATTERNS) {
-		// Reset regex lastIndex to ensure proper matching
-		pattern.lastIndex = 0;
+  for (const pattern of YOUTUBE_URL_PATTERNS) {
+    // Reset regex lastIndex to ensure proper matching
+    pattern.lastIndex = 0;
 
-		let match: RegExpExecArray | null;
-		// biome-ignore lint/suspicious/noAssignInExpressions: RegExp.exec() pattern requires assignment in expression
-		while ((match = pattern.exec(text)) !== null) {
-			if (match[1]) {
-				videoIds.push(match[1]);
-			}
-		}
+    let match: RegExpExecArray | null;
+    // biome-ignore lint/suspicious/noAssignInExpressions: RegExp.exec() pattern requires assignment in expression
+    while ((match = pattern.exec(text)) !== null) {
+      if (match[1]) {
+        videoIds.push(match[1]);
+      }
+    }
 
-		// Reset again after processing
-		pattern.lastIndex = 0;
-	}
+    // Reset again after processing
+    pattern.lastIndex = 0;
+  }
 
-	// Remove duplicates and return
-	return [...new Set(videoIds)];
+  // Remove duplicates and return
+  return [...new Set(videoIds)];
 }
 
 /**
@@ -79,18 +79,18 @@ export function extractYouTubeVideoIds(text: string): string[] {
  * @returns Text with YouTube URLs removed/replaced
  */
 export function removeYouTubeUrls(text: string, replacement = ""): string {
-	let cleanedText = text;
+  let cleanedText = text;
 
-	for (const pattern of YOUTUBE_URL_PATTERNS) {
-		// Reset regex lastIndex to ensure proper matching
-		pattern.lastIndex = 0;
-		cleanedText = cleanedText.replace(pattern, replacement);
-		// Reset again after processing
-		pattern.lastIndex = 0;
-	}
+  for (const pattern of YOUTUBE_URL_PATTERNS) {
+    // Reset regex lastIndex to ensure proper matching
+    pattern.lastIndex = 0;
+    cleanedText = cleanedText.replace(pattern, replacement);
+    // Reset again after processing
+    pattern.lastIndex = 0;
+  }
 
-	// Clean up any extra whitespace that might result from URL removal
-	return cleanedText.replace(/\s+/g, " ").trim();
+  // Clean up any extra whitespace that might result from URL removal
+  return cleanedText.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -101,28 +101,28 @@ export function removeYouTubeUrls(text: string, replacement = ""): string {
  * @returns Text with YouTube URLs replaced with placeholders
  */
 export function replaceYouTubeUrlsWithPlaceholders(
-	text: string,
-	placeholder = "[YouTube video processed]",
+  text: string,
+  placeholder = "[YouTube video processed]",
 ): string {
-	let processedText = text;
+  let processedText = text;
 
-	for (const pattern of YOUTUBE_URL_PATTERNS) {
-		// Reset regex lastIndex to ensure proper matching
-		pattern.lastIndex = 0;
+  for (const pattern of YOUTUBE_URL_PATTERNS) {
+    // Reset regex lastIndex to ensure proper matching
+    pattern.lastIndex = 0;
 
-		processedText = processedText.replace(pattern, (_, videoId) => {
-			// If placeholder contains {videoId}, replace it with actual video ID
-			if (placeholder.includes("{videoId}") && videoId) {
-				return placeholder.replace("{videoId}", videoId);
-			}
-			return placeholder;
-		});
+    processedText = processedText.replace(pattern, (_, videoId) => {
+      // If placeholder contains {videoId}, replace it with actual video ID
+      if (placeholder.includes("{videoId}") && videoId) {
+        return placeholder.replace("{videoId}", videoId);
+      }
+      return placeholder;
+    });
 
-		// Reset again after processing
-		pattern.lastIndex = 0;
-	}
+    // Reset again after processing
+    pattern.lastIndex = 0;
+  }
 
-	return processedText.replace(/\s+/g, " ").trim();
+  return processedText.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -131,18 +131,18 @@ export function replaceYouTubeUrlsWithPlaceholders(
  * @returns True if text contains YouTube URLs
  */
 export function containsYouTubeUrls(text: string): boolean {
-	for (const pattern of YOUTUBE_URL_PATTERNS) {
-		// Reset regex lastIndex to ensure proper matching
-		pattern.lastIndex = 0;
-		if (pattern.test(text)) {
-			// Reset after test
-			pattern.lastIndex = 0;
-			return true;
-		}
-		// Reset again just to be safe
-		pattern.lastIndex = 0;
-	}
-	return false;
+  for (const pattern of YOUTUBE_URL_PATTERNS) {
+    // Reset regex lastIndex to ensure proper matching
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) {
+      // Reset after test
+      pattern.lastIndex = 0;
+      return true;
+    }
+    // Reset again just to be safe
+    pattern.lastIndex = 0;
+  }
+  return false;
 }
 
 /**
@@ -151,16 +151,16 @@ export function containsYouTubeUrls(text: string): boolean {
  * @returns Object with URL count and unique video IDs
  */
 export function getYouTubeUrlStats(text: string): {
-	urlCount: number;
-	uniqueVideoIds: string[];
-	urls: string[];
+  urlCount: number;
+  uniqueVideoIds: string[];
+  urls: string[];
 } {
-	const urls = extractYouTubeUrls(text);
-	const videoIds = extractYouTubeVideoIds(text);
+  const urls = extractYouTubeUrls(text);
+  const videoIds = extractYouTubeVideoIds(text);
 
-	return {
-		urlCount: urls.length,
-		uniqueVideoIds: videoIds,
-		urls: urls,
-	};
+  return {
+    urlCount: urls.length,
+    uniqueVideoIds: videoIds,
+    urls: urls,
+  };
 }

@@ -1,18 +1,18 @@
 import {
-	TextInputStyle,
-	type ButtonInteraction,
-	type ChatInputCommandInteraction,
-	type Client,
-	type ModalSubmitInteraction,
-	type SlashCommandSubcommandBuilder,
+  TextInputStyle,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type Client,
+  type ModalSubmitInteraction,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
-	promptWithModal,
-	replyInfoEmbed,
-	replyPaginatedPersonaChoicesV2,
+  promptWithModal,
+  replyInfoEmbed,
+  replyPaginatedPersonaChoicesV2,
 } from "../../utils/discord/interactionHelper";
 import type { TomoriState, UserRow } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
@@ -33,11 +33,11 @@ const FIELD_STARS = "nai_attg_stars";
  * @returns Configured subcommand builder
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("attg")
-		.setDescription(localizer("en-US", "commands.novelai.attg.description"));
+  subcommand
+    .setName("attg")
+    .setDescription(localizer("en-US", "commands.novelai.attg.description"));
 
 /**
  * Configure per-persona ATTG (Author/Title/Tags/Genre/Stars) metadata
@@ -63,176 +63,176 @@ export const configureSubcommand = (
  * @param locale - User's locale preference
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild) {
-		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
+  // 1. Ensure command is run in a guild
+  if (!interaction.guild) {
+    await replyInfoEmbed(interaction, userData.language_pref, {
+      titleKey: "general.errors.guild_only_title",
+      descriptionKey: "general.errors.guild_only_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
 
-	let personaSelectionInteraction: ButtonInteraction | null = null;
-	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
-	let selectedPersona: TomoriState | null = null;
+  let personaSelectionInteraction: ButtonInteraction | null = null;
+  let modalSubmitInteraction: ModalSubmitInteraction | null = null;
+  let selectedPersona: TomoriState | null = null;
 
-	try {
-		// 2. Load all personas for the server
-		const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
-		if (allPersonas.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+  try {
+    // 2. Load all personas for the server
+    const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
+    if (allPersonas.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		// 3. Show paginated persona selector.
-		//    preserveSelectedInteraction=true leaves the ButtonInteraction unacknowledged
-		//    so we can open a modal as the first response to it.
-		const personaResult = await replyPaginatedPersonaChoicesV2(
-			interaction,
-			locale,
-			{
-				personas: allPersonas,
-				titleKey: "commands.novelai.attg.persona_select_title",
-				color: ColorCode.INFO,
-				preserveSelectedInteraction: true,
-				onSelect: async () => {},
-			},
-		);
+    // 3. Show paginated persona selector.
+    //    preserveSelectedInteraction=true leaves the ButtonInteraction unacknowledged
+    //    so we can open a modal as the first response to it.
+    const personaResult = await replyPaginatedPersonaChoicesV2(
+      interaction,
+      locale,
+      {
+        personas: allPersonas,
+        titleKey: "commands.novelai.attg.persona_select_title",
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      },
+    );
 
-		if (
-			!personaResult.success ||
-			personaResult.selectedIndex === undefined ||
-			!personaResult.interaction
-		) {
-			return;
-		}
+    if (
+      !personaResult.success ||
+      personaResult.selectedIndex === undefined ||
+      !personaResult.interaction
+    ) {
+      return;
+    }
 
-		personaSelectionInteraction = personaResult.interaction;
-		selectedPersona = allPersonas[personaResult.selectedIndex] ?? null;
+    personaSelectionInteraction = personaResult.interaction;
+    selectedPersona = allPersonas[personaResult.selectedIndex] ?? null;
 
-		if (!selectedPersona?.tomori_id) {
-			await replyInfoEmbed(personaSelectionInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+    if (!selectedPersona?.tomori_id) {
+      await replyInfoEmbed(personaSelectionInteraction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		// 4. Open the ATTG five-field modal.
-		//    Pre-fill fields from the persona's existing values (may be null).
-		const modalResult = await promptWithModal(
-			personaSelectionInteraction,
-			locale,
-			{
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.novelai.attg.modal_title",
-				components: [
-					{
-						customId: FIELD_AUTHOR,
-						labelKey: "commands.novelai.attg.author_label",
-						placeholder: "commands.novelai.attg.author_placeholder",
-						style: TextInputStyle.Short,
-						required: false,
-						maxLength: 256,
-						value: selectedPersona.nai_attg_author ?? undefined,
-					},
-					{
-						customId: FIELD_TITLE,
-						labelKey: "commands.novelai.attg.title_label",
-						placeholder: "commands.novelai.attg.title_placeholder",
-						style: TextInputStyle.Short,
-						required: false,
-						maxLength: 256,
-						value: selectedPersona.nai_attg_title ?? undefined,
-					},
-					{
-						customId: FIELD_TAGS,
-						labelKey: "commands.novelai.attg.tags_label",
-						placeholder: "commands.novelai.attg.tags_placeholder",
-						style: TextInputStyle.Short,
-						required: false,
-						maxLength: 256,
-						value: selectedPersona.nai_attg_tags ?? undefined,
-					},
-					{
-						customId: FIELD_GENRE,
-						labelKey: "commands.novelai.attg.genre_label",
-						placeholder: "commands.novelai.attg.genre_placeholder",
-						style: TextInputStyle.Short,
-						required: false,
-						maxLength: 256,
-						value: selectedPersona.nai_attg_genre ?? undefined,
-					},
-					{
-						customId: FIELD_STARS,
-						labelKey: "commands.novelai.attg.stars_label",
-						placeholder: "commands.novelai.attg.stars_placeholder",
-						style: TextInputStyle.Short,
-						required: false,
-						maxLength: 1,
-						value:
-							selectedPersona.nai_attg_stars != null
-								? selectedPersona.nai_attg_stars.toString()
-								: undefined,
-					},
-				],
-			},
-		);
+    // 4. Open the ATTG five-field modal.
+    //    Pre-fill fields from the persona's existing values (may be null).
+    const modalResult = await promptWithModal(
+      personaSelectionInteraction,
+      locale,
+      {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.novelai.attg.modal_title",
+        components: [
+          {
+            customId: FIELD_AUTHOR,
+            labelKey: "commands.novelai.attg.author_label",
+            placeholder: "commands.novelai.attg.author_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_author ?? undefined,
+          },
+          {
+            customId: FIELD_TITLE,
+            labelKey: "commands.novelai.attg.title_label",
+            placeholder: "commands.novelai.attg.title_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_title ?? undefined,
+          },
+          {
+            customId: FIELD_TAGS,
+            labelKey: "commands.novelai.attg.tags_label",
+            placeholder: "commands.novelai.attg.tags_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_tags ?? undefined,
+          },
+          {
+            customId: FIELD_GENRE,
+            labelKey: "commands.novelai.attg.genre_label",
+            placeholder: "commands.novelai.attg.genre_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_genre ?? undefined,
+          },
+          {
+            customId: FIELD_STARS,
+            labelKey: "commands.novelai.attg.stars_label",
+            placeholder: "commands.novelai.attg.stars_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 1,
+            value:
+              selectedPersona.nai_attg_stars != null
+                ? selectedPersona.nai_attg_stars.toString()
+                : undefined,
+          },
+        ],
+      },
+    );
 
-		if (modalResult.outcome !== "submit") {
-			log.info(
-				`ATTG modal ${modalResult.outcome} for user ${userData.user_id}`,
-			);
-			return;
-		}
+    if (modalResult.outcome !== "submit") {
+      log.info(
+        `ATTG modal ${modalResult.outcome} for user ${userData.user_id}`,
+      );
+      return;
+    }
 
-		// biome-ignore lint/style/noNonNullAssertion: outcome "submit" guarantees interaction
-		modalSubmitInteraction = modalResult.interaction!;
-		const values = modalResult.values ?? {};
+    // biome-ignore lint/style/noNonNullAssertion: outcome "submit" guarantees interaction
+    modalSubmitInteraction = modalResult.interaction!;
+    const values = modalResult.values ?? {};
 
-		// 5. Parse field values — trim and treat empty strings as null
-		const author = values[FIELD_AUTHOR]?.trim() || null;
-		const title = values[FIELD_TITLE]?.trim() || null;
-		const tags = values[FIELD_TAGS]?.trim() || null;
-		const genre = values[FIELD_GENRE]?.trim() || null;
-		const starsRaw = values[FIELD_STARS]?.trim() || "";
+    // 5. Parse field values — trim and treat empty strings as null
+    const author = values[FIELD_AUTHOR]?.trim() || null;
+    const title = values[FIELD_TITLE]?.trim() || null;
+    const tags = values[FIELD_TAGS]?.trim() || null;
+    const genre = values[FIELD_GENRE]?.trim() || null;
+    const starsRaw = values[FIELD_STARS]?.trim() || "";
 
-		// 5a. Validate stars: must be empty OR an integer 1–5
-		let stars: number | null = null;
-		if (starsRaw !== "") {
-			const parsed = Number.parseInt(starsRaw, 10);
-			if (
-				Number.isNaN(parsed) ||
-				parsed < 1 ||
-				parsed > 5 ||
-				starsRaw !== parsed.toString()
-			) {
-				await replyInfoEmbed(modalSubmitInteraction, locale, {
-					titleKey: "commands.novelai.attg.invalid_stars_title",
-					descriptionKey: "commands.novelai.attg.invalid_stars_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
-			stars = parsed;
-		}
+    // 5a. Validate stars: must be empty OR an integer 1–5
+    let stars: number | null = null;
+    if (starsRaw !== "") {
+      const parsed = Number.parseInt(starsRaw, 10);
+      if (
+        Number.isNaN(parsed) ||
+        parsed < 1 ||
+        parsed > 5 ||
+        starsRaw !== parsed.toString()
+      ) {
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey: "commands.novelai.attg.invalid_stars_title",
+          descriptionKey: "commands.novelai.attg.invalid_stars_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      stars = parsed;
+    }
 
-		const personaId = selectedPersona.tomori_id;
+    const personaId = selectedPersona.tomori_id;
 
-		// 6. If all fields are empty → clear all ATTG columns (set to NULL)
-		if (!author && !title && !tags && !genre && stars === null) {
-			await sql`
+    // 6. If all fields are empty → clear all ATTG columns (set to NULL)
+    if (!author && !title && !tags && !genre && stars === null) {
+      await sql`
 				UPDATE tomoris
 				SET
 					nai_attg_author = NULL,
@@ -243,21 +243,21 @@ export async function execute(
 				WHERE tomori_id = ${personaId}
 			`;
 
-			// 6a. Invalidate cache so next access gets fresh data
-			invalidateTomoriStateCache(interaction.guild.id);
+      // 6a. Invalidate cache so next access gets fresh data
+      invalidateTomoriStateCache(interaction.guild.id);
 
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.novelai.attg.cleared_title",
-				descriptionKey: "commands.novelai.attg.cleared_description",
-				descriptionVars: { persona_name: selectedPersona.tomori_nickname },
-				color: ColorCode.SUCCESS,
-			});
-			return;
-		}
+      await replyInfoEmbed(modalSubmitInteraction, locale, {
+        titleKey: "commands.novelai.attg.cleared_title",
+        descriptionKey: "commands.novelai.attg.cleared_description",
+        descriptionVars: { persona_name: selectedPersona.tomori_nickname },
+        color: ColorCode.SUCCESS,
+      });
+      return;
+    }
 
-		// 7. Write non-empty values to DB.
-		//    NULL-coalesced with existing values so unmodified fields are preserved.
-		await sql`
+    // 7. Write non-empty values to DB.
+    //    NULL-coalesced with existing values so unmodified fields are preserved.
+    await sql`
 			UPDATE tomoris
 			SET
 				nai_attg_author = ${author},
@@ -268,35 +268,35 @@ export async function execute(
 			WHERE tomori_id = ${personaId}
 		`;
 
-		// 7a. Invalidate cache after successful write
-		invalidateTomoriStateCache(interaction.guild.id);
+    // 7a. Invalidate cache after successful write
+    invalidateTomoriStateCache(interaction.guild.id);
 
-		// 8. Success reply
-		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.novelai.attg.success_title",
-			descriptionKey: "commands.novelai.attg.success_description",
-			descriptionVars: { persona_name: selectedPersona.tomori_nickname },
-			color: ColorCode.SUCCESS,
-		});
-	} catch (error) {
-		const context = {
-			errorType: "CommandExecutionError",
-			metadata: {
-				command: "nai attg",
-				guildId: interaction.guild?.id ?? null,
-				personaId: selectedPersona?.tomori_id ?? null,
-			},
-		};
-		await log.error("Error in /novelai attg command", error, context);
+    // 8. Success reply
+    await replyInfoEmbed(modalSubmitInteraction, locale, {
+      titleKey: "commands.novelai.attg.success_title",
+      descriptionKey: "commands.novelai.attg.success_description",
+      descriptionVars: { persona_name: selectedPersona.tomori_nickname },
+      color: ColorCode.SUCCESS,
+    });
+  } catch (error) {
+    const context = {
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "nai attg",
+        guildId: interaction.guild?.id ?? null,
+        personaId: selectedPersona?.tomori_id ?? null,
+      },
+    };
+    await log.error("Error in /novelai attg command", error, context);
 
-		// Reply to the most recent interaction we have
-		const errorInteraction =
-			modalSubmitInteraction ?? personaSelectionInteraction ?? interaction;
+    // Reply to the most recent interaction we have
+    const errorInteraction =
+      modalSubmitInteraction ?? personaSelectionInteraction ?? interaction;
 
-		await replyInfoEmbed(errorInteraction, locale, {
-			titleKey: "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-			color: ColorCode.ERROR,
-		});
-	}
+    await replyInfoEmbed(errorInteraction, locale, {
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+      color: ColorCode.ERROR,
+    });
+  }
 }

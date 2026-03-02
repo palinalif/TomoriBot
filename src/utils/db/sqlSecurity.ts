@@ -9,78 +9,78 @@
  */
 
 import type {
-	UserRow,
-	TomoriRow,
-	TomoriConfigRow,
+  UserRow,
+  TomoriRow,
+  TomoriConfigRow,
 } from "../../types/db/schema";
 import { log } from "../misc/logger";
 
 // Extract allowed field names from Zod schemas
 // These exclude auto-managed fields (IDs, timestamps) that shouldn't be in dynamic updates
 const ALLOWED_USER_FIELDS = new Set<keyof UserRow>([
-	"user_disc_id",
-	"user_nickname",
-	"language_pref",
-	"registration_locale", // Static field (set once at registration, but whitelisted for safety)
-	"personal_memories",
-	"privacy_level",
-	// Exclude: user_id (primary key), created_at, updated_at (auto-managed)
+  "user_disc_id",
+  "user_nickname",
+  "language_pref",
+  "registration_locale", // Static field (set once at registration, but whitelisted for safety)
+  "personal_memories",
+  "privacy_level",
+  // Exclude: user_id (primary key), created_at, updated_at (auto-managed)
 ]);
 
 const ALLOWED_TOMORI_FIELDS = new Set<keyof TomoriRow>([
-	"server_id",
-	"tomori_nickname",
-	"attribute_list",
-	"sample_dialogues_in",
-	"sample_dialogues_out",
-	"autoch_counter",
-	// Exclude: tomori_id (primary key), created_at, updated_at (auto-managed)
+  "server_id",
+  "tomori_nickname",
+  "attribute_list",
+  "sample_dialogues_in",
+  "sample_dialogues_out",
+  "autoch_counter",
+  // Exclude: tomori_id (primary key), created_at, updated_at (auto-managed)
 ]);
 
 const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
-	"llm_id",
-	"embedding_model_id",
-	"llm_temperature",
-	"llm_top_p",
-	"llm_top_k",
-	"llm_frequency_penalty",
-	"llm_presence_penalty",
-	"llm_min_p",
-	"api_key",
-	"key_version",
-	"trigger_words",
-	"autoch_disc_ids",
-	"autoch_threshold",
-	"message_fetch_limit",
-	"server_memteaching_enabled",
-	"attribute_memteaching_enabled",
-	"sampledialogue_memteaching_enabled",
-	"self_teaching_enabled",
-	"web_search_enabled",
-	"personal_memories_enabled",
-	"humanizer_degree",
-	"emoji_usage_enabled",
-	"sticker_usage_enabled",
-	"imagegen_enabled",
-	"timezone_offset",
-	"system_prompt",
-	"nai_preset_name",
-	"rp_channel_ids",
-	"self_reply_limit",
-	"triggered_persona_limit",
-	"diffusion_model_id",
-	"pin_message_enabled",
-	"hide_respond_embed",
-	"hide_impersonation_embeds",
-	"uncensor_injection_enabled",
-	"uncensor_unicode_space_enabled",
-	"uncensor_sanitize_enabled",
-	"videogen_enabled",
-	"cooldown_type",
-	"cooldown_length",
-	"custom_endpoint_url",
-	"custom_model_name",
-	// Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
+  "llm_id",
+  "embedding_model_id",
+  "llm_temperature",
+  "llm_top_p",
+  "llm_top_k",
+  "llm_frequency_penalty",
+  "llm_presence_penalty",
+  "llm_min_p",
+  "api_key",
+  "key_version",
+  "trigger_words",
+  "autoch_disc_ids",
+  "autoch_threshold",
+  "message_fetch_limit",
+  "server_memteaching_enabled",
+  "attribute_memteaching_enabled",
+  "sampledialogue_memteaching_enabled",
+  "self_teaching_enabled",
+  "web_search_enabled",
+  "personal_memories_enabled",
+  "humanizer_degree",
+  "emoji_usage_enabled",
+  "sticker_usage_enabled",
+  "imagegen_enabled",
+  "timezone_offset",
+  "system_prompt",
+  "nai_preset_name",
+  "rp_channel_ids",
+  "self_reply_limit",
+  "triggered_persona_limit",
+  "diffusion_model_id",
+  "pin_message_enabled",
+  "hide_respond_embed",
+  "hide_impersonation_embeds",
+  "uncensor_injection_enabled",
+  "uncensor_unicode_space_enabled",
+  "uncensor_sanitize_enabled",
+  "videogen_enabled",
+  "cooldown_type",
+  "cooldown_length",
+  "custom_endpoint_url",
+  "custom_model_name",
+  // Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
 ]);
 
 /**
@@ -91,13 +91,13 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
  * @throws Error if any field name is not whitelisted
  */
 export function validateUserFields(fields: string[]): void {
-	for (const field of fields) {
-		if (!ALLOWED_USER_FIELDS.has(field as keyof UserRow)) {
-			const error = `Security violation: Invalid field name '${field}' for User table update. Allowed fields: ${Array.from(ALLOWED_USER_FIELDS).join(", ")}`;
-			log.error(error);
-			throw new Error(error);
-		}
-	}
+  for (const field of fields) {
+    if (!ALLOWED_USER_FIELDS.has(field as keyof UserRow)) {
+      const error = `Security violation: Invalid field name '${field}' for User table update. Allowed fields: ${Array.from(ALLOWED_USER_FIELDS).join(", ")}`;
+      log.error(error);
+      throw new Error(error);
+    }
+  }
 }
 
 /**
@@ -108,13 +108,13 @@ export function validateUserFields(fields: string[]): void {
  * @throws Error if any field name is not whitelisted
  */
 export function validateTomoriFields(fields: string[]): void {
-	for (const field of fields) {
-		if (!ALLOWED_TOMORI_FIELDS.has(field as keyof TomoriRow)) {
-			const error = `Security violation: Invalid field name '${field}' for Tomori table update. Allowed fields: ${Array.from(ALLOWED_TOMORI_FIELDS).join(", ")}`;
-			log.error(error);
-			throw new Error(error);
-		}
-	}
+  for (const field of fields) {
+    if (!ALLOWED_TOMORI_FIELDS.has(field as keyof TomoriRow)) {
+      const error = `Security violation: Invalid field name '${field}' for Tomori table update. Allowed fields: ${Array.from(ALLOWED_TOMORI_FIELDS).join(", ")}`;
+      log.error(error);
+      throw new Error(error);
+    }
+  }
 }
 
 /**
@@ -125,32 +125,32 @@ export function validateTomoriFields(fields: string[]): void {
  * @throws Error if any field name is not whitelisted
  */
 export function validateTomoriConfigFields(fields: string[]): void {
-	for (const field of fields) {
-		if (!ALLOWED_TOMORI_CONFIG_FIELDS.has(field as keyof TomoriConfigRow)) {
-			const error = `Security violation: Invalid field name '${field}' for TomoriConfig table update. Allowed fields: ${Array.from(ALLOWED_TOMORI_CONFIG_FIELDS).join(", ")}`;
-			log.error(error);
-			throw new Error(error);
-		}
-	}
+  for (const field of fields) {
+    if (!ALLOWED_TOMORI_CONFIG_FIELDS.has(field as keyof TomoriConfigRow)) {
+      const error = `Security violation: Invalid field name '${field}' for TomoriConfig table update. Allowed fields: ${Array.from(ALLOWED_TOMORI_CONFIG_FIELDS).join(", ")}`;
+      log.error(error);
+      throw new Error(error);
+    }
+  }
 }
 
 /**
  * Get all allowed field names for User table (for documentation/debugging purposes)
  */
 export function getAllowedUserFields(): readonly string[] {
-	return Array.from(ALLOWED_USER_FIELDS);
+  return Array.from(ALLOWED_USER_FIELDS);
 }
 
 /**
  * Get all allowed field names for Tomori table (for documentation/debugging purposes)
  */
 export function getAllowedTomoriFields(): readonly string[] {
-	return Array.from(ALLOWED_TOMORI_FIELDS);
+  return Array.from(ALLOWED_TOMORI_FIELDS);
 }
 
 /**
  * Get all allowed field names for TomoriConfig table (for documentation/debugging purposes)
  */
 export function getAllowedTomoriConfigFields(): readonly string[] {
-	return Array.from(ALLOWED_TOMORI_CONFIG_FIELDS);
+  return Array.from(ALLOWED_TOMORI_CONFIG_FIELDS);
 }

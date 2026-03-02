@@ -11,13 +11,13 @@ import type { UserRow } from "@/types/db/schema";
  * @returns The configured subcommand
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("github")
-		.setDescription(
-			localizer("en-US", "commands.contribute.github.description"),
-		);
+  subcommand
+    .setName("github")
+    .setDescription(
+      localizer("en-US", "commands.contribute.github.description"),
+    );
 
 /**
  * Execute the contribute github command - show GitHub repository link and contribution information
@@ -27,33 +27,33 @@ export const configureSubcommand = (
  * @param locale - Locale of the interaction
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  _userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 0. Defer the interaction before async file I/O to prevent timeout
-	await interaction.deferReply();
+  // 0. Defer the interaction before async file I/O to prevent timeout
+  await interaction.deferReply();
 
-	// 1. Load gitbanner.png image as attachment
-	const bannerFile = Bun.file("img/gitbanner.png");
-	const bannerBuffer = await bannerFile.arrayBuffer();
-	const attachment = new AttachmentBuilder(Buffer.from(bannerBuffer), {
-		name: "gitbanner.png",
-	});
+  // 1. Load gitbanner.png image as attachment
+  const bannerFile = Bun.file("img/gitbanner.png");
+  const bannerBuffer = await bannerFile.arrayBuffer();
+  const attachment = new AttachmentBuilder(Buffer.from(bannerBuffer), {
+    name: "gitbanner.png",
+  });
 
-	// 2. Create embed with image attachment
-	const embed = new EmbedBuilder()
-		.setTitle(localizer(locale, "commands.contribute.github.title"))
-		.setDescription(
-			localizer(locale, "commands.contribute.github.description_text"),
-		)
-		.setColor(ColorCode.INFO)
-		.setImage("attachment://gitbanner.png");
+  // 2. Create embed with image attachment
+  const embed = new EmbedBuilder()
+    .setTitle(localizer(locale, "commands.contribute.github.title"))
+    .setDescription(
+      localizer(locale, "commands.contribute.github.description_text"),
+    )
+    .setColor(ColorCode.INFO)
+    .setImage("attachment://gitbanner.png");
 
-	// 3. Reply with embed and attachment
-	await interaction.editReply({
-		embeds: [embed],
-		files: [attachment],
-	});
+  // 3. Reply with embed and attachment
+  await interaction.editReply({
+    embeds: [embed],
+    files: [attachment],
+  });
 }

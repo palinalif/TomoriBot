@@ -11,16 +11,16 @@
  * and PostgreSQL-specific types.
  */
 export type SqlValue =
-	| string
-	| number
-	| boolean
-	| Date
-	| string[]
-	| number[]
-	| boolean[]
-	| Buffer
-	| null
-	| undefined;
+  | string
+  | number
+  | boolean
+  | Date
+  | string[]
+  | number[]
+  | boolean[]
+  | Buffer
+  | null
+  | undefined;
 
 /**
  * Array type for SQL query parameters used with sql.unsafe spread operations.
@@ -84,12 +84,12 @@ export type ValidatedTomoriConfigFields = string[];
  * Provides metadata for security logging and error tracking.
  */
 export type SqlSecurityContext = {
-	/** The table being operated on */
-	tableName: "users" | "tomoris" | "tomori_configs";
-	/** Field names that passed whitelist validation */
-	validatedFields: string[];
-	/** The operation being performed */
-	operation: "UPDATE" | "SELECT" | "INSERT" | "DELETE";
-	/** Whether sql.unsafe was used in the operation */
-	usedUnsafeQuery: boolean;
+  /** The table being operated on */
+  tableName: "users" | "tomoris" | "tomori_configs";
+  /** Field names that passed whitelist validation */
+  validatedFields: string[];
+  /** The operation being performed */
+  operation: "UPDATE" | "SELECT" | "INSERT" | "DELETE";
+  /** Whether sql.unsafe was used in the operation */
+  usedUnsafeQuery: boolean;
 };

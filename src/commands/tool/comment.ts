@@ -1,15 +1,15 @@
 import type { Client, ChatInputCommandInteraction } from "discord.js";
 import {
-	MessageFlags,
-	type SlashCommandSubcommandBuilder,
-	EmbedBuilder,
-	ChannelType,
+  MessageFlags,
+  type SlashCommandSubcommandBuilder,
+  EmbedBuilder,
+  ChannelType,
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
 import {
-	replyInfoEmbed,
-	promptWithPaginatedModal,
+  replyInfoEmbed,
+  promptWithPaginatedModal,
 } from "@/utils/discord/interactionHelper";
 import type { UserRow } from "@/types/db/schema";
 
@@ -19,11 +19,11 @@ import type { UserRow } from "@/types/db/schema";
  * @returns Configured subcommand builder
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) => {
-	return subcommand
-		.setName("comment")
-		.setDescription(localizer("en-US", "commands.tool.comment.description"));
+  return subcommand
+    .setName("comment")
+    .setDescription(localizer("en-US", "commands.tool.comment.description"));
 };
 
 /**
@@ -35,106 +35,108 @@ export const configureSubcommand = (
  * @param locale - User's locale
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  _userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 1. Fast validation
-	if (!interaction.guild || !interaction.channel) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
-			color: ColorCode.WARN,
-			flags: MessageFlags.Ephemeral,
-		});
-		return;
-	}
+  // 1. Fast validation
+  if (!interaction.guild || !interaction.channel) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.guild_only_title",
+      descriptionKey: "general.errors.guild_only_description",
+      color: ColorCode.WARN,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-	// Narrow channel type to TextChannel
-	if (interaction.channel.type !== ChannelType.GuildText) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.tool.comment.invalid_channel_title",
-			descriptionKey: "commands.tool.comment.invalid_channel_description",
-			color: ColorCode.WARN,
-			flags: MessageFlags.Ephemeral,
-		});
-		return;
-	}
+  // Narrow channel type to TextChannel
+  if (interaction.channel.type !== ChannelType.GuildText) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.tool.comment.invalid_channel_title",
+      descriptionKey: "commands.tool.comment.invalid_channel_description",
+      color: ColorCode.WARN,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-	const channel = interaction.channel;
+  const channel = interaction.channel;
 
-	// 2. Show modal for comment content
-	// DO NOT defer before modal - Pattern 3
-	const modalResult = await promptWithPaginatedModal(interaction, locale, {
-		modalCustomId: "tool_comment_modal",
-		modalTitleKey: "commands.tool.comment.modal_title",
-		components: [
-			{
-				customId: "comment_content",
-				labelKey: "commands.tool.comment.content_label",
-				placeholder: localizer(
-					locale,
-					"commands.tool.comment.content_placeholder",
-				),
-				required: true,
-				minLength: 1,
-				maxLength: 4000,
-				style: 2, // TextInputStyle.Paragraph
-			},
-		],
-	});
+  // 2. Show modal for comment content
+  // DO NOT defer before modal - Pattern 3
+  const modalResult = await promptWithPaginatedModal(interaction, locale, {
+    modalCustomId: "tool_comment_modal",
+    modalTitleKey: "commands.tool.comment.modal_title",
+    components: [
+      {
+        customId: "comment_content",
+        labelKey: "commands.tool.comment.content_label",
+        placeholder: localizer(
+          locale,
+          "commands.tool.comment.content_placeholder",
+        ),
+        required: true,
+        minLength: 1,
+        maxLength: 4000,
+        style: 2, // TextInputStyle.Paragraph
+      },
+    ],
+  });
 
-	// 3. Process modal submission
-	if (
-		modalResult.outcome !== "submit" ||
-		!modalResult.values ||
-		!modalResult.interaction
-	) {
-		return;
-	}
+  // 3. Process modal submission
+  if (
+    modalResult.outcome !== "submit" ||
+    !modalResult.values ||
+    !modalResult.interaction
+  ) {
+    return;
+  }
 
-	// Ensure submission is deferred
-	if (!modalResult.interaction.deferred && !modalResult.interaction.replied) {
-		await modalResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
-	}
+  // Ensure submission is deferred
+  if (!modalResult.interaction.deferred && !modalResult.interaction.replied) {
+    await modalResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
 
-	const commentContent = modalResult.values.comment_content || "";
+  const commentContent = modalResult.values.comment_content || "";
 
-	// 4. Create embed with comment content
-	const embed = new EmbedBuilder()
-		.setDescription(commentContent)
-		.setColor(ColorCode.INFO);
+  // 4. Create embed with comment content
+  const embed = new EmbedBuilder()
+    .setDescription(commentContent)
+    .setColor(ColorCode.INFO);
 
-	// 5. Add footer showing who created the comment (with profile picture)
-	const memberAvatarUrl = interaction.member
-		? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
-				size: 64,
-				extension: "png",
-				forceStatic: true,
-			})
-		: interaction.user.displayAvatarURL({
-				size: 64,
-				extension: "png",
-				forceStatic: true,
-			});
+  // 5. Add footer showing who created the comment (with profile picture)
+  const memberAvatarUrl = interaction.member
+    ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL(
+        {
+          size: 64,
+          extension: "png",
+          forceStatic: true,
+        },
+      )
+    : interaction.user.displayAvatarURL({
+        size: 64,
+        extension: "png",
+        forceStatic: true,
+      });
 
-	embed.setFooter({
-		text: localizer(locale, "commands.tool.comment.footer", {
-			user: interaction.user.username,
-		}),
-		iconURL: memberAvatarUrl,
-	});
+  embed.setFooter({
+    text: localizer(locale, "commands.tool.comment.footer", {
+      user: interaction.user.username,
+    }),
+    iconURL: memberAvatarUrl,
+  });
 
-	// 6. Send as public message in the channel
-	await channel.send({
-		embeds: [embed],
-	});
+  // 6. Send as public message in the channel
+  await channel.send({
+    embeds: [embed],
+  });
 
-	// 7. Send confirmation to user
-	await replyInfoEmbed(modalResult.interaction, locale, {
-		titleKey: "commands.tool.comment.success_title",
-		descriptionKey: "commands.tool.comment.success_description",
-		color: ColorCode.SUCCESS,
-	});
+  // 7. Send confirmation to user
+  await replyInfoEmbed(modalResult.interaction, locale, {
+    titleKey: "commands.tool.comment.success_title",
+    descriptionKey: "commands.tool.comment.success_description",
+    color: ColorCode.SUCCESS,
+  });
 }

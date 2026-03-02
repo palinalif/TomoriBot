@@ -18,14 +18,14 @@ const llmCache = new Map<number, LlmRow>();
  * This should be called once at bot startup for optimal performance
  */
 export async function initializeLLMCache(): Promise<void> {
-	try {
-		log.info("Initializing LLM configuration cache...");
+  try {
+    log.info("Initializing LLM configuration cache...");
 
-		// 1. Clear existing cache
-		llmCache.clear();
+    // 1. Clear existing cache
+    llmCache.clear();
 
-		// 2. Load all LLM configurations from database
-		const llms = await sql`
+    // 2. Load all LLM configurations from database
+    const llms = await sql`
 			SELECT
 				llm_id,
 				llm_provider,
@@ -49,34 +49,34 @@ export async function initializeLLMCache(): Promise<void> {
 			ORDER BY llm_provider, llm_codename
 		`;
 
-		if (!llms || llms.length === 0) {
-			log.warn("No LLM configurations found in database");
-			return;
-		}
+    if (!llms || llms.length === 0) {
+      log.warn("No LLM configurations found in database");
+      return;
+    }
 
-		// 3. Cache each LLM configuration
-		for (const llm of llms) {
-			llmCache.set(llm.llm_id, llm as LlmRow);
-		}
+    // 3. Cache each LLM configuration
+    for (const llm of llms) {
+      llmCache.set(llm.llm_id, llm as LlmRow);
+    }
 
-		// 4. Log statistics
-		const providerCounts = new Map<string, number>();
-		for (const llm of llms) {
-			const count = providerCounts.get(llm.llm_provider) || 0;
-			providerCounts.set(llm.llm_provider, count + 1);
-		}
+    // 4. Log statistics
+    const providerCounts = new Map<string, number>();
+    for (const llm of llms) {
+      const count = providerCounts.get(llm.llm_provider) || 0;
+      providerCounts.set(llm.llm_provider, count + 1);
+    }
 
-		const providerStats = Array.from(providerCounts.entries())
-			.map(([provider, count]) => `${provider}: ${count}`)
-			.join(", ");
+    const providerStats = Array.from(providerCounts.entries())
+      .map(([provider, count]) => `${provider}: ${count}`)
+      .join(", ");
 
-		log.success(
-			`LLM cache initialized with ${llmCache.size} models (${providerStats})`,
-		);
-	} catch (error) {
-		log.error("Failed to initialize LLM configuration cache:", error as Error);
-		// Don't throw - bot should still work with database queries as fallback
-	}
+    log.success(
+      `LLM cache initialized with ${llmCache.size} models (${providerStats})`,
+    );
+  } catch (error) {
+    log.error("Failed to initialize LLM configuration cache:", error as Error);
+    // Don't throw - bot should still work with database queries as fallback
+  }
 }
 
 /**
@@ -86,7 +86,7 @@ export async function initializeLLMCache(): Promise<void> {
  * @returns LLM configuration or undefined
  */
 export function getCachedLLM(llmId: number): LlmRow | undefined {
-	return llmCache.get(llmId);
+  return llmCache.get(llmId);
 }
 
 /**
@@ -94,7 +94,7 @@ export function getCachedLLM(llmId: number): LlmRow | undefined {
  * @returns Array of all LLM configurations
  */
 export function getAllCachedLLMs(): LlmRow[] {
-	return Array.from(llmCache.values());
+  return Array.from(llmCache.values());
 }
 
 /**
@@ -103,11 +103,11 @@ export function getAllCachedLLMs(): LlmRow[] {
  * @returns Array of LLM configurations for the provider
  */
 export function getCachedLLMsByProvider(provider: string): LlmRow[] {
-	// Normalize provider name to lowercase for case-insensitive matching
-	const normalizedProvider = provider.toLowerCase();
-	return Array.from(llmCache.values()).filter(
-		(llm) => llm.llm_provider.toLowerCase() === normalizedProvider,
-	);
+  // Normalize provider name to lowercase for case-insensitive matching
+  const normalizedProvider = provider.toLowerCase();
+  return Array.from(llmCache.values()).filter(
+    (llm) => llm.llm_provider.toLowerCase() === normalizedProvider,
+  );
 }
 
 /**
@@ -116,11 +116,12 @@ export function getCachedLLMsByProvider(provider: string): LlmRow[] {
  * @returns Default LLM configuration or undefined
  */
 export function getCachedDefaultLLM(provider: string): LlmRow | undefined {
-	// Normalize provider name to lowercase for case-insensitive matching
-	const normalizedProvider = provider.toLowerCase();
-	return Array.from(llmCache.values()).find(
-		(llm) => llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_default,
-	);
+  // Normalize provider name to lowercase for case-insensitive matching
+  const normalizedProvider = provider.toLowerCase();
+  return Array.from(llmCache.values()).find(
+    (llm) =>
+      llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_default,
+  );
 }
 
 /**
@@ -129,11 +130,12 @@ export function getCachedDefaultLLM(provider: string): LlmRow | undefined {
  * @returns Smartest LLM configuration or undefined
  */
 export function getCachedSmartestLLM(provider: string): LlmRow | undefined {
-	// Normalize provider name to lowercase for case-insensitive matching
-	const normalizedProvider = provider.toLowerCase();
-	return Array.from(llmCache.values()).find(
-		(llm) => llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_smartest,
-	);
+  // Normalize provider name to lowercase for case-insensitive matching
+  const normalizedProvider = provider.toLowerCase();
+  return Array.from(llmCache.values()).find(
+    (llm) =>
+      llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_smartest,
+  );
 }
 
 /**
@@ -142,11 +144,12 @@ export function getCachedSmartestLLM(provider: string): LlmRow | undefined {
  * @returns Array of reasoning LLM configurations
  */
 export function getCachedReasoningLLMs(provider: string): LlmRow[] {
-	// Normalize provider name to lowercase for case-insensitive matching
-	const normalizedProvider = provider.toLowerCase();
-	return Array.from(llmCache.values()).filter(
-		(llm) => llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_reasoning,
-	);
+  // Normalize provider name to lowercase for case-insensitive matching
+  const normalizedProvider = provider.toLowerCase();
+  return Array.from(llmCache.values()).filter(
+    (llm) =>
+      llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_reasoning,
+  );
 }
 
 /**
@@ -154,7 +157,7 @@ export function getCachedReasoningLLMs(provider: string): LlmRow[] {
  * @returns True if cache is ready, false otherwise
  */
 export function isLLMCacheReady(): boolean {
-	return llmCache.size > 0;
+  return llmCache.size > 0;
 }
 
 /**
@@ -162,5 +165,5 @@ export function isLLMCacheReady(): boolean {
  * @returns Number of cached LLM configurations
  */
 export function getLLMCacheSize(): number {
-	return llmCache.size;
+  return llmCache.size;
 }

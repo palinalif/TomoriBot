@@ -17,8 +17,8 @@
  * @returns true if the string is a recognised bridge user ID
  */
 export function isBridgeUserId(id: string): boolean {
-	// Matrix: @localpart:homeserver
-	return /^@[^:]+:[^:]+/.test(id);
+  // Matrix: @localpart:homeserver
+  return /^@[^:]+:[^:]+/.test(id);
 }
 
 /**
@@ -31,11 +31,11 @@ export function isBridgeUserId(id: string): boolean {
  * @returns The display name portion (e.g., "Alice"), or the original string if not a bridge webhook
  */
 export function stripBridgePrefix(username: string): string {
-	if (!username.startsWith("[")) return username;
-	const bracketEnd = username.indexOf("]");
-	if (bracketEnd === -1) return username;
-	// Skip the closing bracket and the space after it ("] ")
-	return username.slice(bracketEnd + 2);
+  if (!username.startsWith("[")) return username;
+  const bracketEnd = username.indexOf("]");
+  if (bracketEnd === -1) return username;
+  // Skip the closing bracket and the space after it ("] ")
+  return username.slice(bracketEnd + 2);
 }
 
 /**
@@ -49,9 +49,9 @@ export function stripBridgePrefix(username: string): string {
  * @returns The bridge user ID (e.g., "@alice:matrix.org"), or null if not a bridge webhook username
  */
 export function extractBridgeUserId(username: string): string | null {
-	// Matches "[BridgeName|userId] ..." and captures the userId portion
-	const match = username.match(/^\[[^|]+\|([^\]]+)\]/);
-	return match ? match[1] : null;
+  // Matches "[BridgeName|userId] ..." and captures the userId portion
+  const match = username.match(/^\[[^|]+\|([^\]]+)\]/);
+  return match ? match[1] : null;
 }
 
 /**
@@ -64,6 +64,6 @@ export function extractBridgeUserId(username: string): string | null {
  * @returns true if the username is a bridge webhook and the embedded ID is Matrix-style
  */
 export function isMatrixBridgeWebhookUsername(username: string): boolean {
-	const bridgeUserId = extractBridgeUserId(username);
-	return bridgeUserId !== null && isBridgeUserId(bridgeUserId);
+  const bridgeUserId = extractBridgeUserId(username);
+  return bridgeUserId !== null && isBridgeUserId(bridgeUserId);
 }

@@ -12,33 +12,33 @@ import { stripBridgePrefix } from "@/utils/bridge";
 
 /** Result of formatting messages for extraction */
 export interface FormattedHistoryResult {
-	/** Formatted dialogue text for the extraction prompt */
-	text: string;
+  /** Formatted dialogue text for the extraction prompt */
+  text: string;
 
-	/** Unique tomori IDs detected from webhook-authored messages (for automatic scope) */
-	detectedPersonaTomoriIds: number[];
+  /** Unique tomori IDs detected from webhook-authored messages (for automatic scope) */
+  detectedPersonaTomoriIds: number[];
 
-	/** Number of messages that made it into the formatted text */
-	messageCount: number;
+  /** Number of messages that made it into the formatted text */
+  messageCount: number;
 }
 
 /** System message types that should be skipped (joins, boosts, pins, etc.) */
 const SKIPPED_MESSAGE_TYPES = new Set([
-	MessageType.UserJoin,
-	MessageType.GuildBoost,
-	MessageType.GuildBoostTier1,
-	MessageType.GuildBoostTier2,
-	MessageType.GuildBoostTier3,
-	MessageType.ChannelPinnedMessage,
-	MessageType.RecipientAdd,
-	MessageType.RecipientRemove,
-	MessageType.Call,
-	MessageType.ChannelNameChange,
-	MessageType.ChannelIconChange,
-	MessageType.ThreadCreated,
-	MessageType.ThreadStarterMessage,
-	MessageType.GuildInviteReminder,
-	MessageType.AutoModerationAction,
+  MessageType.UserJoin,
+  MessageType.GuildBoost,
+  MessageType.GuildBoostTier1,
+  MessageType.GuildBoostTier2,
+  MessageType.GuildBoostTier3,
+  MessageType.ChannelPinnedMessage,
+  MessageType.RecipientAdd,
+  MessageType.RecipientRemove,
+  MessageType.Call,
+  MessageType.ChannelNameChange,
+  MessageType.ChannelIconChange,
+  MessageType.ThreadCreated,
+  MessageType.ThreadStarterMessage,
+  MessageType.GuildInviteReminder,
+  MessageType.AutoModerationAction,
 ]);
 
 /**
@@ -49,32 +49,32 @@ const SKIPPED_MESSAGE_TYPES = new Set([
  * @returns Content with resolved mentions
  */
 function resolveMentions(content: string, msg: Message): string {
-	let resolved = content;
+  let resolved = content;
 
-	// 1. Resolve user mentions: <@123456> or <@!123456> → @Username
-	resolved = resolved.replace(/<@!?(\d+)>/g, (_match, userId: string) => {
-		const member = msg.guild?.members.cache.get(userId);
-		if (member) return `@${member.displayName}`;
-		const user = msg.client.users.cache.get(userId);
-		if (user) return `@${user.username}`;
-		return `@UnknownUser`;
-	});
+  // 1. Resolve user mentions: <@123456> or <@!123456> → @Username
+  resolved = resolved.replace(/<@!?(\d+)>/g, (_match, userId: string) => {
+    const member = msg.guild?.members.cache.get(userId);
+    if (member) return `@${member.displayName}`;
+    const user = msg.client.users.cache.get(userId);
+    if (user) return `@${user.username}`;
+    return `@UnknownUser`;
+  });
 
-	// 2. Resolve channel mentions: <#123456> → #channel-name
-	resolved = resolved.replace(/<#(\d+)>/g, (_match, channelId: string) => {
-		const channel = msg.guild?.channels.cache.get(channelId);
-		if (channel) return `#${channel.name}`;
-		return `#unknown-channel`;
-	});
+  // 2. Resolve channel mentions: <#123456> → #channel-name
+  resolved = resolved.replace(/<#(\d+)>/g, (_match, channelId: string) => {
+    const channel = msg.guild?.channels.cache.get(channelId);
+    if (channel) return `#${channel.name}`;
+    return `#unknown-channel`;
+  });
 
-	// 3. Resolve role mentions: <@&123456> → @RoleName
-	resolved = resolved.replace(/<@&(\d+)>/g, (_match, roleId: string) => {
-		const role = msg.guild?.roles.cache.get(roleId);
-		if (role) return `@${role.name}`;
-		return `@unknown-role`;
-	});
+  // 3. Resolve role mentions: <@&123456> → @RoleName
+  resolved = resolved.replace(/<@&(\d+)>/g, (_match, roleId: string) => {
+    const role = msg.guild?.roles.cache.get(roleId);
+    if (role) return `@${role.name}`;
+    return `@unknown-role`;
+  });
 
-	return resolved;
+  return resolved;
 }
 
 /**
@@ -99,74 +99,74 @@ function resolveMentions(content: string, msg: Message): string {
  * @returns Formatted text, detected persona IDs, and message count
  */
 export function formatMessagesForExtraction(
-	messages: Message[],
-	serverPersonas: TomoriState[],
+  messages: Message[],
+  serverPersonas: TomoriState[],
 ): FormattedHistoryResult {
-	const lines: string[] = [];
-	const detectedTomoriIds = new Set<number>();
+  const lines: string[] = [];
+  const detectedTomoriIds = new Set<number>();
 
-	// Build a lowercase nickname → tomoriId map for persona detection
-	const nicknameToTomoriId = new Map<string, number>();
-	for (const persona of serverPersonas) {
-		if (persona.tomori_id !== undefined) {
-			nicknameToTomoriId.set(
-				persona.tomori_nickname.toLowerCase(),
-				persona.tomori_id,
-			);
-		}
-	}
+  // Build a lowercase nickname → tomoriId map for persona detection
+  const nicknameToTomoriId = new Map<string, number>();
+  for (const persona of serverPersonas) {
+    if (persona.tomori_id !== undefined) {
+      nicknameToTomoriId.set(
+        persona.tomori_nickname.toLowerCase(),
+        persona.tomori_id,
+      );
+    }
+  }
 
-	for (const msg of messages) {
-		// 1. Skip system messages
-		if (SKIPPED_MESSAGE_TYPES.has(msg.type)) continue;
+  for (const msg of messages) {
+    // 1. Skip system messages
+    if (SKIPPED_MESSAGE_TYPES.has(msg.type)) continue;
 
-		// 2. Build message content
-		let content = msg.content ? resolveMentions(msg.content, msg) : "";
+    // 2. Build message content
+    let content = msg.content ? resolveMentions(msg.content, msg) : "";
 
-		// 3. Append attachment indicators
-		for (const attachment of msg.attachments.values()) {
-			content += ` [Attachment: ${attachment.name ?? "file"}]`;
-		}
+    // 3. Append attachment indicators
+    for (const attachment of msg.attachments.values()) {
+      content += ` [Attachment: ${attachment.name ?? "file"}]`;
+    }
 
-		// 4. Append non-system embed indicators
-		for (const embed of msg.embeds) {
-			// Skip refresh/system embeds
-			if (isRefreshMarkerEmbed(embed)) continue;
-			if (embed.title) {
-				content += ` [Embed: ${embed.title}]`;
-			}
-		}
+    // 4. Append non-system embed indicators
+    for (const embed of msg.embeds) {
+      // Skip refresh/system embeds
+      if (isRefreshMarkerEmbed(embed)) continue;
+      if (embed.title) {
+        content += ` [Embed: ${embed.title}]`;
+      }
+    }
 
-		// 5. Skip empty messages (no content, no attachments, no meaningful embeds)
-		content = content.trim();
-		if (!content) continue;
+    // 5. Skip empty messages (no content, no attachments, no meaningful embeds)
+    content = content.trim();
+    if (!content) continue;
 
-		// 6. Format timestamp
-		const timestamp = msg.createdAt.toISOString();
+    // 6. Format timestamp
+    const timestamp = msg.createdAt.toISOString();
 
-		// 7. Determine author name
-		//    Strip "[Matrix|@user:host] " prefix from Matrix bridge webhook messages
-		//    so TomoriBot sees just the display name (e.g., "Neko Neechan") in context
-		const rawAuthorName =
-			msg.member?.displayName ?? msg.author?.username ?? "Unknown";
-		const authorName = stripBridgePrefix(rawAuthorName);
+    // 7. Determine author name
+    //    Strip "[Matrix|@user:host] " prefix from Matrix bridge webhook messages
+    //    so TomoriBot sees just the display name (e.g., "Neko Neechan") in context
+    const rawAuthorName =
+      msg.member?.displayName ?? msg.author?.username ?? "Unknown";
+    const authorName = stripBridgePrefix(rawAuthorName);
 
-		// 8. Build formatted line
-		lines.push(`[${timestamp}] ${authorName}: ${content}`);
+    // 8. Build formatted line
+    lines.push(`[${timestamp}] ${authorName}: ${content}`);
 
-		// 9. Persona detection: match webhook-authored messages by name
-		if (msg.webhookId && msg.author) {
-			const authorLower = msg.author.username.toLowerCase();
-			const matchedTomoriId = nicknameToTomoriId.get(authorLower);
-			if (matchedTomoriId !== undefined) {
-				detectedTomoriIds.add(matchedTomoriId);
-			}
-		}
-	}
+    // 9. Persona detection: match webhook-authored messages by name
+    if (msg.webhookId && msg.author) {
+      const authorLower = msg.author.username.toLowerCase();
+      const matchedTomoriId = nicknameToTomoriId.get(authorLower);
+      if (matchedTomoriId !== undefined) {
+        detectedTomoriIds.add(matchedTomoriId);
+      }
+    }
+  }
 
-	return {
-		text: lines.join("\n"),
-		detectedPersonaTomoriIds: [...detectedTomoriIds],
-		messageCount: lines.length,
-	};
+  return {
+    text: lines.join("\n"),
+    detectedPersonaTomoriIds: [...detectedTomoriIds],
+    messageCount: lines.length,
+  };
 }

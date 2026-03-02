@@ -17,8 +17,8 @@ const BIRTHDAY_DAY = 11;
  * @returns {boolean} True if today is May 11, false otherwise.
  */
 function isTomoriBirthday(): boolean {
-	const now = new Date();
-	return now.getMonth() === BIRTHDAY_MONTH && now.getDate() === BIRTHDAY_DAY;
+  const now = new Date();
+  return now.getMonth() === BIRTHDAY_MONTH && now.getDate() === BIRTHDAY_DAY;
 }
 
 /**
@@ -28,24 +28,24 @@ function isTomoriBirthday(): boolean {
  * @returns {Promise<number>} The number of servers.
  */
 async function getServerCount(client: Client): Promise<number> {
-	try {
-		// Query database for total server count (includes DMs)
-		const result = await sql<[{ count: string }]>`
+  try {
+    // Query database for total server count (includes DMs)
+    const result = await sql<[{ count: string }]>`
 			SELECT COUNT(*) as count
 			FROM servers
 		`;
 
-		// sql returns count as string, parse to number
-		const count = Number.parseInt(result[0]?.count || "0", 10);
-		return count;
-	} catch (error) {
-		// Fall back to Discord cache if database query fails
-		log.warn("Failed to get server count from database, using cache", {
-			errorType: "DatabaseQueryError",
-			metadata: { error },
-		});
-		return client.guilds.cache.size;
-	}
+    // sql returns count as string, parse to number
+    const count = Number.parseInt(result[0]?.count || "0", 10);
+    return count;
+  } catch (error) {
+    // Fall back to Discord cache if database query fails
+    log.warn("Failed to get server count from database, using cache", {
+      errorType: "DatabaseQueryError",
+      metadata: { error },
+    });
+    return client.guilds.cache.size;
+  }
 }
 
 /**
@@ -55,87 +55,87 @@ async function getServerCount(client: Client): Promise<number> {
  * @returns Promise<void>
  */
 const handler = async (client: Client): Promise<void> => {
-	log.section(`Launching ${client.user?.tag} on Discord...`);
+  log.section(`Launching ${client.user?.tag} on Discord...`);
 
-	// Wait for MCP initialization to complete before finalizing startup
-	const mcpManager = getMCPManager();
+  // Wait for MCP initialization to complete before finalizing startup
+  const mcpManager = getMCPManager();
 
-	// Wait for MCP manager to be ready (with a reasonable timeout)
-	const mcpTimeout = 10000; // 10 seconds timeout
-	const startTime = Date.now();
+  // Wait for MCP manager to be ready (with a reasonable timeout)
+  const mcpTimeout = 10000; // 10 seconds timeout
+  const startTime = Date.now();
 
-	while (!mcpManager.isReady() && Date.now() - startTime < mcpTimeout) {
-		await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 100ms between checks
-	}
+  while (!mcpManager.isReady() && Date.now() - startTime < mcpTimeout) {
+    await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 100ms between checks
+  }
 
-	if (mcpManager.isReady()) {
-		const connectedCount = mcpManager.getConnectedServerCount();
-		log.info(`MCP systems ready with ${connectedCount} server(s) connected`);
-	} else {
-		log.warn("MCP initialization timeout - proceeding with startup anyway");
-	}
+  if (mcpManager.isReady()) {
+    const connectedCount = mcpManager.getConnectedServerCount();
+    log.info(`MCP systems ready with ${connectedCount} server(s) connected`);
+  } else {
+    log.warn("MCP initialization timeout - proceeding with startup anyway");
+  }
 
-	log.success(`${client.user?.tag} up and running!`);
+  log.success(`${client.user?.tag} up and running!`);
 
-	log.section("Listening for error and info logs...");
-	log.info(`Time started: [${new Date().toLocaleTimeString()}]`);
+  log.section("Listening for error and info logs...");
+  log.info(`Time started: [${new Date().toLocaleTimeString()}]`);
 
-	const birthdayStatus: ActivityOptions = {
-		name: "Celebrating my birthday!",
-		type: ActivityType.Streaming,
-		url: "https://www.youtube.com/shorts/eS9g6cnF7Z8", // Required for Streaming type
-	};
+  const birthdayStatus: ActivityOptions = {
+    name: "Celebrating my birthday!",
+    type: ActivityType.Streaming,
+    url: "https://www.youtube.com/shorts/eS9g6cnF7Z8", // Required for Streaming type
+  };
 
-	/**
-	 * Updates the bot's status based on whether it's Tomori's birthday.
-	 * If it's May 11, shows birthday status; otherwise rotates through normal statuses.
-	 * Fetches server count from database for accurate status display.
-	 * Skips setting status if not in production environment.
-	 */
-	async function updateStatus(): Promise<void> {
-		if (!client.user) return;
+  /**
+   * Updates the bot's status based on whether it's Tomori's birthday.
+   * If it's May 11, shows birthday status; otherwise rotates through normal statuses.
+   * Fetches server count from database for accurate status display.
+   * Skips setting status if not in production environment.
+   */
+  async function updateStatus(): Promise<void> {
+    if (!client.user) return;
 
-		// 1. Skip status updates in non-production environments
-		const isProduction = process.env.NODE_ENV === "production";
-		if (!isProduction) {
-			return;
-		}
+    // 1. Skip status updates in non-production environments
+    const isProduction = process.env.NODE_ENV === "production";
+    if (!isProduction) {
+      return;
+    }
 
-		// 2. Check if today is Tomori's birthday
-		if (isTomoriBirthday()) {
-			// 3. Set birthday status
-			client.user.setActivity(birthdayStatus);
-		} else {
-			// 4. Get current server count from database
-			const serverCount = await getServerCount(client);
+    // 2. Check if today is Tomori's birthday
+    if (isTomoriBirthday()) {
+      // 3. Set birthday status
+      client.user.setActivity(birthdayStatus);
+    } else {
+      // 4. Get current server count from database
+      const serverCount = await getServerCount(client);
 
-			// 5. Build normal status options with current server count
-			const normalStatus: ActivityOptions[] = [
-				{
-					name: `Multi-Persona Update! /updates`,
-					type: ActivityType.Playing,
-				},
-				{
-					name: `Listening for /help in ${serverCount} servers`,
-					type: ActivityType.Listening,
-				},
-			];
+      // 5. Build normal status options with current server count
+      const normalStatus: ActivityOptions[] = [
+        {
+          name: `Multi-Persona Update! /updates`,
+          type: ActivityType.Playing,
+        },
+        {
+          name: `Listening for /help in ${serverCount} servers`,
+          type: ActivityType.Listening,
+        },
+      ];
 
-			// 6. Normal status rotation
-			if (normalStatus.length > 0) {
-				const random = Math.floor(Math.random() * normalStatus.length);
-				client.user.setActivity(normalStatus[random]);
-			}
-		}
-	}
+      // 6. Normal status rotation
+      if (normalStatus.length > 0) {
+        const random = Math.floor(Math.random() * normalStatus.length);
+        client.user.setActivity(normalStatus[random]);
+      }
+    }
+  }
 
-	// Set initial status on startup
-	await updateStatus();
+  // Set initial status on startup
+  await updateStatus();
 
-	// Update status every cycle (5 minutes)
-	setInterval(() => {
-		void updateStatus(); // Use void to indicate intentional fire-and-forget
-	}, CYCLE_DELAY);
+  // Update status every cycle (5 minutes)
+  setInterval(() => {
+    void updateStatus(); // Use void to indicate intentional fire-and-forget
+  }, CYCLE_DELAY);
 };
 
 export default handler;

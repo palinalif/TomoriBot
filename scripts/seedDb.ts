@@ -5,10 +5,10 @@ import path from "node:path";
 log.section("TomoriBot Database Seeding...");
 
 try {
-	const seedPath = path.join(process.cwd(), "src", "db", "seed.sql");
-	await sql.file(seedPath);
-	log.success("Database seed script executed successfully!");
+  const seedPath = path.join(process.cwd(), "src", "db", "seed.sql");
+  await sql.file(seedPath);
+  log.success("Database seed script executed successfully!");
 } catch (error) {
-	log.error("Database seeding failed:", error);
-	process.exit(1);
+  log.error("Database seeding failed:", error);
+  process.exit(1);
 }

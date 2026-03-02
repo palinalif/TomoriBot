@@ -19,8 +19,8 @@ import { log } from "@/utils/misc/logger";
  * or an LlmRow when an override is set.
  */
 const channelLlmCache = new Map<
-	string,
-	{ llm: LlmRow | null; expiresAt: number }
+  string,
+  { llm: LlmRow | null; expiresAt: number }
 >();
 
 /**
@@ -28,8 +28,8 @@ const channelLlmCache = new Map<
  * Defaults to 10 minutes (same as TOMORI_STATE_CACHE_TTL_MINUTES).
  */
 const CACHE_TTL_MINUTES = Number.parseInt(
-	process.env.TOMORI_STATE_CACHE_TTL_MINUTES || "10",
-	10,
+  process.env.TOMORI_STATE_CACHE_TTL_MINUTES || "10",
+  10,
 );
 const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
 
@@ -41,7 +41,7 @@ const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
  * @param channelDiscId - Discord channel snowflake ID
  */
 function getCacheKey(serverId: number, channelDiscId: string): string {
-	return `${serverId}:${channelDiscId}`;
+  return `${serverId}:${channelDiscId}`;
 }
 
 /**
@@ -54,33 +54,33 @@ function getCacheKey(serverId: number, channelDiscId: string): string {
  * @returns The overriding LlmRow, or null if no channel override is set
  */
 export async function getCachedChannelLlm(
-	serverId: number,
-	channelDiscId: string,
+  serverId: number,
+  channelDiscId: string,
 ): Promise<LlmRow | null> {
-	const key = getCacheKey(serverId, channelDiscId);
-	const now = Date.now();
+  const key = getCacheKey(serverId, channelDiscId);
+  const now = Date.now();
 
-	// 1. Check in-memory cache (includes negative/null entries)
-	const cached = channelLlmCache.get(key);
-	if (cached && cached.expiresAt > now) {
-		return cached.llm; // may be null — indicates no override
-	}
+  // 1. Check in-memory cache (includes negative/null entries)
+  const cached = channelLlmCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.llm; // may be null — indicates no override
+  }
 
-	// 2. Cache miss — fetch from database
-	try {
-		const llm = await getChannelLlmOverride(serverId, channelDiscId);
+  // 2. Cache miss — fetch from database
+  try {
+    const llm = await getChannelLlmOverride(serverId, channelDiscId);
 
-		// 3. Store result (including null) in cache
-		channelLlmCache.set(key, { llm, expiresAt: now + CACHE_TTL_MS });
+    // 3. Store result (including null) in cache
+    channelLlmCache.set(key, { llm, expiresAt: now + CACHE_TTL_MS });
 
-		return llm;
-	} catch (error) {
-		log.error(
-			`[ChannelLlmCache] Failed to fetch channel LLM override for ${key}:`,
-			error,
-		);
-		return null; // fail open — fall back to global model
-	}
+    return llm;
+  } catch (error) {
+    log.error(
+      `[ChannelLlmCache] Failed to fetch channel LLM override for ${key}:`,
+      error,
+    );
+    return null; // fail open — fall back to global model
+  }
 }
 
 /**
@@ -92,12 +92,12 @@ export async function getCachedChannelLlm(
  * @param llm - The LlmRow that was just written (or null to cache "no override")
  */
 export function setChannelLlmCache(
-	serverId: number,
-	channelDiscId: string,
-	llm: LlmRow | null,
+  serverId: number,
+  channelDiscId: string,
+  llm: LlmRow | null,
 ): void {
-	const key = getCacheKey(serverId, channelDiscId);
-	channelLlmCache.set(key, { llm, expiresAt: Date.now() + CACHE_TTL_MS });
+  const key = getCacheKey(serverId, channelDiscId);
+  channelLlmCache.set(key, { llm, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
 /**
@@ -108,12 +108,12 @@ export function setChannelLlmCache(
  * @param channelDiscId - Discord channel snowflake ID
  */
 export function invalidateChannelLlmCache(
-	serverId: number,
-	channelDiscId: string,
+  serverId: number,
+  channelDiscId: string,
 ): void {
-	const key = getCacheKey(serverId, channelDiscId);
-	channelLlmCache.delete(key);
-	log.info(`[ChannelLlmCache] Invalidated cache for ${key}`);
+  const key = getCacheKey(serverId, channelDiscId);
+  channelLlmCache.delete(key);
+  log.info(`[ChannelLlmCache] Invalidated cache for ${key}`);
 }
 
 /**
@@ -122,15 +122,15 @@ export function invalidateChannelLlmCache(
  * @param serverId - Database integer server ID
  */
 export function invalidateAllChannelLlmCacheForServer(serverId: number): void {
-	const prefix = `${serverId}:`;
-	let count = 0;
-	for (const key of channelLlmCache.keys()) {
-		if (key.startsWith(prefix)) {
-			channelLlmCache.delete(key);
-			count++;
-		}
-	}
-	log.info(
-		`[ChannelLlmCache] Invalidated ${count} channel override entries for server ${serverId}`,
-	);
+  const prefix = `${serverId}:`;
+  let count = 0;
+  for (const key of channelLlmCache.keys()) {
+    if (key.startsWith(prefix)) {
+      channelLlmCache.delete(key);
+      count++;
+    }
+  }
+  log.info(
+    `[ChannelLlmCache] Invalidated ${count} channel override entries for server ${serverId}`,
+  );
 }

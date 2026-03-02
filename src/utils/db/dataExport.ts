@@ -1,23 +1,23 @@
 import { sql } from "@/utils/db/client";
 import { log } from "../misc/logger";
 import {
-	EXPORT_VERSION,
-	personalMemoriesExportSchema,
-	globalPersonalMemoriesExportSchema,
-	personalSettingsExportSchema,
-	serverMemoriesExportSchema,
-	serverConfigOnlyExportSchema,
-	getPersonalExportSchema,
-	getServerExportSchema,
-	type PersonalMemoriesExport,
-	type GlobalPersonalMemoriesExport,
-	type PersonalSettingsExport,
-	type ServerMemoriesExport,
-	type ServerConfigOnlyExport,
-	type PersonalExport,
-	type ServerExport,
-	type ExportResult,
-	type PersonalityExportResult,
+  EXPORT_VERSION,
+  personalMemoriesExportSchema,
+  globalPersonalMemoriesExportSchema,
+  personalSettingsExportSchema,
+  serverMemoriesExportSchema,
+  serverConfigOnlyExportSchema,
+  getPersonalExportSchema,
+  getServerExportSchema,
+  type PersonalMemoriesExport,
+  type GlobalPersonalMemoriesExport,
+  type PersonalSettingsExport,
+  type ServerMemoriesExport,
+  type ServerConfigOnlyExport,
+  type PersonalExport,
+  type ServerExport,
+  type ExportResult,
+  type PersonalityExportResult,
 } from "../../types/db/dataExport";
 
 /**
@@ -27,18 +27,18 @@ import {
  * @returns Object with sanitized content and flag indicating if sanitization occurred
  */
 function sanitizeForJson(content: string): {
-	sanitized: string;
-	wasSanitized: boolean;
+  sanitized: string;
+  wasSanitized: boolean;
 } {
-	// 1. Remove null bytes and control characters except \n (0x0A) and \t (0x09)
-	// Regex matches control chars (0x00-0x1F) except newline and tab
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for sanitization
-	const cleaned = content.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, "");
+  // 1. Remove null bytes and control characters except \n (0x0A) and \t (0x09)
+  // Regex matches control chars (0x00-0x1F) except newline and tab
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentionally matching control characters for sanitization
+  const cleaned = content.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, "");
 
-	// 2. Check if sanitization occurred
-	const wasSanitized = cleaned !== content;
+  // 2. Check if sanitization occurred
+  const wasSanitized = cleaned !== content;
 
-	return { sanitized: cleaned, wasSanitized };
+  return { sanitized: cleaned, wasSanitized };
 }
 
 /**
@@ -48,28 +48,28 @@ function sanitizeForJson(content: string): {
  * @returns Object with sanitized memories and count of sanitized items
  */
 function sanitizeMemories(
-	memories: string[],
-	contextLabel: string,
+  memories: string[],
+  contextLabel: string,
 ): { sanitized: string[]; sanitizedCount: number } {
-	// 1. Track how many memories were sanitized
-	let sanitizedCount = 0;
+  // 1. Track how many memories were sanitized
+  let sanitizedCount = 0;
 
-	// 2. Sanitize each memory string
-	const sanitized = memories.map((memory, index) => {
-		const { sanitized: cleanMemory, wasSanitized } = sanitizeForJson(memory);
+  // 2. Sanitize each memory string
+  const sanitized = memories.map((memory, index) => {
+    const { sanitized: cleanMemory, wasSanitized } = sanitizeForJson(memory);
 
-		// 3. Log warning if sanitization occurred
-		if (wasSanitized) {
-			sanitizedCount++;
-			log.warn(
-				`Sanitized ${contextLabel} at index ${index}: removed control characters`,
-			);
-		}
+    // 3. Log warning if sanitization occurred
+    if (wasSanitized) {
+      sanitizedCount++;
+      log.warn(
+        `Sanitized ${contextLabel} at index ${index}: removed control characters`,
+      );
+    }
 
-		return cleanMemory;
-	});
+    return cleanMemory;
+  });
 
-	return { sanitized, sanitizedCount };
+  return { sanitized, sanitizedCount };
 }
 
 /**
@@ -80,32 +80,32 @@ function sanitizeMemories(
  * @returns ExportResult containing the exported data or error
  */
 export async function exportPersonalData(
-	userDiscId: string,
-	personaLineageId = 0,
-	includeGlobalMemories = true,
+  userDiscId: string,
+  personaLineageId = 0,
+  includeGlobalMemories = true,
 ): Promise<ExportResult> {
-	try {
-		// 1. Query user data from database
-		const rows = await sql`
+  try {
+    // 1. Query user data from database
+    const rows = await sql`
 			SELECT user_id, user_nickname, language_pref
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
 		`;
 
-		if (!rows.length) {
-			return {
-				success: false,
-				error: "commands.data.export.error_no_user_data",
-			};
-		}
+    if (!rows.length) {
+      return {
+        success: false,
+        error: "commands.data.export.error_no_user_data",
+      };
+    }
 
-		const userData = rows[0];
+    const userData = rows[0];
 
-		// 2. Load personal memories from lineage-scoped table
-		const memoryRows =
-			includeGlobalMemories && personaLineageId !== 0
-				? await sql`
+    // 2. Load personal memories from lineage-scoped table
+    const memoryRows =
+      includeGlobalMemories && personaLineageId !== 0
+        ? await sql`
 					SELECT content
 					FROM personal_memories
 					WHERE user_id = ${userData.user_id}
@@ -115,7 +115,7 @@ export async function exportPersonalData(
 					  )
 					ORDER BY created_at DESC, personal_memory_id DESC
 				`
-				: await sql`
+        : await sql`
 					SELECT content
 					FROM personal_memories
 					WHERE user_id = ${userData.user_id}
@@ -123,52 +123,52 @@ export async function exportPersonalData(
 					ORDER BY created_at DESC, personal_memory_id DESC
 				`;
 
-		const personalMemories = memoryRows.map(
-			(row: { content: string }) => row.content,
-		);
+    const personalMemories = memoryRows.map(
+      (row: { content: string }) => row.content,
+    );
 
-		// 3. Sanitize memories for safe JSON export
-		const { sanitized: sanitizedMemories } = sanitizeMemories(
-			personalMemories,
-			"personal memories",
-		);
+    // 3. Sanitize memories for safe JSON export
+    const { sanitized: sanitizedMemories } = sanitizeMemories(
+      personalMemories,
+      "personal memories",
+    );
 
-		// 4. Build export object
-		const exportData: PersonalExport = {
-			version: EXPORT_VERSION,
-			type: "personal",
-			exported_at: new Date().toISOString(),
-			data: {
-				user_nickname: userData.user_nickname,
-				language_pref: userData.language_pref,
-				personal_memories: sanitizedMemories,
-			},
-		};
+    // 4. Build export object
+    const exportData: PersonalExport = {
+      version: EXPORT_VERSION,
+      type: "personal",
+      exported_at: new Date().toISOString(),
+      data: {
+        user_nickname: userData.user_nickname,
+        language_pref: userData.language_pref,
+        personal_memories: sanitizedMemories,
+      },
+    };
 
-		// 5. Validate export data structure
-		const validated = getPersonalExportSchema().safeParse(exportData);
-		if (!validated.success) {
-			log.error(
-				`Personal export validation failed for user ${userDiscId}:`,
-				validated.error,
-			);
-			return {
-				success: false,
-				error: "commands.data.export.error_validation_failed",
-			};
-		}
+    // 5. Validate export data structure
+    const validated = getPersonalExportSchema().safeParse(exportData);
+    if (!validated.success) {
+      log.error(
+        `Personal export validation failed for user ${userDiscId}:`,
+        validated.error,
+      );
+      return {
+        success: false,
+        error: "commands.data.export.error_validation_failed",
+      };
+    }
 
-		return {
-			success: true,
-			data: validated.data,
-		};
-	} catch (error) {
-		log.error(`Error exporting personal data for user ${userDiscId}:`, error);
-		return {
-			success: false,
-			error: "commands.data.export.error_export_failed",
-		};
-	}
+    return {
+      success: true,
+      data: validated.data,
+    };
+  } catch (error) {
+    log.error(`Error exporting personal data for user ${userDiscId}:`, error);
+    return {
+      success: false,
+      error: "commands.data.export.error_export_failed",
+    };
+  }
 }
 
 /**
@@ -178,29 +178,29 @@ export async function exportPersonalData(
  * @returns ExportResult containing the exported data or error
  */
 export async function exportServerData(
-	serverDiscId: string,
-	tomoriId?: number,
+  serverDiscId: string,
+  tomoriId?: number,
 ): Promise<ExportResult> {
-	try {
-		// 1. Get internal server ID
-		const serverRows = await sql`
+  try {
+    // 1. Get internal server ID
+    const serverRows = await sql`
 			SELECT server_id
 			FROM servers
 			WHERE server_disc_id = ${serverDiscId}
 			LIMIT 1
 		`;
 
-		if (!serverRows.length) {
-			return {
-				success: false,
-				error: "commands.data.export.error_no_server_data",
-			};
-		}
+    if (!serverRows.length) {
+      return {
+        success: false,
+        error: "commands.data.export.error_no_server_data",
+      };
+    }
 
-		const serverId = serverRows[0].server_id;
+    const serverId = serverRows[0].server_id;
 
-		// 2. Get tomori configuration
-		const configRows = await sql`
+    // 2. Get tomori configuration
+    const configRows = await sql`
 			SELECT
 				COALESCE(tc_server.llm_temperature, tc_legacy.llm_temperature) as llm_temperature,
 				COALESCE(tc_server.llm_top_p, tc_legacy.llm_top_p, 1.0) as llm_top_p,
@@ -229,22 +229,25 @@ export async function exportServerData(
 			LIMIT 1
 		`;
 
-		if (!configRows.length) {
-			return {
-				success: false,
-				error: "commands.data.export.error_no_server_config",
-			};
-		}
+    if (!configRows.length) {
+      return {
+        success: false,
+        error: "commands.data.export.error_no_server_config",
+      };
+    }
 
-		const configData = configRows[0];
+    const configData = configRows[0];
 
-		// 3. Resolve target persona/lineage for server memory export
-		let targetTomoriId = tomoriId;
-		let targetPersonaLineageId: number | null = null;
-		if (!targetTomoriId) {
-			const mainPersonaRows = await sql<
-				Array<{ tomori_id: number; persona_lineage_id: number | bigint | string }>
-			>`
+    // 3. Resolve target persona/lineage for server memory export
+    let targetTomoriId = tomoriId;
+    let targetPersonaLineageId: number | null = null;
+    if (!targetTomoriId) {
+      const mainPersonaRows = await sql<
+        Array<{
+          tomori_id: number;
+          persona_lineage_id: number | bigint | string;
+        }>
+      >`
 				SELECT tomori_id, persona_lineage_id
 				FROM tomoris
 				WHERE server_id = ${serverId}
@@ -252,130 +255,130 @@ export async function exportServerData(
 				ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
 				LIMIT 1
 			`;
-			targetTomoriId = mainPersonaRows[0]?.tomori_id;
-			const rawMainLineageId = mainPersonaRows[0]?.persona_lineage_id;
-			targetPersonaLineageId =
-				typeof rawMainLineageId === "bigint"
-					? Number(rawMainLineageId)
-					: typeof rawMainLineageId === "string"
-						? Number(rawMainLineageId)
-						: (rawMainLineageId ?? null);
-		} else {
-			const [targetPersonaMeta] = await sql<
-				Array<{ persona_lineage_id: number | bigint | string }>
-			>`
+      targetTomoriId = mainPersonaRows[0]?.tomori_id;
+      const rawMainLineageId = mainPersonaRows[0]?.persona_lineage_id;
+      targetPersonaLineageId =
+        typeof rawMainLineageId === "bigint"
+          ? Number(rawMainLineageId)
+          : typeof rawMainLineageId === "string"
+            ? Number(rawMainLineageId)
+            : (rawMainLineageId ?? null);
+    } else {
+      const [targetPersonaMeta] = await sql<
+        Array<{ persona_lineage_id: number | bigint | string }>
+      >`
 				SELECT persona_lineage_id
 				FROM tomoris
 				WHERE tomori_id = ${targetTomoriId}
 				  AND server_id = ${serverId}
 				LIMIT 1
 			`;
-			if (!targetPersonaMeta) {
-				return {
-					success: false,
-					error: "commands.data.export.error_no_server_data",
-				};
-			}
-			const rawLineageId = targetPersonaMeta?.persona_lineage_id;
-			targetPersonaLineageId =
-				typeof rawLineageId === "bigint"
-					? Number(rawLineageId)
-					: typeof rawLineageId === "string"
-						? Number(rawLineageId)
-						: (rawLineageId ?? null);
-		}
+      if (!targetPersonaMeta) {
+        return {
+          success: false,
+          error: "commands.data.export.error_no_server_data",
+        };
+      }
+      const rawLineageId = targetPersonaMeta?.persona_lineage_id;
+      targetPersonaLineageId =
+        typeof rawLineageId === "bigint"
+          ? Number(rawLineageId)
+          : typeof rawLineageId === "string"
+            ? Number(rawLineageId)
+            : (rawLineageId ?? null);
+    }
 
-		if (
-			targetPersonaLineageId !== null &&
-			!Number.isFinite(targetPersonaLineageId)
-		) {
-			targetPersonaLineageId = null;
-		}
+    if (
+      targetPersonaLineageId !== null &&
+      !Number.isFinite(targetPersonaLineageId)
+    ) {
+      targetPersonaLineageId = null;
+    }
 
-		// 4. Get lineage-scoped server memories for the selected persona target.
-		const memoryRows =
-			targetPersonaLineageId !== null
-				? await sql`
+    // 4. Get lineage-scoped server memories for the selected persona target.
+    const memoryRows =
+      targetPersonaLineageId !== null
+        ? await sql`
 					SELECT content
 					FROM server_memories
 					WHERE server_id = ${serverId}
 					  AND persona_lineage_id = ${targetPersonaLineageId}
 					ORDER BY created_at DESC
 				`
-				: await sql`
+        : await sql`
 					SELECT content
 					FROM server_memories
 					WHERE server_id = ${serverId}
 					ORDER BY created_at DESC
 				`;
 
-		const serverMemories = memoryRows.map(
-			(row: { content: string }) => row.content,
-		);
+    const serverMemories = memoryRows.map(
+      (row: { content: string }) => row.content,
+    );
 
-		// 5. Sanitize memories for safe JSON export
-		const { sanitized: sanitizedServerMemories } = sanitizeMemories(
-			serverMemories,
-			"server memories",
-		);
+    // 5. Sanitize memories for safe JSON export
+    const { sanitized: sanitizedServerMemories } = sanitizeMemories(
+      serverMemories,
+      "server memories",
+    );
 
-		// 6. Build export object
-		const exportData: ServerExport = {
-			version: EXPORT_VERSION,
-			type: "server",
-			exported_at: new Date().toISOString(),
-			data: {
-				config: {
-					llm_temperature: configData.llm_temperature,
-					llm_top_p: configData.llm_top_p,
-					llm_top_k: configData.llm_top_k,
-					llm_frequency_penalty: configData.llm_frequency_penalty,
-					llm_presence_penalty: configData.llm_presence_penalty,
-					llm_min_p: configData.llm_min_p,
-					humanizer_degree: configData.humanizer_degree,
-					timezone_offset: configData.timezone_offset,
-					message_fetch_limit: configData.message_fetch_limit,
-					system_prompt: configData.system_prompt ?? null,
-					server_memteaching_enabled: configData.server_memteaching_enabled,
-					attribute_memteaching_enabled:
-						configData.attribute_memteaching_enabled,
-					sampledialogue_memteaching_enabled:
-						configData.sampledialogue_memteaching_enabled,
-					self_teaching_enabled: configData.self_teaching_enabled,
-					web_search_enabled: configData.web_search_enabled,
-					personal_memories_enabled: configData.personal_memories_enabled,
-					emoji_usage_enabled: configData.emoji_usage_enabled,
-					sticker_usage_enabled: configData.sticker_usage_enabled,
-					imagegen_enabled: configData.imagegen_enabled,
-				},
-				server_memories: sanitizedServerMemories,
-			},
-		};
+    // 6. Build export object
+    const exportData: ServerExport = {
+      version: EXPORT_VERSION,
+      type: "server",
+      exported_at: new Date().toISOString(),
+      data: {
+        config: {
+          llm_temperature: configData.llm_temperature,
+          llm_top_p: configData.llm_top_p,
+          llm_top_k: configData.llm_top_k,
+          llm_frequency_penalty: configData.llm_frequency_penalty,
+          llm_presence_penalty: configData.llm_presence_penalty,
+          llm_min_p: configData.llm_min_p,
+          humanizer_degree: configData.humanizer_degree,
+          timezone_offset: configData.timezone_offset,
+          message_fetch_limit: configData.message_fetch_limit,
+          system_prompt: configData.system_prompt ?? null,
+          server_memteaching_enabled: configData.server_memteaching_enabled,
+          attribute_memteaching_enabled:
+            configData.attribute_memteaching_enabled,
+          sampledialogue_memteaching_enabled:
+            configData.sampledialogue_memteaching_enabled,
+          self_teaching_enabled: configData.self_teaching_enabled,
+          web_search_enabled: configData.web_search_enabled,
+          personal_memories_enabled: configData.personal_memories_enabled,
+          emoji_usage_enabled: configData.emoji_usage_enabled,
+          sticker_usage_enabled: configData.sticker_usage_enabled,
+          imagegen_enabled: configData.imagegen_enabled,
+        },
+        server_memories: sanitizedServerMemories,
+      },
+    };
 
-		// 7. Validate export data structure
-		const validated = getServerExportSchema().safeParse(exportData);
-		if (!validated.success) {
-			log.error(
-				`Server export validation failed for server ${serverDiscId}:`,
-				validated.error,
-			);
-			return {
-				success: false,
-				error: "commands.data.export.error_validation_failed",
-			};
-		}
+    // 7. Validate export data structure
+    const validated = getServerExportSchema().safeParse(exportData);
+    if (!validated.success) {
+      log.error(
+        `Server export validation failed for server ${serverDiscId}:`,
+        validated.error,
+      );
+      return {
+        success: false,
+        error: "commands.data.export.error_validation_failed",
+      };
+    }
 
-		return {
-			success: true,
-			data: validated.data,
-		};
-	} catch (error) {
-		log.error(`Error exporting server data for server ${serverDiscId}:`, error);
-		return {
-			success: false,
-			error: "commands.data.export.error_export_failed",
-		};
-	}
+    return {
+      success: true,
+      data: validated.data,
+    };
+  } catch (error) {
+    log.error(`Error exporting server data for server ${serverDiscId}:`, error);
+    return {
+      success: false,
+      error: "commands.data.export.error_export_failed",
+    };
+  }
 }
 
 /**
@@ -384,42 +387,50 @@ export async function exportServerData(
  * @param personaLineageId - Persona lineage namespace to export memories from
  */
 export async function exportPersonaPersonalMemories(
-	userDiscId: string,
-	personaLineageId: number,
+  userDiscId: string,
+  personaLineageId: number,
 ): Promise<ExportResult> {
-	const baseExport = await exportPersonalData(userDiscId, personaLineageId, false);
-	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
-		return {
-			success: false,
-			error: baseExport.error || "commands.data.export.error_export_failed",
-		};
-	}
+  const baseExport = await exportPersonalData(
+    userDiscId,
+    personaLineageId,
+    false,
+  );
+  if (
+    !baseExport.success ||
+    !baseExport.data ||
+    baseExport.data.type !== "personal"
+  ) {
+    return {
+      success: false,
+      error: baseExport.error || "commands.data.export.error_export_failed",
+    };
+  }
 
-	const exportData: PersonalMemoriesExport = {
-		version: EXPORT_VERSION,
-		type: "personal_memories",
-		exported_at: baseExport.data.exported_at,
-		data: {
-			personal_memories: baseExport.data.data.personal_memories,
-		},
-	};
+  const exportData: PersonalMemoriesExport = {
+    version: EXPORT_VERSION,
+    type: "personal_memories",
+    exported_at: baseExport.data.exported_at,
+    data: {
+      personal_memories: baseExport.data.data.personal_memories,
+    },
+  };
 
-	const validated = personalMemoriesExportSchema.safeParse(exportData);
-	if (!validated.success) {
-		log.error(
-			`Persona personal memories export validation failed for user ${userDiscId}:`,
-			validated.error,
-		);
-		return {
-			success: false,
-			error: "commands.data.export.error_validation_failed",
-		};
-	}
+  const validated = personalMemoriesExportSchema.safeParse(exportData);
+  if (!validated.success) {
+    log.error(
+      `Persona personal memories export validation failed for user ${userDiscId}:`,
+      validated.error,
+    );
+    return {
+      success: false,
+      error: "commands.data.export.error_validation_failed",
+    };
+  }
 
-	return {
-		success: true,
-		data: validated.data,
-	};
+  return {
+    success: true,
+    data: validated.data,
+  };
 }
 
 /**
@@ -427,41 +438,45 @@ export async function exportPersonaPersonalMemories(
  * @param userDiscId - Discord user ID to export data for
  */
 export async function exportGlobalPersonalMemories(
-	userDiscId: string,
+  userDiscId: string,
 ): Promise<ExportResult> {
-	const baseExport = await exportPersonalData(userDiscId, 0, false);
-	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
-		return {
-			success: false,
-			error: baseExport.error || "commands.data.export.error_export_failed",
-		};
-	}
+  const baseExport = await exportPersonalData(userDiscId, 0, false);
+  if (
+    !baseExport.success ||
+    !baseExport.data ||
+    baseExport.data.type !== "personal"
+  ) {
+    return {
+      success: false,
+      error: baseExport.error || "commands.data.export.error_export_failed",
+    };
+  }
 
-	const exportData: GlobalPersonalMemoriesExport = {
-		version: EXPORT_VERSION,
-		type: "global_personal_memories",
-		exported_at: baseExport.data.exported_at,
-		data: {
-			personal_memories: baseExport.data.data.personal_memories,
-		},
-	};
+  const exportData: GlobalPersonalMemoriesExport = {
+    version: EXPORT_VERSION,
+    type: "global_personal_memories",
+    exported_at: baseExport.data.exported_at,
+    data: {
+      personal_memories: baseExport.data.data.personal_memories,
+    },
+  };
 
-	const validated = globalPersonalMemoriesExportSchema.safeParse(exportData);
-	if (!validated.success) {
-		log.error(
-			`Global personal memories export validation failed for user ${userDiscId}:`,
-			validated.error,
-		);
-		return {
-			success: false,
-			error: "commands.data.export.error_validation_failed",
-		};
-	}
+  const validated = globalPersonalMemoriesExportSchema.safeParse(exportData);
+  if (!validated.success) {
+    log.error(
+      `Global personal memories export validation failed for user ${userDiscId}:`,
+      validated.error,
+    );
+    return {
+      success: false,
+      error: "commands.data.export.error_validation_failed",
+    };
+  }
 
-	return {
-		success: true,
-		data: validated.data,
-	};
+  return {
+    success: true,
+    data: validated.data,
+  };
 }
 
 /**
@@ -469,42 +484,46 @@ export async function exportGlobalPersonalMemories(
  * @param userDiscId - Discord user ID to export data for
  */
 export async function exportPersonalSettings(
-	userDiscId: string,
+  userDiscId: string,
 ): Promise<ExportResult> {
-	const baseExport = await exportPersonalData(userDiscId, 0, false);
-	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
-		return {
-			success: false,
-			error: baseExport.error || "commands.data.export.error_export_failed",
-		};
-	}
+  const baseExport = await exportPersonalData(userDiscId, 0, false);
+  if (
+    !baseExport.success ||
+    !baseExport.data ||
+    baseExport.data.type !== "personal"
+  ) {
+    return {
+      success: false,
+      error: baseExport.error || "commands.data.export.error_export_failed",
+    };
+  }
 
-	const exportData: PersonalSettingsExport = {
-		version: EXPORT_VERSION,
-		type: "personal_settings",
-		exported_at: baseExport.data.exported_at,
-		data: {
-			user_nickname: baseExport.data.data.user_nickname,
-			language_pref: baseExport.data.data.language_pref,
-		},
-	};
+  const exportData: PersonalSettingsExport = {
+    version: EXPORT_VERSION,
+    type: "personal_settings",
+    exported_at: baseExport.data.exported_at,
+    data: {
+      user_nickname: baseExport.data.data.user_nickname,
+      language_pref: baseExport.data.data.language_pref,
+    },
+  };
 
-	const validated = personalSettingsExportSchema.safeParse(exportData);
-	if (!validated.success) {
-		log.error(
-			`Personal settings export validation failed for user ${userDiscId}:`,
-			validated.error,
-		);
-		return {
-			success: false,
-			error: "commands.data.export.error_validation_failed",
-		};
-	}
+  const validated = personalSettingsExportSchema.safeParse(exportData);
+  if (!validated.success) {
+    log.error(
+      `Personal settings export validation failed for user ${userDiscId}:`,
+      validated.error,
+    );
+    return {
+      success: false,
+      error: "commands.data.export.error_validation_failed",
+    };
+  }
 
-	return {
-		success: true,
-		data: validated.data,
-	};
+  return {
+    success: true,
+    data: validated.data,
+  };
 }
 
 /**
@@ -513,42 +532,46 @@ export async function exportPersonalSettings(
  * @param tomoriId - Persona ID to export memories from
  */
 export async function exportPersonaServerMemories(
-	serverDiscId: string,
-	tomoriId: number,
+  serverDiscId: string,
+  tomoriId: number,
 ): Promise<ExportResult> {
-	const baseExport = await exportServerData(serverDiscId, tomoriId);
-	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "server") {
-		return {
-			success: false,
-			error: baseExport.error || "commands.data.export.error_export_failed",
-		};
-	}
+  const baseExport = await exportServerData(serverDiscId, tomoriId);
+  if (
+    !baseExport.success ||
+    !baseExport.data ||
+    baseExport.data.type !== "server"
+  ) {
+    return {
+      success: false,
+      error: baseExport.error || "commands.data.export.error_export_failed",
+    };
+  }
 
-	const exportData: ServerMemoriesExport = {
-		version: EXPORT_VERSION,
-		type: "server_memories",
-		exported_at: baseExport.data.exported_at,
-		data: {
-			server_memories: baseExport.data.data.server_memories,
-		},
-	};
+  const exportData: ServerMemoriesExport = {
+    version: EXPORT_VERSION,
+    type: "server_memories",
+    exported_at: baseExport.data.exported_at,
+    data: {
+      server_memories: baseExport.data.data.server_memories,
+    },
+  };
 
-	const validated = serverMemoriesExportSchema.safeParse(exportData);
-	if (!validated.success) {
-		log.error(
-			`Persona server memories export validation failed for server ${serverDiscId}:`,
-			validated.error,
-		);
-		return {
-			success: false,
-			error: "commands.data.export.error_validation_failed",
-		};
-	}
+  const validated = serverMemoriesExportSchema.safeParse(exportData);
+  if (!validated.success) {
+    log.error(
+      `Persona server memories export validation failed for server ${serverDiscId}:`,
+      validated.error,
+    );
+    return {
+      success: false,
+      error: "commands.data.export.error_validation_failed",
+    };
+  }
 
-	return {
-		success: true,
-		data: validated.data,
-	};
+  return {
+    success: true,
+    data: validated.data,
+  };
 }
 
 /**
@@ -556,41 +579,45 @@ export async function exportPersonaServerMemories(
  * @param serverDiscId - Discord server ID to export data for
  */
 export async function exportServerConfig(
-	serverDiscId: string,
+  serverDiscId: string,
 ): Promise<ExportResult> {
-	const baseExport = await exportServerData(serverDiscId);
-	if (!baseExport.success || !baseExport.data || baseExport.data.type !== "server") {
-		return {
-			success: false,
-			error: baseExport.error || "commands.data.export.error_export_failed",
-		};
-	}
+  const baseExport = await exportServerData(serverDiscId);
+  if (
+    !baseExport.success ||
+    !baseExport.data ||
+    baseExport.data.type !== "server"
+  ) {
+    return {
+      success: false,
+      error: baseExport.error || "commands.data.export.error_export_failed",
+    };
+  }
 
-	const exportData: ServerConfigOnlyExport = {
-		version: EXPORT_VERSION,
-		type: "server_config",
-		exported_at: baseExport.data.exported_at,
-		data: {
-			config: baseExport.data.data.config,
-		},
-	};
+  const exportData: ServerConfigOnlyExport = {
+    version: EXPORT_VERSION,
+    type: "server_config",
+    exported_at: baseExport.data.exported_at,
+    data: {
+      config: baseExport.data.data.config,
+    },
+  };
 
-	const validated = serverConfigOnlyExportSchema.safeParse(exportData);
-	if (!validated.success) {
-		log.error(
-			`Server config export validation failed for server ${serverDiscId}:`,
-			validated.error,
-		);
-		return {
-			success: false,
-			error: "commands.data.export.error_validation_failed",
-		};
-	}
+  const validated = serverConfigOnlyExportSchema.safeParse(exportData);
+  if (!validated.success) {
+    log.error(
+      `Server config export validation failed for server ${serverDiscId}:`,
+      validated.error,
+    );
+    return {
+      success: false,
+      error: "commands.data.export.error_validation_failed",
+    };
+  }
 
-	return {
-		success: true,
-		data: validated.data,
-	};
+  return {
+    success: true,
+    data: validated.data,
+  };
 }
 
 /**
@@ -600,14 +627,14 @@ export async function exportServerConfig(
  * @returns PersonalityExportResult containing formatted text or error
  */
 export async function exportPersonalityData(
-	serverDiscId: string,
-	tomoriId?: number,
+  serverDiscId: string,
+  tomoriId?: number,
 ): Promise<PersonalityExportResult> {
-	try {
-		// 1. Get persona data (selected persona or default main persona)
-		const rows =
-			typeof tomoriId === "number"
-				? await sql`
+  try {
+    // 1. Get persona data (selected persona or default main persona)
+    const rows =
+      typeof tomoriId === "number"
+        ? await sql`
 					SELECT
 						t.tomori_nickname,
 						t.attribute_list,
@@ -619,7 +646,7 @@ export async function exportPersonalityData(
 					  AND t.tomori_id = ${tomoriId}
 					LIMIT 1
 				`
-				: await sql`
+        : await sql`
 					SELECT
 						t.tomori_nickname,
 						t.attribute_list,
@@ -632,80 +659,80 @@ export async function exportPersonalityData(
 					LIMIT 1
 				`;
 
-		if (!rows.length) {
-			return {
-				success: false,
-				error: "commands.data.export.error_no_personality_data",
-			};
-		}
+    if (!rows.length) {
+      return {
+        success: false,
+        error: "commands.data.export.error_no_personality_data",
+      };
+    }
 
-		const personalityData = rows[0];
+    const personalityData = rows[0];
 
-		// 2. Format personality data as human-readable text
-		let textOutput = "";
+    // 2. Format personality data as human-readable text
+    let textOutput = "";
 
-		// Add header with personality name
-		textOutput += `========================================\n`;
-		textOutput += `TOMORI PERSONALITY EXPORT\n`;
-		textOutput += `========================================\n\n`;
-		textOutput += `Personality Name: ${personalityData.tomori_nickname}\n`;
-		textOutput += `Exported: ${new Date().toISOString()}\n\n`;
+    // Add header with personality name
+    textOutput += `========================================\n`;
+    textOutput += `TOMORI PERSONALITY EXPORT\n`;
+    textOutput += `========================================\n\n`;
+    textOutput += `Personality Name: ${personalityData.tomori_nickname}\n`;
+    textOutput += `Exported: ${new Date().toISOString()}\n\n`;
 
-		// Add attributes section
-		textOutput += `========================================\n`;
-		textOutput += `ATTRIBUTES\n`;
-		textOutput += `========================================\n\n`;
+    // Add attributes section
+    textOutput += `========================================\n`;
+    textOutput += `ATTRIBUTES\n`;
+    textOutput += `========================================\n\n`;
 
-		const attributes = personalityData.attribute_list || [];
-		if (attributes.length > 0) {
-			attributes.forEach((attr: string, index: number) => {
-				textOutput += `${index + 1}. ${attr}\n`;
-			});
-		} else {
-			textOutput += `No attributes defined.\n`;
-		}
+    const attributes = personalityData.attribute_list || [];
+    if (attributes.length > 0) {
+      attributes.forEach((attr: string, index: number) => {
+        textOutput += `${index + 1}. ${attr}\n`;
+      });
+    } else {
+      textOutput += `No attributes defined.\n`;
+    }
 
-		textOutput += `\n`;
+    textOutput += `\n`;
 
-		// Add sample dialogues section
-		textOutput += `========================================\n`;
-		textOutput += `SAMPLE DIALOGUES\n`;
-		textOutput += `========================================\n\n`;
+    // Add sample dialogues section
+    textOutput += `========================================\n`;
+    textOutput += `SAMPLE DIALOGUES\n`;
+    textOutput += `========================================\n\n`;
 
-		const dialoguesIn = personalityData.sample_dialogues_in || [];
-		const dialoguesOut = personalityData.sample_dialogues_out || [];
+    const dialoguesIn = personalityData.sample_dialogues_in || [];
+    const dialoguesOut = personalityData.sample_dialogues_out || [];
 
-		if (dialoguesIn.length > 0 && dialoguesOut.length > 0) {
-			const maxLength = Math.max(dialoguesIn.length, dialoguesOut.length);
+    if (dialoguesIn.length > 0 && dialoguesOut.length > 0) {
+      const maxLength = Math.max(dialoguesIn.length, dialoguesOut.length);
 
-			for (let i = 0; i < maxLength; i++) {
-				textOutput += `--- Dialogue ${i + 1} ---\n`;
-				textOutput += `User: ${dialoguesIn[i] || "(none)"}\n`;
-				textOutput += `Tomori: ${dialoguesOut[i] || "(none)"}\n\n`;
-			}
-		} else {
-			textOutput += `No sample dialogues defined.\n\n`;
-		}
+      for (let i = 0; i < maxLength; i++) {
+        textOutput += `--- Dialogue ${i + 1} ---\n`;
+        textOutput += `User: ${dialoguesIn[i] || "(none)"}\n`;
+        textOutput += `Tomori: ${dialoguesOut[i] || "(none)"}\n\n`;
+      }
+    } else {
+      textOutput += `No sample dialogues defined.\n\n`;
+    }
 
-		// Add footer note
-		textOutput += `========================================\n`;
-		textOutput += `NOTE\n`;
-		textOutput += `========================================\n\n`;
-		textOutput += `This export is for informational purposes only.\n`;
-		textOutput += `To import personalities, use the /persona commands.\n`;
+    // Add footer note
+    textOutput += `========================================\n`;
+    textOutput += `NOTE\n`;
+    textOutput += `========================================\n\n`;
+    textOutput += `This export is for informational purposes only.\n`;
+    textOutput += `To import personalities, use the /persona commands.\n`;
 
-		return {
-			success: true,
-			text: textOutput,
-		};
-	} catch (error) {
-		log.error(
-			`Error exporting personality data for server ${serverDiscId}:`,
-			error,
-		);
-		return {
-			success: false,
-			error: "commands.data.export.error_export_failed",
-		};
-	}
+    return {
+      success: true,
+      text: textOutput,
+    };
+  } catch (error) {
+    log.error(
+      `Error exporting personality data for server ${serverDiscId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "commands.data.export.error_export_failed",
+    };
+  }
 }

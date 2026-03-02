@@ -14,14 +14,14 @@ export const DEFAULT_MESSAGE_FETCH_LIMIT = 80;
  * @returns Clamped integer fetch limit
  */
 export function normalizeMessageFetchLimit(
-	value: number | null | undefined,
+  value: number | null | undefined,
 ): number {
-	if (typeof value !== "number" || Number.isNaN(value)) {
-		return DEFAULT_MESSAGE_FETCH_LIMIT;
-	}
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_MESSAGE_FETCH_LIMIT;
+  }
 
-	return Math.min(
-		MAX_MESSAGE_FETCH_LIMIT,
-		Math.max(MIN_MESSAGE_FETCH_LIMIT, Math.trunc(value)),
-	);
+  return Math.min(
+    MAX_MESSAGE_FETCH_LIMIT,
+    Math.max(MIN_MESSAGE_FETCH_LIMIT, Math.trunc(value)),
+  );
 }

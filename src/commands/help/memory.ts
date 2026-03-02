@@ -1,7 +1,7 @@
 import type {
-	ChatInputCommandInteraction,
-	Client,
-	SlashCommandSubcommandBuilder,
+  ChatInputCommandInteraction,
+  Client,
+  SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
@@ -16,11 +16,11 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
  * Explains the teach/forget memory system
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("memory")
-		.setDescription(localizer("en-US", "commands.help.memory.description"));
+  subcommand
+    .setName("memory")
+    .setDescription(localizer("en-US", "commands.help.memory.description"));
 
 /**
  * Execute the /help memory command
@@ -31,168 +31,168 @@ export const configureSubcommand = (
  * @param locale - Locale of the interaction
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	try {
-		// Get command mentions for cross-references
-		const teachMention = commandRegistry.getCommandMention("teach");
-		const teachMemoryPersonalMention = commandRegistry.getCommandMention(
-			"teach",
-			"memory",
-			"personal",
-		);
-		const teachMemoryServerMention = commandRegistry.getCommandMention(
-			"teach",
-			"memory",
-			"server",
-		);
-		const forgetMention = commandRegistry.getCommandMention("forget");
-		const forgetMemoryPersonalMention = commandRegistry.getCommandMention(
-			"forget",
-			"memory",
-			"personal",
-		);
-		const forgetMemoryServerMention = commandRegistry.getCommandMention(
-			"forget",
-			"memory",
-			"server",
-		);
-		const dataExportMention = commandRegistry.getCommandMention(
-			"data",
-			"export",
-		);
-		const statusMention = commandRegistry.getCommandMention("tool", "status");
-		const helpCustomizationMention = commandRegistry.getCommandMention(
-			"help",
-			"customization",
-		);
-		const personalCacheMention = commandRegistry.getCommandMention(
-			"personal",
-			"cache",
-		);
+  try {
+    // Get command mentions for cross-references
+    const teachMention = commandRegistry.getCommandMention("teach");
+    const teachMemoryPersonalMention = commandRegistry.getCommandMention(
+      "teach",
+      "memory",
+      "personal",
+    );
+    const teachMemoryServerMention = commandRegistry.getCommandMention(
+      "teach",
+      "memory",
+      "server",
+    );
+    const forgetMention = commandRegistry.getCommandMention("forget");
+    const forgetMemoryPersonalMention = commandRegistry.getCommandMention(
+      "forget",
+      "memory",
+      "personal",
+    );
+    const forgetMemoryServerMention = commandRegistry.getCommandMention(
+      "forget",
+      "memory",
+      "server",
+    );
+    const dataExportMention = commandRegistry.getCommandMention(
+      "data",
+      "export",
+    );
+    const statusMention = commandRegistry.getCommandMention("tool", "status");
+    const helpCustomizationMention = commandRegistry.getCommandMention(
+      "help",
+      "customization",
+    );
+    const personalCacheMention = commandRegistry.getCommandMention(
+      "personal",
+      "cache",
+    );
 
-		// Use replySummaryEmbed to show structured memory guide
-		await replySummaryEmbed(
-			interaction,
-			locale,
-			{
-				titleKey: "commands.help.memory.title",
-				descriptionKey: "commands.help.memory.embed_description",
-				descriptionVars: {
-					helpCustomization: helpCustomizationMention,
-				},
-				color: ColorCode.INFO,
-				fields: [
-					{
-						nameKey: "commands.help.memory.teaching_title",
-						value: localizer(
-							locale,
-							"commands.help.memory.teaching_description",
-							{
-								teach: teachMention,
-								teachMemoryPersonal: teachMemoryPersonalMention,
-								teachMemoryServer: teachMemoryServerMention,
-							},
-						),
-						inline: false,
-					},
-					{
-						nameKey: "commands.help.memory.forgetting_title",
-						value: localizer(
-							locale,
-							"commands.help.memory.forgetting_description",
-							{
-								forget: forgetMention,
-								forgetMemoryPersonal: forgetMemoryPersonalMention,
-								forgetMemoryServer: forgetMemoryServerMention,
-							},
-						),
-						inline: false,
-					},
-					{
-						nameKey: "commands.help.memory.how_it_works_title",
-						value: localizer(
-							locale,
-							"commands.help.memory.how_it_works_description",
-						),
-						inline: false,
-					},
-					{
-						nameKey: "commands.help.memory.tips_title",
-						value: localizer(locale, "commands.help.memory.tips_description", {
-							dataExport: dataExportMention,
-							status: statusMention,
-						}),
-						inline: false,
-					},
-					{
-						nameKey: "commands.help.memory.documents_title",
-						value: localizer(
-							locale,
-							"commands.help.memory.documents_description",
-						),
-						inline: false,
-					},
-					{
-						nameKey: "commands.help.memory.shortterm_title",
-						value: localizer(
-							locale,
-							"commands.help.memory.shortterm_description",
-							{
-								personalCache: personalCacheMention,
-								personalCacheClear: personalCacheMention,
-							},
-						),
-						inline: false,
-					},
-				],
-			},
+    // Use replySummaryEmbed to show structured memory guide
+    await replySummaryEmbed(
+      interaction,
+      locale,
+      {
+        titleKey: "commands.help.memory.title",
+        descriptionKey: "commands.help.memory.embed_description",
+        descriptionVars: {
+          helpCustomization: helpCustomizationMention,
+        },
+        color: ColorCode.INFO,
+        fields: [
+          {
+            nameKey: "commands.help.memory.teaching_title",
+            value: localizer(
+              locale,
+              "commands.help.memory.teaching_description",
+              {
+                teach: teachMention,
+                teachMemoryPersonal: teachMemoryPersonalMention,
+                teachMemoryServer: teachMemoryServerMention,
+              },
+            ),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.memory.forgetting_title",
+            value: localizer(
+              locale,
+              "commands.help.memory.forgetting_description",
+              {
+                forget: forgetMention,
+                forgetMemoryPersonal: forgetMemoryPersonalMention,
+                forgetMemoryServer: forgetMemoryServerMention,
+              },
+            ),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.memory.how_it_works_title",
+            value: localizer(
+              locale,
+              "commands.help.memory.how_it_works_description",
+            ),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.memory.tips_title",
+            value: localizer(locale, "commands.help.memory.tips_description", {
+              dataExport: dataExportMention,
+              status: statusMention,
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.memory.documents_title",
+            value: localizer(
+              locale,
+              "commands.help.memory.documents_description",
+            ),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.memory.shortterm_title",
+            value: localizer(
+              locale,
+              "commands.help.memory.shortterm_description",
+              {
+                personalCache: personalCacheMention,
+                personalCacheClear: personalCacheMention,
+              },
+            ),
+            inline: false,
+          },
+        ],
+      },
 
-			MessageFlags.Ephemeral,
-		);
-	} catch (error) {
-		// Log error with context
-		const context: ErrorContext = {
-			userId: userData.user_id,
-			errorType: "CommandExecutionError",
-			metadata: {
-				commandName: "/help memory",
-				guildDiscordId: interaction.guild?.id,
-			},
-		};
-		await log.error(
-			"Error executing /help memory command",
-			error as Error,
-			context,
-		);
+      MessageFlags.Ephemeral,
+    );
+  } catch (error) {
+    // Log error with context
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      errorType: "CommandExecutionError",
+      metadata: {
+        commandName: "/help memory",
+        guildDiscordId: interaction.guild?.id,
+      },
+    };
+    await log.error(
+      "Error executing /help memory command",
+      error as Error,
+      context,
+    );
 
-		// Inform user of error (ephemeral)
-		const errorMessage = localizer(
-			locale,
-			"general.errors.unknown_error_description",
-		);
-		try {
-			if (interaction.replied || interaction.deferred) {
-				await interaction.followUp({
-					content: errorMessage,
-					flags: MessageFlags.Ephemeral,
-				});
-			} else {
-				await interaction.reply({
-					content: errorMessage,
-					flags: MessageFlags.Ephemeral,
-				});
-			}
-		} catch (replyError) {
-			// Log if even the error reply fails
-			log.error(
-				"Failed to send error reply for /help memory",
-				replyError,
-				context,
-			);
-		}
-	}
+    // Inform user of error (ephemeral)
+    const errorMessage = localizer(
+      locale,
+      "general.errors.unknown_error_description",
+    );
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({
+          content: errorMessage,
+          flags: MessageFlags.Ephemeral,
+        });
+      } else {
+        await interaction.reply({
+          content: errorMessage,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    } catch (replyError) {
+      // Log if even the error reply fails
+      log.error(
+        "Failed to send error reply for /help memory",
+        replyError,
+        context,
+      );
+    }
+  }
 }

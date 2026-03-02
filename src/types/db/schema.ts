@@ -2,185 +2,185 @@ import { StickerFormatType } from "discord.js";
 import { z } from "zod";
 
 export enum HumanizerDegree {
-	NONE = 0,
-	LIGHT = 1,
-	MEDIUM = 2,
-	HEAVY = 3,
+  NONE = 0,
+  LIGHT = 1,
+  MEDIUM = 2,
+  HEAVY = 3,
 }
 
 export enum PrivacyLevel {
-	MINIMAL = 0, // Minimal privacy (full personalization features)
-	PARTIAL = 1, // Partial privacy (limited personalization)
-	FULL = 2, // Full privacy (maximum protection - completely invisible)
+  MINIMAL = 0, // Minimal privacy (full personalization features)
+  PARTIAL = 1, // Partial privacy (limited personalization)
+  FULL = 2, // Full privacy (maximum protection - completely invisible)
 }
 
 export enum CooldownType {
-	OFF = 0, // No cooldown on message triggers (default)
-	PER_USER = 1, // Each user has their own cooldown per server
-	PER_CHANNEL = 2, // Each channel has its own cooldown
-	SERVER_WIDE = 3, // Everyone waits (server managers exempt)
-	STRICT_SERVER_WIDE = 4, // Everyone waits (no exceptions)
-	COMMAND_CATEGORY = 5, // Command category cooldowns (per-user, global across servers)
+  OFF = 0, // No cooldown on message triggers (default)
+  PER_USER = 1, // Each user has their own cooldown per server
+  PER_CHANNEL = 2, // Each channel has its own cooldown
+  SERVER_WIDE = 3, // Everyone waits (server managers exempt)
+  STRICT_SERVER_WIDE = 4, // Everyone waits (no exceptions)
+  COMMAND_CATEGORY = 5, // Command category cooldowns (per-user, global across servers)
 }
 
 export const userSchema = z.object({
-	user_id: z.number().optional(),
-	user_disc_id: z.string(),
-	user_nickname: z.string(),
-	language_pref: z.string().default("en-US"),
-	registration_locale: z.string().nullable(), // Static locale captured at registration
-	privacy_level: z.nativeEnum(PrivacyLevel).default(PrivacyLevel.MINIMAL),
-	personal_memories: z.array(z.string()).default([]),
-	shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  user_id: z.number().optional(),
+  user_disc_id: z.string(),
+  user_nickname: z.string(),
+  language_pref: z.string().default("en-US"),
+  registration_locale: z.string().nullable(), // Static locale captured at registration
+  privacy_level: z.nativeEnum(PrivacyLevel).default(PrivacyLevel.MINIMAL),
+  personal_memories: z.array(z.string()).default([]),
+  shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type UserRow = z.infer<typeof userSchema>;
 
 export const serverSchema = z.object({
-	server_id: z.number().optional(),
-	server_disc_id: z.string(),
-	is_dm_channel: z.boolean().default(false), // Added for DM support
-	registration_locale: z.string().nullable(), // Static locale captured at server setup
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_id: z.number().optional(),
+  server_disc_id: z.string(),
+  is_dm_channel: z.boolean().default(false), // Added for DM support
+  registration_locale: z.string().nullable(), // Static locale captured at server setup
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type ServerRow = z.infer<typeof serverSchema>;
 
 export const tomoriSchema = z.object({
-	tomori_id: z.number().optional(),
-	server_id: z.number(),
-	persona_lineage_id: z
-		.preprocess((value) => {
-			if (typeof value === "bigint") {
-				return Number(value);
-			}
-			if (typeof value === "string" && value.trim() !== "") {
-				return Number(value);
-			}
-			return value;
-		}, z.number().int().nonnegative())
-		.default(0),
-	tomori_nickname: z.string(),
-	attribute_list: z.array(z.string()).default([]),
-	sample_dialogues_in: z.array(z.string()).default([]),
-	sample_dialogues_out: z.array(z.string()).default([]),
-	autoch_counter: z.number().default(0),
-	is_alter: z.boolean().default(false), // Added January 2026 - Distinguishes main persona (false) from alter personas (true)
-	webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Discord CDN URL for alter persona avatars from import embed
-	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
-	nai_tags: z.array(z.string()).default([]), // Imageboard-style character tags for NovelAI self-portrait generation
-	nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
-	nai_attg_title: z.string().nullable().optional(),  // Added March 2026 - ATTG: Story title
-	nai_attg_tags: z.string().nullable().optional(),   // Added March 2026 - ATTG: Genre/style tags
-	nai_attg_genre: z.string().nullable().optional(),  // Added March 2026 - ATTG: Genre categories
-	nai_attg_stars: z.number().int().min(1).max(5).nullable().optional(), // Added March 2026 - ATTG: Quality stars (Erato only)
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  tomori_id: z.number().optional(),
+  server_id: z.number(),
+  persona_lineage_id: z
+    .preprocess((value) => {
+      if (typeof value === "bigint") {
+        return Number(value);
+      }
+      if (typeof value === "string" && value.trim() !== "") {
+        return Number(value);
+      }
+      return value;
+    }, z.number().int().nonnegative())
+    .default(0),
+  tomori_nickname: z.string(),
+  attribute_list: z.array(z.string()).default([]),
+  sample_dialogues_in: z.array(z.string()).default([]),
+  sample_dialogues_out: z.array(z.string()).default([]),
+  autoch_counter: z.number().default(0),
+  is_alter: z.boolean().default(false), // Added January 2026 - Distinguishes main persona (false) from alter personas (true)
+  webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Discord CDN URL for alter persona avatars from import embed
+  alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
+  nai_tags: z.array(z.string()).default([]), // Imageboard-style character tags for NovelAI self-portrait generation
+  nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
+  nai_attg_title: z.string().nullable().optional(), // Added March 2026 - ATTG: Story title
+  nai_attg_tags: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre/style tags
+  nai_attg_genre: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre categories
+  nai_attg_stars: z.number().int().min(1).max(5).nullable().optional(), // Added March 2026 - ATTG: Quality stars (Erato only)
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type TomoriRow = z.infer<typeof tomoriSchema>;
 
 export const llmSchema = z.object({
-	llm_id: z.number().optional(),
-	llm_provider: z.string(),
-	llm_codename: z.string(),
-	is_smartest: z.boolean().default(false),
-	is_default: z.boolean().default(false),
-	is_reasoning: z.boolean().default(false),
-	is_deprecated: z.boolean().default(false),
-	is_free: z.boolean().default(false),
-	has_tools: z.boolean().default(false),
-	sees_images: z.boolean().default(false),
-	sees_videos: z.boolean().default(false),
-	sees_youtube: z.boolean().default(false),
-	is_uncensored: z.boolean().default(false),
-	supports_structoutput: z.boolean().default(false),
-	llm_description: z.string().nullable().optional(),
-	ja_description: z.string().nullable().optional(),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  llm_id: z.number().optional(),
+  llm_provider: z.string(),
+  llm_codename: z.string(),
+  is_smartest: z.boolean().default(false),
+  is_default: z.boolean().default(false),
+  is_reasoning: z.boolean().default(false),
+  is_deprecated: z.boolean().default(false),
+  is_free: z.boolean().default(false),
+  has_tools: z.boolean().default(false),
+  sees_images: z.boolean().default(false),
+  sees_videos: z.boolean().default(false),
+  sees_youtube: z.boolean().default(false),
+  is_uncensored: z.boolean().default(false),
+  supports_structoutput: z.boolean().default(false),
+  llm_description: z.string().nullable().optional(),
+  ja_description: z.string().nullable().optional(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type LlmRow = z.infer<typeof llmSchema>;
 
 export const diffusionModelSchema = z.object({
-	diffusion_model_id: z.number().optional(),
-	provider: z.string(),
-	codename: z.string(),
-	model_description: z.string().nullable().optional(),
-	ja_description: z.string().nullable().optional(),
-	is_default: z.boolean().default(false),
-	is_deprecated: z.boolean().default(false),
-	is_free: z.boolean().default(false),
-	is_uncensored: z.boolean().default(false),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  diffusion_model_id: z.number().optional(),
+  provider: z.string(),
+  codename: z.string(),
+  model_description: z.string().nullable().optional(),
+  ja_description: z.string().nullable().optional(),
+  is_default: z.boolean().default(false),
+  is_deprecated: z.boolean().default(false),
+  is_free: z.boolean().default(false),
+  is_uncensored: z.boolean().default(false),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type DiffusionModelRow = z.infer<typeof diffusionModelSchema>;
 
 export const embeddingModelSchema = z.object({
-	embedding_model_id: z.number().optional(),
-	provider: z.string(),
-	codename: z.string(),
-	model_family: z.string(),
-	model_description: z.string().nullable().optional(),
-	ja_description: z.string().nullable().optional(),
-	is_default: z.boolean().default(false),
-	is_deprecated: z.boolean().default(false),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  embedding_model_id: z.number().optional(),
+  provider: z.string(),
+  codename: z.string(),
+  model_family: z.string(),
+  model_description: z.string().nullable().optional(),
+  ja_description: z.string().nullable().optional(),
+  is_default: z.boolean().default(false),
+  is_deprecated: z.boolean().default(false),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type EmbeddingModelRow = z.infer<typeof embeddingModelSchema>;
 
 export const tomoriConfigSchema = z.object({
-	tomori_config_id: z.number().optional(),
-	tomori_id: z.number().nullable().optional(), // Legacy pointer (server-scoped configs use server_id)
-	server_id: z.number().nullable().optional(), // Added January 2026 - Server-scoped config (nullable for legacy rows)
-	llm_id: z.number(),
-	embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
-	diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
-	llm_temperature: z.number().min(1.0).max(2.0).default(1.5),
-	llm_top_p: z.number().min(0.0).max(1.0).default(1.0), // Added February 2026 - Nucleus sampling (1.0=disabled)
-	llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
-	llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
-	llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
-	llm_min_p: z.number().min(0.0).max(1.0).default(0.0), // Added February 2026 - Min-P sampling (0.0=disabled)
-	api_key: z.instanceof(Buffer).nullable(),
-	key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
-	trigger_words: z.array(z.string()).default([]),
-	autoch_disc_ids: z.array(z.string()).default([]),
-	rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
-	autoch_threshold: z.number().default(0),
-	self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
-	triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message
-	message_fetch_limit: z.number().int().min(20).max(100).default(80), // Added February 2026 - Max recent messages fetched for context
-	server_memteaching_enabled: z.boolean().default(true),
-	attribute_memteaching_enabled: z.boolean().default(false),
-	sampledialogue_memteaching_enabled: z.boolean().default(false),
-	self_teaching_enabled: z.boolean().default(true),
-	web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
-	personal_memories_enabled: z.boolean().default(true),
-	humanizer_degree: z
-		.nativeEnum(HumanizerDegree)
-		.default(HumanizerDegree.LIGHT),
-	emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
-	sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
-	pin_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission for pin message tool
-	imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
-	hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
-	hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds
-	uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
-	uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle
-	uncensor_sanitize_enabled: z.boolean().default(false), // Added February 2026 - Sensitive word sanitization toggle
-	videogen_enabled: z.boolean().default(true), // Added January 2026 - Reserved for future video generation
-	timezone_offset: z.number().int().min(-12).max(14).default(0),
-	system_prompt: z.string().nullable(), // Added December 2025 - Custom system prompt for personality instructions
-	cooldown_type: z.nativeEnum(CooldownType).default(CooldownType.OFF), // Added January 2026 - Message trigger cooldown type
-	cooldown_length: z.number().int().min(1).max(86400).default(5), // Added January 2026 - Cooldown duration in seconds
-	custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
-	custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
-	nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  tomori_config_id: z.number().optional(),
+  tomori_id: z.number().nullable().optional(), // Legacy pointer (server-scoped configs use server_id)
+  server_id: z.number().nullable().optional(), // Added January 2026 - Server-scoped config (nullable for legacy rows)
+  llm_id: z.number(),
+  embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
+  diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
+  llm_temperature: z.number().min(1.0).max(2.0).default(1.5),
+  llm_top_p: z.number().min(0.0).max(1.0).default(1.0), // Added February 2026 - Nucleus sampling (1.0=disabled)
+  llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
+  llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
+  llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
+  llm_min_p: z.number().min(0.0).max(1.0).default(0.0), // Added February 2026 - Min-P sampling (0.0=disabled)
+  api_key: z.instanceof(Buffer).nullable(),
+  key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
+  trigger_words: z.array(z.string()).default([]),
+  autoch_disc_ids: z.array(z.string()).default([]),
+  rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
+  autoch_threshold: z.number().default(0),
+  self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
+  triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message
+  message_fetch_limit: z.number().int().min(20).max(100).default(80), // Added February 2026 - Max recent messages fetched for context
+  server_memteaching_enabled: z.boolean().default(true),
+  attribute_memteaching_enabled: z.boolean().default(false),
+  sampledialogue_memteaching_enabled: z.boolean().default(false),
+  self_teaching_enabled: z.boolean().default(true),
+  web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
+  personal_memories_enabled: z.boolean().default(true),
+  humanizer_degree: z
+    .nativeEnum(HumanizerDegree)
+    .default(HumanizerDegree.LIGHT),
+  emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
+  sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
+  pin_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission for pin message tool
+  imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
+  hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
+  hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds
+  uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
+  uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle
+  uncensor_sanitize_enabled: z.boolean().default(false), // Added February 2026 - Sensitive word sanitization toggle
+  videogen_enabled: z.boolean().default(true), // Added January 2026 - Reserved for future video generation
+  timezone_offset: z.number().int().min(-12).max(14).default(0),
+  system_prompt: z.string().nullable(), // Added December 2025 - Custom system prompt for personality instructions
+  cooldown_type: z.nativeEnum(CooldownType).default(CooldownType.OFF), // Added January 2026 - Message trigger cooldown type
+  cooldown_length: z.number().int().min(1).max(86400).default(5), // Added January 2026 - Cooldown duration in seconds
+  custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
+  custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
+  nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type TomoriConfigRow = z.infer<typeof tomoriConfigSchema>;
 
@@ -191,24 +191,24 @@ export type TomoriConfigRow = z.infer<typeof tomoriConfigSchema>;
  * to tomori_configs; NAI-specific fields are merged at generation time.
  */
 export const naiPresetSchema = z.object({
-	nai_preset_id:   z.number(),
-	preset_name:     z.string(),
-	model_target:    z.string(), // "kayra" or "erato"
-	is_default:      z.boolean(),
-	preset_desc:     z.string(), // EN human-readable description
-	ja_preset_desc:  z.string(), // JA human-readable description
-	parameters:      z.record(z.string(), z.unknown()),
-	created_at:      z.date().optional(),
+  nai_preset_id: z.number(),
+  preset_name: z.string(),
+  model_target: z.string(), // "kayra" or "erato"
+  is_default: z.boolean(),
+  preset_desc: z.string(), // EN human-readable description
+  ja_preset_desc: z.string(), // JA human-readable description
+  parameters: z.record(z.string(), z.unknown()),
+  created_at: z.date().optional(),
 });
 export type NaiPresetRow = z.infer<typeof naiPresetSchema>;
 
 export const personaConfigSchema = z.object({
-	tomori_id: z.number(),
-	trigger_words: z.array(z.string()).default([]),
-	persona_prompt: z.string().nullable().optional(),
-	llm_id: z.number().int().nullable().optional(), // Added March 2026 - Persona-specific LLM model override
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  tomori_id: z.number(),
+  trigger_words: z.array(z.string()).default([]),
+  persona_prompt: z.string().nullable().optional(),
+  llm_id: z.number().int().nullable().optional(), // Added March 2026 - Persona-specific LLM model override
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type PersonaConfigRow = z.infer<typeof personaConfigSchema>;
 
@@ -217,146 +217,146 @@ export type PersonaConfigRow = z.infer<typeof personaConfigSchema>;
  * When set, overrides the global llm_id for all personas in that channel.
  */
 export const channelLlmOverrideSchema = z.object({
-	server_id: z.number(),
-	channel_disc_id: z.string(),
-	llm_id: z.number(),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_id: z.number(),
+  channel_disc_id: z.string(),
+  llm_id: z.number(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type ChannelLlmOverrideRow = z.infer<typeof channelLlmOverrideSchema>;
 
 export const tomoriPresetSchema = z.object({
-	tomori_preset_id: z.number(),
-	tomori_preset_name: z.string(),
-	tomori_preset_desc: z.string(),
-	preset_attribute_list: z.array(z.string()).default([]),
-	preset_sample_dialogues_in: z.array(z.string()).default([]),
-	preset_sample_dialogues_out: z.array(z.string()).default([]),
-	preset_language: z.string(),
-	preset_avatar_path: z.string().nullable().optional(),
-	preset_trigger_words: z.array(z.string()).default([]),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  tomori_preset_id: z.number(),
+  tomori_preset_name: z.string(),
+  tomori_preset_desc: z.string(),
+  preset_attribute_list: z.array(z.string()).default([]),
+  preset_sample_dialogues_in: z.array(z.string()).default([]),
+  preset_sample_dialogues_out: z.array(z.string()).default([]),
+  preset_language: z.string(),
+  preset_avatar_path: z.string().nullable().optional(),
+  preset_trigger_words: z.array(z.string()).default([]),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type TomoriPresetRow = z.infer<typeof tomoriPresetSchema>;
 
 export const systemPromptPresetSchema = z.object({
-	system_prompt_preset_id: z.number(),
-	system_prompt_preset_name: z.string(),
-	system_prompt_preset_desc: z.string(),
-	ja_description: z.string().nullable().optional(),
-	preset_prompt_text: z.string(),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  system_prompt_preset_id: z.number(),
+  system_prompt_preset_name: z.string(),
+  system_prompt_preset_desc: z.string(),
+  ja_description: z.string().nullable().optional(),
+  preset_prompt_text: z.string(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type SystemPromptPresetRow = z.infer<typeof systemPromptPresetSchema>;
 
 export const serverEmojiSchema = z.object({
-	server_emoji_id: z.number().optional(),
-	server_id: z.number(),
-	emoji_disc_id: z.string(),
-	emoji_name: z.string(),
-	emoji_desc: z.string().default(""),
-	emotion_key: z.string(),
-	is_global: z.boolean().default(false),
-	is_animated: z.boolean().default(false),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_emoji_id: z.number().optional(),
+  server_id: z.number(),
+  emoji_disc_id: z.string(),
+  emoji_name: z.string(),
+  emoji_desc: z.string().default(""),
+  emotion_key: z.string(),
+  is_global: z.boolean().default(false),
+  is_animated: z.boolean().default(false),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type ServerEmojiRow = z.infer<typeof serverEmojiSchema>;
 
 export const serverStickerSchema = z.object({
-	server_sticker_id: z.number().optional(),
-	server_id: z.number(),
-	sticker_disc_id: z.string(),
-	sticker_name: z.string(),
-	sticker_desc: z.string().default(""),
-	emotion_key: z.string(),
-	is_global: z.boolean().default(false),
-	//is_animated: z.boolean().default(false),
-	sticker_format: z
-		.nativeEnum(StickerFormatType)
-		.default(StickerFormatType.PNG),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_sticker_id: z.number().optional(),
+  server_id: z.number(),
+  sticker_disc_id: z.string(),
+  sticker_name: z.string(),
+  sticker_desc: z.string().default(""),
+  emotion_key: z.string(),
+  is_global: z.boolean().default(false),
+  //is_animated: z.boolean().default(false),
+  sticker_format: z
+    .nativeEnum(StickerFormatType)
+    .default(StickerFormatType.PNG),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type ServerStickerRow = z.infer<typeof serverStickerSchema>;
 
 export const serverMemorySchema = z.object({
-	server_memory_id: z.number().optional(),
-	server_id: z.number(),
-	tomori_id: z.number().nullable().optional(),
-	persona_lineage_id: z.preprocess((value) => {
-		if (typeof value === "bigint") {
-			return Number(value);
-		}
-		if (typeof value === "string" && value.trim() !== "") {
-			return Number(value);
-		}
-		return value;
-	}, z.number().int().nonnegative()),
-	user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
-	content: z.string(),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_memory_id: z.number().optional(),
+  server_id: z.number(),
+  tomori_id: z.number().nullable().optional(),
+  persona_lineage_id: z.preprocess((value) => {
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      return Number(value);
+    }
+    return value;
+  }, z.number().int().nonnegative()),
+  user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
+  content: z.string(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type ServerMemoryRow = z.infer<typeof serverMemorySchema>;
 
 export const personalMemorySchema = z.object({
-	personal_memory_id: z.number().optional(),
-	user_id: z.number(),
-	persona_lineage_id: z.preprocess((value) => {
-		if (typeof value === "bigint") {
-			return Number(value);
-		}
-		if (typeof value === "string" && value.trim() !== "") {
-			return Number(value);
-		}
-		return value;
-	}, z.number().int().nonnegative()),
-	content: z.string(),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  personal_memory_id: z.number().optional(),
+  user_id: z.number(),
+  persona_lineage_id: z.preprocess((value) => {
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      return Number(value);
+    }
+    return value;
+  }, z.number().int().nonnegative()),
+  content: z.string(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type PersonalMemoryRow = z.infer<typeof personalMemorySchema>;
 
 export const documentSchema = z.object({
-	document_id: z.number().optional(),
-	server_id: z.number(),
-	tomori_id: z.number().nullable().optional(),
-	uploader_user_id: z.number().nullable().optional(),
-	document_name: z.string(),
-	file_name: z.string().nullable().optional(),
-	mime_type: z.string().nullable().optional(),
-	file_size_bytes: z.number().int().nullable().optional(),
-	text_content: z.string(),
-	source_type: z.string().default("upload"),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  document_id: z.number().optional(),
+  server_id: z.number(),
+  tomori_id: z.number().nullable().optional(),
+  uploader_user_id: z.number().nullable().optional(),
+  document_name: z.string(),
+  file_name: z.string().nullable().optional(),
+  mime_type: z.string().nullable().optional(),
+  file_size_bytes: z.number().int().nullable().optional(),
+  text_content: z.string(),
+  source_type: z.string().default("upload"),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type DocumentRow = z.infer<typeof documentSchema>;
 
 export const documentChunkSchema = z.object({
-	document_chunk_id: z.number().optional(),
-	document_id: z.number(),
-	server_id: z.number(),
-	embedding_model_id: z.number(),
-	embedding_family: z.string(),
-	chunk_index: z.number().int(),
-	content: z.string(),
-	embedding: z.unknown().optional(),
-	created_at: z.date().optional(),
+  document_chunk_id: z.number().optional(),
+  document_id: z.number(),
+  server_id: z.number(),
+  embedding_model_id: z.number(),
+  embedding_family: z.string(),
+  chunk_index: z.number().int(),
+  content: z.string(),
+  embedding: z.unknown().optional(),
+  created_at: z.date().optional(),
 });
 export type DocumentChunkRow = z.infer<typeof documentChunkSchema>;
 
 export const personalizationBlacklistSchema = z.object({
-	server_id: z.number(),
-	user_disc_id: z.string(), // Discord ID - persists even if user deletes account
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_id: z.number(),
+  user_disc_id: z.string(), // Discord ID - persists even if user deletes account
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type PersonalizationBlacklistRow = z.infer<
-	typeof personalizationBlacklistSchema
+  typeof personalizationBlacklistSchema
 >;
 
 /**
@@ -365,81 +365,81 @@ export type PersonalizationBlacklistRow = z.infer<
  * When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.
  */
 export const channelWhitelistSchema = z.object({
-	server_id: z.number(),
-	channel_disc_id: z.string(),
-	cooldown_type: z.nativeEnum(CooldownType).default(CooldownType.OFF),
-	cooldown_length: z.number().int().min(0).max(86400).default(0),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  server_id: z.number(),
+  channel_disc_id: z.string(),
+  cooldown_type: z.nativeEnum(CooldownType).default(CooldownType.OFF),
+  cooldown_length: z.number().int().min(0).max(86400).default(0),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type ChannelWhitelistRow = z.infer<typeof channelWhitelistSchema>;
 
 export const errorLogSchema = z.object({
-	error_log_id: z.number().optional(), // Primary key, optional as it's generated
-	// Context IDs - Optional because errors can occur outside specific contexts
-	tomori_id: z.number().nullable().optional(),
-	user_id: z.number().nullable().optional(),
-	server_id: z.number().nullable().optional(),
-	// Error Details
-	error_type: z.string().default("GenericError"), // Categorize the error, default if not specified
-	error_message: z.string(), // The main error message, required
-	stack_trace: z.string().nullable().optional(), // Dedicated field for stack trace, optional
-	error_metadata: z
-		.record(z.string(), z.unknown())
-		.nullable()
-		.optional()
-		.default({}), // Flexible JSON for extra context, optional
-	// Timestamps
-	created_at: z.date().optional(), // Handled by DB default
-	updated_at: z.date().optional(), // Handled by DB default/trigger
+  error_log_id: z.number().optional(), // Primary key, optional as it's generated
+  // Context IDs - Optional because errors can occur outside specific contexts
+  tomori_id: z.number().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  server_id: z.number().nullable().optional(),
+  // Error Details
+  error_type: z.string().default("GenericError"), // Categorize the error, default if not specified
+  error_message: z.string(), // The main error message, required
+  stack_trace: z.string().nullable().optional(), // Dedicated field for stack trace, optional
+  error_metadata: z
+    .record(z.string(), z.unknown())
+    .nullable()
+    .optional()
+    .default({}), // Flexible JSON for extra context, optional
+  // Timestamps
+  created_at: z.date().optional(), // Handled by DB default
+  updated_at: z.date().optional(), // Handled by DB default/trigger
 });
 export type ErrorLogRow = z.infer<typeof errorLogSchema>;
 
 export interface ErrorContext {
-	tomoriId?: number | null;
-	userId?: number | null;
-	serverId?: number | null; // Database ID only - use metadata for Discord snowflakes
-	errorType?: string;
-	metadata?: Record<string, unknown> | null;
+  tomoriId?: number | null;
+  userId?: number | null;
+  serverId?: number | null; // Database ID only - use metadata for Discord snowflakes
+  errorType?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export const cooldownSchema = z.object({
-	cooldown_id: z.number().optional(),
-	cooldown_type: z.number(),
-	server_disc_id: z.string().nullable(),
-	user_disc_id: z.string().nullable(),
-	channel_disc_id: z.string().nullable(),
-	command_category: z.string().nullable(),
-	expiry_time: z.number(),
-	created_at: z.string().optional(),
+  cooldown_id: z.number().optional(),
+  cooldown_type: z.number(),
+  server_disc_id: z.string().nullable(),
+  user_disc_id: z.string().nullable(),
+  channel_disc_id: z.string().nullable(),
+  command_category: z.string().nullable(),
+  expiry_time: z.number(),
+  created_at: z.string().optional(),
 });
 export type CooldownRow = z.infer<typeof cooldownSchema>;
 
 export const optApiKeySchema = z.object({
-	opt_api_key_id: z.number().optional(), // Primary key, optional as it's generated
-	server_id: z.number(), // Foreign key to servers table
-	service_name: z.string(), // Service name identifier (e.g., 'brave-search', 'duckduckgo-search', 'fetch')
-	api_key: z.instanceof(Buffer).nullable(), // Encrypted API key using pgcrypto, nullable for free services
-	key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
-	created_at: z.date().optional(), // Handled by DB default
-	updated_at: z.date().optional(), // Handled by DB default/trigger
+  opt_api_key_id: z.number().optional(), // Primary key, optional as it's generated
+  server_id: z.number(), // Foreign key to servers table
+  service_name: z.string(), // Service name identifier (e.g., 'brave-search', 'duckduckgo-search', 'fetch')
+  api_key: z.instanceof(Buffer).nullable(), // Encrypted API key using pgcrypto, nullable for free services
+  key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
+  created_at: z.date().optional(), // Handled by DB default
+  updated_at: z.date().optional(), // Handled by DB default/trigger
 });
 export type OptApiKeyRow = z.infer<typeof optApiKeySchema>;
 
 export const reminderSchema = z.object({
-	reminder_id: z.number().optional(), // Primary key, optional as it's generated
-	server_id: z.number(), // Foreign key to servers table
-	channel_disc_id: z.string(), // Discord channel ID where reminder was set
-	user_discord_id: z.string(), // Target user's Discord ID
-	user_nickname: z.string(), // Target user's nickname for display
-	reminder_purpose: z.string(), // What the reminder is for
-	reminder_time: z.date(), // When to trigger the reminder (TIMESTAMP WITH TIME ZONE)
-	repetition_interval_hours: z.number().int().nullable().optional(), // Optional: repeat interval in hours
-	self_reminder: z.boolean().nullable().optional(), // Optional: reminder targets the bot itself
-	created_by_user_id: z.number().nullable(), // Who requested the reminder (nullable - set to NULL if user deleted)
-	persona_id: z.number().nullable().optional(), // Persona that created the reminder (nullable - fallback to main)
-	created_at: z.date().optional(), // Handled by DB default
-	updated_at: z.date().optional(), // Handled by DB default/trigger
+  reminder_id: z.number().optional(), // Primary key, optional as it's generated
+  server_id: z.number(), // Foreign key to servers table
+  channel_disc_id: z.string(), // Discord channel ID where reminder was set
+  user_discord_id: z.string(), // Target user's Discord ID
+  user_nickname: z.string(), // Target user's nickname for display
+  reminder_purpose: z.string(), // What the reminder is for
+  reminder_time: z.date(), // When to trigger the reminder (TIMESTAMP WITH TIME ZONE)
+  repetition_interval_hours: z.number().int().nullable().optional(), // Optional: repeat interval in hours
+  self_reminder: z.boolean().nullable().optional(), // Optional: reminder targets the bot itself
+  created_by_user_id: z.number().nullable(), // Who requested the reminder (nullable - set to NULL if user deleted)
+  persona_id: z.number().nullable().optional(), // Persona that created the reminder (nullable - fallback to main)
+  created_at: z.date().optional(), // Handled by DB default
+  updated_at: z.date().optional(), // Handled by DB default/trigger
 });
 export type ReminderRow = z.infer<typeof reminderSchema>;
 
@@ -452,23 +452,23 @@ export const ApiKeyRotationErrorType = z.enum(["rate_limit", "api_error"]);
 export type ApiKeyRotationErrorType = z.infer<typeof ApiKeyRotationErrorType>;
 
 const coerceNumber = z.preprocess((value) => {
-	if (typeof value === "bigint") {
-		return Number(value);
-	}
-	if (typeof value === "string" && value.trim() !== "") {
-		return Number(value);
-	}
-	return value;
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    return Number(value);
+  }
+  return value;
 }, z.number());
 
 const coerceIntNumber = z.preprocess((value) => {
-	if (typeof value === "bigint") {
-		return Number(value);
-	}
-	if (typeof value === "string" && value.trim() !== "") {
-		return Number(value);
-	}
-	return value;
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    return Number(value);
+  }
+  return value;
 }, z.number().int());
 
 /**
@@ -476,21 +476,21 @@ const coerceIntNumber = z.preprocess((value) => {
  * Used for load balancing (round-robin) and failover across multiple API keys
  */
 export const apiKeyRotationSchema = z.object({
-	rotation_key_id: z.number().optional(), // Primary key, auto-generated
-	server_id: z.number(), // Foreign key to servers table
-	provider: z.string(), // Must match current provider in tomori_configs
-	api_key: z.instanceof(Buffer).nullable(), // NULL if is_main_key_pointer = true
-	key_version: z.number().int().default(1), // Encryption key version
-	is_main_key_pointer: z.boolean().default(false), // true = use tomori_configs.api_key
-	is_enabled: z.boolean().default(true), // Manual or auto-disabled after errors
-	usage_count: coerceNumber.default(0), // For round-robin tracking
-	error_count: coerceIntNumber.default(0), // Consecutive errors
-	last_used_at: z.date().nullable().optional(), // Last successful use
-	last_error_at: z.date().nullable().optional(), // For cooldown logic
-	last_error_type: ApiKeyRotationErrorType.nullable().optional(), // Error category for cooldown
-	last_error_message: z.string().nullable().optional(), // Human-readable error
-	created_at: z.date().optional(), // Handled by DB default
-	updated_at: z.date().optional(), // Handled by DB default/trigger
+  rotation_key_id: z.number().optional(), // Primary key, auto-generated
+  server_id: z.number(), // Foreign key to servers table
+  provider: z.string(), // Must match current provider in tomori_configs
+  api_key: z.instanceof(Buffer).nullable(), // NULL if is_main_key_pointer = true
+  key_version: z.number().int().default(1), // Encryption key version
+  is_main_key_pointer: z.boolean().default(false), // true = use tomori_configs.api_key
+  is_enabled: z.boolean().default(true), // Manual or auto-disabled after errors
+  usage_count: coerceNumber.default(0), // For round-robin tracking
+  error_count: coerceIntNumber.default(0), // Consecutive errors
+  last_used_at: z.date().nullable().optional(), // Last successful use
+  last_error_at: z.date().nullable().optional(), // For cooldown logic
+  last_error_type: ApiKeyRotationErrorType.nullable().optional(), // Error category for cooldown
+  last_error_message: z.string().nullable().optional(), // Human-readable error
+  created_at: z.date().optional(), // Handled by DB default
+  updated_at: z.date().optional(), // Handled by DB default/trigger
 });
 export type ApiKeyRotationRow = z.infer<typeof apiKeyRotationSchema>;
 
@@ -499,13 +499,13 @@ export type ApiKeyRotationRow = z.infer<typeof apiKeyRotationSchema>;
  * Controls daily user quotas and server-wide quota pools
  */
 export const imageQuotaConfigSchema = z.object({
-	server_id: z.number(), // Foreign key to servers table
-	daily_user_quota: z.number().int().min(0).max(100).default(10), // Per-user daily limit (0 = unlimited)
-	serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
-	serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
-	enabled: z.boolean().default(true), // Master toggle for quota system
-	created_at: z.date().optional(), // Handled by DB default
-	updated_at: z.date().optional(), // Handled by DB default/trigger
+  server_id: z.number(), // Foreign key to servers table
+  daily_user_quota: z.number().int().min(0).max(100).default(10), // Per-user daily limit (0 = unlimited)
+  serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
+  serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
+  enabled: z.boolean().default(true), // Master toggle for quota system
+  created_at: z.date().optional(), // Handled by DB default
+  updated_at: z.date().optional(), // Handled by DB default/trigger
 });
 export type ImageQuotaConfigRow = z.infer<typeof imageQuotaConfigSchema>;
 
@@ -514,12 +514,12 @@ export type ImageQuotaConfigRow = z.infer<typeof imageQuotaConfigSchema>;
  * Resets daily at midnight (server timezone)
  */
 export const imageQuotaSchema = z.object({
-	quota_id: z.number().optional(), // Primary key, auto-generated
-	server_id: z.number(), // Foreign key to servers table
-	user_disc_id: z.string(), // User's Discord ID
-	usage_count: z.number().int().min(0).default(0), // Images generated today
-	quota_date: z.date(), // Date this quota is for (YYYY-MM-DD)
-	last_reset: z.date().optional(), // Handled by DB default
+  quota_id: z.number().optional(), // Primary key, auto-generated
+  server_id: z.number(), // Foreign key to servers table
+  user_disc_id: z.string(), // User's Discord ID
+  usage_count: z.number().int().min(0).default(0), // Images generated today
+  quota_date: z.date(), // Date this quota is for (YYYY-MM-DD)
+  last_reset: z.date().optional(), // Handled by DB default
 });
 export type ImageQuotaRow = z.infer<typeof imageQuotaSchema>;
 
@@ -528,11 +528,11 @@ export type ImageQuotaRow = z.infer<typeof imageQuotaSchema>;
  * Resets based on serverwide_quota_resets_in configuration
  */
 export const serverwideQuotaSchema = z.object({
-	server_id: z.number(), // Primary key, foreign key to servers table
-	usage_count: z.number().int().min(0).default(0), // Total images generated this period
-	quota_period_start: z.date(), // When this quota period started
-	quota_period_end: z.date(), // When this quota period ends (calculated from config)
-	last_updated: z.date().optional(), // Handled by DB default
+  server_id: z.number(), // Primary key, foreign key to servers table
+  usage_count: z.number().int().min(0).default(0), // Total images generated this period
+  quota_period_start: z.date(), // When this quota period started
+  quota_period_end: z.date(), // When this quota period ends (calculated from config)
+  last_updated: z.date().optional(), // Handled by DB default
 });
 export type ServerwideQuotaRow = z.infer<typeof serverwideQuotaSchema>;
 
@@ -541,28 +541,28 @@ export type ServerwideQuotaRow = z.infer<typeof serverwideQuotaSchema>;
  * Enforces strict 1-to-1 mapping: one Discord channel per Matrix room and vice versa.
  */
 export const matrixChannelLinkSchema = z.object({
-	link_id:         z.number().optional(),
-	server_id:       z.number(),
-	channel_disc_id: z.string(),
-	matrix_room_id:  z.string(),
-	created_at:      z.date().optional(),
+  link_id: z.number().optional(),
+  server_id: z.number(),
+  channel_disc_id: z.string(),
+  matrix_room_id: z.string(),
+  created_at: z.date().optional(),
 });
 export type MatrixChannelLinkRow = z.infer<typeof matrixChannelLinkSchema>;
 
 export const randomTriggerSchema = z.object({
-	trigger_id: z.number().optional(), // Primary key, auto-generated
-	server_id: z.number(), // Foreign key to servers table
-	channel_disc_id: z.string(), // Discord channel ID where trigger fires
-	tomori_id: z.number().nullable().optional(), // NULL = "Random" persona selection
-	timer_hours: z.number().int().min(1), // How often to roll the dice (hours)
-	random_offset_range: z.number().int().min(0).nullable().optional(), // Optional +/- jitter range (hours)
-	chance_percent: z.number().int().min(1).max(100), // Probability of firing (1-100%)
-	silence_threshold_hours: z.number().int().nullable().optional(), // Skip if channel active within N hours
-	respond_to_self: z.boolean().default(false), // Whether to fire if persona spoke last
-	custom_prompt: z.string().nullable().optional(), // Optional injected system prompt
-	next_trigger_at: z.date(), // Scheduled time for next dice roll
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  trigger_id: z.number().optional(), // Primary key, auto-generated
+  server_id: z.number(), // Foreign key to servers table
+  channel_disc_id: z.string(), // Discord channel ID where trigger fires
+  tomori_id: z.number().nullable().optional(), // NULL = "Random" persona selection
+  timer_hours: z.number().int().min(1), // How often to roll the dice (hours)
+  random_offset_range: z.number().int().min(0).nullable().optional(), // Optional +/- jitter range (hours)
+  chance_percent: z.number().int().min(1).max(100), // Probability of firing (1-100%)
+  silence_threshold_hours: z.number().int().nullable().optional(), // Skip if channel active within N hours
+  respond_to_self: z.boolean().default(false), // Whether to fire if persona spoke last
+  custom_prompt: z.string().nullable().optional(), // Optional injected system prompt
+  next_trigger_at: z.date(), // Scheduled time for next dice roll
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type RandomTriggerRow = z.infer<typeof randomTriggerSchema>;
 
@@ -570,44 +570,44 @@ export type RandomTriggerRow = z.infer<typeof randomTriggerSchema>;
  * Tomori's combined state (base config + LLM settings + LLM info)
  */
 export type TomoriState = TomoriRow & {
-	config: TomoriConfigRow;
-	llm: LlmRow; // Added LLM information
-	trigger_words: string[]; // Persona-scoped trigger words from persona_configs
-	persona_prompt: string | null; // Optional persona-specific prompt appended after system prompt
-	server_memories: string[]; // Changed to string array to match implementation
-	rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
-	persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
-	nai_preset?: NaiPresetRow; // Added March 2026 - Active NovelAI sampling preset (null when not using NAI)
+  config: TomoriConfigRow;
+  llm: LlmRow; // Added LLM information
+  trigger_words: string[]; // Persona-scoped trigger words from persona_configs
+  persona_prompt: string | null; // Optional persona-specific prompt appended after system prompt
+  server_memories: string[]; // Changed to string array to match implementation
+  rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
+  persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
+  nai_preset?: NaiPresetRow; // Added March 2026 - Active NovelAI sampling preset (null when not using NAI)
 };
 
 /**
  * Schema for validating the combined Tomori state
  */
 export const tomoriStateSchema = tomoriSchema.extend({
-	config: tomoriConfigSchema,
-	llm: llmSchema, // Added LLM schema validation
-	trigger_words: z.array(z.string()).default([]),
-	persona_prompt: z.string().nullable().default(null),
-	server_memories: z.array(z.string()).default([]), // Changed to array of strings
-	rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
-	persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
-	nai_preset: naiPresetSchema.optional(), // Added March 2026 - Active NovelAI sampling preset
+  config: tomoriConfigSchema,
+  llm: llmSchema, // Added LLM schema validation
+  trigger_words: z.array(z.string()).default([]),
+  persona_prompt: z.string().nullable().default(null),
+  server_memories: z.array(z.string()).default([]), // Changed to array of strings
+  rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
+  persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
+  nai_preset: naiPresetSchema.optional(), // Added March 2026 - Active NovelAI sampling preset
 });
 
 /**
  * Configuration data needed for server setup
  */
 export const setupConfigSchema = z.object({
-	serverId: z.string(),
-	encryptedApiKey: z.instanceof(Buffer),
-	keyVersion: z.number().int().default(1), // Encryption key version
-	provider: z.string(), // LLM provider name (e.g., "google", "openai")
-	presetId: z.number(),
-	humanizer: z.number().default(1),
-	tomoriName: z.string(),
-	timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
-	locale: z.string(),
-	registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
+  serverId: z.string(),
+  encryptedApiKey: z.instanceof(Buffer),
+  keyVersion: z.number().int().default(1), // Encryption key version
+  provider: z.string(), // LLM provider name (e.g., "google", "openai")
+  presetId: z.number(),
+  humanizer: z.number().default(1),
+  tomoriName: z.string(),
+  timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
+  locale: z.string(),
+  registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
 });
 export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
@@ -615,10 +615,10 @@ export type SetupConfig = z.infer<typeof setupConfigSchema>;
  * Result of the setup operation, containing all created database rows
  */
 export const setupResultSchema = z.object({
-	server: serverSchema,
-	tomori: tomoriSchema,
-	config: tomoriConfigSchema,
-	emojis: z.array(serverEmojiSchema),
-	stickers: z.array(serverStickerSchema),
+  server: serverSchema,
+  tomori: tomoriSchema,
+  config: tomoriConfigSchema,
+  emojis: z.array(serverEmojiSchema),
+  stickers: z.array(serverStickerSchema),
 });
 export type SetupResult = z.infer<typeof setupResultSchema>;

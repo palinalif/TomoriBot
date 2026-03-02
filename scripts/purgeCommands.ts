@@ -9,11 +9,11 @@ const rest = new REST().setToken(token);
 log.section("Purging TomoriBot's Command List...");
 
 rest
-	.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] })
-	.then(() => log.success("Successfully deleted all guild commands."))
-	.catch(console.error);
+  .put(Routes.applicationGuildCommands(clientId, guildId), { body: [] })
+  .then(() => log.success("Successfully deleted all guild commands."))
+  .catch(console.error);
 
 rest
-	.put(Routes.applicationCommands(clientId), { body: [] })
-	.then(() => log.success("Successfully deleted all application commands."))
-	.catch(console.error);
+  .put(Routes.applicationCommands(clientId), { body: [] })
+  .then(() => log.success("Successfully deleted all application commands."))
+  .catch(console.error);

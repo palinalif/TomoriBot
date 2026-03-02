@@ -5,93 +5,89 @@
 
 import { log } from "../../utils/misc/logger";
 import {
-	sanitizeSampleDialogueText,
-	type GeneratePresetParams,
-	type PresetGenerationResult,
+  sanitizeSampleDialogueText,
+  type GeneratePresetParams,
+  type PresetGenerationResult,
 } from "../google/presetGenerator";
 import type { ToolContext, ToolResult } from "../../types/tool/interfaces";
 import { executeTool } from "../../tools/toolRegistry";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
 
 interface OpenrouterPresetGenerationOptions {
-	model: string;
-	temperature?: number;
-	tools?: Array<Record<string, unknown>>;
-	toolContext?: ToolContext;
-	maxToolRounds?: number;
+  model: string;
+  temperature?: number;
+  tools?: Array<Record<string, unknown>>;
+  toolContext?: ToolContext;
+  maxToolRounds?: number;
 }
 
 type OpenrouterContentPart =
-	| { type: "text"; text: string }
-	| { type: "image_url"; image_url: { url: string } };
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 
 type OpenrouterMessage =
-	| { role: "system"; content: string }
-	| { role: "user"; content: string | OpenrouterContentPart[] }
-	| {
-			role: "assistant";
-			content?: string | null;
-			tool_calls?: OpenrouterToolCall[];
-	  }
-	| { role: "tool"; tool_call_id: string; content: string };
+  | { role: "system"; content: string }
+  | { role: "user"; content: string | OpenrouterContentPart[] }
+  | {
+      role: "assistant";
+      content?: string | null;
+      tool_calls?: OpenrouterToolCall[];
+    }
+  | { role: "tool"; tool_call_id: string; content: string };
 
 interface OpenrouterToolCall {
-	id?: string;
-	type?: string;
-	function?: {
-		name?: string;
-		arguments?: string;
-	};
+  id?: string;
+  type?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
 }
 
 function buildPresetResponseSchema() {
-	return {
-		type: "object" as const,
-		properties: {
-			attribute_list: {
-				type: "array" as const,
-				description:
-					"Array containing exactly 6 items describing different facets of the character, in this exact order: 1) {bot}'s Description (core identity and essence), 2) {bot}'s Appearance (physical traits and style), 3) {bot}'s Personality (personality traits, comma-separated), 4) {bot}'s Likes (interests and preferences), 5) {bot}'s Dislikes (aversions and pet peeves), 6) {bot}'s Behavioral Quirks (unique mannerisms and patterns). Each item maximum 2000 characters, in this specific format per array item: \"{bot}'s Description: \"",
-				items: {
-					type: "string" as const,
-					maxLength: 2000,
-				},
-				minItems: 6,
-				maxItems: 6,
-			},
-			sample_dialogues_in: {
-				type: "array" as const,
-				description:
-					"Array of exactly 5 example user messages. MUST include these 3 guided scenarios in order: 1) Self-introduction request, 2) Emotional/personal scenario, 3) Practical/functional scenario. Then add 2 free dialogue scenarios that showcase unique character traits. Do NOT prepend with speaker names. Each message maximum 2000 characters.",
-				items: {
-					type: "string" as const,
-					maxLength: 2000,
-				},
-				minItems: 5,
-				maxItems: 5,
-			},
-			sample_dialogues_out: {
-				type: "array" as const,
-				description:
-					"Array of exactly 5 character responses paired with sample_dialogues_in. Should reflect the character's speaking style, personality, and demonstrate their full range across the 3 guided scenarios and 2 free scenarios. Do NOT prepend with speaker names. Each response maximum 2000 characters.",
-				items: {
-					type: "string" as const,
-					maxLength: 2000,
-				},
-				minItems: 5,
-				maxItems: 5,
-			},
-		},
-		required: [
-			"attribute_list",
-			"sample_dialogues_in",
-			"sample_dialogues_out",
-		],
-	};
+  return {
+    type: "object" as const,
+    properties: {
+      attribute_list: {
+        type: "array" as const,
+        description:
+          "Array containing exactly 6 items describing different facets of the character, in this exact order: 1) {bot}'s Description (core identity and essence), 2) {bot}'s Appearance (physical traits and style), 3) {bot}'s Personality (personality traits, comma-separated), 4) {bot}'s Likes (interests and preferences), 5) {bot}'s Dislikes (aversions and pet peeves), 6) {bot}'s Behavioral Quirks (unique mannerisms and patterns). Each item maximum 2000 characters, in this specific format per array item: \"{bot}'s Description: \"",
+        items: {
+          type: "string" as const,
+          maxLength: 2000,
+        },
+        minItems: 6,
+        maxItems: 6,
+      },
+      sample_dialogues_in: {
+        type: "array" as const,
+        description:
+          "Array of exactly 5 example user messages. MUST include these 3 guided scenarios in order: 1) Self-introduction request, 2) Emotional/personal scenario, 3) Practical/functional scenario. Then add 2 free dialogue scenarios that showcase unique character traits. Do NOT prepend with speaker names. Each message maximum 2000 characters.",
+        items: {
+          type: "string" as const,
+          maxLength: 2000,
+        },
+        minItems: 5,
+        maxItems: 5,
+      },
+      sample_dialogues_out: {
+        type: "array" as const,
+        description:
+          "Array of exactly 5 character responses paired with sample_dialogues_in. Should reflect the character's speaking style, personality, and demonstrate their full range across the 3 guided scenarios and 2 free scenarios. Do NOT prepend with speaker names. Each response maximum 2000 characters.",
+        items: {
+          type: "string" as const,
+          maxLength: 2000,
+        },
+        minItems: 5,
+        maxItems: 5,
+      },
+    },
+    required: ["attribute_list", "sample_dialogues_in", "sample_dialogues_out"],
+  };
 }
 
 function buildPresetPrompt(params: GeneratePresetParams): string {
-	let prompt = `You are an expert character creator for a Discord chatbot. Create a detailed character profile based on the following information.
+  let prompt = `You are an expert character creator for a Discord chatbot. Create a detailed character profile based on the following information.
 
 Character Name: ${params.characterName}
 
@@ -149,18 +145,18 @@ The sample_dialogues_in and sample_dialogues_out MUST follow this structure (exa
    - Avoid repeating patterns from previous dialogues
    - Could be humor, vulnerability, expertise, philosophical musings, or anything that adds dimension`;
 
-	if (params.useWebSearch) {
-		prompt += `\n\nWeb Search Instructions:
+  if (params.useWebSearch) {
+    prompt += `\n\nWeb Search Instructions:
 - Use the available web search tools to gather accurate, up-to-date details when helpful
 - If you cannot find reliable information, treat the character as original and rely on the user's description and image
 - Do not include citations, URLs, or sources in the JSON output`;
-	}
+  }
 
-	if (params.additionalInstructions?.trim()) {
-		prompt += `\n\nAdditional Instructions: ${params.additionalInstructions.trim()}`;
-	}
+  if (params.additionalInstructions?.trim()) {
+    prompt += `\n\nAdditional Instructions: ${params.additionalInstructions.trim()}`;
+  }
 
-	prompt += `\n\nIMPORTANT:
+  prompt += `\n\nIMPORTANT:
 - Respond with COMPLETE valid JSON only
 - Follow the exact schema provided with strict length limits
 - Exactly 6 items in attribute_list in the exact order specified above (each MAX 2000 characters)
@@ -172,38 +168,38 @@ The sample_dialogues_in and sample_dialogues_out MUST follow this structure (exa
 - Use "{bot}" placeholder when character refers to themselves in their responses
 - All string lengths must not exceed 2000 characters per item`;
 
-	return prompt;
+  return prompt;
 }
 
 function extractResponseText(content: unknown): string {
-	if (typeof content === "string") {
-		return content;
-	}
+  if (typeof content === "string") {
+    return content;
+  }
 
-	if (Array.isArray(content)) {
-		return content
-			.filter(
-				(part): part is { type: "text"; text: string } =>
-					typeof part === "object" &&
-					part !== null &&
-					"type" in part &&
-					(part as { type?: string }).type === "text" &&
-					"text" in part &&
-					typeof (part as { text?: unknown }).text === "string",
-			)
-			.map((part) => part.text)
-			.join("");
-	}
+  if (Array.isArray(content)) {
+    return content
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          (part as { type?: string }).type === "text" &&
+          "text" in part &&
+          typeof (part as { text?: unknown }).text === "string",
+      )
+      .map((part) => part.text)
+      .join("");
+  }
 
-	return "";
+  return "";
 }
 
 function buildToolErrorResult(message: string): ToolResult {
-	return {
-		success: false,
-		error: message,
-		message,
-	};
+  return {
+    success: false,
+    error: message,
+    message,
+  };
 }
 
 /**
@@ -216,292 +212,299 @@ function buildToolErrorResult(message: string): ToolResult {
  * @returns Promise<PresetGenerationResult> - Generated preset or error
  */
 export async function generatePresetFromPromptOpenrouter(
-	apiKey: string,
-	params: GeneratePresetParams,
-	_locale: string,
-	options: OpenrouterPresetGenerationOptions,
+  apiKey: string,
+  params: GeneratePresetParams,
+  _locale: string,
+  options: OpenrouterPresetGenerationOptions,
 ): Promise<PresetGenerationResult> {
-	if (!apiKey || apiKey.trim().length < 10) {
-		return {
-			error: "Invalid OpenRouter API key",
-			errorType: "API_KEY",
-		};
-	}
+  if (!apiKey || apiKey.trim().length < 10) {
+    return {
+      error: "Invalid OpenRouter API key",
+      errorType: "API_KEY",
+    };
+  }
 
-	const openrouterAdapter = getOpenrouterToolAdapter();
-	const tools = options.tools ?? [];
-	const toolContext = options.toolContext;
-	const toolsEnabled = tools.length > 0 && toolContext;
+  const openrouterAdapter = getOpenrouterToolAdapter();
+  const tools = options.tools ?? [];
+  const toolContext = options.toolContext;
+  const toolsEnabled = tools.length > 0 && toolContext;
 
-	const responseFormat = {
-		type: "json_schema" as const,
-		json_schema: {
-			name: "preset_export_data",
-			description: "Structured persona preset data",
-			schema: buildPresetResponseSchema(),
-		},
-	};
+  const responseFormat = {
+    type: "json_schema" as const,
+    json_schema: {
+      name: "preset_export_data",
+      description: "Structured persona preset data",
+      schema: buildPresetResponseSchema(),
+    },
+  };
 
-	const prompt = buildPresetPrompt(params);
+  const prompt = buildPresetPrompt(params);
 
-	const contentParts: OpenrouterContentPart[] = [
-		{ type: "text", text: prompt },
-	];
+  const contentParts: OpenrouterContentPart[] = [
+    { type: "text", text: prompt },
+  ];
 
-	if (params.imageBase64 && params.imageMimeType) {
-		contentParts.push({
-			type: "image_url",
-			image_url: {
-				url: `data:${params.imageMimeType};base64,${params.imageBase64}`,
-			},
-		});
-		log.info("OpenRouter preset generation: image included in prompt");
-	}
+  if (params.imageBase64 && params.imageMimeType) {
+    contentParts.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${params.imageMimeType};base64,${params.imageBase64}`,
+      },
+    });
+    log.info("OpenRouter preset generation: image included in prompt");
+  }
 
-	const userContent =
-		contentParts.length === 1 && contentParts[0].type === "text"
-			? contentParts[0].text
-			: contentParts;
+  const userContent =
+    contentParts.length === 1 && contentParts[0].type === "text"
+      ? contentParts[0].text
+      : contentParts;
 
-	const messages: OpenrouterMessage[] = [
-		{
-			role: "user",
-			content: userContent,
-		},
-	];
+  const messages: OpenrouterMessage[] = [
+    {
+      role: "user",
+      content: userContent,
+    },
+  ];
 
-	const maxToolRounds = options.maxToolRounds ?? 3;
-	let toolRounds = 0;
+  const maxToolRounds = options.maxToolRounds ?? 3;
+  let toolRounds = 0;
 
-	while (true) {
-		const body: Record<string, unknown> = {
-			...(options.model !== "account-setting" ? { model: options.model } : {}),
-			messages,
-			temperature: options.temperature ?? 1.0,
-			max_tokens: 8192,
-			response_format: responseFormat,
-			plugins: [{ id: "response-healing" }],
-			stream: false,
-		};
+  while (true) {
+    const body: Record<string, unknown> = {
+      ...(options.model !== "account-setting" ? { model: options.model } : {}),
+      messages,
+      temperature: options.temperature ?? 1.0,
+      max_tokens: 8192,
+      response_format: responseFormat,
+      plugins: [{ id: "response-healing" }],
+      stream: false,
+    };
 
-		if (toolsEnabled) {
-			body.tools = tools;
-			body.tool_choice = "auto";
-		}
+    if (toolsEnabled) {
+      body.tools = tools;
+      body.tool_choice = "auto";
+    }
 
-		const response = await fetch(
-			"https://openrouter.ai/api/v1/chat/completions",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(body),
-			},
-		);
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
 
-		if (!response.ok) {
-			const errorBody = await response.text();
-			log.error("OpenRouter preset generation request failed", new Error(errorBody), {
-				errorType: "OpenrouterPresetHttpError",
-				metadata: {
-					model: options.model,
-					status: response.status,
-					errorBody: errorBody, // Include in metadata for debugging
-				},
-			});
-			return {
-				error: `OpenRouter request failed (${response.status}): ${response.statusText}`,
-				errorType: "CONNECTION",
-			};
-		}
+    if (!response.ok) {
+      const errorBody = await response.text();
+      log.error(
+        "OpenRouter preset generation request failed",
+        new Error(errorBody),
+        {
+          errorType: "OpenrouterPresetHttpError",
+          metadata: {
+            model: options.model,
+            status: response.status,
+            errorBody: errorBody, // Include in metadata for debugging
+          },
+        },
+      );
+      return {
+        error: `OpenRouter request failed (${response.status}): ${response.statusText}`,
+        errorType: "CONNECTION",
+      };
+    }
 
-		const result = (await response.json()) as {
-			choices?: Array<{
-				message?: {
-					content?: unknown;
-					tool_calls?: OpenrouterToolCall[];
-				};
-			}>;
-		};
+    const result = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: unknown;
+          tool_calls?: OpenrouterToolCall[];
+        };
+      }>;
+    };
 
-		const message = result.choices?.[0]?.message;
-		if (!message) {
-			return {
-				error: "OpenRouter returned an empty response.",
-				errorType: "EMPTY_RESPONSE",
-			};
-		}
+    const message = result.choices?.[0]?.message;
+    if (!message) {
+      return {
+        error: "OpenRouter returned an empty response.",
+        errorType: "EMPTY_RESPONSE",
+      };
+    }
 
-		const toolCalls = message.tool_calls ?? [];
-		if (toolCalls.length > 0) {
-			if (!toolsEnabled || !toolContext) {
-				return {
-					error: "OpenRouter requested tool calls but tools are not available.",
-					errorType: "MODEL_ERROR",
-				};
-			}
+    const toolCalls = message.tool_calls ?? [];
+    if (toolCalls.length > 0) {
+      if (!toolsEnabled || !toolContext) {
+        return {
+          error: "OpenRouter requested tool calls but tools are not available.",
+          errorType: "MODEL_ERROR",
+        };
+      }
 
-			toolRounds += 1;
-			if (toolRounds > maxToolRounds) {
-				return {
-					error: "OpenRouter tool call loop exceeded limit.",
-					errorType: "TIMEOUT",
-				};
-			}
+      toolRounds += 1;
+      if (toolRounds > maxToolRounds) {
+        return {
+          error: "OpenRouter tool call loop exceeded limit.",
+          errorType: "TIMEOUT",
+        };
+      }
 
-			const normalizedToolCalls = toolCalls.map((toolCall, index) => ({
-				...toolCall,
-				id: toolCall.id ?? `tool_call_${toolRounds}_${index}`,
-			}));
+      const normalizedToolCalls = toolCalls.map((toolCall, index) => ({
+        ...toolCall,
+        id: toolCall.id ?? `tool_call_${toolRounds}_${index}`,
+      }));
 
-			messages.push({
-				role: "assistant",
-				content: typeof message.content === "string" ? message.content : null,
-				tool_calls: normalizedToolCalls,
-			});
+      messages.push({
+        role: "assistant",
+        content: typeof message.content === "string" ? message.content : null,
+        tool_calls: normalizedToolCalls,
+      });
 
-			for (const toolCall of normalizedToolCalls) {
-				const functionName = toolCall.function?.name;
-				const rawArgs = toolCall.function?.arguments ?? "";
+      for (const toolCall of normalizedToolCalls) {
+        const functionName = toolCall.function?.name;
+        const rawArgs = toolCall.function?.arguments ?? "";
 
-				let toolResult: ToolResult | undefined;
-				let parsedArgs: Record<string, unknown> = {};
+        let toolResult: ToolResult | undefined;
+        let parsedArgs: Record<string, unknown> = {};
 
-				if (!functionName) {
-					toolResult = buildToolErrorResult(
-						"Tool call missing function name",
-					);
-				} else {
-					if (rawArgs) {
-						try {
-							parsedArgs = JSON.parse(rawArgs);
-						} catch (parseError) {
-							log.warn(
-								`OpenRouter tool call args parse failed for ${functionName}: ${rawArgs}`,
-								parseError as Error,
-							);
-							toolResult = buildToolErrorResult(
-								`Invalid tool arguments for ${functionName}`,
-							);
-						}
-					}
+        if (!functionName) {
+          toolResult = buildToolErrorResult("Tool call missing function name");
+        } else {
+          if (rawArgs) {
+            try {
+              parsedArgs = JSON.parse(rawArgs);
+            } catch (parseError) {
+              log.warn(
+                `OpenRouter tool call args parse failed for ${functionName}: ${rawArgs}`,
+                parseError as Error,
+              );
+              toolResult = buildToolErrorResult(
+                `Invalid tool arguments for ${functionName}`,
+              );
+            }
+          }
 
-					if (!toolResult) {
-						log.info(
-							`Executing OpenRouter tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
-						);
-						toolResult = await executeTool(
-							functionName,
-							parsedArgs,
-							toolContext,
-						);
-					}
-				}
+          if (!toolResult) {
+            log.info(
+              `Executing OpenRouter tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
+            );
+            toolResult = await executeTool(
+              functionName,
+              parsedArgs,
+              toolContext,
+            );
+          }
+        }
 
-				const convertedResult = openrouterAdapter.convertResult(
-					toolResult ?? buildToolErrorResult("Tool execution failed"),
-				);
-				const resultContent =
-					typeof convertedResult.content === "string"
-						? convertedResult.content
-						: JSON.stringify(convertedResult.content);
-				const toolCallId = toolCall.id ?? "tool_call_unknown";
+        const convertedResult = openrouterAdapter.convertResult(
+          toolResult ?? buildToolErrorResult("Tool execution failed"),
+        );
+        const resultContent =
+          typeof convertedResult.content === "string"
+            ? convertedResult.content
+            : JSON.stringify(convertedResult.content);
+        const toolCallId = toolCall.id ?? "tool_call_unknown";
 
-				messages.push({
-					role: "tool",
-					tool_call_id: toolCallId,
-					content: resultContent,
-				});
-			}
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCallId,
+          content: resultContent,
+        });
+      }
 
-			continue;
-		}
+      continue;
+    }
 
-		const responseText = extractResponseText(message.content);
-		if (!responseText || responseText.trim() === "") {
-			return {
-				error: "OpenRouter returned an empty response.",
-				errorType: "EMPTY_RESPONSE",
-			};
-		}
+    const responseText = extractResponseText(message.content);
+    if (!responseText || responseText.trim() === "") {
+      return {
+        error: "OpenRouter returned an empty response.",
+        errorType: "EMPTY_RESPONSE",
+      };
+    }
 
-		let parsedResponse: {
-			attribute_list?: string[];
-			sample_dialogues_in?: string[];
-			sample_dialogues_out?: string[];
-		};
+    let parsedResponse: {
+      attribute_list?: string[];
+      sample_dialogues_in?: string[];
+      sample_dialogues_out?: string[];
+    };
 
-		try {
-			parsedResponse = JSON.parse(responseText);
-		} catch (parseError) {
-			log.error("OpenRouter preset generation JSON parse failed", parseError as Error);
-			return {
-				error: "Invalid JSON response from OpenRouter.",
-				errorType: "INVALID_JSON",
-			};
-		}
+    try {
+      parsedResponse = JSON.parse(responseText);
+    } catch (parseError) {
+      log.error(
+        "OpenRouter preset generation JSON parse failed",
+        parseError as Error,
+      );
+      return {
+        error: "Invalid JSON response from OpenRouter.",
+        errorType: "INVALID_JSON",
+      };
+    }
 
-		if (
-			!parsedResponse.attribute_list ||
-			!parsedResponse.sample_dialogues_in ||
-			!parsedResponse.sample_dialogues_out
-		) {
-			return {
-				error: "Generated character data is incomplete. Please try again.",
-				errorType: "INVALID_JSON",
-			};
-		}
+    if (
+      !parsedResponse.attribute_list ||
+      !parsedResponse.sample_dialogues_in ||
+      !parsedResponse.sample_dialogues_out
+    ) {
+      return {
+        error: "Generated character data is incomplete. Please try again.",
+        errorType: "INVALID_JSON",
+      };
+    }
 
-		if (
-			!Array.isArray(parsedResponse.attribute_list) ||
-			parsedResponse.attribute_list.length !== 6
-		) {
-			return {
-				error:
-					"Generated attribute list must contain exactly 6 items. Please try again.",
-				errorType: "VALIDATION_ERROR",
-			};
-		}
+    if (
+      !Array.isArray(parsedResponse.attribute_list) ||
+      parsedResponse.attribute_list.length !== 6
+    ) {
+      return {
+        error:
+          "Generated attribute list must contain exactly 6 items. Please try again.",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
 
-		if (
-			!Array.isArray(parsedResponse.sample_dialogues_in) ||
-			parsedResponse.sample_dialogues_in.length !== 5
-		) {
-			return {
-				error: "Generated sample dialogues must contain exactly 5 user inputs.",
-				errorType: "VALIDATION_ERROR",
-			};
-		}
+    if (
+      !Array.isArray(parsedResponse.sample_dialogues_in) ||
+      parsedResponse.sample_dialogues_in.length !== 5
+    ) {
+      return {
+        error: "Generated sample dialogues must contain exactly 5 user inputs.",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
 
-		if (
-			!Array.isArray(parsedResponse.sample_dialogues_out) ||
-			parsedResponse.sample_dialogues_out.length !== 5
-		) {
-			return {
-				error:
-					"Generated sample dialogues must contain exactly 5 character responses.",
-				errorType: "VALIDATION_ERROR",
-			};
-		}
+    if (
+      !Array.isArray(parsedResponse.sample_dialogues_out) ||
+      parsedResponse.sample_dialogues_out.length !== 5
+    ) {
+      return {
+        error:
+          "Generated sample dialogues must contain exactly 5 character responses.",
+        errorType: "VALIDATION_ERROR",
+      };
+    }
 
-		const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(
-			sanitizeSampleDialogueText,
-		);
-		const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(
-			sanitizeSampleDialogueText,
-		);
+    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(
+      sanitizeSampleDialogueText,
+    );
+    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(
+      sanitizeSampleDialogueText,
+    );
 
-		const preset = {
-			tomori_nickname: params.characterName,
-			trigger_words: [params.characterName],
-			attribute_list: parsedResponse.attribute_list,
-			sample_dialogues_in: sanitizedDialoguesIn,
-			sample_dialogues_out: sanitizedDialoguesOut,
-		};
+    const preset = {
+      tomori_nickname: params.characterName,
+      trigger_words: [params.characterName],
+      attribute_list: parsedResponse.attribute_list,
+      sample_dialogues_in: sanitizedDialoguesIn,
+      sample_dialogues_out: sanitizedDialoguesOut,
+    };
 
-		log.success(`OpenRouter preset generation successful for ${params.characterName}`);
-		return { preset };
-	}
+    log.success(
+      `OpenRouter preset generation successful for ${params.characterName}`,
+    );
+    return { preset };
+  }
 }

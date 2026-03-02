@@ -1,50 +1,52 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.15/schema.json",
-	"vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-	"files": {
-		"ignoreUnknown": false,
-		"includes": ["**/*", "!!**/node_modules", "!!**/dist"]
-	},
-	"formatter": { "enabled": true, "indentStyle": "tab" },
-	"assist": {
-		"actions": {
-			"source": {
-				"organizeImports": {
-					"level": "off",
-					"options": {}
-				}
-			}
-		}
-	},
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true,
-			"style": {
-				"noUselessElse": "off"
-			},
-			"correctness": {
-				"noUnusedPrivateClassMembers": "off"
-			}
-		}
-	},
-	"javascript": {
-		"formatter": { "quoteStyle": "double" }
-	},
-	"json": { "formatter": { "enabled": true, "indentStyle": "tab" } },
-	"overrides": [
-		{
-			"includes": ["src/locales/**/*.ts"],
-			"linter": {
-				"rules": {
-					"style": {
-						"noUnusedTemplateLiteral": "off"
-					},
-					"correctness": {
-						"noUnusedPrivateClassMembers": "off"
-					}
-				}
-			}
-		}
-	]
+  "$schema": "https://biomejs.dev/schemas/2.3.15/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["**/*", "!!**/node_modules", "!!**/dist"]
+  },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "off",
+          "options": {}
+        }
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        "noUselessElse": "off"
+      },
+      "correctness": {
+        "noUnusedPrivateClassMembers": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "double" }
+  },
+  "json": {
+    "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 }
+  },
+  "overrides": [
+    {
+      "includes": ["src/locales/**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noUnusedTemplateLiteral": "off"
+          },
+          "correctness": {
+            "noUnusedPrivateClassMembers": "off"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -1,40 +1,40 @@
 import { sql } from "@/utils/db/client";
 import type { SqlParameterArray } from "@/types/db/sqlOperations";
 import {
-	tomoriSchema,
-	userSchema,
-	tomoriConfigSchema,
-	type TomoriRow,
-	type UserRow,
-	type TomoriConfigRow,
-	type ErrorContext,
-	serverMemorySchema,
-	personalMemorySchema,
-	reminderSchema,
-	type ReminderRow,
-	randomTriggerSchema,
-	type RandomTriggerRow,
-	type NaiPresetRow,
+  tomoriSchema,
+  userSchema,
+  tomoriConfigSchema,
+  type TomoriRow,
+  type UserRow,
+  type TomoriConfigRow,
+  type ErrorContext,
+  serverMemorySchema,
+  personalMemorySchema,
+  reminderSchema,
+  type ReminderRow,
+  randomTriggerSchema,
+  type RandomTriggerRow,
+  type NaiPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import {
-	validateTomoriConfigFields,
-	validateTomoriFields,
-	validateUserFields,
+  validateTomoriConfigFields,
+  validateTomoriFields,
+  validateUserFields,
 } from "./sqlSecurity";
 import { getBaseTriggerWords } from "../text/localizer";
 import { DEFAULT_SYSTEM_PROMPT } from "../text/contextBuilder";
 import type { Guild } from "discord.js";
 import {
-	validateMemoryContent,
-	checkPersonalMemoryLimit,
-	checkServerMemoryLimit,
+  validateMemoryContent,
+  checkPersonalMemoryLimit,
+  checkServerMemoryLimit,
 } from "./memoryLimits";
 import type {
-	ServerMemoryRow,
-	PersonalMemoryRow,
-	SetupConfig,
-	SetupResult,
+  ServerMemoryRow,
+  PersonalMemoryRow,
+  SetupConfig,
+  SetupResult,
 } from "../../types/db/schema";
 import { setupConfigSchema, setupResultSchema } from "../../types/db/schema";
 
@@ -48,16 +48,16 @@ import { setupConfigSchema, setupResultSchema } from "../../types/db/schema";
  * @returns The validated UserRow object, or null if registration failed
  */
 export async function registerUser(
-	userDiscId: string,
-	displayName: string,
-	language = "en",
+  userDiscId: string,
+  displayName: string,
+  language = "en",
 ): Promise<UserRow | null> {
-	try {
-		log.info(`Registering/updating user ${userDiscId} (${displayName})`);
+  try {
+    log.info(`Registering/updating user ${userDiscId} (${displayName})`);
 
-		// Apply UPSERT pattern with RETURNING (Rule #15)
-		// registration_locale is only set on INSERT (static field for analytics)
-		const [userData] = await sql`
+    // Apply UPSERT pattern with RETURNING (Rule #15)
+    // registration_locale is only set on INSERT (static field for analytics)
+    const [userData] = await sql`
             INSERT INTO users (
                 user_disc_id,
                 user_nickname,
@@ -74,22 +74,22 @@ export async function registerUser(
             RETURNING *
         `;
 
-		// Validate with Zod schema (Rules #3, #6)
-		const validatedUser = userSchema.safeParse(userData);
+    // Validate with Zod schema (Rules #3, #6)
+    const validatedUser = userSchema.safeParse(userData);
 
-		if (!validatedUser.success) {
-			log.error(
-				`Failed to validate registered user data for ${userDiscId}:`,
-				validatedUser.error,
-			);
-			return null;
-		}
+    if (!validatedUser.success) {
+      log.error(
+        `Failed to validate registered user data for ${userDiscId}:`,
+        validatedUser.error,
+      );
+      return null;
+    }
 
-		return validatedUser.data;
-	} catch (error) {
-		log.error(`Error registering user ${userDiscId}:`, error);
-		return null;
-	}
+    return validatedUser.data;
+  } catch (error) {
+    log.error(`Error registering user ${userDiscId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -101,53 +101,53 @@ export async function registerUser(
  * @returns The updated UserRow object, or null if the operation failed
  */
 export async function setPrivacyLevel(
-	userDiscId: string,
-	level: import("@/types/db/schema").PrivacyLevel,
+  userDiscId: string,
+  level: import("@/types/db/schema").PrivacyLevel,
 ): Promise<UserRow | null> {
-	try {
-		log.info(`Setting privacy level to ${level} for user ${userDiscId}`);
+  try {
+    log.info(`Setting privacy level to ${level} for user ${userDiscId}`);
 
-		// 1. Validate level
-		if (![0, 1, 2].includes(level)) {
-			log.error(`Invalid privacy level ${level} for user ${userDiscId}`);
-			return null;
-		}
+    // 1. Validate level
+    if (![0, 1, 2].includes(level)) {
+      log.error(`Invalid privacy level ${level} for user ${userDiscId}`);
+      return null;
+    }
 
-		// 2. Update privacy level
-		const [userData] = await sql`
+    // 2. Update privacy level
+    const [userData] = await sql`
 			UPDATE users
 			SET privacy_level = ${level}
 			WHERE user_disc_id = ${userDiscId}
 			RETURNING *
 		`;
 
-		// 3. Check if user was found and updated
-		if (!userData) {
-			log.warn(
-				`Cannot set privacy level: User ${userDiscId} not found in database`,
-			);
-			return null;
-		}
+    // 3. Check if user was found and updated
+    if (!userData) {
+      log.warn(
+        `Cannot set privacy level: User ${userDiscId} not found in database`,
+      );
+      return null;
+    }
 
-		// 4. Validate with Zod schema
-		const validatedUser = userSchema.safeParse(userData);
+    // 4. Validate with Zod schema
+    const validatedUser = userSchema.safeParse(userData);
 
-		if (!validatedUser.success) {
-			log.error(
-				`Failed to validate user data after privacy update for ${userDiscId}:`,
-				validatedUser.error,
-			);
-			return null;
-		}
+    if (!validatedUser.success) {
+      log.error(
+        `Failed to validate user data after privacy update for ${userDiscId}:`,
+        validatedUser.error,
+      );
+      return null;
+    }
 
-		log.success(
-			`Privacy level successfully set to ${level} for user ${userDiscId}`,
-		);
-		return validatedUser.data;
-	} catch (error) {
-		log.error(`Error setting privacy level for user ${userDiscId}:`, error);
-		return null;
-	}
+    log.success(
+      `Privacy level successfully set to ${level} for user ${userDiscId}`,
+    );
+    return validatedUser.data;
+  } catch (error) {
+    log.error(`Error setting privacy level for user ${userDiscId}:`, error);
+    return null;
+  }
 }
 
 /**
@@ -155,12 +155,12 @@ export async function setPrivacyLevel(
  * @deprecated Use setPrivacyLevel() instead
  */
 export async function setPrivacyOptOut(
-	userDiscId: string,
-	optedOut: boolean,
+  userDiscId: string,
+  optedOut: boolean,
 ): Promise<UserRow | null> {
-	const { PrivacyLevel } = await import("@/types/db/schema");
-	const level = optedOut ? PrivacyLevel.FULL : PrivacyLevel.MINIMAL; // optedOut=true maps to Level 2 (FULL privacy)
-	return setPrivacyLevel(userDiscId, level);
+  const { PrivacyLevel } = await import("@/types/db/schema");
+  const level = optedOut ? PrivacyLevel.FULL : PrivacyLevel.MINIMAL; // optedOut=true maps to Level 2 (FULL privacy)
+  return setPrivacyLevel(userDiscId, level);
 }
 
 /**
@@ -172,27 +172,27 @@ export async function setPrivacyOptOut(
  * @returns New opt-in value (true if enabled, false if disabled)
  */
 export async function toggleCrossServerShortTermMemoryOptIn(
-	userDiscId: string,
+  userDiscId: string,
 ): Promise<boolean> {
-	try {
-		// Toggle the setting
-		const [updated] = await sql`
+  try {
+    // Toggle the setting
+    const [updated] = await sql`
 			UPDATE users
 			SET shortterm_cache_crossserver_opt_in = NOT shortterm_cache_crossserver_opt_in
 			WHERE user_disc_id = ${userDiscId}
 			RETURNING shortterm_cache_crossserver_opt_in
 		`;
 
-		// Return the toggled value directly — only one column was returned
-		return updated?.shortterm_cache_crossserver_opt_in ?? false;
-	} catch (error) {
-		log.error(
-			`Error toggling cross-server short-term memory opt-in for user ${userDiscId}:`,
-			error,
-		);
-		// Re-throw to allow caller to handle
-		throw error;
-	}
+    // Return the toggled value directly — only one column was returned
+    return updated?.shortterm_cache_crossserver_opt_in ?? false;
+  } catch (error) {
+    log.error(
+      `Error toggling cross-server short-term memory opt-in for user ${userDiscId}:`,
+      error,
+    );
+    // Re-throw to allow caller to handle
+    throw error;
+  }
 }
 
 /**
@@ -203,27 +203,27 @@ export async function toggleCrossServerShortTermMemoryOptIn(
  * @returns The updated TomoriRow with the new counter value, or null on error.
  */
 export async function incrementTomoriCounter(
-	tomoriId: number,
-	threshold: number,
+  tomoriId: number,
+  threshold: number,
 ): Promise<TomoriRow | null> {
-	try {
-		// 1. First check if the threshold is positive and active
-		if (threshold <= 0) {
-			// If threshold is inactive, just increment without resetting
-			const [incrementedTomori] = await sql`
+  try {
+    // 1. First check if the threshold is positive and active
+    if (threshold <= 0) {
+      // If threshold is inactive, just increment without resetting
+      const [incrementedTomori] = await sql`
 				UPDATE tomoris
 				SET autoch_counter = autoch_counter + 1
 				WHERE tomori_id = ${tomoriId}
 				RETURNING *
 			`;
 
-			// Validate and return
-			const parsedTomori = tomoriSchema.safeParse(incrementedTomori);
-			return parsedTomori.success ? parsedTomori.data : null;
-		}
+      // Validate and return
+      const parsedTomori = tomoriSchema.safeParse(incrementedTomori);
+      return parsedTomori.success ? parsedTomori.data : null;
+    }
 
-		// 2. If threshold is active, use CTE to check if we've reached it
-		const [updatedTomori] = await sql`
+    // 2. If threshold is active, use CTE to check if we've reached it
+    const [updatedTomori] = await sql`
 			WITH incremented AS (
 				UPDATE tomoris
 				SET autoch_counter = 
@@ -237,62 +237,62 @@ export async function incrementTomoriCounter(
 			SELECT * FROM incremented
 		`;
 
-		if (!updatedTomori) {
-			const context: ErrorContext = {
-				tomoriId,
-				errorType: "DatabaseUpdateError",
-				metadata: {
-					operation: "incrementTomoriCounter",
-					threshold,
-				},
-			};
+    if (!updatedTomori) {
+      const context: ErrorContext = {
+        tomoriId,
+        errorType: "DatabaseUpdateError",
+        metadata: {
+          operation: "incrementTomoriCounter",
+          threshold,
+        },
+      };
 
-			await log.error(
-				`Failed to increment/reset counter for Tomori ${tomoriId}`,
-				new Error("Tomori not found"),
-				context,
-			);
-			return null;
-		}
+      await log.error(
+        `Failed to increment/reset counter for Tomori ${tomoriId}`,
+        new Error("Tomori not found"),
+        context,
+      );
+      return null;
+    }
 
-		// Validate the returned data
-		const parsedTomori = tomoriSchema.safeParse(updatedTomori);
-		if (!parsedTomori.success) {
-			const context: ErrorContext = {
-				tomoriId,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "incrementTomoriCounter",
-					validationErrors: parsedTomori.error.flatten(),
-				},
-			};
+    // Validate the returned data
+    const parsedTomori = tomoriSchema.safeParse(updatedTomori);
+    if (!parsedTomori.success) {
+      const context: ErrorContext = {
+        tomoriId,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "incrementTomoriCounter",
+          validationErrors: parsedTomori.error.flatten(),
+        },
+      };
 
-			await log.error(
-				"Failed to validate Tomori data after counter update",
-				parsedTomori.error,
-				context,
-			);
-			return null;
-		}
+      await log.error(
+        "Failed to validate Tomori data after counter update",
+        parsedTomori.error,
+        context,
+      );
+      return null;
+    }
 
-		return parsedTomori.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			tomoriId,
-			errorType: "DatabaseOperationError",
-			metadata: {
-				operation: "incrementTomoriCounter",
-				threshold,
-			},
-		};
+    return parsedTomori.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      tomoriId,
+      errorType: "DatabaseOperationError",
+      metadata: {
+        operation: "incrementTomoriCounter",
+        threshold,
+      },
+    };
 
-		await log.error(
-			`Error incrementing/resetting auto counter for Tomori ${tomoriId}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    await log.error(
+      `Error incrementing/resetting auto counter for Tomori ${tomoriId}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 
 /**
@@ -306,25 +306,25 @@ export async function incrementTomoriCounter(
  * @throws If validation fails or any part of the setup transaction fails
  */
 export async function setupServer(
-	guild: Guild | null,
-	config: SetupConfig,
+  guild: Guild | null,
+  config: SetupConfig,
 ): Promise<SetupResult> {
-	// Validate input config - critical operation so we use Zod (Rule 3, Rule 5)
-	const validConfig = setupConfigSchema.parse(config);
+  // Validate input config - critical operation so we use Zod (Rule 3, Rule 5)
+  const validConfig = setupConfigSchema.parse(config);
 
-	// Detect if this is a DM context (no guild)
-	const isDMChannel = guild === null;
-	log.section(
-		`Starting server setup transaction (${isDMChannel ? "DM" : "Guild"} context)`,
-	);
+  // Detect if this is a DM context (no guild)
+  const isDMChannel = guild === null;
+  log.section(
+    `Starting server setup transaction (${isDMChannel ? "DM" : "Guild"} context)`,
+  );
 
-	try {
-		// Start transaction for atomicity (Rule 15)
-		const result = await sql.transaction(async (tx) => {
-			// Find the default model for the selected provider within the transaction to avoid race conditions
-			// First try to get the default model (is_default = true) for this provider, excluding deprecated
-			let selectedLlm = (
-				await tx`
+  try {
+    // Start transaction for atomicity (Rule 15)
+    const result = await sql.transaction(async (tx) => {
+      // Find the default model for the selected provider within the transaction to avoid race conditions
+      // First try to get the default model (is_default = true) for this provider, excluding deprecated
+      let selectedLlm = (
+        await tx`
                 SELECT * FROM llms
                 WHERE llm_provider = ${validConfig.provider} 
                   AND is_default = true 
@@ -332,39 +332,39 @@ export async function setupServer(
                 ORDER BY llm_id ASC
                 LIMIT 1
             `
-			)[0];
+      )[0];
 
-			// Fallback: if no default model found, get the first available non-deprecated model for this provider
-			if (!selectedLlm) {
-				selectedLlm = (
-					await tx`
+      // Fallback: if no default model found, get the first available non-deprecated model for this provider
+      if (!selectedLlm) {
+        selectedLlm = (
+          await tx`
 					SELECT * FROM llms
 					WHERE llm_provider = ${validConfig.provider} 
 					  AND is_deprecated = false
 					ORDER BY llm_id ASC
 					LIMIT 1
 				`
-				)[0];
+        )[0];
 
-				if (!selectedLlm) {
-					throw new Error(
-						`No available models found for provider: ${validConfig.provider}`,
-					);
-				}
+        if (!selectedLlm) {
+          throw new Error(
+            `No available models found for provider: ${validConfig.provider}`,
+          );
+        }
 
-				log.warn(
-					`No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`,
-				);
-			} else {
-				log.info(
-					`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`,
-				);
-			}
+        log.warn(
+          `No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`,
+        );
+      } else {
+        log.info(
+          `Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`,
+        );
+      }
 
-			// Find the default diffusion model for the selected provider (for image generation)
-			// First try to get the default diffusion model (is_default = true) for this provider, excluding deprecated
-			let selectedDiffusionModel = (
-				await tx`
+      // Find the default diffusion model for the selected provider (for image generation)
+      // First try to get the default diffusion model (is_default = true) for this provider, excluding deprecated
+      let selectedDiffusionModel = (
+        await tx`
 					SELECT * FROM image_diffusion_models
 					WHERE provider = ${validConfig.provider}
 					  AND is_default = true
@@ -372,38 +372,38 @@ export async function setupServer(
 					ORDER BY diffusion_model_id ASC
 					LIMIT 1
 				`
-			)[0];
+      )[0];
 
-			// Fallback: if no default diffusion model found, get the first available non-deprecated model for this provider
-			if (!selectedDiffusionModel) {
-				selectedDiffusionModel = (
-					await tx`
+      // Fallback: if no default diffusion model found, get the first available non-deprecated model for this provider
+      if (!selectedDiffusionModel) {
+        selectedDiffusionModel = (
+          await tx`
 						SELECT * FROM image_diffusion_models
 						WHERE provider = ${validConfig.provider}
 						  AND is_deprecated = false
 						ORDER BY diffusion_model_id ASC
 						LIMIT 1
 					`
-				)[0];
+        )[0];
 
-				if (selectedDiffusionModel) {
-					log.warn(
-						`No default diffusion model found for provider ${validConfig.provider}, using fallback: ${selectedDiffusionModel.codename}`,
-					);
-				} else {
-					log.info(
-						`No diffusion models available for provider ${validConfig.provider} (image generation not supported)`,
-					);
-				}
-			} else {
-				log.info(
-					`Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`,
-				);
-			}
+        if (selectedDiffusionModel) {
+          log.warn(
+            `No default diffusion model found for provider ${validConfig.provider}, using fallback: ${selectedDiffusionModel.codename}`,
+          );
+        } else {
+          log.info(
+            `No diffusion models available for provider ${validConfig.provider} (image generation not supported)`,
+          );
+        }
+      } else {
+        log.info(
+          `Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`,
+        );
+      }
 
-			// Find the default embedding model for the selected provider (for document retrieval)
-			let selectedEmbeddingModel = (
-				await tx`
+      // Find the default embedding model for the selected provider (for document retrieval)
+      let selectedEmbeddingModel = (
+        await tx`
 					SELECT * FROM embedding_models
 					WHERE provider = ${validConfig.provider}
 					  AND is_default = true
@@ -411,73 +411,75 @@ export async function setupServer(
 					ORDER BY embedding_model_id ASC
 					LIMIT 1
 				`
-			)[0];
+      )[0];
 
-			// Fallback: if no default embedding model found, get the first available non-deprecated model
-			if (!selectedEmbeddingModel) {
-				selectedEmbeddingModel = (
-					await tx`
+      // Fallback: if no default embedding model found, get the first available non-deprecated model
+      if (!selectedEmbeddingModel) {
+        selectedEmbeddingModel = (
+          await tx`
 						SELECT * FROM embedding_models
 						WHERE provider = ${validConfig.provider}
 						  AND is_deprecated = false
 						ORDER BY embedding_model_id ASC
 						LIMIT 1
 					`
-				)[0];
+        )[0];
 
-				if (selectedEmbeddingModel) {
-					log.warn(
-						`No default embedding model found for provider ${validConfig.provider}, using fallback: ${selectedEmbeddingModel.codename}`,
-					);
-				} else {
-					log.info(
-						`No embedding models available for provider ${validConfig.provider} (document retrieval not supported)`,
-					);
-				}
-			} else {
-				log.info(
-					`Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`,
-				);
-			}
+        if (selectedEmbeddingModel) {
+          log.warn(
+            `No default embedding model found for provider ${validConfig.provider}, using fallback: ${selectedEmbeddingModel.codename}`,
+          );
+        } else {
+          log.info(
+            `No embedding models available for provider ${validConfig.provider} (document retrieval not supported)`,
+          );
+        }
+      } else {
+        log.info(
+          `Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`,
+        );
+      }
 
-			// Extract diffusion_model_id (null if no model found)
-			const selectedDiffusionModelId = selectedDiffusionModel
-				? selectedDiffusionModel.diffusion_model_id
-				: null;
-			const selectedEmbeddingModelId = selectedEmbeddingModel
-				? selectedEmbeddingModel.embedding_model_id
-				: null;
+      // Extract diffusion_model_id (null if no model found)
+      const selectedDiffusionModelId = selectedDiffusionModel
+        ? selectedDiffusionModel.diffusion_model_id
+        : null;
+      const selectedEmbeddingModelId = selectedEmbeddingModel
+        ? selectedEmbeddingModel.embedding_model_id
+        : null;
 
-			const presetRows = await tx<Array<{ preset_trigger_words: string[] | null }>>`
+      const presetRows = await tx<
+        Array<{ preset_trigger_words: string[] | null }>
+      >`
 				SELECT preset_trigger_words
 				FROM tomori_presets
 				WHERE tomori_preset_id = ${validConfig.presetId}
 				LIMIT 1
 			`;
-			const presetTriggerCandidates =
-				presetRows[0]?.preset_trigger_words?.filter(
-					(trigger): trigger is string =>
-						typeof trigger === "string" && trigger.trim().length > 0,
-				) ?? [];
-			const dedupedPresetTriggers: string[] = [];
-			const seenPresetTriggers = new Set<string>();
-			for (const trigger of presetTriggerCandidates) {
-				const normalized = trigger.trim().toLowerCase();
-				if (seenPresetTriggers.has(normalized)) {
-					continue;
-				}
-				seenPresetTriggers.add(normalized);
-				dedupedPresetTriggers.push(trigger.trim());
-			}
+      const presetTriggerCandidates =
+        presetRows[0]?.preset_trigger_words?.filter(
+          (trigger): trigger is string =>
+            typeof trigger === "string" && trigger.trim().length > 0,
+        ) ?? [];
+      const dedupedPresetTriggers: string[] = [];
+      const seenPresetTriggers = new Set<string>();
+      for (const trigger of presetTriggerCandidates) {
+        const normalized = trigger.trim().toLowerCase();
+        if (seenPresetTriggers.has(normalized)) {
+          continue;
+        }
+        seenPresetTriggers.add(normalized);
+        dedupedPresetTriggers.push(trigger.trim());
+      }
 
-			const defaultTriggers =
-				dedupedPresetTriggers.length > 0
-					? dedupedPresetTriggers
-					: getBaseTriggerWords(validConfig.locale);
+      const defaultTriggers =
+        dedupedPresetTriggers.length > 0
+          ? dedupedPresetTriggers
+          : getBaseTriggerWords(validConfig.locale);
 
-			// 1. Create or update server record with DM support (Rule 15)
-			// registration_locale is only set on INSERT (static field for analytics)
-			const [server] = await tx`
+      // 1. Create or update server record with DM support (Rule 15)
+      // registration_locale is only set on INSERT (static field for analytics)
+      const [server] = await tx`
 				INSERT INTO servers (server_disc_id, is_dm_channel, registration_locale)
 				VALUES (${validConfig.serverId}, ${isDMChannel}, ${validConfig.registrationLocale})
 				ON CONFLICT (server_disc_id) DO UPDATE
@@ -485,8 +487,8 @@ export async function setupServer(
 				RETURNING *
 			`;
 
-			// 2. Create Tomori instance with preset including description
-			const [tomori] = await tx`
+      // 2. Create Tomori instance with preset including description
+      const [tomori] = await tx`
 				INSERT INTO tomoris (
 					server_id,
 					tomori_nickname,
@@ -512,10 +514,10 @@ export async function setupServer(
 				RETURNING *
 				`;
 
-			// Format trigger words as PostgreSQL array
-			const triggerWordsArrayLiteral = `{${defaultTriggers.map((t) => `"${t.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+      // Format trigger words as PostgreSQL array
+      const triggerWordsArrayLiteral = `{${defaultTriggers.map((t) => `"${t.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
-			const [config] = await tx`
+      const [config] = await tx`
 				INSERT INTO tomori_configs (
 					tomori_id,
 					server_id,
@@ -549,32 +551,32 @@ export async function setupServer(
 				RETURNING *
 			`;
 
-			// Initialize persona-scoped config for the main persona.
-			await tx`
+      // Initialize persona-scoped config for the main persona.
+      await tx`
 				INSERT INTO persona_configs (tomori_id, trigger_words)
 				VALUES (${tomori.tomori_id}, ${triggerWordsArrayLiteral}::text[])
 				ON CONFLICT (tomori_id) DO NOTHING
 			`;
 
-			// 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
-			const emojis = [];
-			if (!isDMChannel && guild) {
-				const emojiValues = Array.from(guild.emojis.cache.values()).map(
-					(e) => ({
-						emoji_disc_id: e.id,
-						emoji_name: e.name ?? "",
-						emotion_key: "unset", // Add the emotion_key field
-						is_animated: e.animated || false, // Track if emoji is animated
-					}),
-				);
+      // 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
+      const emojis = [];
+      if (!isDMChannel && guild) {
+        const emojiValues = Array.from(guild.emojis.cache.values()).map(
+          (e) => ({
+            emoji_disc_id: e.id,
+            emoji_name: e.name ?? "",
+            emotion_key: "unset", // Add the emotion_key field
+            is_animated: e.animated || false, // Track if emoji is animated
+          }),
+        );
 
-				for (const {
-					emoji_disc_id,
-					emoji_name,
-					emotion_key,
-					is_animated,
-				} of emojiValues) {
-					const [row] = await tx`
+        for (const {
+          emoji_disc_id,
+          emoji_name,
+          emotion_key,
+          is_animated,
+        } of emojiValues) {
+          const [row] = await tx`
 				INSERT INTO server_emojis (
 					server_id,
 					emoji_disc_id,
@@ -591,36 +593,36 @@ export async function setupServer(
 					)
 					RETURNING *
 				`;
-					emojis.push(row);
-				}
-			} else {
-				log.info("Skipping emoji registration for DM context");
-			}
+          emojis.push(row);
+        }
+      } else {
+        log.info("Skipping emoji registration for DM context");
+      }
 
-			// 5. Register guild stickers (only for guild contexts)
-			const stickers = [];
-			if (!isDMChannel && guild) {
-				log.info(`Registering stickers for server ${server.server_id}`);
-				const stickerValues = Array.from(guild.stickers.cache.values()).map(
-					(s) => ({
-						sticker_disc_id: s.id,
-						sticker_name: s.name,
-						sticker_desc: s.description ?? "",
-						emotion_key: "unset",
-						// is_animated: s.format === StickerFormatType.Lottie, // Remove this line
-						sticker_format: s.format, // Store the actual format type enum value
-					}),
-				);
+      // 5. Register guild stickers (only for guild contexts)
+      const stickers = [];
+      if (!isDMChannel && guild) {
+        log.info(`Registering stickers for server ${server.server_id}`);
+        const stickerValues = Array.from(guild.stickers.cache.values()).map(
+          (s) => ({
+            sticker_disc_id: s.id,
+            sticker_name: s.name,
+            sticker_desc: s.description ?? "",
+            emotion_key: "unset",
+            // is_animated: s.format === StickerFormatType.Lottie, // Remove this line
+            sticker_format: s.format, // Store the actual format type enum value
+          }),
+        );
 
-				for (const {
-					sticker_disc_id,
-					sticker_name,
-					sticker_desc,
-					emotion_key,
-					// is_animated, // Remove from destructuring
-					sticker_format, // Add to destructuring
-				} of stickerValues) {
-					const [row] = await tx`
+        for (const {
+          sticker_disc_id,
+          sticker_name,
+          sticker_desc,
+          emotion_key,
+          // is_animated, // Remove from destructuring
+          sticker_format, // Add to destructuring
+        } of stickerValues) {
+          const [row] = await tx`
                         INSERT INTO server_stickers (
                             server_id,
                             sticker_disc_id,
@@ -640,44 +642,44 @@ export async function setupServer(
                         ON CONFLICT (server_id, sticker_disc_id) DO NOTHING
                         RETURNING *
                     `;
-					if (row) {
-						stickers.push(row);
-					}
-				}
-				log.info(`Finished registering ${stickers.length} stickers.`);
-			} else {
-				log.info("Skipping sticker registration for DM context");
-			}
+          if (row) {
+            stickers.push(row);
+          }
+        }
+        log.info(`Finished registering ${stickers.length} stickers.`);
+      } else {
+        log.info("Skipping sticker registration for DM context");
+      }
 
-			// Return all created records
-			return {
-				server,
-				tomori,
-				config,
-				emojis,
-				stickers,
-			};
-		});
+      // Return all created records
+      return {
+        server,
+        tomori,
+        config,
+        emojis,
+        stickers,
+      };
+    });
 
-		// Validate output structure but don't overwrite the result
-		setupResultSchema.parse(result);
+    // Validate output structure but don't overwrite the result
+    setupResultSchema.parse(result);
 
-		log.success(
-			`${isDMChannel ? "DM pseudo-server" : "Server"} setup completed successfully for Server ID (${validConfig.serverId})`,
-		);
-		if (!isDMChannel) {
-			log.info(
-				`Registered ${result.emojis.length} emojis and ${result.stickers.length} stickers`,
-			);
-		} else {
-			log.info("DM setup completed - emoji/sticker registration skipped");
-		}
+    log.success(
+      `${isDMChannel ? "DM pseudo-server" : "Server"} setup completed successfully for Server ID (${validConfig.serverId})`,
+    );
+    if (!isDMChannel) {
+      log.info(
+        `Registered ${result.emojis.length} emojis and ${result.stickers.length} stickers`,
+      );
+    } else {
+      log.info("DM setup completed - emoji/sticker registration skipped");
+    }
 
-		return result;
-	} catch (error) {
-		log.error("Server setup transaction failed:", error);
-		throw error; // Re-throw to let caller handle the error
-	}
+    return result;
+  } catch (error) {
+    log.error("Server setup transaction failed:", error);
+    throw error; // Re-throw to let caller handle the error
+  }
 }
 
 /**
@@ -689,112 +691,113 @@ export async function setupServer(
  * @returns The updated TomoriConfigRow or null if update failed
  */
 export async function updateTomoriConfig(
-	serverId: number,
-	configData: Partial<TomoriConfigRow>,
+  serverId: number,
+  configData: Partial<TomoriConfigRow>,
 ): Promise<TomoriConfigRow | null> {
-	try {
-		// Validate the partial data with Zod (Rule #7)
-		const validConfigData = tomoriConfigSchema.partial().parse(configData);
+  try {
+    // Validate the partial data with Zod (Rule #7)
+    const validConfigData = tomoriConfigSchema.partial().parse(configData);
 
-		// Extract field names and values for the SQL query.
-		// Filter to only keys that were in the original input — Zod injects defaults for all
-		// schema fields with .default(), which would incorrectly expand the SET clause.
-		const fields = Object.keys(validConfigData).filter(
-			(key) => key !== "tomori_id" && key !== "tomori_config_id" && key in configData,
-		);
+    // Extract field names and values for the SQL query.
+    // Filter to only keys that were in the original input — Zod injects defaults for all
+    // schema fields with .default(), which would incorrectly expand the SET clause.
+    const fields = Object.keys(validConfigData).filter(
+      (key) =>
+        key !== "tomori_id" && key !== "tomori_config_id" && key in configData,
+    );
 
-		if (fields.length === 0) {
-			log.warn(`No fields provided to update for server_id: ${serverId}`);
-			return null;
-		}
+    if (fields.length === 0) {
+      log.warn(`No fields provided to update for server_id: ${serverId}`);
+      return null;
+    }
 
-		// Security validation: Ensure all field names are whitelisted to prevent SQL injection
-		validateTomoriConfigFields(fields);
+    // Security validation: Ensure all field names are whitelisted to prevent SQL injection
+    validateTomoriConfigFields(fields);
 
-		// Dynamically build the SQL SET clause
-		// 1. Prepare arrays for placeholders and values
-		const setParts: string[] = [];
-		const values: SqlParameterArray = [];
+    // Dynamically build the SQL SET clause
+    // 1. Prepare arrays for placeholders and values
+    const setParts: string[] = [];
+    const values: SqlParameterArray = [];
 
-		// 2. Iterate through fields to build SET clause parts and collect values
-		fields.forEach((field, index) => {
-			// Use PostgreSQL standard placeholders ($1, $2, etc.)
-			setParts.push(`${field} = $${index + 1}`);
-			// Add the corresponding value to the values array
-			values.push(validConfigData[field as keyof typeof validConfigData]);
-		});
+    // 2. Iterate through fields to build SET clause parts and collect values
+    fields.forEach((field, index) => {
+      // Use PostgreSQL standard placeholders ($1, $2, etc.)
+      setParts.push(`${field} = $${index + 1}`);
+      // Add the corresponding value to the values array
+      values.push(validConfigData[field as keyof typeof validConfigData]);
+    });
 
-		// 3. Join the SET parts
-		const setClause = setParts.join(", ");
+    // 3. Join the SET parts
+    const setClause = setParts.join(", ");
 
-		// 4. Add the tomoriId as the last parameter for the WHERE clause
-		const finalPlaceholderIndex = values.length + 1;
-		values.push(serverId);
+    // 4. Add the tomoriId as the last parameter for the WHERE clause
+    const finalPlaceholderIndex = values.length + 1;
+    values.push(serverId);
 
-		// 5. Execute the UPDATE using sql.unsafe() with the values array (not spread —
-		// Bun SQL expects a single array argument, not individual arguments).
-		const result = await sql.unsafe(
-			`
+    // 5. Execute the UPDATE using sql.unsafe() with the values array (not spread —
+    // Bun SQL expects a single array argument, not individual arguments).
+    const result = await sql.unsafe(
+      `
 			UPDATE tomori_configs
 			SET ${setClause}
 			WHERE server_id = $${finalPlaceholderIndex}
 			RETURNING *
 		`,
-			values, // Pass values as a single array — sql.unsafe(query, valuesArray)
-		);
+      values, // Pass values as a single array — sql.unsafe(query, valuesArray)
+    );
 
-		if (!result.length) {
-			const context: ErrorContext = {
-				serverId,
-				errorType: "DatabaseUpdateError",
-				metadata: {
-					operation: "updateTomoriConfig",
-					fields,
-				},
-			};
-			await log.error(
-				`No tomori_config found with server_id: ${serverId}`,
-				new Error("Config not found"),
-				context,
-			);
-			return null;
-		}
+    if (!result.length) {
+      const context: ErrorContext = {
+        serverId,
+        errorType: "DatabaseUpdateError",
+        metadata: {
+          operation: "updateTomoriConfig",
+          fields,
+        },
+      };
+      await log.error(
+        `No tomori_config found with server_id: ${serverId}`,
+        new Error("Config not found"),
+        context,
+      );
+      return null;
+    }
 
-		// Validate the returned data for type safety (Rule #5)
-		const updatedConfig = tomoriConfigSchema.safeParse(result[0]);
-		if (!updatedConfig.success) {
-			const context: ErrorContext = {
-				serverId,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "updateTomoriConfig",
-					validationErrors: updatedConfig.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate updated config for server_id: ${serverId}`,
-				updatedConfig.error,
-				context,
-			);
-			return null;
-		}
+    // Validate the returned data for type safety (Rule #5)
+    const updatedConfig = tomoriConfigSchema.safeParse(result[0]);
+    if (!updatedConfig.success) {
+      const context: ErrorContext = {
+        serverId,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "updateTomoriConfig",
+          validationErrors: updatedConfig.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate updated config for server_id: ${serverId}`,
+        updatedConfig.error,
+        context,
+      );
+      return null;
+    }
 
-		return updatedConfig.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			serverId,
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				operation: "updateTomoriConfig",
-			},
-		};
-		await log.error(
-			`Error updating tomori_config for server_id: ${serverId}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    return updatedConfig.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      serverId,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "updateTomoriConfig",
+      },
+    };
+    await log.error(
+      `Error updating tomori_config for server_id: ${serverId}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 
 /**
@@ -806,26 +809,26 @@ export async function updateTomoriConfig(
  * @returns Temperature clamped to the Gemini scale [1.0, 2.0]
  */
 function invertNaiTemperature(naiTemp: number, model: string): number {
-	let geminiTemp: number;
+  let geminiTemp: number;
 
-	if (model === "kayra-v1") {
-		// 1. Kayra: simple offset (Gemini 1.5 → Kayra 1.35), inverse is +0.15
-		geminiTemp = naiTemp + 0.15;
-	} else {
-		// 2. Erato / GLM piecewise linear inverse:
-		//    Forward low:  gemini [1.0,1.5] → nai = 0.6 + (gemini-1.0)*0.8
-		//    Inverse low:  nai ≤ 1.0 → gemini = 1.0 + (nai-0.6)/0.8
-		//    Forward high: gemini (1.5,2.0] → nai = 1.0 + (gemini-1.5)*1.2
-		//    Inverse high: nai > 1.0 → gemini = 1.5 + (nai-1.0)/1.2
-		if (naiTemp <= 1.0) {
-			geminiTemp = 1.0 + (naiTemp - 0.6) / 0.8;
-		} else {
-			geminiTemp = 1.5 + (naiTemp - 1.0) / 1.2;
-		}
-	}
+  if (model === "kayra-v1") {
+    // 1. Kayra: simple offset (Gemini 1.5 → Kayra 1.35), inverse is +0.15
+    geminiTemp = naiTemp + 0.15;
+  } else {
+    // 2. Erato / GLM piecewise linear inverse:
+    //    Forward low:  gemini [1.0,1.5] → nai = 0.6 + (gemini-1.0)*0.8
+    //    Inverse low:  nai ≤ 1.0 → gemini = 1.0 + (nai-0.6)/0.8
+    //    Forward high: gemini (1.5,2.0] → nai = 1.0 + (gemini-1.5)*1.2
+    //    Inverse high: nai > 1.0 → gemini = 1.5 + (nai-1.0)/1.2
+    if (naiTemp <= 1.0) {
+      geminiTemp = 1.0 + (naiTemp - 0.6) / 0.8;
+    } else {
+      geminiTemp = 1.5 + (naiTemp - 1.0) / 1.2;
+    }
+  }
 
-	// 3. Clamp to the valid tomori_configs range [1.0, 2.0]
-	return Math.min(2.0, Math.max(1.0, geminiTemp));
+  // 3. Clamp to the valid tomori_configs range [1.0, 2.0]
+  return Math.min(2.0, Math.max(1.0, geminiTemp));
 }
 
 /**
@@ -843,28 +846,30 @@ function invertNaiTemperature(naiTemp: number, model: string): number {
  * @returns The updated TomoriConfigRow, or null if the update failed
  */
 export async function applyNaiPreset(
-	serverId: number,
-	preset: NaiPresetRow,
-	model: string,
+  serverId: number,
+  preset: NaiPresetRow,
+  model: string,
 ): Promise<TomoriConfigRow | null> {
-	const params = preset.parameters;
+  const params = preset.parameters;
 
-	// 1. Extract schema-compatible sampling fields from the preset.
-	//    Absent values fall back to neutral/disabled DB defaults.
-	const naiTemp = typeof params.temperature === "number" ? params.temperature : 1.35;
-	const llm_temperature = invertNaiTemperature(naiTemp, model);
-	const llm_top_k      = typeof params.top_k === "number" ? Math.round(params.top_k) : 0;
-	const llm_top_p      = typeof params.top_p === "number" ? params.top_p : 1.0;
-	const llm_min_p      = typeof params.min_p === "number" ? params.min_p : 0.0;
+  // 1. Extract schema-compatible sampling fields from the preset.
+  //    Absent values fall back to neutral/disabled DB defaults.
+  const naiTemp =
+    typeof params.temperature === "number" ? params.temperature : 1.35;
+  const llm_temperature = invertNaiTemperature(naiTemp, model);
+  const llm_top_k =
+    typeof params.top_k === "number" ? Math.round(params.top_k) : 0;
+  const llm_top_p = typeof params.top_p === "number" ? params.top_p : 1.0;
+  const llm_min_p = typeof params.min_p === "number" ? params.min_p : 0.0;
 
-	// 2. Write to DB, linking the preset name for non-schema field lookup at generation time.
-	return updateTomoriConfig(serverId, {
-		llm_temperature,
-		llm_top_k,
-		llm_top_p,
-		llm_min_p,
-		nai_preset_name: preset.preset_name,
-	});
+  // 2. Write to DB, linking the preset name for non-schema field lookup at generation time.
+  return updateTomoriConfig(serverId, {
+    llm_temperature,
+    llm_top_k,
+    llm_top_p,
+    llm_min_p,
+    nai_preset_name: preset.preset_name,
+  });
 }
 
 /**
@@ -876,106 +881,106 @@ export async function applyNaiPreset(
  * @returns The updated TomoriRow or null if update failed
  */
 export async function updateTomori(
-	tomoriId: number,
-	tomoriData: Partial<TomoriRow>,
+  tomoriId: number,
+  tomoriData: Partial<TomoriRow>,
 ): Promise<TomoriRow | null> {
-	try {
-		// Validate the partial data with Zod (Rule #7)
-		const validTomoriData = tomoriSchema.partial().parse(tomoriData);
+  try {
+    // Validate the partial data with Zod (Rule #7)
+    const validTomoriData = tomoriSchema.partial().parse(tomoriData);
 
-		// Extract field names and values for the SQL query
-		const fields = Object.keys(validTomoriData).filter(
-			(key) => key !== "tomori_id", // Exclude the primary key
-		);
+    // Extract field names and values for the SQL query
+    const fields = Object.keys(validTomoriData).filter(
+      (key) => key !== "tomori_id", // Exclude the primary key
+    );
 
-		if (fields.length === 0) {
-			log.warn(`No fields provided to update for tomori_id: ${tomoriId}`);
-			return null;
-		}
+    if (fields.length === 0) {
+      log.warn(`No fields provided to update for tomori_id: ${tomoriId}`);
+      return null;
+    }
 
-		// Security validation: Ensure all field names are whitelisted to prevent SQL injection
-		validateTomoriFields(fields);
+    // Security validation: Ensure all field names are whitelisted to prevent SQL injection
+    validateTomoriFields(fields);
 
-		// 1. Prepare arrays for placeholders and values
-		const setParts: string[] = [];
-		const values: SqlParameterArray = [];
+    // 1. Prepare arrays for placeholders and values
+    const setParts: string[] = [];
+    const values: SqlParameterArray = [];
 
-		// 2. Iterate through fields to build SET clause parts and collect values
-		fields.forEach((field, index) => {
-			setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
-			values.push(validTomoriData[field as keyof typeof validTomoriData]);
-		});
+    // 2. Iterate through fields to build SET clause parts and collect values
+    fields.forEach((field, index) => {
+      setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
+      values.push(validTomoriData[field as keyof typeof validTomoriData]);
+    });
 
-		// 3. Join the SET parts
-		const setClause = setParts.join(", ");
+    // 3. Join the SET parts
+    const setClause = setParts.join(", ");
 
-		// 4. Add the tomoriId as the last parameter for the WHERE clause
-		const finalPlaceholderIndex = values.length + 1;
-		values.push(tomoriId);
+    // 4. Add the tomoriId as the last parameter for the WHERE clause
+    const finalPlaceholderIndex = values.length + 1;
+    values.push(tomoriId);
 
-		// 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
-		const result = await sql.unsafe(
-			`
+    // 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
+    const result = await sql.unsafe(
+      `
 			UPDATE tomoris
 			SET ${setClause}
 			WHERE tomori_id = $${finalPlaceholderIndex}
 			RETURNING *
 		`,
-			...values, // Pass the values array directly spreading
-		);
+      ...values, // Pass the values array directly spreading
+    );
 
-		if (!result.length) {
-			const context: ErrorContext = {
-				tomoriId,
-				errorType: "DatabaseUpdateError",
-				metadata: {
-					operation: "updateTomori",
-					fields,
-				},
-			};
-			await log.error(
-				`No tomori found with id: ${tomoriId}`,
-				new Error("Tomori not found"),
-				context,
-			);
-			return null;
-		}
+    if (!result.length) {
+      const context: ErrorContext = {
+        tomoriId,
+        errorType: "DatabaseUpdateError",
+        metadata: {
+          operation: "updateTomori",
+          fields,
+        },
+      };
+      await log.error(
+        `No tomori found with id: ${tomoriId}`,
+        new Error("Tomori not found"),
+        context,
+      );
+      return null;
+    }
 
-		// Validate the returned data for type safety
-		const updatedTomori = tomoriSchema.safeParse(result[0]);
-		if (!updatedTomori.success) {
-			const context: ErrorContext = {
-				tomoriId,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "updateTomori",
-					validationErrors: updatedTomori.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate updated tomori for id: ${tomoriId}`,
-				updatedTomori.error,
-				context,
-			);
-			return null;
-		}
+    // Validate the returned data for type safety
+    const updatedTomori = tomoriSchema.safeParse(result[0]);
+    if (!updatedTomori.success) {
+      const context: ErrorContext = {
+        tomoriId,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "updateTomori",
+          validationErrors: updatedTomori.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate updated tomori for id: ${tomoriId}`,
+        updatedTomori.error,
+        context,
+      );
+      return null;
+    }
 
-		return updatedTomori.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			tomoriId,
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				operation: "updateTomori",
-			},
-		};
-		await log.error(
-			`Error updating tomori for id: ${tomoriId}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    return updatedTomori.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      tomoriId,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "updateTomori",
+      },
+    };
+    await log.error(
+      `Error updating tomori for id: ${tomoriId}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 
 /**
@@ -987,102 +992,102 @@ export async function updateTomori(
  * @returns The updated UserRow or null if update failed
  */
 export async function updateUser(
-	userId: number,
-	userData: Partial<UserRow>,
+  userId: number,
+  userData: Partial<UserRow>,
 ): Promise<UserRow | null> {
-	try {
-		// Validate the partial data with Zod (Rule #7)
-		const validUserData = userSchema.partial().parse(userData);
+  try {
+    // Validate the partial data with Zod (Rule #7)
+    const validUserData = userSchema.partial().parse(userData);
 
-		// Extract field names and values for the SQL query
-		const fields = Object.keys(validUserData).filter(
-			(key) => key !== "user_id", // Exclude the primary key
-		);
+    // Extract field names and values for the SQL query
+    const fields = Object.keys(validUserData).filter(
+      (key) => key !== "user_id", // Exclude the primary key
+    );
 
-		if (fields.length === 0) {
-			log.warn(`No fields provided to update for user_id: ${userId}`);
-			return null;
-		}
+    if (fields.length === 0) {
+      log.warn(`No fields provided to update for user_id: ${userId}`);
+      return null;
+    }
 
-		// Security validation: Ensure all field names are whitelisted to prevent SQL injection
-		validateUserFields(fields);
+    // Security validation: Ensure all field names are whitelisted to prevent SQL injection
+    validateUserFields(fields);
 
-		// 1. Prepare arrays for placeholders and values
-		const setParts: string[] = [];
-		const values: SqlParameterArray = [];
+    // 1. Prepare arrays for placeholders and values
+    const setParts: string[] = [];
+    const values: SqlParameterArray = [];
 
-		// 2. Iterate through fields to build SET clause parts and collect values
-		fields.forEach((field, index) => {
-			setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
-			values.push(validUserData[field as keyof typeof validUserData]);
-		});
+    // 2. Iterate through fields to build SET clause parts and collect values
+    fields.forEach((field, index) => {
+      setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
+      values.push(validUserData[field as keyof typeof validUserData]);
+    });
 
-		// 3. Join the SET parts
-		const setClause = setParts.join(", ");
+    // 3. Join the SET parts
+    const setClause = setParts.join(", ");
 
-		// 4. Add the userId as the last parameter for the WHERE clause
-		const finalPlaceholderIndex = values.length + 1;
-		values.push(userId);
+    // 4. Add the userId as the last parameter for the WHERE clause
+    const finalPlaceholderIndex = values.length + 1;
+    values.push(userId);
 
-		// 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
-		const result = await sql.unsafe(
-			`
+    // 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
+    const result = await sql.unsafe(
+      `
             UPDATE users
             SET ${setClause}
             WHERE user_id = $${finalPlaceholderIndex}
             RETURNING *
         `,
-			...values, // Spread the values array as arguments
-		);
+      ...values, // Spread the values array as arguments
+    );
 
-		if (!result.length) {
-			const context: ErrorContext = {
-				userId,
-				errorType: "DatabaseUpdateError",
-				metadata: {
-					operation: "updateUser",
-					fields,
-				},
-			};
-			await log.error(
-				`No user found with id: ${userId}`,
-				new Error("User not found"),
-				context,
-			);
-			return null;
-		}
+    if (!result.length) {
+      const context: ErrorContext = {
+        userId,
+        errorType: "DatabaseUpdateError",
+        metadata: {
+          operation: "updateUser",
+          fields,
+        },
+      };
+      await log.error(
+        `No user found with id: ${userId}`,
+        new Error("User not found"),
+        context,
+      );
+      return null;
+    }
 
-		// Validate the returned data for type safety
-		const updatedUser = userSchema.safeParse(result[0]);
-		if (!updatedUser.success) {
-			const context: ErrorContext = {
-				userId,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "updateUser",
-					validationErrors: updatedUser.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate updated user for id: ${userId}`,
-				updatedUser.error,
-				context,
-			);
-			return null;
-		}
+    // Validate the returned data for type safety
+    const updatedUser = userSchema.safeParse(result[0]);
+    if (!updatedUser.success) {
+      const context: ErrorContext = {
+        userId,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "updateUser",
+          validationErrors: updatedUser.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate updated user for id: ${userId}`,
+        updatedUser.error,
+        context,
+      );
+      return null;
+    }
 
-		return updatedUser.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			userId,
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				operation: "updateUser",
-			},
-		};
-		await log.error(`Error updating user for id: ${userId}`, error, context);
-		return null;
-	}
+    return updatedUser.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      userId,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "updateUser",
+      },
+    };
+    await log.error(`Error updating user for id: ${userId}`, error, context);
+    return null;
+  }
 }
 
 /**
@@ -1097,93 +1102,93 @@ export async function updateUser(
  * @returns The newly created ServerMemoryRow, or null if the operation failed.
  */
 export async function addServerMemoryByTomori(
-	serverId: number,
-	tomoriId: number,
-	personaLineageId: number,
-	taughtByUserId: number,
-	content: string,
+  serverId: number,
+  tomoriId: number,
+  personaLineageId: number,
+  taughtByUserId: number,
+  content: string,
 ): Promise<ServerMemoryRow | null> {
-	// 1. Log the attempt to add a server memory.
-	log.info(
-		`Tomori is attempting to self-learn a server memory for server ID ${serverId}, tomori ID ${tomoriId}, lineage ${personaLineageId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
-	);
+  // 1. Log the attempt to add a server memory.
+  log.info(
+    `Tomori is attempting to self-learn a server memory for server ID ${serverId}, tomori ID ${tomoriId}, lineage ${personaLineageId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
+  );
 
-	// 2. Validate memory content before database operations
-	const contentValidation = validateMemoryContent(content);
-	if (!contentValidation.isValid) {
-		log.warn(
-			`Server memory content validation failed for server ID ${serverId}: ${contentValidation.error}`,
-		);
-		return null;
-	}
+  // 2. Validate memory content before database operations
+  const contentValidation = validateMemoryContent(content);
+  if (!contentValidation.isValid) {
+    log.warn(
+      `Server memory content validation failed for server ID ${serverId}: ${contentValidation.error}`,
+    );
+    return null;
+  }
 
-	// 3. Check server memory limit
-	const serverLimitCheck = await checkServerMemoryLimit(
-		serverId,
-		personaLineageId,
-	);
-	if (!serverLimitCheck.isValid) {
-		log.warn(
-			`Server memory limit exceeded for server ID ${serverId}: ${serverLimitCheck.currentCount}/${serverLimitCheck.maxAllowed}`,
-		);
-		return null;
-	}
+  // 3. Check server memory limit
+  const serverLimitCheck = await checkServerMemoryLimit(
+    serverId,
+    personaLineageId,
+  );
+  if (!serverLimitCheck.isValid) {
+    log.warn(
+      `Server memory limit exceeded for server ID ${serverId}: ${serverLimitCheck.currentCount}/${serverLimitCheck.maxAllowed}`,
+    );
+    return null;
+  }
 
-	try {
-		// 2. Insert the new memory into the server_memories table.
-		// The columns now correctly match the serverMemorySchema.
-		const [newMemory] = await sql`
+  try {
+    // 2. Insert the new memory into the server_memories table.
+    // The columns now correctly match the serverMemorySchema.
+    const [newMemory] = await sql`
 			INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content)
 			VALUES (${serverId}, ${tomoriId}, ${personaLineageId}, ${taughtByUserId}, ${content})
 			RETURNING *
 		`;
 
-		// 3. Validate the returned data using Zod schema (Rule 3, Rule 5, Rule 6).
-		const validatedMemory = serverMemorySchema.safeParse(newMemory);
+    // 3. Validate the returned data using Zod schema (Rule 3, Rule 5, Rule 6).
+    const validatedMemory = serverMemorySchema.safeParse(newMemory);
 
-		if (!validatedMemory.success) {
-			const context: ErrorContext = {
-				serverId,
-				tomoriId,
-				userId: taughtByUserId,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "addServerMemoryByTomori",
-					contentAttempted: content.substring(0, 100),
-					validationErrors: validatedMemory.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate new server memory for server ID ${serverId}`,
-				validatedMemory.error,
-				context,
-			);
-			return null;
-		}
+    if (!validatedMemory.success) {
+      const context: ErrorContext = {
+        serverId,
+        tomoriId,
+        userId: taughtByUserId,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "addServerMemoryByTomori",
+          contentAttempted: content.substring(0, 100),
+          validationErrors: validatedMemory.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate new server memory for server ID ${serverId}`,
+        validatedMemory.error,
+        context,
+      );
+      return null;
+    }
 
-		// 4. Log success and return the validated memory.
-		log.success(
-			`Tomori successfully saved a new server memory (ID: ${validatedMemory.data.server_memory_id}) for server ID ${serverId}, tomori ID ${tomoriId}, taught by user ID ${taughtByUserId}.`,
-		);
-		return validatedMemory.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			serverId,
-			tomoriId,
-			userId: taughtByUserId,
-			errorType: "DatabaseInsertError",
-			metadata: {
-				operation: "addServerMemoryByTomori",
-				contentAttempted: content.substring(0, 100),
-			},
-		};
-		await log.error(
-			`Error adding server memory for server ID ${serverId}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    // 4. Log success and return the validated memory.
+    log.success(
+      `Tomori successfully saved a new server memory (ID: ${validatedMemory.data.server_memory_id}) for server ID ${serverId}, tomori ID ${tomoriId}, taught by user ID ${taughtByUserId}.`,
+    );
+    return validatedMemory.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      serverId,
+      tomoriId,
+      userId: taughtByUserId,
+      errorType: "DatabaseInsertError",
+      metadata: {
+        operation: "addServerMemoryByTomori",
+        contentAttempted: content.substring(0, 100),
+      },
+    };
+    await log.error(
+      `Error adding server memory for server ID ${serverId}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 /**
  * Adds a new lineage-scoped personal memory for a user.
@@ -1194,92 +1199,92 @@ export async function addServerMemoryByTomori(
  * @returns The inserted PersonalMemoryRow, or null if the operation failed.
  */
 export async function addPersonalMemoryByTomori(
-	userId: number,
-	personaLineageId: number,
-	content: string,
+  userId: number,
+  personaLineageId: number,
+  content: string,
 ): Promise<PersonalMemoryRow | null> {
-	// 1. Log the attempt to add a personal memory.
-	log.info(
-		`Tomori is attempting to self-learn a personal memory for user ${userId} in lineage ${personaLineageId}: "${content.substring(0, 50)}..."`,
-	);
+  // 1. Log the attempt to add a personal memory.
+  log.info(
+    `Tomori is attempting to self-learn a personal memory for user ${userId} in lineage ${personaLineageId}: "${content.substring(0, 50)}..."`,
+  );
 
-	// 2. Validate memory content before database operations
-	const contentValidation = validateMemoryContent(content);
-	if (!contentValidation.isValid) {
-		log.warn(
-			`Personal memory content validation failed for user ID ${userId}: ${contentValidation.error}`,
-		);
-		return null;
-	}
+  // 2. Validate memory content before database operations
+  const contentValidation = validateMemoryContent(content);
+  if (!contentValidation.isValid) {
+    log.warn(
+      `Personal memory content validation failed for user ID ${userId}: ${contentValidation.error}`,
+    );
+    return null;
+  }
 
-	// 3. Check personal memory limit
-	const personalLimitCheck = await checkPersonalMemoryLimit(
-		userId,
-		personaLineageId,
-		true,
-	);
-	if (!personalLimitCheck.isValid) {
-		log.warn(
-			`Personal memory limit exceeded for user ID ${userId}: ${personalLimitCheck.currentCount}/${personalLimitCheck.maxAllowed}`,
-		);
-		return null;
-	}
+  // 3. Check personal memory limit
+  const personalLimitCheck = await checkPersonalMemoryLimit(
+    userId,
+    personaLineageId,
+    true,
+  );
+  if (!personalLimitCheck.isValid) {
+    log.warn(
+      `Personal memory limit exceeded for user ID ${userId}: ${personalLimitCheck.currentCount}/${personalLimitCheck.maxAllowed}`,
+    );
+    return null;
+  }
 
-	try {
-		const [insertedMemory] = await sql`
+  try {
+    const [insertedMemory] = await sql`
 			INSERT INTO personal_memories (user_id, persona_lineage_id, content)
 			VALUES (${userId}, ${personaLineageId}, ${content})
 			RETURNING *
 		`;
 
-		if (!insertedMemory) {
-			log.warn(
-				`Attempted to insert personal memory for non-existent user ${userId}`,
-			);
-			return null;
-		}
+    if (!insertedMemory) {
+      log.warn(
+        `Attempted to insert personal memory for non-existent user ${userId}`,
+      );
+      return null;
+    }
 
-		const validatedMemory = personalMemorySchema.safeParse(insertedMemory);
-		if (!validatedMemory.success) {
-			const context: ErrorContext = {
-				userId,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "addPersonalMemoryByTomori",
-					personaLineageId,
-					contentAttempted: content.substring(0, 100),
-					validationErrors: validatedMemory.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate inserted personal memory for user ${userId} in lineage ${personaLineageId}`,
-				validatedMemory.error,
-				context,
-			);
-			return null;
-		}
+    const validatedMemory = personalMemorySchema.safeParse(insertedMemory);
+    if (!validatedMemory.success) {
+      const context: ErrorContext = {
+        userId,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "addPersonalMemoryByTomori",
+          personaLineageId,
+          contentAttempted: content.substring(0, 100),
+          validationErrors: validatedMemory.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate inserted personal memory for user ${userId} in lineage ${personaLineageId}`,
+        validatedMemory.error,
+        context,
+      );
+      return null;
+    }
 
-		log.success(
-			`Tomori successfully inserted personal memory (ID: ${validatedMemory.data.personal_memory_id}) for user ${userId} in lineage ${personaLineageId}.`,
-		);
-		return validatedMemory.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			userId,
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				operation: "addPersonalMemoryByTomori",
-				personaLineageId,
-				contentAttempted: content.substring(0, 100),
-			},
-		};
-		await log.error(
-			`Error inserting personal memory for user ${userId} in lineage ${personaLineageId}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    log.success(
+      `Tomori successfully inserted personal memory (ID: ${validatedMemory.data.personal_memory_id}) for user ${userId} in lineage ${personaLineageId}.`,
+    );
+    return validatedMemory.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      userId,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "addPersonalMemoryByTomori",
+        personaLineageId,
+        contentAttempted: content.substring(0, 100),
+      },
+    };
+    await log.error(
+      `Error inserting personal memory for user ${userId} in lineage ${personaLineageId}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1288,25 +1293,25 @@ export async function addPersonalMemoryByTomori(
  * @returns The created ReminderRow object, or null if creation failed
  */
 export async function addReminder(reminderData: {
-	server_id: number;
-	channel_disc_id: string;
-	user_discord_id: string;
-	user_nickname: string;
-	reminder_purpose: string;
-	reminder_time: Date;
-	repetition_interval_hours?: number | null;
-	self_reminder?: boolean | null;
-	created_by_user_id: number | null;
-	persona_id?: number | null;
+  server_id: number;
+  channel_disc_id: string;
+  user_discord_id: string;
+  user_nickname: string;
+  reminder_purpose: string;
+  reminder_time: Date;
+  repetition_interval_hours?: number | null;
+  self_reminder?: boolean | null;
+  created_by_user_id: number | null;
+  persona_id?: number | null;
 }): Promise<ReminderRow | null> {
-	try {
-		log.info(
-			`Creating reminder for user ${reminderData.user_nickname} (${reminderData.user_discord_id}) ` +
-				`in server ${reminderData.server_id} at ${reminderData.reminder_time.toISOString()}`,
-		);
+  try {
+    log.info(
+      `Creating reminder for user ${reminderData.user_nickname} (${reminderData.user_discord_id}) ` +
+        `in server ${reminderData.server_id} at ${reminderData.reminder_time.toISOString()}`,
+    );
 
-		// Insert the new reminder into the database
-		const [reminderResult] = await sql`
+    // Insert the new reminder into the database
+    const [reminderResult] = await sql`
 			INSERT INTO reminders (
 				server_id,
 				channel_disc_id,
@@ -1333,59 +1338,59 @@ export async function addReminder(reminderData: {
 			RETURNING *
 		`;
 
-		// Check if the reminder was created
-		if (!reminderResult) {
-			log.warn("Failed to create reminder: No result returned from database");
-			return null;
-		}
+    // Check if the reminder was created
+    if (!reminderResult) {
+      log.warn("Failed to create reminder: No result returned from database");
+      return null;
+    }
 
-		// Validate the returned reminder data using Zod schema
-		const validatedReminder = reminderSchema.safeParse(reminderResult);
+    // Validate the returned reminder data using Zod schema
+    const validatedReminder = reminderSchema.safeParse(reminderResult);
 
-		if (!validatedReminder.success) {
-			const context: ErrorContext = {
-				serverId: reminderData.server_id,
-				userId: reminderData.created_by_user_id,
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "addReminder",
-					reminderPurpose: reminderData.reminder_purpose.substring(0, 100),
-					targetUser: reminderData.user_discord_id,
-					validationErrors: validatedReminder.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate new reminder for user ${reminderData.user_discord_id}`,
-				validatedReminder.error,
-				context,
-			);
-			return null;
-		}
+    if (!validatedReminder.success) {
+      const context: ErrorContext = {
+        serverId: reminderData.server_id,
+        userId: reminderData.created_by_user_id,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "addReminder",
+          reminderPurpose: reminderData.reminder_purpose.substring(0, 100),
+          targetUser: reminderData.user_discord_id,
+          validationErrors: validatedReminder.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate new reminder for user ${reminderData.user_discord_id}`,
+        validatedReminder.error,
+        context,
+      );
+      return null;
+    }
 
-		// Log success and return the validated reminder
-		log.success(
-			`Reminder successfully created (ID: ${validatedReminder.data.reminder_id}) ` +
-				`for ${reminderData.user_nickname} at ${reminderData.reminder_time.toISOString()}`,
-		);
-		return validatedReminder.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			serverId: reminderData.server_id,
-			userId: reminderData.created_by_user_id,
-			errorType: "DatabaseInsertError",
-			metadata: {
-				operation: "addReminder",
-				reminderPurpose: reminderData.reminder_purpose.substring(0, 100),
-				targetUser: reminderData.user_discord_id,
-			},
-		};
-		await log.error(
-			`Error creating reminder for user ${reminderData.user_discord_id}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    // Log success and return the validated reminder
+    log.success(
+      `Reminder successfully created (ID: ${validatedReminder.data.reminder_id}) ` +
+        `for ${reminderData.user_nickname} at ${reminderData.reminder_time.toISOString()}`,
+    );
+    return validatedReminder.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      serverId: reminderData.server_id,
+      userId: reminderData.created_by_user_id,
+      errorType: "DatabaseInsertError",
+      metadata: {
+        operation: "addReminder",
+        reminderPurpose: reminderData.reminder_purpose.substring(0, 100),
+        targetUser: reminderData.user_discord_id,
+      },
+    };
+    await log.error(
+      `Error creating reminder for user ${reminderData.user_discord_id}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 
 /**
@@ -1395,11 +1400,11 @@ export async function addReminder(reminderData: {
  * @returns The updated ReminderRow object, or null if update failed
  */
 export async function rescheduleReminder(
-	reminderId: number,
-	nextReminderTime: Date,
+  reminderId: number,
+  nextReminderTime: Date,
 ): Promise<ReminderRow | null> {
-	try {
-		const [updatedReminder] = await sql`
+  try {
+    const [updatedReminder] = await sql`
 			UPDATE reminders
 			SET reminder_time = ${nextReminderTime},
 				updated_at = CURRENT_TIMESTAMP
@@ -1407,49 +1412,49 @@ export async function rescheduleReminder(
 			RETURNING *
 		`;
 
-		if (!updatedReminder) {
-			log.warn(`Failed to reschedule reminder ${reminderId} (no row returned)`);
-			return null;
-		}
+    if (!updatedReminder) {
+      log.warn(`Failed to reschedule reminder ${reminderId} (no row returned)`);
+      return null;
+    }
 
-		const validatedReminder = reminderSchema.safeParse(updatedReminder);
-		if (!validatedReminder.success) {
-			const context: ErrorContext = {
-				errorType: "SchemaValidationError",
-				metadata: {
-					operation: "rescheduleReminder",
-					reminderId,
-					validationErrors: validatedReminder.error.flatten(),
-				},
-			};
-			await log.error(
-				`Failed to validate reminder after reschedule (ID: ${reminderId})`,
-				validatedReminder.error,
-				context,
-			);
-			return null;
-		}
+    const validatedReminder = reminderSchema.safeParse(updatedReminder);
+    if (!validatedReminder.success) {
+      const context: ErrorContext = {
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "rescheduleReminder",
+          reminderId,
+          validationErrors: validatedReminder.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate reminder after reschedule (ID: ${reminderId})`,
+        validatedReminder.error,
+        context,
+      );
+      return null;
+    }
 
-		log.success(
-			`Reminder rescheduled (ID: ${reminderId}) to ${nextReminderTime.toISOString()}`,
-		);
-		return validatedReminder.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				operation: "rescheduleReminder",
-				reminderId,
-				nextReminderTime: nextReminderTime.toISOString(),
-			},
-		};
-		await log.error(
-			`Error rescheduling reminder ${reminderId}`,
-			error,
-			context,
-		);
-		return null;
-	}
+    log.success(
+      `Reminder rescheduled (ID: ${reminderId}) to ${nextReminderTime.toISOString()}`,
+    );
+    return validatedReminder.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "rescheduleReminder",
+        reminderId,
+        nextReminderTime: nextReminderTime.toISOString(),
+      },
+    };
+    await log.error(
+      `Error rescheduling reminder ${reminderId}`,
+      error,
+      context,
+    );
+    return null;
+  }
 }
 
 // ─── Random Trigger Write Functions ─────────────────────────────────────────
@@ -1458,15 +1463,15 @@ export async function rescheduleReminder(
  * Data shape for creating or updating a random trigger.
  */
 interface RandomTriggerData {
-	serverId: number;
-	channelDiscId: string;
-	tomoriId: number | null;
-	timerHours: number;
-	randomOffsetRange: number | null;
-	chancePercent: number;
-	silenceThresholdHours: number | null;
-	respondToSelf: boolean;
-	customPrompt: string | null;
+  serverId: number;
+  channelDiscId: string;
+  tomoriId: number | null;
+  timerHours: number;
+  randomOffsetRange: number | null;
+  chancePercent: number;
+  silenceThresholdHours: number | null;
+  respondToSelf: boolean;
+  customPrompt: string | null;
 }
 
 /**
@@ -1477,11 +1482,11 @@ interface RandomTriggerData {
  * @returns The inserted RandomTriggerRow, or null on failure.
  */
 export async function insertRandomTrigger(
-	data: RandomTriggerData,
+  data: RandomTriggerData,
 ): Promise<RandomTriggerRow | null> {
-	try {
-		// 1. Insert trigger; schedule first roll after one full timer cycle
-		const [row] = await sql`
+  try {
+    // 1. Insert trigger; schedule first roll after one full timer cycle
+    const [row] = await sql`
 			INSERT INTO random_triggers (
 				server_id,
 				channel_disc_id,
@@ -1508,34 +1513,31 @@ export async function insertRandomTrigger(
 			RETURNING *
 		`;
 
-		if (!row) {
-			log.error("insertRandomTrigger: INSERT returned no rows");
-			return null;
-		}
+    if (!row) {
+      log.error("insertRandomTrigger: INSERT returned no rows");
+      return null;
+    }
 
-		// 2. Validate with schema
-		const parsed = randomTriggerSchema.safeParse(row);
-		if (!parsed.success) {
-			log.error(
-				"insertRandomTrigger: schema validation failed:",
-				parsed.error,
-			);
-			return null;
-		}
+    // 2. Validate with schema
+    const parsed = randomTriggerSchema.safeParse(row);
+    if (!parsed.success) {
+      log.error("insertRandomTrigger: schema validation failed:", parsed.error);
+      return null;
+    }
 
-		log.success(
-			`Random trigger created (id=${parsed.data.trigger_id}) for channel ${data.channelDiscId}`,
-		);
-		return parsed.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			serverId: data.serverId,
-			errorType: "DatabaseInsertError",
-			metadata: { operation: "insertRandomTrigger", ...data },
-		};
-		await log.error("Error inserting random trigger", error, context);
-		return null;
-	}
+    log.success(
+      `Random trigger created (id=${parsed.data.trigger_id}) for channel ${data.channelDiscId}`,
+    );
+    return parsed.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      serverId: data.serverId,
+      errorType: "DatabaseInsertError",
+      metadata: { operation: "insertRandomTrigger", ...data },
+    };
+    await log.error("Error inserting random trigger", error, context);
+    return null;
+  }
 }
 
 /**
@@ -1547,12 +1549,12 @@ export async function insertRandomTrigger(
  * @returns The updated RandomTriggerRow, or null on failure.
  */
 export async function upsertRandomTrigger(
-	triggerId: number,
-	data: RandomTriggerData,
+  triggerId: number,
+  data: RandomTriggerData,
 ): Promise<RandomTriggerRow | null> {
-	try {
-		// 1. Update the trigger and reschedule the next roll from now
-		const [row] = await sql`
+  try {
+    // 1. Update the trigger and reschedule the next roll from now
+    const [row] = await sql`
 			UPDATE random_triggers SET
 				timer_hours             = ${data.timerHours},
 				random_offset_range     = ${data.randomOffsetRange},
@@ -1565,34 +1567,29 @@ export async function upsertRandomTrigger(
 			RETURNING *
 		`;
 
-		if (!row) {
-			log.warn(
-				`upsertRandomTrigger: no row found for trigger_id=${triggerId}`,
-			);
-			return null;
-		}
+    if (!row) {
+      log.warn(`upsertRandomTrigger: no row found for trigger_id=${triggerId}`);
+      return null;
+    }
 
-		// 2. Validate with schema
-		const parsed = randomTriggerSchema.safeParse(row);
-		if (!parsed.success) {
-			log.error(
-				"upsertRandomTrigger: schema validation failed:",
-				parsed.error,
-			);
-			return null;
-		}
+    // 2. Validate with schema
+    const parsed = randomTriggerSchema.safeParse(row);
+    if (!parsed.success) {
+      log.error("upsertRandomTrigger: schema validation failed:", parsed.error);
+      return null;
+    }
 
-		log.success(`Random trigger updated (id=${triggerId})`);
-		return parsed.data;
-	} catch (error) {
-		const context: ErrorContext = {
-			serverId: data.serverId,
-			errorType: "DatabaseUpdateError",
-			metadata: { operation: "upsertRandomTrigger", triggerId, ...data },
-		};
-		await log.error("Error updating random trigger", error, context);
-		return null;
-	}
+    log.success(`Random trigger updated (id=${triggerId})`);
+    return parsed.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      serverId: data.serverId,
+      errorType: "DatabaseUpdateError",
+      metadata: { operation: "upsertRandomTrigger", triggerId, ...data },
+    };
+    await log.error("Error updating random trigger", error, context);
+    return null;
+  }
 }
 
 /**
@@ -1601,29 +1598,27 @@ export async function upsertRandomTrigger(
  * @param triggerId - The trigger_id to delete.
  * @returns True if deleted successfully, false otherwise.
  */
-export async function deleteRandomTrigger(
-	triggerId: number,
-): Promise<boolean> {
-	try {
-		// 1. Delete the trigger row
-		await sql`
+export async function deleteRandomTrigger(triggerId: number): Promise<boolean> {
+  try {
+    // 1. Delete the trigger row
+    await sql`
 			DELETE FROM random_triggers
 			WHERE trigger_id = ${triggerId}
 		`;
-		log.success(`Random trigger deleted (id=${triggerId})`);
-		return true;
-	} catch (error) {
-		const context: ErrorContext = {
-			errorType: "DatabaseDeleteError",
-			metadata: { operation: "deleteRandomTrigger", triggerId },
-		};
-		await log.error(
-			`Error deleting random trigger ${triggerId}`,
-			error,
-			context,
-		);
-		return false;
-	}
+    log.success(`Random trigger deleted (id=${triggerId})`);
+    return true;
+  } catch (error) {
+    const context: ErrorContext = {
+      errorType: "DatabaseDeleteError",
+      metadata: { operation: "deleteRandomTrigger", triggerId },
+    };
+    await log.error(
+      `Error deleting random trigger ${triggerId}`,
+      error,
+      context,
+    );
+    return false;
+  }
 }
 
 /**
@@ -1636,50 +1631,50 @@ export async function deleteRandomTrigger(
  * @returns True if rescheduled successfully, false otherwise.
  */
 export async function rescheduleRandomTrigger(
-	triggerId: number,
-	timerHours: number,
-	randomOffsetRange: number | null,
+  triggerId: number,
+  timerHours: number,
+  randomOffsetRange: number | null,
 ): Promise<boolean> {
-	try {
-		const normalizedOffsetRange = Math.max(0, randomOffsetRange ?? 0);
-		const randomOffset =
-			normalizedOffsetRange > 0
-				? Math.floor(Math.random() * (normalizedOffsetRange * 2 + 1)) -
-					normalizedOffsetRange
-				: 0;
-		const nextTimerHours = Math.max(1, timerHours + randomOffset);
+  try {
+    const normalizedOffsetRange = Math.max(0, randomOffsetRange ?? 0);
+    const randomOffset =
+      normalizedOffsetRange > 0
+        ? Math.floor(Math.random() * (normalizedOffsetRange * 2 + 1)) -
+          normalizedOffsetRange
+        : 0;
+    const nextTimerHours = Math.max(1, timerHours + randomOffset);
 
-		// 1. Advance next_trigger_at by the configured interval from now
-		const [row] = await sql`
+    // 1. Advance next_trigger_at by the configured interval from now
+    const [row] = await sql`
 			UPDATE random_triggers
 			SET next_trigger_at = NOW() + (${nextTimerHours} * INTERVAL '1 hour')
 			WHERE trigger_id = ${triggerId}
 			RETURNING trigger_id
 		`;
-		if (!row) {
-			log.warn(
-				`rescheduleRandomTrigger: no row found for trigger_id=${triggerId}`,
-			);
-			return false;
-		}
-		return true;
-	} catch (error) {
-		const context: ErrorContext = {
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				operation: "rescheduleRandomTrigger",
-				triggerId,
-				timerHours,
-				randomOffsetRange,
-			},
-		};
-		await log.error(
-			`Error rescheduling random trigger ${triggerId}`,
-			error,
-			context,
-		);
-		return false;
-	}
+    if (!row) {
+      log.warn(
+        `rescheduleRandomTrigger: no row found for trigger_id=${triggerId}`,
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    const context: ErrorContext = {
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "rescheduleRandomTrigger",
+        triggerId,
+        timerHours,
+        randomOffsetRange,
+      },
+    };
+    await log.error(
+      `Error rescheduling random trigger ${triggerId}`,
+      error,
+      context,
+    );
+    return false;
+  }
 }
 
 /**
@@ -1692,23 +1687,26 @@ export async function rescheduleRandomTrigger(
  * @returns True on success, false on failure
  */
 export async function setChannelLlmOverride(
-	serverId: number,
-	channelDiscId: string,
-	llmId: number,
+  serverId: number,
+  channelDiscId: string,
+  llmId: number,
 ): Promise<boolean> {
-	try {
-		// UPSERT — insert or update the override for this (server, channel) pair
-		await sql`
+  try {
+    // UPSERT — insert or update the override for this (server, channel) pair
+    await sql`
 			INSERT INTO channel_llm_overrides (server_id, channel_disc_id, llm_id)
 			VALUES (${serverId}, ${channelDiscId}, ${llmId})
 			ON CONFLICT (server_id, channel_disc_id)
 			DO UPDATE SET llm_id = EXCLUDED.llm_id, updated_at = CURRENT_TIMESTAMP
 		`;
-		return true;
-	} catch (error) {
-		log.error(`Error setting channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
-		return false;
-	}
+    return true;
+  } catch (error) {
+    log.error(
+      `Error setting channel LLM override for server ${serverId} channel ${channelDiscId}:`,
+      error,
+    );
+    return false;
+  }
 }
 
 /**
@@ -1721,22 +1719,25 @@ export async function setChannelLlmOverride(
  * @returns True on success, false on failure
  */
 export async function setPersonaLlmOverride(
-	tomoriId: number,
-	llmId: number | null,
+  tomoriId: number,
+  llmId: number | null,
 ): Promise<boolean> {
-	try {
-		// UPSERT — create or update the persona_configs row
-		await sql`
+  try {
+    // UPSERT — create or update the persona_configs row
+    await sql`
 			INSERT INTO persona_configs (tomori_id, llm_id)
 			VALUES (${tomoriId}, ${llmId})
 			ON CONFLICT (tomori_id)
 			DO UPDATE SET llm_id = EXCLUDED.llm_id, updated_at = CURRENT_TIMESTAMP
 		`;
-		return true;
-	} catch (error) {
-		log.error(`Error setting persona LLM override for tomori_id ${tomoriId}:`, error);
-		return false;
-	}
+    return true;
+  } catch (error) {
+    log.error(
+      `Error setting persona LLM override for tomori_id ${tomoriId}:`,
+      error,
+    );
+    return false;
+  }
 }
 
 /**
@@ -1747,18 +1748,21 @@ export async function setPersonaLlmOverride(
  * @returns True on success, false on failure
  */
 export async function clearAllChannelLlmOverridesForServer(
-	serverId: number,
+  serverId: number,
 ): Promise<boolean> {
-	try {
-		await sql`
+  try {
+    await sql`
 			DELETE FROM channel_llm_overrides
 			WHERE server_id = ${serverId}
 		`;
-		return true;
-	} catch (error) {
-		log.error(`Error clearing channel LLM overrides for server ${serverId}:`, error);
-		return false;
-	}
+    return true;
+  } catch (error) {
+    log.error(
+      `Error clearing channel LLM overrides for server ${serverId}:`,
+      error,
+    );
+    return false;
+  }
 }
 
 /**
@@ -1769,20 +1773,23 @@ export async function clearAllChannelLlmOverridesForServer(
  * @returns True on success, false on failure
  */
 export async function clearAllPersonaLlmOverridesForServer(
-	serverId: number,
+  serverId: number,
 ): Promise<boolean> {
-	try {
-		// Join via tomoris to scope the update to this server only
-		await sql`
+  try {
+    // Join via tomoris to scope the update to this server only
+    await sql`
 			UPDATE persona_configs
 			SET llm_id = NULL, updated_at = CURRENT_TIMESTAMP
 			WHERE tomori_id IN (
 				SELECT tomori_id FROM tomoris WHERE server_id = ${serverId}
 			)
 		`;
-		return true;
-	} catch (error) {
-		log.error(`Error clearing persona LLM overrides for server ${serverId}:`, error);
-		return false;
-	}
+    return true;
+  } catch (error) {
+    log.error(
+      `Error clearing persona LLM overrides for server ${serverId}:`,
+      error,
+    );
+    return false;
+  }
 }

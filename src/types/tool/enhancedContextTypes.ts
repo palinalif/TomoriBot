@@ -10,10 +10,10 @@
  * Extends standard content with additional metadata for processing.
  */
 export interface BaseEnhancedContent {
-	/** Content type identifier */
-	type: string;
-	/** Special marker indicating enhanced context processing is required */
-	enhancedContext: boolean;
+  /** Content type identifier */
+  type: string;
+  /** Special marker indicating enhanced context processing is required */
+  enhancedContext: boolean;
 }
 
 /**
@@ -21,13 +21,13 @@ export interface BaseEnhancedContent {
  * Used when tools need to provide video context with additional metadata.
  */
 export interface EnhancedVideoContent extends BaseEnhancedContent {
-	type: "video";
-	/** Video URI */
-	uri: string;
-	/** MIME type for the video */
-	mimeType: string;
-	/** Flag indicating this is a YouTube link */
-	isYouTubeLink: boolean;
+  type: "video";
+  /** Video URI */
+  uri: string;
+  /** MIME type for the video */
+  mimeType: string;
+  /** Flag indicating this is a YouTube link */
+  isYouTubeLink: boolean;
 }
 
 /**
@@ -35,20 +35,20 @@ export interface EnhancedVideoContent extends BaseEnhancedContent {
  * Used when tools need to provide image context with additional metadata.
  */
 export interface EnhancedImageContent extends BaseEnhancedContent {
-	type: "image";
-	/** Image URI (data URI or public URL) */
-	uri: string;
-	/** MIME type for the image */
-	mimeType: string;
-	/** Inline image data */
-	inlineData: {
-		/** MIME type for the image */
-		mimeType: string;
-		/** Base64 encoded image data */
-		data: string;
-	};
-	/** Flag indicating this is a profile picture */
-	isProfilePicture: boolean;
+  type: "image";
+  /** Image URI (data URI or public URL) */
+  uri: string;
+  /** MIME type for the image */
+  mimeType: string;
+  /** Inline image data */
+  inlineData: {
+    /** MIME type for the image */
+    mimeType: string;
+    /** Base64 encoded image data */
+    data: string;
+  };
+  /** Flag indicating this is a profile picture */
+  isProfilePicture: boolean;
 }
 
 /**
@@ -62,6 +62,6 @@ export type EnhancedContent = EnhancedVideoContent | EnhancedImageContent;
  * Contains enhanced content objects for processing by AI providers.
  */
 export interface EnhancedContextMessage {
-	/** Array of enhanced content objects */
-	contents: EnhancedContent[];
+  /** Array of enhanced content objects */
+  contents: EnhancedContent[];
 }

@@ -7,5 +7,5 @@
  * Format a memory entry with its ID for LLM context display.
  */
 export function formatMemoryWithId(memoryId: number, content: string): string {
-	return `ID:${memoryId} ${content}`;
+  return `ID:${memoryId} ${content}`;
 }

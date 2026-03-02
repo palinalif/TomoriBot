@@ -1,49 +1,49 @@
 import { sql } from "@/utils/db/client";
 import { log } from "../misc/logger";
 import {
-	EXPORT_VERSION,
-	personalMemoriesExportSchema,
-	globalPersonalMemoriesExportSchema,
-	personalSettingsExportSchema,
-	serverMemoriesExportSchema,
-	serverConfigOnlyExportSchema,
-	getPersonalExportSchema,
-	getServerExportSchema,
-	type PersonalExportData,
-	type ServerExportData,
-	type PersonalMemoriesExportData,
-	type ServerMemoriesExportData,
-	type PersonalSettingsExportData,
-	type ServerConfigExport,
-	type ImportResult,
+  EXPORT_VERSION,
+  personalMemoriesExportSchema,
+  globalPersonalMemoriesExportSchema,
+  personalSettingsExportSchema,
+  serverMemoriesExportSchema,
+  serverConfigOnlyExportSchema,
+  getPersonalExportSchema,
+  getServerExportSchema,
+  type PersonalExportData,
+  type ServerExportData,
+  type PersonalMemoriesExportData,
+  type ServerMemoriesExportData,
+  type PersonalSettingsExportData,
+  type ServerConfigExport,
+  type ImportResult,
 } from "../../types/db/dataExport";
 import { validateMemoryContent } from "./memoryLimits";
 import { validateTomoriConfigFields } from "./sqlSecurity";
 
 export type ImportFileType =
-	| "personal_memories"
-	| "server_memories"
-	| "personal_settings"
-	| "server_config"
-	| "global_personal_memories"
-	| "personal"
-	| "server";
+  | "personal_memories"
+  | "server_memories"
+  | "personal_settings"
+  | "server_config"
+  | "global_personal_memories"
+  | "personal"
+  | "server";
 
 export interface ImportValidationResult {
-	valid: boolean;
-	type?: ImportFileType;
-	data?:
-		| PersonalMemoriesExportData
-		| ServerMemoriesExportData
-		| PersonalSettingsExportData
-		| { config: ServerConfigExport }
-		| PersonalExportData
-		| ServerExportData;
-	error?: string;
+  valid: boolean;
+  type?: ImportFileType;
+  data?:
+    | PersonalMemoriesExportData
+    | ServerMemoriesExportData
+    | PersonalSettingsExportData
+    | { config: ServerConfigExport }
+    | PersonalExportData
+    | ServerExportData;
+  error?: string;
 }
 
 async function ensureUserId(userDiscId: string): Promise<number | null> {
-	const upserted = await sql<Array<{ user_id: number }>>`
+  const upserted = await sql<Array<{ user_id: number }>>`
 		INSERT INTO users (
 			user_disc_id,
 			user_nickname,
@@ -58,21 +58,23 @@ async function ensureUserId(userDiscId: string): Promise<number | null> {
 		RETURNING user_id
 	`;
 
-	return upserted[0]?.user_id ?? null;
+  return upserted[0]?.user_id ?? null;
 }
 
 async function resolveServerId(serverDiscId: string): Promise<number | null> {
-	const serverRows = await sql<Array<{ server_id: number }>>`
+  const serverRows = await sql<Array<{ server_id: number }>>`
 		SELECT s.server_id
 		FROM servers s
 		WHERE s.server_disc_id = ${serverDiscId}
 		LIMIT 1
 	`;
-	return serverRows[0]?.server_id ?? null;
+  return serverRows[0]?.server_id ?? null;
 }
 
-async function resolveMainTomoriId(serverId: number): Promise<number | undefined> {
-	const mainPersonaRows = await sql<Array<{ tomori_id: number }>>`
+async function resolveMainTomoriId(
+  serverId: number,
+): Promise<number | undefined> {
+  const mainPersonaRows = await sql<Array<{ tomori_id: number }>>`
 		SELECT tomori_id
 		FROM tomoris
 		WHERE server_id = ${serverId}
@@ -80,30 +82,30 @@ async function resolveMainTomoriId(serverId: number): Promise<number | undefined
 		ORDER BY updated_at DESC NULLS LAST, tomori_id DESC
 		LIMIT 1
 	`;
-	return mainPersonaRows[0]?.tomori_id;
+  return mainPersonaRows[0]?.tomori_id;
 }
 
 function coerceLineageId(
-	value: number | string | bigint | null | undefined,
+  value: number | string | bigint | null | undefined,
 ): number | null {
-	if (typeof value === "bigint") {
-		return Number(value);
-	}
-	if (typeof value === "string" && value.trim() !== "") {
-		return Number(value);
-	}
-	if (typeof value === "number") {
-		return value;
-	}
-	return null;
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    return Number(value);
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  return null;
 }
 
 async function resolveMainTomoriScope(
-	serverId: number,
+  serverId: number,
 ): Promise<{ tomoriId: number; personaLineageId: number } | null> {
-	const mainPersonaRows = await sql<
-		Array<{ tomori_id: number; persona_lineage_id: number | string | bigint }>
-	>`
+  const mainPersonaRows = await sql<
+    Array<{ tomori_id: number; persona_lineage_id: number | string | bigint }>
+  >`
 		SELECT tomori_id, persona_lineage_id
 		FROM tomoris
 		WHERE server_id = ${serverId}
@@ -112,83 +114,86 @@ async function resolveMainTomoriScope(
 		LIMIT 1
 	`;
 
-	const mainTomori = mainPersonaRows[0];
-	if (!mainTomori) {
-		return null;
-	}
+  const mainTomori = mainPersonaRows[0];
+  if (!mainTomori) {
+    return null;
+  }
 
-	const personaLineageId = coerceLineageId(mainTomori.persona_lineage_id);
-	if (
-		typeof personaLineageId !== "number" ||
-		!Number.isFinite(personaLineageId)
-	) {
-		return null;
-	}
+  const personaLineageId = coerceLineageId(mainTomori.persona_lineage_id);
+  if (
+    typeof personaLineageId !== "number" ||
+    !Number.isFinite(personaLineageId)
+  ) {
+    return null;
+  }
 
-	return {
-		tomoriId: mainTomori.tomori_id,
-		personaLineageId,
-	};
+  return {
+    tomoriId: mainTomori.tomori_id,
+    personaLineageId,
+  };
 }
 
 export async function importPersonalMemories(
-	userDiscId: string,
-	memories: string[],
-	personaLineageId = 0,
+  userDiscId: string,
+  memories: string[],
+  personaLineageId = 0,
 ): Promise<ImportResult> {
-	try {
-		for (const memory of memories) {
-			const validation = validateMemoryContent(memory);
-			if (!validation.isValid) {
-				return {
-					success: false,
-					error: `commands.data.import.error_invalid_memory|${validation.error}`,
-				};
-			}
-		}
+  try {
+    for (const memory of memories) {
+      const validation = validateMemoryContent(memory);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: `commands.data.import.error_invalid_memory|${validation.error}`,
+        };
+      }
+    }
 
-		const targetUserId = await ensureUserId(userDiscId);
-		if (!targetUserId) {
-			return {
-				success: false,
-				error: "commands.data.import.error_update_failed",
-			};
-		}
+    const targetUserId = await ensureUserId(userDiscId);
+    if (!targetUserId) {
+      return {
+        success: false,
+        error: "commands.data.import.error_update_failed",
+      };
+    }
 
-		await sql`
+    await sql`
 			DELETE FROM personal_memories
 			WHERE user_id = ${targetUserId}
 			  AND persona_lineage_id = ${personaLineageId}
 		`;
 
-		for (const memory of memories) {
-			await sql`
+    for (const memory of memories) {
+      await sql`
 				INSERT INTO personal_memories (user_id, persona_lineage_id, content)
 				VALUES (${targetUserId}, ${personaLineageId}, ${memory})
 			`;
-		}
+    }
 
-		return {
-			success: true,
-			itemsImported: {
-				memoriesCount: memories.length,
-			},
-		};
-	} catch (error) {
-		log.error(`Error importing personal memories for user ${userDiscId}:`, error);
-		return {
-			success: false,
-			error: "commands.data.import.error_import_failed",
-		};
-	}
+    return {
+      success: true,
+      itemsImported: {
+        memoriesCount: memories.length,
+      },
+    };
+  } catch (error) {
+    log.error(
+      `Error importing personal memories for user ${userDiscId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "commands.data.import.error_import_failed",
+    };
+  }
 }
 
 export async function importPersonalSettings(
-	userDiscId: string,
-	importData: PersonalSettingsExportData,
+  userDiscId: string,
+  importData: PersonalSettingsExportData,
 ): Promise<ImportResult> {
-	try {
-		const updateResult = await sql`
+  try {
+    const updateResult = await sql`
 			INSERT INTO users (
 				user_disc_id,
 				user_nickname,
@@ -205,53 +210,56 @@ export async function importPersonalSettings(
 			RETURNING user_id
 		`;
 
-		if (!updateResult.length) {
-			return {
-				success: false,
-				error: "commands.data.import.error_update_failed",
-			};
-		}
+    if (!updateResult.length) {
+      return {
+        success: false,
+        error: "commands.data.import.error_update_failed",
+      };
+    }
 
-		return {
-			success: true,
-			itemsImported: {
-				configFieldsCount: 2,
-			},
-		};
-	} catch (error) {
-		log.error(`Error importing personal settings for user ${userDiscId}:`, error);
-		return {
-			success: false,
-			error: "commands.data.import.error_import_failed",
-		};
-	}
+    return {
+      success: true,
+      itemsImported: {
+        configFieldsCount: 2,
+      },
+    };
+  } catch (error) {
+    log.error(
+      `Error importing personal settings for user ${userDiscId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "commands.data.import.error_import_failed",
+    };
+  }
 }
 
 export async function importServerConfig(
-	serverDiscId: string,
-	config: ServerConfigExport,
+  serverDiscId: string,
+  config: ServerConfigExport,
 ): Promise<ImportResult> {
-	try {
-		const serverId = await resolveServerId(serverDiscId);
-		if (!serverId) {
-			return {
-				success: false,
-				error: "commands.data.import.error_no_server_data",
-			};
-		}
+  try {
+    const serverId = await resolveServerId(serverDiscId);
+    if (!serverId) {
+      return {
+        success: false,
+        error: "commands.data.import.error_no_server_data",
+      };
+    }
 
-		const configFields = Object.keys(config);
-		try {
-			validateTomoriConfigFields(configFields);
-		} catch (error) {
-			log.error("Config field validation failed during import:", error);
-			return {
-				success: false,
-				error: "commands.data.import.error_invalid_config",
-			};
-		}
+    const configFields = Object.keys(config);
+    try {
+      validateTomoriConfigFields(configFields);
+    } catch (error) {
+      log.error("Config field validation failed during import:", error);
+      return {
+        success: false,
+        error: "commands.data.import.error_invalid_config",
+      };
+    }
 
-		let updateRows = await sql<Array<{ tomori_config_id: number }>>`
+    let updateRows = await sql<Array<{ tomori_config_id: number }>>`
 			UPDATE tomori_configs
 			SET
 				llm_temperature = ${config.llm_temperature},
@@ -277,10 +285,10 @@ export async function importServerConfig(
 			RETURNING tomori_config_id
 		`;
 
-		if (!updateRows.length) {
-			const mainTomoriId = await resolveMainTomoriId(serverId);
-			if (mainTomoriId) {
-				updateRows = await sql<Array<{ tomori_config_id: number }>>`
+    if (!updateRows.length) {
+      const mainTomoriId = await resolveMainTomoriId(serverId);
+      if (mainTomoriId) {
+        updateRows = await sql<Array<{ tomori_config_id: number }>>`
 					UPDATE tomori_configs
 					SET
 						llm_temperature = ${config.llm_temperature},
@@ -305,332 +313,339 @@ export async function importServerConfig(
 					WHERE tomori_id = ${mainTomoriId}
 					RETURNING tomori_config_id
 				`;
-			}
-		}
+      }
+    }
 
-		if (!updateRows.length) {
-			return {
-				success: false,
-				error: "commands.data.import.error_update_failed",
-			};
-		}
+    if (!updateRows.length) {
+      return {
+        success: false,
+        error: "commands.data.import.error_update_failed",
+      };
+    }
 
-		return {
-			success: true,
-			itemsImported: {
-				configFieldsCount: configFields.length,
-			},
-		};
-	} catch (error) {
-		log.error(`Error importing server config for server ${serverDiscId}:`, error);
-		return {
-			success: false,
-			error: "commands.data.import.error_import_failed",
-		};
-	}
+    return {
+      success: true,
+      itemsImported: {
+        configFieldsCount: configFields.length,
+      },
+    };
+  } catch (error) {
+    log.error(
+      `Error importing server config for server ${serverDiscId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "commands.data.import.error_import_failed",
+    };
+  }
 }
 
 export async function importServerMemories(
-	serverDiscId: string,
-	memories: string[],
-	target:
-		| { mode: "persona"; tomoriId?: number }
-		| { mode: "global" },
+  serverDiscId: string,
+  memories: string[],
+  target: { mode: "persona"; tomoriId?: number } | { mode: "global" },
 ): Promise<ImportResult> {
-	try {
-		const serverId = await resolveServerId(serverDiscId);
-		if (!serverId) {
-			return {
-				success: false,
-				error: "commands.data.import.error_no_server_data",
-			};
-		}
+  try {
+    const serverId = await resolveServerId(serverDiscId);
+    if (!serverId) {
+      return {
+        success: false,
+        error: "commands.data.import.error_no_server_data",
+      };
+    }
 
-		for (const memory of memories) {
-			const validation = validateMemoryContent(memory);
-			if (!validation.isValid) {
-				return {
-					success: false,
-					error: `commands.data.import.error_invalid_server_memory|${validation.error}`,
-				};
-			}
-		}
+    for (const memory of memories) {
+      const validation = validateMemoryContent(memory);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          error: `commands.data.import.error_invalid_server_memory|${validation.error}`,
+        };
+      }
+    }
 
-		let insertTomoriId: number | null = null;
-		let targetPersonaLineageId: number | null = null;
+    let insertTomoriId: number | null = null;
+    let targetPersonaLineageId: number | null = null;
 
-		if (target.mode === "persona") {
-			if (target.tomoriId) {
-				const [targetPersona] = await sql<
-					Array<{
-						tomori_id: number;
-						persona_lineage_id: number | string | bigint;
-					}>
-				>`
+    if (target.mode === "persona") {
+      if (target.tomoriId) {
+        const [targetPersona] = await sql<
+          Array<{
+            tomori_id: number;
+            persona_lineage_id: number | string | bigint;
+          }>
+        >`
 					SELECT tomori_id, persona_lineage_id
 					FROM tomoris
 					WHERE server_id = ${serverId}
 					  AND tomori_id = ${target.tomoriId}
 					LIMIT 1
 				`;
-				if (!targetPersona) {
-					return {
-						success: false,
-						error: "commands.data.import.error_no_server_data",
-					};
-				}
-				insertTomoriId = targetPersona.tomori_id;
-				targetPersonaLineageId = coerceLineageId(
-					targetPersona.persona_lineage_id,
-				);
-			} else {
-				const mainScope = await resolveMainTomoriScope(serverId);
-				insertTomoriId = mainScope?.tomoriId ?? null;
-				targetPersonaLineageId = mainScope?.personaLineageId ?? null;
-			}
-		} else {
-			// Global target maps to the current main persona lineage.
-			const mainScope = await resolveMainTomoriScope(serverId);
-			targetPersonaLineageId = mainScope?.personaLineageId ?? null;
-			insertTomoriId = null;
-		}
+        if (!targetPersona) {
+          return {
+            success: false,
+            error: "commands.data.import.error_no_server_data",
+          };
+        }
+        insertTomoriId = targetPersona.tomori_id;
+        targetPersonaLineageId = coerceLineageId(
+          targetPersona.persona_lineage_id,
+        );
+      } else {
+        const mainScope = await resolveMainTomoriScope(serverId);
+        insertTomoriId = mainScope?.tomoriId ?? null;
+        targetPersonaLineageId = mainScope?.personaLineageId ?? null;
+      }
+    } else {
+      // Global target maps to the current main persona lineage.
+      const mainScope = await resolveMainTomoriScope(serverId);
+      targetPersonaLineageId = mainScope?.personaLineageId ?? null;
+      insertTomoriId = null;
+    }
 
-		if (
-			typeof targetPersonaLineageId !== "number" ||
-			!Number.isFinite(targetPersonaLineageId)
-		) {
-			return {
-				success: false,
-				error: "commands.data.import.error_no_server_data",
-			};
-		}
+    if (
+      typeof targetPersonaLineageId !== "number" ||
+      !Number.isFinite(targetPersonaLineageId)
+    ) {
+      return {
+        success: false,
+        error: "commands.data.import.error_no_server_data",
+      };
+    }
 
-		await sql`
+    await sql`
 			DELETE FROM server_memories
 			WHERE server_id = ${serverId}
 			  AND persona_lineage_id = ${targetPersonaLineageId}
 		`;
 
-		if (memories.length === 0) {
-			return {
-				success: true,
-				itemsImported: {
-					memoriesCount: 0,
-				},
-			};
-		}
+    if (memories.length === 0) {
+      return {
+        success: true,
+        itemsImported: {
+          memoriesCount: 0,
+        },
+      };
+    }
 
-		const userRows = await sql<Array<{ user_id: number }>>`
+    const userRows = await sql<Array<{ user_id: number }>>`
 			SELECT u.user_id
 			FROM users u
 			LIMIT 1
 		`;
 
-		if (!userRows.length) {
-			return {
-				success: false,
-				error: "commands.data.import.error_no_users",
-			};
-		}
+    if (!userRows.length) {
+      return {
+        success: false,
+        error: "commands.data.import.error_no_users",
+      };
+    }
 
-		const userId = userRows[0].user_id;
+    const userId = userRows[0].user_id;
 
-		for (const content of memories) {
-			await sql`
+    for (const content of memories) {
+      await sql`
 				INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content)
 				VALUES (${serverId}, ${insertTomoriId}, ${targetPersonaLineageId}, ${userId}, ${content})
 			`;
-		}
+    }
 
-		return {
-			success: true,
-			itemsImported: {
-				memoriesCount: memories.length,
-			},
-		};
-	} catch (error) {
-		log.error(`Error importing server memories for server ${serverDiscId}:`, error);
-		return {
-			success: false,
-			error: "commands.data.import.error_import_failed",
-		};
-	}
+    return {
+      success: true,
+      itemsImported: {
+        memoriesCount: memories.length,
+      },
+    };
+  } catch (error) {
+    log.error(
+      `Error importing server memories for server ${serverDiscId}:`,
+      error,
+    );
+    return {
+      success: false,
+      error: "commands.data.import.error_import_failed",
+    };
+  }
 }
 
 export async function importPersonalData(
-	userDiscId: string,
-	importData: PersonalExportData,
-	personaLineageId = 0,
+  userDiscId: string,
+  importData: PersonalExportData,
+  personaLineageId = 0,
 ): Promise<ImportResult> {
-	const settingsResult = await importPersonalSettings(userDiscId, {
-		user_nickname: importData.user_nickname,
-		language_pref: importData.language_pref,
-	});
-	if (!settingsResult.success) {
-		return settingsResult;
-	}
+  const settingsResult = await importPersonalSettings(userDiscId, {
+    user_nickname: importData.user_nickname,
+    language_pref: importData.language_pref,
+  });
+  if (!settingsResult.success) {
+    return settingsResult;
+  }
 
-	const memoriesResult = await importPersonalMemories(
-		userDiscId,
-		importData.personal_memories,
-		personaLineageId,
-	);
-	if (!memoriesResult.success) {
-		return memoriesResult;
-	}
+  const memoriesResult = await importPersonalMemories(
+    userDiscId,
+    importData.personal_memories,
+    personaLineageId,
+  );
+  if (!memoriesResult.success) {
+    return memoriesResult;
+  }
 
-	return {
-		success: true,
-		itemsImported: {
-			memoriesCount: memoriesResult.itemsImported?.memoriesCount ?? 0,
-			configFieldsCount: settingsResult.itemsImported?.configFieldsCount ?? 0,
-		},
-	};
+  return {
+    success: true,
+    itemsImported: {
+      memoriesCount: memoriesResult.itemsImported?.memoriesCount ?? 0,
+      configFieldsCount: settingsResult.itemsImported?.configFieldsCount ?? 0,
+    },
+  };
 }
 
 export async function importServerData(
-	serverDiscId: string,
-	importData: ServerExportData,
-	tomoriId?: number,
+  serverDiscId: string,
+  importData: ServerExportData,
+  tomoriId?: number,
 ): Promise<ImportResult> {
-	const configResult = await importServerConfig(serverDiscId, importData.config);
-	if (!configResult.success) {
-		return configResult;
-	}
+  const configResult = await importServerConfig(
+    serverDiscId,
+    importData.config,
+  );
+  if (!configResult.success) {
+    return configResult;
+  }
 
-	const memoriesResult = await importServerMemories(
-		serverDiscId,
-		importData.server_memories,
-		{ mode: "persona", tomoriId },
-	);
-	if (!memoriesResult.success) {
-		return memoriesResult;
-	}
+  const memoriesResult = await importServerMemories(
+    serverDiscId,
+    importData.server_memories,
+    { mode: "persona", tomoriId },
+  );
+  if (!memoriesResult.success) {
+    return memoriesResult;
+  }
 
-	return {
-		success: true,
-		itemsImported: {
-			memoriesCount: memoriesResult.itemsImported?.memoriesCount ?? 0,
-			configFieldsCount: configResult.itemsImported?.configFieldsCount ?? 0,
-		},
-	};
+  return {
+    success: true,
+    itemsImported: {
+      memoriesCount: memoriesResult.itemsImported?.memoriesCount ?? 0,
+      configFieldsCount: configResult.itemsImported?.configFieldsCount ?? 0,
+    },
+  };
 }
 
 export function validateImportFile(jsonData: unknown): ImportValidationResult {
-	if (typeof jsonData !== "object" || jsonData === null) {
-		return {
-			valid: false,
-			error: "commands.data.import.error_not_json",
-		};
-	}
+  if (typeof jsonData !== "object" || jsonData === null) {
+    return {
+      valid: false,
+      error: "commands.data.import.error_not_json",
+    };
+  }
 
-	const version = (jsonData as { version?: string }).version;
-	if (version !== EXPORT_VERSION) {
-		return {
-			valid: false,
-			error: `commands.data.import.error_incompatible_version|${EXPORT_VERSION}|${version || "unknown"}`,
-		};
-	}
+  const version = (jsonData as { version?: string }).version;
+  if (version !== EXPORT_VERSION) {
+    return {
+      valid: false,
+      error: `commands.data.import.error_incompatible_version|${EXPORT_VERSION}|${version || "unknown"}`,
+    };
+  }
 
-	const type = (jsonData as { type?: string }).type;
+  const type = (jsonData as { type?: string }).type;
 
-	if (type === "personal_memories") {
-		const validated = personalMemoriesExportSchema.safeParse(jsonData);
-		if (!validated.success) {
-			log.error("Personal memories import validation failed:", validated.error);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_personal_memories_format",
-			};
-		}
-		return { valid: true, type, data: validated.data.data };
-	}
+  if (type === "personal_memories") {
+    const validated = personalMemoriesExportSchema.safeParse(jsonData);
+    if (!validated.success) {
+      log.error("Personal memories import validation failed:", validated.error);
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_personal_memories_format",
+      };
+    }
+    return { valid: true, type, data: validated.data.data };
+  }
 
-	if (type === "global_personal_memories") {
-		const validated = globalPersonalMemoriesExportSchema.safeParse(jsonData);
-		if (!validated.success) {
-			log.error(
-				"Global personal memories import validation failed:",
-				validated.error,
-			);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_personal_memories_format",
-			};
-		}
-		return { valid: true, type, data: validated.data.data };
-	}
+  if (type === "global_personal_memories") {
+    const validated = globalPersonalMemoriesExportSchema.safeParse(jsonData);
+    if (!validated.success) {
+      log.error(
+        "Global personal memories import validation failed:",
+        validated.error,
+      );
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_personal_memories_format",
+      };
+    }
+    return { valid: true, type, data: validated.data.data };
+  }
 
-	if (type === "server_memories") {
-		const validated = serverMemoriesExportSchema.safeParse(jsonData);
-		if (!validated.success) {
-			log.error("Server memories import validation failed:", validated.error);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_server_memories_format",
-			};
-		}
-		return { valid: true, type, data: validated.data.data };
-	}
+  if (type === "server_memories") {
+    const validated = serverMemoriesExportSchema.safeParse(jsonData);
+    if (!validated.success) {
+      log.error("Server memories import validation failed:", validated.error);
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_server_memories_format",
+      };
+    }
+    return { valid: true, type, data: validated.data.data };
+  }
 
-	if (type === "personal_settings") {
-		const validated = personalSettingsExportSchema.safeParse(jsonData);
-		if (!validated.success) {
-			log.error("Personal settings import validation failed:", validated.error);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_personal_settings_format",
-			};
-		}
-		return { valid: true, type, data: validated.data.data };
-	}
+  if (type === "personal_settings") {
+    const validated = personalSettingsExportSchema.safeParse(jsonData);
+    if (!validated.success) {
+      log.error("Personal settings import validation failed:", validated.error);
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_personal_settings_format",
+      };
+    }
+    return { valid: true, type, data: validated.data.data };
+  }
 
-	if (type === "server_config") {
-		const validated = serverConfigOnlyExportSchema.safeParse(jsonData);
-		if (!validated.success) {
-			log.error("Server config import validation failed:", validated.error);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_server_config_format",
-			};
-		}
-		return { valid: true, type, data: validated.data.data };
-	}
+  if (type === "server_config") {
+    const validated = serverConfigOnlyExportSchema.safeParse(jsonData);
+    if (!validated.success) {
+      log.error("Server config import validation failed:", validated.error);
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_server_config_format",
+      };
+    }
+    return { valid: true, type, data: validated.data.data };
+  }
 
-	if (type === "personal") {
-		const validated = getPersonalExportSchema().safeParse(jsonData);
-		if (!validated.success) {
-			log.error("Personal import validation failed:", validated.error);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_personal_format",
-			};
-		}
-		return {
-			valid: true,
-			type: "personal",
-			data: validated.data.data,
-		};
-	}
+  if (type === "personal") {
+    const validated = getPersonalExportSchema().safeParse(jsonData);
+    if (!validated.success) {
+      log.error("Personal import validation failed:", validated.error);
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_personal_format",
+      };
+    }
+    return {
+      valid: true,
+      type: "personal",
+      data: validated.data.data,
+    };
+  }
 
-	if (type === "server") {
-		const validated = getServerExportSchema().safeParse(jsonData);
-		if (!validated.success) {
-			log.error("Server import validation failed:", validated.error);
-			return {
-				valid: false,
-				error: "commands.data.import.error_invalid_server_format",
-			};
-		}
-		return {
-			valid: true,
-			type: "server",
-			data: validated.data.data,
-		};
-	}
+  if (type === "server") {
+    const validated = getServerExportSchema().safeParse(jsonData);
+    if (!validated.success) {
+      log.error("Server import validation failed:", validated.error);
+      return {
+        valid: false,
+        error: "commands.data.import.error_invalid_server_format",
+      };
+    }
+    return {
+      valid: true,
+      type: "server",
+      data: validated.data.data,
+    };
+  }
 
-	return {
-		valid: false,
-		error: `commands.data.import.error_unknown_type|${type}`,
-	};
+  return {
+    valid: false,
+    error: `commands.data.import.error_unknown_type|${type}`,
+  };
 }

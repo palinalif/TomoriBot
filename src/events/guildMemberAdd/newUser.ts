@@ -10,28 +10,28 @@ import { log } from "../../utils/misc/logger";
  * @returns Promise<void>
  */
 const handler = async (_client: Client, member: GuildMember): Promise<void> => {
-	try {
-		// 1. Determine the server and user's preferred language
-		const userLanguage = member.guild.preferredLocale;
-		log.info(
-			`New user ${member.user.tag} joined server, registering with language: ${userLanguage}`,
-		);
+  try {
+    // 1. Determine the server and user's preferred language
+    const userLanguage = member.guild.preferredLocale;
+    log.info(
+      `New user ${member.user.tag} joined server, registering with language: ${userLanguage}`,
+    );
 
-		// 2. Register user using our centralized function (Rule #17)
-		const userData = await registerUser(
-			member.id,
-			member.user.username,
-			userLanguage,
-		);
+    // 2. Register user using our centralized function (Rule #17)
+    const userData = await registerUser(
+      member.id,
+      member.user.username,
+      userLanguage,
+    );
 
-		if (userData) {
-			log.success(`User ${member.user.tag} registered successfully`);
-		} else {
-			log.error(`Failed to register user ${member.user.tag}`);
-		}
-	} catch (error) {
-		log.error(`Error in guildMemberAdd handler for ${member.user.tag}:`, error);
-	}
+    if (userData) {
+      log.success(`User ${member.user.tag} registered successfully`);
+    } else {
+      log.error(`Failed to register user ${member.user.tag}`);
+    }
+  } catch (error) {
+    log.error(`Error in guildMemberAdd handler for ${member.user.tag}:`, error);
+  }
 };
 
 export default handler;

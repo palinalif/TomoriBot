@@ -18,12 +18,12 @@ import { log } from "../misc/logger";
  * Configuration for emoji penalty thresholds
  */
 interface EmojiPenaltyConfig {
-	/** Whether the emoji penalty system is enabled */
-	readonly enabled: boolean;
-	/** Number of recent bot messages to analyze */
-	readonly lookbackCount: number;
-	/** Maximum total emojis allowed across the lookback window */
-	readonly maxEmojis: number;
+  /** Whether the emoji penalty system is enabled */
+  readonly enabled: boolean;
+  /** Number of recent bot messages to analyze */
+  readonly lookbackCount: number;
+  /** Maximum total emojis allowed across the lookback window */
+  readonly maxEmojis: number;
 }
 
 /**
@@ -31,26 +31,26 @@ interface EmojiPenaltyConfig {
  * @returns Configuration object with enabled status and thresholds
  */
 function loadEmojiPenaltyConfig(): EmojiPenaltyConfig {
-	// 1. Check if feature is enabled (default: true)
-	const enabled = process.env.EMOJI_PENALTY_ENABLED !== "false";
+  // 1. Check if feature is enabled (default: true)
+  const enabled = process.env.EMOJI_PENALTY_ENABLED !== "false";
 
-	// 2. Load lookback count (default: 3 messages)
-	const lookbackCount = Number.parseInt(
-		process.env.EMOJI_PENALTY_LOOKBACK || "3",
-		10,
-	);
+  // 2. Load lookback count (default: 3 messages)
+  const lookbackCount = Number.parseInt(
+    process.env.EMOJI_PENALTY_LOOKBACK || "3",
+    10,
+  );
 
-	// 3. Load max emoji threshold (default: 1, meaning 2+ triggers penalty)
-	const maxEmojis = Number.parseInt(
-		process.env.EMOJI_PENALTY_THRESHOLD || "1",
-		10,
-	);
+  // 3. Load max emoji threshold (default: 1, meaning 2+ triggers penalty)
+  const maxEmojis = Number.parseInt(
+    process.env.EMOJI_PENALTY_THRESHOLD || "1",
+    10,
+  );
 
-	return {
-		enabled,
-		lookbackCount: Number.isNaN(lookbackCount) ? 2 : lookbackCount,
-		maxEmojis: Number.isNaN(maxEmojis) ? 1 : maxEmojis,
-	};
+  return {
+    enabled,
+    lookbackCount: Number.isNaN(lookbackCount) ? 2 : lookbackCount,
+    maxEmojis: Number.isNaN(maxEmojis) ? 1 : maxEmojis,
+  };
 }
 
 /**
@@ -59,11 +59,11 @@ function loadEmojiPenaltyConfig(): EmojiPenaltyConfig {
  * @returns Concatenated text from all text parts
  */
 function extractTextFromContextItem(item: StructuredContextItem): string {
-	// 1. Filter for text parts only
-	const textParts = item.parts.filter((part) => part.type === "text");
+  // 1. Filter for text parts only
+  const textParts = item.parts.filter((part) => part.type === "text");
 
-	// 2. Concatenate all text content
-	return textParts.map((part) => part.text).join(" ");
+  // 2. Concatenate all text content
+  return textParts.map((part) => part.text).join(" ");
 }
 
 /**
@@ -73,70 +73,70 @@ function extractTextFromContextItem(item: StructuredContextItem): string {
  * @returns True if emoji usage exceeds threshold, false otherwise
  */
 export function shouldApplyEmojiPenalty(
-	contextItems: StructuredContextItem[],
-	config?: EmojiPenaltyConfig,
+  contextItems: StructuredContextItem[],
+  config?: EmojiPenaltyConfig,
 ): boolean {
-	// 1. Load config from environment if not provided
-	const penaltyConfig = config ?? loadEmojiPenaltyConfig();
+  // 1. Load config from environment if not provided
+  const penaltyConfig = config ?? loadEmojiPenaltyConfig();
 
-	// 2. Early return if feature is disabled
-	if (!penaltyConfig.enabled) {
-		return false;
-	}
-	// 3. Filter for bot messages in dialogue history (role: "model")
-	//    We only care about actual dialogue, not system prompts or sample dialogues
-	const botMessages = contextItems.filter(
-		(item) =>
-			item.role === "model" &&
-			item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
-	);
+  // 2. Early return if feature is disabled
+  if (!penaltyConfig.enabled) {
+    return false;
+  }
+  // 3. Filter for bot messages in dialogue history (role: "model")
+  //    We only care about actual dialogue, not system prompts or sample dialogues
+  const botMessages = contextItems.filter(
+    (item) =>
+      item.role === "model" &&
+      item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
+  );
 
-	log.info(
-		`[Emoji Penalty] Found ${botMessages.length} bot messages in dialogue history`,
-	);
+  log.info(
+    `[Emoji Penalty] Found ${botMessages.length} bot messages in dialogue history`,
+  );
 
-	// 4. If no bot messages exist at all, no penalty needed
-	if (botMessages.length === 0) {
-		log.info("[Emoji Penalty] No bot messages found, skipping penalty");
-		return false;
-	}
+  // 4. If no bot messages exist at all, no penalty needed
+  if (botMessages.length === 0) {
+    log.info("[Emoji Penalty] No bot messages found, skipping penalty");
+    return false;
+  }
 
-	// 5. Get the last N bot messages (or all available if fewer than lookback)
-	const messagesToCheck = Math.min(
-		botMessages.length,
-		penaltyConfig.lookbackCount,
-	);
-	const recentBotMessages = botMessages.slice(-messagesToCheck);
+  // 5. Get the last N bot messages (or all available if fewer than lookback)
+  const messagesToCheck = Math.min(
+    botMessages.length,
+    penaltyConfig.lookbackCount,
+  );
+  const recentBotMessages = botMessages.slice(-messagesToCheck);
 
-	log.info(
-		`[Emoji Penalty] Checking last ${messagesToCheck} message(s) (lookback config: ${penaltyConfig.lookbackCount})`,
-	);
+  log.info(
+    `[Emoji Penalty] Checking last ${messagesToCheck} message(s) (lookback config: ${penaltyConfig.lookbackCount})`,
+  );
 
-	// 6. Count total CUSTOM emojis across recent messages (ignore Unicode emojis)
-	let totalCustomEmojis = 0;
-	const emojiCounts: string[] = [];
-	for (const message of recentBotMessages) {
-		const text = extractTextFromContextItem(message);
-		const customEmojis = extractCustomEmojis(text);
-		const count = customEmojis.length;
-		totalCustomEmojis += count;
-		emojiCounts.push(
-			`"${text.substring(0, 50)}..." = ${count} custom emoji(s)${count > 0 ? `: ${customEmojis.join(", ")}` : ""}`,
-		);
-	}
+  // 6. Count total CUSTOM emojis across recent messages (ignore Unicode emojis)
+  let totalCustomEmojis = 0;
+  const emojiCounts: string[] = [];
+  for (const message of recentBotMessages) {
+    const text = extractTextFromContextItem(message);
+    const customEmojis = extractCustomEmojis(text);
+    const count = customEmojis.length;
+    totalCustomEmojis += count;
+    emojiCounts.push(
+      `"${text.substring(0, 50)}..." = ${count} custom emoji(s)${count > 0 ? `: ${customEmojis.join(", ")}` : ""}`,
+    );
+  }
 
-	log.info(`[Emoji Penalty] Analyzed messages:\n${emojiCounts.join("\n")}`);
-	log.info(
-		`[Emoji Penalty] Total: ${totalCustomEmojis} custom emojis (threshold: ${penaltyConfig.maxEmojis})`,
-	);
+  log.info(`[Emoji Penalty] Analyzed messages:\n${emojiCounts.join("\n")}`);
+  log.info(
+    `[Emoji Penalty] Total: ${totalCustomEmojis} custom emojis (threshold: ${penaltyConfig.maxEmojis})`,
+  );
 
-	// 7. Check if threshold exceeded
-	const shouldTrigger = totalCustomEmojis > penaltyConfig.maxEmojis;
-	log.info(
-		`[Emoji Penalty] ${shouldTrigger ? "TRIGGERING" : "NOT triggering"} penalty (custom emojis only)`,
-	);
+  // 7. Check if threshold exceeded
+  const shouldTrigger = totalCustomEmojis > penaltyConfig.maxEmojis;
+  log.info(
+    `[Emoji Penalty] ${shouldTrigger ? "TRIGGERING" : "NOT triggering"} penalty (custom emojis only)`,
+  );
 
-	return shouldTrigger;
+  return shouldTrigger;
 }
 
 /**
@@ -146,37 +146,37 @@ export function shouldApplyEmojiPenalty(
  * @returns A StructuredContextItem to append to context
  */
 function buildEmojiPenaltyText(botName: string): string {
-	return `${botName} has been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.`;
+  return `${botName} has been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.`;
 }
 
 export function generateEmojiPenaltyMessage(
-	botName: string,
+  botName: string,
 ): StructuredContextItem {
-	// Create a natural-sounding reminder message
-	// It appears as a user message to be close to generation point
-	const penaltyText = `[System: ${buildEmojiPenaltyText(botName)}]`;
+  // Create a natural-sounding reminder message
+  // It appears as a user message to be close to generation point
+  const penaltyText = `[System: ${buildEmojiPenaltyText(botName)}]`;
 
-	return {
-		role: "user",
-		parts: [
-			{
-				type: "text",
-				text: penaltyText,
-			},
-		],
-		metadataTag: ContextItemTag.DIALOGUE_HISTORY, // Tag as dialogue to keep it close to generation
-	};
+  return {
+    role: "user",
+    parts: [
+      {
+        type: "text",
+        text: penaltyText,
+      },
+    ],
+    metadataTag: ContextItemTag.DIALOGUE_HISTORY, // Tag as dialogue to keep it close to generation
+  };
 }
 
 export function getEmojiPenaltyDirective(
-	contextItems: StructuredContextItem[],
-	botName: string,
+  contextItems: StructuredContextItem[],
+  botName: string,
 ): string | null {
-	if (!shouldApplyEmojiPenalty(contextItems)) {
-		return null;
-	}
+  if (!shouldApplyEmojiPenalty(contextItems)) {
+    return null;
+  }
 
-	return buildEmojiPenaltyText(botName);
+  return buildEmojiPenaltyText(botName);
 }
 
 /**
@@ -187,29 +187,29 @@ export function getEmojiPenaltyDirective(
  * @returns Modified context array with penalty message if threshold exceeded, otherwise unchanged
  */
 export function applyEmojiPenaltyIfNeeded(
-	contextItems: StructuredContextItem[],
-	botName: string,
+  contextItems: StructuredContextItem[],
+  botName: string,
 ): StructuredContextItem[] {
-	// 1. Check if penalty should be applied
-	if (!shouldApplyEmojiPenalty(contextItems)) {
-		return contextItems;
-	}
+  // 1. Check if penalty should be applied
+  if (!shouldApplyEmojiPenalty(contextItems)) {
+    return contextItems;
+  }
 
-	// 2. Generate and append penalty message
-	const penaltyMessage = generateEmojiPenaltyMessage(botName);
+  // 2. Generate and append penalty message
+  const penaltyMessage = generateEmojiPenaltyMessage(botName);
 
-	// 3. Return new array with penalty message appended
-	return [...contextItems, penaltyMessage];
+  // 3. Return new array with penalty message appended
+  return [...contextItems, penaltyMessage];
 }
 
 /**
  * Configuration for unique emoji enforcement
  */
 interface UniqueEmojiConfig {
-	/** Whether unique emoji enforcement is enabled */
-	readonly enabled: boolean;
-	/** Number of recent bot messages to track for unique emojis */
-	readonly lookbackCount: number;
+  /** Whether unique emoji enforcement is enabled */
+  readonly enabled: boolean;
+  /** Number of recent bot messages to track for unique emojis */
+  readonly lookbackCount: number;
 }
 
 /**
@@ -217,19 +217,19 @@ interface UniqueEmojiConfig {
  * @returns Configuration object with enabled status and lookback count
  */
 function loadUniqueEmojiConfig(): UniqueEmojiConfig {
-	// 1. Check if feature is enabled (default: true)
-	const enabled = process.env.EMOJI_UNIQUE_ENABLED !== "false";
+  // 1. Check if feature is enabled (default: true)
+  const enabled = process.env.EMOJI_UNIQUE_ENABLED !== "false";
 
-	// 2. Load lookback count (default: 5 messages)
-	const lookbackCount = Number.parseInt(
-		process.env.EMOJI_UNIQUE_LOOKBACK || "5",
-		10,
-	);
+  // 2. Load lookback count (default: 5 messages)
+  const lookbackCount = Number.parseInt(
+    process.env.EMOJI_UNIQUE_LOOKBACK || "5",
+    10,
+  );
 
-	return {
-		enabled,
-		lookbackCount: Number.isNaN(lookbackCount) ? 5 : lookbackCount,
-	};
+  return {
+    enabled,
+    lookbackCount: Number.isNaN(lookbackCount) ? 5 : lookbackCount,
+  };
 }
 
 /**
@@ -239,51 +239,51 @@ function loadUniqueEmojiConfig(): UniqueEmojiConfig {
  * @returns Set of custom emoji strings used in recent messages (e.g., ":tomori:", ":pepehands:")
  */
 export function getRecentlyUsedCustomEmojis(
-	contextItems: StructuredContextItem[],
-	config?: UniqueEmojiConfig,
+  contextItems: StructuredContextItem[],
+  config?: UniqueEmojiConfig,
 ): Set<string> {
-	// 1. Load config from environment if not provided
-	const uniqueConfig = config ?? loadUniqueEmojiConfig();
+  // 1. Load config from environment if not provided
+  const uniqueConfig = config ?? loadUniqueEmojiConfig();
 
-	// 2. Early return if feature is disabled
-	if (!uniqueConfig.enabled) {
-		return new Set();
-	}
+  // 2. Early return if feature is disabled
+  if (!uniqueConfig.enabled) {
+    return new Set();
+  }
 
-	// 3. Filter for bot messages in dialogue history
-	const botMessages = contextItems.filter(
-		(item) =>
-			item.role === "model" &&
-			item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
-	);
+  // 3. Filter for bot messages in dialogue history
+  const botMessages = contextItems.filter(
+    (item) =>
+      item.role === "model" &&
+      item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
+  );
 
-	// 4. If no bot messages exist, return empty set
-	if (botMessages.length === 0) {
-		return new Set();
-	}
+  // 4. If no bot messages exist, return empty set
+  if (botMessages.length === 0) {
+    return new Set();
+  }
 
-	// 5. Get the last N bot messages (or all available if fewer)
-	const messagesToCheck = Math.min(
-		botMessages.length,
-		uniqueConfig.lookbackCount,
-	);
-	const recentBotMessages = botMessages.slice(-messagesToCheck);
+  // 5. Get the last N bot messages (or all available if fewer)
+  const messagesToCheck = Math.min(
+    botMessages.length,
+    uniqueConfig.lookbackCount,
+  );
+  const recentBotMessages = botMessages.slice(-messagesToCheck);
 
-	// 6. Extract all custom emojis from recent messages
-	const usedEmojis = new Set<string>();
-	for (const message of recentBotMessages) {
-		const text = extractTextFromContextItem(message);
-		const customEmojis = extractCustomEmojis(text);
-		for (const emoji of customEmojis) {
-			usedEmojis.add(emoji.toLowerCase()); // Store lowercase for case-insensitive matching
-		}
-	}
+  // 6. Extract all custom emojis from recent messages
+  const usedEmojis = new Set<string>();
+  for (const message of recentBotMessages) {
+    const text = extractTextFromContextItem(message);
+    const customEmojis = extractCustomEmojis(text);
+    for (const emoji of customEmojis) {
+      usedEmojis.add(emoji.toLowerCase()); // Store lowercase for case-insensitive matching
+    }
+  }
 
-	log.info(
-		`[Unique Emoji] Found ${usedEmojis.size} unique custom emoji(s) in last ${messagesToCheck} message(s): ${Array.from(usedEmojis).join(", ") || "(none)"}`,
-	);
+  log.info(
+    `[Unique Emoji] Found ${usedEmojis.size} unique custom emoji(s) in last ${messagesToCheck} message(s): ${Array.from(usedEmojis).join(", ") || "(none)"}`,
+  );
 
-	return usedEmojis;
+  return usedEmojis;
 }
 
 /**
@@ -294,58 +294,58 @@ export function getRecentlyUsedCustomEmojis(
  * @returns Filtered text with duplicate custom emojis removed
  */
 export function filterDuplicateCustomEmojis(
-	generatedText: string,
-	contextItems: StructuredContextItem[],
+  generatedText: string,
+  contextItems: StructuredContextItem[],
 ): string {
-	// 1. Get recently used custom emojis
-	const recentlyUsed = getRecentlyUsedCustomEmojis(contextItems);
+  // 1. Get recently used custom emojis
+  const recentlyUsed = getRecentlyUsedCustomEmojis(contextItems);
 
-	// 2. If no emojis to filter, return original text
-	if (recentlyUsed.size === 0) {
-		return generatedText;
-	}
+  // 2. If no emojis to filter, return original text
+  if (recentlyUsed.size === 0) {
+    return generatedText;
+  }
 
-	// 3. Extract custom emojis from generated text
-	const emojisInGenerated = extractCustomEmojis(generatedText);
+  // 3. Extract custom emojis from generated text
+  const emojisInGenerated = extractCustomEmojis(generatedText);
 
-	// 4. Find which emojis need to be filtered (case-insensitive)
-	const emojisToRemove = new Set<string>();
-	for (const emoji of emojisInGenerated) {
-		if (recentlyUsed.has(emoji.toLowerCase())) {
-			emojisToRemove.add(emoji);
-		}
-	}
+  // 4. Find which emojis need to be filtered (case-insensitive)
+  const emojisToRemove = new Set<string>();
+  for (const emoji of emojisInGenerated) {
+    if (recentlyUsed.has(emoji.toLowerCase())) {
+      emojisToRemove.add(emoji);
+    }
+  }
 
-	// 5. If no duplicates found, return original text
-	if (emojisToRemove.size === 0) {
-		log.info(
-			"[Unique Emoji] No duplicate custom emojis found in generated text",
-		);
-		return generatedText;
-	}
+  // 5. If no duplicates found, return original text
+  if (emojisToRemove.size === 0) {
+    log.info(
+      "[Unique Emoji] No duplicate custom emojis found in generated text",
+    );
+    return generatedText;
+  }
 
-	// 6. Filter duplicates and log
-	const filtered = filterCustomEmojis(generatedText, emojisToRemove);
+  // 6. Filter duplicates and log
+  const filtered = filterCustomEmojis(generatedText, emojisToRemove);
 
-	// 6.5 If filtering collapses output to punctuation/whitespace only (or empty),
-	// keep the original text to avoid unnatural messages like a lone "," or "."
-	// and to avoid dropping emoji-only lines entirely.
-	const compactFiltered = filtered.replace(/\s+/g, "");
-	if (
-		compactFiltered.length === 0 ||
-		/^[.,!?;:。！？、，]+$/.test(compactFiltered)
-	) {
-		log.info(
-			"[Unique Emoji] Skipping duplicate filter because result became punctuation/whitespace-only",
-		);
-		return generatedText;
-	}
+  // 6.5 If filtering collapses output to punctuation/whitespace only (or empty),
+  // keep the original text to avoid unnatural messages like a lone "," or "."
+  // and to avoid dropping emoji-only lines entirely.
+  const compactFiltered = filtered.replace(/\s+/g, "");
+  if (
+    compactFiltered.length === 0 ||
+    /^[.,!?;:。！？、，]+$/.test(compactFiltered)
+  ) {
+    log.info(
+      "[Unique Emoji] Skipping duplicate filter because result became punctuation/whitespace-only",
+    );
+    return generatedText;
+  }
 
-	log.info(
-		`[Unique Emoji] Filtered ${emojisToRemove.size} duplicate custom emoji(s): ${Array.from(emojisToRemove).join(", ")}`,
-	);
-	log.info(`[Unique Emoji] Original: "${generatedText}"`);
-	log.info(`[Unique Emoji] Filtered: "${filtered}"`);
+  log.info(
+    `[Unique Emoji] Filtered ${emojisToRemove.size} duplicate custom emoji(s): ${Array.from(emojisToRemove).join(", ")}`,
+  );
+  log.info(`[Unique Emoji] Original: "${generatedText}"`);
+  log.info(`[Unique Emoji] Filtered: "${filtered}"`);
 
-	return filtered;
+  return filtered;
 }

@@ -8,20 +8,20 @@
  */
 
 import {
-	ChannelType,
-	MessageFlags,
-	PermissionFlagsBits,
-	type ChatInputCommandInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+  ChannelType,
+  MessageFlags,
+  PermissionFlagsBits,
+  type ChatInputCommandInteraction,
+  type Client,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import {
-	isMatrixConfigured,
-	joinMatrixRoom,
-	isRoomEncrypted,
-	invalidateMatrixLinkCache,
+  isMatrixConfigured,
+  joinMatrixRoom,
+  isRoomEncrypted,
+  invalidateMatrixLinkCache,
 } from "@/utils/matrix";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
@@ -32,30 +32,30 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
  * Configure the /server matrix link subcommand builder.
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("link")
-		.setDescription(
-			localizer("en-US", "commands.server.matrix.link.description"),
-		)
-		.addChannelOption((option) =>
-			option
-				.setName("channel")
-				.setDescription(
-					localizer("en-US", "commands.server.matrix.link.channel_description"),
-				)
-				.addChannelTypes(ChannelType.GuildText)
-				.setRequired(true),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("room")
-				.setDescription(
-					localizer("en-US", "commands.server.matrix.link.room_description"),
-				)
-				.setRequired(true),
-		);
+  subcommand
+    .setName("link")
+    .setDescription(
+      localizer("en-US", "commands.server.matrix.link.description"),
+    )
+    .addChannelOption((option) =>
+      option
+        .setName("channel")
+        .setDescription(
+          localizer("en-US", "commands.server.matrix.link.channel_description"),
+        )
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("room")
+        .setDescription(
+          localizer("en-US", "commands.server.matrix.link.room_description"),
+        )
+        .setRequired(true),
+    );
 
 /**
  * Execute the /server matrix link command.
@@ -67,164 +67,166 @@ export const configureSubcommand = (
  * @param locale      - User's preferred locale
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	user: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  user: UserRow,
+  locale: string,
 ): Promise<void> {
-	const errorContext: ErrorContext = {
-		userId:   user.user_id,
-		serverId: null,
-		tomoriId: null,
-	};
+  const errorContext: ErrorContext = {
+    userId: user.user_id,
+    serverId: null,
+    tomoriId: null,
+  };
 
-	try {
-		// 1. Validate guild context
-		if (!interaction.guild || !interaction.guildId) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.ERROR,
-				titleKey:       "general.errors.guild_only_title",
-				descriptionKey: "general.errors.guild_only_description",
-			});
-			return;
-		}
+  try {
+    // 1. Validate guild context
+    if (!interaction.guild || !interaction.guildId) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "general.errors.guild_only_title",
+        descriptionKey: "general.errors.guild_only_description",
+      });
+      return;
+    }
 
-		// 2. Validate ManageGuild permission
-		if (
-			!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
-		) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.ERROR,
-				titleKey:       "general.errors.permission_denied_title",
-				descriptionKey: "general.errors.permission_denied_description",
-			});
-			return;
-		}
+    // 2. Validate ManageGuild permission
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "general.errors.permission_denied_title",
+        descriptionKey: "general.errors.permission_denied_description",
+      });
+      return;
+    }
 
-		// 3. Defer before async work (Pattern 2)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    // 3. Defer before async work (Pattern 2)
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 4. Check Matrix bridge is configured
-		if (!isMatrixConfigured()) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.ERROR,
-				titleKey:       "commands.server.matrix.link.matrix_not_configured_title",
-				descriptionKey: "commands.server.matrix.link.matrix_not_configured_description",
-			});
-			return;
-		}
+    // 4. Check Matrix bridge is configured
+    if (!isMatrixConfigured()) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "commands.server.matrix.link.matrix_not_configured_title",
+        descriptionKey:
+          "commands.server.matrix.link.matrix_not_configured_description",
+      });
+      return;
+    }
 
-		// 5. Load Tomori state (bot must be set up)
-		const tomoriState = await getCachedTomoriState(interaction.guildId);
-		if (!tomoriState) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.ERROR,
-				titleKey:       "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-			});
-			return;
-		}
+    // 5. Load Tomori state (bot must be set up)
+    const tomoriState = await getCachedTomoriState(interaction.guildId);
+    if (!tomoriState) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+      });
+      return;
+    }
 
-		errorContext.serverId = tomoriState.server_id;
-		errorContext.tomoriId = tomoriState.tomori_id;
+    errorContext.serverId = tomoriState.server_id;
+    errorContext.tomoriId = tomoriState.tomori_id;
 
-		// 6. Get command options
-		const channel  = interaction.options.getChannel("channel", true);
-		const roomId   = interaction.options.getString("room", true).trim();
+    // 6. Get command options
+    const channel = interaction.options.getChannel("channel", true);
+    const roomId = interaction.options.getString("room", true).trim();
 
-		// 7. Validate Matrix room ID format: must start with "!" and contain ":"
-		if (!roomId.startsWith("!") || !roomId.includes(":")) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.ERROR,
-				titleKey:       "commands.server.matrix.link.invalid_room_title",
-				descriptionKey: "commands.server.matrix.link.invalid_room_description",
-			});
-			return;
-		}
+    // 7. Validate Matrix room ID format: must start with "!" and contain ":"
+    if (!roomId.startsWith("!") || !roomId.includes(":")) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "commands.server.matrix.link.invalid_room_title",
+        descriptionKey: "commands.server.matrix.link.invalid_room_description",
+      });
+      return;
+    }
 
-		// 8. Reject encrypted rooms — Matrix encryption is permanent and cannot be
-		//    disabled, so bridging would never work for this room.
-		if (await isRoomEncrypted(roomId)) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.ERROR,
-				titleKey:       "commands.server.matrix.link.encrypted_room_title",
-				descriptionKey: "commands.server.matrix.link.encrypted_room_description",
-				descriptionVars: {
-					room_id:     roomId,
-					bot_user_id: process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account",
-				},
-			});
-			return;
-		}
+    // 8. Reject encrypted rooms — Matrix encryption is permanent and cannot be
+    //    disabled, so bridging would never work for this room.
+    if (await isRoomEncrypted(roomId)) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "commands.server.matrix.link.encrypted_room_title",
+        descriptionKey:
+          "commands.server.matrix.link.encrypted_room_description",
+        descriptionVars: {
+          room_id: roomId,
+          bot_user_id:
+            process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account",
+        },
+      });
+      return;
+    }
 
-		// 10. Fetch previous room ID for this channel (to invalidate old cache entry)
-		const [existingLink] = await sql<{ matrix_room_id: string }[]>`
+    // 10. Fetch previous room ID for this channel (to invalidate old cache entry)
+    const [existingLink] = await sql<{ matrix_room_id: string }[]>`
 			SELECT matrix_room_id
 			FROM matrix_channel_links
 			WHERE channel_disc_id = ${channel.id}
 			LIMIT 1
 		`;
-		const oldRoomId = existingLink?.matrix_room_id;
+    const oldRoomId = existingLink?.matrix_room_id;
 
-		// 11. Upsert: insert or replace existing link for this channel
-		await sql`
+    // 11. Upsert: insert or replace existing link for this channel
+    await sql`
 			INSERT INTO matrix_channel_links (server_id, channel_disc_id, matrix_room_id)
 			VALUES (${tomoriState.server_id}, ${channel.id}, ${roomId})
 			ON CONFLICT (channel_disc_id) DO UPDATE
 				SET matrix_room_id = EXCLUDED.matrix_room_id
 		`;
 
-		// 12. Invalidate cache entries for both old and new room IDs
-		invalidateMatrixLinkCache(channel.id, oldRoomId);
-		invalidateMatrixLinkCache(channel.id, roomId);
+    // 12. Invalidate cache entries for both old and new room IDs
+    invalidateMatrixLinkCache(channel.id, oldRoomId);
+    invalidateMatrixLinkCache(channel.id, roomId);
 
-		// 13. Attempt to join the Matrix room as the bot account (non-critical)
-		let joinFailed = false;
-		try {
-			await joinMatrixRoom(roomId);
-		} catch (joinError) {
-			log.warn(
-				`Matrix link: could not auto-join room ${roomId} — user must invite the bot`,
-				joinError,
-			);
-			joinFailed = true;
-		}
+    // 13. Attempt to join the Matrix room as the bot account (non-critical)
+    let joinFailed = false;
+    try {
+      await joinMatrixRoom(roomId);
+    } catch (joinError) {
+      log.warn(
+        `Matrix link: could not auto-join room ${roomId} — user must invite the bot`,
+        joinError,
+      );
+      joinFailed = true;
+    }
 
-		// 14. Reply success (with note if join failed)
-		const botUserId = process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
+    // 14. Reply success (with note if join failed)
+    const botUserId =
+      process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
 
-		if (joinFailed) {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.WARN,
-				titleKey:       "commands.server.matrix.link.success_title",
-				descriptionKey: "commands.server.matrix.link.join_failed_description",
-				descriptionVars: {
-					channel_id:  channel.id,
-					room_id:     roomId,
-					bot_user_id: botUserId,
-				},
-			});
-		} else {
-			await replyInfoEmbed(interaction, locale, {
-				color:          ColorCode.SUCCESS,
-				titleKey:       "commands.server.matrix.link.success_title",
-				descriptionKey: "commands.server.matrix.link.success_description",
-				descriptionVars: {
-					channel_id: channel.id,
-					room_id:    roomId,
-				},
-			});
-		}
+    if (joinFailed) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.WARN,
+        titleKey: "commands.server.matrix.link.success_title",
+        descriptionKey: "commands.server.matrix.link.join_failed_description",
+        descriptionVars: {
+          channel_id: channel.id,
+          room_id: roomId,
+          bot_user_id: botUserId,
+        },
+      });
+    } else {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.SUCCESS,
+        titleKey: "commands.server.matrix.link.success_title",
+        descriptionKey: "commands.server.matrix.link.success_description",
+        descriptionVars: {
+          channel_id: channel.id,
+          room_id: roomId,
+        },
+      });
+    }
 
-		log.info(
-			`Matrix bridge: linked channel ${channel.id} (${channel.name}) to room ${roomId} in guild ${interaction.guildId}`,
-		);
-	} catch (error) {
-		log.error("Error executing /server matrix link", error, errorContext);
-		await replyInfoEmbed(interaction, locale, {
-			color:          ColorCode.ERROR,
-			titleKey:       "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-		});
-	}
+    log.info(
+      `Matrix bridge: linked channel ${channel.id} (${channel.name}) to room ${roomId} in guild ${interaction.guildId}`,
+    );
+  } catch (error) {
+    log.error("Error executing /server matrix link", error, errorContext);
+    await replyInfoEmbed(interaction, locale, {
+      color: ColorCode.ERROR,
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+    });
+  }
 }

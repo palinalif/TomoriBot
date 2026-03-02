@@ -35,19 +35,19 @@ const SUBSCRIPTION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
  * env vars for fine-grained control.
  */
 const KAYRA_CONTEXT_LIMIT_BY_TIER: Readonly<Record<number, number>> = {
-	0: 1_024, // Free Trial
-	1: 4_096, // Tablet
-	2: 8_192, // Scroll
-	3: 8_192, // Opus (same ceiling for Kayra; Opus perks are Anlas/priority/max_length)
+  0: 1_024, // Free Trial
+  1: 4_096, // Tablet
+  2: 8_192, // Scroll
+  3: 8_192, // Opus (same ceiling for Kayra; Opus perks are Anlas/priority/max_length)
 };
 
 interface CachedSubscriptionEntry {
-	/** Resolved context token limit for Kayra on this guild's subscription tier */
-	contextLimit: number;
-	/** The raw tier number from the API, kept for logging/debugging */
-	tier: number;
-	/** Unix timestamp (ms) when this entry expires */
-	expiresAt: number;
+  /** Resolved context token limit for Kayra on this guild's subscription tier */
+  contextLimit: number;
+  /** The raw tier number from the API, kept for logging/debugging */
+  tier: number;
+  /** Unix timestamp (ms) when this entry expires */
+  expiresAt: number;
 }
 
 /** Map from guildId (server Discord ID) to cached subscription entry */
@@ -60,11 +60,11 @@ const subscriptionCache = new Map<string, CachedSubscriptionEntry>();
  * @param guildId - Discord guild (server) ID
  */
 export function getCachedContextTokens(guildId: string): number | undefined {
-	const entry = subscriptionCache.get(guildId);
-	if (!entry || Date.now() > entry.expiresAt) {
-		return undefined;
-	}
-	return entry.contextLimit;
+  const entry = subscriptionCache.get(guildId);
+  if (!entry || Date.now() > entry.expiresAt) {
+    return undefined;
+  }
+  return entry.contextLimit;
 }
 
 /**
@@ -75,15 +75,15 @@ export function getCachedContextTokens(guildId: string): number | undefined {
  * @param tier - Raw tier number from the API
  */
 export function setCachedContextTokens(
-	guildId: string,
-	contextLimit: number,
-	tier: number,
+  guildId: string,
+  contextLimit: number,
+  tier: number,
 ): void {
-	subscriptionCache.set(guildId, {
-		contextLimit,
-		tier,
-		expiresAt: Date.now() + SUBSCRIPTION_CACHE_TTL_MS,
-	});
+  subscriptionCache.set(guildId, {
+    contextLimit,
+    tier,
+    expiresAt: Date.now() + SUBSCRIPTION_CACHE_TTL_MS,
+  });
 }
 
 /**
@@ -101,43 +101,46 @@ export function setCachedContextTokens(
  * @param apiKey - Plaintext NovelAI API key
  */
 export async function refreshNovelAISubscription(
-	guildId: string,
-	apiKey: string,
+  guildId: string,
+  apiKey: string,
 ): Promise<number | undefined> {
-	// If the operator has explicitly set NAI_KAYRA_CONTEXT_LIMIT, trust it over
-	// the tier lookup — skip the subscription API call entirely.
-	if (process.env.NAI_KAYRA_CONTEXT_LIMIT !== undefined) {
-		const explicitLimit = Number.parseInt(process.env.NAI_KAYRA_CONTEXT_LIMIT, 10);
-		if (!Number.isNaN(explicitLimit) && explicitLimit > 0) {
-			log.info(
-				`NovelAI: NAI_KAYRA_CONTEXT_LIMIT=${explicitLimit} explicitly set — skipping subscription fetch for guild ${guildId}`,
-			);
-			setCachedContextTokens(guildId, explicitLimit, -1);
-			return explicitLimit;
-		}
-	}
+  // If the operator has explicitly set NAI_KAYRA_CONTEXT_LIMIT, trust it over
+  // the tier lookup — skip the subscription API call entirely.
+  if (process.env.NAI_KAYRA_CONTEXT_LIMIT !== undefined) {
+    const explicitLimit = Number.parseInt(
+      process.env.NAI_KAYRA_CONTEXT_LIMIT,
+      10,
+    );
+    if (!Number.isNaN(explicitLimit) && explicitLimit > 0) {
+      log.info(
+        `NovelAI: NAI_KAYRA_CONTEXT_LIMIT=${explicitLimit} explicitly set — skipping subscription fetch for guild ${guildId}`,
+      );
+      setCachedContextTokens(guildId, explicitLimit, -1);
+      return explicitLimit;
+    }
+  }
 
-	try {
-		const subscription = await fetchNovelAISubscription(apiKey);
-		if (!subscription) return undefined;
+  try {
+    const subscription = await fetchNovelAISubscription(apiKey);
+    if (!subscription) return undefined;
 
-		const tier = subscription.tier;
-		// Resolve the context limit from the tier map; fall back to the highest
-		// known limit rather than undefined, so an unrecognized tier isn't punished.
-		const contextLimit =
-			KAYRA_CONTEXT_LIMIT_BY_TIER[tier] ??
-			Math.max(...Object.values(KAYRA_CONTEXT_LIMIT_BY_TIER));
+    const tier = subscription.tier;
+    // Resolve the context limit from the tier map; fall back to the highest
+    // known limit rather than undefined, so an unrecognized tier isn't punished.
+    const contextLimit =
+      KAYRA_CONTEXT_LIMIT_BY_TIER[tier] ??
+      Math.max(...Object.values(KAYRA_CONTEXT_LIMIT_BY_TIER));
 
-		setCachedContextTokens(guildId, contextLimit, tier);
-		log.info(
-			`NovelAI subscription fetched for guild ${guildId}: API tier=${tier} → hardcoded limit=${contextLimit} tokens`,
-		);
-		return contextLimit;
-	} catch (error) {
-		log.warn(
-			`Failed to refresh NovelAI subscription for guild ${guildId}`,
-			error,
-		);
-		return undefined;
-	}
+    setCachedContextTokens(guildId, contextLimit, tier);
+    log.info(
+      `NovelAI subscription fetched for guild ${guildId}: API tier=${tier} → hardcoded limit=${contextLimit} tokens`,
+    );
+    return contextLimit;
+  } catch (error) {
+    log.warn(
+      `Failed to refresh NovelAI subscription for guild ${guildId}`,
+      error,
+    );
+    return undefined;
+  }
 }

@@ -1,23 +1,23 @@
 import {
-	MessageFlags,
-	type ChatInputCommandInteraction,
-	type ButtonInteraction,
-	type ModalSubmitInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type ButtonInteraction,
+  type ModalSubmitInteraction,
+  type Client,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
-	replyInfoEmbed,
-	replyPaginatedPersonaChoicesV2,
-	promptWithPaginatedModal,
-	safeSelectOptionText,
+  replyInfoEmbed,
+  replyPaginatedPersonaChoicesV2,
+  promptWithPaginatedModal,
+  safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import {
-	getCachedTomoriState,
-	invalidateTomoriStateCache,
+  getCachedTomoriState,
+  invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type { SelectOption } from "../../types/discord/modal";
@@ -28,225 +28,228 @@ const DOCUMENT_SELECT_ID = "document_select";
 type DocumentScope = "persona" | "serverwide";
 
 async function performDocumentRemoval(
-	tomoriState: TomoriState,
-	targetTomoriId: number | null,
-	documentId: number,
-	userData: UserRow,
-	replyInteraction:
-		| ChatInputCommandInteraction
-		| ButtonInteraction
-		| ModalSubmitInteraction,
-	locale: string,
+  tomoriState: TomoriState,
+  targetTomoriId: number | null,
+  documentId: number,
+  userData: UserRow,
+  replyInteraction:
+    | ChatInputCommandInteraction
+    | ButtonInteraction
+    | ModalSubmitInteraction,
+  locale: string,
 ): Promise<void> {
-	const deletedRows =
-		targetTomoriId === null
-			? await sql`
+  const deletedRows =
+    targetTomoriId === null
+      ? await sql`
 				DELETE FROM documents
 				WHERE document_id = ${documentId}
 				  AND server_id = ${tomoriState.server_id}
 				  AND tomori_id IS NULL
 				RETURNING document_name
 			`
-			: await sql`
+      : await sql`
 				DELETE FROM documents
 				WHERE document_id = ${documentId}
 				  AND server_id = ${tomoriState.server_id}
 				  AND tomori_id = ${targetTomoriId}
 				RETURNING document_name
 			`;
-	const [deletedRow] = deletedRows;
+  const [deletedRow] = deletedRows;
 
-	if (!deletedRow?.document_name) {
-		const context: ErrorContext = {
-			tomoriId: targetTomoriId ?? tomoriState.tomori_id,
-			serverId: tomoriState.server_id,
-			userId: userData.user_id,
-			errorType: "DatabaseUpdateError",
-			metadata: {
-				command: "forget document",
-				documentId,
-			},
-		};
-		await log.error(
-			"Failed to delete document row",
-			new Error("Document deletion returned no rows"),
-			context,
-		);
-		await replyInfoEmbed(replyInteraction, locale, {
-			titleKey: "general.errors.update_failed_title",
-			descriptionKey: "general.errors.update_failed_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
+  if (!deletedRow?.document_name) {
+    const context: ErrorContext = {
+      tomoriId: targetTomoriId ?? tomoriState.tomori_id,
+      serverId: tomoriState.server_id,
+      userId: userData.user_id,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        command: "forget document",
+        documentId,
+      },
+    };
+    await log.error(
+      "Failed to delete document row",
+      new Error("Document deletion returned no rows"),
+      context,
+    );
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "general.errors.update_failed_title",
+      descriptionKey: "general.errors.update_failed_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
 
-	if (replyInteraction.guildId) {
-		invalidateTomoriStateCache(replyInteraction.guildId);
-	}
+  if (replyInteraction.guildId) {
+    invalidateTomoriStateCache(replyInteraction.guildId);
+  }
 
-	await replyInfoEmbed(replyInteraction, locale, {
-		titleKey: "commands.forget.document.success_title",
-		descriptionKey: "commands.forget.document.success_description",
-		descriptionVars: {
-			name: deletedRow.document_name,
-		},
-		color: ColorCode.SUCCESS,
-	});
+  await replyInfoEmbed(replyInteraction, locale, {
+    titleKey: "commands.forget.document.success_title",
+    descriptionKey: "commands.forget.document.success_description",
+    descriptionVars: {
+      name: deletedRow.document_name,
+    },
+    color: ColorCode.SUCCESS,
+  });
 }
 
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("document")
-		.setDescription(localizer("en-US", "commands.forget.document.description"))
-		.addStringOption((option) =>
-			option
-				.setName("scope")
-				.setDescription(
-					localizer("en-US", "commands.forget.document.scope_description"),
-				)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.forget.document.scope_choice_persona",
-						),
-						value: "persona",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.forget.document.scope_choice_serverwide",
-						),
-						value: "serverwide",
-					},
-				)
-				.setRequired(false),
-		);
+  subcommand
+    .setName("document")
+    .setDescription(localizer("en-US", "commands.forget.document.description"))
+    .addStringOption((option) =>
+      option
+        .setName("scope")
+        .setDescription(
+          localizer("en-US", "commands.forget.document.scope_description"),
+        )
+        .addChoices(
+          {
+            name: localizer(
+              "en-US",
+              "commands.forget.document.scope_choice_persona",
+            ),
+            value: "persona",
+          },
+          {
+            name: localizer(
+              "en-US",
+              "commands.forget.document.scope_choice_serverwide",
+            ),
+            value: "serverwide",
+          },
+        )
+        .setRequired(false),
+    );
 
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	const ragEnabled =
-		process.env.RUN_ENV === "production" ||
-		process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragEnabled =
+    process.env.RUN_ENV === "production" ||
+    process.env.ACTIVATE_LOCAL_RAG === "true";
 
-	if (!interaction.channel) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.channel_only_title",
-			descriptionKey: "general.errors.channel_only_description",
-			color: ColorCode.ERROR,
-			flags: MessageFlags.Ephemeral,
-		});
-		return;
-	}
+  if (!interaction.channel) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.channel_only_title",
+      descriptionKey: "general.errors.channel_only_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-	let tomoriState: TomoriState | null = null;
-	let targetTomoriId: number | null = null;
-	let personaSelectionInteraction: ButtonInteraction | null = null;
+  let tomoriState: TomoriState | null = null;
+  let targetTomoriId: number | null = null;
+  let personaSelectionInteraction: ButtonInteraction | null = null;
 
-	try {
-		if (!ragEnabled) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.forget.document.rag_disabled_title",
-				descriptionKey: "commands.forget.document.rag_disabled_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+  try {
+    if (!ragEnabled) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.forget.document.rag_disabled_title",
+        descriptionKey: "commands.forget.document.rag_disabled_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		tomoriState = await getCachedTomoriState(
-			interaction.guild?.id ?? interaction.user.id,
-		);
-		if (!tomoriState) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+    tomoriState = await getCachedTomoriState(
+      interaction.guild?.id ?? interaction.user.id,
+    );
+    if (!tomoriState) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		const hasManagePermission =
-			interaction.memberPermissions?.has("ManageGuild") ?? false;
-		if (!tomoriState.config.server_memteaching_enabled && !hasManagePermission) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.document.teaching_disabled_title",
-				descriptionKey: "commands.teach.document.teaching_disabled_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+    const hasManagePermission =
+      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    if (
+      !tomoriState.config.server_memteaching_enabled &&
+      !hasManagePermission
+    ) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.teach.document.teaching_disabled_title",
+        descriptionKey: "commands.teach.document.teaching_disabled_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		const scopeInput = interaction.options.getString("scope");
-		const scope: DocumentScope =
-			scopeInput === "serverwide" ? "serverwide" : "persona";
+    const scopeInput = interaction.options.getString("scope");
+    const scope: DocumentScope =
+      scopeInput === "serverwide" ? "serverwide" : "persona";
 
-		if (scope === "persona") {
-			const allPersonas = await loadAllPersonasForServer(
-				interaction.guild?.id ?? interaction.user.id,
-			);
-			if (allPersonas.length === 0) {
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "general.errors.tomori_not_setup_title",
-					descriptionKey: "general.errors.tomori_not_setup_description",
-					color: ColorCode.ERROR,
-					flags: MessageFlags.Ephemeral,
-				});
-				return;
-			}
+    if (scope === "persona") {
+      const allPersonas = await loadAllPersonasForServer(
+        interaction.guild?.id ?? interaction.user.id,
+      );
+      if (allPersonas.length === 0) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.tomori_not_setup_title",
+          descriptionKey: "general.errors.tomori_not_setup_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
 
-			const personaSelection = await replyPaginatedPersonaChoicesV2(
-				interaction,
-				locale,
-				{
-					personas: allPersonas,
-					color: ColorCode.INFO,
-					preserveSelectedInteraction: true,
-					onSelect: async () => {},
-				},
-			);
+      const personaSelection = await replyPaginatedPersonaChoicesV2(
+        interaction,
+        locale,
+        {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        },
+      );
 
-			if (
-				!personaSelection.success ||
-				personaSelection.selectedIndex === undefined ||
-				!personaSelection.interaction
-			) {
-				return;
-			}
+      if (
+        !personaSelection.success ||
+        personaSelection.selectedIndex === undefined ||
+        !personaSelection.interaction
+      ) {
+        return;
+      }
 
-			personaSelectionInteraction = personaSelection.interaction;
-			const selectedPersona =
-				allPersonas[personaSelection.selectedIndex] ?? null;
-			if (!selectedPersona?.tomori_id) {
-				await replyInfoEmbed(personaSelectionInteraction, locale, {
-					titleKey: "general.errors.invalid_option_title",
-					descriptionKey: "general.errors.invalid_option_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
-			targetTomoriId = selectedPersona.tomori_id;
-		}
+      personaSelectionInteraction = personaSelection.interaction;
+      const selectedPersona =
+        allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await replyInfoEmbed(personaSelectionInteraction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      targetTomoriId = selectedPersona.tomori_id;
+    }
 
-		const selectionInteraction = personaSelectionInteraction ?? interaction;
-		const documents =
-			targetTomoriId === null
-				? await sql<Array<{ document_id: number; document_name: string }>>`
+    const selectionInteraction = personaSelectionInteraction ?? interaction;
+    const documents =
+      targetTomoriId === null
+        ? await sql<Array<{ document_id: number; document_name: string }>>`
 					SELECT document_id, document_name
 					FROM documents
 					WHERE server_id = ${tomoriState.server_id}
 					  AND tomori_id IS NULL
 					ORDER BY created_at DESC
 				`
-				: await sql<Array<{ document_id: number; document_name: string }>>`
+        : await sql<Array<{ document_id: number; document_name: string }>>`
 					SELECT document_id, document_name
 					FROM documents
 					WHERE server_id = ${tomoriState.server_id}
@@ -254,106 +257,106 @@ export async function execute(
 					ORDER BY created_at DESC
 				`;
 
-		if (!documents || documents.length === 0) {
-			await replyInfoEmbed(selectionInteraction, locale, {
-				titleKey: "commands.forget.document.none_title",
-				descriptionKey: "commands.forget.document.none_description",
-				color: ColorCode.WARN,
-			});
-			return;
-		}
+    if (!documents || documents.length === 0) {
+      await replyInfoEmbed(selectionInteraction, locale, {
+        titleKey: "commands.forget.document.none_title",
+        descriptionKey: "commands.forget.document.none_description",
+        color: ColorCode.WARN,
+      });
+      return;
+    }
 
-		const documentOptions: SelectOption[] = documents.map((doc) => ({
-			label: safeSelectOptionText(doc.document_name),
-			value: doc.document_id.toString(),
-		}));
+    const documentOptions: SelectOption[] = documents.map((doc) => ({
+      label: safeSelectOptionText(doc.document_name),
+      value: doc.document_id.toString(),
+    }));
 
-		const modalResult = await promptWithPaginatedModal(
-			selectionInteraction,
-			locale,
-			{
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.forget.document.modal_title",
-				components: [
-					{
-						customId: DOCUMENT_SELECT_ID,
-						labelKey: "commands.forget.document.select_label",
-						descriptionKey: "commands.forget.document.select_description",
-						placeholder: "commands.forget.document.select_placeholder",
-						required: true,
-						options: documentOptions,
-					},
-				],
-			},
-		);
+    const modalResult = await promptWithPaginatedModal(
+      selectionInteraction,
+      locale,
+      {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.forget.document.modal_title",
+        components: [
+          {
+            customId: DOCUMENT_SELECT_ID,
+            labelKey: "commands.forget.document.select_label",
+            descriptionKey: "commands.forget.document.select_description",
+            placeholder: "commands.forget.document.select_placeholder",
+            required: true,
+            options: documentOptions,
+          },
+        ],
+      },
+    );
 
-		if (modalResult.outcome !== "submit") {
-			log.info(
-				`Document removal modal ${modalResult.outcome} for user ${userData.user_id}`,
-			);
-			return;
-		}
+    if (modalResult.outcome !== "submit") {
+      log.info(
+        `Document removal modal ${modalResult.outcome} for user ${userData.user_id}`,
+      );
+      return;
+    }
 
-		if (!modalResult.interaction || !modalResult.values) {
-			await replyInfoEmbed(selectionInteraction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+    if (!modalResult.interaction || !modalResult.values) {
+      await replyInfoEmbed(selectionInteraction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-		const selectedIdStr = modalResult.values[DOCUMENT_SELECT_ID];
-		if (!selectedIdStr) {
-			await replyInfoEmbed(modalResult.interaction, locale, {
-				titleKey: "commands.forget.document.none_title",
-				descriptionKey: "commands.forget.document.none_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+    const selectedIdStr = modalResult.values[DOCUMENT_SELECT_ID];
+    if (!selectedIdStr) {
+      await replyInfoEmbed(modalResult.interaction, locale, {
+        titleKey: "commands.forget.document.none_title",
+        descriptionKey: "commands.forget.document.none_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		const modalSubmitInteraction = modalResult.interaction;
-		const selectedId = Number.parseInt(selectedIdStr, 10);
+    const modalSubmitInteraction = modalResult.interaction;
+    const selectedId = Number.parseInt(selectedIdStr, 10);
 
-		await performDocumentRemoval(
-			tomoriState,
-			targetTomoriId,
-			selectedId,
-			userData,
-			modalSubmitInteraction,
-			locale,
-		);
-	} catch (error) {
-		const context: ErrorContext = {
-			userId: userData.user_id,
-			serverId: tomoriState?.server_id,
-			tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
-			errorType: "CommandExecutionError",
-			metadata: {
-				command: "forget document",
-				guildId: interaction.guild?.id,
-				executorDiscordId: interaction.user.id,
-			},
-		};
-		await log.error(
-			`Unexpected error in /forget document for user ${userData.user_disc_id}`,
-			error as Error,
-			context,
-		);
+    await performDocumentRemoval(
+      tomoriState,
+      targetTomoriId,
+      selectedId,
+      userData,
+      modalSubmitInteraction,
+      locale,
+    );
+  } catch (error) {
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: tomoriState?.server_id,
+      tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "forget document",
+        guildId: interaction.guild?.id,
+        executorDiscordId: interaction.user.id,
+      },
+    };
+    await log.error(
+      `Unexpected error in /forget document for user ${userData.user_disc_id}`,
+      error as Error,
+      context,
+    );
 
-		const errorReplyTarget =
-			personaSelectionInteraction &&
-			!personaSelectionInteraction.deferred &&
-			!personaSelectionInteraction.replied
-				? personaSelectionInteraction
-				: interaction;
-		await replyInfoEmbed(errorReplyTarget, locale, {
-			titleKey: "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-			color: ColorCode.ERROR,
-			flags: MessageFlags.Ephemeral,
-		});
-	}
+    const errorReplyTarget =
+      personaSelectionInteraction &&
+      !personaSelectionInteraction.deferred &&
+      !personaSelectionInteraction.replied
+        ? personaSelectionInteraction
+        : interaction;
+    await replyInfoEmbed(errorReplyTarget, locale, {
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 }

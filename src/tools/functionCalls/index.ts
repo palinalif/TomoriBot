@@ -29,7 +29,7 @@ export { ReviewCapabilitiesTool } from "./reviewCapabilities";
 
 // Re-export common types for convenience
 export type {
-	Tool,
-	ToolContext,
-	ToolResult,
+  Tool,
+  ToolContext,
+  ToolResult,
 } from "../../types/tool/interfaces";

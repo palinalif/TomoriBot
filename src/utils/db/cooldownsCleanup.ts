@@ -5,9 +5,9 @@ import { log } from "../misc/logger";
  * Result of cooldowns cleanup operation
  */
 export interface CooldownsCleanupResult {
-	success: boolean;
-	deletedCount: number;
-	error?: string;
+  success: boolean;
+  deletedCount: number;
+  error?: string;
 }
 
 /**
@@ -17,34 +17,34 @@ export interface CooldownsCleanupResult {
  * @returns Promise<CooldownsCleanupResult> - Result of the cleanup operation
  */
 export async function cleanupExpiredCooldowns(): Promise<CooldownsCleanupResult> {
-	try {
-		log.info("Starting cooldowns cleanup...");
+  try {
+    log.info("Starting cooldowns cleanup...");
 
-		// Call the PostgreSQL function that handles cleanup logic
-		const [result] = await sql`
+    // Call the PostgreSQL function that handles cleanup logic
+    const [result] = await sql`
 			SELECT cleanup_expired_cooldowns() as deleted_count
 		`;
 
-		const deletedCount = Number(result?.deleted_count || 0);
+    const deletedCount = Number(result?.deleted_count || 0);
 
-		if (deletedCount > 0) {
-			log.info(`Successfully cleaned up ${deletedCount} expired cooldowns`);
-		} else {
-			log.info("No expired cooldowns found to clean up");
-		}
+    if (deletedCount > 0) {
+      log.info(`Successfully cleaned up ${deletedCount} expired cooldowns`);
+    } else {
+      log.info("No expired cooldowns found to clean up");
+    }
 
-		return {
-			success: true,
-			deletedCount,
-		};
-	} catch (error) {
-		log.error("Error cleaning up expired cooldowns:", error);
-		return {
-			success: false,
-			deletedCount: 0,
-			error: error instanceof Error ? error.message : "Unknown error",
-		};
-	}
+    return {
+      success: true,
+      deletedCount,
+    };
+  } catch (error) {
+    log.error("Error cleaning up expired cooldowns:", error);
+    return {
+      success: false,
+      deletedCount: 0,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
 }
 
 /**
@@ -54,31 +54,31 @@ export async function cleanupExpiredCooldowns(): Promise<CooldownsCleanupResult>
  * @returns Promise<CooldownsCleanupResult> - Result of the cleanup operation
  */
 export async function clearAllCooldowns(): Promise<CooldownsCleanupResult> {
-	try {
-		log.warn("Clearing ALL cooldowns from database...");
+  try {
+    log.warn("Clearing ALL cooldowns from database...");
 
-		// Use DELETE with RETURNING to get count of deleted rows
-		const deletedRows = await sql`
+    // Use DELETE with RETURNING to get count of deleted rows
+    const deletedRows = await sql`
 			DELETE FROM cooldowns
 			RETURNING *
 		`;
 
-		const deletedCount = deletedRows.length;
+    const deletedCount = deletedRows.length;
 
-		log.warn(
-			`Successfully cleared ${deletedCount} cooldown records from database`,
-		);
+    log.warn(
+      `Successfully cleared ${deletedCount} cooldown records from database`,
+    );
 
-		return {
-			success: true,
-			deletedCount,
-		};
-	} catch (error) {
-		log.error("Error clearing all cooldowns:", error);
-		return {
-			success: false,
-			deletedCount: 0,
-			error: error instanceof Error ? error.message : "Unknown error",
-		};
-	}
+    return {
+      success: true,
+      deletedCount,
+    };
+  } catch (error) {
+    log.error("Error clearing all cooldowns:", error);
+    return {
+      success: false,
+      deletedCount: 0,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
 }
