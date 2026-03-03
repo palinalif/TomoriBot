@@ -687,6 +687,27 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         success_title: `Comment Posted`,
         success_description: `Your comment has been posted in this channel.`,
       },
+      delete: {
+        description: `Delete turns or other channel content.`,
+        turn: {
+          description: `Delete the last persona's turn from the channel.`,
+          regenerate_description: `If true, re-trigger the persona after deletion.`,
+          select_persona_description: `If true, choose which persona's turn to delete.`,
+          no_permission_title: `Permission Denied`,
+          no_permission_description: `This command requires Manage Server permission or must be used in a designated RP channel.`,
+          already_running_title: `Already Deleting`,
+          already_running_description: `A deletion is already in progress for this channel. Please wait.`,
+          no_persona_found_title: `No Persona Turn Found`,
+          no_persona_found_description: `Couldn't find a contiguous block of persona messages in the recent history.`,
+          deleting_title: `⏳ Deleting Turn`,
+          deleting_description: `Deleting {count} message(s) from **{persona_name}**...`,
+          success_title: `✅ Turn Deleted`,
+          success_description: `Deleted {count} message(s) from **{persona_name}**.`,
+          success_regenerate_description: `Deleted {count} message(s) from **{persona_name}**. Re-triggering...`,
+          partial_title: `⚠️ Partial Deletion`,
+          partial_description: `Deleted {deleted_count}/{total_count} message(s) from **{persona_name}**. Some messages could not be deleted.`,
+        },
+      },
     },
 
     // Data management commands

@@ -689,6 +689,27 @@ export default {
         success_title: `コメント投稿済み`,
         success_description: `コメントがこのチャンネルに投稿されました。`,
       },
+      delete: {
+        description: `ターンやチャンネルのコンテンツを削除します。`,
+        turn: {
+          description: `チャンネルから最後のペルソナのターンを削除します。`,
+          regenerate_description: `trueの場合、削除後にペルソナを再トリガーします。`,
+          select_persona_description: `trueの場合、削除するペルソナのターンを選択できます。`,
+          no_permission_title: `権限が不足しています`,
+          no_permission_description: `このコマンドにはサーバー管理権限が必要か、指定されたRPチャンネルで使用する必要があります。`,
+          already_running_title: `削除中です`,
+          already_running_description: `このチャンネルではすでに削除処理が進行中です。しばらくお待ちください。`,
+          no_persona_found_title: `ペルソナのターンが見つかりません`,
+          no_persona_found_description: `最近の履歴にペルソナの連続したメッセージブロックが見つかりませんでした。`,
+          deleting_title: `⏳ ターンを削除中`,
+          deleting_description: `**{persona_name}** の {count} 件のメッセージを削除中...`,
+          success_title: `✅ ターンが削除されました`,
+          success_description: `**{persona_name}** の {count} 件のメッセージを削除しました。`,
+          success_regenerate_description: `**{persona_name}** の {count} 件のメッセージを削除しました。再トリガー中...`,
+          partial_title: `⚠️ 一部削除されました`,
+          partial_description: `**{persona_name}** の {deleted_count}/{total_count} 件のメッセージを削除しました。一部のメッセージは削除できませんでした。`,
+        },
+      },
     },
 
     // データ管理コマンド
