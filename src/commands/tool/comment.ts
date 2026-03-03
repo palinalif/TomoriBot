@@ -99,14 +99,24 @@ export async function execute(
     await modalResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
-  const commentContent = modalResult.values.comment_content || "";
+  const rawContent = modalResult.values.comment_content || "";
 
-  // 4. Create embed with comment content
+  // 4. Resolve :emojiName: patterns into Discord custom emoji syntax if found in guild
+  const commentContent = rawContent.replace(/:(\w+):/g, (match, name) => {
+    const emoji = interaction.guild?.emojis.cache.find(
+      (e) => e.name === name,
+    );
+    if (!emoji) return match;
+    // Animated emojis use <a:name:id>, static use <:name:id>
+    return emoji.animated ? `<a:${emoji.name}:${emoji.id}>` : `<:${emoji.name}:${emoji.id}>`;
+  });
+
+  // 5. Create embed with comment content
   const embed = new EmbedBuilder()
     .setDescription(commentContent)
     .setColor(ColorCode.INFO);
 
-  // 5. Add footer showing who created the comment (with profile picture)
+  // 6. Add footer showing who created the comment (with profile picture)
   const memberAvatarUrl = interaction.member
     ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL(
         {
@@ -128,12 +138,12 @@ export async function execute(
     iconURL: memberAvatarUrl,
   });
 
-  // 6. Send as public message in the channel
+  // 7. Send as public message in the channel
   await channel.send({
     embeds: [embed],
   });
 
-  // 7. Send confirmation to user
+  // 8. Send confirmation to user
   await replyInfoEmbed(modalResult.interaction, locale, {
     titleKey: "commands.tool.comment.success_title",
     descriptionKey: "commands.tool.comment.success_description",

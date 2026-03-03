@@ -33,6 +33,10 @@ const GEMINI_TOKEN_LIMITS: Readonly<Record<string, ModelTokenLimits>> = {
     contextLength: 1_048_576,
     maxCompletionTokens: 8192,
   },
+  "gemini-3.1-pro-preview": {
+    contextLength: 1_048_576,
+    maxCompletionTokens: 8192,
+  },
   "gemma-3-27b-it": { contextLength: 131_072, maxCompletionTokens: 8192 },
 };
 

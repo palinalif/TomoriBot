@@ -49,6 +49,55 @@ async function getServerCount(client: Client): Promise<number> {
 }
 
 /**
+ * Posts the current Discord guild count to Top.gg once during startup.
+ * Only runs in production and only when TOPGG_TOKEN is configured.
+ * Non-critical — failures are logged as warnings and do not affect startup.
+ *
+ * @param client - The Discord client instance (must be ready, provides bot ID and guild cache).
+ * @returns {Promise<void>}
+ */
+async function postTopggStats(client: Client): Promise<void> {
+  // 1. Only run in production with a configured token
+  const isProduction = process.env.NODE_ENV === "production";
+  const topggToken = process.env.TOPGG_TOKEN;
+
+  if (!isProduction || !topggToken || !client.user) return;
+
+  // 2. Use the actual Discord guild count (guilds the bot has joined)
+  const serverCount = client.guilds.cache.size;
+  const botId = client.user.id;
+
+  try {
+    // 3. POST server count to Top.gg REST API
+    const response = await fetch(
+      `https://top.gg/api/bots/${botId}/stats`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": topggToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ server_count: serverCount }),
+      },
+    );
+
+    if (!response.ok) {
+      log.warn(`Top.gg stats update failed: HTTP ${response.status}`, {
+        errorType: "TopggApiError",
+        metadata: { status: response.status, botId, serverCount },
+      });
+    } else {
+      log.info(`Top.gg stats updated: ${serverCount} server(s)`);
+    }
+  } catch (error) {
+    log.warn("Top.gg stats update failed (non-critical)", {
+      errorType: "TopggNetworkError",
+      metadata: { error },
+    });
+  }
+}
+
+/**
  * Sets the bot's status and logs startup information.
  * Waits for MCP initialization to complete before finalizing startup.
  * @param client - The Discord client instance.
@@ -76,6 +125,9 @@ const handler = async (client: Client): Promise<void> => {
   }
 
   log.success(`${client.user?.tag} up and running!`);
+
+  // Post server count to Top.gg once at startup (production only, non-critical)
+  await postTopggStats(client);
 
   log.section("Listening for error and info logs...");
   log.info(`Time started: [${new Date().toLocaleTimeString()}]`);

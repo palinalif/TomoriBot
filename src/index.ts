@@ -75,6 +75,11 @@ if (secrets.MATRIX_APPSERVICE_PUBLIC_URL) {
     secrets.MATRIX_APPSERVICE_PUBLIC_URL;
 }
 
+// Optional Top.gg integration token
+if (secrets.TOPGG_TOKEN) {
+  process.env.TOPGG_TOKEN = secrets.TOPGG_TOKEN;
+}
+
 log.success(
   `Secrets loaded successfully from ${(process.env.RUN_ENV || "development") === "production" && process.env.TEST_PRODUCTION !== "true" ? "AWS Secrets Manager" : ".env file"}`,
 );

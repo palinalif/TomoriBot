@@ -39,6 +39,7 @@ export interface TomoriSecrets {
   MATRIX_SERVER_NAME?: string; // Homeserver domain (e.g., localhost or yourdomain.com)
   MATRIX_HS_TOKEN?: string; // Homeserver token (hs_token) — homeserver sends this to verify its identity
   MATRIX_APPSERVICE_PUBLIC_URL?: string; // Optional callback URL used in appservice registration for remote homeservers
+  TOPGG_TOKEN?: string; // Optional: Top.gg API token for posting server stats
   [key: string]: string | undefined; // Allow dynamic CRYPTO_SECRET_V* keys
 }
 
@@ -154,6 +155,11 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
         process.env.MATRIX_APPSERVICE_PUBLIC_URL;
     }
 
+    // Optional Top.gg integration token
+    if (process.env.TOPGG_TOKEN) {
+      secrets.TOPGG_TOKEN = process.env.TOPGG_TOKEN;
+    }
+
     // Validate required fields
     validateRequiredSecrets(secrets);
 
@@ -243,6 +249,11 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
     if (rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL) {
       secrets.MATRIX_APPSERVICE_PUBLIC_URL =
         rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL;
+    }
+
+    // Optional Top.gg integration token
+    if (rawSecrets.TOPGG_TOKEN) {
+      secrets.TOPGG_TOKEN = rawSecrets.TOPGG_TOKEN;
     }
 
     // 7. Validate required fields
