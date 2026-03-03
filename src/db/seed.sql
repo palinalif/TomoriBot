@@ -61,6 +61,7 @@ VALUES
   ('openrouter', 'qwen/qwen3.5-35b-a3b', false, false, false, false, false, true, true, true, false, false, true, 'Qwen 3.5 35B A3B model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応したQwen 3.5 35B A3Bモデル'),
   ('openrouter', 'qwen/qwen3.5-27b', false, false, false, false, false, true, true, true, false, false, true, 'Qwen 3.5 27B model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応したQwen 3.5 27Bモデル'),
   ('openrouter', 'qwen/qwen3.5-flash-02-23', false, false, false, false, false, true, true, true, false, false, true, 'Fast Qwen 3.5 Flash (02-23) model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応した高速Qwen 3.5 Flash（02-23）モデル'),
+  ('openrouter', 'moonshotai/kimi-k2.5', false, false, false, false, false, true, true, false, false, false, true, 'Moonshot AI''s state-of-the-art native multimodal model', 'Moonshot AIの最先端ネイティブ・マルチモーダルモデル'),
   ('openrouter', 'aion-labs/aion-2.0', false, false, false, false, false, false, false, false, false, false, false, 'Cheap role-play fine-tune of DeepSeek with no tools, vision, or structured output support', 'ツール・画像理解・構造化出力に対応しない、DeepSeekベースの低コストなロールプレイ特化ファインチューニングモデル'),
   ('openrouter', 'account-setting', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Uses your OpenRouter account default model', '上級者向け：OpenRouterアカウントのデフォルトモデルを使用'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)

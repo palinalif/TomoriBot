@@ -3817,7 +3817,7 @@ export default async function tomoriChat(
       ) {
         const currentPersona = personasToRespond[personaIndex];
         const trimmedPrefill = manualPrefill?.trim();
-        const personaSnapshot: RequestSnapshot = {
+        let personaSnapshot: RequestSnapshot = {
           ...requestSnapshot,
           tomoriState: currentPersona,
         };
@@ -3844,6 +3844,10 @@ export default async function tomoriChat(
         if (effectiveLlm !== currentPersona.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
           tomoriState = { ...tomoriState, llm: effectiveLlm };
+          // Keep the snapshot in sync — its tomoriState.llm must reflect the override
+          // so any consumer reading snapshot.tomoriState (e.g. contextBuilder) gets the
+          // correct model, not the global/persona-base model that was snapshotted earlier.
+          personaSnapshot = { ...personaSnapshot, tomoriState };
         }
 
         // Send typing indicator for each persona response
