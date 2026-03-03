@@ -1372,6 +1372,9 @@ CREATE TABLE IF NOT EXISTS random_triggers (
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
 );
 SELECT add_column_if_not_exists('random_triggers', 'random_offset_range', 'INTEGER');
+SELECT add_column_if_not_exists('random_triggers', 'failure_threshold', 'INTEGER');
+-- consecutive_failures tracks how many dice rolls in a row missed; resets on fire or force-fire
+SELECT add_column_if_not_exists('random_triggers', 'consecutive_failures', 'INTEGER', '0', 'NOT NULL');
 
 -- Fast lookup for due triggers (primary polling query)
 CREATE INDEX IF NOT EXISTS idx_random_triggers_next ON random_triggers(next_trigger_at);

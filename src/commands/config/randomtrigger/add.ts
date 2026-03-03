@@ -121,6 +121,18 @@ export const configureSubcommand = (
         )
         .setMinValue(1)
         .setRequired(false),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("failure_threshold")
+        .setDescription(
+          localizer(
+            "en-US",
+            "commands.config.randomtrigger.add.failure_threshold_description",
+          ),
+        )
+        .setMinValue(1)
+        .setRequired(false),
     );
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
@@ -169,6 +181,8 @@ export async function execute(
     const chance = interaction.options.getInteger("chance", true);
     const silenceThreshold =
       interaction.options.getInteger("silence_threshold", false) ?? null;
+    const failureThreshold =
+      interaction.options.getInteger("failure_threshold", false) ?? null;
 
     // 3. Load Tomori state to verify the server is set up
     const tomoriState = await getCachedTomoriState(interaction.guild.id);
@@ -323,6 +337,7 @@ export async function execute(
       silenceThresholdHours: silenceThreshold,
       respondToSelf,
       customPrompt: customPromptRaw,
+      failureThreshold,
     };
 
     // 10. Override check: if a named persona already has a trigger for this channel, update it
@@ -396,14 +411,7 @@ export async function execute(
       return;
     }
 
-    // 12. Build silence suffix string (only shown if silence threshold was set)
-    const silenceSuffix = silenceThreshold
-      ? localizer(
-          locale,
-          "commands.config.randomtrigger.add.success_silence_suffix",
-          { silence_threshold: silenceThreshold.toString() },
-        )
-      : "";
+    // 12. Build optional suffix strings for non-default settings
     const offsetSuffix =
       randomOffsetRange !== null && randomOffsetRange > 0
         ? localizer(
@@ -412,6 +420,20 @@ export async function execute(
             { random_offset_range: randomOffsetRange.toString() },
           )
         : "";
+    const silenceSuffix = silenceThreshold
+      ? localizer(
+          locale,
+          "commands.config.randomtrigger.add.success_silence_suffix",
+          { silence_threshold: silenceThreshold.toString() },
+        )
+      : "";
+    const failureSuffix = failureThreshold
+      ? localizer(
+          locale,
+          "commands.config.randomtrigger.add.success_failure_suffix",
+          { failure_threshold: failureThreshold.toString() },
+        )
+      : "";
 
     // 13. Reply with success summary
     await replyInfoEmbed(modalInteraction, locale, {
@@ -424,6 +446,7 @@ export async function execute(
         persona: personaDisplayName,
         offset_suffix: offsetSuffix,
         silence_suffix: silenceSuffix,
+        failure_suffix: failureSuffix,
       },
       color: ColorCode.SUCCESS,
     });

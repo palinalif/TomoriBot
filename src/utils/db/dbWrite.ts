@@ -1472,6 +1472,7 @@ interface RandomTriggerData {
   silenceThresholdHours: number | null;
   respondToSelf: boolean;
   customPrompt: string | null;
+  failureThreshold: number | null; // NULL = disabled; force-fire after N consecutive dice misses
 }
 
 /**
@@ -1497,6 +1498,8 @@ export async function insertRandomTrigger(
 				silence_threshold_hours,
 				respond_to_self,
 				custom_prompt,
+				failure_threshold,
+				consecutive_failures,
 				next_trigger_at
 			) VALUES (
 				${data.serverId},
@@ -1508,6 +1511,8 @@ export async function insertRandomTrigger(
 				${data.silenceThresholdHours},
 				${data.respondToSelf},
 				${data.customPrompt},
+				${data.failureThreshold},
+				0,
 				NOW() + (${data.timerHours} * INTERVAL '1 hour')
 			)
 			RETURNING *
@@ -1562,6 +1567,8 @@ export async function upsertRandomTrigger(
 				silence_threshold_hours = ${data.silenceThresholdHours},
 				respond_to_self         = ${data.respondToSelf},
 				custom_prompt           = ${data.customPrompt},
+				failure_threshold       = ${data.failureThreshold},
+				consecutive_failures    = 0,
 				next_trigger_at         = NOW() + (${data.timerHours} * INTERVAL '1 hour')
 			WHERE trigger_id = ${triggerId}
 			RETURNING *
@@ -1634,6 +1641,7 @@ export async function rescheduleRandomTrigger(
   triggerId: number,
   timerHours: number,
   randomOffsetRange: number | null,
+  consecutiveFailures: number,
 ): Promise<boolean> {
   try {
     const normalizedOffsetRange = Math.max(0, randomOffsetRange ?? 0);
@@ -1644,10 +1652,11 @@ export async function rescheduleRandomTrigger(
         : 0;
     const nextTimerHours = Math.max(1, timerHours + randomOffset);
 
-    // 1. Advance next_trigger_at by the configured interval from now
+    // 1. Advance next_trigger_at and persist the current consecutive failure count
     const [row] = await sql`
 			UPDATE random_triggers
-			SET next_trigger_at = NOW() + (${nextTimerHours} * INTERVAL '1 hour')
+			SET next_trigger_at      = NOW() + (${nextTimerHours} * INTERVAL '1 hour'),
+			    consecutive_failures = ${consecutiveFailures}
 			WHERE trigger_id = ${triggerId}
 			RETURNING trigger_id
 		`;
@@ -1666,6 +1675,7 @@ export async function rescheduleRandomTrigger(
         triggerId,
         timerHours,
         randomOffsetRange,
+        consecutiveFailures,
       },
     };
     await log.error(

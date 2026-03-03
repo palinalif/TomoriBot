@@ -560,6 +560,8 @@ export const randomTriggerSchema = z.object({
   silence_threshold_hours: z.number().int().nullable().optional(), // Skip if channel active within N hours
   respond_to_self: z.boolean().default(false), // Whether to fire if persona spoke last
   custom_prompt: z.string().nullable().optional(), // Optional injected system prompt
+  failure_threshold: z.number().int().min(1).nullable().optional(), // NULL = disabled; force-fire after N consecutive misses
+  consecutive_failures: z.number().int().min(0).default(0).optional(), // Current consecutive miss count; resets on fire
   next_trigger_at: z.date(), // Scheduled time for next dice roll
   created_at: z.date().optional(),
   updated_at: z.date().optional(),

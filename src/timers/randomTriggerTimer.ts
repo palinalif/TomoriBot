@@ -115,24 +115,42 @@ export class RandomTriggerTimer {
   private async executeTrigger(trigger: RandomTriggerRow): Promise<void> {
     const triggerId = trigger.trigger_id ?? 0;
 
+    // Track consecutive dice misses; mutated throughout and persisted by the final reschedule.
+    // Guard-based skips (silence, self-reply) are intentional suppressions, not failures,
+    // so they leave this value unchanged.
+    let consecutiveFailures = trigger.consecutive_failures ?? 0;
+
     try {
+      const failureThreshold = trigger.failure_threshold ?? null;
+      const isForced =
+        failureThreshold !== null && consecutiveFailures >= failureThreshold;
+
       log.info(
-        `Evaluating random trigger ${triggerId} (channel=${trigger.channel_disc_id}, chance=${trigger.chance_percent}%)`,
+        `Evaluating random trigger ${triggerId} (channel=${trigger.channel_disc_id}, chance=${trigger.chance_percent}%${failureThreshold !== null ? `, failures=${consecutiveFailures}/${failureThreshold}` : ""})`,
       );
 
-      // ── Step 1: Dice roll ────────────────────────────────────────────────
-      // Fire when random number [0, 100) < chance_percent
+      // ── Step 1: Dice roll + force-fire check ────────────────────────────
+      // Force-fire overrides the dice when consecutive misses hit the threshold.
+      // Otherwise, fire when random number [0, 100) < chance_percent.
       const roll = Math.random() * 100;
-      if (roll >= trigger.chance_percent) {
+      if (!isForced && roll >= trigger.chance_percent) {
+        consecutiveFailures += 1;
         log.info(
-          `Random trigger ${triggerId} missed the roll (${roll.toFixed(1)} >= ${trigger.chance_percent}) — rescheduling`,
+          `Random trigger ${triggerId} missed the roll (${roll.toFixed(1)} >= ${trigger.chance_percent})${failureThreshold !== null ? `, failures now ${consecutiveFailures}/${failureThreshold}` : ""} — rescheduling`,
         );
         await this.rescheduleTrigger(
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
+      }
+
+      if (isForced) {
+        log.info(
+          `Random trigger ${triggerId}: force-firing after ${consecutiveFailures} consecutive miss(es) (threshold: ${failureThreshold})`,
+        );
       }
 
       // ── Step 2: Fetch and validate target channel ────────────────────────
@@ -148,6 +166,7 @@ export class RandomTriggerTimer {
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
       }
@@ -165,12 +184,14 @@ export class RandomTriggerTimer {
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
       }
 
       // ── Step 3: Silence guard ────────────────────────────────────────────
-      // If silence_threshold_hours is set, skip if the channel had recent activity
+      // If silence_threshold_hours is set, skip if the channel had recent activity.
+      // A silence skip is not a dice failure — the counter is preserved unchanged.
       let lastMessage: import("discord.js").Message | undefined;
       if ("messages" in rawChannel) {
         try {
@@ -198,6 +219,7 @@ export class RandomTriggerTimer {
               triggerId,
               trigger.timer_hours,
               trigger.random_offset_range ?? null,
+              consecutiveFailures,
             );
             return;
           }
@@ -216,6 +238,7 @@ export class RandomTriggerTimer {
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
       }
@@ -231,6 +254,7 @@ export class RandomTriggerTimer {
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
       }
@@ -253,12 +277,14 @@ export class RandomTriggerTimer {
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
       }
 
       // ── Step 5: Self-reply guard ─────────────────────────────────────────
-      // If respond_to_self = false, skip if the chosen persona spoke last
+      // If respond_to_self = false, skip if the chosen persona spoke last.
+      // A self-reply skip is not a dice failure — the counter is preserved unchanged.
       if (!trigger.respond_to_self && lastMessage) {
         // Webhook-based persona messages: check username against persona nickname
         const isPersonaLastSpeaker =
@@ -273,6 +299,7 @@ export class RandomTriggerTimer {
             triggerId,
             trigger.timer_hours,
             trigger.random_offset_range ?? null,
+            consecutiveFailures,
           );
           return;
         }
@@ -307,12 +334,16 @@ export class RandomTriggerTimer {
           triggerId,
           trigger.timer_hours,
           trigger.random_offset_range ?? null,
+          consecutiveFailures,
         );
         return;
       }
 
       // ── Step 7: Suppress self-reply suppressor so the trigger fires freely ─
       suppressNextSelfReply(rawChannel.id);
+
+      // Reset failure counter — this trigger is about to fire (dice hit or force-fire)
+      consecutiveFailures = 0;
 
       log.info(
         `Random trigger ${triggerId}: firing for persona "${chosenPersona.tomori_nickname}" in channel ${trigger.channel_disc_id}`,
@@ -345,31 +376,35 @@ export class RandomTriggerTimer {
     } catch (error) {
       log.error(`Error executing random trigger ${triggerId}:`, error);
     } finally {
-      // ── Step 9: Always reschedule after processing (hit or miss) ──────────
+      // ── Step 9: Always reschedule and persist consecutive_failures ─────────
       await this.rescheduleTrigger(
         triggerId,
         trigger.timer_hours,
         trigger.random_offset_range ?? null,
+        consecutiveFailures,
       );
     }
   }
 
   /**
-   * Advances next_trigger_at by timer_hours from now.
+   * Advances next_trigger_at by timer_hours from now and persists the consecutive failure count.
    *
    * @param triggerId - The trigger_id to reschedule
    * @param timerHours - The configured base interval
    * @param randomOffsetRange - Optional +/- jitter range for this reset
+   * @param consecutiveFailures - Current consecutive miss count to persist
    */
   private async rescheduleTrigger(
     triggerId: number,
     timerHours: number,
     randomOffsetRange: number | null,
+    consecutiveFailures: number,
   ): Promise<void> {
     const rescheduled = await rescheduleRandomTrigger(
       triggerId,
       timerHours,
       randomOffsetRange,
+      consecutiveFailures,
     );
     if (!rescheduled) {
       log.error(

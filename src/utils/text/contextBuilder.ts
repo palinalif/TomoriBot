@@ -700,6 +700,8 @@ export async function buildContext({
   matrixUsers,
   syntheticUsers,
   includeTimestamps = false,
+  seesImages: seesImagesOverride,
+  seesVideos: seesVideosOverride,
 }: {
   guildId: string;
   serverName: string;
@@ -737,6 +739,18 @@ export async function buildContext({
   >;
   /** When true, append a [System: Sent ...] timestamp annotation to every dialogue message. */
   includeTimestamps?: boolean;
+  /**
+   * Effective image-capability override from the provider's capability cache.
+   * When provided, takes precedence over `tomoriState.llm.sees_images` (DB flag).
+   * Use this to pass the API-resolved value so the context builder and stream
+   * adapter stay in sync — the DB flag can lag behind newly-supported models.
+   */
+  seesImages?: boolean;
+  /**
+   * Effective video-capability override from the provider's capability cache.
+   * When provided, takes precedence over `tomoriState.llm.sees_videos` (DB flag).
+   */
+  seesVideos?: boolean;
 }): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
@@ -1918,9 +1932,12 @@ export async function buildContext({
     const hasSignificantMedia = hasNonEmojiImages || hasVideos;
     let mediaIdHintAdded = false;
 
-    // Model capability flags (used for both the out-of-window hint and within-window rendering)
-    const seesImages = tomoriState?.llm.sees_images ?? false;
-    const seesVideos = tomoriState?.llm.sees_videos ?? false;
+    // Model capability flags (used for both the out-of-window hint and within-window rendering).
+    // Prefer the caller-supplied override (resolved from the provider capability cache) so
+    // the context builder stays in sync with what the stream adapter will actually send.
+    // Fall back to the DB flag when no override is provided (e.g. non-OpenRouter providers).
+    const seesImages = seesImagesOverride ?? tomoriState?.llm.sees_images ?? false;
+    const seesVideos = seesVideosOverride ?? tomoriState?.llm.sees_videos ?? false;
 
     // If message has significant media but is outside window, add placeholder.
     // Only shown if the model actually supports the relevant media type — no point

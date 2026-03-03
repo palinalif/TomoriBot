@@ -116,6 +116,7 @@ import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { CooldownType } from "@/types/db/schema";
 import { truncateDialogueHistory } from "../../utils/text/contextTruncator";
 import {
+  getOpenRouterCapabilities,
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
@@ -4085,6 +4086,28 @@ export default async function tomoriChat(
           // `simplifiedMessages` and produce `StructuredContextItem[]`.
           // For now, its signature and output type (ContextSegment[]) remain, but we pass the new data.
           let contextSegments: StructuredContextItem[] = [];
+
+          // Resolve effective media-capability flags from the OpenRouter capability cache so the
+          // context builder and stream adapter agree on whether image/video data should be included.
+          // Without this, contextBuilder would fall back to the raw DB flag (which may be stale),
+          // replacing image attachments with text placeholders before the provider ever sees them.
+          let effectiveContextSeesImages: boolean | undefined;
+          let effectiveContextSeesVideos: boolean | undefined;
+          if (
+            // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+            tomoriState!.llm.llm_provider === "openrouter" &&
+            // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+            tomoriState!.llm.llm_codename !== "account-setting" &&
+            isOpenRouterCapabilityCacheReady()
+          ) {
+            // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+            const apiCaps = getOpenRouterCapabilities(tomoriState!.llm.llm_codename);
+            if (apiCaps) {
+              effectiveContextSeesImages = apiCaps.seesImages;
+              effectiveContextSeesVideos = apiCaps.seesVideos;
+            }
+          }
+
           try {
             // NOTE: The `buildContext` call signature will change.
             // It will take `simplifiedMessageHistory: simplifiedMessages` instead of `conversationHistory`.
@@ -4123,6 +4146,9 @@ export default async function tomoriChat(
               impersonatedUserId, // Pass impersonated user ID (February 2026)
               impersonatedUserNickname:
                 impersonatedIdentityName ?? impersonatedUserDbNickname, // Pass resolved identity name for context (February 2026)
+              // Pass API-resolved capability flags so the context builder matches the stream adapter
+              seesImages: effectiveContextSeesImages,
+              seesVideos: effectiveContextSeesVideos,
             });
             contextSegments = contextBuild.contextItems;
 
@@ -5515,6 +5541,9 @@ export default async function tomoriChat(
                         preloadedStickers: loadedStickers, // Pass pre-loaded sticker data to avoid redundant DB query
                         isUserImpersonation, // Pass user impersonation flag (February 2026)
                         impersonatedUserId, // Pass impersonated user ID (February 2026)
+                        // Reuse the same API-resolved capability flags as the initial context build
+                        seesImages: effectiveContextSeesImages,
+                        seesVideos: effectiveContextSeesVideos,
                       });
                       contextSegments = contextBuild.contextItems;
 
