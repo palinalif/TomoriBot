@@ -128,6 +128,11 @@ import {
 } from "../../utils/cache/novelaiSubscriptionCache";
 import type { NovelaiStreamConfig } from "../../providers/novelai/novelaiStreamAdapter";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import {
+  checkTextQuota,
+  incrementTextQuota,
+  type TextQuotaCheckResult,
+} from "@/utils/quota/textQuotaManager";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -983,8 +988,18 @@ async function buildForcedMentionsForReminder(
 
 // New: Constants for the semaphore/locking mechanism
 const CHANNEL_LOCK_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes for a lock to be considered stale
+const TEXT_QUOTA_TRIGGER_TTL_MS = 10 * 60 * 1000; // Keep trigger consumption state for 10 minutes
 
 // New: In-memory store for channel locks and message queues
+type TextQuotaSource = "user" | "system";
+
+interface TextQuotaTriggerState {
+  serverId: number;
+  userDiscId: string;
+  consumed: boolean;
+  createdAt: number;
+}
+
 interface ChannelLockEntry {
   isLocked: boolean;
   lockedAt: number; // Timestamp when the lock was acquired
@@ -1003,11 +1018,49 @@ interface ChannelLockEntry {
     isPersonaJob?: boolean;
     isUserImpersonation?: boolean; // Preserve user impersonation flag through queue
     impersonatedUserId?: string; // Preserve impersonated user ID through queue
+    textQuotaSource?: TextQuotaSource;
+    textQuotaTriggerKey?: string;
+    textQuotaUserDiscId?: string;
     manualSystemPrompt?: string;
     manualPrefill?: string;
   }>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
+const textQuotaTriggerStates = new Map<string, TextQuotaTriggerState>();
+
+function cleanupTextQuotaTriggerStates(): void {
+  const now = Date.now();
+  for (const [triggerKey, state] of textQuotaTriggerStates.entries()) {
+    if (now - state.createdAt >= TEXT_QUOTA_TRIGGER_TTL_MS) {
+      textQuotaTriggerStates.delete(triggerKey);
+    }
+  }
+}
+
+function buildTextQuotaResetInfo(
+  locale: string,
+  quotaCheck: TextQuotaCheckResult,
+): string {
+  if (!quotaCheck.resetTime) {
+    return "";
+  }
+
+  const resetTime = quotaCheck.resetTime;
+  const now = new Date();
+  const diffMs = resetTime.getTime() - now.getTime();
+  const hoursUntilReset = Math.ceil(diffMs / (1000 * 60 * 60));
+
+  if (hoursUntilReset <= 24) {
+    return localizer(locale, "genai.text_quota_resets_in_hours", {
+      hours: hoursUntilReset.toString(),
+    });
+  }
+
+  const daysUntilReset = Math.ceil(hoursUntilReset / 24);
+  return localizer(locale, "genai.text_quota_resets_in_days", {
+    days: daysUntilReset.toString(),
+  });
+}
 
 /**
  * Check whether a channel is currently processing a message.
@@ -1339,6 +1392,9 @@ async function enforceGlobalRateLimit(params: {
  * @param skipLock - Whether to skip semaphore lock acquisition (for recursive calls).
  * @param selectedPersonaId - Optional persona ID to use instead of main persona (for manual triggers).
  * @param isPersonaJob - Whether this invocation is an internal queued persona job.
+ * @param textQuotaSource - Whether this invocation should be treated as user-triggered or system/internal for text quota.
+ * @param textQuotaTriggerKey - Stable per-trigger key used to ensure quota is consumed only once across retries/persona jobs.
+ * @param textQuotaUserDiscId - Triggering user Discord ID override for slash-command flows that use passport messages.
  * @param manualSystemPrompt - Optional system prompt to append at the end of context.
  * @param manualPrefill - Optional assistant prefill used for hybrid prefix output and final context item.
  * @param naiContinuationPrefill - NAI GLM-4.6 only: incomplete trailing sentence from the previous stream,
@@ -1368,6 +1424,9 @@ export default async function tomoriChat(
   isPersonaJob = false,
   isUserImpersonation = false,
   impersonatedUserId?: string,
+  textQuotaSource: TextQuotaSource = "user",
+  textQuotaTriggerKey?: string,
+  textQuotaUserDiscId?: string,
   manualSystemPrompt?: string,
   manualPrefill?: string,
   naiContinuationPrefill?: string,
@@ -1376,6 +1435,7 @@ export default async function tomoriChat(
   // 1. Initial Checks & State Loading
   const channel = message.channel;
   let locale = "en-US";
+  cleanupTextQuotaTriggerStates();
 
   const isBotAuthor = message.author.bot;
   const isWebhookMessage = Boolean(message.webhookId);
@@ -1491,6 +1551,9 @@ export default async function tomoriChat(
     ? extractBridgeUserId(message.author.username)
     : undefined;
   const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
+  const effectiveTextQuotaTriggerKey = textQuotaTriggerKey ?? message.id;
+  const effectiveTextQuotaUserDiscId =
+    textQuotaUserDiscId ?? cooldownUserDiscId;
 
   // Check if user is allowed to trigger bot (Level 2 FULL privacy users cannot trigger)
   // Skip this check for manual triggers and reminders
@@ -1825,6 +1888,9 @@ export default async function tomoriChat(
             isPersonaJob,
             isUserImpersonation: isUserImpersonation || undefined,
             impersonatedUserId,
+            textQuotaSource,
+            textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
+            textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
             manualSystemPrompt,
             manualPrefill,
           });
@@ -2027,6 +2093,7 @@ export default async function tomoriChat(
         Math.max(rawTriggeredPersonaLimit, MIN_TRIGGERED_PERSONA_LIMIT),
         MAX_TRIGGERED_PERSONA_LIMIT,
       );
+      let textQuotaStateForTrigger: TextQuotaTriggerState | null = null;
 
       if (
         (message.author.bot || message.webhookId) &&
@@ -2714,6 +2781,68 @@ export default async function tomoriChat(
         return;
       }
 
+      // 8.52. Check text generation quota for user-triggered guild responses
+      const shouldApplyTextQuota =
+        textQuotaSource === "user" &&
+        !isDMChannel &&
+        !isStopResponse &&
+        !reminderRecipientID &&
+        !reminderData?.self_reminder;
+
+      if (shouldApplyTextQuota) {
+        const existingTextQuotaState = textQuotaTriggerStates.get(
+          effectiveTextQuotaTriggerKey,
+        );
+
+        if (!isPersonaJob) {
+          if (!existingTextQuotaState) {
+            const quotaCheck = await checkTextQuota(
+              tomoriState.server_id,
+              effectiveTextQuotaUserDiscId,
+            );
+
+            if (!quotaCheck.allowed) {
+              const resetInfo = buildTextQuotaResetInfo(locale, quotaCheck);
+              let descriptionKey = "genai.text_quota_exceeded_description";
+
+              if (quotaCheck.reason === "user_quota_exceeded") {
+                descriptionKey = "genai.text_user_quota_exceeded_description";
+              } else if (quotaCheck.reason === "serverwide_quota_exceeded") {
+                descriptionKey =
+                  "genai.text_serverwide_quota_exceeded_description";
+              }
+
+              await sendStandardEmbed(channel, locale, {
+                color: ColorCode.ERROR,
+                titleKey: "genai.text_quota_exceeded_title",
+                descriptionKey,
+                descriptionVars: {
+                  reset_info: resetInfo,
+                },
+              });
+              return;
+            }
+
+            textQuotaStateForTrigger = {
+              serverId: tomoriState.server_id,
+              userDiscId: effectiveTextQuotaUserDiscId,
+              consumed: false,
+              createdAt: Date.now(),
+            };
+            textQuotaTriggerStates.set(
+              effectiveTextQuotaTriggerKey,
+              textQuotaStateForTrigger,
+            );
+          } else {
+            textQuotaStateForTrigger = existingTextQuotaState;
+          }
+        } else if (existingTextQuotaState) {
+          // Internal persona jobs must not check quota independently, but
+          // they can consume the already-approved trigger slot on first success.
+          textQuotaStateForTrigger = existingTextQuotaState;
+        }
+      }
+
       if (
         isSelfMessage &&
         !isManuallyTriggered &&
@@ -2783,6 +2912,9 @@ export default async function tomoriChat(
               llmOverrideCodename,
               selectedPersonaId: queuedPersona.selectedPersonaId,
               isPersonaJob: true,
+              textQuotaSource,
+              textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
+              textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
             });
           }
 
@@ -5276,6 +5408,9 @@ export default async function tomoriChat(
                       isPersonaJob,
                       isUserImpersonation,
                       impersonatedUserId,
+                      textQuotaSource,
+                      effectiveTextQuotaTriggerKey,
+                      effectiveTextQuotaUserDiscId,
                       manualSystemPrompt,
                       manualPrefill,
                       // NAI GLM-4.6: pass trailing fragment so next call appends it to the prompt
@@ -5345,6 +5480,8 @@ export default async function tomoriChat(
                         // Keep stop follow-up persona aligned with the interrupted stream.
                         selectedPersonaId:
                           currentPersona.tomori_id ?? undefined,
+                        textQuotaSource: "system",
+                        textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
                       });
 
                       log.info(
@@ -6541,6 +6678,24 @@ export default async function tomoriChat(
         }
       } // END OF MULTI-PERSONA RESPONSE LOOP
 
+      // 8.9. Consume exactly one text quota slot for this trigger after first successful output
+      if (
+        shouldApplyTextQuota &&
+        textQuotaStateForTrigger &&
+        !textQuotaStateForTrigger.consumed &&
+        personaResponses.length > 0
+      ) {
+        await incrementTextQuota(
+          textQuotaStateForTrigger.serverId,
+          textQuotaStateForTrigger.userDiscId,
+        );
+        textQuotaStateForTrigger.consumed = true;
+        textQuotaTriggerStates.set(
+          effectiveTextQuotaTriggerKey,
+          textQuotaStateForTrigger,
+        );
+      }
+
       // === SHORT-TERM MEMORY STORAGE (Phase 2) ===
       // Store conversation in short-term memory cache after successful response
       // Only store if:
@@ -6734,6 +6889,9 @@ export default async function tomoriChat(
               nextMessageData.isPersonaJob ?? false,
               nextMessageData.isUserImpersonation, // Preserve user impersonation through queue
               nextMessageData.impersonatedUserId, // Preserve impersonated user ID through queue
+              nextMessageData.textQuotaSource ?? "user",
+              nextMessageData.textQuotaTriggerKey,
+              nextMessageData.textQuotaUserDiscId,
               nextMessageData.manualSystemPrompt, // manualSystemPrompt
               nextMessageData.manualPrefill, // manualPrefill
             ).catch((e) => {

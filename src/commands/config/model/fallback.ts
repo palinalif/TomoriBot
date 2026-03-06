@@ -27,8 +27,9 @@ import { createStandardEmbed } from "../../../utils/discord/embedHelper";
 import type { LlmRow, UserRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 
-// Modal and field identifiers
-const MODAL_CUSTOM_ID = "config_model_fallback_modal";
+// Modal field identifiers
+// Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
+// awaitModalSubmit listeners from a previous run resolving on the same submission.
 const SLOT_IDS = [
 	"fallback_slot_1",
 	"fallback_slot_2",
@@ -100,7 +101,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure the command is run in a channel context
+	// 1a. Scope modal custom ID to this invocation so stale awaitModalSubmit listeners
+	//     from earlier (un-submitted) runs don't also resolve on this submission.
+	const MODAL_CUSTOM_ID = `config_model_fallback_modal_${interaction.id}`;
+
+	// 1b. Ensure the command is run in a channel context
 	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
 			titleKey: "general.errors.channel_only_title",

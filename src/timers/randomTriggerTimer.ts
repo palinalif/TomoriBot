@@ -367,6 +367,9 @@ export class RandomTriggerTimer {
         false, // isPersonaJob
         false, // isUserImpersonation
         undefined, // impersonatedUserId
+        "system", // textQuotaSource (internal timer trigger)
+        `random:${triggerId}:${lastMessage.id}`, // textQuotaTriggerKey
+        undefined, // textQuotaUserDiscId
         trigger.custom_prompt ?? undefined, // manualSystemPrompt
       );
 

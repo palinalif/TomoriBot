@@ -496,6 +496,12 @@ export async function execute(
 						undefined, // reminderRecipientID
 						undefined, // reminderData
 						resolvedPersona.tomori_id, // selectedPersonaId
+						false, // isPersonaJob
+						false, // isUserImpersonation
+						undefined, // impersonatedUserId
+						"user", // textQuotaSource
+						interaction.id, // textQuotaTriggerKey
+						interaction.user.id, // textQuotaUserDiscId
 					);
 				}
 			} catch (regenError) {

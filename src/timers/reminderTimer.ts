@@ -231,6 +231,10 @@ export class ReminderTimer {
           self_reminder: isSelfReminder,
         },
         reminder.persona_id ?? undefined, // selectedPersonaId (fallback to main)
+        false, // isPersonaJob
+        false, // isUserImpersonation
+        undefined, // impersonatedUserId
+        "system", // textQuotaSource (internal timer trigger)
       );
 
       log.info(

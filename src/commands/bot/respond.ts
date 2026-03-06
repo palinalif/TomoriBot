@@ -381,6 +381,9 @@ export async function execute(
       undefined, // isPersonaJob
       undefined, // isUserImpersonation
       undefined, // impersonatedUserId
+      "user", // textQuotaSource
+      interaction.id, // textQuotaTriggerKey (one slot per /bot respond invocation)
+      interaction.user.id, // textQuotaUserDiscId
       manualPrompt || undefined, // manualSystemPrompt
       manualPrefill, // manualPrefill
     );

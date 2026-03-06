@@ -175,6 +175,17 @@ export default {
     no_response_title: `No Response`,
     no_response_description: `I didn't respond - this may be due to an empty response or timeout from the AI.`,
 
+    // Text quota errors
+    text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
+    text_quota_exceeded_description:
+      `You have reached your text generation quota. {reset_info}`,
+    text_user_quota_exceeded_description:
+      `You have reached your daily text generation quota. {reset_info}`,
+    text_serverwide_quota_exceeded_description:
+      `This server has reached its text generation quota for this period. {reset_info}`,
+    text_quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
+    text_quota_resets_in_days: `Quota resets in {days} day(s).`,
+
     // Search related messages
     search: {
       web_search_title: `🔍 Searching for \`{query}\` on the web...`,
@@ -2684,7 +2695,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         },
       },
       quota: {
-        description: `Manage image generation quotas`,
+        description: `Manage generation quotas`,
         imagegen: {
           description: `Configure daily image generation quotas for this server.`,
           unlimited: `Unlimited`,
@@ -2700,6 +2711,22 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           serverwide_quota_resets_in_days_description: `Days before reset (1-365).`,
           serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
           serverwide_quota_resets_in_success_description: `Server-wide quota will now reset every **{days}** days.`,
+        },
+        textgen: {
+          description: `Configure text generation trigger quotas for this server.`,
+          unlimited: `Unlimited`,
+          daily_user_quota_description: `Set the daily text generation trigger limit per user.`,
+          daily_user_quota_limit_description: `Daily text triggers per user (0 = unlimited, 1-100).`,
+          daily_user_quota_success_title: `User Quota Updated`,
+          daily_user_quota_success_description: `Daily user quota set to **{limit}** text trigger(s) per day.`,
+          serverwide_quota_description: `Set the total server-wide text generation trigger limit.`,
+          serverwide_quota_limit_description: `Total server text triggers (0 = unlimited, 1-99999).`,
+          serverwide_quota_success_title: `Server-wide Quota Updated`,
+          serverwide_quota_success_description: `Server-wide quota set to **{limit}** text trigger(s) per period.`,
+          serverwide_quota_resets_in_description: `Set how many days before server-wide text quota resets.`,
+          serverwide_quota_resets_in_days_description: `Days before reset (1-365).`,
+          serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
+          serverwide_quota_resets_in_success_description: `Server-wide text quota will now reset every **{days}** days.`,
         },
       },
       memberpermissions: {

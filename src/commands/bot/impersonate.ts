@@ -601,6 +601,9 @@ async function handleUserImpersonation(
       false, // Not a persona job
       true, // isUserImpersonation - enables role reversal
       impersonatedUserId, // impersonatedUserId - the user to mimic
+      "user", // textQuotaSource
+      interaction.id, // textQuotaTriggerKey
+      interaction.user.id, // textQuotaUserDiscId
     );
 
     // 7. Set cooldown after successful response (shares cooldown pool with message triggers and /bot respond)

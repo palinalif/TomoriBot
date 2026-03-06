@@ -28,7 +28,8 @@ import type { SelectOption } from "@/types/discord/modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MODAL_CUSTOM_ID = "config_remove_modelfallback_modal";
+// Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
+// awaitModalSubmit listeners from a previous run resolving on the same submission.
 const FALLBACK_SELECT_ID = "fallback_select";
 
 // ─── Subcommand Configuration ─────────────────────────────────────────────────
@@ -66,6 +67,10 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
+	// 0. Scope modal custom ID to this invocation — prevents stale awaitModalSubmit
+	//    listeners from a prior (un-submitted) run resolving on this submission.
+	const MODAL_CUSTOM_ID = `config_remove_modelfallback_modal_${interaction.id}`;
+
 	// 1. Ensure command is run in a guild
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {

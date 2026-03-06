@@ -233,6 +233,9 @@ export async function execute(
       undefined, // isPersonaJob
       undefined, // isUserImpersonation
       undefined, // impersonatedUserId
+      "user", // textQuotaSource
+      interaction.id, // textQuotaTriggerKey
+      interaction.user.id, // textQuotaUserDiscId
       undefined, // manualSystemPrompt
     );
   } catch (error) {
