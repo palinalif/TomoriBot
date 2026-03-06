@@ -485,6 +485,7 @@ export default {
           current_output_long_title: `推定出力: 長め`,
           current_output_band_value: `**出力推定:** {outputTokens} トークン\n**合計推定:** {totalTokens} トークン\n**費用:** 1トリガーあたり約 {costPerMessage}（100トリガーあたり約 {costPer100}）`,
           current_footer: `対応プロバイダー（Google/OpenRouter）では入力トークンはプロバイダー計測値です。出力トークンは推定値です。`,
+          no_cost_provider_description: `現在のプロバイダーには費用がありません`,
           fallback_notice_title: `ライブ計測を利用できません`,
           fallback_notice_value: `現在の設定ではライブのプロバイダートークン計測を利用できなかったため、この表示はおおまかな代替推定です。`,
           minimum_scenario_title: `最小シナリオ（軽量使用）`,

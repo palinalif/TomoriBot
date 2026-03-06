@@ -483,6 +483,7 @@ export default {
           current_output_long_title: `Estimated Output: Long`,
           current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
           current_footer: `Input token counts are provider-measured for supported providers (Google/OpenRouter). Output token counts are estimated only.`,
+          no_cost_provider_description: `Current provider does not have costs`,
           fallback_notice_title: `Live Counting Unavailable`,
           fallback_notice_value: `Live provider token counting could not be used for your current setup, so this view is a rough fallback estimate.`,
           minimum_scenario_title: `Minimum Scenario (Light Usage)`,

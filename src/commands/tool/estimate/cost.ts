@@ -9,7 +9,10 @@ import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { replySummaryEmbed } from "@/utils/discord/interactionHelper";
+import {
+  replyInfoEmbed,
+  replySummaryEmbed,
+} from "@/utils/discord/interactionHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { getAvailableToolsForContext } from "@/tools/toolRegistry";
 import {
@@ -587,6 +590,11 @@ function resolveProvider(providerName: string): LiveProvider | null {
     return "openrouter";
   }
   return null;
+}
+
+function providerHasNoUsageCosts(providerName: string): boolean {
+  const normalized = providerName.toLowerCase();
+  return normalized === "novelai" || normalized === "custom";
 }
 
 function getTriggererName(interaction: ChatInputCommandInteraction): string {
@@ -1331,6 +1339,22 @@ async function sendLegacyEstimateEmbed(
   );
 }
 
+async function sendNoCostProviderEmbed(
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+): Promise<void> {
+  await replyInfoEmbed(
+    interaction,
+    locale,
+    {
+      titleKey: "commands.tool.estimate.cost.title",
+      descriptionKey: "commands.tool.estimate.cost.no_cost_provider_description",
+      color: ColorCode.INFO,
+    },
+    MessageFlags.Ephemeral,
+  );
+}
+
 /**
  * Configure the /tool estimate cost subcommand
  * Shows users estimated API costs for paid providers
@@ -1374,6 +1398,11 @@ export async function execute(
     const tomoriState = await getCachedTomoriState(serverDiscId);
     if (!tomoriState || !tomoriState.config.api_key) {
       await sendLegacyEstimateEmbed(interaction, locale, true);
+      return;
+    }
+
+    if (providerHasNoUsageCosts(tomoriState.llm.llm_provider)) {
+      await sendNoCostProviderEmbed(interaction, locale);
       return;
     }
 
