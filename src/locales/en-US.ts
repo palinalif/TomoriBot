@@ -177,14 +177,12 @@ export default {
 
     // Text quota errors
     text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
-    text_quota_exceeded_description:
-      `You have reached your text generation quota. {reset_info}`,
-    text_user_quota_exceeded_description:
-      `You have reached your daily text generation quota. {reset_info}`,
-    text_serverwide_quota_exceeded_description:
-      `This server has reached its text generation quota for this period. {reset_info}`,
+    text_quota_exceeded_description: `You have reached your text generation quota. {reset_info}`,
+    text_user_quota_exceeded_description: `You have reached your daily text generation quota. {reset_info}`,
+    text_serverwide_quota_exceeded_description: `This server has reached its text generation quota for this period. {reset_info}`,
     text_quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
     text_quota_resets_in_days: `Quota resets in {days} day(s).`,
+    text_quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
 
     // Search related messages
     search: {
@@ -593,6 +591,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         server_page5_description: `Active server system prompt preview`,
         server_page6_title: `Server Status: Model Overrides`,
         server_page6_description: `Channel and persona model overrides`,
+        server_page7_title: `Server Status: Quotas`,
+        server_page7_description: `Complete image and text quota settings`,
         // Persona scope (persona picker + 5 pages)
         persona_page1_title: `{persona_name}: Identity`,
         persona_page1_description: `Persona identity and trigger words`,
@@ -619,7 +619,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_autoch_channels: `Auto-Chat Channels`,
         field_rp_channels: `RP Channels`,
         field_trigger_words: `Trigger Words`,
-        field_whitelist_channels: `Trigger Whitelist`,
+        field_whitelist_channels: `Channel Whitelist`,
         field_whitelist_roles: `Role Whitelist`,
         whitelist_all_allowed: `None (all channels can trigger)`,
         whitelist_roles_all_allowed: `None (all roles can trigger)`,
@@ -652,6 +652,16 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_uncensor_injection: `Anti-Injection Prompt`,
         field_uncensor_unicode: `Unicode Space Replacement`,
         field_uncensor_sanitize: `Word Sanitization`,
+        field_image_quota_enabled: `Image Quota Enabled`,
+        field_image_quota_daily_user: `Image Daily User Quota`,
+        field_image_quota_serverwide: `Image Server-wide Quota`,
+        field_image_quota_reset_days: `Image Quota Reset Period`,
+        field_text_quota_enabled: `Text Quota Enabled`,
+        field_text_quota_daily_user: `Text Daily User Quota`,
+        field_text_quota_serverwide: `Text Server-wide Quota`,
+        field_text_quota_reset_days: `Text Quota Reset Period`,
+        field_quota_reset_days_value: `{days} day(s)`,
+        field_quota_unlimited: `Unlimited`,
         field_nickname: `Nickname`,
         field_dialogue_count: `Sample Dialogues`,
         field_attributes: `Attributes`,
@@ -3423,6 +3433,8 @@ You can change this anytime using \`/personal privacy\`.`,
           "This server has reached its image generation quota for this period. {reset_info}",
         quota_resets_in_hours: "Quota resets in {hours} hour(s).",
         quota_resets_in_days: "Quota resets in {days} day(s).",
+        quota_exceeded_footer:
+          "This quota is configured by this server's managers via `/server quota`.",
       },
     },
   },

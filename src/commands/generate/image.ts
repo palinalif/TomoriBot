@@ -409,6 +409,7 @@ export async function execute(
       titleKey: errorTitleKey,
       descriptionKey: errorDescriptionKey,
       descriptionVars,
+      footerKey: "commands.generate.image.quota_exceeded_footer",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });

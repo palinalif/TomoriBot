@@ -2922,6 +2922,7 @@ export default async function tomoriChat(
                 descriptionVars: {
                   reset_info: resetInfo,
                 },
+                footerKey: "genai.text_quota_exceeded_footer",
               });
               return;
             }

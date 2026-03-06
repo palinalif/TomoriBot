@@ -25,6 +25,8 @@ import {
 } from "../../utils/db/dbRead";
 import { getAllWhitelistChannels } from "../../utils/db/channelWhitelist";
 import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
+import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
+import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
 import type {
   UserRow,
   ChannelWhitelistRow,
@@ -113,6 +115,12 @@ function truncateText(input: string, maxLength: number): string {
   return input.length > maxLength
     ? `${input.substring(0, maxLength)}...`
     : input;
+}
+
+function formatQuotaLimitValue(locale: string, limit: number): string {
+  return limit === 0
+    ? localizer(locale, "commands.tool.status.field_quota_unlimited")
+    : String(limit);
 }
 
 /**
@@ -578,6 +586,8 @@ export async function execute(
           randomTriggers,
           allPersonas,
           channelLlmOverrides,
+          imageQuotaConfig,
+          textQuotaConfig,
         ] = await Promise.all([
           getBraveApiKeyStatus(tomoriState.server_id),
           getBlacklistedMemberIds(tomoriState.server_id),
@@ -586,6 +596,8 @@ export async function execute(
           getServerRandomTriggers(tomoriState.server_id),
           loadAllPersonasForServer(serverDiscId),
           getAllChannelLlmOverridesForServer(tomoriState.server_id),
+          getQuotaConfig(tomoriState.server_id),
+          getTextQuotaConfig(tomoriState.server_id),
         ]);
 
         // 3. Build a persona name map for random trigger display (tomori_id -> nickname)
@@ -963,10 +975,87 @@ export async function execute(
           ],
         };
 
+        // ── Page 7: Quotas ──────────────────────────────────────────────
+        const serverPage7: SummaryEmbedOptions = {
+          titleKey: "commands.tool.status.server_page7_title",
+          descriptionKey: "commands.tool.status.server_page7_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.tool.status.field_image_quota_enabled",
+              value: formatBooleanLocalized(imageQuotaConfig.enabled, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_image_quota_daily_user",
+              value: formatQuotaLimitValue(
+                locale,
+                imageQuotaConfig.daily_user_quota,
+              ),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_image_quota_serverwide",
+              value: formatQuotaLimitValue(
+                locale,
+                imageQuotaConfig.serverwide_quota,
+              ),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_image_quota_reset_days",
+              value: localizer(
+                locale,
+                "commands.tool.status.field_quota_reset_days_value",
+                { days: imageQuotaConfig.serverwide_quota_resets_in },
+              ),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_text_quota_enabled",
+              value: formatBooleanLocalized(textQuotaConfig.enabled, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_text_quota_daily_user",
+              value: formatQuotaLimitValue(
+                locale,
+                textQuotaConfig.daily_user_quota,
+              ),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_text_quota_serverwide",
+              value: formatQuotaLimitValue(
+                locale,
+                textQuotaConfig.serverwide_quota,
+              ),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_text_quota_reset_days",
+              value: localizer(
+                locale,
+                "commands.tool.status.field_quota_reset_days_value",
+                { days: textQuotaConfig.serverwide_quota_resets_in },
+              ),
+              inline: true,
+            },
+          ],
+        };
+
         await replyPaginatedStatusPages(
           interaction,
           locale,
-          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5, serverPage6],
+          [
+            serverPage1,
+            serverPage2,
+            serverPage3,
+            serverPage4,
+            serverPage5,
+            serverPage6,
+            serverPage7,
+          ],
           MessageFlags.Ephemeral,
         );
         break;

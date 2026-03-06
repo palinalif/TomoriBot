@@ -91,32 +91,6 @@ function normalizeTomoriConfigFromJson(rawConfig: unknown): unknown {
     }
   }
 
-  // Keep fallback IDs as clean integer arrays.
-  const rawFallbackIds = normalizedConfig.fallback_llm_ids;
-  let fallbackIdsSource: unknown = rawFallbackIds;
-  if (typeof fallbackIdsSource === "string") {
-    try {
-      fallbackIdsSource = JSON.parse(fallbackIdsSource);
-    } catch {
-      fallbackIdsSource = [];
-    }
-  }
-  if (Array.isArray(fallbackIdsSource)) {
-    normalizedConfig.fallback_llm_ids = fallbackIdsSource
-      .map((id) => {
-        const parsed =
-          typeof id === "number"
-            ? id
-            : typeof id === "string"
-              ? Number(id)
-              : NaN;
-        return Number.isInteger(parsed) ? parsed : null;
-      })
-      .filter((id): id is number => id !== null);
-  } else {
-    normalizedConfig.fallback_llm_ids = [];
-  }
-
   return normalizedConfig;
 }
 
@@ -427,9 +401,7 @@ export async function loadTomoriState(
 
     // 8. Load fallback LLMs if any are configured for this server
     const rawFallbackIds = configData.fallback_llm_ids;
-    const fallbackLlmIds: number[] = Array.isArray(rawFallbackIds)
-      ? (rawFallbackIds as number[])
-      : [];
+    const fallbackLlmIds = configData.fallback_llm_ids;
     const fallbackLlms =
       fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
     if (FALLBACK_DEBUG_ENABLED) {
@@ -529,9 +501,7 @@ export async function loadAllPersonasForServer(
 
         // 3. Resolve server-scoped fallback LLM chain once.
         const rawFallbackIds = configData.fallback_llm_ids;
-        const fallbackLlmIds: number[] = Array.isArray(rawFallbackIds)
-          ? (rawFallbackIds as number[])
-          : [];
+        const fallbackLlmIds = configData.fallback_llm_ids;
         const fallbackLlms =
           fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
         if (FALLBACK_DEBUG_ENABLED) {
