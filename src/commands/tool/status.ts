@@ -31,7 +31,7 @@ import type {
   LlmRow,
 } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
-import { CooldownType, PrivacyLevel } from "../../types/db/schema";
+import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/schema";
 import { formatBooleanLocalized } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
@@ -360,6 +360,34 @@ async function formatChannelLlmOverrides(
   );
 
   return lines.join("\n");
+}
+
+/**
+ * Formats the list of persona-level LLM overrides as a numbered list.
+ * Only includes personas that have an explicit model override set.
+ * @param personas - Array of all TomoriState personas for the server
+ * @param locale - User locale
+ * @returns Formatted persona LLM override list string, or localized "None" if empty
+ */
+function formatPersonaLlmOverrides(
+  personas: TomoriState[],
+  locale: string,
+): string {
+  // 1. Filter to personas with an explicit override, narrowing the type so llm is non-optional
+  const overrides = personas.filter(
+    (p): p is TomoriState & { persona_llm: LlmRow } => p.persona_llm != null,
+  );
+
+  if (overrides.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  // 2. Format: "N. Persona Name → `model` (provider)"
+  return overrides
+    .map((p, index) => {
+      return `${index + 1}. **${p.tomori_nickname}** → \`${p.persona_llm.llm_codename}\` (${p.persona_llm.llm_provider})`;
+    })
+    .join("\n");
 }
 
 /**
@@ -721,11 +749,6 @@ export async function execute(
               value: randomTriggersValue,
               inline: false,
             },
-            {
-              nameKey: "commands.tool.status.field_channel_llm_overrides",
-              value: channelLlmOverridesValue,
-              inline: false,
-            },
           ],
         };
 
@@ -878,10 +901,34 @@ export async function execute(
           ],
         };
 
+        // ── Page 6: Model Overrides ─────────────────────────────────────
+        const personaLlmOverridesValue = formatPersonaLlmOverrides(
+          allPersonas,
+          locale,
+        );
+
+        const serverPage6: SummaryEmbedOptions = {
+          titleKey: "commands.tool.status.server_page6_title",
+          descriptionKey: "commands.tool.status.server_page6_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.tool.status.field_channel_llm_overrides",
+              value: channelLlmOverridesValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_persona_llm_overrides",
+              value: personaLlmOverridesValue,
+              inline: false,
+            },
+          ],
+        };
+
         await replyPaginatedStatusPages(
           interaction,
           locale,
-          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5],
+          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5, serverPage6],
           MessageFlags.Ephemeral,
         );
         break;

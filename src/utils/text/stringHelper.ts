@@ -609,6 +609,9 @@ export function chunkMessage(
   // Accumulates consecutive emoji blocks so they are sent as a single chunk
   let emojiRun = "";
   let lastEmojiInRun: string | null = null;
+  // Tracks whether the previous processed block was an emoji, so we can strip
+  // orphaned leading punctuation from text blocks that follow (e.g. "<emoji>. Next")
+  let prevBlockWasEmoji = false;
 
   for (const block of mergedBlocks) {
     // Flush any accumulated emoji run before processing a non-emoji block.
@@ -658,6 +661,7 @@ export function chunkMessage(
         if (emojiRun.length === 0) {
           emojiRun = block.content;
           lastEmojiInRun = block.content;
+          prevBlockWasEmoji = true;
           break;
         }
 
@@ -665,11 +669,13 @@ export function chunkMessage(
           chunkedMessages.push(emojiRun);
           emojiRun = block.content;
           lastEmojiInRun = block.content;
+          prevBlockWasEmoji = true;
           break;
         }
 
         emojiRun += block.content;
         lastEmojiInRun = block.content;
+        prevBlockWasEmoji = true;
         break;
 
       case "url":
@@ -695,7 +701,15 @@ export function chunkMessage(
 
       case "text": {
         // 3c. Handle Text - based on humanizer degree
-        const textToAdd = block.content.trim();
+        let textToAdd = block.content.trim();
+        if (prevBlockWasEmoji) {
+          // Strip leading sentence-ending punctuation orphaned by the emoji split.
+          // e.g. "<emoji>. Next sentence" produces a text block starting with ". Next sentence".
+          // Only strip if the punctuation is immediately followed by whitespace or end-of-string,
+          // so we don't accidentally clip constructs like `."quote"`.
+          textToAdd = textToAdd.replace(/^[.!?。]+(?=\s|$)/, "");
+        }
+        prevBlockWasEmoji = false;
         if (!textToAdd) continue; // Skip empty text
 
         if (humanizerDegree < HumanizerDegree.HEAVY) {

@@ -327,16 +327,17 @@ export function filterDuplicateCustomEmojis(
   // 6. Filter duplicates and log
   const filtered = filterCustomEmojis(generatedText, emojisToRemove);
 
-  // 6.5 If filtering collapses output to punctuation/whitespace only (or empty),
-  // keep the original text to avoid unnatural messages like a lone "," or "."
-  // and to avoid dropping emoji-only lines entirely.
+  // 6.5 If filtering collapses output to punctuation only (e.g. ", that's all!" → ","),
+  // keep the original text to avoid sending a lone punctuation character.
+  // NOTE: An empty result is intentionally allowed — it means the segment was purely
+  // duplicate emojis, and the orchestrator's empty-segment guard will drop it cleanly.
   const compactFiltered = filtered.replace(/\s+/g, "");
   if (
-    compactFiltered.length === 0 ||
+    compactFiltered.length > 0 &&
     /^[.,!?;:。！？、，]+$/.test(compactFiltered)
   ) {
     log.info(
-      "[Unique Emoji] Skipping duplicate filter because result became punctuation/whitespace-only",
+      "[Unique Emoji] Skipping duplicate filter because result became punctuation-only",
     );
     return generatedText;
   }

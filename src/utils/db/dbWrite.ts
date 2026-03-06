@@ -1751,6 +1751,34 @@ export async function setPersonaLlmOverride(
 }
 
 /**
+ * Deletes the channel-level LLM override for a single channel.
+ * After calling, set channel LLM cache to null for this channel.
+ *
+ * @param serverId - The database server_id
+ * @param channelDiscId - The Discord snowflake ID of the channel
+ * @returns True on success, false on failure
+ */
+export async function deleteChannelLlmOverride(
+  serverId: number,
+  channelDiscId: string,
+): Promise<boolean> {
+  try {
+    await sql`
+			DELETE FROM channel_llm_overrides
+			WHERE server_id = ${serverId}
+			  AND channel_disc_id = ${channelDiscId}
+		`;
+    return true;
+  } catch (error) {
+    log.error(
+      `Error deleting channel LLM override for server ${serverId} channel ${channelDiscId}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+/**
  * Deletes all channel-level LLM overrides for a server.
  * Called when the server switches providers so stale model references are removed.
  *

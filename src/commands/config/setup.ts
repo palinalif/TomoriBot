@@ -16,6 +16,7 @@ import {
   replySummaryEmbed,
   promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ProviderFactory } from "../../utils/provider/providerFactory";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
@@ -836,6 +837,18 @@ export async function execute(
           ),
         });
       }
+
+      // Always show a "What can I do?" field pointing to /help features
+      const helpFeaturesMention = commandRegistry.getCommandMention(
+        "help",
+        "features",
+      );
+      successFields.push({
+        nameKey: "commands.config.setup.next_steps_title",
+        value: localizer(locale, "commands.config.setup.next_steps_description", {
+          helpFeatures: helpFeaturesMention,
+        }),
+      });
 
       // Show success message
       const successDescriptionKey = configuredModelName

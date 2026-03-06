@@ -2049,18 +2049,8 @@ export class OpenrouterStreamAdapter implements StreamProvider {
    * Handle OpenRouter-specific errors using official error codes
    */
   handleProviderError(error: unknown): ProviderError {
-    // Log the full error object for debugging
+    // Log the full error object for debugging (Pino's error serializer handles non-enumerable Error properties)
     log.error("OpenRouter error details:", error);
-    if (error && typeof error === "object") {
-      try {
-        log.error(
-          "OpenRouter error stringified:",
-          JSON.stringify(error, null, 2),
-        );
-      } catch {
-        log.error("OpenRouter error stringified: [unserializable object]");
-      }
-    }
 
     const errorMessage = error instanceof Error ? error.message : String(error);
 

@@ -93,6 +93,14 @@ export async function execute(
             inline: false,
           },
           {
+            nameKey: "commands.help.features.expressions_title",
+            value: localizer(
+              locale,
+              "commands.help.features.expressions_description",
+            ),
+            inline: false,
+          },
+          {
             nameKey: "commands.help.features.documents_title",
             value: localizer(
               locale,

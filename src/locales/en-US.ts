@@ -571,11 +571,13 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         server_page2_title: `Server Status: Behavior`,
         server_page2_description: `Timing, limits, and cooldown settings`,
         server_page3_title: `Server Status: Channels and Automation`,
-        server_page3_description: `Auto-chat, RP channels, whitelist, random triggers, and channel model overrides`,
+        server_page3_description: `Auto-chat, RP channels, whitelist, and random triggers`,
         server_page4_title: `Server Status: Features and Moderation`,
         server_page4_description: `Feature toggles and moderation settings`,
         server_page5_title: `Server Status: System Prompt`,
         server_page5_description: `Active server system prompt preview`,
+        server_page6_title: `Server Status: Model Overrides`,
+        server_page6_description: `Channel and persona model overrides`,
         // Persona scope (persona picker + 5 pages)
         persona_page1_title: `{persona_name}: Identity`,
         persona_page1_description: `Persona identity and trigger words`,
@@ -606,6 +608,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         whitelist_all_allowed: `None (all channels can trigger)`,
         field_random_triggers: `Random Triggers`,
         field_channel_llm_overrides: `Channel Model Overrides`,
+        field_persona_llm_overrides: `Persona Model Overrides`,
         random_trigger_persona_random: `Random`,
         field_cooldown_type: `Cooldown Type`,
         field_cooldown_length: `Cooldown Duration`,
@@ -1197,7 +1200,14 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         alter_description: `- Multiple characters can coexist in one server via alter personas
 - Each alter has its own personality and is triggered by specific keywords
 - Alter personas use webhooks for distinct avatars
+- Multiple alters can respond to a single message (up to the \`/config multitrigger\` limit)
+- Replying to a webhook message continues the conversation as that persona
 - Manage alters with \`/persona import\` (alter option) and \`/persona remove\``,
+        expressions_title: `Expressions & Reactions`,
+        expressions_description: `- I can use your server's custom emojis naturally in conversation (case-insensitive \`:name:\` syntax)
+- I can send stickers as part of my replies
+- I can react to messages with relevant emojis
+- Register emojis and stickers with \`/server initialize expressions\` for higher accuracy`,
         documents_title: `Document Knowledge Base`,
         documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/teach document\`
 - I retrieve and reference relevant document content when answering questions
@@ -1213,7 +1223,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Use \`/generate image\` or just ask me to generate an image
 - Reference images can come from message attachments, stickers, emojis, or user avatars
 - Available on Google and OpenRouter providers (configure with \`/config model image\`)`,
-        footer: `Not all features are available for all AI providers. It is recommended to use Google's Gemini`,
+        footer: `Not all features are available for all AI providers. Recommended: Google Gemini. You can also just ask me what I can do!`,
       },
 
       // /help cost
@@ -2212,13 +2222,15 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_desc_with_model: `I am now configured for this server! I will use the \`{model_name}\` model (the default for this provider). To modify my configuration, use my \`/config\` and \`/server\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also manage or delete your data anytime with \`/data\`. Here's a summary:`,
         success_desc_dm: `I am now configured for this Direct Message. You can manage or delete your data anytime with \`/data\`. Here's a summary:`,
         success_desc_dm_with_model: `I am now configured for this Direct Message. I will use the \`{model_name}\` model (the default for this provider). You can manage or delete your data anytime with \`/data\`. Here's a summary:`,
+        next_steps_title: `🟢 What Can I Do?`,
+        next_steps_description: `Use {helpFeatures} to see all my features, or just ask me in chat! I can also tell you what slash commands are available.`,
         novelai_expressions_warning_field: `⚠️ Expressions Disabled`,
         novelai_expressions_warning_value: `Emoji and sticker usage have been automatically disabled to keep NovelAI's context lean and stable. You can re-enable them anytime with .`,
         preset_field: `Personality Preset`,
         name_field: `My Name`,
         dm_context_explanation_title: `About Direct Messages`,
         dm_context_explanation: `I will still refer to this Direct Message as a "server". Meaning all "server" features work the same way, just privately here between us! Think of this Direct Message as a 1-on-1 server with me, therefore its server memories are my memories within here only.`,
-        already_setup_title: `Already Set Up`,
+        already_setup_title: `Already SeWt Up`,
         already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/teach\`, etc.
 
 				If you wish to swap my provider, use the \`/config apikey set\` command.`,
@@ -2429,7 +2441,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_failure_suffix: ` Force-fires after **{failure_threshold}** consecutive misses.`,
         },
         remove: {
-          description: `Remove a random trigger from this server.`,
+          description: `Remove an existing random trigger from this server.`,
           modal_title: `Remove Random Trigger`,
           select_label: `Trigger to Remove`,
           select_description: `Select the random trigger you want to delete.`,
@@ -2438,6 +2450,31 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           none_description: `This server has no random triggers configured.`,
           success_title: `Random Trigger Removed`,
           success_description: `The random trigger for {channel} has been removed.`,
+        },
+      },
+
+      // Model override removal (subcommand group)
+      remove: {
+        description: `Remove overrides from the server configuration.`,
+        modeloverrides: {
+          description: `Remove a channel or persona model override.`,
+          scope_description: `Whether to remove a channel override or a persona override.`,
+          scope_channel: `Channel Override`,
+          scope_persona: `Persona Override`,
+          channel_modal_title: `Remove Channel Model Override`,
+          channel_select_label: `Channel Override to Remove`,
+          channel_select_placeholder: `Select a channel...`,
+          channel_none_title: `No Channel Overrides`,
+          channel_none_description: `This server has no channel model overrides configured.`,
+          channel_success_title: `Channel Override Removed`,
+          channel_success_description: `The model override for {channel} has been removed. It will now use the server default.`,
+          persona_modal_title: `Remove Persona Model Override`,
+          persona_select_label: `Persona Override to Remove`,
+          persona_select_placeholder: `Select a persona...`,
+          persona_none_title: `No Persona Overrides`,
+          persona_none_description: `None of this server's personas have a model override configured.`,
+          persona_success_title: `Persona Override Removed`,
+          persona_success_description: `The model override for **{persona}** has been removed. It will now use the server default.`,
         },
       },
     },
