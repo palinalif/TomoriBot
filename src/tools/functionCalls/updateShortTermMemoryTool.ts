@@ -29,7 +29,7 @@ import { log } from "../../utils/misc/logger";
 export class UpdateShortTermMemoryTool extends BaseTool {
   name = "update_short_term_memory";
   description =
-    "Update your short-term working memory for the current story or conversation. Use this to remember important context from this ongoing conversation that you might need later, but don't need to store permanently. For long term memory that you need to store for a longer time, use update_long_term_memory or remember_this_fact";
+    "Update your short-term working memory for the current story or conversation. Use this to remember important context from this ongoing conversation that you might need later, but don't need to store permanently. Do NOT use this when a user explicitly asks you to remember/save/store something for future conversations; use update_long_term_memory or remember_this_fact for that.";
   category = "memory" as const;
 
   parameters: ToolParameterSchema = {

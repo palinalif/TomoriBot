@@ -26,12 +26,12 @@ import {
 import { resolveBridgeUserId } from "../../utils/matrix";
 
 /**
- * Tool for setting user reminders that will trigger messages at specific times
+ * Tool for creating scheduled tasks that trigger messages at specific times
  */
 export class ReminderTool extends BaseTool {
-  name = "set_channel_task_or_reminder";
+  name = "create_task";
   description =
-    "Set a reminder for a Discord user or a TASK for yourself. You will mention the user or execute the task in the selected channel at the specified time with the reminder purpose. IMPORTANT: Always set 'repetition_interval_hours' - use 0 for one-time reminders/tasks, or 1+ for recurring (e.g., 24 for daily tasks). Use 'self_reminder' for tasks you need to do (these can be recurring tasks like daily summaries or one-time tasks such as sending messages in a different channel). You can specify time in two ways: (1) Use relative time parameters like 'minutes_from_now', 'hours_from_now', 'days_from_now', 'months_from_now' - these are much easier for natural requests like 'remind me in 2 hours' or 'remind me tomorrow' (1 day from now). Multiple relative parameters add up. (2) Use absolute 'reminder_time' in YYYY-MM-DD_HH:MM format using the server's configured timezone (set via /config timezone) for specific dates/times. If both are provided, absolute time takes priority. If you omit all time parameters, the reminder defaults to 1 minute from now (useful for immediate tasks/messages).";
+    "Create a scheduled task in a Discord channel. Use this for both user reminders and self tasks: a reminder is just a task that notifies a target user. IMPORTANT: Always set 'repetition_interval_hours' - use 0 for one-time tasks, or 1+ for recurring tasks (e.g., 24 for daily tasks). Use 'self_reminder' for tasks you should execute yourself (for example daily summaries or one-time cross-channel posts). You can specify time in two ways: (1) Use relative time parameters like 'minutes_from_now', 'hours_from_now', 'days_from_now', 'months_from_now' for natural requests like 'in 2 hours' or 'tomorrow'. Multiple relative parameters add up. (2) Use absolute 'reminder_time' in YYYY-MM-DD_HH:MM format using the server's configured timezone (set via /config timezone) for specific dates/times. If both are provided, absolute time takes priority. If you omit all time parameters, the task defaults to 1 minute from now.";
   category = "utility" as const;
 
   parameters: ToolParameterSchema = {
@@ -40,57 +40,57 @@ export class ReminderTool extends BaseTool {
       reminder_purpose: {
         type: "string",
         description:
-          "What the reminder or task is for. IMPORTANT: Be very descriptive and detailed (2-4 sentences) because you might not remember the context after a long time. Include WHAT the task or the reminder is about, WHY it was set, and any relevant details from the conversation. The more context you provide now, the more helpful the reminder will be later, but do NOT include user/channel IDs or any meta information in your reminder or task purpose content.",
+          "What the task is for. IMPORTANT: Be very descriptive and detailed (2-4 sentences) because you might not remember the context after a long time. Include WHAT the task is about, WHY it was set, and any relevant details from the conversation. The more context you provide now, the more helpful the task will be later, but do NOT include user/channel IDs or any meta information in this content.",
       },
       target_user_nickname: {
         type: "string",
         description:
-          "Nickname of the Discord user the reminder or task is for, as you see them in the current conversation or their user profile information.",
+          "Nickname of the Discord user this task should notify, as you see them in the current conversation or their user profile information.",
       },
       target_user_discord_id: {
         type: "string",
         description:
-          "Discord ID of the user the reminder or task is for (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
+          "Discord ID of the user this task should notify (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
       },
       reminder_time: {
         type: "string",
         description:
-          "OPTIONAL: Absolute time to remind the user or to execute the task in YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_15:30') using the server's configured timezone. Times are interpreted using the server's timezone setting from /config timezone. Use this for specific dates/times. If provided, this takes priority over 'from now' parameters.",
+          "OPTIONAL: Absolute time to trigger the task in YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_15:30') using the server's configured timezone. Times are interpreted using the server's timezone setting from /config timezone. Use this for specific dates/times. If provided, this takes priority over 'from now' parameters.",
       },
       minutes_from_now: {
         type: "number",
         description:
-          "OPTIONAL: Minutes from the current time to set the reminder or task. Can be combined with other 'from now' parameters.",
+          "OPTIONAL: Minutes from the current time to schedule the task. Can be combined with other 'from now' parameters.",
       },
       hours_from_now: {
         type: "number",
         description:
-          "OPTIONAL: Hours from the current time to set the reminder or task. Can be combined with other 'from now' parameters.",
+          "OPTIONAL: Hours from the current time to schedule the task. Can be combined with other 'from now' parameters.",
       },
       days_from_now: {
         type: "number",
         description:
-          "OPTIONAL: Days from the current time to set the reminder or task. Can be combined with other 'from now' parameters.",
+          "OPTIONAL: Days from the current time to schedule the task. Can be combined with other 'from now' parameters.",
       },
       months_from_now: {
         type: "number",
         description:
-          "OPTIONAL: Months from the current time to set the reminder or task. Can be combined with other 'from now' parameters. Uses calendar months (30.44 days average).",
+          "OPTIONAL: Months from the current time to schedule the task. Can be combined with other 'from now' parameters. Uses calendar months (30.44 days average).",
       },
       repetition_interval_hours: {
         type: "number",
         description:
-          "REQUIRED: Set to 0 for one-time reminders/tasks. Set to 1 or higher to make the reminder/task recurring (repeats every X hours after the first trigger). Example: 24 for daily tasks, 168 for weekly tasks.",
+          "REQUIRED: Set to 0 for one-time tasks. Set to 1 or higher to make the task recurring (repeats every X hours after the first trigger). Example: 24 for daily tasks, 168 for weekly tasks.",
       },
       self_reminder: {
         type: "boolean",
         description:
-          "OPTIONAL: Set to true when the reminder is a task for you to execute yourself. This disables user mentions and focuses the prompt on the task.",
+          "OPTIONAL: Set to true when this is a task for you to execute yourself. This disables user mentions and focuses the prompt on the task.",
       },
       channel_id: {
         type: "string",
         description:
-          "OPTIONAL: Discord channel ID to send the reminder or to execute the task in. Useful for executing cross text channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
+          "OPTIONAL: Discord channel ID where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
       },
     },
     required: [
@@ -313,7 +313,7 @@ export class ReminderTool extends BaseTool {
         !resolvedUserId && "resolvedUserId",
       ].filter(Boolean);
       log.error(
-        `Critical state missing before handling set_reminder_or_task: [${missing.join(", ")}]`,
+        `Critical state missing before handling create_task: [${missing.join(", ")}]`,
       );
       return {
         success: false,

@@ -24,7 +24,7 @@ From `src/tools/functionCalls/`:
 - `remember_this_fact` (`memoryTool.ts`)
 - `update_long_term_memory` (`updateLongTermMemoryTool.ts`)
 - `update_short_term_memory` (`updateShortTermMemoryTool.ts`)
-- `set_channel_task_or_reminder` (`reminderTool.ts`)
+- `create_task` (`reminderTool.ts`)
 - `select_sticker_for_response` (`stickerTool.ts`)
 - `process_youtube_video` (`youtubeVideoTool.ts`)
 - `pin_selected_message` (`pinMessageTool.ts`)

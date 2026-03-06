@@ -1751,6 +1751,37 @@ export async function setPersonaLlmOverride(
 }
 
 /**
+ * Sets the ordered fallback LLM model chain for a server.
+ * When the primary model errors during generation, the bot retries each fallback in order.
+ * Pass an empty array to clear all configured fallback models.
+ * After calling, invalidate TomoriState cache for the server.
+ *
+ * @param serverId - Database server_id for the target server
+ * @param llmIds - Ordered array of llm_id values (up to 5), or [] to clear all fallbacks
+ * @returns True on success, false on failure
+ */
+export async function setFallbackLlms(
+  serverId: number,
+  llmIds: number[],
+): Promise<boolean> {
+  try {
+    await sql`
+			UPDATE tomori_configs
+			SET fallback_llm_ids = ${llmIds},
+			    updated_at = CURRENT_TIMESTAMP
+			WHERE server_id = ${serverId}
+		`;
+    return true;
+  } catch (error) {
+    log.error(
+      `Error setting fallback LLMs for server ${serverId} (ids: [${llmIds.join(", ")}]):`,
+      error,
+    );
+    return false;
+  }
+}
+
+/**
  * Deletes the channel-level LLM override for a single channel.
  * After calling, set channel LLM cache to null for this channel.
  *

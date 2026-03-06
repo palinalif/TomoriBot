@@ -167,6 +167,10 @@ export default {
     nai_tool_retry_exhausted_description:
       "A tool failed multiple times and couldn't complete the request. Please try again or use `/tool refresh` if this issue persists.",
 
+    // Fallback model info (shown when primary model fails but a fallback succeeded)
+    fallback_used_title: `Fallback Model Used`,
+    fallback_used_description: `\`{success_model}\` was used instead of {chain}`,
+
     // Generic no response warning (for unknown status or unhandled cases)
     no_response_title: `No Response`,
     no_response_description: `I didn't respond - this may be due to an empty response or timeout from the AI.`,
@@ -2132,6 +2136,26 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_title: `Embedding Model Updated`,
           success_description: `Embedding model changed to \`{model_name}\` (previously \`{previous_model}\`).`,
           current_none: `None`,
+        },
+        fallback: {
+          description: `Set backup models to use if the primary model fails.`,
+          modal_title: `Set Fallback Models`,
+          slot_1_label: `Fallback Model 1 (Required)`,
+          slot_2_label: `Fallback Model 2`,
+          slot_3_label: `Fallback Model 3`,
+          slot_4_label: `Fallback Model 4`,
+          slot_5_label: `Fallback Model 5`,
+          select_placeholder: `Choose a model...`,
+          no_models_title: `No Models Available`,
+          no_models_description: `There are no models available for your current provider.`,
+          custom_provider_title: `Not Supported`,
+          custom_provider_description: `Fallback models are not supported for custom providers.`,
+          primary_conflict_title: `Invalid Selection`,
+          primary_conflict_description: `One or more selected fallback models matches the server's primary model \`{model}\`. Please choose different models.`,
+          success_title: `Fallback Models Updated`,
+          success_description: `Fallback order:\n{model_list}`,
+          cleared_title: `Fallback Models Cleared`,
+          cleared_description: `No fallback models are configured for this server.`,
         },
         image: {
           description: `Change the image generation model for this server.`,

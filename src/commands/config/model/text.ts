@@ -709,14 +709,28 @@ export async function execute(
     }
 
     // 9. Update the config in the database using direct SQL (Rule #4, #15)
-    // Clear custom_model_name when switching to a non-custom provider
-    const [updatedRow] = await sql`
+    // Clear custom_model_name when switching to a non-custom provider.
+    // Also clear fallback_llm_ids when the provider changes — fallback models are
+    // provider-scoped and become invalid after a provider switch.
+    const clearFallbacks =
+      tomoriState.llm.llm_provider !== selectedModel.llm_provider;
+    const queryResult = clearFallbacks
+      ? await sql`
+            UPDATE tomori_configs
+            SET llm_id = ${selectedModel.llm_id},
+                custom_model_name = NULL,
+                fallback_llm_ids = ARRAY[]::INT[]
+            WHERE server_id = ${tomoriState.server_id}
+            RETURNING *
+        `
+      : await sql`
             UPDATE tomori_configs
             SET llm_id = ${selectedModel.llm_id},
                 custom_model_name = NULL
             WHERE server_id = ${tomoriState.server_id}
             RETURNING *
         `;
+    const [updatedRow] = queryResult;
 
     // 10. Validate the returned data (Rules #3, #5)
     const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);

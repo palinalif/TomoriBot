@@ -295,7 +295,7 @@ const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   "update_short_term_memory",
   //"update_long_term_memory",
   //"remember_this_fact",
-  //"set_channel_task_or_reminder",
+  //"create_task",
 ]);
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 const DEFAULT_SELF_REPLY_LIMIT = 1;
@@ -3893,8 +3893,9 @@ export default async function tomoriChat(
               }
             : tomoriState.config;
           // Shallow-copy TomoriState with effective config so both createConfig and streamToDiscord
-          // see the suppressed flags without ever mutating the cached TomoriState object
-          const effectiveTomoriState = isRpChannel
+          // see the suppressed flags without ever mutating the cached TomoriState object.
+          // Must be `let` so the fallback model loop can swap in a different llm for each attempt.
+          let effectiveTomoriState = isRpChannel
             ? { ...tomoriState, config: effectiveTomoriConfig }
             : tomoriState;
 
@@ -4580,8 +4581,9 @@ export default async function tomoriChat(
           }
 
           // Use effectiveTomoriState (immutable shallow copy) for createConfig so the provider's
-          // StreamConfig reflects RP channel suppression without mutating the cached TomoriState
-          const providerConfig = await provider.createConfig(
+          // StreamConfig reflects RP channel suppression without mutating the cached TomoriState.
+          // Must be `let` so the fallback model loop can recreate config for each new model.
+          let providerConfig = await provider.createConfig(
             effectiveTomoriState,
             decryptedApiKey,
           );
@@ -4815,7 +4817,10 @@ export default async function tomoriChat(
                       fallbackExcludeIds,
                     ));
 
-                  streamingContext.suppressUserErrors = hasFallbackKey;
+                  // Suppress errors if rotation keys remain OR if model fallbacks are pending
+                  streamingContext.suppressUserErrors =
+                    hasFallbackKey ||
+                    (streamingContext.forceModelFallback ?? false);
 
                   // Keep provider config in sync with the selected key
                   if (providerConfig.apiKey !== decryptedApiKey) {
@@ -4967,13 +4972,193 @@ export default async function tomoriChat(
                 }
               };
 
+              // --- Model Fallback Types ---
+              interface FallbackAttempt {
+                modelCodename: string;
+                errorCode: string;
+              }
+              interface FallbackRunResult {
+                streamResult: StreamResult | null;
+                abort: boolean;
+                // null = primary succeeded; populated array = primary failed, fallback succeeded
+                fallbackUsed: FallbackAttempt[] | null;
+                successModel: import("@/types/db/schema").LlmRow | null;
+              }
+
+              /**
+               * Extracts a short error code string from a StreamResult for display in the
+               * fallback info embed chain (e.g., "503", "rate_limit", "unknown").
+               */
+              const extractErrorCode = (result: StreamResult): string => {
+                if (!result.data) return "unknown";
+                const d = result.data as {
+                  type?: string;
+                  code?: string;
+                  message?: string;
+                };
+                return d.code ?? d.type ?? "unknown";
+              };
+
+              /**
+               * Wraps `runStreamWithKeyRetry` with model-level fallback logic.
+               * If the primary model errors and fallback LLMs are configured,
+               * retries each fallback in order until one succeeds or all fail.
+               *
+               * Closes over: effectiveTomoriState, providerConfig, decryptedApiKey,
+               * selectedKeyResult, excludedRotationKeyIds, streamingContext, tomoriState,
+               * provider, serverDiscId (for NovelAI context limit re-application).
+               */
+              const runWithFallbackModels =
+                async (): Promise<FallbackRunResult> => {
+                  const fallbackLlms = tomoriState?.fallback_llms ?? [];
+                  // Snapshot the original effective state to restore if all fallbacks fail
+                  const primaryEffectiveTomoriState = effectiveTomoriState;
+
+                  // 1. Attempt with the primary model
+                  streamingContext.forceModelFallback = fallbackLlms.length > 0;
+                  const primaryResult = await runStreamWithKeyRetry();
+
+                  if (primaryResult.abort) {
+                    streamingContext.forceModelFallback = false;
+                    return {
+                      streamResult: null,
+                      abort: true,
+                      fallbackUsed: null,
+                      successModel: null,
+                    };
+                  }
+
+                  if (
+                    !primaryResult.streamResult ||
+                    primaryResult.streamResult.status !== "error"
+                  ) {
+                    // Primary succeeded (or returned a non-error status)
+                    streamingContext.forceModelFallback = false;
+                    return {
+                      ...primaryResult,
+                      fallbackUsed: null,
+                      successModel: null,
+                    };
+                  }
+
+                  // 2. Primary errored — enter fallback loop
+                  const failures: FallbackAttempt[] = [
+                    {
+                      modelCodename:
+                        primaryEffectiveTomoriState.llm.llm_codename,
+                      errorCode: extractErrorCode(primaryResult.streamResult),
+                    },
+                  ];
+                  let lastResult = primaryResult;
+
+                  for (let fi = 0; fi < fallbackLlms.length; fi++) {
+                    const fallbackLlm = fallbackLlms[fi];
+                    const isLast = fi === fallbackLlms.length - 1;
+
+                    log.info(
+                      `Primary model failed (${failures[0].errorCode}). ` +
+                        `Trying fallback ${fi + 1}/${fallbackLlms.length}: ${fallbackLlm.llm_codename}`,
+                    );
+
+                    // 2a. Swap in the fallback model and recreate provider config
+                    effectiveTomoriState = {
+                      ...effectiveTomoriState,
+                      llm: fallbackLlm,
+                    };
+                    providerConfig = await provider.createConfig(
+                      effectiveTomoriState,
+                      decryptedApiKey,
+                    );
+                    // Re-apply NovelAI subscription context limit when relevant
+                    if (fallbackLlm.llm_provider === "novelai") {
+                      const cachedKayraLimit =
+                        getCachedContextTokens(serverDiscId);
+                      if (cachedKayraLimit !== undefined) {
+                        (providerConfig as NovelaiStreamConfig).kayraContextLimit =
+                          cachedKayraLimit;
+                      }
+                    }
+
+                    // 2b. Reset key rotation state for a clean attempt
+                    excludedRotationKeyIds.clear();
+                    const resetKeySelection = await selectApiKeyForAttempt();
+                    decryptedApiKey = resetKeySelection.apiKey;
+                    selectedKeyResult = resetKeySelection.selectedKeyResult;
+
+                    if (!decryptedApiKey) {
+                      log.error(
+                        "API key unavailable during fallback model attempt",
+                        undefined,
+                        {
+                          serverId: tomoriState?.server_id,
+                          errorType: "ApiKeyError",
+                        },
+                      );
+                      streamingContext.forceModelFallback = false;
+                      effectiveTomoriState = primaryEffectiveTomoriState;
+                      return {
+                        streamResult: lastResult.streamResult,
+                        abort: false,
+                        fallbackUsed: null,
+                        successModel: null,
+                      };
+                    }
+
+                    // 2c. Show error on last attempt; suppress on all earlier attempts
+                    streamingContext.forceModelFallback = !isLast;
+
+                    const fallbackResult = await runStreamWithKeyRetry();
+                    lastResult = fallbackResult;
+
+                    if (fallbackResult.abort) {
+                      streamingContext.forceModelFallback = false;
+                      effectiveTomoriState = primaryEffectiveTomoriState;
+                      return {
+                        streamResult: null,
+                        abort: true,
+                        fallbackUsed: null,
+                        successModel: null,
+                      };
+                    }
+
+                    if (
+                      !fallbackResult.streamResult ||
+                      fallbackResult.streamResult.status !== "error"
+                    ) {
+                      // This fallback succeeded
+                      streamingContext.forceModelFallback = false;
+                      return {
+                        streamResult: fallbackResult.streamResult,
+                        abort: false,
+                        fallbackUsed: failures,
+                        successModel: fallbackLlm,
+                      };
+                    }
+
+                    failures.push({
+                      modelCodename: fallbackLlm.llm_codename,
+                      errorCode: extractErrorCode(fallbackResult.streamResult),
+                    });
+                  }
+
+                  // 3. All models failed — restore primary state for clean teardown
+                  streamingContext.forceModelFallback = false;
+                  effectiveTomoriState = primaryEffectiveTomoriState;
+                  return {
+                    streamResult: lastResult.streamResult,
+                    abort: false,
+                    fallbackUsed: null,
+                    successModel: null,
+                  };
+                };
+
               let streamResult: StreamResult | null = null;
-              const retryOutcome = await runStreamWithKeyRetry();
-              if (retryOutcome.abort) {
+              const fallbackRunResult = await runWithFallbackModels();
+              if (fallbackRunResult.abort) {
                 finalStreamCompleted = true;
                 break;
               }
-              streamResult = retryOutcome.streamResult;
+              streamResult = fallbackRunResult.streamResult;
               if (!streamResult) {
                 finalStreamCompleted = true;
                 break;
@@ -6132,6 +6317,28 @@ export default async function tomoriChat(
                   break;
                 }
               } // End of switch statement
+
+              // If a fallback model was used successfully, send a blue info embed so
+              // the user knows which model actually responded and what failed before it.
+              if (
+                fallbackRunResult.fallbackUsed &&
+                fallbackRunResult.successModel
+              ) {
+                const chain = fallbackRunResult.fallbackUsed
+                  .map((f) => `\`${f.modelCodename}\` (errored ${f.errorCode})`)
+                  .join(" → ");
+                await sendStandardEmbed(channel, locale, {
+                  color: ColorCode.INFO,
+                  titleKey: "genai.fallback_used_title",
+                  descriptionKey: "genai.fallback_used_description",
+                  descriptionVars: {
+                    success_model: fallbackRunResult.successModel.llm_codename,
+                    chain,
+                  },
+                }).catch((e) =>
+                  log.warn("Failed to send fallback info embed", e),
+                );
+              }
 
               // Check if we should exit the loop after switch statement
               if (finalStreamCompleted) {

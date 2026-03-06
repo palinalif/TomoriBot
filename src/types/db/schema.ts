@@ -179,6 +179,7 @@ export const tomoriConfigSchema = z.object({
   custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
   custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
   nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
+  fallback_llm_ids: z.array(z.number().int()).default([]), // Added March 2026 - Ordered fallback llm_ids for provider failover
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -580,6 +581,7 @@ export type TomoriState = TomoriRow & {
   rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
   persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
   nai_preset?: NaiPresetRow; // Added March 2026 - Active NovelAI sampling preset (null when not using NAI)
+  fallback_llms?: LlmRow[]; // Added March 2026 - Resolved LLM rows for fallback model failover chain
 };
 
 /**
@@ -594,6 +596,7 @@ export const tomoriStateSchema = tomoriSchema.extend({
   rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
   persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
   nai_preset: naiPresetSchema.optional(), // Added March 2026 - Active NovelAI sampling preset
+  fallback_llms: z.array(llmSchema).optional(), // Added March 2026 - Resolved fallback LLM rows
 });
 
 /**

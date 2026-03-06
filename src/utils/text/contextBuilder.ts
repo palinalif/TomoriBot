@@ -554,7 +554,7 @@ async function buildShortTermMemoryContext(
         // Add the HINT immediately after the summary (not at the end)
         // Only when the STM tool is available for this provider
         if (isStmToolAvailable) {
-          const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic]`;
+          const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use remember_this_fact or update_long_term_memory instead.]`;
 
           memoryItems.push({
             role: "user",
@@ -582,7 +582,7 @@ async function buildShortTermMemoryContext(
         // NO SUMMARY but enough messages - Create prompt at end
         // Only when the STM tool is available for this provider
         const createText =
-          "You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels.";
+          "You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use remember_this_fact or update_long_term_memory instead.";
 
         createPromptText = await convertMentions(
           createText,

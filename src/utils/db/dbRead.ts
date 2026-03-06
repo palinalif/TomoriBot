@@ -32,6 +32,48 @@ import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
 
 /**
+ * Loads multiple LLM rows by their IDs, returning results in the same order as the input array.
+ * Invalid rows are skipped with a warning log. Returns empty array immediately for empty input.
+ *
+ * @param ids - Array of llm_id values to fetch
+ * @returns Ordered array of validated LlmRow objects (preserves input order, skips missing/invalid rows)
+ */
+export async function getLlmsByIds(ids: number[]): Promise<LlmRow[]> {
+  if (ids.length === 0) return [];
+
+  try {
+    // 1. Fetch all matching rows in a single query using ANY($1)
+    const rows = await sql`
+			SELECT * FROM llms
+			WHERE llm_id = ANY(${ids})
+		`;
+
+    // 2. Validate each row and index by ID for order-preserving lookup
+    const rowMap = new Map<number, LlmRow>();
+    for (const row of rows) {
+      const parsed = llmSchema.safeParse(row);
+      if (parsed.success && parsed.data.llm_id !== undefined) {
+        rowMap.set(parsed.data.llm_id, parsed.data);
+      } else if (!parsed.success) {
+        log.warn(
+          `Invalid LLM row for id ${row.llm_id}:`,
+          parsed.error.flatten(),
+        );
+      }
+    }
+
+    // 3. Return in the same order as the input ids, skipping any missing entries
+    return ids.flatMap((id) => {
+      const llm = rowMap.get(id);
+      return llm ? [llm] : [];
+    });
+  } catch (error) {
+    log.error(`Error loading LLMs by ids [${ids.join(", ")}]:`, error);
+    return [];
+  }
+}
+
+/**
  * Loads all NovelAI sampling presets for a given model target.
  * Results are ordered: defaults first, then alphabetically by preset_name.
  *
@@ -233,7 +275,15 @@ export async function loadTomoriState(
       }
     }
 
-    // 8. Combine and validate the full state
+    // 8. Load fallback LLMs if any are configured for this server
+    const rawFallbackIds = configData.fallback_llm_ids;
+    const fallbackLlmIds: number[] = Array.isArray(rawFallbackIds)
+      ? (rawFallbackIds as number[])
+      : [];
+    const fallbackLlms =
+      fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
+
+    // 9. Combine and validate the full state
     const fallbackTriggerWords =
       tomoriData.is_alter === true
         ? (tomoriData.alter_triggers ?? [])
@@ -247,6 +297,7 @@ export async function loadTomoriState(
       server_memories: serverMemories, // Add server memories to the state
       rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
       nai_preset: naiPreset, // Active NAI sampling preset (undefined when not configured)
+      fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined, // Resolved fallback model chain
     };
 
     // Use Zod to parse and validate the combined structure

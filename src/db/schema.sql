@@ -1458,3 +1458,7 @@ CREATE INDEX IF NOT EXISTS idx_nai_presets_model_target ON nai_presets(model_tar
 
 -- Link active preset by name to server config (nullable for non-NAI providers)
 SELECT add_column_if_not_exists('tomori_configs', 'nai_preset_name', 'TEXT');
+
+-- Add fallback model chain for automatic provider failover (March 2026)
+-- Stores an ordered list of fallback llm_ids to retry if the primary model errors
+SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'INT[]', 'ARRAY[]::INT[]');
