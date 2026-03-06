@@ -128,7 +128,7 @@ function needsConversion(text: string): boolean {
 /**
  * Converts Discord mention IDs to human-readable names using cached database lookups.
  * Also handles special placeholders like {user} and {bot}.
- * Checks for custom user nicknames first, falls back to Discord usernames.
+ * Checks for custom DB nicknames first, then server nicknames, then Discord usernames.
  * @param text - Text containing Discord mention strings or placeholders
  * @param client - Discord client for user/role lookups
  * @param serverId - Discord server ID for context
@@ -205,23 +205,43 @@ export async function convertMentions(
             const serverPersonalizationDisabled =
               personalMemoriesEnabled === false;
 
-            // Use Discord username if user is blacklisted OR server personalization is disabled OR no custom nickname exists
+            // Use custom nickname only if user is not blacklisted AND personalization is enabled
             if (
-              isUserBlacklisted ||
-              serverPersonalizationDisabled ||
-              !userData?.user_nickname
+              !isUserBlacklisted &&
+              !serverPersonalizationDisabled &&
+              userData?.user_nickname
             ) {
-              const user =
-                client.users.cache.get(id) ||
-                (await client.users.fetch(id).catch(() => null));
-              if (user) {
-                mentionCache.set(id, user.username);
-                return `${user.username}`;
-              }
-            } else {
-              // Use custom nickname only if user is not blacklisted AND personalization is enabled
               mentionCache.set(id, userData.user_nickname);
               return `${userData.user_nickname}`;
+            }
+
+            // Fallback chain for non-custom naming:
+            // server nickname -> account username
+            const guild =
+              serverId === "DM" ? null : client.guilds.cache.get(serverId);
+            const member = guild
+              ? (guild.members.cache.get(id) ??
+                (await guild.members.fetch(id).catch(() => null)))
+              : null;
+            const serverNickname = member?.nickname ?? null;
+
+            if (serverNickname) {
+              mentionCache.set(id, serverNickname);
+              return `${serverNickname}`;
+            }
+
+            const username = member?.user.username ?? null;
+            if (username) {
+              mentionCache.set(id, username);
+              return `${username}`;
+            }
+
+            const user =
+              client.users.cache.get(id) ||
+              (await client.users.fetch(id).catch(() => null));
+            if (user) {
+              mentionCache.set(id, user.username);
+              return `${user.username}`;
             }
           } catch (error) {
             log.error(
@@ -2156,9 +2176,21 @@ export async function buildContext({
       // Media-only message (no text content): synthesize an attribution line so the model
       // knows who sent it. Prose form is used ("Misuzu sent this image") rather than the
       // "authorName:" prefix, which is reserved strictly for actual utterances.
+      const mediaAttributionText = buildMediaAttributionText(
+        msg,
+        msg.authorName,
+      );
+      const resolvedMediaAttributionText = await convertMentions(
+        mediaAttributionText,
+        client,
+        guildId,
+        msg.authorName,
+        botName,
+        tomoriConfig.personal_memories_enabled,
+      );
       parts.push({
         type: "text",
-        text: buildMediaAttributionText(msg, msg.authorName),
+        text: resolvedMediaAttributionText,
       });
     }
 
