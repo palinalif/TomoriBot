@@ -31,6 +31,9 @@ import type { SelectOption } from "@/types/discord/modal";
 // Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
 // awaitModalSubmit listeners from a previous run resolving on the same submission.
 const FALLBACK_SELECT_ID = "fallback_select";
+const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
+	(process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
+);
 
 // ─── Subcommand Configuration ─────────────────────────────────────────────────
 
@@ -98,6 +101,11 @@ export async function execute(
 			});
 			return;
 		}
+		if (FALLBACK_DEBUG_ENABLED) {
+			log.info(
+				`[FallbackDebug][/config remove modelfallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} current_fallbacks=[${(tomoriState.fallback_llms ?? []).map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
+			);
+		}
 
 		// 3. Check there are fallbacks to remove
 		const currentFallbacks = tomoriState.fallback_llms ?? [];
@@ -157,6 +165,11 @@ export async function execute(
 			10,
 		);
 		const removedLlm = currentFallbacks[selectedIndex];
+		if (FALLBACK_DEBUG_ENABLED) {
+			log.info(
+				`[FallbackDebug][/config remove modelfallback] server_disc_id=${serverDiscId} selected_index=${selectedIndex} selected_value=${values[FALLBACK_SELECT_ID] ?? ""}`,
+			);
+		}
 
 		if (!removedLlm) {
 			await replyInfoEmbed(modalInteraction, locale, {
@@ -177,6 +190,11 @@ export async function execute(
 
 		// 9. Write the updated chain to the database
 		const writeOk = await setFallbackLlms(tomoriState.server_id, remainingIds);
+		if (FALLBACK_DEBUG_ENABLED) {
+			log.info(
+				`[FallbackDebug][/config remove modelfallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} remaining_ids=[${remainingIds.join(", ")}] write_ok=${writeOk}`,
+			);
+		}
 		if (!writeOk) {
 			const context: ErrorContext = {
 				serverId: tomoriState.server_id,

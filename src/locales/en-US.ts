@@ -2639,7 +2639,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       whitelist: {
         description: `Manage channel whitelist (overrides global cooldown settings)`,
-        add: {
+        channel: {
           description: `Add a channel to the whitelist with custom cooldown settings`,
           channel_description: `The channel to whitelist`,
           type_description: `Cooldown type for this channel`,
@@ -2727,6 +2727,23 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           serverwide_quota_resets_in_days_description: `Days before reset (1-365).`,
           serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
           serverwide_quota_resets_in_success_description: `Server-wide text quota will now reset every **{days}** days.`,
+        },
+        reset: {
+          description: `Reset a quota pool for image/text generation.`,
+          scope_description: `Choose whether to reset a user's daily quota or the server-wide quota.`,
+          scope_choice_user: `User`,
+          scope_choice_server: `Server`,
+          quota_type_description: `Choose which quota pool type to reset.`,
+          quota_type_choice_imagegen: `Image Generation`,
+          quota_type_choice_textgen: `Text Generation`,
+          user_select_title: `Select a User`,
+          user_select_description: `Pick a user whose daily quota should be reset.`,
+          user_select_placeholder: `Select a user...`,
+          success_title: `Quota Reset`,
+          success_user_imagegen_description: `Reset daily image generation quota usage for {user}.`,
+          success_user_textgen_description: `Reset daily text generation trigger quota usage for {user}.`,
+          success_server_imagegen_description: `Reset the server-wide image generation quota pool.`,
+          success_server_textgen_description: `Reset the server-wide text generation trigger quota pool.`,
         },
       },
       memberpermissions: {

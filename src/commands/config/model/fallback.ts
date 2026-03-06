@@ -47,6 +47,9 @@ const SLOT_LABEL_KEYS = [
 ] as const;
 
 const ITEMS_PER_PAGE = 25;
+const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
+	(process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
+);
 
 /**
  * Returns a localized description string for a given LLM model, with capability flags prepended.
@@ -126,6 +129,11 @@ export async function execute(
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
+	}
+	if (FALLBACK_DEBUG_ENABLED) {
+		log.info(
+			`[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} current_fallbacks=[${(tomoriState.fallback_llms ?? []).map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
+		);
 	}
 
 	// 3. Block custom providers — model names are free-text, no enumerated list to select from
@@ -311,9 +319,19 @@ export async function execute(
 			resolvedCodenames.push(codename);
 		}
 	}
+	if (FALLBACK_DEBUG_ENABLED) {
+		log.info(
+			`[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} selected_slots=[${rawSlots.join(", ")}] deduplicated=[${deduplicatedCodenames.join(", ")}] resolved_ids=[${resolvedIds.join(", ")}]`,
+		);
+	}
 
 	// 12. Write to database
 	const writeOk = await setFallbackLlms(tomoriState.server_id, resolvedIds);
+	if (FALLBACK_DEBUG_ENABLED) {
+		log.info(
+			`[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} write_ok=${writeOk}`,
+		);
+	}
 	if (!writeOk) {
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "general.errors.update_failed_title",

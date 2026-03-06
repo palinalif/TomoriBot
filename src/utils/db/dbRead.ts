@@ -37,6 +37,10 @@ type TomoriConfigJsonResult = {
   config: unknown;
 };
 
+const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
+  (process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
+);
+
 /**
  * Converts a Postgres bytea JSON representation (e.g., "\\xDEADBEEF") to Buffer.
  * Returns null when the input is malformed or cannot be parsed.
@@ -89,8 +93,16 @@ function normalizeTomoriConfigFromJson(rawConfig: unknown): unknown {
 
   // Keep fallback IDs as clean integer arrays.
   const rawFallbackIds = normalizedConfig.fallback_llm_ids;
-  if (Array.isArray(rawFallbackIds)) {
-    normalizedConfig.fallback_llm_ids = rawFallbackIds
+  let fallbackIdsSource: unknown = rawFallbackIds;
+  if (typeof fallbackIdsSource === "string") {
+    try {
+      fallbackIdsSource = JSON.parse(fallbackIdsSource);
+    } catch {
+      fallbackIdsSource = [];
+    }
+  }
+  if (Array.isArray(fallbackIdsSource)) {
+    normalizedConfig.fallback_llm_ids = fallbackIdsSource
       .map((id) => {
         const parsed =
           typeof id === "number"
@@ -180,11 +192,20 @@ export async function getLlmsByIds(ids: number[]): Promise<LlmRow[]> {
   if (ids.length === 0) return [];
 
   try {
-    // 1. Fetch all matching rows in a single query using ANY($1)
-    const rows = await sql`
+    // 1. Fetch all matching rows in a single query using an IN (...) list.
+    //    Avoid ANY($1) array binding here - Bun SQL can intermittently fail on
+    //    integer-array parameters with protocol error 08P01.
+    const distinctIds = Array.from(new Set(ids));
+    const placeholders = distinctIds
+      .map((_, index) => `$${index + 1}`)
+      .join(", ");
+    const rows = await sql.unsafe(
+      `
 			SELECT * FROM llms
-			WHERE llm_id = ANY(${ids})
-		`;
+			WHERE llm_id IN (${placeholders})
+		`,
+      distinctIds,
+    );
 
     // 2. Validate each row and index by ID for order-preserving lookup
     const rowMap = new Map<number, LlmRow>();
@@ -411,6 +432,11 @@ export async function loadTomoriState(
       : [];
     const fallbackLlms =
       fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
+    if (FALLBACK_DEBUG_ENABLED) {
+      log.info(
+        `[FallbackDebug][loadTomoriState] server_disc_id=${serverDiscId} server_id=${serverId} raw_fallback_ids=${JSON.stringify(rawFallbackIds)} parsed_fallback_ids=[${fallbackLlmIds.join(", ")}] resolved_fallbacks=[${fallbackLlms.map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
+      );
+    }
 
     // 9. Combine and validate the full state
     const fallbackTriggerWords =
@@ -501,7 +527,20 @@ export async function loadAllPersonasForServer(
           return [];
         }
 
-        // 3. Load LLM data once (with cache fallback)
+        // 3. Resolve server-scoped fallback LLM chain once.
+        const rawFallbackIds = configData.fallback_llm_ids;
+        const fallbackLlmIds: number[] = Array.isArray(rawFallbackIds)
+          ? (rawFallbackIds as number[])
+          : [];
+        const fallbackLlms =
+          fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
+        if (FALLBACK_DEBUG_ENABLED) {
+          log.info(
+            `[FallbackDebug][loadAllPersonasForServer] server_disc_id=${serverDiscId} server_id=${serverId} raw_fallback_ids=${JSON.stringify(rawFallbackIds)} parsed_fallback_ids=[${fallbackLlmIds.join(", ")}] resolved_fallbacks=[${fallbackLlms.map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
+          );
+        }
+
+        // 4. Load LLM data once (with cache fallback)
         let llmData = getCachedLLM(configData.llm_id);
         if (!llmData) {
           log.info(
@@ -522,7 +561,7 @@ export async function loadAllPersonasForServer(
           llmData = llmRows[0] as LlmRow;
         }
 
-        // 4. Load rotation keys once (server-scoped)
+        // 5. Load rotation keys once (server-scoped)
         const rotationKeysRows = await sql`
 					SELECT * FROM api_key_rotation
 					WHERE server_id = ${serverId}
@@ -546,7 +585,7 @@ export async function loadAllPersonasForServer(
           }
         }
 
-        // 5. Load persona configs for all personas in this server
+        // 6. Load persona configs for all personas in this server
         const personaConfigRows = await sql`
 					SELECT pc.*
 					FROM persona_configs pc
@@ -566,7 +605,7 @@ export async function loadAllPersonasForServer(
           }
         }
 
-        // 6. Load server memories once, grouped by persona_lineage_id
+        // 7. Load server memories once, grouped by persona_lineage_id
         const memoryRows = await sql<
           Array<{
             persona_lineage_id: number | string | bigint | null;
@@ -601,7 +640,7 @@ export async function loadAllPersonasForServer(
           memoriesByLineage.set(lineageId, existing);
         }
 
-        // 7. Build persona states
+        // 8. Build persona states
         const personas: TomoriState[] = [];
         for (const tomoriRow of tomoriRows) {
           const tomoriId = tomoriRow.tomori_id;
@@ -655,6 +694,7 @@ export async function loadAllPersonasForServer(
             persona_prompt: personaConfig?.persona_prompt ?? null,
             server_memories: serverMemories,
             rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
+            fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined,
             persona_llm: personaLlm, // undefined if no override set
           };
 

@@ -16,7 +16,7 @@ import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 /**
- * Configure the /server whitelist add subcommand
+ * Configure the /server whitelist channel subcommand
  * Allows server managers to whitelist specific channels with custom cooldown settings
  * When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot
  */
@@ -24,9 +24,9 @@ export const configureSubcommand = (
   subcommand: SlashCommandSubcommandBuilder,
 ) =>
   subcommand
-    .setName("add")
+    .setName("channel")
     .setDescription(
-      localizer("en-US", "commands.server.whitelist.add.description"),
+      localizer("en-US", "commands.server.whitelist.channel.description"),
     )
     .addChannelOption((option) =>
       option
@@ -34,7 +34,7 @@ export const configureSubcommand = (
         .setDescription(
           localizer(
             "en-US",
-            "commands.server.whitelist.add.channel_description",
+            "commands.server.whitelist.channel.channel_description",
           ),
         )
         .addChannelTypes(ChannelType.GuildText)
@@ -44,7 +44,7 @@ export const configureSubcommand = (
       option
         .setName("cooldown_type")
         .setDescription(
-          localizer("en-US", "commands.server.whitelist.add.type_description"),
+          localizer("en-US", "commands.server.whitelist.channel.type_description"),
         )
         .setRequired(true)
         .addChoices(
@@ -89,7 +89,7 @@ export const configureSubcommand = (
         .setDescription(
           localizer(
             "en-US",
-            "commands.server.whitelist.add.length_description",
+            "commands.server.whitelist.channel.length_description",
           ),
         )
         .setMinValue(0)
@@ -98,7 +98,7 @@ export const configureSubcommand = (
     );
 
 /**
- * Execute the /server whitelist add command
+ * Execute the /server whitelist channel command
  * Adds a channel to the whitelist with custom cooldown settings
  */
 export async function execute(
@@ -153,9 +153,9 @@ export async function execute(
     if (channel.type !== ChannelType.GuildText) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
-        titleKey: "commands.server.whitelist.add.invalid_channel_title",
+        titleKey: "commands.server.whitelist.channel.invalid_channel_title",
         descriptionKey:
-          "commands.server.whitelist.add.invalid_channel_description",
+          "commands.server.whitelist.channel.invalid_channel_description",
       });
       return;
     }
@@ -164,9 +164,9 @@ export async function execute(
     if (cooldownType < 0 || cooldownType > 3) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
-        titleKey: "commands.server.whitelist.add.invalid_type_title",
+        titleKey: "commands.server.whitelist.channel.invalid_type_title",
         descriptionKey:
-          "commands.server.whitelist.add.invalid_type_description",
+          "commands.server.whitelist.channel.invalid_type_description",
       });
       return;
     }
@@ -175,9 +175,9 @@ export async function execute(
     if (cooldownLength < 0 || cooldownLength > 86400) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
-        titleKey: "commands.server.whitelist.add.invalid_length_title",
+        titleKey: "commands.server.whitelist.channel.invalid_length_title",
         descriptionKey:
-          "commands.server.whitelist.add.invalid_length_description",
+          "commands.server.whitelist.channel.invalid_length_description",
         descriptionVars: {
           min: "0",
           max: "86400",
@@ -201,8 +201,8 @@ export async function execute(
     ) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
-        titleKey: "commands.server.whitelist.add.already_set_title",
-        descriptionKey: "commands.server.whitelist.add.already_set_description",
+        titleKey: "commands.server.whitelist.channel.already_set_title",
+        descriptionKey: "commands.server.whitelist.channel.already_set_description",
         descriptionVars: {
           channel_name: channel.name ?? "UNDEFINED_CH",
         },
@@ -234,9 +234,9 @@ export async function execute(
         locale,
         {
           color: ColorCode.SUCCESS,
-          titleKey: "commands.server.whitelist.add.success_instant_title",
+          titleKey: "commands.server.whitelist.channel.success_instant_title",
           descriptionKey:
-            "commands.server.whitelist.add.success_instant_description",
+            "commands.server.whitelist.channel.success_instant_description",
           descriptionVars: {
             channel_name: channel.name ?? "UNDEFINED_CH",
             cooldown_type: cooldownTypeName,
@@ -250,8 +250,8 @@ export async function execute(
         locale,
         {
           color: ColorCode.SUCCESS,
-          titleKey: "commands.server.whitelist.add.success_title",
-          descriptionKey: "commands.server.whitelist.add.success_description",
+          titleKey: "commands.server.whitelist.channel.success_title",
+          descriptionKey: "commands.server.whitelist.channel.success_description",
           descriptionVars: {
             channel_name: channel.name ?? "UNDEFINED_CH",
             cooldown_type: cooldownTypeName,
@@ -267,7 +267,7 @@ export async function execute(
     );
   } catch (error) {
     log.error(
-      "Error executing /server whitelist add command",
+      "Error executing /server whitelist channel command",
       error,
       errorContext,
     );

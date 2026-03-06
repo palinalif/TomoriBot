@@ -231,7 +231,7 @@ Rules:
 ## Representative Command Groups
 
 - `config`: setup, model(text/image/embedding), apikey(set/delete/rotation), sysprompt(change/clear/preset), params(*), timezone, maxmsgfetch, permissions, uncensors
-- `server`: trigger(add/delete), whitelist(add/remove), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen), rpchannel(add/remove)
+- `server`: trigger(add/delete), whitelist(add/remove), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove
 - `tool`: ping, status, refresh, compact, comment
 

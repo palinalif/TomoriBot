@@ -38,6 +38,10 @@ import type {
 } from "../../types/db/schema";
 import { setupConfigSchema, setupResultSchema } from "../../types/db/schema";
 
+const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
+  (process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
+);
+
 /**
  * Registers or updates a user in the database, ensuring they have a record for presence tracking and personalization.
  * Uses an UPSERT pattern following Rule #15.
@@ -1766,12 +1770,51 @@ export async function setFallbackLlms(
 ): Promise<boolean> {
   try {
     const fallbackJson = JSON.stringify(llmIds);
-    await sql`
+    // Match server-scoped rows (server_id = serverId) first.
+    // Legacy rows have server_id = NULL and are linked via tomori_id → tomoris.server_id,
+    // so include them in the same UPDATE to avoid silently writing nothing.
+    const updatedRows = await sql<
+      Array<{
+        tomori_config_id: number;
+        server_id: number | null;
+        tomori_id: number | null;
+        fallback_llm_ids: unknown;
+      }>
+    >`
 			UPDATE tomori_configs
 			SET fallback_llm_ids = ${fallbackJson}::JSONB,
 			    updated_at = CURRENT_TIMESTAMP
 			WHERE server_id = ${serverId}
+			   OR (
+			       server_id IS NULL
+			       AND tomori_id IN (
+			           SELECT tomori_id FROM tomoris
+			           WHERE server_id = ${serverId}
+			             AND is_alter = false
+			       )
+			   )
+			RETURNING tomori_config_id, server_id, tomori_id, fallback_llm_ids
 		`;
+
+    if (updatedRows.length === 0) {
+      log.warn(
+        `[FallbackConfig] setFallbackLlms matched 0 rows for server_id ${serverId} (requested ids: [${llmIds.join(", ")}])`,
+      );
+      return false;
+    }
+
+    if (FALLBACK_DEBUG_ENABLED) {
+      const updatedRowSummary = updatedRows.map((row) => ({
+        tomori_config_id: row.tomori_config_id,
+        server_id: row.server_id,
+        tomori_id: row.tomori_id,
+        fallback_llm_ids: row.fallback_llm_ids,
+      }));
+      log.info(
+        `[FallbackDebug][setFallbackLlms] server_id=${serverId} requested_ids=[${llmIds.join(", ")}] updated_rows=${JSON.stringify(updatedRowSummary)}`,
+      );
+    }
+
     return true;
   } catch (error) {
     log.error(

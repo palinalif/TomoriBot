@@ -72,7 +72,7 @@ Operational note:
 
 - Global trigger cooldown: `/server cooldown triggers`
 - Channel whitelist + per-channel overrides:
-  - `/server whitelist add`
+  - `/server whitelist channel`
   - `/server whitelist remove`
 
 ## Cleanup
