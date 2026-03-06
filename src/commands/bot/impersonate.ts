@@ -617,6 +617,7 @@ async function handleUserImpersonation(
       interaction.channel.id,
       cooldownType,
       cooldownLength,
+      interaction.member as import("discord.js").GuildMember | null,
     );
     log.info(`[/bot impersonate ${commandTarget}] Cooldown set successfully`);
 

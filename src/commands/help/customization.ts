@@ -163,10 +163,15 @@ export async function execute(
       "persona",
       "remove",
     );
-    const serverWhitelistAddMention = commandRegistry.getCommandMention(
+    const serverWhitelistChannelMention = commandRegistry.getCommandMention(
       "server",
       "whitelist",
-      "add",
+      "channel",
+    );
+    const serverWhitelistRoleMention = commandRegistry.getCommandMention(
+      "server",
+      "whitelist",
+      "role",
     );
     const serverWhitelistRemoveMention = commandRegistry.getCommandMention(
       "server",
@@ -315,7 +320,8 @@ export async function execute(
         serverTriggerAdd: serverTriggerAddMention,
         serverTriggerDelete: serverTriggerDeleteMention,
         serverAvatar: serverAvatarMention,
-        serverWhitelistAdd: serverWhitelistAddMention,
+        serverWhitelistChannel: serverWhitelistChannelMention,
+        serverWhitelistRole: serverWhitelistRoleMention,
         serverWhitelistRemove: serverWhitelistRemoveMention,
         teachDocument: teachDocumentMention,
         forgetDocument: forgetDocumentMention,

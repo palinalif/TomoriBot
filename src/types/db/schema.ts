@@ -168,6 +168,7 @@ export const tomoriConfigSchema = z.object({
   imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
   hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
   hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds
+  self_debug_enabled: z.boolean().default(false), // Added March 2026 - Include Tomori error embeds in context as [System: ...]
   uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
   uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle
   uncensor_sanitize_enabled: z.boolean().default(false), // Added February 2026 - Sensitive word sanitization toggle
@@ -374,6 +375,19 @@ export const channelWhitelistSchema = z.object({
   updated_at: z.date().optional(),
 });
 export type ChannelWhitelistRow = z.infer<typeof channelWhitelistSchema>;
+
+/**
+ * Role Whitelist Schema
+ * Defines role-based trigger access for server-wide whitelist restrictions.
+ * When ANY role is whitelisted, only members with whitelisted roles can trigger the bot.
+ */
+export const roleWhitelistSchema = z.object({
+  server_id: z.number(),
+  role_disc_id: z.string(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+});
+export type RoleWhitelistRow = z.infer<typeof roleWhitelistSchema>;
 
 export const errorLogSchema = z.object({
   error_log_id: z.number().optional(), // Primary key, optional as it's generated

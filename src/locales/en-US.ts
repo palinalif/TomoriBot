@@ -620,7 +620,9 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_rp_channels: `RP Channels`,
         field_trigger_words: `Trigger Words`,
         field_whitelist_channels: `Trigger Whitelist`,
+        field_whitelist_roles: `Role Whitelist`,
         whitelist_all_allowed: `None (all channels can trigger)`,
+        whitelist_roles_all_allowed: `None (all roles can trigger)`,
         field_random_triggers: `Random Triggers`,
         field_channel_llm_overrides: `Channel Model Overrides`,
         field_persona_llm_overrides: `Persona Model Overrides`,
@@ -634,6 +636,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_self_teach: `Self-Teaching`,
         field_pin_message: `Pin Message Tool`,
         field_hide_respond_embed: `Hide Respond Embed`,
+        field_self_debug: `Self-Debug Error Embeds`,
         field_blacklisted_members: `Blacklisted Members`,
         field_api_key_set: `API Key Set`,
         field_brave_api_key_set: `Brave API Key Set`,
@@ -1563,7 +1566,8 @@ Triggers & Appearance:
 
 Channel Whitelist & Cooldowns:
 - {configCooldown} - Set global cooldown between my responses
-- {serverWhitelistAdd} - Add a channel to the whitelist (only whitelisted channels can trigger me)
+- {serverWhitelistChannel} - Add a channel to the whitelist (only whitelisted channels can trigger me)
+- {serverWhitelistRole} - Add/remove roles allowed to trigger me when role whitelist is active
 - {serverWhitelistRemove} - Remove a channel from the whitelist
 - Whitelisted channels completely override the global cooldown with per-channel settings
 
@@ -1744,7 +1748,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         no_smart_model_title: `No Reasoning Model Found`,
         no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config apikey set\`.`,
         cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot respond\` again. This cooldown is shared with message triggers.`,
-        channel_not_whitelisted: `This server has a channel whitelist active. \`/bot respond\` can only be used in whitelisted channels.`,
+        channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot respond\` can only be used in whitelisted channels by members with whitelisted roles.`,
       },
       kill: {
         description: `Immediately stop the current stream and clear queued responses in this channel.`,
@@ -1784,8 +1788,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         no_messages_description: `No messages found in this channel. Send at least one message before using user impersonation.`,
         cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate me\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
         cooldown_active_user: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate user\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
-        channel_not_whitelisted: `This server has a channel whitelist active. \`/bot impersonate me\` can only be used in whitelisted channels.`,
-        channel_not_whitelisted_user: `This server has a channel whitelist active. \`/bot impersonate user\` can only be used in whitelisted channels.`,
+        channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot impersonate me\` can only be used in whitelisted channels by members with whitelisted roles.`,
+        channel_not_whitelisted_user: `This server has whitelist restrictions active. \`/bot impersonate user\` can only be used in whitelisted channels by members with whitelisted roles.`,
 
         // System impersonation
         system_modal_title: `System Prompt Injection`,
@@ -2065,6 +2069,16 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_disabled_title: `Self-Reply Disabled`,
           success_disabled_description: `Self-reply chain is now disabled.`,
         },
+      },
+      selfdebug: {
+        description: `Toggle whether I load my own diagnostic embeds into context.`,
+        set_description: `Enable or disable self-debug embed ingestion.`,
+        already_set_title: `Self-Debug Already Set`,
+        already_enabled_description: `Self-debug is already **enabled**.`,
+        already_disabled_description: `Self-debug is already **disabled**.`,
+        success_title: `Self-Debug Updated`,
+        enabled_success: `Self-debug is now **enabled**. I will load my error and diagnostic embeds into context as [System: ...] messages.`,
+        disabled_success: `Self-debug is now **disabled**. My error and diagnostic embeds will no longer be loaded into context.`,
       },
       maxmsgfetch: {
         description: `Set how many recent messages I fetch for context (20-100).`,
@@ -2638,7 +2652,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         cannot_blacklist_bot_description: `\`{user_name}\` is a bot and cannot be added to the personalization blacklist.`,
       },
       whitelist: {
-        description: `Manage channel whitelist (overrides global cooldown settings)`,
+        description: `Manage trigger whitelist (channels + roles; channel entries override global cooldown settings)`,
         channel: {
           description: `Add a channel to the whitelist with custom cooldown settings`,
           channel_description: `The channel to whitelist`,
@@ -2656,6 +2670,23 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_description: `Channel **{channel_name}** whitelisted with **{cooldown_type}** cooldown of **{cooldown_length}** seconds.\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
           success_instant_title: `Channel Whitelisted (Instant)`,
           success_instant_description: `Channel **{channel_name}** whitelisted with **{cooldown_type}** (0 seconds = instant, no cooldown).\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
+        },
+        role: {
+          description: `Add or remove whitelisted roles that can trigger the bot`,
+          role_description: `The role to add or remove from whitelist`,
+          action_description: `Choose whether to add or remove this role`,
+          action_add: `Add`,
+          action_remove: `Remove`,
+          invalid_role_title: `Invalid Role`,
+          invalid_role_description: `The @everyone role cannot be used for role whitelist.`,
+          already_set_title: `Already Set`,
+          already_set_description: `Role {role_mention} is already in the whitelist.`,
+          not_set_title: `Not Set`,
+          not_set_description: `Role {role_mention} is not in the whitelist.`,
+          success_add_title: `Role Whitelisted`,
+          success_add_description: `Role {role_mention} can now trigger the bot when role whitelist is active.`,
+          success_remove_title: `Role Removed from Whitelist`,
+          success_remove_description: `Role {role_mention} has been removed from the whitelist.`,
         },
         remove: {
           description: `Remove a channel from the whitelist`,

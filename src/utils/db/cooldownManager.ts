@@ -1,6 +1,7 @@
 import { PermissionFlagsBits, type GuildMember } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { CooldownType } from "@/types/db/schema";
+import type { WhitelistBlockReason } from "@/types/misc/channelWhitelist";
 import { log } from "@/utils/misc/logger";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 
@@ -11,8 +12,10 @@ export interface CooldownCheckResult {
   isOnCooldown: boolean;
   remainingSeconds: number;
   cooldownType: CooldownType;
-  /** True when the channel is blocked because a whitelist exists but this channel isn't on it */
+  /** True when whitelist restrictions block this trigger */
   blockedByWhitelist?: boolean;
+  /** Which whitelist rule blocked the trigger when blockedByWhitelist is true */
+  whitelistBlockReason?: WhitelistBlockReason;
 }
 
 /**
@@ -277,19 +280,23 @@ export async function checkMessageTriggerCooldownWithWhitelist(
   member: GuildMember | null = null,
 ): Promise<CooldownCheckResult> {
   // 1. Check whitelist status FIRST (before checking cooldown type)
-  const whitelistStatus = await getCachedWhitelistStatus(serverId, channelId);
+  const memberRoleDiscIds = member
+    ? member.roles.cache.map((role) => role.id)
+    : undefined;
+  const whitelistStatus = await getCachedWhitelistStatus(
+    serverId,
+    channelId,
+    memberRoleDiscIds,
+  );
 
-  // 2. Block non-whitelisted channels if ANY whitelist exists
-  if (
-    whitelistStatus.hasActiveWhitelist &&
-    !whitelistStatus.isChannelWhitelisted
-  ) {
-    // Channel not whitelisted — blocked entirely (not a cooldown)
+  // 2. Block if whitelist policy disallows this trigger
+  if (!whitelistStatus.isTriggerAllowed) {
     return {
       isOnCooldown: true,
       remainingSeconds: 0,
       cooldownType: CooldownType.OFF,
       blockedByWhitelist: true,
+      whitelistBlockReason: whitelistStatus.blockReason,
     };
   }
 
@@ -336,9 +343,17 @@ export async function setMessageTriggerCooldownWithWhitelist(
   channelId: string,
   globalCooldownType: CooldownType,
   globalCooldownLength: number,
+  member: GuildMember | null = null,
 ): Promise<void> {
   // 1. Check whitelist status FIRST to determine which settings to use
-  const whitelistStatus = await getCachedWhitelistStatus(serverId, channelId);
+  const memberRoleDiscIds = member
+    ? member.roles.cache.map((role) => role.id)
+    : undefined;
+  const whitelistStatus = await getCachedWhitelistStatus(
+    serverId,
+    channelId,
+    memberRoleDiscIds,
+  );
 
   // 2. Determine which cooldown settings to use
   // If channel is whitelisted, use channel-specific settings; otherwise use global settings

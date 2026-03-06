@@ -7,7 +7,7 @@ This document describes the currently implemented cooldown behavior.
 TomoriBot has two cooldown domains:
 
 1. Slash command category cooldowns (`interactionCreate`)
-2. Message-trigger cooldowns (`messageCreate`) with whitelist-aware per-channel overrides
+2. Message-trigger cooldowns (`messageCreate`) with whitelist-aware channel/role gating and per-channel overrides
 
 ## Data Storage
 
@@ -42,9 +42,10 @@ Used for automatic message-triggered chat flow.
 ### Effective cooldown source
 
 1. Check whitelist cache (`getCachedWhitelistStatus`).
-2. If any whitelist exists and current channel is not whitelisted -> channel is blocked.
-3. If channel is whitelisted, use channel-specific cooldown type/length.
-4. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
+2. If channel whitelist is active and current channel is not whitelisted -> blocked.
+3. If role whitelist is active and triggering member has no whitelisted role -> blocked.
+4. If channel is whitelisted, use channel-specific cooldown type/length.
+5. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
 
 ### Cooldown types
 
@@ -71,8 +72,9 @@ Operational note:
 ## Configuration Commands
 
 - Global trigger cooldown: `/server cooldown triggers`
-- Channel whitelist + per-channel overrides:
+- Trigger whitelist:
   - `/server whitelist channel`
+  - `/server whitelist role`
   - `/server whitelist remove`
 
 ## Cleanup

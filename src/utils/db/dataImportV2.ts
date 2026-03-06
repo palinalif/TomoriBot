@@ -280,7 +280,8 @@ export async function importServerConfig(
 				personal_memories_enabled = ${config.personal_memories_enabled},
 				emoji_usage_enabled = ${config.emoji_usage_enabled},
 				sticker_usage_enabled = ${config.sticker_usage_enabled},
-				imagegen_enabled = ${config.imagegen_enabled}
+				imagegen_enabled = ${config.imagegen_enabled},
+				self_debug_enabled = ${config.self_debug_enabled}
 			WHERE server_id = ${serverId}
 			RETURNING tomori_config_id
 		`;
@@ -309,7 +310,8 @@ export async function importServerConfig(
 						personal_memories_enabled = ${config.personal_memories_enabled},
 						emoji_usage_enabled = ${config.emoji_usage_enabled},
 						sticker_usage_enabled = ${config.sticker_usage_enabled},
-						imagegen_enabled = ${config.imagegen_enabled}
+						imagegen_enabled = ${config.imagegen_enabled},
+						self_debug_enabled = ${config.self_debug_enabled}
 					WHERE tomori_id = ${mainTomoriId}
 					RETURNING tomori_config_id
 				`;

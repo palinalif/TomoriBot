@@ -4,7 +4,7 @@ import { log } from "@/utils/misc/logger";
 
 /**
  * Cache for channel whitelist status
- * Key format: "serverDiscId:channelDiscId"
+ * Key format: "serverDiscId:channelDiscId:roleSignature"
  * TTL: 5 minutes (whitelists change infrequently)
  */
 const whitelistCache = new Map<
@@ -32,23 +32,43 @@ const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
  * Generate cache key from server and channel Discord IDs
  * @param serverDiscId - Discord server ID (snowflake)
  * @param channelDiscId - Discord channel ID (snowflake)
+ * @param memberRoleDiscIds - Optional member role IDs used for role-whitelist checks
  * @returns Cache key string
  */
-function getCacheKey(serverDiscId: string, channelDiscId: string): string {
-  return `${serverDiscId}:${channelDiscId}`;
+function getCacheKey(
+  serverDiscId: string,
+  channelDiscId: string,
+  memberRoleDiscIds?: string[],
+): string {
+  let roleSignature = "unknown";
+
+  if (memberRoleDiscIds !== undefined) {
+    roleSignature =
+      memberRoleDiscIds.length > 0
+        ? memberRoleDiscIds.slice().sort().join(",")
+        : "none";
+  }
+
+  return `${serverDiscId}:${channelDiscId}:${roleSignature}`;
 }
 
 /**
  * Get cached whitelist status or fetch from database
  * @param serverDiscId - Discord server ID (snowflake)
  * @param channelDiscId - Discord channel ID (snowflake)
+ * @param memberRoleDiscIds - Optional member role IDs used for role-whitelist checks
  * @returns WhitelistCheckResult with whitelist status and settings
  */
 export async function getCachedWhitelistStatus(
   serverDiscId: string,
   channelDiscId: string,
+  memberRoleDiscIds?: string[],
 ): Promise<WhitelistCheckResult> {
-  const cacheKey = getCacheKey(serverDiscId, channelDiscId);
+  const cacheKey = getCacheKey(
+    serverDiscId,
+    channelDiscId,
+    memberRoleDiscIds,
+  );
   const now = Date.now();
 
   // Check cache first
@@ -67,7 +87,11 @@ export async function getCachedWhitelistStatus(
     `[Whitelist Cache] MISS - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`,
   );
 
-  const result = await checkChannelWhitelist(serverDiscId, channelDiscId);
+  const result = await checkChannelWhitelist(
+    serverDiscId,
+    channelDiscId,
+    memberRoleDiscIds,
+  );
 
   // Store in cache
   whitelistCache.set(cacheKey, {
@@ -90,11 +114,17 @@ export function invalidateWhitelistCache(
   channelDiscId?: string,
 ): void {
   if (channelDiscId) {
-    // Invalidate specific channel
-    const cacheKey = getCacheKey(serverDiscId, channelDiscId);
-    const deleted = whitelistCache.delete(cacheKey);
+    // Invalidate all cached role-signature variants for this channel
+    const prefix = `${serverDiscId}:${channelDiscId}:`;
+    let deletedCount = 0;
+    for (const key of whitelistCache.keys()) {
+      if (key.startsWith(prefix)) {
+        whitelistCache.delete(key);
+        deletedCount++;
+      }
+    }
     log.info(
-      `[Whitelist Cache] Invalidated specific channel - ${cacheKey} (deleted: ${deleted})`,
+      `[Whitelist Cache] Invalidated channel variants - ${prefix}* (deleted: ${deletedCount})`,
     );
   } else {
     // Invalidate all channels for this server

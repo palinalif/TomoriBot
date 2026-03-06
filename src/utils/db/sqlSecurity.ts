@@ -72,6 +72,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
   "pin_message_enabled",
   "hide_respond_embed",
   "hide_impersonation_embeds",
+  "self_debug_enabled",
   "uncensor_injection_enabled",
   "uncensor_unicode_space_enabled",
   "uncensor_sanitize_enabled",

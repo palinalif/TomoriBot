@@ -432,7 +432,8 @@ export async function execute(
 					personal_memories_enabled = true,
 					emoji_usage_enabled = true,
 					sticker_usage_enabled = true,
-					imagegen_enabled = true
+					imagegen_enabled = true,
+					self_debug_enabled = false
 				WHERE server_id = ${serverId}
 				RETURNING tomori_config_id
 			`;
@@ -463,7 +464,8 @@ export async function execute(
 							personal_memories_enabled = true,
 							emoji_usage_enabled = true,
 							sticker_usage_enabled = true,
-							imagegen_enabled = true
+							imagegen_enabled = true,
+							self_debug_enabled = false
 						WHERE tomori_id = ${mainTomoriId}
 						RETURNING tomori_config_id
 					`;

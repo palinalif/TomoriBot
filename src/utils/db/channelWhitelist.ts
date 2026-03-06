@@ -4,15 +4,26 @@ import type { WhitelistCheckResult } from "@/types/misc/channelWhitelist";
 import { log } from "@/utils/misc/logger";
 
 /**
- * Check if a channel is whitelisted and get its cooldown settings
+ * Check whitelist status (channel + role) and get channel cooldown settings.
  * @param serverDiscId - Discord server ID (snowflake) or user ID for DMs
  * @param channelDiscId - Discord channel ID (snowflake)
+ * @param memberRoleDiscIds - Optional role IDs for the triggering member
  * @returns WhitelistCheckResult with whitelist status and settings
  */
 export async function checkChannelWhitelist(
   serverDiscId: string,
   channelDiscId: string,
+  memberRoleDiscIds?: string[],
 ): Promise<WhitelistCheckResult> {
+  const fallbackResult: WhitelistCheckResult = {
+    hasActiveWhitelist: false,
+    hasActiveChannelWhitelist: false,
+    isChannelWhitelisted: false,
+    hasActiveRoleWhitelist: false,
+    isRoleWhitelisted: false,
+    isTriggerAllowed: true,
+  };
+
   try {
     // 1. Get server database ID
     const [serverRow] = await sql`
@@ -21,63 +32,96 @@ export async function checkChannelWhitelist(
 
     if (!serverRow) {
       // Server not in database - no whitelist
-      return {
-        hasActiveWhitelist: false,
-        isChannelWhitelisted: false,
-      };
+      return fallbackResult;
     }
 
     const serverId = serverRow.server_id as number;
 
-    // 2. Check if server has ANY whitelist entries
+    // 2. Check if server has channel whitelist entries
     const [countRow] = await sql`
 			SELECT COUNT(*) as count FROM channel_whitelist WHERE server_id = ${serverId}
 		`;
 
-    const whitelistCount = Number.parseInt(countRow?.count as string, 10);
-    const hasActiveWhitelist = whitelistCount > 0;
-
-    if (!hasActiveWhitelist) {
-      // No whitelist entries - all channels allowed with global settings
-      return {
-        hasActiveWhitelist: false,
-        isChannelWhitelisted: false,
-      };
-    }
+    const channelWhitelistCount = Number.parseInt(countRow?.count as string, 10);
+    const hasActiveChannelWhitelist = channelWhitelistCount > 0;
 
     // 3. Check if specific channel is whitelisted
-    const [channelRow] = await sql`
+    const [channelRow] = hasActiveChannelWhitelist
+      ? await sql`
 			SELECT cooldown_type, cooldown_length
 			FROM channel_whitelist
 			WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
-		`;
+		`
+      : [null];
+    const isChannelWhitelisted = Boolean(channelRow);
 
-    if (!channelRow) {
-      // Whitelist exists but this channel is NOT in it - block
-      return {
-        hasActiveWhitelist: true,
-        isChannelWhitelisted: false,
-      };
+    // 4. Load role whitelist entries for this server
+    const roleRows = await sql<Array<{ role_disc_id: string }>>`
+			SELECT role_disc_id
+			FROM role_whitelist
+			WHERE server_id = ${serverId}
+		`;
+    const hasActiveRoleWhitelist = roleRows.length > 0;
+
+    // 5. Role whitelist check (fail-open if role data is unavailable)
+    let isRoleWhitelisted = false;
+    if (hasActiveRoleWhitelist) {
+      if (memberRoleDiscIds === undefined) {
+        isRoleWhitelisted = true;
+      } else if (memberRoleDiscIds.length > 0) {
+        const memberRoles = new Set(memberRoleDiscIds);
+        isRoleWhitelisted = roleRows.some((row) =>
+          memberRoles.has(row.role_disc_id),
+        );
+      } else {
+        isRoleWhitelisted = false;
+      }
     }
 
-    // 4. Channel is whitelisted - return its settings
+    const isChannelAllowed =
+      !hasActiveChannelWhitelist || isChannelWhitelisted;
+    const isRoleAllowed = !hasActiveRoleWhitelist || isRoleWhitelisted;
+    const isTriggerAllowed = isChannelAllowed && isRoleAllowed;
+    const hasActiveWhitelist =
+      hasActiveChannelWhitelist || hasActiveRoleWhitelist;
+
+    let blockReason: WhitelistCheckResult["blockReason"];
+    if (!isTriggerAllowed) {
+      const blockedByChannel =
+        hasActiveChannelWhitelist && !isChannelWhitelisted;
+      const blockedByRole = hasActiveRoleWhitelist && !isRoleWhitelisted;
+      if (blockedByChannel && blockedByRole) {
+        blockReason = "channel_and_role";
+      } else if (blockedByRole) {
+        blockReason = "role";
+      } else {
+        blockReason = "channel";
+      }
+    }
+
     return {
-      hasActiveWhitelist: true,
-      isChannelWhitelisted: true,
-      channelCooldownType: channelRow.cooldown_type as CooldownType,
-      channelCooldownLength: channelRow.cooldown_length as number,
+      hasActiveWhitelist,
+      hasActiveChannelWhitelist,
+      isChannelWhitelisted,
+      hasActiveRoleWhitelist,
+      isRoleWhitelisted,
+      isTriggerAllowed,
+      blockReason,
+      channelCooldownType: isChannelWhitelisted
+        ? (channelRow?.cooldown_type as CooldownType)
+        : undefined,
+      channelCooldownLength: isChannelWhitelisted
+        ? (channelRow?.cooldown_length as number)
+        : undefined,
     };
   } catch (error) {
     log.warn("Failed to check channel whitelist, failing open", {
       errorType: "ChannelWhitelistCheckError",
-      metadata: { serverDiscId, channelDiscId, error },
+      metadata: { serverDiscId, channelDiscId, memberRoleDiscIds, error },
     });
 
     // Fail open - no whitelist enforcement on error
-    return {
-      hasActiveWhitelist: false,
-      isChannelWhitelisted: false,
-    };
+    return fallbackResult;
   }
 }
 

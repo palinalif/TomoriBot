@@ -38,8 +38,8 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
 
 ### 4) Channel whitelist cache (`channelWhitelistCache.ts`)
 
-- Key: `serverDiscId:channelDiscId`
-- Stores whitelist decision + channel cooldown overrides
+- Key: `serverDiscId:channelDiscId:roleSignature`
+- Stores whitelist decision (channel + role) + channel cooldown overrides
 - Default TTL: `CHANNEL_WHITELIST_CACHE_TTL_MINUTES` (default 5)
 - API: `getCachedWhitelistStatus`, `invalidateWhitelistCache`
 

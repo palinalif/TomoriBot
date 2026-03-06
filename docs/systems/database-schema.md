@@ -39,6 +39,7 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 
 - `personalization_blacklist`
 - `channel_whitelist`
+- `role_whitelist`
 
 ### Ops and reliability
 

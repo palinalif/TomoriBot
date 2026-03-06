@@ -308,6 +308,13 @@ const MAX_SELF_REPLY_LIMIT = 10;
 const DEFAULT_TRIGGERED_PERSONA_LIMIT = 1;
 const MIN_TRIGGERED_PERSONA_LIMIT = 1;
 const MAX_TRIGGERED_PERSONA_LIMIT = 10;
+const SELF_DEBUG_ERROR_EMBED_MAX_DESCRIPTION_LENGTH = 1200;
+const SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT = 6;
+const SELF_DEBUG_ERROR_EMBED_MAX_FIELD_VALUE_LENGTH = 280;
+const ERROR_EMBED_COLOR_DECIMAL = Number.parseInt(
+  ColorCode.ERROR.replace("#", ""),
+  16,
+);
 const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 30 minutes of inactivity
 const SELF_REPLY_SUPPRESSION_TTL_MS = 5000;
 const selfReplySuppressionUntil = new Map<string, number>();
@@ -349,6 +356,99 @@ function normalizeTailDirective(text: string): string {
     trimmed = trimmed.slice(1, -1).trim();
   }
   return trimmed;
+}
+
+function compactWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function truncateForSystemContext(text: string, maxLength: number): string {
+  const compacted = compactWhitespace(text);
+  if (compacted.length <= maxLength) {
+    return compacted;
+  }
+  return `${compacted.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function checkSelfDebugDiagnosticEmbedTitle(embedTitle: string | null): boolean {
+  if (!embedTitle) return false;
+
+  for (const supportedLocale of getSupportedLocales()) {
+    const diagnosticTitles = [
+      localizer(supportedLocale, "genai.fallback_used_title"),
+      localizer(supportedLocale, "genai.error_stream_timeout_title"),
+      localizer(supportedLocale, "genai.empty_response_title"),
+      localizer(supportedLocale, "genai.max_iterations_title"),
+      localizer(supportedLocale, "genai.no_response_title"),
+    ];
+    if (diagnosticTitles.includes(embedTitle)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function shouldIncludeSelfDebugEmbed(embed: Embed): boolean {
+  return (
+    embed.color === ERROR_EMBED_COLOR_DECIMAL ||
+    checkSelfDebugDiagnosticEmbedTitle(embed.title)
+  );
+}
+
+function formatTomoriSelfDebugEmbedAsSystemMessage(embed: Embed): string | null {
+  if (!shouldIncludeSelfDebugEmbed(embed)) {
+    return null;
+  }
+
+  const isErrorEmbed = embed.color === ERROR_EMBED_COLOR_DECIMAL;
+
+  const lines: string[] = [
+    isErrorEmbed
+      ? "Tomori emitted an error embed."
+      : "Tomori emitted a diagnostic embed.",
+  ];
+
+  if (embed.title?.trim()) {
+    lines.push(`Title: ${truncateForSystemContext(embed.title, 160)}`);
+  }
+  if (embed.description?.trim()) {
+    lines.push(
+      `Description: ${truncateForSystemContext(
+        embed.description,
+        SELF_DEBUG_ERROR_EMBED_MAX_DESCRIPTION_LENGTH,
+      )}`,
+    );
+  }
+  if (embed.author?.name?.trim()) {
+    lines.push(
+      `Embed Author: ${truncateForSystemContext(embed.author.name, 120)}`,
+    );
+  }
+
+  if (embed.fields.length > 0) {
+    const fieldSummary = embed.fields
+      .slice(0, SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT)
+      .map((field) => {
+        const fieldName = field.name?.trim() ? field.name : "Field";
+        return `${truncateForSystemContext(fieldName, 90)}: ${truncateForSystemContext(field.value, SELF_DEBUG_ERROR_EMBED_MAX_FIELD_VALUE_LENGTH)}`;
+      })
+      .join(" | ");
+    if (fieldSummary) {
+      lines.push(`Fields: ${fieldSummary}`);
+    }
+    if (embed.fields.length > SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT) {
+      lines.push(
+        `Additional fields omitted: ${embed.fields.length - SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT}.`,
+      );
+    }
+  }
+
+  if (embed.footer?.text?.trim()) {
+    lines.push(`Footer: ${truncateForSystemContext(embed.footer.text, 220)}`);
+  }
+
+  return `[System: ${lines.join("\n")}]`;
 }
 
 function cacheUserImpersonationWebhook(
@@ -1826,18 +1926,19 @@ export default async function tomoriChat(
             !message.webhookId
           ) {
             // Check whitelist status
+            const memberRoleDiscIds = message.member
+              ? message.member.roles.cache.map((role) => role.id)
+              : undefined;
             const whitelistStatus = await getCachedWhitelistStatus(
               guild?.id ?? message.author.id,
               message.channelId,
+              memberRoleDiscIds,
             );
 
-            // If active whitelist exists but channel NOT whitelisted, silently ignore
-            if (
-              whitelistStatus.hasActiveWhitelist &&
-              !whitelistStatus.isChannelWhitelisted
-            ) {
+            // If whitelist rules block this trigger, silently ignore
+            if (!whitelistStatus.isTriggerAllowed) {
               log.info(
-                `Message ${message.id} in channel ${message.channelId} rejected - channel not whitelisted`,
+                `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
               );
               return; // Silent rejection
             }
@@ -2636,18 +2737,19 @@ export default async function tomoriChat(
 
       // 6.5. Check whitelist status (skip for manual triggers, stop responses, and self messages)
       if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
+        const memberRoleDiscIds = message.member
+          ? message.member.roles.cache.map((role) => role.id)
+          : undefined;
         const whitelistStatus = await getCachedWhitelistStatus(
           guild?.id ?? message.author.id,
           message.channelId,
+          memberRoleDiscIds,
         );
 
-        // If active whitelist exists but channel NOT whitelisted, silently ignore
-        if (
-          whitelistStatus.hasActiveWhitelist &&
-          !whitelistStatus.isChannelWhitelisted
-        ) {
+        // If whitelist rules block this trigger, silently ignore
+        if (!whitelistStatus.isTriggerAllowed) {
           log.info(
-            `Message ${message.id} in channel ${message.channelId} rejected - channel not whitelisted`,
+            `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
           );
           return; // Silent rejection
         }
@@ -2702,6 +2804,7 @@ export default async function tomoriChat(
           message.channelId,
           tomoriState.config.cooldown_type ?? CooldownType.OFF,
           tomoriState.config.cooldown_length ?? 5,
+          message.member,
         );
       }
 
@@ -3366,6 +3469,10 @@ export default async function tomoriChat(
           [];
         const videoAttachments: SimplifiedMessageForContext["videoAttachments"] =
           [];
+        const selfDebugEnabled = tomoriState.config.self_debug_enabled ?? false;
+        const isTomoriAuthoredMessage =
+          msg.author.id === client.user?.id ||
+          (isWebhookMessage && authorType === "persona");
         let messageContentForLlm: string | null = processedContent; // Use processed content (with reference context and "$:" removed if present)
         let hasProcessedEmbed = false; // Track if this message contains a processed embed
         const mediaSourceMessageIds: string[] = []; // Array to collect all message IDs with media
@@ -3527,7 +3634,26 @@ export default async function tomoriChat(
               }
             }
 
-            // 2. Process link preview embeds (new logic) - ONLY for non-bot messages
+            // 2. Process Tomori diagnostic embeds when self-debug mode is enabled
+            else if (
+              selfDebugEnabled &&
+              isTomoriAuthoredMessage &&
+              shouldIncludeSelfDebugEmbed(embed)
+            ) {
+              const diagnosticEmbedContent =
+                formatTomoriSelfDebugEmbedAsSystemMessage(embed);
+              if (diagnosticEmbedContent) {
+                messageContentForLlm = messageContentForLlm
+                  ? `${messageContentForLlm}\n${diagnosticEmbedContent}`
+                  : diagnosticEmbedContent;
+                hasProcessedEmbed = true;
+                log.info(
+                  `Self-debug: loaded Tomori diagnostic embed from message ${msg.id} into context`,
+                );
+              }
+            }
+
+            // 3. Process link preview embeds (new logic) - ONLY for non-bot messages
             else if (!msg.author.bot) {
               const linkEmbedData = processLinkEmbed(embed);
               if (linkEmbedData.isLinkPreview) {

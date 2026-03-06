@@ -107,6 +107,7 @@ export const serverConfigExportSchema = z.object({
   emoji_usage_enabled: z.boolean(),
   sticker_usage_enabled: z.boolean(),
   imagegen_enabled: z.boolean().default(true),
+  self_debug_enabled: z.boolean().default(false),
 });
 
 export type ServerConfigExport = z.infer<typeof serverConfigExportSchema>;

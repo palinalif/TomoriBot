@@ -220,7 +220,8 @@ export async function exportServerData(
 				COALESCE(tc_server.personal_memories_enabled, tc_legacy.personal_memories_enabled) as personal_memories_enabled,
 				COALESCE(tc_server.emoji_usage_enabled, tc_legacy.emoji_usage_enabled) as emoji_usage_enabled,
 				COALESCE(tc_server.sticker_usage_enabled, tc_legacy.sticker_usage_enabled) as sticker_usage_enabled,
-				COALESCE(tc_server.imagegen_enabled, tc_legacy.imagegen_enabled) as imagegen_enabled
+				COALESCE(tc_server.imagegen_enabled, tc_legacy.imagegen_enabled) as imagegen_enabled,
+				COALESCE(tc_server.self_debug_enabled, tc_legacy.self_debug_enabled, false) as self_debug_enabled
 			FROM tomoris t
 			LEFT JOIN tomori_configs tc_server ON tc_server.server_id = t.server_id
 			LEFT JOIN tomori_configs tc_legacy ON tc_legacy.tomori_id = t.tomori_id
@@ -350,6 +351,7 @@ export async function exportServerData(
           emoji_usage_enabled: configData.emoji_usage_enabled,
           sticker_usage_enabled: configData.sticker_usage_enabled,
           imagegen_enabled: configData.imagegen_enabled,
+          self_debug_enabled: configData.self_debug_enabled,
         },
         server_memories: sanitizedServerMemories,
       },

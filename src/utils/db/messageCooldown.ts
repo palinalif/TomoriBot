@@ -58,17 +58,17 @@ export async function checkMessageTriggerCooldown(
 ): Promise<CooldownCheckResult> {
   // 1. Check whitelist status FIRST (before checking cooldown type)
   const serverDiscId = message.guildId ?? message.author.id;
+  const memberRoleDiscIds = message.member
+    ? message.member.roles.cache.map((role) => role.id)
+    : undefined;
   const whitelistStatus = await getCachedWhitelistStatus(
     serverDiscId,
     message.channelId,
+    memberRoleDiscIds,
   );
 
-  // 2. Block non-whitelisted channels if ANY whitelist exists
-  if (
-    whitelistStatus.hasActiveWhitelist &&
-    !whitelistStatus.isChannelWhitelisted
-  ) {
-    // Channel not whitelisted - effectively "on permanent cooldown"
+  // 2. Block if whitelist policy disallows this trigger
+  if (!whitelistStatus.isTriggerAllowed) {
     return {
       isOnCooldown: true,
       remainingSeconds: 999999,
@@ -216,9 +216,13 @@ export async function setMessageTriggerCooldown(
 ): Promise<void> {
   // 1. Check whitelist status FIRST to determine which settings to use
   const serverDiscId = message.guildId ?? message.author.id;
+  const memberRoleDiscIds = message.member
+    ? message.member.roles.cache.map((role) => role.id)
+    : undefined;
   const whitelistStatus = await getCachedWhitelistStatus(
     serverDiscId,
     message.channelId,
+    memberRoleDiscIds,
   );
 
   // 2. Determine which cooldown settings to use

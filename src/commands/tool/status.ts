@@ -24,9 +24,11 @@ import {
   getAllChannelLlmOverridesForServer,
 } from "../../utils/db/dbRead";
 import { getAllWhitelistChannels } from "../../utils/db/channelWhitelist";
+import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
 import type {
   UserRow,
   ChannelWhitelistRow,
+  RoleWhitelistRow,
   RandomTriggerRow,
   LlmRow,
 } from "../../types/db/schema";
@@ -278,6 +280,28 @@ async function formatWhitelistEntries(
   );
 
   return lines.join("\n");
+}
+
+/**
+ * Formats the role whitelist as a numbered list.
+ * When no entries exist, shows an "all roles allowed" message instead.
+ * @param entries - Array of role whitelist rows from the database
+ * @param locale - User locale
+ * @returns Formatted role whitelist string
+ */
+function formatWhitelistRolesEntries(
+  entries: RoleWhitelistRow[],
+  locale: string,
+): string {
+  if (entries.length === 0) {
+    return localizer(locale, "commands.tool.status.whitelist_roles_all_allowed");
+  }
+
+  return entries
+    .map((entry, index) => {
+      return `${index + 1}. <@&${entry.role_disc_id}>`;
+    })
+    .join("\n");
 }
 
 /**
@@ -550,6 +574,7 @@ export async function execute(
           braveApiKeySet,
           blacklistedMemberIds,
           whitelistChannels,
+          whitelistRoles,
           randomTriggers,
           allPersonas,
           channelLlmOverrides,
@@ -557,6 +582,7 @@ export async function execute(
           getBraveApiKeyStatus(tomoriState.server_id),
           getBlacklistedMemberIds(tomoriState.server_id),
           getAllWhitelistChannels(tomoriState.server_id),
+          getAllWhitelistRoles(tomoriState.server_id),
           getServerRandomTriggers(tomoriState.server_id),
           loadAllPersonasForServer(serverDiscId),
           getAllChannelLlmOverridesForServer(tomoriState.server_id),
@@ -608,12 +634,14 @@ export async function execute(
           autoChannelsValue,
           rpChannelsValue,
           whitelistValue,
+          whitelistRolesValue,
           randomTriggersValue,
           channelLlmOverridesValue,
         ] = await Promise.all([
           formatChannelList(client, config.autoch_disc_ids, locale),
           formatChannelList(client, config.rp_channel_ids, locale),
           formatWhitelistEntries(client, whitelistChannels, locale),
+          formatWhitelistRolesEntries(whitelistRoles, locale),
           formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
           formatChannelLlmOverrides(client, channelLlmOverrides, locale),
         ]);
@@ -745,6 +773,11 @@ export async function execute(
               inline: false,
             },
             {
+              nameKey: "commands.tool.status.field_whitelist_roles",
+              value: whitelistRolesValue,
+              inline: false,
+            },
+            {
               nameKey: "commands.tool.status.field_random_triggers",
               value: randomTriggersValue,
               inline: false,
@@ -852,6 +885,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_hide_respond_embed",
               value: formatBooleanLocalized(config.hide_respond_embed, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_self_debug",
+              value: formatBooleanLocalized(config.self_debug_enabled, locale),
               inline: true,
             },
             {

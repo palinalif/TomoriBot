@@ -444,6 +444,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'imagegen_enabled', 'BOOLEAN',
 -- Add hide respond embed permission (January 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'hide_respond_embed', 'BOOLEAN', 'false');
 
+-- Add self-debug permission (March 2026)
+-- When enabled, Tomori ingests her own error embeds into context as [System: ...] lines
+SELECT add_column_if_not_exists('tomori_configs', 'self_debug_enabled', 'BOOLEAN', 'false');
+
 -- Add uncensor feature toggles (February 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'uncensor_injection_enabled', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'uncensor_unicode_space_enabled', 'BOOLEAN', 'false');
@@ -974,6 +978,27 @@ CREATE INDEX IF NOT EXISTS idx_channel_whitelist_active ON channel_whitelist(ser
 DROP TRIGGER IF EXISTS update_channel_whitelist_timestamp ON channel_whitelist;
 CREATE TRIGGER update_channel_whitelist_timestamp
 BEFORE UPDATE ON channel_whitelist
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Role Whitelist Table
+-- Restricts triggers to members with whitelisted roles when active
+CREATE TABLE IF NOT EXISTS role_whitelist (
+	server_id INT NOT NULL,
+	role_disc_id TEXT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (server_id, role_disc_id),
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Create indexes for role_whitelist
+CREATE INDEX IF NOT EXISTS idx_role_whitelist_server ON role_whitelist(server_id);
+
+-- Create updated_at trigger for role_whitelist table
+DROP TRIGGER IF EXISTS update_role_whitelist_timestamp ON role_whitelist;
+CREATE TRIGGER update_role_whitelist_timestamp
+BEFORE UPDATE ON role_whitelist
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 

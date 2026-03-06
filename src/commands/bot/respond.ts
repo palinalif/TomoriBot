@@ -396,6 +396,7 @@ export async function execute(
       interaction.channel.id,
       cooldownType,
       cooldownLength,
+      interaction.member as import("discord.js").GuildMember | null,
     );
   } catch (error) {
     log.error("Error in bot respond command:", error, {
