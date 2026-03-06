@@ -365,6 +365,54 @@ function buildMediaDescription(msg: SimplifiedMessageForContext): string {
   return mediaParts.join(" and ");
 }
 
+/**
+ * Builds a natural-language attribution string for a media-only message (no text content).
+ * Used when a user uploads media without any accompanying text, so the model still knows
+ * who sent it. Prose form is intentional — the "authorName:" prefix format is reserved
+ * for actual utterances only.
+ * @param msg - SimplifiedMessageForContext with at least one attachment
+ * @param authorName - Resolved display name of the sender
+ * @returns Attribution string (e.g., "Misuzu sent this image", "Misuzu sent these 2 images and a video")
+ */
+function buildMediaAttributionText(
+	msg: SimplifiedMessageForContext,
+	authorName: string,
+): string {
+	const imageCount = msg.imageAttachments.length;
+	const videoCount = msg.videoAttachments.length;
+	const hasGif = msg.imageAttachments.some((att) =>
+		att.mimeType?.includes("gif"),
+	);
+	const isMixed = imageCount > 0 && videoCount > 0;
+
+	const mediaParts: string[] = [];
+
+	// Build image/GIF description
+	if (imageCount > 0) {
+		if (hasGif && imageCount === 1) {
+			mediaParts.push("this GIF");
+		} else if (hasGif) {
+			mediaParts.push(`these ${imageCount} images (including a GIF)`);
+		} else if (imageCount === 1) {
+			mediaParts.push("this image");
+		} else {
+			mediaParts.push(`these ${imageCount} images`);
+		}
+	}
+
+	// Use "a/N video(s)" when mixed with images so "sent this image and a video" reads naturally
+	if (videoCount > 0) {
+		if (isMixed) {
+			mediaParts.push(videoCount === 1 ? "a video" : `${videoCount} videos`);
+		} else {
+			mediaParts.push(videoCount === 1 ? "this video" : `these ${videoCount} videos`);
+		}
+	}
+
+	const mediaDescription = mediaParts.join(" and ") || "this media";
+	return `${authorName} sent ${mediaDescription}`;
+}
+
 function getLatestUserQuery(
   messages: SimplifiedMessageForContext[],
 ): string | null {
@@ -2041,7 +2089,10 @@ export async function buildContext({
       }
     }
 
-    // 9.c. Add text part if content exists (always included, regardless of window)
+    // 9.c. Add text part if content exists (always included, regardless of window).
+    // If there is no text but media was added, synthesize an attribution line so the model
+    // knows who sent the media — the "authorName:" prefix format is reserved for actual
+    // utterances, so we use "Misuzu sent this image" prose instead.
     if (msg.content) {
       // Request 4: Prepend speaker name to content
       const normalizedContent = normalizeCustomEmojisForLlm(msg.content);
@@ -2101,6 +2152,14 @@ export async function buildContext({
           text: formatMessageTimestamp(msg.createdAt),
         });
       }
+    } else if (parts.length > 0) {
+      // Media-only message (no text content): synthesize an attribution line so the model
+      // knows who sent it. Prose form is used ("Misuzu sent this image") rather than the
+      // "authorName:" prefix, which is reserved strictly for actual utterances.
+      parts.push({
+        type: "text",
+        text: buildMediaAttributionText(msg, msg.authorName),
+      });
     }
 
     // Expose message ID(s) for media messages so tools (generate_image, process_gif) can reference attachments

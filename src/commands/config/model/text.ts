@@ -719,7 +719,7 @@ export async function execute(
             UPDATE tomori_configs
             SET llm_id = ${selectedModel.llm_id},
                 custom_model_name = NULL,
-                fallback_llm_ids = ARRAY[]::INT[]
+                fallback_llm_ids = '[]'::JSONB
             WHERE server_id = ${tomoriState.server_id}
             RETURNING *
         `

@@ -2479,8 +2479,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
       // Model override removal (subcommand group)
       remove: {
-        description: `Remove overrides from the server configuration.`,
-        modeloverrides: {
+        description: `Remove overrides and fallbacks from the server configuration.`,
+        modeloverride: {
           description: `Remove a channel or persona model override.`,
           scope_description: `Whether to remove a channel override or a persona override.`,
           scope_channel: `Channel Override`,
@@ -2499,6 +2499,16 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           persona_none_description: `None of this server's personas have a model override configured.`,
           persona_success_title: `Persona Override Removed`,
           persona_success_description: `The model override for **{persona}** has been removed. It will now use the server default.`,
+        },
+        modelfallback: {
+          description: `Remove a model from the fallback chain.`,
+          modal_title: `Remove Fallback Model`,
+          select_label: `Fallback to Remove`,
+          select_placeholder: `Select a fallback model...`,
+          none_title: `No Fallbacks Configured`,
+          none_description: `This server has no fallback models configured.`,
+          success_title: `Fallback Removed`,
+          success_description: `\`{model}\` has been removed from the fallback chain. {remaining_count} fallback(s) remaining.`,
         },
       },
     },

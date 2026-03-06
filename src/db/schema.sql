@@ -1461,4 +1461,35 @@ SELECT add_column_if_not_exists('tomori_configs', 'nai_preset_name', 'TEXT');
 
 -- Add fallback model chain for automatic provider failover (March 2026)
 -- Stores an ordered list of fallback llm_ids to retry if the primary model errors
-SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'INT[]', 'ARRAY[]::INT[]');
+SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'JSONB', '''[]''::JSONB');
+
+-- Bun SQL currently fails on INT[] binary decoding in some code paths.
+-- Migrate fallback_llm_ids to JSONB for stable SELECT */RETURNING * behavior.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'tomori_configs'
+          AND column_name = 'fallback_llm_ids'
+          AND udt_name = '_int4'
+    ) THEN
+        ALTER TABLE tomori_configs
+            ALTER COLUMN fallback_llm_ids DROP DEFAULT;
+
+        ALTER TABLE tomori_configs
+            ALTER COLUMN fallback_llm_ids TYPE JSONB
+            USING COALESCE(to_jsonb(fallback_llm_ids), '[]'::JSONB);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'tomori_configs'
+          AND column_name = 'fallback_llm_ids'
+          AND udt_name = 'jsonb'
+    ) THEN
+        ALTER TABLE tomori_configs
+            ALTER COLUMN fallback_llm_ids SET DEFAULT '[]'::JSONB;
+    END IF;
+END $$;

@@ -179,7 +179,7 @@ export const tomoriConfigSchema = z.object({
   custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
   custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
   nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
-  fallback_llm_ids: z.array(z.number().int()).default([]), // Added March 2026 - Ordered fallback llm_ids for provider failover
+  fallback_llm_ids: z.array(z.number().int()).default([]), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

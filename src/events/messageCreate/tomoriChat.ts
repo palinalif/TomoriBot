@@ -3689,12 +3689,16 @@ export default async function tomoriChat(
           prevMessage.authorId === effectiveAuthorId &&
           prevWasDebugMessage === isDebugMessage;
 
-        // 5.d. Determine if we should combine with the previous message or create a new entry
-        if (
-          isSameEffectiveAuthor &&
-          messageContentForLlm &&
-          prevMessage.content
-        ) {
+        // 5.d. Determine if we should combine with the previous message or create a new entry.
+        // The previous message is considered "has something to merge into" if it has text OR
+        // media — this handles the case where a user uploads an image without text and then
+        // immediately sends a follow-up reply in the same turn.
+        const prevMessageHasContent =
+          prevMessage &&
+          (prevMessage.content ||
+            prevMessage.imageAttachments.length > 0 ||
+            prevMessage.videoAttachments.length > 0);
+        if (isSameEffectiveAuthor && messageContentForLlm && prevMessageHasContent) {
           // Append this message's content to the previous message with a newline
           prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
           if (imageAttachments.length > 0) {

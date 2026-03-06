@@ -1765,9 +1765,10 @@ export async function setFallbackLlms(
   llmIds: number[],
 ): Promise<boolean> {
   try {
+    const fallbackJson = JSON.stringify(llmIds);
     await sql`
 			UPDATE tomori_configs
-			SET fallback_llm_ids = ${llmIds},
+			SET fallback_llm_ids = ${fallbackJson}::JSONB,
 			    updated_at = CURRENT_TIMESTAMP
 			WHERE server_id = ${serverId}
 		`;

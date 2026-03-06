@@ -7,6 +7,8 @@ import {
   personaConfigSchema,
   type TomoriState,
   type TomoriRow,
+  tomoriConfigSchema,
+  type TomoriConfigRow,
   type UserRow,
   type ServerEmojiRow,
   type LlmRow,
@@ -30,6 +32,142 @@ import {
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
+
+type TomoriConfigJsonResult = {
+  config: unknown;
+};
+
+/**
+ * Converts a Postgres bytea JSON representation (e.g., "\\xDEADBEEF") to Buffer.
+ * Returns null when the input is malformed or cannot be parsed.
+ */
+function parseJsonBytea(value: unknown): Buffer | null {
+  if (value === null || value === undefined) return null;
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (typeof value !== "string") return null;
+
+  const normalized = value.startsWith("\\x")
+    ? value.slice(2)
+    : value.startsWith("0x")
+      ? value.slice(2)
+      : value;
+
+  if (!/^[0-9a-fA-F]*$/.test(normalized) || normalized.length % 2 !== 0) {
+    return null;
+  }
+
+  return Buffer.from(normalized, "hex");
+}
+
+/**
+ * Normalizes JSON-projected tomori_configs data into runtime-compatible types.
+ * This avoids Bun/Postgres INT[] binary decoding issues while preserving schema shape.
+ */
+function normalizeTomoriConfigFromJson(rawConfig: unknown): unknown {
+  if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
+    return rawConfig;
+  }
+
+  const normalizedConfig = {
+    ...(rawConfig as Record<string, unknown>),
+  };
+
+  // Convert JSON bytea string back to Buffer for decryption codepaths.
+  normalizedConfig.api_key = parseJsonBytea(normalizedConfig.api_key);
+
+  // Normalize timestamps from JSON strings to Date objects expected by schemas.
+  for (const key of ["created_at", "updated_at"] as const) {
+    const value = normalizedConfig[key];
+    if (typeof value === "string" || typeof value === "number") {
+      const parsedDate = new Date(value);
+      normalizedConfig[key] = Number.isNaN(parsedDate.getTime())
+        ? undefined
+        : parsedDate;
+    }
+  }
+
+  // Keep fallback IDs as clean integer arrays.
+  const rawFallbackIds = normalizedConfig.fallback_llm_ids;
+  if (Array.isArray(rawFallbackIds)) {
+    normalizedConfig.fallback_llm_ids = rawFallbackIds
+      .map((id) => {
+        const parsed =
+          typeof id === "number"
+            ? id
+            : typeof id === "string"
+              ? Number(id)
+              : NaN;
+        return Number.isInteger(parsed) ? parsed : null;
+      })
+      .filter((id): id is number => id !== null);
+  } else {
+    normalizedConfig.fallback_llm_ids = [];
+  }
+
+  return normalizedConfig;
+}
+
+/**
+ * Loads and validates a server config row through JSON projection to avoid
+ * Bun/Postgres INT[] binary decoding failures.
+ */
+async function loadTomoriConfigRowByServerId(
+  serverId: number,
+): Promise<TomoriConfigRow | null> {
+  const configRows = await sql<TomoriConfigJsonResult[]>`
+		SELECT to_jsonb(tc) AS config
+		FROM tomori_configs tc
+		WHERE tc.server_id = ${serverId}
+		LIMIT 1
+	`;
+
+  if (!configRows.length) {
+    return null;
+  }
+
+  const normalized = normalizeTomoriConfigFromJson(configRows[0].config);
+  const parsedConfig = tomoriConfigSchema.safeParse(normalized);
+  if (!parsedConfig.success) {
+    log.error(
+      `Invalid server-scoped tomori config for server_id ${serverId}:`,
+      parsedConfig.error.flatten(),
+    );
+    return null;
+  }
+
+  return parsedConfig.data;
+}
+
+/**
+ * Loads and validates a legacy tomori config row by tomori_id through JSON projection.
+ */
+async function loadTomoriConfigRowByTomoriId(
+  tomoriId: number,
+): Promise<TomoriConfigRow | null> {
+  const configRows = await sql<TomoriConfigJsonResult[]>`
+		SELECT to_jsonb(tc) AS config
+		FROM tomori_configs tc
+		WHERE tc.tomori_id = ${tomoriId}
+		LIMIT 1
+	`;
+
+  if (!configRows.length) {
+    return null;
+  }
+
+  const normalized = normalizeTomoriConfigFromJson(configRows[0].config);
+  const parsedConfig = tomoriConfigSchema.safeParse(normalized);
+  if (!parsedConfig.success) {
+    log.error(
+      `Invalid legacy tomori config for tomori_id ${tomoriId}:`,
+      parsedConfig.error.flatten(),
+    );
+    return null;
+  }
+
+  return parsedConfig.data;
+}
 
 /**
  * Loads multiple LLM rows by their IDs, returning results in the same order as the input array.
@@ -139,31 +277,22 @@ export async function loadTomoriState(
     // biome-ignore lint/style/noNonNullAssertion: Row existence checked above, ID is guaranteed by DB schema.
     const tomoriId = tomoriData.tomori_id!;
     const serverId = tomoriData.server_id;
-    let configRows = await sql`
-			SELECT * FROM tomori_configs
-			WHERE server_id = ${serverId}
-			LIMIT 1
-		`;
+    let configData = await loadTomoriConfigRowByServerId(serverId);
 
     // Backward compatibility: fall back to tomori_id if server_id config missing
-    if (!configRows.length) {
+    if (!configData) {
       log.warn(
         `No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${tomoriId}`,
       );
-      configRows = await sql`
-				SELECT * FROM tomori_configs
-				WHERE tomori_id = ${tomoriId}
-				LIMIT 1
-			`;
+      configData = await loadTomoriConfigRowByTomoriId(tomoriId);
     }
 
-    if (!configRows.length) {
+    if (!configData) {
       log.error(
         `Found Tomori (${tomoriId}) but no config for server ${serverDiscId}`,
       );
       return null;
     }
-    const configData = configRows[0];
 
     // 3. Load LLM data using the llm_id from the config (with cache fallback)
     let llmData = getCachedLLM(configData.llm_id);
@@ -350,13 +479,9 @@ export async function loadAllPersonasForServer(
         const serverId = tomoriRows[0].server_id;
 
         // 2. Load server-scoped config once (fallback to main persona config)
-        let configRows = await sql`
-					SELECT * FROM tomori_configs
-					WHERE server_id = ${serverId}
-					LIMIT 1
-				`;
+        let configData = await loadTomoriConfigRowByServerId(serverId);
 
-        if (!configRows.length) {
+        if (!configData) {
           const mainTomoriRow =
             tomoriRows.find((row: TomoriRow) => row.is_alter === false) ??
             tomoriRows[0];
@@ -365,21 +490,16 @@ export async function loadAllPersonasForServer(
             log.warn(
               `No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${fallbackTomoriId}`,
             );
-            configRows = await sql`
-							SELECT * FROM tomori_configs
-							WHERE tomori_id = ${fallbackTomoriId}
-							LIMIT 1
-						`;
+            configData = await loadTomoriConfigRowByTomoriId(fallbackTomoriId);
           }
         }
 
-        if (!configRows.length) {
+        if (!configData) {
           log.error(
             `No config found for server ${serverDiscId}; cannot build persona states`,
           );
           return [];
         }
-        const configData = configRows[0];
 
         // 3. Load LLM data once (with cache fallback)
         let llmData = getCachedLLM(configData.llm_id);

@@ -1,5 +1,5 @@
 /**
- * /config remove modeloverrides
+ * /config remove modeloverride
  * Removes an existing channel or persona model override from the server.
  * Presents a paginated modal select of all current overrides for the invoker to choose from.
  */
@@ -34,24 +34,24 @@ import type { SelectOption } from "@/types/discord/modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CHANNEL_MODAL_CUSTOM_ID = "config_remove_modeloverrides_channel_modal";
-const PERSONA_MODAL_CUSTOM_ID = "config_remove_modeloverrides_persona_modal";
+const CHANNEL_MODAL_CUSTOM_ID = "config_remove_modeloverride_channel_modal";
+const PERSONA_MODAL_CUSTOM_ID = "config_remove_modeloverride_persona_modal";
 const OVERRIDE_SELECT_ID = "override_select";
 
 // ─── Subcommand Configuration ─────────────────────────────────────────────────
 
 /**
- * Configures the 'modeloverrides' subcommand for /config remove.
+ * Configures the 'modeloverride' subcommand for /config remove.
  */
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("modeloverrides")
+		.setName("modeloverride")
 		.setDescription(
 			localizer(
 				"en-US",
-				"commands.config.remove.modeloverrides.description",
+				"commands.config.remove.modeloverride.description",
 			),
 		)
 		.addStringOption((option) =>
@@ -60,7 +60,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.remove.modeloverrides.scope_description",
+						"commands.config.remove.modeloverride.scope_description",
 					),
 				)
 				.setRequired(true)
@@ -68,14 +68,14 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.remove.modeloverrides.scope_channel",
+							"commands.config.remove.modeloverride.scope_channel",
 						),
 						value: "channel",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.remove.modeloverrides.scope_persona",
+							"commands.config.remove.modeloverride.scope_persona",
 						),
 						value: "persona",
 					},
@@ -85,7 +85,7 @@ export const configureSubcommand = (
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
 /**
- * Executes the /config remove modeloverrides command.
+ * Executes the /config remove modeloverride command.
  * Routes to the channel or persona removal flow based on the scope option.
  *
  * @param _client - Discord client instance
@@ -137,10 +137,10 @@ export async function execute(
 		const context: ErrorContext = {
 			userId: userData.user_id,
 			errorType: "CommandExecutionError",
-			metadata: { command: "config remove modeloverrides" },
+			metadata: { command: "config remove modeloverride" },
 		};
 		await log.error(
-			"Error in /config remove modeloverrides",
+			"Error in /config remove modeloverride",
 			error as Error,
 			context,
 		);
@@ -196,9 +196,9 @@ async function handleChannelScope(
 
 	if (overrides.length === 0) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.remove.modeloverrides.channel_none_title",
+			titleKey: "commands.config.remove.modeloverride.channel_none_title",
 			descriptionKey:
-				"commands.config.remove.modeloverrides.channel_none_description",
+				"commands.config.remove.modeloverride.channel_none_description",
 			color: ColorCode.WARN,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -224,14 +224,14 @@ async function handleChannelScope(
 	const modalResult = await promptWithPaginatedModal(interaction, locale, {
 		modalCustomId: CHANNEL_MODAL_CUSTOM_ID,
 		modalTitleKey:
-			"commands.config.remove.modeloverrides.channel_modal_title",
+			"commands.config.remove.modeloverride.channel_modal_title",
 		components: [
 			{
 				customId: OVERRIDE_SELECT_ID,
 				labelKey:
-					"commands.config.remove.modeloverrides.channel_select_label",
+					"commands.config.remove.modeloverride.channel_select_label",
 				placeholder:
-					"commands.config.remove.modeloverrides.channel_select_placeholder",
+					"commands.config.remove.modeloverride.channel_select_placeholder",
 				required: true,
 				options: overrideOptions,
 			},
@@ -303,9 +303,9 @@ async function handleChannelScope(
 			?.toString() ?? `<#${selectedEntry.channelDiscId}>`;
 
 	await replyInfoEmbed(modalInteraction, locale, {
-		titleKey: "commands.config.remove.modeloverrides.channel_success_title",
+		titleKey: "commands.config.remove.modeloverride.channel_success_title",
 		descriptionKey:
-			"commands.config.remove.modeloverrides.channel_success_description",
+			"commands.config.remove.modeloverride.channel_success_description",
 		descriptionVars: { channel: channelMention },
 		color: ColorCode.SUCCESS,
 	});
@@ -343,9 +343,9 @@ async function handlePersonaScope(
 
 	if (personasWithOverride.length === 0) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.remove.modeloverrides.persona_none_title",
+			titleKey: "commands.config.remove.modeloverride.persona_none_title",
 			descriptionKey:
-				"commands.config.remove.modeloverrides.persona_none_description",
+				"commands.config.remove.modeloverride.persona_none_description",
 			color: ColorCode.WARN,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -366,14 +366,14 @@ async function handlePersonaScope(
 	const modalResult = await promptWithPaginatedModal(interaction, locale, {
 		modalCustomId: PERSONA_MODAL_CUSTOM_ID,
 		modalTitleKey:
-			"commands.config.remove.modeloverrides.persona_modal_title",
+			"commands.config.remove.modeloverride.persona_modal_title",
 		components: [
 			{
 				customId: OVERRIDE_SELECT_ID,
 				labelKey:
-					"commands.config.remove.modeloverrides.persona_select_label",
+					"commands.config.remove.modeloverride.persona_select_label",
 				placeholder:
-					"commands.config.remove.modeloverrides.persona_select_placeholder",
+					"commands.config.remove.modeloverride.persona_select_placeholder",
 				required: true,
 				options: personaOptions,
 			},
@@ -438,9 +438,9 @@ async function handlePersonaScope(
 
 	// 8. Reply success
 	await replyInfoEmbed(modalInteraction, locale, {
-		titleKey: "commands.config.remove.modeloverrides.persona_success_title",
+		titleKey: "commands.config.remove.modeloverride.persona_success_title",
 		descriptionKey:
-			"commands.config.remove.modeloverrides.persona_success_description",
+			"commands.config.remove.modeloverride.persona_success_description",
 		descriptionVars: { persona: selectedPersona.tomori_nickname },
 		color: ColorCode.SUCCESS,
 	});
