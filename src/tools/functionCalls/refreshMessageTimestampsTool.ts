@@ -25,7 +25,7 @@ import { log } from "../../utils/misc/logger";
 export class RefreshMessageTimestampsTool extends BaseTool {
   name = "refresh_message_timestamps";
   description =
-    "Rebuild conversation context with timestamps on every message (e.g. 'Feb 28, 2026 14:32 UTC, 3h ago'). Only use this when a user is directly asking WHEN something was said or how long ago — for example 'when did X say that?' or 'how long ago was that message?'. Do NOT use this for general conversation, recalling what was said, summarizing content, or questions about the order of events that can be inferred from context.";
+    "Rebuild conversation context with timestamps on every message (e.g. 'Feb 28, 2026 14:32 UTC, 3h ago'). Only use this when a user is directly asking WHEN something was said or how long ago, for example 'when did X say that?' or 'how long ago was that message?'. Do NOT use this for general conversation, recalling what was said, summarizing content, or questions about the order of events that can be inferred from context.";
   category = "utility" as const;
 
   parameters: ToolParameterSchema = {

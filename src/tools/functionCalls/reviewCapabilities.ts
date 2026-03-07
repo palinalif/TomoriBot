@@ -335,6 +335,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
             "- **process_youtube_video** (analyze YouTube videos)\n";
         }
         capabilitiesContent +=
+          "- **read_document** (read PDF, TXT, or MD file attachments shared in chat)\n";
+        capabilitiesContent +=
           "- **get_profile_picture** (fetch user avatars)\n";
         capabilitiesContent +=
           "- **pin_message/unpin_message** (manage pinned messages)\n";

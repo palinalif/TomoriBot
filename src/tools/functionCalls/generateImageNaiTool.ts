@@ -640,7 +640,7 @@ export class GenerateImageNaiTool extends BaseTool {
       await incrementImageQuota(context.tomoriState.server_id, userDiscId);
 
       // Build success message with remaining quota info
-      let successMessage = `Good job! The image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it — do NOT generate another image unless asked. The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
+      let successMessage = `Good job! The image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it, so do NOT generate another image unless asked. The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
 
       if (quotaCheck.userRemaining !== undefined) {
         const remainingText = localizer(

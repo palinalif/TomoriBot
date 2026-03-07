@@ -1248,6 +1248,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         documents_title: `Document Knowledge Base`,
         documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/teach document\`
 - I retrieve and reference relevant document content when answering questions
+- I can also read document attachments (PDF, TXT, MD) shared directly in chat, just ask me to read it!
 - Requires an embedding model (configure with \`/config model embedding\`)
 - Remove documents with \`/forget document\``,
         impersonation_title: `Impersonation & Tools`,
@@ -2502,7 +2503,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           cap_reached_title: `Trigger Limit Reached`,
           cap_reached_description: `This server has reached the maximum of {max} random triggers. Remove one first.`,
           override_title: `Trigger Updated`,
-          override_description: `A trigger already existed for {persona} in {channel} — it has been updated with the new settings.`,
+          override_description: `A trigger already existed for {persona} in {channel}, and it has been updated with the new settings.`,
           success_title: `Random Trigger Added`,
           success_description: `I will check {channel} every **{timer_hours}h** with a **{chance}%** chance of speaking as **{persona}**.{offset_suffix}{silence_suffix}{failure_suffix}`,
           success_offset_suffix: ` Each reset adds a random offset of up to **+/-{random_offset_range}h**.`,
@@ -3147,7 +3148,7 @@ You can change this anytime using \`/personal privacy\`.`,
         success_description: `Extracted **{fact_count}** facts from **{message_count}** messages and stored as **{name}** ({chunk_count} chunks) for {scope}.`,
         success_automatic_description: `Extracted **{fact_count}** facts from **{message_count}** messages.\n\n{persona_list}`,
         success_automatic_persona_line: `**{persona_name}**: stored as **{doc_name}** ({chunk_count} chunks)`,
-        success_automatic_global_fallback: `No personas detected — stored as **{name}** for serverwide scope.`,
+        success_automatic_global_fallback: `No personas detected. Stored as **{name}** for serverwide scope.`,
         scope_label_persona: `persona "{persona_name}"`,
         scope_label_global: `serverwide scope`,
       },
@@ -3485,7 +3486,7 @@ You can change this anytime using \`/personal privacy\`.`,
     task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
     task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/forget reminder\`.`,
 
-    // Fallback info embed when AI generation fails — shows the raw reminder/task content
+    // Fallback info embed when AI generation fails - shows the raw reminder/task content
     reminder_triggered_title: `🔵 Reminder Triggered`,
     task_triggered_title: `🔵 Task Triggered`,
     triggered_description: `{reminder_purpose}`,
@@ -3505,7 +3506,7 @@ You can change this anytime using \`/personal privacy\`.`,
     },
   },
 
-  // Matrix bridge — concise summaries of Discord embeds relayed to Matrix rooms.
+  // Matrix bridge - concise summaries of Discord embeds relayed to Matrix rooms.
   // Discord embeds cannot be rendered natively in Matrix, so tool-result embeds are
   // converted to short bracketed notices that convey the key information inline.
   matrix: {

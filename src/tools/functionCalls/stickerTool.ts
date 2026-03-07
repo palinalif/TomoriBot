@@ -210,7 +210,7 @@ export class StickerTool extends BaseTool {
 
       return {
         success: false,
-        error: "Missing sticker_name — please retry with a specific name",
+        error: "Missing sticker_name, please retry with a specific name",
         message: stickerListText,
         data: {
           status: "sticker_name_missing_retry",
