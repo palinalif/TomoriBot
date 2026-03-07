@@ -3756,6 +3756,15 @@ export default async function tomoriChat(
                 `Processed video attachment: ${attachment.name} (${attachment.contentType})`,
               );
             }
+            // Non-media attachments (PDF, TXT, MD, etc.) — append text placeholder
+            // with message ID so the LLM can call read_document with the correct ID
+            else {
+              const attachName = attachment.name ?? "file";
+              const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
+              messageContentForLlm = messageContentForLlm
+                ? `${messageContentForLlm} ${attachHint}`
+                : attachHint;
+            }
           }
         }
 

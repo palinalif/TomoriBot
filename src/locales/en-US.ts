@@ -202,6 +202,12 @@ export default {
         "This may take a moment depending on the video length",
     },
 
+    // Inline document reading messages (read_document tool)
+    document: {
+      reading_title: "📄 Reading Document...",
+      reading_description: "Reading the contents of `{filename}`",
+    },
+
     // New: Stream specific error messages
     stream: {
       response_stopped_title: "Response Interrupted",

@@ -35,6 +35,7 @@ import {
   insertDocumentWithChunks,
   normalizeDocumentText,
 } from "../../utils/documents/documentService";
+import { extractTextFromBuffer } from "../../utils/documents/textExtractor";
 import { generateEmbeddingsBatched } from "../../utils/embeddings/embeddingProvider";
 import type { ErrorContext, TomoriState, UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
@@ -114,23 +115,6 @@ function validateAttachment(attachment: Attachment): {
   }
 
   return { isValid: true };
-}
-
-async function extractTextFromBuffer(
-  buffer: Buffer,
-  filename: string,
-  contentType?: string | null,
-): Promise<string> {
-  const lowerName = filename.toLowerCase();
-  const isPdf = contentType === "application/pdf" || lowerName.endsWith(".pdf");
-
-  if (isPdf) {
-    const pdfParse = (await import("pdf-parse")).default;
-    const parsed = await pdfParse(buffer);
-    return parsed.text ?? "";
-  }
-
-  return buffer.toString("utf8");
 }
 
 /**

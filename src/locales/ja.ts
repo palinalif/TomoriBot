@@ -203,6 +203,12 @@ export default {
         "動画の長さに応じて、少し時間がかかる場合があります",
     },
 
+    // インラインドキュメント読み取りメッセージ (read_document ツール)
+    document: {
+      reading_title: "📄 ドキュメントを読み取り中...",
+      reading_description: "`{filename}` の内容を読み取っています",
+    },
+
     // 新規: ストリーム固有のエラーメッセージ
     stream: {
       response_stopped_title: "応答が中断されました",
