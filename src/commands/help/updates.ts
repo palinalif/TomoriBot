@@ -134,7 +134,10 @@ export async function execute(
       .setDescription(description)
       .setColor(ColorCode.SUCCESS)
       .setTimestamp(new Date(release.created_at))
-      .setURL(release.html_url); // Title becomes a clickable link to the release
+      .setURL(release.html_url) // Title becomes a clickable link to the release
+      .setFooter({
+        text: localizer(locale, "commands.help.updates.footer"),
+      });
 
     // 6. Attach the release image if one was found in the notes
     if (imageUrl) {

@@ -2071,13 +2071,24 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             break;
         }
 
+        const hasFallbackModels =
+          (context.tomoriState.fallback_llms?.length ?? 0) > 0;
+        const shouldShowModelFallbackHint =
+          !hasFallbackModels &&
+          (providerError.type === "rate_limit" ||
+            providerError.type === "provider_overloaded" ||
+            providerError.code === "503");
+        const footerText = shouldShowModelFallbackHint
+          ? `${localizer(locale, tipKey)}\n${localizer(locale, "genai.stream.model_fallback_hint")}`
+          : localizer(locale, tipKey);
+
         // Create provider-specific error embed manually since we have a direct description
         const embed = new EmbedBuilder()
           .setColor(color)
           .setTitle(localizer(locale, titleKey))
           .setDescription(providerDescription)
           .setFooter({
-            text: localizer(locale, tipKey),
+            text: footerText,
           });
 
         await context.channel
