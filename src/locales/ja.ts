@@ -441,13 +441,13 @@ export default {
       personal_memory_updated_description:
         "{user_nickname}さんに関する個人的な記憶を更新しました:\n`{memory_content}`",
       server_memory_footer:
-        "サーバー管理者は`/teach`と`/forget`コマンドでこの記憶を管理できます。",
+        "サーバー管理者は`/teach`と`/forget`コマンドでこの記憶を管理できます。全文は`/data export`で確認できます。",
       personal_memory_footer_manage:
-        "あなたの個人的な記憶は`/teach`と`/forget`コマンドで管理できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
+        "あなたの個人的な記憶は`/teach`と`/forget`コマンドで管理できます。全文は`/data export`で確認できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
       personal_memory_footer_personalization_disabled:
-        "この記憶は保存されましたが、現在このサーバーではパーソナライズ機能が無効になっているため、すぐには効果がありません。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
+        "この記憶は保存されましたが、現在このサーバーではパーソナライズ機能が無効になっているため、すぐには効果がありません。全文は`/data export`で確認できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
       personal_memory_footer_user_blacklisted:
-        "この記憶は保存されましたが、対象のユーザーは現在このサーバーのパーソナライズ機能のブラックリストに登録されているため、すぐには効果がありません。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
+        "この記憶は保存されましたが、対象のユーザーは現在このサーバーのパーソナライズ機能のブラックリストに登録されているため、すぐには効果がありません。全文は`/data export`で確認できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
     },
   },
 

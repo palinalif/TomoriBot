@@ -12,6 +12,7 @@ import {
   BaseGuildTextChannel,
   ChannelType,
   DMChannel,
+  MessageType,
   TextChannel,
 } from "discord.js"; // Import value for instanceof check
 // Provider imports moved to factory pattern
@@ -3236,9 +3237,15 @@ export default async function tomoriChat(
         // Variable to store referenced message data for later attachment extraction
         let referencedMessageData: { message: Message } | undefined;
 
+        const isUserJoinMessage = msg.type === MessageType.UserJoin;
+        const joinServerName = guild?.name ?? "this server";
+
         // 1. Check for debug prefix "$:" at the start of the message
-        const isDebugMessage = msg.content.startsWith("$:"); // Easter egg functionality hehehe
-        let processedContent = msg.content;
+        const isDebugMessage =
+          !isUserJoinMessage && msg.content.startsWith("$:"); // Easter egg functionality hehehe
+        let processedContent = isUserJoinMessage
+          ? `[System: <@${authorId}> has just joined ${joinServerName}]`
+          : msg.content;
 
         // 2. If debug prefix found, trim it and treat message as coming from bot
         if (isDebugMessage) {
@@ -3704,6 +3711,11 @@ export default async function tomoriChat(
           // Processed embeds should appear as system/user messages
           effectiveAuthorId = "system-embed"; // Use a special system ID to prevent combination
           authorName = "System"; // Use "System" as the author name for processed embeds
+          authorType = "user";
+          personaName = null;
+        } else if (isUserJoinMessage) {
+          effectiveAuthorId = `system-user-join:${msg.id}`;
+          authorName = "System";
           authorType = "user";
           personaName = null;
         } else if (isDebugMessage) {

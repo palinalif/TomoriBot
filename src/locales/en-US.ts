@@ -439,13 +439,13 @@ export default {
       personal_memory_updated_description:
         "A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
       server_memory_footer:
-        "Server managers can manage this memory using `/teach` and `/forget` commands.",
+        "Server managers can manage this memory using `/teach` and `/forget` commands. Use `/data export` to view the full text.",
       personal_memory_footer_manage:
-        "You can manage your personal memories using `/teach` and `/forget` commands. Opt out of personal memory storage with `/personal privacy`.",
+        "You can manage your personal memories using `/teach` and `/forget` commands. Use `/data export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
       personal_memory_footer_personalization_disabled:
-        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Opt out of personal memory storage with `/personal privacy`.",
+        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/data export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
       personal_memory_footer_user_blacklisted:
-        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Opt out of personal memory storage with `/personal privacy`.",
+        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use `/data export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
     },
   },
 
