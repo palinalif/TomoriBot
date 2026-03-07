@@ -51,6 +51,14 @@ Current message preprocessing in `tomoriChat.ts` enriches fetched history before
 
 `clientReady` handlers run startup tasks such as command registration and MCP registration.
 
+### Member join event
+
+`guildMemberAdd` -> `events/guildMemberAdd/newUser.ts`
+
+- registers the joining Discord user in the database
+- optionally triggers a configured welcome message in the server's welcome channel
+- welcome greetings reuse the normal `tomoriChat.ts` manual-trigger pipeline, including persona selection, queueing, and mention fallback checks
+
 ## Adding a New Event Handler
 
 1. Create `src/events/{folderName}/`.

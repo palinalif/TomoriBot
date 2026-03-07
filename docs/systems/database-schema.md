@@ -84,6 +84,9 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.server_id` is the primary modern scope.
 - `tomori_configs.tomori_id` remains as a nullable legacy pointer.
 - `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config maxmsgfetch`).
+- `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
+- `tomori_configs.welcome_prompt` stores the required additional greeting instruction shown in `/server welcomechannel`.
+- `tomori_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.
 
 ### Memory split
 

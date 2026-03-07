@@ -133,6 +133,8 @@ import {
   incrementTextQuota,
   type TextQuotaCheckResult,
 } from "@/utils/quota/textQuotaManager";
+import type { ForcedMention } from "@/types/discord/mentions";
+import { buildForcedMentionsForUser } from "@/utils/discord/mentionHelper";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -1040,50 +1042,34 @@ function extractEmojiImageAttachments(
   return attachments;
 }
 
-type ForcedMention = { handle: string; userId: string };
+function mergeForcedMentions(
+  ...mentionLists: Array<ForcedMention[] | undefined>
+): ForcedMention[] {
+  const seen = new Set<string>();
+  const merged: ForcedMention[] = [];
 
-function normalizeMentionHandle(value?: string | null): string | null {
-  if (!value) return null;
-  let handle = value.trim();
-  if (!handle) return null;
-  if (handle.startsWith("<@")) return null;
-  if (handle.startsWith("@")) {
-    handle = handle.slice(1).trim();
+  for (const mentionList of mentionLists) {
+    if (!mentionList) continue;
+    for (const mention of mentionList) {
+      const dedupeKey = `${mention.userId}:${mention.handle.toLowerCase()}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      merged.push(mention);
+    }
   }
-  return handle || null;
+
+  return merged;
 }
 
-async function buildForcedMentionsForReminder(
-  recipientId: string,
-  client: Client,
-  guild?: Guild | null,
-): Promise<ForcedMention[]> {
-  const handles = new Set<string>();
-  const addHandle = (value?: string | null) => {
-    const normalized = normalizeMentionHandle(value);
-    if (normalized) handles.add(normalized);
-  };
-
-  const userRow = await getCachedUserRow(recipientId);
-  addHandle(userRow?.user_nickname);
-
-  let member = null;
-  if (guild) {
-    member = await guild.members.fetch(recipientId).catch(() => null);
+function appendInjectedContextItems(
+  contextItems: StructuredContextItem[],
+  injectedContextItems?: StructuredContextItem[],
+): StructuredContextItem[] {
+  if (!injectedContextItems || injectedContextItems.length === 0) {
+    return contextItems;
   }
 
-  const fallbackUser = member
-    ? null
-    : await client.users.fetch(recipientId).catch(() => null);
-
-  addHandle(member?.nickname);
-  addHandle(member?.user.globalName ?? fallbackUser?.globalName);
-  addHandle(member?.user.username ?? fallbackUser?.username);
-
-  return Array.from(handles).map((handle) => ({
-    handle,
-    userId: recipientId,
-  }));
+  return [...contextItems, ...injectedContextItems];
 }
 
 // New: Constants for the semaphore/locking mechanism
@@ -1123,6 +1109,8 @@ interface ChannelLockEntry {
     textQuotaUserDiscId?: string;
     manualSystemPrompt?: string;
     manualPrefill?: string;
+    injectedContextItems?: StructuredContextItem[];
+    forcedMentions?: ForcedMention[];
   }>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
@@ -1502,6 +1490,8 @@ async function enforceGlobalRateLimit(params: {
  *   Set automatically on empty-response retries when the provider surfaces a pending continuation fragment.
  * @param emptyResponseFinishReason - Optional terminal finish reason captured from the previous empty-response attempt.
  *   Currently used to apply extra history trimming on OpenRouter when finishReason="length".
+ * @param injectedContextItems - Optional synthetic context items appended after rebuilt history.
+ * @param forcedMentions - Optional mention handle mappings to enforce for a target user.
  */
 export default async function tomoriChat(
   client: Client,
@@ -1531,6 +1521,8 @@ export default async function tomoriChat(
   manualPrefill?: string,
   naiContinuationPrefill?: string,
   emptyResponseFinishReason?: string,
+  injectedContextItems?: StructuredContextItem[],
+  forcedMentions?: ForcedMention[],
 ): Promise<void> {
   // 1. Initial Checks & State Loading
   const channel = message.channel;
@@ -1994,6 +1986,8 @@ export default async function tomoriChat(
             textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
             manualSystemPrompt,
             manualPrefill,
+            injectedContextItems,
+            forcedMentions,
           });
           log.info(
             `Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
@@ -2166,14 +2160,20 @@ export default async function tomoriChat(
       );
 
       if (reminderRecipientID && !reminderData?.self_reminder) {
-        const forcedMentions = await buildForcedMentionsForReminder(
+        const reminderForcedMentions = await buildForcedMentionsForUser(
           reminderRecipientID,
           client,
           guild ?? null,
         );
-        if (forcedMentions.length > 0) {
-          streamingContext.forcedMentions = forcedMentions;
+        const mergedForcedMentions = mergeForcedMentions(
+          forcedMentions,
+          reminderForcedMentions,
+        );
+        if (mergedForcedMentions.length > 0) {
+          streamingContext.forcedMentions = mergedForcedMentions;
         }
+      } else if (forcedMentions && forcedMentions.length > 0) {
+        streamingContext.forcedMentions = mergeForcedMentions(forcedMentions);
       }
 
       const selectedPersona = selectedPersonaId
@@ -3019,6 +3019,8 @@ export default async function tomoriChat(
               textQuotaSource,
               textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
               textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
+              injectedContextItems,
+              forcedMentions,
             });
           }
 
@@ -4427,7 +4429,10 @@ export default async function tomoriChat(
               seesImages: effectiveContextSeesImages,
               seesVideos: effectiveContextSeesVideos,
             });
-            contextSegments = contextBuild.contextItems;
+            contextSegments = appendInjectedContextItems(
+              contextBuild.contextItems,
+              injectedContextItems,
+            );
 
             // Truncate oldest dialogue history pairs if the conversation is approaching
             // the context window limit, ensuring the output budget is always preserved.
@@ -5552,6 +5557,8 @@ export default async function tomoriChat(
                       // NAI GLM-4.6: pass trailing fragment so next call appends it to the prompt
                       streamResult.naiContinuationPrefill,
                       isOpenRouterLengthEmptyResponse ? "length" : undefined,
+                      injectedContextItems,
+                      forcedMentions,
                     );
                   } else {
                     // Max retries reached, show error embed
@@ -6011,7 +6018,10 @@ export default async function tomoriChat(
                         seesImages: effectiveContextSeesImages,
                         seesVideos: effectiveContextSeesVideos,
                       });
-                      contextSegments = contextBuild.contextItems;
+                      contextSegments = appendInjectedContextItems(
+                        contextBuild.contextItems,
+                        injectedContextItems,
+                      );
 
                       // Truncate oldest dialogue history pairs if the conversation is approaching
                       // the context window limit, ensuring the output budget is always preserved.
@@ -7030,6 +7040,10 @@ export default async function tomoriChat(
               nextMessageData.textQuotaUserDiscId,
               nextMessageData.manualSystemPrompt, // manualSystemPrompt
               nextMessageData.manualPrefill, // manualPrefill
+              undefined, // naiContinuationPrefill
+              undefined, // emptyResponseFinishReason
+              nextMessageData.injectedContextItems,
+              nextMessageData.forcedMentions,
             ).catch((e) => {
               log.error(
                 `Error processing queued message ${nextMessageData.message.id}:`,

@@ -26,6 +26,7 @@ import {
   getOrCreateWebhook,
   resolvePersonaAvatarURL,
 } from "../utils/discord/webhookManager";
+import { ensureDiscordUserMention } from "../utils/discord/mentionHelper";
 import { isBridgeUserId } from "../utils/bridge";
 import { sendMatrixReminderMention } from "../utils/matrix";
 
@@ -318,91 +319,16 @@ export class ReminderTimer {
     // Matrix user IDs cannot be mentioned in Discord — skip the mention step entirely.
     if (isBridgeUserId(reminder.user_discord_id)) return;
 
-    type SendableChannel = TextBasedChannel & {
-      send: (options: {
-        content: string;
-        allowedMentions: { users: string[]; roles: string[]; parse: string[] };
-      }) => Promise<unknown>;
-    };
-
-    const botUserId = this.client.user?.id;
-    if (!botUserId) {
-      log.warn(
-        `Cannot verify reminder mention for reminder ${reminder.reminder_id}: bot user not available`,
-      );
-      return;
-    }
-
-    if (!("messages" in channel)) {
-      log.warn(
-        `Cannot verify reminder mention for reminder ${reminder.reminder_id}: channel does not support message fetching`,
-      );
-      return;
-    }
-
-    try {
-      const recentMessages = await channel.messages.fetch({
-        after: afterMessageId,
-        limit: 100,
-      });
-
-      const relevantMessages = recentMessages.filter(
-        (message) =>
-          (message.author.id === botUserId || message.webhookId) &&
-          message.createdTimestamp >= reminderStartTime - 1000,
-      );
-
-      if (relevantMessages.size === 0) {
-        log.warn(
-          `No bot or webhook messages found after reminder ${reminder.reminder_id} to verify mention`,
-        );
-        return;
-      }
-
-      const mentionToken = `<@${reminder.user_discord_id}>`;
-      const mentionTokenAlt = `<@!${reminder.user_discord_id}>`;
-
-      const hasMention = relevantMessages.some(
-        (message) =>
-          message.mentions.users.has(reminder.user_discord_id) ||
-          message.content.includes(mentionToken) ||
-          message.content.includes(mentionTokenAlt),
-      );
-
-      if (!hasMention) {
-        if (!("send" in channel)) {
-          log.warn(
-            `Cannot send fallback mention for reminder ${reminder.reminder_id}: channel does not support sending`,
-          );
-          return;
-        }
-
-        const sentViaPersona = await this.trySendPersonaFallbackMention(
-          channel,
-          reminder,
-          mentionToken,
-        );
-
-        if (!sentViaPersona) {
-          await (channel as SendableChannel).send({
-            content: mentionToken,
-            allowedMentions: {
-              users: [reminder.user_discord_id],
-              roles: [],
-              parse: [],
-            },
-          });
-        }
-        log.info(
-          `Added fallback mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`,
-        );
-      }
-    } catch (error) {
-      log.warn(
-        `Failed to verify reminder mention for reminder ${reminder.reminder_id}:`,
-        error,
-      );
-    }
+    await ensureDiscordUserMention({
+      client: this.client,
+      channel,
+      targetUserId: reminder.user_discord_id,
+      afterMessageId,
+      triggerStartTime: reminderStartTime,
+      contextLabel: `reminder ${reminder.reminder_id}`,
+      fallbackSender: (content) =>
+        this.trySendPersonaFallbackMention(channel, reminder, content),
+    });
   }
 
   private async trySendPersonaFallbackMention(

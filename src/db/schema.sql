@@ -496,6 +496,12 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 -- Channels in this list always suppress emojis and stickers regardless of global settings
 SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
+-- Add welcome channel configuration (March 2026)
+-- One configured channel/prompt/persona per server for join greetings
+SELECT add_column_if_not_exists('tomori_configs', 'welcome_channel_disc_id', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'welcome_prompt', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'welcome_persona_id', 'INTEGER', 'NULL');
+
 -- Add LLM sampling parameter columns (February 2026)
 -- llm_top_p: Nucleus sampling — probability mass threshold (1.0=neutral/disabled, 0.0=most restricted)
 SELECT add_column_if_not_exists('tomori_configs', 'llm_top_p', 'REAL', '1.0');
