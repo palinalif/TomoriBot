@@ -1768,6 +1768,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         use_reasoning_no_description: `Use the standard model for a normal response.`,
         no_smart_model_title: `No Reasoning Model Found`,
         no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config apikey set\`.`,
+        no_messages_title: `No Messages Found`,
+        no_messages_description: `No messages found in this channel. Send at least one message before using \`/bot respond\`.`,
         cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot respond\` again. This cooldown is shared with message triggers.`,
         channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot respond\` can only be used in whitelisted channels by members with whitelisted roles.`,
       },

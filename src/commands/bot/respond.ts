@@ -321,6 +321,26 @@ export async function execute(
   }
 
   try {
+    const messages = await interaction.channel.messages.fetch({ limit: 1 });
+    const latestMessage = messages.first();
+
+    if (!latestMessage) {
+      log.warn(
+        `No messages found in channel ${interaction.channel.id} for manual respond command.`,
+      );
+      await replyInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(localizer(locale, "commands.bot.respond.no_messages_title"))
+            .setDescription(
+              localizer(locale, "commands.bot.respond.no_messages_description"),
+            )
+            .setColor(ColorCode.WARN),
+        ],
+      });
+      return;
+    }
+
     // 6. Build success embed
     const successEmbed = new EmbedBuilder()
       .setTitle(localizer(locale, "commands.bot.respond.success_title"))
@@ -340,17 +360,6 @@ export async function execute(
     await replyInteraction.editReply({
       embeds: [successEmbed],
     });
-
-    // 8. Get the latest message in the channel (excluding the interaction itself)
-    const messages = await interaction.channel.messages.fetch({ limit: 1 });
-    const latestMessage = messages.first();
-
-    if (!latestMessage) {
-      log.warn(
-        `No messages found in channel ${interaction.channel.id} for manual respond command.`,
-      );
-      return;
-    }
 
     // 5. Create a "passport" message that will trigger tomoriChat
     // We need to ensure this message will pass the trigger checks
@@ -386,6 +395,16 @@ export async function execute(
       interaction.user.id, // textQuotaUserDiscId
       manualPrompt || undefined, // manualSystemPrompt
       manualPrefill, // manualPrefill
+      undefined, // naiContinuationPrefill
+      undefined, // emptyResponseFinishReason
+      undefined, // injectedContextItems
+      undefined, // forcedMentions
+      {
+        userDiscId: interaction.user.id,
+        username: interaction.user.username,
+        locale,
+        member: interaction.member as import("discord.js").GuildMember | null,
+      },
     );
 
     // 7. Set cooldown after successful response (shares cooldown pool with message triggers)

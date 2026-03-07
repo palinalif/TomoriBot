@@ -3,6 +3,7 @@ import type {
   BaseGuildVoiceChannel,
   Client,
   Guild,
+  GuildMember,
   Message,
   Sticker,
   Embed,
@@ -1080,6 +1081,13 @@ const TEXT_QUOTA_TRIGGER_TTL_MS = 10 * 60 * 1000; // Keep trigger consumption st
 // New: In-memory store for channel locks and message queues
 type TextQuotaSource = "user" | "system";
 
+interface ManualTriggerInvoker {
+  userDiscId: string;
+  username: string;
+  locale?: string;
+  member?: GuildMember | null;
+}
+
 interface TextQuotaTriggerState {
   serverId: number;
   userDiscId: string;
@@ -1112,6 +1120,7 @@ interface ChannelLockEntry {
     manualPrefill?: string;
     injectedContextItems?: StructuredContextItem[];
     forcedMentions?: ForcedMention[];
+    manualTriggerInvoker?: ManualTriggerInvoker;
   }>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
@@ -1493,6 +1502,7 @@ async function enforceGlobalRateLimit(params: {
  *   Currently used to apply extra history trimming on OpenRouter when finishReason="length".
  * @param injectedContextItems - Optional synthetic context items appended after rebuilt history.
  * @param forcedMentions - Optional mention handle mappings to enforce for a target user.
+ * @param manualTriggerInvoker - Manual-trigger invoker metadata used when a slash command passes a bot/webhook passport message.
  */
 export default async function tomoriChat(
   client: Client,
@@ -1524,6 +1534,7 @@ export default async function tomoriChat(
   emptyResponseFinishReason?: string,
   injectedContextItems?: StructuredContextItem[],
   forcedMentions?: ForcedMention[],
+  manualTriggerInvoker?: ManualTriggerInvoker,
 ): Promise<void> {
   // 1. Initial Checks & State Loading
   const channel = message.channel;
@@ -1567,7 +1578,7 @@ export default async function tomoriChat(
     return;
   }
 
-  if (isLikelySelfMessage && message.reference?.messageId) {
+  if (!isManuallyTriggered && isLikelySelfMessage && message.reference?.messageId) {
     let referencedMessage = message.channel.messages.cache.get(
       message.reference.messageId,
     );
@@ -1614,7 +1625,7 @@ export default async function tomoriChat(
     }
   }
 
-  if (isLikelySelfMessage) {
+  if (isLikelySelfMessage && !isManuallyTriggered) {
     isPersonaJob = true;
   }
 
@@ -1639,7 +1650,8 @@ export default async function tomoriChat(
   };
 
   // biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
-  const userDiscId = message.author!.id;
+  const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author!.id;
+  const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
   const matrixRelayUserId = isMatrixRelayMessage
     ? extractBridgeUserId(message.author.username)
     : undefined;
@@ -1989,6 +2001,7 @@ export default async function tomoriChat(
             manualPrefill,
             injectedContextItems,
             forcedMentions,
+            manualTriggerInvoker,
           });
           log.info(
             `Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
@@ -2100,19 +2113,18 @@ export default async function tomoriChat(
 
       // Register user if they don't exist yet (first message interaction)
       if (!userRow) {
-        const registrationLocale = message.guild?.preferredLocale.startsWith(
-          "ja",
-        )
-          ? "ja"
-          : "en-US";
+        const registrationLocale =
+          manualTriggerInvoker?.locale ??
+          (message.guild?.preferredLocale.startsWith("ja") ? "ja" : "en-US");
         userRow = await registerUser(
           userDiscId,
-          message.author.username,
+          triggererUsername,
           registrationLocale,
         );
       }
 
-      locale = userRow?.language_pref ?? "en-US"; // Set locale based on user pref
+      locale =
+        userRow?.language_pref ?? manualTriggerInvoker?.locale ?? "en-US"; // Set locale based on user pref
 
       // Determine triggererName based on blacklist and personalization settings
       const isUserBlacklisted = await getCachedBlacklistStatus(
@@ -2123,7 +2135,7 @@ export default async function tomoriChat(
         tomoriState?.config.personal_memories_enabled === false;
       const triggererDisplayName = isMatrixRelayMessage
         ? stripBridgePrefix(message.author.username) || message.author.username
-        : message.author.username;
+        : triggererUsername;
 
       // Use Discord username if user is blacklisted OR server personalization is disabled OR no custom nickname exists
       const triggererName =
@@ -2141,9 +2153,9 @@ export default async function tomoriChat(
       // Preload guild member for presence lookups (only if not DM)
       let preloadedMember = null;
       if (!isDMChannel && guild) {
-        preloadedMember = await guild.members
-          .fetch(userDiscId)
-          .catch(() => null);
+        preloadedMember =
+          manualTriggerInvoker?.member ??
+          (await guild.members.fetch(userDiscId).catch(() => null));
       }
 
       // Create the snapshot
@@ -5571,6 +5583,7 @@ export default async function tomoriChat(
                       isOpenRouterLengthEmptyResponse ? "length" : undefined,
                       injectedContextItems,
                       forcedMentions,
+                      manualTriggerInvoker,
                     );
                   } else {
                     // Max retries reached, show error embed
@@ -7056,6 +7069,7 @@ export default async function tomoriChat(
               undefined, // emptyResponseFinishReason
               nextMessageData.injectedContextItems,
               nextMessageData.forcedMentions,
+              nextMessageData.manualTriggerInvoker,
             ).catch((e) => {
               log.error(
                 `Error processing queued message ${nextMessageData.message.id}:`,
