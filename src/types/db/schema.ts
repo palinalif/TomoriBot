@@ -214,6 +214,7 @@ export const tomoriConfigSchema = z.object({
     (value) => normalizeFallbackLlmIds(value),
     z.array(z.number().int()).default([]),
   ), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
+  nai_exclusive_imggen: z.boolean().default(false), // Added March 2026 - Hides standard generate_image when NovelAI opt key is present
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

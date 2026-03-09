@@ -1597,6 +1597,9 @@ SELECT add_column_if_not_exists('tomori_configs', 'nai_preset_name', 'TEXT');
 -- Stores an ordered list of fallback llm_ids to retry if the primary model errors
 SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'JSONB', '''[]''::JSONB');
 
+-- When true, hides the standard generate_image tool so only generate_image_nai is available (March 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'nai_exclusive_imggen', 'BOOLEAN', 'false');
+
 -- Bun SQL currently fails on INT[] binary decoding in some code paths.
 -- Migrate fallback_llm_ids to JSONB for stable SELECT */RETURNING * behavior.
 DO $$

@@ -19,6 +19,7 @@ import {
 } from "../utils/tools/featureFlagMapper";
 import { getMCPManager } from "../utils/mcp/mcpManager";
 import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchService";
+import { hasOptApiKey } from "../utils/security/crypto";
 
 /**
  * Minimal state interface for context building operations
@@ -32,6 +33,7 @@ export interface ToolStateForContext {
     self_teaching_enabled: boolean;
     pin_message_enabled: boolean;
     imagegen_enabled: boolean;
+    nai_exclusive_imggen: boolean;
   };
 }
 
@@ -203,7 +205,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
   }> {
     try {
       // Get built-in tools (already filtered by feature flags)
-      const builtInTools = this.getAvailableToolsForContext(
+      let builtInTools = this.getAvailableToolsForContext(
         provider,
         stateForContext,
       );
@@ -245,10 +247,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         );
 
         // Apply Brave API key preference logic (prefer Brave over DuckDuckGo when Brave is available)
-        const serverIdNumber = stateForContext.server_id
+        const braveServerIdNumber = stateForContext.server_id
           ? Number.parseInt(stateForContext.server_id, 10)
           : undefined;
-        const hasBraveApiKey = await isBraveSearchAvailable(serverIdNumber);
+        const hasBraveApiKey = await isBraveSearchAvailable(braveServerIdNumber);
         if (hasBraveApiKey) {
           // DuckDuckGo search function names to exclude when Brave is available
           const duckduckgoSearchFunctions = [
@@ -268,7 +270,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
           if (excludedCount > 0) {
             log.info(
-              `Excluded ${excludedCount} DuckDuckGo search functions (Brave API key available for server ${serverIdNumber || "global"})`,
+              `Excluded ${excludedCount} DuckDuckGo search functions (Brave API key available for server ${braveServerIdNumber || "global"})`,
             );
           }
         }
@@ -278,6 +280,79 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         log.info(
           `MCP tools: ${allMCPFunctionNames.length} total, ${mcpFunctionNames.length} after centralized filtering (feature flags + provider preferences)`,
         );
+      }
+
+      // Apply NovelAI opt API key preference logic for image generation tools
+      const serverIdNumber = stateForContext.server_id
+        ? Number.parseInt(stateForContext.server_id, 10)
+        : undefined;
+      if (serverIdNumber) {
+        const hasNovelAiOptKey = await hasOptApiKey(serverIdNumber, "novelai");
+
+        // 1. If provider is not NovelAI AND no NovelAI opt key exists, remove generate_image_nai
+        if (provider !== "novelai" && !hasNovelAiOptKey) {
+          const beforeCount = builtInTools.length;
+          builtInTools = builtInTools.filter(
+            (tool) => tool.name !== "generate_image_nai",
+          );
+          if (builtInTools.length < beforeCount) {
+            log.info(
+              `Excluded generate_image_nai (no NovelAI opt key and provider is ${provider})`,
+            );
+          }
+        }
+
+        // 2. If NovelAI opt key exists AND nai_exclusive_imggen is enabled, remove generate_image
+        if (
+          hasNovelAiOptKey &&
+          stateForContext.config.nai_exclusive_imggen
+        ) {
+          const beforeCount = builtInTools.length;
+          builtInTools = builtInTools.filter(
+            (tool) => tool.name !== "generate_image",
+          );
+          if (builtInTools.length < beforeCount) {
+            log.info(
+              "Excluded generate_image (nai_exclusive_imggen enabled with NovelAI opt key)",
+            );
+          }
+        }
+
+        // 3. Dynamic parameter stripping for generate_image_nai inpainting params.
+        //    Only expose message_id/edit_target when Gemini API access is available
+        //    (Google opt key exists OR provider is Google), since segmentation requires it.
+        const hasGoogleOptKey = await hasOptApiKey(serverIdNumber, "google");
+        const hasGeminiAccess = hasGoogleOptKey || provider === "google";
+
+        if (!hasGeminiAccess) {
+          builtInTools = builtInTools.map((tool) => {
+            if (tool.name !== "generate_image_nai") return tool;
+
+            // Create a shallow proxy that hides inpainting-only parameters
+            const { message_id: _msgId, edit_target: _editTarget, ...baseProps } =
+              tool.parameters.properties;
+
+            const strippedDescription = tool.description.replace(
+              / For editing\/inpainting:.*?The image will be sent directly to the Discord channel\./,
+              " The image will be sent directly to the Discord channel.",
+            );
+
+            return Object.create(tool, {
+              parameters: {
+                value: {
+                  type: tool.parameters.type,
+                  properties: baseProps,
+                  required: tool.parameters.required,
+                },
+                enumerable: true,
+              },
+              description: {
+                value: strippedDescription,
+                enumerable: true,
+              },
+            });
+          });
+        }
       }
 
       const totalCount = builtInTools.length + mcpFunctionNames.length;

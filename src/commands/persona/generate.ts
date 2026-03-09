@@ -672,6 +672,7 @@ export async function execute(
           self_teaching_enabled: false,
           pin_message_enabled: false,
           imagegen_enabled: false,
+          nai_exclusive_imggen: false,
         },
       };
 

@@ -2,6 +2,13 @@
  * NovelAI Image Generation Tool
  * Generates images using NovelAI's diffusion models with imageboard-style tag prompts.
  * Supports self-portrait mode that prepends persona's character tags to the prompt.
+ *
+ * Inpainting mode (Phase 2):
+ * When `message_id` + `edit_target` are provided, the tool enters inpaint mode:
+ * 1. Extracts the image from the referenced Discord message
+ * 2. Calls Gemini segmentation to identify the edit target region
+ * 3. Generates a mask (white = redraw, black = preserve)
+ * 4. Sends image + mask to NovelAI's infill endpoint with an inpainting model
  */
 
 import { AttachmentBuilder } from "discord.js";
@@ -9,17 +16,19 @@ import JSZip from "jszip";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
+	BaseTool,
+	type ToolContext,
+	type ToolResult,
+	type ToolParameterSchema,
 } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
-import { decryptApiKey } from "../../utils/security/crypto";
+import { decryptApiKey, getOptApiKey } from "../../utils/security/crypto";
 import {
-  checkImageQuota,
-  incrementImageQuota,
+	checkImageQuota,
+	incrementImageQuota,
 } from "../../utils/quota/imageQuotaManager";
+import { extractImagesFromMessage } from "../../utils/image/imageExtractor";
+import { segmentImage } from "../../utils/image/segmentationService";
 
 // Configurable generation parameters via environment variables
 const NAI_STEPS = Number.parseInt(process.env.NAI_IMAGE_STEPS || "28", 10);
@@ -34,6 +43,10 @@ const NAI_NEGATIVE_PROMPT =
 const NAI_IMAGE_ENABLE_TAG_RESOLUTION =
   (process.env.NAI_IMAGE_ENABLE_TAG_RESOLUTION || "false").toLowerCase() ===
   "true";
+// Inpainting strength: how strongly the infilled region replaces the original (0.0–1.0)
+const NAI_INPAINT_STRENGTH = Number.parseFloat(
+	process.env.NAI_INPAINT_STRENGTH || "0.7",
+);
 
 /** Base URL for NovelAI's image generation API */
 const NAI_IMAGE_BASE_URL = "https://image.novelai.net";
@@ -64,43 +77,55 @@ interface SuggestTagsResponse {
  * Uses imageboard-style tag prompts instead of natural language descriptions.
  */
 export class GenerateImageNaiTool extends BaseTool {
-  name = "generate_image_nai";
-  description =
-    "Generate an AI image using NovelAI's diffusion models. Provide imageboard-style tags (e.g. '1girl, short hair, red eyes, sunset'). If is_self_portrait is true, the persona's character tags are automatically prepended. The image will be sent directly to the Discord channel.";
-  category = "utility" as const;
-  requiresFeatureFlag = "image_gen";
-  requiresFollowUp = true; // Allow model to generate a text response after image is sent, preventing orphaned self-reply
+	name = "generate_image_nai";
+	description =
+		"Generate or edit an AI image using NovelAI's diffusion models. For generation: provide imageboard-style tags (e.g. '1girl, short hair, red eyes, sunset'). For editing/inpainting: also provide message_id (referencing a message with an image) and edit_target (what to change, e.g. 'the background'). The image will be sent directly to the Discord channel.";
+	category = "utility" as const;
+	requiresFeatureFlag = "image_gen";
+	requiresFollowUp = true; // Allow model to generate a text response after image is sent, preventing orphaned self-reply
 
-  parameters: ToolParameterSchema = {
-    type: "object",
-    properties: {
-      prompt: {
-        type: "string",
-        description:
-          "Imageboard-style tags for image generation, separated by commas (e.g. '1girl, short hair, red eyes, sunset, masterpiece'). Tags describe the desired image content, style, and quality.",
-      },
-      orientation: {
-        type: "string",
-        description:
-          "Image orientation/aspect ratio. 'portrait' (832x1216), 'landscape' (1216x832), or 'square' (1024x1024). Default: portrait.",
-        enum: ["portrait", "landscape", "square"],
-      },
-      is_self_portrait: {
-        type: "boolean",
-        description:
-          "If true, automatically prepends the persona's configured character tags (from /nai charactertags) to the prompt for consistent self-portraits.",
-      },
-    },
-    required: ["prompt"],
-  };
+	parameters: ToolParameterSchema = {
+		type: "object",
+		properties: {
+			prompt: {
+				type: "string",
+				description:
+					"Imageboard-style tags for image generation, separated by commas (e.g. '1girl, short hair, red eyes, sunset, masterpiece'). Tags describe the desired image content, style, and quality. For inpainting, describe what should replace the masked region.",
+			},
+			orientation: {
+				type: "string",
+				description:
+					"Image orientation/aspect ratio. 'portrait' (832x1216), 'landscape' (1216x832), or 'square' (1024x1024). Default: portrait. Ignored in inpaint mode (uses source image dimensions).",
+				enum: ["portrait", "landscape", "square"],
+			},
+			is_self_portrait: {
+				type: "boolean",
+				description:
+					"If true, automatically prepends the persona's configured character tags (from /nai charactertags) to the prompt for consistent self-portraits.",
+			},
+			message_id: {
+				type: "string",
+				description:
+					"Optional: Discord message ID containing the image to edit. When provided with edit_target, enables inpainting mode. The first image found in the message (attachment, embed, sticker, or emoji) will be used as the source.",
+			},
+			edit_target: {
+				type: "string",
+				description:
+					"Optional: Natural language description of the region to edit (e.g. 'the background', 'her hair', 'the cat'). Required when message_id is provided. Gemini AI will segment this region to create an inpainting mask.",
+			},
+		},
+		required: ["prompt"],
+	};
 
   /**
-   * NovelAI image generation is only available when the provider is novelai
-   * @param provider - LLM provider name
-   * @returns True only for 'novelai' provider
+   * NovelAI image generation is available for any provider that supports tools.
+   * When the active provider is not 'novelai', the tool requires a NovelAI opt API key
+   * (checked by the tool registry's post-filtering in getAvailableToolsWithMCP).
+   * @param _provider - LLM provider name (accepted for all providers)
+   * @returns Always true — actual availability is gated by opt key check in the registry
    */
-  isAvailableFor(provider: string): boolean {
-    return provider === "novelai";
+  isAvailableFor(_provider: string): boolean {
+    return true;
   }
 
   /**
@@ -254,32 +279,212 @@ export class GenerateImageNaiTool extends BaseTool {
   }
 
   /**
-   * Calls NovelAI's generate-image API and extracts the PNG from the ZIP response.
-   *
-   * Flow:
-   * 1. Build request payload with model, prompt, and generation parameters
-   * 2. Send POST request to NovelAI image generation endpoint
-   * 3. Receive ZIP response containing the generated PNG
-   * 4. Extract the first PNG file from the ZIP archive
-   *
-   * @param apiKey - Decrypted NovelAI API key
-   * @param model - Diffusion model codename
-   * @param prompt - Normalized tag prompt string (comma-separated)
-   * @param orientation - Image orientation key (portrait/landscape/square)
-   * @returns Buffer containing the generated PNG image data
-   */
-  /**
    * Checks whether the given model codename is a v4+ model that requires the v4_prompt format.
    * V4 models use a structured caption object instead of a flat prompt string.
    * @param model - Diffusion model codename
    * @returns True if the model requires v4_prompt format
    */
-  private isV4Model(model: string): boolean {
-    // Match models like nai-diffusion-4-5-full, nai-diffusion-4-5-curated, or future nai-diffusion-4-*
-    return /nai-diffusion-4/.test(model);
-  }
+	private isV4Model(model: string): boolean {
+		// Match models like nai-diffusion-4-5-full, nai-diffusion-4-5-curated, or future nai-diffusion-4-*
+		return /nai-diffusion-4/.test(model);
+	}
 
-  private async generateImage(
+	/**
+	 * Derive the inpainting model codename from the base model.
+	 * NovelAI inpainting models use a `-inpainting` suffix and are NOT stored
+	 * in the `image_diffusion_models` table — the codename is derived at runtime.
+	 * @param baseCodename - Base model codename (e.g. "nai-diffusion-4-5-curated")
+	 * @returns Inpainting model codename (e.g. "nai-diffusion-4-5-curated-inpainting")
+	 */
+	private getInpaintingModelCodename(baseCodename: string): string {
+		return `${baseCodename}-inpainting`;
+	}
+
+	/**
+	 * Resolve a Google API key for Gemini segmentation.
+	 *
+	 * Resolution order:
+	 * 1. Google opt key from `/config googleapi set` (stored as opt_api_keys service_name='google')
+	 * 2. Main config API key when the active provider is Google
+	 *
+	 * @param context - Tool execution context
+	 * @returns Decrypted Google API key, or null if unavailable
+	 */
+	private async resolveGoogleApiKey(
+		context: ToolContext,
+	): Promise<string | null> {
+		// 1st priority: opt key for "google"
+		const optKey = await getOptApiKey(
+			context.tomoriState.server_id,
+			"google",
+		);
+		if (optKey) return optKey;
+
+		// 2nd priority: main config key when provider is Google
+		if (context.provider === "google") {
+			const encryptedApiKey = context.tomoriState.config.api_key;
+			const keyVersion = context.tomoriState.config.key_version || 1;
+
+			if (encryptedApiKey) {
+				return await decryptApiKey(encryptedApiKey, keyVersion);
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Calls NovelAI's infill (inpainting) endpoint with a source image and mask.
+	 *
+	 * Flow:
+	 * 1. Build infill request payload with inpainting model, image, and mask
+	 * 2. Send POST request to NovelAI image generation endpoint
+	 * 3. Extract the resulting PNG from the ZIP response
+	 *
+	 * @param apiKey - Decrypted NovelAI API key
+	 * @param model - Inpainting model codename (with -inpainting suffix)
+	 * @param prompt - Tag prompt describing what to draw in the masked region
+	 * @param imageBase64 - Base64-encoded source image
+	 * @param maskBase64 - Base64-encoded mask (white = redraw, black = preserve)
+	 * @returns Buffer containing the inpainted PNG image data
+	 */
+	private async generateInpaintImage(
+		apiKey: string,
+		model: string,
+		prompt: string,
+		imageBase64: string,
+		maskBase64: string,
+	): Promise<Buffer> {
+		const seed = Math.floor(Math.random() * 2147483647);
+
+		// Build infill request payload
+		// Inpainting uses action: "infill" and includes image + mask in parameters
+		let requestPayload: Record<string, unknown>;
+
+		if (this.isV4Model(model)) {
+			requestPayload = {
+				action: "infill",
+				input: prompt,
+				model,
+				parameters: {
+					prompt,
+					seed,
+					n_samples: 1,
+					steps: NAI_STEPS,
+					scale: NAI_SCALE,
+					uncond_scale: 0.0,
+					cfg_rescale: 0.0,
+					sampler: NAI_SAMPLER,
+					noise_schedule: NAI_NOISE_SCHEDULE,
+					legacy_v3_extend: false,
+					image: imageBase64,
+					mask: maskBase64,
+					add_original_image: true,
+					strength: NAI_INPAINT_STRENGTH,
+					reference_information_extracted_multiple: [],
+					reference_strength_multiple: [],
+					v4_prompt: {
+						caption: {
+							base_caption: prompt,
+							char_captions: [],
+						},
+						use_coords: false,
+						use_order: true,
+						legacy_uc: false,
+					},
+					v4_negative_prompt: {
+						caption: {
+							base_caption: NAI_NEGATIVE_PROMPT,
+							char_captions: [],
+						},
+						use_coords: false,
+						use_order: false,
+						legacy_uc: false,
+					},
+					controlnet_strength: 1.0,
+					controlnet_model: null,
+					dynamic_thresholding: false,
+					dynamic_thresholding_percentile: 0.999,
+					dynamic_thresholding_mimic_scale: 10.0,
+					sm: false,
+					sm_dyn: false,
+					skip_cfg_above_sigma: null,
+					skip_cfg_below_sigma: 0.0,
+					lora_unet_weights: null,
+					lora_clip_weights: null,
+					deliberate_euler_ancestral_bug: false,
+					prefer_brownian: true,
+					cfg_sched_eligibility: "enable_for_post_summer_samplers",
+					explike_fine_detail: false,
+					minimize_sigma_inf: false,
+					uncond_per_vibe: true,
+					wonky_vibe_correlation: true,
+					version: 1,
+					uc: NAI_NEGATIVE_PROMPT,
+					request_type: "PromptGenerateRequest",
+				},
+			};
+		} else {
+			// V3 infill structure
+			requestPayload = {
+				action: "infill",
+				input: prompt,
+				model,
+				parameters: {
+					steps: NAI_STEPS,
+					scale: NAI_SCALE,
+					sampler: NAI_SAMPLER,
+					noise_schedule: NAI_NOISE_SCHEDULE,
+					n_samples: 1,
+					seed,
+					image: imageBase64,
+					mask: maskBase64,
+					add_original_image: true,
+					strength: NAI_INPAINT_STRENGTH,
+					negative_prompt: NAI_NEGATIVE_PROMPT,
+				},
+			};
+		}
+
+		log.info(
+			`[NAI] Inpainting with model "${model}" (seed: ${seed})`,
+		);
+
+		// Send infill request
+		const response = await fetch(`${NAI_IMAGE_BASE_URL}/ai/generate-image`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(requestPayload),
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text().catch(() => "");
+			const snippet = errorText.slice(0, 500);
+			throw new Error(
+				`NovelAI inpainting failed (${response.status} ${response.statusText}): ${snippet}`,
+			);
+		}
+
+		// Extract PNG from ZIP response
+		const zipBuffer = Buffer.from(await response.arrayBuffer());
+		const zip = await JSZip.loadAsync(zipBuffer);
+
+		const pngFileName = Object.keys(zip.files).find((name) =>
+			name.toLowerCase().endsWith(".png"),
+		);
+
+		if (!pngFileName) {
+			throw new Error("NovelAI inpainting response ZIP did not contain a PNG file");
+		}
+
+		const pngData = await zip.files[pngFileName].async("nodebuffer");
+		return Buffer.from(pngData);
+	}
+
+	private async generateImage(
     apiKey: string,
     model: string,
     prompt: string,
@@ -378,11 +583,6 @@ export class GenerateImageNaiTool extends BaseTool {
 
     log.info(
       `[NAI] Generating image with model "${model}" (${dimensions.width}x${dimensions.height}, seed: ${seed})`,
-    );
-
-    // Debug: log full request payload to compare against working examples
-    log.info(
-      `[NAI] Full request payload:\n${JSON.stringify(requestPayload, null, 2)}`,
     );
 
     // 2. Send generation request
@@ -527,169 +727,291 @@ export class GenerateImageNaiTool extends BaseTool {
       };
     }
 
-    // Extract arguments
-    const prompt = args.prompt as string;
-    const orientation = (args.orientation as string) || "portrait";
-    const isSelfPortrait = args.is_self_portrait !== true; // Default to false when not provided
+		// Extract arguments
+		const prompt = args.prompt as string;
+		const orientation = (args.orientation as string) || "portrait";
+		const isSelfPortrait = args.is_self_portrait === true; // Default to false when not provided
+		const messageId = args.message_id as string | undefined;
+		const editTarget = args.edit_target as string | undefined;
 
-    try {
-      // 3. Get the diffusion model codename from database
-      const diffusionModelId = context.tomoriState.config.diffusion_model_id;
+		// Determine if this is an inpainting request
+		const isInpaintMode = !!(messageId && editTarget);
 
-      if (!diffusionModelId) {
-        return {
-          success: false,
-          error:
-            "No diffusion model configured for this server. Please run the setup command or configure an API key to enable image generation.",
-        };
-      }
+		try {
+			// 3. Get the diffusion model codename from database
+			const diffusionModelId = context.tomoriState.config.diffusion_model_id;
 
-      const modelCodename =
-        await this.getDiffusionModelCodename(diffusionModelId);
+			if (!diffusionModelId) {
+				return {
+					success: false,
+					error:
+						"No diffusion model configured for this server. Please run the setup command or configure an API key to enable image generation.",
+				};
+			}
 
-      log.info(
-        `Using NAI diffusion model: ${modelCodename} for image generation`,
-      );
+			const baseModelCodename =
+				await this.getDiffusionModelCodename(diffusionModelId);
 
-      // Decrypt API key (same key used for text and image generation)
-      const encryptedApiKey = context.tomoriState.config.api_key;
-      const keyVersion = context.tomoriState.config.key_version || 1;
+			log.info(
+				`Using NAI diffusion model: ${baseModelCodename} for ${isInpaintMode ? "inpainting" : "image generation"}`,
+			);
 
-      if (!encryptedApiKey) {
-        return {
-          success: false,
-          error: "No API key configured for this server",
-        };
-      }
+			// Resolve NovelAI API key — prefer opt key (cross-provider), fall back to main config key (NovelAI provider)
+			let apiKey: string | null = null;
 
-      const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
+			// 1st priority: opt_api_keys entry for "novelai" (set via /config novelaiapi set)
+			apiKey = await getOptApiKey(context.tomoriState.server_id, "novelai");
 
-      if (!apiKey) {
-        return {
-          success: false,
-          error: "Failed to decrypt API key",
-        };
-      }
+			// 2nd priority: main config key when the active provider is NovelAI
+			if (!apiKey) {
+				const encryptedApiKey = context.tomoriState.config.api_key;
+				const keyVersion = context.tomoriState.config.key_version || 1;
 
-      // 4. Build tag list — quality tags and character tags are trusted (no normalization needed)
-      const qualityTags = [
-        "8k",
-        "absurdres",
-        "masterpiece",
-        "best quality",
-        "good quality",
-        "newest",
-      ];
+				if (encryptedApiKey) {
+					apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
+				}
+			}
 
-      // Parse model-provided tags (these need normalization)
-      const modelTags = prompt
-        .split(/[,\u3001]/)
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0);
+			if (!apiKey) {
+				return {
+					success: false,
+					error: "No NovelAI API key available. Set one with /config novelaiapi set, or switch to the NovelAI provider.",
+				};
+			}
 
-      // Trusted tags: quality + persona character tags (skip normalization)
-      const trustedTags = [...qualityTags];
+			// 4. Build tag list — quality tags and character tags are trusted (no normalization needed)
+			const qualityTags = [
+				"8k",
+				"absurdres",
+				"masterpiece",
+				"best quality",
+				"good quality",
+				"newest",
+			];
 
-      if (isSelfPortrait) {
-        const naiTags = context.tomoriState.nai_tags || [];
-        if (naiTags.length > 0) {
-          trustedTags.push(...naiTags);
-          log.info(
-            `[NAI] Prepended ${naiTags.length} persona character tag(s) for self-portrait`,
-          );
-        }
-      }
+			// Parse model-provided tags (these need normalization)
+			const modelTags = prompt
+				.split(/[,\u3001]/)
+				.map((t) => t.trim())
+				.filter((t) => t.length > 0);
 
-      // 5. Resolve only the model-provided tags via suggest-tags API when enabled
-      const resolvedModelTags = NAI_IMAGE_ENABLE_TAG_RESOLUTION
-        ? await this.normalizeTags(modelTags, modelCodename, apiKey)
-        : modelTags;
+			// Trusted tags: quality + persona character tags (skip normalization)
+			const trustedTags = [...qualityTags];
 
-      if (!NAI_IMAGE_ENABLE_TAG_RESOLUTION) {
-        log.info(
-          "[NAI] Tag resolution via suggest-tags is disabled; using raw model-provided tags",
-        );
-      }
+			if (isSelfPortrait) {
+				const naiTags = context.tomoriState.nai_tags || [];
+				if (naiTags.length > 0) {
+					trustedTags.push(...naiTags);
+					log.info(
+						`[NAI] Prepended ${naiTags.length} persona character tag(s) for self-portrait`,
+					);
+				}
+			}
 
-      // Combine: trusted tags first (as-is), then resolved/raw model tags
-      const normalizedTags = [...trustedTags, ...resolvedModelTags];
+			// 5. Resolve only the model-provided tags via suggest-tags API when enabled
+			const resolvedModelTags = NAI_IMAGE_ENABLE_TAG_RESOLUTION
+				? await this.normalizeTags(modelTags, baseModelCodename, apiKey)
+				: modelTags;
 
-      const normalizedPrompt = normalizedTags.join(", ");
-      log.info(
-        `[NAI] Normalized prompt: "${normalizedPrompt.substring(0, 200)}${normalizedPrompt.length > 200 ? "..." : ""}"`,
-      );
+			if (!NAI_IMAGE_ENABLE_TAG_RESOLUTION) {
+				log.info(
+					"[NAI] Tag resolution via suggest-tags is disabled; using raw model-provided tags",
+				);
+			}
 
-      // 6. Generate image
-      const imageBuffer = await this.generateImage(
-        apiKey,
-        modelCodename,
-        normalizedPrompt,
-        orientation,
-      );
+			// Combine: trusted tags first (as-is), then resolved/raw model tags
+			const normalizedTags = [...trustedTags, ...resolvedModelTags];
 
-      // 7. Send image to Discord
-      const attachment = new AttachmentBuilder(imageBuffer, {
-        name: `nai_generated_${Date.now()}.png`,
-      });
+			const normalizedPrompt = normalizedTags.join(", ");
+			log.info(
+				`[NAI] Normalized prompt: "${normalizedPrompt.substring(0, 200)}${normalizedPrompt.length > 200 ? "..." : ""}"`,
+			);
 
-      const sentMessage = await this.sendGeneratedImage(context, attachment);
+			let imageBuffer: Buffer;
 
-      log.success("Successfully generated and sent NAI image to Discord");
+			if (isInpaintMode) {
+				// ── Inpainting flow ──────────────────────────────────────────
+				// 6a. Extract source image from referenced Discord message
+				log.info(
+					`[NAI] Inpaint mode: extracting image from message ${messageId}, target="${editTarget}"`,
+				);
 
-      // 8. Increment quota after successful generation
-      await incrementImageQuota(context.tomoriState.server_id, userDiscId);
+				const extractedImages = await extractImagesFromMessage(
+					messageId,
+					context,
+				);
 
-      // Build success message with remaining quota info
-      let successMessage = `Good job! The image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it, so do NOT generate another image unless asked. The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
+				// Use the first image found as the inpainting source
+				const sourceImage = extractedImages[0];
 
-      if (quotaCheck.userRemaining !== undefined) {
-        const remainingText = localizer(
-          context.locale,
-          "tools.generate_image.quota_remaining",
-          { remaining: quotaCheck.userRemaining.toString() },
-        );
-        successMessage += ` ${remainingText}`;
-      }
+				// 6b. Resolve Google API key for Gemini segmentation
+				const googleApiKey = await this.resolveGoogleApiKey(context);
+				if (!googleApiKey) {
+					return {
+						success: false,
+						error: localizer(
+							context.locale,
+							"tools.generate_image_nai.no_google_api_key",
+						),
+					};
+				}
 
-      return {
-        success: true,
-        message: successMessage,
-        // imageMetadata intentionally omitted — Discord CDN URLs are protected
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+				// 6c. Call Gemini segmentation to generate the inpainting mask
+				log.info(
+					`[NAI] Calling Gemini segmentation for target: "${editTarget}"`,
+				);
 
-      log.error("NAI image generation failed:", error as Error);
+				const segResult = await segmentImage(
+					sourceImage.data,
+					sourceImage.mimeType,
+					editTarget,
+					googleApiKey,
+				);
 
-      // Check for auth/billing errors
-      if (
-        errorMessage.includes("401") ||
-        errorMessage.includes("403") ||
-        errorMessage.includes("Unauthorized") ||
-        errorMessage.includes("payment")
-      ) {
-        return {
-          success: false,
-          error:
-            "NovelAI API authentication failed. Please check your API key and subscription status.",
-        };
-      }
+				log.info(
+					`[NAI] Segmentation complete: ${segResult.segmentCount} segment(s) found [${segResult.labels.join(", ")}]`,
+				);
 
-      // Check for rate limiting
-      if (errorMessage.includes("429") || errorMessage.includes("rate limit")) {
-        return {
-          success: false,
-          error:
-            "NovelAI API rate limit reached. Please try again in a moment.",
-        };
-      }
+				// 6d. If debug mode is enabled, DM the invoking user the mask overlay
+				if (segResult.debugMaskBuffer && context.userId) {
+					try {
+						const debugUser =
+							await context.client.users.fetch(context.userId);
+						const maskAttachment = new AttachmentBuilder(
+							segResult.debugMaskBuffer,
+							{ name: `inpaint_mask_debug_${Date.now()}.png` },
+						);
+						await debugUser.send({
+							content: `**[NAI Inpaint Debug]** Segmentation mask for "${editTarget}" (${segResult.segmentCount} segment(s): ${segResult.labels.join(", ")})`,
+							files: [maskAttachment],
+						});
+						log.info(
+							"[NAI] Sent debug segmentation mask to user via DM",
+						);
+					} catch (dmErr) {
+						log.warn(
+							"[NAI] Failed to send debug mask DM (user may have DMs disabled)",
+							dmErr as Error,
+						);
+					}
+				}
 
-      // Generic error fallback
-      return {
-        success: false,
-        error: `Failed to generate NAI image: ${errorMessage}`,
-      };
-    }
-  }
+				// 6e. Generate inpainted image via NovelAI infill endpoint
+				const inpaintModel = this.getInpaintingModelCodename(
+					baseModelCodename,
+				);
+
+				imageBuffer = await this.generateInpaintImage(
+					apiKey,
+					inpaintModel,
+					normalizedPrompt,
+					sourceImage.data,
+					segResult.maskBase64,
+				);
+
+				log.success(
+					`[NAI] Inpainting complete with model "${inpaintModel}"`,
+				);
+			} else {
+				// ── Standard generation flow ─────────────────────────────────
+				// 6. Generate image normally
+				imageBuffer = await this.generateImage(
+					apiKey,
+					baseModelCodename,
+					normalizedPrompt,
+					orientation,
+				);
+			}
+
+			// 7. Send image to Discord
+			const filePrefix = isInpaintMode ? "nai_inpainted" : "nai_generated";
+			const attachment = new AttachmentBuilder(imageBuffer, {
+				name: `${filePrefix}_${Date.now()}.png`,
+			});
+
+			const sentMessage = await this.sendGeneratedImage(
+				context,
+				attachment,
+			);
+
+			log.success(
+				`Successfully ${isInpaintMode ? "inpainted" : "generated"} and sent NAI image to Discord`,
+			);
+
+			// 8. Increment quota after successful generation
+			await incrementImageQuota(context.tomoriState.server_id, userDiscId);
+
+			// Build success message with remaining quota info
+			let successMessage: string;
+
+			if (isInpaintMode) {
+				successMessage = `Good job! The inpainted image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it, so do NOT generate another image unless asked. The edit targeted "${editTarget}" and applied tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
+			} else {
+				successMessage = `Good job! The image has been generated and sent directly to the Discord chat (message ID: ${sentMessage.id}). The user can already see it, so do NOT generate another image unless asked. The image was created using tags: "${normalizedPrompt.substring(0, 100)}${normalizedPrompt.length > 100 ? "..." : ""}".`;
+			}
+
+			if (quotaCheck.userRemaining !== undefined) {
+				const remainingText = localizer(
+					context.locale,
+					"tools.generate_image.quota_remaining",
+					{ remaining: quotaCheck.userRemaining.toString() },
+				);
+				successMessage += ` ${remainingText}`;
+			}
+
+			return {
+				success: true,
+				message: successMessage,
+				// imageMetadata intentionally omitted — Discord CDN URLs are protected
+			};
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : String(error);
+
+			log.error(
+				`NAI ${isInpaintMode ? "inpainting" : "image generation"} failed:`,
+				error as Error,
+			);
+
+			// Check for auth/billing errors
+			if (
+				errorMessage.includes("401") ||
+				errorMessage.includes("403") ||
+				errorMessage.includes("Unauthorized") ||
+				errorMessage.includes("payment")
+			) {
+				return {
+					success: false,
+					error:
+						"NovelAI API authentication failed. Please check your API key and subscription status.",
+				};
+			}
+
+			// Check for rate limiting
+			if (
+				errorMessage.includes("429") ||
+				errorMessage.includes("rate limit")
+			) {
+				return {
+					success: false,
+					error:
+						"NovelAI API rate limit reached. Please try again in a moment.",
+				};
+			}
+
+			// Segmentation-specific errors
+			if (errorMessage.includes("segmentation") || errorMessage.includes("segment")) {
+				return {
+					success: false,
+					error: `Segmentation failed: ${errorMessage}`,
+				};
+			}
+
+			// Generic error fallback
+			return {
+				success: false,
+				error: `Failed to ${isInpaintMode ? "inpaint" : "generate"} NAI image: ${errorMessage}`,
+			};
+		}
+	}
 }

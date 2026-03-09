@@ -1965,6 +1965,50 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_description: `The Brave Search API key has been successfully removed.`,
         },
       },
+      // Google API key management (subcommand group)
+      googleapi: {
+        description: `Manage Google API key`,
+        set: {
+          description: `Set the Google API key for this server.`,
+          key_description: `Your Google API key.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid Google API key.`,
+          key_validation_failed_title: `Google API Key Validation Failed`,
+          key_validation_failed_description: `The provided Google API key is not valid. Please check the key and try again.`,
+          success_title: `Google API Key Set`,
+          success_description: `The Google API key has been successfully validated, encrypted, and saved. It will be used for features like image segmentation.`,
+        },
+        delete: {
+          description: `Remove the currently configured Google API key.`,
+          no_key_title: `No Google API Key Set`,
+          no_key_description: `There is no Google API key currently configured to remove.`,
+          success_title: `Google API Key Removed`,
+          success_description: `The Google API key has been successfully removed.`,
+        },
+      },
+      // NovelAI API key management (subcommand group)
+      novelaiapi: {
+        description: `Manage NovelAI API key`,
+        set: {
+          description: `Set the NovelAI API key for this server.`,
+          key_description: `Your NovelAI API key.`,
+          disable_other_imggen_description: `If true, hides the standard image generation tool so only NovelAI image gen is available.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid NovelAI API key.`,
+          key_validation_failed_title: `NovelAI API Key Validation Failed`,
+          key_validation_failed_description: `The provided NovelAI API key is not valid. Please check the key and ensure you have an active subscription.`,
+          success_title: `NovelAI API Key Set`,
+          success_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now available regardless of your active LLM provider.`,
+          success_exclusive_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now the exclusive image generation tool for this server.`,
+        },
+        delete: {
+          description: `Remove the currently configured NovelAI API key.`,
+          no_key_title: `No NovelAI API Key Set`,
+          no_key_description: `There is no NovelAI API key currently configured to remove.`,
+          success_title: `NovelAI API Key Removed`,
+          success_description: `The NovelAI API key and exclusive image generation setting have been removed.`,
+        },
+      },
       // Custom provider configuration (non-production only)
       custom: {
         // Endpoint URL field help text (shown instead of API key for custom provider)
@@ -3528,6 +3572,9 @@ You can change this anytime using \`/personal privacy\`.`,
       quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
       quota_resets_in_days: `Quota resets in {days} day(s).`,
       quota_remaining: `You have {remaining} image(s) remaining for today.`,
+    },
+    generate_image_nai: {
+      no_google_api_key: `Inpainting requires a Google API key for image segmentation. Set one with /config googleapi set, or switch to the Google provider.`,
     },
   },
 

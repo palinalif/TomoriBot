@@ -270,6 +270,7 @@ function estimateToolSchemaTokens(): number {
         self_teaching_enabled: true,
         pin_message_enabled: true,
         imagegen_enabled: true,
+        nai_exclusive_imggen: false,
       },
     };
 
