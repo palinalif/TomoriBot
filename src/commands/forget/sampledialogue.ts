@@ -33,6 +33,53 @@ const MODAL_CUSTOM_ID = "forget_sampledialogue_modal";
 const DIALOGUE_SELECT_ID = "dialogue_select";
 
 /**
+ * Repairs mismatched sample dialogue arrays by truncating both to the shorter length.
+ * This heals corruption caused by the old array_remove() bug which could remove
+ * duplicate values from one array but not the other, breaking alignment.
+ * @param tomoriId - The tomori ID to repair
+ * @param inLength - Current length of sample_dialogues_in
+ * @param outLength - Current length of sample_dialogues_out
+ * @returns The repaired [in, out] arrays, or null if repair failed
+ */
+async function repairMismatchedDialogues(
+	tomoriId: number,
+	inLength: number,
+	outLength: number,
+): Promise<{ repairedIn: string[]; repairedOut: string[] } | null> {
+	// Truncate both arrays to the shorter length to restore alignment
+	const safeLength = Math.min(inLength, outLength);
+
+	log.warn(
+		`Self-healing: truncating sample dialogues for tomori ${tomoriId} from (in: ${inLength}, out: ${outLength}) to ${safeLength} pairs`,
+	);
+
+	const [updatedRow] = await sql`
+		UPDATE tomoris
+		SET
+			sample_dialogues_in = sample_dialogues_in[1:${safeLength}],
+			sample_dialogues_out = sample_dialogues_out[1:${safeLength}]
+		WHERE tomori_id = ${tomoriId}
+		RETURNING sample_dialogues_in, sample_dialogues_out
+	`;
+
+	if (!updatedRow) {
+		log.error(
+			`Self-healing failed: no rows returned for tomori ${tomoriId}`,
+		);
+		return null;
+	}
+
+	log.success(
+		`Self-healing complete: sample dialogues for tomori ${tomoriId} repaired to ${safeLength} pairs`,
+	);
+
+	return {
+		repairedIn: (updatedRow.sample_dialogues_in as string[]) ?? [],
+		repairedOut: (updatedRow.sample_dialogues_out as string[]) ?? [],
+	};
+}
+
+/**
  * Helper function to perform sample dialogue removal from database
  * @param tomoriState - Current Tomori state
  * @param selectedIndex - Index of the dialogue pair to remove
@@ -54,16 +101,29 @@ async function performSampleDialogueRemoval(
     | ModalSubmitInteraction,
   locale: string,
 ): Promise<void> {
-  // Get the item being removed
+  // Get the item being removed (for display purposes)
   const itemToRemoveIn = currentIn[selectedIndex];
   const itemToRemoveOut = currentOut[selectedIndex];
 
-  // Update both arrays in the database using array_remove for atomic operations
+  // Convert 0-based JS index to 1-based PostgreSQL ordinality
+  const pgIndex = selectedIndex + 1;
+
+  // Update both arrays using index-based removal via unnest + ordinality
+  // NOTE: array_remove() is NOT safe here — it removes ALL matching values,
+  // which corrupts array alignment when duplicate dialogue text exists.
   const [updatedRow] = await sql`
 		UPDATE tomoris
 		SET
-			sample_dialogues_in = array_remove(sample_dialogues_in, ${itemToRemoveIn}),
-			sample_dialogues_out = array_remove(sample_dialogues_out, ${itemToRemoveOut})
+			sample_dialogues_in = (
+				SELECT COALESCE(array_agg(elem ORDER BY ord), '{}')
+				FROM unnest(sample_dialogues_in) WITH ORDINALITY AS t(elem, ord)
+				WHERE ord != ${pgIndex}
+			),
+			sample_dialogues_out = (
+				SELECT COALESCE(array_agg(elem ORDER BY ord), '{}')
+				FROM unnest(sample_dialogues_out) WITH ORDINALITY AS t(elem, ord)
+				WHERE ord != ${pgIndex}
+			)
 		WHERE tomori_id = ${tomoriState.tomori_id}
 		RETURNING *
 	`;
@@ -249,16 +309,33 @@ export async function execute(
     }
 
     // 5. Get the current dialogue pairs
-    const currentIn = selectedPersona.sample_dialogues_in ?? [];
-    const currentOut = selectedPersona.sample_dialogues_out ?? [];
+    let currentIn = selectedPersona.sample_dialogues_in ?? [];
+    let currentOut = selectedPersona.sample_dialogues_out ?? [];
 
-    // 6. Check if there are any dialogues to remove or if arrays mismatch
-    if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
-      if (currentIn.length !== currentOut.length) {
-        log.warn(
-          `Sample dialogue array length mismatch for tomori ${tomoriState.tomori_id} (in: ${currentIn.length}, out: ${currentOut.length})`,
-        );
+    // 6. Self-heal mismatched arrays before checking emptiness
+    // This repairs corruption from the old array_remove() bug
+    if (
+      currentIn.length !== currentOut.length &&
+      currentIn.length > 0 &&
+      currentOut.length > 0
+    ) {
+      const repaired = await repairMismatchedDialogues(
+        selectedPersona.tomori_id,
+        currentIn.length,
+        currentOut.length,
+      );
+      if (repaired) {
+        currentIn = repaired.repairedIn;
+        currentOut = repaired.repairedOut;
+        // Invalidate cache so subsequent operations see repaired data
+        if (interaction.guildId) {
+          invalidateTomoriStateCache(interaction.guildId);
+        }
       }
+    }
+
+    // 7. Check if there are any dialogues to remove after potential repair
+    if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
       await replyInfoEmbed(personaSelectionInteraction, locale, {
         titleKey: "commands.forget.sampledialogue.no_dialogues_title",
         descriptionKey: "commands.forget.sampledialogue.no_dialogues",
@@ -267,7 +344,7 @@ export async function execute(
       return;
     }
 
-    // 7. Create dialogue select options for the modal
+    // 8. Create dialogue select options for the modal
     const dialogueSelectOptions: SelectOption[] = currentIn.map(
       (input, index) => {
         const output = currentOut[index];
@@ -283,7 +360,7 @@ export async function execute(
       },
     );
 
-    // 8. Show the paginated modal with dialogue selection
+    // 9. Show the paginated modal with dialogue selection
     const modalResult = await promptWithPaginatedModal(
       personaSelectionInteraction,
       locale,
@@ -303,7 +380,7 @@ export async function execute(
       },
     );
 
-    // 9. Handle modal outcome
+    // 10. Handle modal outcome
     if (modalResult.outcome !== "submit") {
       log.info(
         `Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -311,7 +388,7 @@ export async function execute(
       return;
     }
 
-    // 10. Extract values from the modal
+    // 11. Extract values from the modal
     const modalSubmitInteraction = modalResult.interaction;
     const selectedIndexStr = modalResult.values?.[DIALOGUE_SELECT_ID];
 
@@ -323,7 +400,7 @@ export async function execute(
 
     const selectedIndex = Number.parseInt(selectedIndexStr, 10);
 
-    // 11. Perform the database update using the helper function - let helper manage interaction state
+    // 12. Perform the database update using the helper function - let helper manage interaction state
     await performSampleDialogueRemoval(
       selectedPersona,
       selectedIndex,

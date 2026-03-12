@@ -127,6 +127,9 @@ export interface GoogleProviderConfig extends ProviderConfig {
     topP?: number;
     maxOutputTokens?: number;
     stopSequences?: string[];
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    seed?: number;
   };
 }
 
@@ -322,11 +325,17 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
     tomoriState: TomoriState,
     apiKey: string,
   ): Promise<GoogleProviderConfig> {
+    // Resolve max output tokens from env var with default fallback
+    const maxOutputTokens = Number.parseInt(
+      process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192",
+      10,
+    );
+
     const config: GoogleProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,
-      maxOutputTokens: 8192,
+      maxOutputTokens,
       safetySettings: [
         {
           category: "HARM_CATEGORY_HARASSMENT",
@@ -355,7 +364,15 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
         ...(tomoriState.config.llm_top_p < 1.0 && {
           topP: tomoriState.config.llm_top_p,
         }),
-        maxOutputTokens: 8192,
+        // Only include penalty params if user has configured non-neutral values
+        // Neutral: frequencyPenalty=0.0, presencePenalty=0.0
+        ...(tomoriState.config.llm_frequency_penalty !== 0 && {
+          frequencyPenalty: tomoriState.config.llm_frequency_penalty,
+        }),
+        ...(tomoriState.config.llm_presence_penalty !== 0 && {
+          presencePenalty: tomoriState.config.llm_presence_penalty,
+        }),
+        maxOutputTokens,
         stopSequences: [],
       },
     };

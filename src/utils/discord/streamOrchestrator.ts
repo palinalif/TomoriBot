@@ -1089,6 +1089,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     state: StreamState,
   ): Promise<void> {
     if (!segment.trim()) return;
+
+    // Discard lone single-character punctuation/symbol fragments that models
+    // sometimes hallucinate (e.g. ".", "]", ")"). These look unnatural when
+    // sent as standalone Discord messages or line-leading fragments.
+    const trimmedGuard = segment.trim();
+    if (trimmedGuard.length === 1 && !/\w/u.test(trimmedGuard)) return;
+
     const wasPrefillInjected = state.prefillInjected;
 
     await context.channel

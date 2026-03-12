@@ -612,6 +612,19 @@ function resolveReferencedWebhookTarget(
     return { replyPersona: null, impersonatedUserId: null };
   }
 
+  // 1. Check persona nickname first — this is authoritative based on the
+  //    webhook's current display name, so it must take priority over the
+  //    impersonation cache which can hold stale entries from earlier webhooks.
+  const rawWebhookName = referenceMessage.author.username;
+  if (rawWebhookName && !extractBridgeUserId(rawWebhookName)) {
+    const webhookName = stripBridgePrefix(rawWebhookName);
+    const matchedPersona = personaByNickname.get(webhookName.toLowerCase());
+    if (matchedPersona) {
+      return { replyPersona: matchedPersona, impersonatedUserId: null };
+    }
+  }
+
+  // 2. Fall back to impersonation cache for user impersonation webhooks
   const cachedImpersonatedUserId = getCachedImpersonatedUserIdForWebhook(
     referenceMessage.webhookId,
   );
@@ -622,17 +635,13 @@ function resolveReferencedWebhookTarget(
     };
   }
 
-  const rawWebhookName = referenceMessage.author.username;
+  // 3. If no persona or cache match, bail out for bridge users or missing name
   if (!rawWebhookName || extractBridgeUserId(rawWebhookName)) {
     return { replyPersona: null, impersonatedUserId: null };
   }
 
+  // 4. Last resort: try to match webhook identity against guild members
   const webhookName = stripBridgePrefix(rawWebhookName);
-  const matchedPersona = personaByNickname.get(webhookName.toLowerCase());
-  if (matchedPersona) {
-    return { replyPersona: matchedPersona, impersonatedUserId: null };
-  }
-
   const webhookAvatarUrl = referenceMessage.author.displayAvatarURL({
     size: 1024,
     extension: "png",

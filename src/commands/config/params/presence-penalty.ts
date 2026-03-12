@@ -49,7 +49,7 @@ export const configureSubcommand = (
 /**
  * Sets the presence penalty for Tomori's LLM
  * Positive values penalize tokens that have appeared at all in the output so far
- * Only applied by OpenRouter (Google and NovelAI use different penalty systems)
+ * Applied by Google, OpenRouter, and NovelAI
  * Neutral at 0.0 (no penalty)
  * @param _client - Discord client instance
  * @param interaction - Command interaction
