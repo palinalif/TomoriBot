@@ -32,6 +32,7 @@ import {
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
+import { DatabaseUnavailableError } from "@/types/errors";
 
 type TomoriConfigJsonResult = {
   config: unknown;
@@ -691,7 +692,11 @@ export async function loadAllPersonasForServer(
           `Error loading all personas for server ${serverDiscId}:`,
           error,
         );
-        return [];
+        // Throw a typed error so the cache layer can distinguish
+        // "DB unreachable" from "server genuinely has no data" (which returns [])
+        throw new DatabaseUnavailableError(
+          `Failed to load personas for server ${serverDiscId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }, `load all personas for server ${serverDiscId}`)) ?? []
   );

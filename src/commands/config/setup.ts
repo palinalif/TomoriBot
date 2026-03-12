@@ -26,6 +26,7 @@ import {
   loadPresetOptionsByLocale,
   loadDefaultModelForProvider,
 } from "@/utils/db/dbRead";
+import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { getCachedPresetAvatar } from "@/utils/image/avatarHelper";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
@@ -95,18 +96,67 @@ export async function execute(
   }
 
   try {
-    // 2. Check if Tomori already exists for this server - NEW CHECK
-    const existingTomoriState = await loadTomoriState(serverId);
+    // 2. Check if a main persona (is_alter=false) exists for this server.
+    //    Previous check used loadTomoriState() which returns ANY persona (main or alter),
+    //    causing a deadlock when the main persona was missing but alters remained:
+    //    - Other commands require a main persona → "Initial Setup Required"
+    //    - Setup found an alter → "Already Set Up"
+    //    Now we specifically check for a main persona to break this deadlock.
+    const existingServerRows = await sql`
+			SELECT s.server_id
+			FROM servers s
+			WHERE s.server_disc_id = ${serverId}
+			LIMIT 1
+		`;
+    const existingInternalServerId = existingServerRows[0]?.server_id ?? null;
 
-    // 3. If Tomori already exists, inform user and exit early
-    if (existingTomoriState) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.setup.already_setup_title",
-        descriptionKey: "commands.config.setup.already_setup_description",
-        color: ColorCode.WARN,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
+    if (existingInternalServerId) {
+      // 2a. Check if a main persona exists for this server
+      const mainPersonaRows = await sql`
+				SELECT t.tomori_id
+				FROM tomoris t
+				WHERE t.server_id = ${existingInternalServerId}
+				  AND t.is_alter = false
+				LIMIT 1
+			`;
+
+      if (mainPersonaRows.length > 0) {
+        // 3. Main persona exists — server is fully set up, block re-setup
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.config.setup.already_setup_title",
+          descriptionKey: "commands.config.setup.already_setup_description",
+          color: ColorCode.WARN,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      // 3a. No main persona but server data exists (orphaned alters/config).
+      //     Clean up orphaned data so setupServer can create fresh rows
+      //     without hitting unique constraint violations on tomori_configs.server_id.
+      log.warn(
+        `[Setup] Server ${serverId} has no main persona but orphaned data exists — cleaning up for fresh setup`,
+      );
+
+      // Delete orphaned tomoris (alters without a main). CASCADE handles persona_configs.
+      // tomori_configs.tomori_id is SET NULL on delete (not cascaded), so we delete config separately.
+      await sql`
+				DELETE FROM tomoris
+				WHERE server_id = ${existingInternalServerId}
+			`;
+
+      // Delete orphaned tomori_configs to clear the server_id unique constraint
+      await sql`
+				DELETE FROM tomori_configs
+				WHERE server_id = ${existingInternalServerId}
+			`;
+
+      // Invalidate cache so stale persona data is not served
+      invalidateTomoriStateCache(serverId);
+
+      log.info(
+        `[Setup] Cleaned up orphaned data for server ${serverId}, proceeding with fresh setup`,
+      );
     }
 
     // Load dynamic data for the modal

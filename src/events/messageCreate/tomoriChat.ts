@@ -28,7 +28,10 @@ import type {
   FunctionResponseImageMetadata,
 } from "../../types/provider/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
-import { getCachedAllPersonas } from "../../utils/cache/tomoriStateCache";
+import {
+	getCachedAllPersonas,
+	getLastDbError,
+} from "../../utils/cache/tomoriStateCache";
 import {
   getCachedUserRow,
   getCachedPrivacyLevel,
@@ -2654,14 +2657,25 @@ export default async function tomoriChat(
             : `User mentioned Tomori in server ${serverDiscId} but Tomori not set up.`;
           log.info(contextMessage);
 
-          await sendStandardEmbed(channel, locale, {
-            color: ColorCode.ERROR,
-            titleKey: "general.errors.tomori_not_setup_title",
-            descriptionKey: "general.errors.tomori_not_setup_description",
-            ...(isDMChannel && {
-              footerKey: "general.errors.tomori_not_setup_dm_footer",
-            }),
-          });
+          // Check if this is a transient DB error (e.g. during deployment)
+          // rather than the server genuinely not being set up
+          const dbError = getLastDbError(serverDiscId);
+          if (dbError) {
+            await sendStandardEmbed(channel, locale, {
+              color: ColorCode.WARN,
+              titleKey: "general.errors.tomori_updating_title",
+              descriptionKey: "general.errors.tomori_updating_description",
+            });
+          } else {
+            await sendStandardEmbed(channel, locale, {
+              color: ColorCode.ERROR,
+              titleKey: "general.errors.tomori_not_setup_title",
+              descriptionKey: "general.errors.tomori_not_setup_description",
+              ...(isDMChannel && {
+                footerKey: "general.errors.tomori_not_setup_dm_footer",
+              }),
+            });
+          }
           return;
         }
 

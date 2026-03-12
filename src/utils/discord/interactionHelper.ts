@@ -33,6 +33,7 @@ import type {
   GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
+import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
 const modalSelectValues = new Map<string, Record<string, string>>();
@@ -576,22 +577,37 @@ export async function replyInfoEmbed(
     | MessageFlags.SuppressNotifications
     | undefined = MessageFlags.Ephemeral,
 ): Promise<void> {
-  // 1. Add DM footer automatically for tomori_not_setup errors in DM context
+  // 1. Check if "not setup" is actually a transient DB error (e.g. during deployment).
+  //    If the DB was recently unreachable, show a yellow "Currently Updating..." embed
+  //    instead of the misleading red "Initial Setup Required" error.
   const isDMContext = !interaction.guild;
   const finalOptions = { ...options };
+  const serverDiscId = interaction.guild?.id ?? interaction.user?.id;
 
   if (
+    options.titleKey === "general.errors.tomori_not_setup_title" &&
+    serverDiscId &&
+    getLastDbError(serverDiscId)
+  ) {
+    finalOptions.titleKey = "general.errors.tomori_updating_title";
+    finalOptions.descriptionKey =
+      "general.errors.tomori_updating_description";
+    finalOptions.color = ColorCode.WARN;
+  }
+
+  // 2. Add DM footer automatically for tomori_not_setup errors in DM context
+  if (
     isDMContext &&
-    (options.titleKey === "general.errors.tomori_not_setup_title" ||
-      options.titleKey === "general.errors.api_key_missing_title")
+    (finalOptions.titleKey === "general.errors.tomori_not_setup_title" ||
+      finalOptions.titleKey === "general.errors.api_key_missing_title")
   ) {
     finalOptions.footerKey = "general.errors.tomori_not_setup_dm_footer";
   }
 
-  // 2. Build the embed using the shared helper for consistency
+  // 3. Build the embed using the shared helper for consistency
   const embed = createStandardEmbed(locale, finalOptions);
 
-  // 3. Defensive interaction state checking
+  // 4. Defensive interaction state checking
   const interactionState = {
     deferred: interaction.deferred,
     replied: interaction.replied,
@@ -602,7 +618,7 @@ export async function replyInfoEmbed(
     `replyInfoEmbed interaction state: ${JSON.stringify(interactionState)}`,
   );
 
-  // 4. Check if interaction was acknowledged via raw REST API (e.g., modal shown)
+  // 5. Check if interaction was acknowledged via raw REST API (e.g., modal shown)
   // Discord.js state may be out of sync in this case
   const wasRawModalSent = rawModalAcknowledged.get(
     interaction as ChatInputCommandInteraction | ButtonInteraction,
