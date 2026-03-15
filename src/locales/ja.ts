@@ -2013,16 +2013,16 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       },
       // Google APIキー管理（サブコマンドグループ）
       googleapi: {
-        description: `Google APIキーを管理`,
+        description: `補助Google APIキーを管理（画像インペインティング用）`,
         set: {
-          description: `このサーバーのGoogle APIキーを設定します。`,
+          description: `画像セグメンテーション用Google APIキー。Googleがメインプロバイダーの場合は不要。`,
           key_description: `あなたのGoogle APIキー。`,
           invalid_key_title: `無効なAPIキー形式`,
           invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なGoogle APIキーを提供してください。`,
           key_validation_failed_title: `Google APIキーの検証に失敗しました`,
           key_validation_failed_description: `提供されたGoogle APIキーは無効です。キーを確認してもう一度お試しください。`,
           success_title: `Google APIキーが設定されました`,
-          success_description: `Google APIキーが正常に検証、暗号化、保存されました。画像セグメンテーションなどの機能に使用されます。`,
+          success_description: `Google APIキーが正常に検証、暗号化、保存されました。AIの画像セグメンテーション（インペインティング）に使用されます。メインプロバイダーがすでにGoogleの場合、このキーがセグメンテーションで優先されます。`,
         },
         delete: {
           description: `現在設定されているGoogle APIキーを削除します。`,
@@ -2034,9 +2034,9 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       },
       // NovelAI APIキー管理（サブコマンドグループ）
       novelaiapi: {
-        description: `NovelAI APIキーを管理`,
+        description: `補助NovelAI APIキーを管理（画像生成用）`,
         set: {
-          description: `このサーバーのNovelAI APIキーを設定します。`,
+          description: `画像生成用NovelAI APIキー。NovelAIがメインプロバイダーの場合は不要。`,
           key_description: `あなたのNovelAI APIキー。`,
           disable_other_imggen_description: `trueの場合、標準の画像生成ツールを非表示にし、NovelAI画像生成のみを利用可能にします。`,
           invalid_key_title: `無効なAPIキー形式`,

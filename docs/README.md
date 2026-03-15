@@ -32,6 +32,7 @@ This folder is organized by topic instead of numeric filenames.
 - NovelAI:
   - [`ai/novelai/tool-calling.md`](./ai/novelai/tool-calling.md)
   - [`ai/novelai/limitations.md`](./ai/novelai/limitations.md)
+  - [`ai/novelai/inpainting.md`](./ai/novelai/inpainting.md)
 
 ## Integrations
 

@@ -59,7 +59,7 @@ export const configureSubcommand = (
 				)
 				.setRequired(true),
 		)
-		.addBooleanOption((option) =>
+		.addStringOption((option) =>
 			option
 				.setName("disable_other_imggen")
 				.setDescription(
@@ -67,6 +67,10 @@ export const configureSubcommand = (
 						"en-US",
 						"commands.config.novelaiapi.set.disable_other_imggen_description",
 					),
+				)
+				.addChoices(
+					{ name: localizer("en-US", "commands.choices.enable"), value: "enable" },
+					{ name: localizer("en-US", "commands.choices.disable"), value: "disable" },
 				)
 				.setRequired(false),
 		);
@@ -138,7 +142,7 @@ export async function execute(
 		// 3. Get the API key and optional flag from options
 		apiKey = interaction.options.getString("key", true);
 		const disableOtherImggen =
-			interaction.options.getBoolean("disable_other_imggen") ?? false;
+			interaction.options.getString("disable_other_imggen") === "enable";
 
 		// 4. Basic format validation
 		if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {

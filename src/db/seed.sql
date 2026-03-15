@@ -98,6 +98,28 @@ SELECT add_column_if_not_exists('image_diffusion_models', 'is_uncensored', 'BOOL
 SELECT add_column_if_not_exists('image_diffusion_models', 'model_description', 'TEXT');
 SELECT add_column_if_not_exists('image_diffusion_models', 'ja_description', 'TEXT');
 
+-- PART 0: Clean up legacy NovelAI codenames that used period separators (4.5 → 4-5)
+-- Two cases:
+--   a) Target codename doesn't exist yet → rename in-place (preserves FK references)
+--   b) Target already exists → delete the old row (FK goes NULL, auto-assigned below)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM image_diffusion_models WHERE codename = 'nai-diffusion-4-5-full') THEN
+        DELETE FROM image_diffusion_models WHERE codename = 'nai-diffusion-4.5-full' AND provider = 'novelai';
+    ELSE
+        UPDATE image_diffusion_models SET codename = 'nai-diffusion-4-5-full' WHERE codename = 'nai-diffusion-4.5-full' AND provider = 'novelai';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM image_diffusion_models WHERE codename = 'nai-diffusion-4-5-curated') THEN
+        DELETE FROM image_diffusion_models WHERE codename = 'nai-diffusion-4.5-curated' AND provider = 'novelai';
+    ELSE
+        UPDATE image_diffusion_models SET codename = 'nai-diffusion-4-5-curated' WHERE codename = 'nai-diffusion-4.5-curated' AND provider = 'novelai';
+    END IF;
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'image_diffusion_models not found, skipping legacy codename cleanup';
+END $$;
+
 -- PART 1: Drop FK constraint and clean up orphaned references BEFORE inserting diffusion models
 -- This allows the INSERT to succeed, then we recreate the constraint after
 DO $$

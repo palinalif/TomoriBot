@@ -84,6 +84,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
   "cooldown_length",
   "custom_endpoint_url",
   "custom_model_name",
+  "nai_exclusive_imggen",
   // Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
 ]);
 

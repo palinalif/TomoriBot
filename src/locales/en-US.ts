@@ -2004,16 +2004,16 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       // Google API key management (subcommand group)
       googleapi: {
-        description: `Manage Google API key`,
+        description: `Manage supplementary Google API key (for image inpainting)`,
         set: {
-          description: `Set the Google API key for this server.`,
+          description: `Set a Google API key for AI image segmentation. Not needed if Google is already your AI provider.`,
           key_description: `Your Google API key.`,
           invalid_key_title: `Invalid API Key Format`,
           invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid Google API key.`,
           key_validation_failed_title: `Google API Key Validation Failed`,
           key_validation_failed_description: `The provided Google API key is not valid. Please check the key and try again.`,
           success_title: `Google API Key Set`,
-          success_description: `The Google API key has been successfully validated, encrypted, and saved. It will be used for features like image segmentation.`,
+          success_description: `The Google API key has been saved for AI image segmentation (inpainting). If your main provider is already Google, this key takes priority over it for segmentation.`,
         },
         delete: {
           description: `Remove the currently configured Google API key.`,
@@ -2025,9 +2025,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       // NovelAI API key management (subcommand group)
       novelaiapi: {
-        description: `Manage NovelAI API key`,
+        description: `Manage supplementary NovelAI API key (for image generation)`,
         set: {
-          description: `Set the NovelAI API key for this server.`,
+          description: `Set a NovelAI API key for image generation. Not needed if NovelAI is already your AI provider.`,
           key_description: `Your NovelAI API key.`,
           disable_other_imggen_description: `If true, hides the standard image generation tool so only NovelAI image gen is available.`,
           invalid_key_title: `Invalid API Key Format`,
