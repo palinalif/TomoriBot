@@ -115,6 +115,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   private static readonly PREFILL_WHITESPACE_SENTINEL = "\uE000";
   private static readonly STREAM_CHUNK_DEDUP_TAIL_CHARS = 4096;
   private static readonly STREAM_CHUNK_DEDUP_MIN_CHARS = 8;
+
+  private static isSilentSpeakerGuardStop(
+    requesterId: string | undefined,
+    state: StreamState,
+  ): boolean {
+    return (
+      requesterId === "speaker_guard" &&
+      state.messageSentCount === 0 &&
+      !state.accumulatedText.trim()
+    );
+  }
+
   private static activeStopRequests = new Map<
     string,
     {
@@ -321,6 +333,23 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 							"Stream: Skipping buffer flush due to internal no-flush stop",
 						);
 					}
+
+          if (
+            StreamOrchestrator.isSilentSpeakerGuardStop(
+              stopRequest?.requesterId,
+              state,
+            )
+          ) {
+            log.warn(
+              "Stream: Silent speaker-guard stop produced no user-visible output; treating as empty response.",
+            );
+            return {
+              status: "empty_response",
+              data: {
+                emptyResponseReason: "speaker_guard",
+              },
+            };
+          }
 
           return { status: "stopped_by_user" };
         }
@@ -2237,11 +2266,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     context: StreamContext,
   ): void {
     state.lastChunkTime = Date.now();
+    state.timedOut = false;
     if (state.inactivityTimer) clearTimeout(state.inactivityTimer);
 
     state.inactivityTimer = setTimeout(() => {
       log.warn(`Stream to ${context.channel.id} timed out due to inactivity.`);
-      // Set a flag or handle timeout - the main loop will check this
+      state.timedOut = true;
+      state.inactivityTimer = null;
     }, config.inactivityTimeoutMs);
   }
 
@@ -2259,12 +2290,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
    * Check if stream has timed out
    */
   private isStreamTimedOut(state: StreamState): boolean {
-    // Simple timeout check - could be enhanced with more sophisticated logic
-    return (
-      state.inactivityTimer === null &&
-      Date.now() - state.lastChunkTime >
-        DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS
-    );
+    return state.timedOut;
   }
 
   /**

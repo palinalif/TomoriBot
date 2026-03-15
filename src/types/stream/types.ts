@@ -45,6 +45,7 @@ export interface StreamState {
   hasRepliedToOriginalMessage: boolean;
   lastChunkTime: number;
   inactivityTimer: NodeJS.Timeout | null;
+  timedOut: boolean;
   accumulatedText: string; // Track all text sent to Discord for short-term memory
   prefillTarget?: string; // Prefill text to strip from streamed output (hybrid prefix)
   prefillMatched: number; // Number of prefill chars matched/stripped so far
@@ -207,6 +208,7 @@ export function createDefaultStreamState(): StreamState {
     hasRepliedToOriginalMessage: false,
     lastChunkTime: Date.now(),
     inactivityTimer: null,
+    timedOut: false,
     accumulatedText: "", // Initialize empty for short-term memory tracking
     prefillTarget: undefined,
     prefillMatched: 0,

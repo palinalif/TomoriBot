@@ -159,11 +159,13 @@ Loop control and max iterations are managed by `tomoriChat` (function-call safet
 ### Inactivity timeout
 - inactivity timer resets on each chunk
 - timeout threshold defaults from stream constants
+- timeout state is tracked explicitly, so cleanup at normal stream end no longer looks like a timeout
 
 ### Stop requests
 - stop requests are tracked by channel
 - checked before processing/sending to avoid duplicate or late sends
 - special handling avoids duplicate flush-limit embeds
+- internal speaker-boundary stops that send no visible text are promoted into the empty-response retry path instead of silently ending as a normal user stop
 
 ### Final flush auto-close
 - if final buffer still has incomplete semantic markers, orchestrator auto-closes markers before sending to avoid text loss
