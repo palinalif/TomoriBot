@@ -46,15 +46,21 @@ export interface WhitelistCheckResult {
   blockReason?: WhitelistBlockReason;
 
   /**
-   * Channel-specific cooldown type (if whitelisted)
-   * Overrides global cooldown settings
+   * Whether this whitelisted channel has an explicit cooldown override.
+   * False means the channel inherits the server-wide cooldown settings.
+   */
+  hasChannelCooldownOverride: boolean;
+
+  /**
+   * Channel-specific cooldown type.
+   * Only set when hasChannelCooldownOverride is true.
    */
   channelCooldownType?: CooldownType;
 
   /**
-   * Channel-specific cooldown length in seconds (if whitelisted)
-   * 0 = instant (no cooldown), 1-86400 = cooldown duration
-   * Overrides global cooldown settings
+   * Channel-specific cooldown length in seconds.
+   * Only set when hasChannelCooldownOverride is true.
+   * 0 = instant (no cooldown), 1-86400 = cooldown duration.
    */
   channelCooldownLength?: number;
 }

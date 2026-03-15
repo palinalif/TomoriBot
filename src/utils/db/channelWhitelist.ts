@@ -22,6 +22,7 @@ export async function checkChannelWhitelist(
     hasActiveRoleWhitelist: false,
     isRoleWhitelisted: false,
     isTriggerAllowed: true,
+    hasChannelCooldownOverride: false,
   };
 
   try {
@@ -47,13 +48,32 @@ export async function checkChannelWhitelist(
 
     // 3. Check if specific channel is whitelisted
     const [channelRow] = hasActiveChannelWhitelist
-      ? await sql`
+      ? await sql<Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>>`
 			SELECT cooldown_type, cooldown_length
 			FROM channel_whitelist
 			WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
 		`
       : [null];
     const isChannelWhitelisted = Boolean(channelRow);
+    const hasChannelCooldownOverride =
+      isChannelWhitelisted &&
+      channelRow?.cooldown_type !== null &&
+      channelRow?.cooldown_length !== null;
+
+    if (
+      isChannelWhitelisted &&
+      !hasChannelCooldownOverride &&
+      !(channelRow?.cooldown_type === null && channelRow?.cooldown_length === null)
+    ) {
+      log.warn("Channel whitelist row has partial cooldown override; falling back to global cooldown", {
+        metadata: {
+          serverDiscId,
+          channelDiscId,
+          cooldownType: channelRow?.cooldown_type ?? null,
+          cooldownLength: channelRow?.cooldown_length ?? null,
+        },
+      });
+    }
 
     // 4. Load role whitelist entries for this server
     const roleRows = await sql<Array<{ role_disc_id: string }>>`
@@ -107,10 +127,11 @@ export async function checkChannelWhitelist(
       isRoleWhitelisted,
       isTriggerAllowed,
       blockReason,
-      channelCooldownType: isChannelWhitelisted
+      hasChannelCooldownOverride,
+      channelCooldownType: hasChannelCooldownOverride
         ? (channelRow?.cooldown_type as CooldownType)
         : undefined,
-      channelCooldownLength: isChannelWhitelisted
+      channelCooldownLength: hasChannelCooldownOverride
         ? (channelRow?.cooldown_length as number)
         : undefined,
     };
@@ -126,18 +147,18 @@ export async function checkChannelWhitelist(
 }
 
 /**
- * Add or update a channel in the whitelist with custom cooldown settings
+ * Add or update a channel in the whitelist with optional cooldown override settings
  * @param serverId - Database server ID
  * @param channelDiscId - Discord channel ID (snowflake)
- * @param cooldownType - Cooldown type for this channel
- * @param cooldownLength - Cooldown length in seconds (0-86400)
+ * @param cooldownType - Cooldown type override for this channel, or null to inherit global cooldown
+ * @param cooldownLength - Cooldown length override in seconds (0-86400), or null to inherit global cooldown
  * @returns The upserted channel whitelist row
  */
 export async function upsertChannelWhitelist(
   serverId: number,
   channelDiscId: string,
-  cooldownType: CooldownType,
-  cooldownLength: number,
+  cooldownType: CooldownType | null,
+  cooldownLength: number | null,
 ): Promise<ChannelWhitelistRow> {
   const [result] = await sql`
 		INSERT INTO channel_whitelist (server_id, channel_disc_id, cooldown_type, cooldown_length)

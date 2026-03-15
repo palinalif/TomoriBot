@@ -274,7 +274,11 @@ async function formatWhitelistEntries(
         entry.channel_disc_id,
         locale,
       );
-      const cooldownType = entry.cooldown_type ?? CooldownType.OFF;
+      if (entry.cooldown_type === null || entry.cooldown_length === null) {
+        return `${index + 1}. ${mention} (${localizer(locale, "commands.choices.inherit_global")})`;
+      }
+
+      const cooldownType = entry.cooldown_type;
       const typeLabel = getCooldownTypeLabel(locale, cooldownType);
 
       // 3. Include duration only when a real cooldown is set

@@ -104,6 +104,11 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `command_category`
 - `expiry_time`
 
+`channel_whitelist` stores optional per-channel cooldown overrides:
+
+- `cooldown_type` / `cooldown_length` both `NULL` -> inherit the server-wide cooldown
+- `cooldown_type` / `cooldown_length` both set -> override the server-wide cooldown for that channel
+
 ### API key security
 
 Encrypted columns are stored as `BYTEA` with key version tracking:

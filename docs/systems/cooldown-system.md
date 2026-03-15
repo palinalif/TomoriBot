@@ -44,8 +44,9 @@ Used for automatic message-triggered chat flow.
 1. Check whitelist cache (`getCachedWhitelistStatus`).
 2. If channel whitelist is active and current channel is not whitelisted -> blocked.
 3. If role whitelist is active and triggering member has no whitelisted role -> blocked.
-4. If channel is whitelisted, use channel-specific cooldown type/length.
-5. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
+4. If channel is whitelisted and has an explicit override, use that channel-specific cooldown type/length.
+5. If channel is whitelisted without an override, inherit global `tomori_configs.cooldown_type/cooldown_length`.
+6. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
 
 ### Cooldown types
 
@@ -73,7 +74,7 @@ Operational note:
 
 - Global trigger cooldown: `/server cooldown triggers`
 - Trigger whitelist:
-  - `/server whitelist channel`
+  - `/server whitelist channel` (leave cooldown options empty to inherit the global cooldown)
   - `/server whitelist role`
   - `/server whitelist remove`
 

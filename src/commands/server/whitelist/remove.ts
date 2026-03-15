@@ -106,11 +106,7 @@ export async function execute(
         );
 
         // Build description with cooldown info
-        const cooldownTypeName = getCooldownTypeName(
-          entry.cooldown_type as CooldownType,
-          locale,
-        );
-        const description = `${cooldownTypeName}, ${entry.cooldown_length}s`;
+        const description = getWhitelistChannelSummary(entry, locale);
 
         channelSelectOptions.push({
           label: channel?.name ?? entry.channel_disc_id, // Fallback to ID if channel not found
@@ -121,11 +117,7 @@ export async function execute(
         // Channel might have been deleted - use channel ID as fallback
         log.warn("Failed to fetch channel for whitelist remove", error);
 
-        const cooldownTypeName = getCooldownTypeName(
-          entry.cooldown_type as CooldownType,
-          locale,
-        );
-        const description = `${cooldownTypeName}, ${entry.cooldown_length}s`;
+        const description = getWhitelistChannelSummary(entry, locale);
 
         channelSelectOptions.push({
           label: `Unknown (${entry.channel_disc_id.substring(0, 10)}...)`,
@@ -235,15 +227,32 @@ export async function execute(
 }
 
 /**
+ * Get localized summary text for a whitelist channel's cooldown behavior.
+ * @param entry - Whitelist entry to summarize
+ * @param locale - The locale to use for localization
+ * @returns Localized summary text
+ */
+function getWhitelistChannelSummary(
+  entry: { cooldown_type: CooldownType | null; cooldown_length: number | null },
+  locale: string,
+): string {
+  if (entry.cooldown_type === null || entry.cooldown_length === null) {
+    return localizer(locale, "commands.choices.inherit_global");
+  }
+
+  const cooldownTypeName = getCooldownTypeName(entry.cooldown_type, locale);
+  return entry.cooldown_type === CooldownType.OFF
+    ? cooldownTypeName
+    : `${cooldownTypeName}, ${entry.cooldown_length}s`;
+}
+
+/**
  * Get localized name for a cooldown type
  * @param cooldownType - The cooldown type
  * @param locale - The locale to use for localization
  * @returns Localized cooldown type name
  */
-function getCooldownTypeName(
-  cooldownType: CooldownType,
-  locale: string,
-): string {
+function getCooldownTypeName(cooldownType: CooldownType, locale: string): string {
   const key = getCooldownTypeKey(cooldownType);
   return localizer(locale, `commands.config.cooldown.type.choice_${key}`);
 }

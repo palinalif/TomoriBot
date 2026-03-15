@@ -20,7 +20,8 @@ import { sql } from "@/utils/db/client";
 
 // Neutral value: 0.0 = no penalty applied
 const FREQUENCY_PENALTY_MIN = -2.0;
-const FREQUENCY_PENALTY_MAX = 2.0;
+const FREQUENCY_PENALTY_INPUT_MAX = 2.0;
+const FREQUENCY_PENALTY_STORED_MAX = 1.99;
 const FREQUENCY_PENALTY_DEFAULT = 0.0;
 
 // Configure the subcommand
@@ -45,14 +46,22 @@ export const configureSubcommand = (
           ),
         )
         .setMinValue(FREQUENCY_PENALTY_MIN)
-        .setMaxValue(FREQUENCY_PENALTY_MAX)
+        .setMaxValue(FREQUENCY_PENALTY_INPUT_MAX)
         .setRequired(true),
     );
+
+function normalizeFrequencyPenalty(value: number): number {
+	return Math.max(
+		FREQUENCY_PENALTY_MIN,
+		Math.min(FREQUENCY_PENALTY_STORED_MAX, value),
+	);
+}
 
 /**
  * Sets the frequency penalty for Tomori's LLM
  * Positive values penalize tokens that appear frequently in the output so far
- * Applied by Google, OpenRouter, and NovelAI
+ * Applied by OpenRouter and NovelAI.
+ * Google support is behind an explicit provider flag and compatible-model guard.
  * Neutral at 0.0 (no penalty)
  * @param _client - Discord client instance
  * @param interaction - Command interaction
@@ -80,10 +89,14 @@ export async function execute(
 
   try {
     // 3. Get the value from options
-    const newValue = interaction.options.getNumber("value", true);
+    const requestedValue = interaction.options.getNumber("value", true);
+    const newValue = normalizeFrequencyPenalty(requestedValue);
 
     // 4. Additional validation (Discord already handles min/max, but just in case)
-    if (newValue < FREQUENCY_PENALTY_MIN || newValue > FREQUENCY_PENALTY_MAX) {
+    if (
+      requestedValue < FREQUENCY_PENALTY_MIN ||
+      requestedValue > FREQUENCY_PENALTY_INPUT_MAX
+    ) {
       await replyInfoEmbed(interaction, locale, {
         titleKey:
           "commands.config.params.frequency-penalty.invalid_value_title",
@@ -91,7 +104,7 @@ export async function execute(
           "commands.config.params.frequency-penalty.invalid_value_description",
         descriptionVars: {
           min: FREQUENCY_PENALTY_MIN.toFixed(1),
-          max: FREQUENCY_PENALTY_MAX.toFixed(1),
+          max: FREQUENCY_PENALTY_INPUT_MAX.toFixed(1),
         },
         color: ColorCode.ERROR,
       });
@@ -145,7 +158,8 @@ export async function execute(
         metadata: {
           command: "config params frequency-penalty",
           guildId: interaction.guild?.id,
-          newValue,
+          requestedValue,
+          normalizedValue: newValue,
           validationErrors: validatedConfig.success
             ? null
             : validatedConfig.error.flatten(),
@@ -201,6 +215,12 @@ export async function execute(
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
         valueAttempted: interaction.options.getNumber("value"),
+        normalizedValue:
+          interaction.options.getNumber("value") === null
+            ? null
+            : normalizeFrequencyPenalty(
+                interaction.options.getNumber("value", true),
+              ),
       },
     };
     await log.error(

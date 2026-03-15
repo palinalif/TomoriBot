@@ -77,8 +77,8 @@ export async function checkMessageTriggerCooldown(
   }
 
   // 3. Determine which cooldown settings to use
-  // If channel is whitelisted, use channel-specific settings; otherwise use global settings
-  const cooldownType = whitelistStatus.isChannelWhitelisted
+  // If a channel-specific override exists, use it; otherwise inherit the global settings
+  const cooldownType = whitelistStatus.hasChannelCooldownOverride
     ? (whitelistStatus.channelCooldownType ??
       config.cooldown_type ??
       CooldownType.OFF)
@@ -86,9 +86,15 @@ export async function checkMessageTriggerCooldown(
 
   // Diagnostic logging for whitelist-based cooldowns
   if (whitelistStatus.isChannelWhitelisted) {
-    log.info(
-      `[Cooldown Check] Channel ${message.channelId} is whitelisted - using channel-specific cooldown type ${cooldownType}, length ${whitelistStatus.channelCooldownLength}s`,
-    );
+    if (whitelistStatus.hasChannelCooldownOverride) {
+      log.info(
+        `[Cooldown Check] Channel ${message.channelId} is whitelisted - using channel-specific cooldown type ${cooldownType}, length ${whitelistStatus.channelCooldownLength}s`,
+      );
+    } else {
+      log.info(
+        `[Cooldown Check] Channel ${message.channelId} is whitelisted - inheriting global cooldown type ${cooldownType}`,
+      );
+    }
   } else {
     log.info(
       `[Cooldown Check] Channel ${message.channelId} NOT whitelisted - using global cooldown type ${cooldownType}`,
@@ -226,22 +232,28 @@ export async function setMessageTriggerCooldown(
   );
 
   // 2. Determine which cooldown settings to use
-  // If channel is whitelisted, use channel-specific settings; otherwise use global settings
-  const cooldownType = whitelistStatus.isChannelWhitelisted
+  // If a channel-specific override exists, use it; otherwise inherit the global settings
+  const cooldownType = whitelistStatus.hasChannelCooldownOverride
     ? (whitelistStatus.channelCooldownType ??
       config.cooldown_type ??
       CooldownType.OFF)
     : (config.cooldown_type ?? CooldownType.OFF);
 
-  const cooldownLengthSeconds = whitelistStatus.isChannelWhitelisted
+  const cooldownLengthSeconds = whitelistStatus.hasChannelCooldownOverride
     ? (whitelistStatus.channelCooldownLength ?? config.cooldown_length ?? 5)
     : (config.cooldown_length ?? 5);
 
   // Diagnostic logging for whitelist-based cooldowns
   if (whitelistStatus.isChannelWhitelisted) {
-    log.info(
-      `[Cooldown Set] Channel ${message.channelId} is whitelisted - setting cooldown type ${cooldownType}, length ${cooldownLengthSeconds}s`,
-    );
+    if (whitelistStatus.hasChannelCooldownOverride) {
+      log.info(
+        `[Cooldown Set] Channel ${message.channelId} is whitelisted - setting cooldown type ${cooldownType}, length ${cooldownLengthSeconds}s`,
+      );
+    } else {
+      log.info(
+        `[Cooldown Set] Channel ${message.channelId} is whitelisted - inheriting global cooldown type ${cooldownType}, length ${cooldownLengthSeconds}s`,
+      );
+    }
   }
 
   // If cooldowns are off, nothing to set

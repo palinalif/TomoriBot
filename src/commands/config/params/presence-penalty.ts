@@ -20,7 +20,8 @@ import { sql } from "@/utils/db/client";
 
 // Neutral value: 0.0 = no penalty applied
 const PRESENCE_PENALTY_MIN = -2.0;
-const PRESENCE_PENALTY_MAX = 2.0;
+const PRESENCE_PENALTY_INPUT_MAX = 2.0;
+const PRESENCE_PENALTY_STORED_MAX = 1.99;
 const PRESENCE_PENALTY_DEFAULT = 0.0;
 
 // Configure the subcommand
@@ -42,14 +43,22 @@ export const configureSubcommand = (
           ),
         )
         .setMinValue(PRESENCE_PENALTY_MIN)
-        .setMaxValue(PRESENCE_PENALTY_MAX)
+        .setMaxValue(PRESENCE_PENALTY_INPUT_MAX)
         .setRequired(true),
     );
+
+function normalizePresencePenalty(value: number): number {
+	return Math.max(
+		PRESENCE_PENALTY_MIN,
+		Math.min(PRESENCE_PENALTY_STORED_MAX, value),
+	);
+}
 
 /**
  * Sets the presence penalty for Tomori's LLM
  * Positive values penalize tokens that have appeared at all in the output so far
- * Applied by Google, OpenRouter, and NovelAI
+ * Applied by OpenRouter and NovelAI.
+ * Google support is behind an explicit provider flag and compatible-model guard.
  * Neutral at 0.0 (no penalty)
  * @param _client - Discord client instance
  * @param interaction - Command interaction
@@ -77,17 +86,21 @@ export async function execute(
 
   try {
     // 3. Get the value from options
-    const newValue = interaction.options.getNumber("value", true);
+    const requestedValue = interaction.options.getNumber("value", true);
+    const newValue = normalizePresencePenalty(requestedValue);
 
     // 4. Additional validation (Discord already handles min/max, but just in case)
-    if (newValue < PRESENCE_PENALTY_MIN || newValue > PRESENCE_PENALTY_MAX) {
+    if (
+      requestedValue < PRESENCE_PENALTY_MIN ||
+      requestedValue > PRESENCE_PENALTY_INPUT_MAX
+    ) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.presence-penalty.invalid_value_title",
         descriptionKey:
           "commands.config.params.presence-penalty.invalid_value_description",
         descriptionVars: {
           min: PRESENCE_PENALTY_MIN.toFixed(1),
-          max: PRESENCE_PENALTY_MAX.toFixed(1),
+          max: PRESENCE_PENALTY_INPUT_MAX.toFixed(1),
         },
         color: ColorCode.ERROR,
       });
@@ -141,7 +154,8 @@ export async function execute(
         metadata: {
           command: "config params presence-penalty",
           guildId: interaction.guild?.id,
-          newValue,
+          requestedValue,
+          normalizedValue: newValue,
           validationErrors: validatedConfig.success
             ? null
             : validatedConfig.error.flatten(),
@@ -197,6 +211,12 @@ export async function execute(
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
         valueAttempted: interaction.options.getNumber("value"),
+        normalizedValue:
+          interaction.options.getNumber("value") === null
+            ? null
+            : normalizePresencePenalty(
+                interaction.options.getNumber("value", true),
+              ),
       },
     };
     await log.error(

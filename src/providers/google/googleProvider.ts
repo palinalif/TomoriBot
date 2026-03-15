@@ -133,6 +133,72 @@ export interface GoogleProviderConfig extends ProviderConfig {
   };
 }
 
+const GOOGLE_PENALTY_MIN = -2.0;
+const GOOGLE_PENALTY_MAX = 1.99;
+const loggedGooglePenaltyNormalizations = new Set<string>();
+const loggedGooglePenaltySkips = new Set<string>();
+
+function isGemini3Model(model: string): boolean {
+	return model.trim().toLowerCase().startsWith("gemini-3");
+}
+
+function isGooglePenaltyParamsEnabled(): boolean {
+	return process.env.GOOGLE_ENABLE_PENALTY_PARAMS?.toLowerCase() === "true";
+}
+
+function sanitizeGooglePenalty(
+	value: number,
+	field: "frequencyPenalty" | "presencePenalty",
+	serverId?: number | null,
+): number {
+	const sanitizedValue = Math.max(
+		GOOGLE_PENALTY_MIN,
+		Math.min(GOOGLE_PENALTY_MAX, value),
+	);
+	if (sanitizedValue !== value) {
+		const warningKey = `${serverId ?? "unknown"}:${field}:${value}:${sanitizedValue}`;
+		if (!loggedGooglePenaltyNormalizations.has(warningKey)) {
+			loggedGooglePenaltyNormalizations.add(warningKey);
+			log.warn(
+				`Normalized Google ${field} from ${value} to ${sanitizedValue} because Gemini requires penalties in [-2.0, 2.0).`,
+				{
+					serverId: serverId ?? null,
+					field,
+					originalValue: value,
+					sanitizedValue,
+				},
+			);
+		}
+	}
+
+	return sanitizedValue;
+}
+
+function logSkippedGooglePenaltyParams(
+	model: string,
+	serverId: number,
+	reason: string,
+	frequencyPenalty?: number,
+	presencePenalty?: number,
+): void {
+	const warningKey = `${serverId}:${model}:${reason}`;
+	if (loggedGooglePenaltySkips.has(warningKey)) {
+		return;
+	}
+
+	loggedGooglePenaltySkips.add(warningKey);
+	log.warn(
+		`Skipping Google penalty params for model ${model}: ${reason}.`,
+		{
+			serverId,
+			model,
+			reason,
+			frequencyPenalty: frequencyPenalty ?? null,
+			presencePenalty: presencePenalty ?? null,
+		},
+	);
+}
+
 /**
  * Google Gemini provider implementation
  */
@@ -330,9 +396,48 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
       process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192",
       10,
     );
+    const modelCodename = tomoriState.llm.llm_codename;
+    const googlePenaltyParamsEnabled = isGooglePenaltyParamsEnabled();
+    const supportsPenaltyParams =
+      googlePenaltyParamsEnabled && isGemini3Model(modelCodename);
+    const hasConfiguredPenaltyParams =
+      tomoriState.config.llm_frequency_penalty !== 0 ||
+      tomoriState.config.llm_presence_penalty !== 0;
+    if (!supportsPenaltyParams && hasConfiguredPenaltyParams) {
+      const skipReason = !googlePenaltyParamsEnabled
+        ? "GOOGLE_ENABLE_PENALTY_PARAMS is disabled"
+        : "only Gemini 3 models receive frequency/presence penalties";
+      logSkippedGooglePenaltyParams(
+        modelCodename,
+        tomoriState.server_id,
+        skipReason,
+        tomoriState.config.llm_frequency_penalty !== 0
+          ? tomoriState.config.llm_frequency_penalty
+          : undefined,
+        tomoriState.config.llm_presence_penalty !== 0
+          ? tomoriState.config.llm_presence_penalty
+          : undefined,
+      );
+    }
+    const frequencyPenalty =
+      supportsPenaltyParams && tomoriState.config.llm_frequency_penalty !== 0
+        ? sanitizeGooglePenalty(
+            tomoriState.config.llm_frequency_penalty,
+            "frequencyPenalty",
+            tomoriState.server_id,
+          )
+        : undefined;
+    const presencePenalty =
+      supportsPenaltyParams && tomoriState.config.llm_presence_penalty !== 0
+        ? sanitizeGooglePenalty(
+            tomoriState.config.llm_presence_penalty,
+            "presencePenalty",
+            tomoriState.server_id,
+          )
+        : undefined;
 
     const config: GoogleProviderConfig = {
-      model: tomoriState.llm.llm_codename,
+      model: modelCodename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,
       maxOutputTokens,
@@ -366,11 +471,11 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
         }),
         // Only include penalty params if user has configured non-neutral values
         // Neutral: frequencyPenalty=0.0, presencePenalty=0.0
-        ...(tomoriState.config.llm_frequency_penalty !== 0 && {
-          frequencyPenalty: tomoriState.config.llm_frequency_penalty,
+        ...(frequencyPenalty !== undefined && {
+          frequencyPenalty,
         }),
-        ...(tomoriState.config.llm_presence_penalty !== 0 && {
-          presencePenalty: tomoriState.config.llm_presence_penalty,
+        ...(presencePenalty !== undefined && {
+          presencePenalty,
         }),
         maxOutputTokens,
         stopSequences: [],
@@ -466,7 +571,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
       // Enable thinking mode for Gemini 3 Flash models
       // This allows the model to use internal reasoning before responding
       const isGemini3Flash =
-        config.model?.startsWith("gemini-3") && config.model?.includes("flash");
+        isGemini3Model(config.model ?? "") && config.model?.includes("flash");
       if (isGemini3Flash) {
         streamConfig.thinkingConfig = {
           thinkingLevel: ThinkingLevel.LOW,

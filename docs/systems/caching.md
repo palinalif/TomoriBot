@@ -39,7 +39,7 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
 ### 4) Channel whitelist cache (`channelWhitelistCache.ts`)
 
 - Key: `serverDiscId:channelDiscId:roleSignature`
-- Stores whitelist decision (channel + role) + channel cooldown overrides
+- Stores whitelist decision (channel + role) + optional channel cooldown overrides
 - Default TTL: `CHANNEL_WHITELIST_CACHE_TTL_MINUTES` (default 5)
 - API: `getCachedWhitelistStatus`, `invalidateWhitelistCache`
 
@@ -99,7 +99,7 @@ Common examples:
 - server/persona/config changes -> `invalidateTomoriStateCache(serverDiscId)`
 - user preference/memory changes -> `invalidateUserCache(userDiscId)`
 - blacklist toggles -> `invalidateUserBlacklistCache(serverDiscId, userDiscId)`
-- whitelist/cooldown override changes -> `invalidateWhitelistCache(serverDiscId, channelDiscId?)`
+- whitelist/inherited cooldown override changes -> `invalidateWhitelistCache(serverDiscId, channelDiscId?)`
 - emoji/sticker update events -> `invalidateEmojiStickerCache(serverId)`
 - persona webhook/avatar changes -> webhook invalidation helpers
 

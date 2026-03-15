@@ -963,18 +963,59 @@ FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
 -- Channel Whitelist Table
--- Stores per-channel cooldown overrides for server-wide whitelist system
+-- Stores per-channel trigger access plus optional cooldown overrides
 -- When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot
 CREATE TABLE IF NOT EXISTS channel_whitelist (
 	server_id INT NOT NULL,
 	channel_disc_id TEXT NOT NULL,
-	cooldown_type INT NOT NULL DEFAULT 0,
-	cooldown_length INT NOT NULL DEFAULT 0,
+	cooldown_type INT,
+	cooldown_length INT,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY (server_id, channel_disc_id),
 	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
+
+-- Allow whitelist entries to inherit global cooldown settings by storing NULL override columns
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_name = 'channel_whitelist'
+		AND column_name = 'cooldown_type'
+		AND is_nullable = 'NO'
+	) THEN
+		ALTER TABLE channel_whitelist ALTER COLUMN cooldown_type DROP NOT NULL;
+		RAISE NOTICE 'Made channel_whitelist.cooldown_type nullable';
+	END IF;
+END $$;
+
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_name = 'channel_whitelist'
+		AND column_name = 'cooldown_length'
+		AND is_nullable = 'NO'
+	) THEN
+		ALTER TABLE channel_whitelist ALTER COLUMN cooldown_length DROP NOT NULL;
+		RAISE NOTICE 'Made channel_whitelist.cooldown_length nullable';
+	END IF;
+END $$;
+
+ALTER TABLE channel_whitelist ALTER COLUMN cooldown_type DROP DEFAULT;
+ALTER TABLE channel_whitelist ALTER COLUMN cooldown_length DROP DEFAULT;
+
+ALTER TABLE channel_whitelist
+	DROP CONSTRAINT IF EXISTS channel_whitelist_cooldown_override_pair;
+ALTER TABLE channel_whitelist
+	ADD CONSTRAINT channel_whitelist_cooldown_override_pair
+	CHECK (
+		(cooldown_type IS NULL AND cooldown_length IS NULL)
+		OR (cooldown_type IS NOT NULL AND cooldown_length IS NOT NULL)
+	);
 
 -- Create indexes for channel_whitelist
 CREATE INDEX IF NOT EXISTS idx_channel_whitelist_server ON channel_whitelist(server_id);

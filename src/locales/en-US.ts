@@ -469,6 +469,7 @@ export default {
       opt_out: "Block Memory Storage",
       opt_in: "Allow Memory Storage",
       none: "None",
+      inherit_global: "Inherit Global Cooldown",
     },
 
     // General utility commands
@@ -1591,7 +1592,7 @@ Channel Whitelist & Cooldowns:
 - {serverWhitelistChannel} - Add a channel to the whitelist (only whitelisted channels can trigger me)
 - {serverWhitelistRole} - Add/remove roles allowed to trigger me when role whitelist is active
 - {serverWhitelistRemove} - Remove a channel from the whitelist
-- Whitelisted channels completely override the global cooldown with per-channel settings
+- Whitelisted channels inherit the global cooldown unless you set a channel-specific override
 
 Documents:
 - {teachDocument} - Upload a document for me to reference
@@ -2387,23 +2388,23 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         },
         "frequency-penalty": {
           description: `Set frequency penalty for repeated tokens (default: 0.0).`,
-          value_description: `Penalty for frequently used tokens (-2.0 to 2.0, 0.0=neutral). Default: 0.0.`,
+          value_description: `Penalty for frequent tokens (-2.0 to 2.0; exact 2.0 saves as 1.99). Default: 0.0.`,
           invalid_value_title: `Invalid Frequency Penalty`,
           invalid_value_description: `Frequency penalty must be between {min} and {max}.`,
           already_set_title: `Frequency Penalty Already Set`,
           already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
           success_title: `Frequency Penalty Updated`,
-          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** Google, OpenRouter, NovelAI`,
+          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter, NovelAI`,
         },
         "presence-penalty": {
           description: `Set presence penalty for repeated topics (default: 0.0).`,
-          value_description: `Penalty for already-mentioned topics (-2.0 to 2.0, 0.0=neutral). Default: 0.0.`,
+          value_description: `Penalty for repeated topics (-2.0 to 2.0; exact 2.0 saves as 1.99). Default: 0.0.`,
           invalid_value_title: `Invalid Presence Penalty`,
           invalid_value_description: `Presence penalty must be between {min} and {max}.`,
           already_set_title: `Presence Penalty Already Set`,
           already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
           success_title: `Presence Penalty Updated`,
-          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** Google, OpenRouter, NovelAI`,
+          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter, NovelAI`,
         },
         "min-p": {
           description: `Set min-P minimum probability threshold (default: 0.0).`,
@@ -2744,12 +2745,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         not_configured_description: `This server does not currently have a welcome channel configured.`,
       },
       whitelist: {
-        description: `Manage trigger whitelist (channels + roles; channel entries override global cooldown settings)`,
+        description: `Manage trigger whitelist (channels + roles; channels can inherit or override the global cooldown)`,
         channel: {
-          description: `Add a channel to the whitelist with custom cooldown settings`,
+          description: `Add a channel to the whitelist, optionally overriding the global cooldown`,
           channel_description: `The channel to whitelist`,
-          type_description: `Cooldown type for this channel`,
-          length_description: `Cooldown length in seconds (0 = instant, no cooldown)`,
+          type_description: `Optional override: cooldown type for this channel`,
+          length_description: `Optional override: cooldown length in seconds (0 = instant, no cooldown)`,
           invalid_channel_title: `Invalid Channel Type`,
           invalid_channel_description: `Only text channels can be whitelisted.`,
           already_set_title: `Already Set`,
@@ -2758,10 +2759,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           invalid_type_description: `The selected cooldown type is invalid. Please choose a valid option.`,
           invalid_length_title: `Invalid Cooldown Length`,
           invalid_length_description: `Cooldown length must be between **{min}** and **{max}** seconds.`,
+          success_inherit_title: `Channel Whitelisted`,
+          success_inherit_description: `Channel **{channel_name}** whitelisted and set to inherit this server's global cooldown.\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
           success_title: `Channel Whitelisted`,
-          success_description: `Channel **{channel_name}** whitelisted with **{cooldown_type}** cooldown of **{cooldown_length}** seconds.\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
+          success_description: `Channel **{channel_name}** whitelisted with a channel-specific **{cooldown_type}** cooldown of **{cooldown_length}** seconds.\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
           success_instant_title: `Channel Whitelisted (Instant)`,
-          success_instant_description: `Channel **{channel_name}** whitelisted with **{cooldown_type}** (0 seconds = instant, no cooldown).\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
+          success_instant_description: `Channel **{channel_name}** whitelisted with a channel-specific **{cooldown_type}** override (0 seconds = instant, no cooldown).\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
         },
         role: {
           description: `Add or remove whitelisted roles that can trigger the bot`,

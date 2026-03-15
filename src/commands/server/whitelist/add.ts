@@ -17,7 +17,7 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 /**
  * Configure the /server whitelist channel subcommand
- * Allows server managers to whitelist specific channels with custom cooldown settings
+ * Allows server managers to whitelist specific channels with optional cooldown overrides
  * When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot
  */
 export const configureSubcommand = (
@@ -46,7 +46,7 @@ export const configureSubcommand = (
         .setDescription(
           localizer("en-US", "commands.server.whitelist.channel.type_description"),
         )
-        .setRequired(true)
+        .setRequired(false)
         .addChoices(
           {
             name: localizer(
@@ -94,12 +94,12 @@ export const configureSubcommand = (
         )
         .setMinValue(0)
         .setMaxValue(86400)
-        .setRequired(true),
+        .setRequired(false),
     );
 
 /**
  * Execute the /server whitelist channel command
- * Adds a channel to the whitelist with custom cooldown settings
+ * Adds a channel to the whitelist with optional cooldown override settings
  */
 export async function execute(
   _client: Client,
@@ -143,11 +143,16 @@ export async function execute(
 
     // 3. Get command parameters
     const channel = interaction.options.getChannel("channel", true);
-    const cooldownType = interaction.options.getInteger("cooldown_type", true);
-    const cooldownLength = interaction.options.getInteger(
-      "cooldown_length",
-      true,
+    const requestedCooldownType = interaction.options.getInteger(
+      "cooldown_type",
+      false,
     );
+    const requestedCooldownLength = interaction.options.getInteger(
+      "cooldown_length",
+      false,
+    );
+    const hasOverrideInput =
+      requestedCooldownType !== null || requestedCooldownLength !== null;
 
     // 4. Validate channel type
     if (channel.type !== ChannelType.GuildText) {
@@ -161,7 +166,10 @@ export async function execute(
     }
 
     // 5. Validate cooldown type (0-3)
-    if (cooldownType < 0 || cooldownType > 3) {
+    if (
+      requestedCooldownType !== null &&
+      (requestedCooldownType < 0 || requestedCooldownType > 3)
+    ) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
         titleKey: "commands.server.whitelist.channel.invalid_type_title",
@@ -172,7 +180,10 @@ export async function execute(
     }
 
     // 6. Validate cooldown length (0-86400)
-    if (cooldownLength < 0 || cooldownLength > 86400) {
+    if (
+      requestedCooldownLength !== null &&
+      (requestedCooldownLength < 0 || requestedCooldownLength > 86400)
+    ) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
         titleKey: "commands.server.whitelist.channel.invalid_length_title",
@@ -187,17 +198,43 @@ export async function execute(
     }
 
     // 7. Check if channel already has these exact settings
-    const [existingEntry] = await sql`
+    const [existingEntry] = await sql<
+      Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>
+    >`
 			SELECT cooldown_type, cooldown_length
 			FROM channel_whitelist
 			WHERE server_id = ${tomoriState.server_id}
 			AND channel_disc_id = ${channel.id}
 		`;
 
+    const currentCooldownType =
+      existingEntry?.cooldown_type !== null &&
+      existingEntry?.cooldown_length !== null
+        ? existingEntry?.cooldown_type
+        : null;
+    const currentCooldownLength =
+      existingEntry?.cooldown_type !== null &&
+      existingEntry?.cooldown_length !== null
+        ? existingEntry?.cooldown_length
+        : null;
+
+    const cooldownType = hasOverrideInput
+      ? ((requestedCooldownType ??
+          currentCooldownType ??
+          tomoriState.config.cooldown_type ??
+          CooldownType.OFF) as CooldownType)
+      : null;
+    const cooldownLength = hasOverrideInput
+      ? (requestedCooldownLength ??
+        currentCooldownLength ??
+        tomoriState.config.cooldown_length ??
+        5)
+      : null;
+
     if (
       existingEntry &&
-      existingEntry.cooldown_type === cooldownType &&
-      existingEntry.cooldown_length === cooldownLength
+      currentCooldownType === cooldownType &&
+      currentCooldownLength === cooldownLength
     ) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
@@ -214,7 +251,7 @@ export async function execute(
     await upsertChannelWhitelist(
       tomoriState.server_id,
       channel.id,
-      cooldownType as CooldownType,
+      cooldownType,
       cooldownLength,
     );
 
@@ -222,49 +259,72 @@ export async function execute(
     invalidateWhitelistCache(interaction.guildId);
 
     // 10. Send success message
-    const cooldownTypeName = localizer(
-      locale,
-      `commands.config.cooldown.type.choice_${getCooldownTypeKey(cooldownType as CooldownType)}`,
-    );
-
-    // Use different message for instant cooldown (length = 0)
-    if (cooldownLength === 0) {
+    if (cooldownType === null || cooldownLength === null) {
       await replyInfoEmbed(
         interaction,
         locale,
         {
           color: ColorCode.SUCCESS,
-          titleKey: "commands.server.whitelist.channel.success_instant_title",
+          titleKey: "commands.server.whitelist.channel.success_inherit_title",
           descriptionKey:
-            "commands.server.whitelist.channel.success_instant_description",
+            "commands.server.whitelist.channel.success_inherit_description",
           descriptionVars: {
             channel_name: channel.name ?? "UNDEFINED_CH",
-            cooldown_type: cooldownTypeName,
           },
         },
         undefined,
       );
     } else {
-      await replyInfoEmbed(
-        interaction,
+      const cooldownTypeName = localizer(
         locale,
-        {
-          color: ColorCode.SUCCESS,
-          titleKey: "commands.server.whitelist.channel.success_title",
-          descriptionKey: "commands.server.whitelist.channel.success_description",
-          descriptionVars: {
-            channel_name: channel.name ?? "UNDEFINED_CH",
-            cooldown_type: cooldownTypeName,
-            cooldown_length: cooldownLength.toString(),
-          },
-        },
-        undefined,
+        `commands.config.cooldown.type.choice_${getCooldownTypeKey(cooldownType)}`,
       );
+
+      // Use different message for instant cooldown (length = 0)
+      if (cooldownLength === 0) {
+        await replyInfoEmbed(
+          interaction,
+          locale,
+          {
+            color: ColorCode.SUCCESS,
+            titleKey: "commands.server.whitelist.channel.success_instant_title",
+            descriptionKey:
+              "commands.server.whitelist.channel.success_instant_description",
+            descriptionVars: {
+              channel_name: channel.name ?? "UNDEFINED_CH",
+              cooldown_type: cooldownTypeName,
+            },
+          },
+          undefined,
+        );
+      } else {
+        await replyInfoEmbed(
+          interaction,
+          locale,
+          {
+            color: ColorCode.SUCCESS,
+            titleKey: "commands.server.whitelist.channel.success_title",
+            descriptionKey: "commands.server.whitelist.channel.success_description",
+            descriptionVars: {
+              channel_name: channel.name ?? "UNDEFINED_CH",
+              cooldown_type: cooldownTypeName,
+              cooldown_length: cooldownLength.toString(),
+            },
+          },
+          undefined,
+        );
+      }
     }
 
-    log.info(
-      `Channel ${channel.name} (${channel.id}) whitelisted in server ${interaction.guildId} with cooldown type ${cooldownType} and length ${cooldownLength}s`,
-    );
+    if (cooldownType === null || cooldownLength === null) {
+      log.info(
+        `Channel ${channel.name} (${channel.id}) whitelisted in server ${interaction.guildId} with inherited global cooldown`,
+      );
+    } else {
+      log.info(
+        `Channel ${channel.name} (${channel.id}) whitelisted in server ${interaction.guildId} with cooldown type ${cooldownType} and length ${cooldownLength}s`,
+      );
+    }
   } catch (error) {
     log.error(
       "Error executing /server whitelist channel command",

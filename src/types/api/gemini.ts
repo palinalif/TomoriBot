@@ -30,8 +30,8 @@ export const GeminiConfigSchema = z.object({
       topK: z.number().min(1),
       topP: z.number().min(0).max(1),
       maxOutputTokens: z.number().optional(),
-      frequencyPenalty: z.number().min(-2).max(2).optional(),
-      presencePenalty: z.number().min(-2).max(2).optional(),
+      frequencyPenalty: z.number().min(-2).lt(2).optional(),
+      presencePenalty: z.number().min(-2).lt(2).optional(),
       seed: z.number().int().optional(),
     })
     .passthrough(), // Allow other official GenerateContentConfig properties
