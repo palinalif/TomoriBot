@@ -142,19 +142,22 @@ export function shouldApplyEmojiPenalty(
 /**
  * Generate an emoji penalty message to inject into context
  * This message appears as natural user guidance to reduce emoji usage
- * @param botName - The bot's current nickname
+ * @param speakerLabel - Optional speaker label for the directive subject
  * @returns A StructuredContextItem to append to context
  */
-function buildEmojiPenaltyText(botName: string): string {
-  return `${botName} has been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.`;
+function buildEmojiPenaltyText(speakerLabel?: string | null): string {
+  const normalizedLabel = speakerLabel?.trim();
+  return normalizedLabel
+    ? `${normalizedLabel} has been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.`
+    : "You have been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.";
 }
 
 export function generateEmojiPenaltyMessage(
-  botName: string,
+  speakerLabel?: string | null,
 ): StructuredContextItem {
   // Create a natural-sounding reminder message
   // It appears as a user message to be close to generation point
-  const penaltyText = `[System: ${buildEmojiPenaltyText(botName)}]`;
+  const penaltyText = `[System: ${buildEmojiPenaltyText(speakerLabel)}]`;
 
   return {
     role: "user",
@@ -170,13 +173,13 @@ export function generateEmojiPenaltyMessage(
 
 export function getEmojiPenaltyDirective(
   contextItems: StructuredContextItem[],
-  botName: string,
+  speakerLabel?: string | null,
 ): string | null {
   if (!shouldApplyEmojiPenalty(contextItems)) {
     return null;
   }
 
-  return buildEmojiPenaltyText(botName);
+  return buildEmojiPenaltyText(speakerLabel);
 }
 
 /**
@@ -188,7 +191,7 @@ export function getEmojiPenaltyDirective(
  */
 export function applyEmojiPenaltyIfNeeded(
   contextItems: StructuredContextItem[],
-  botName: string,
+  speakerLabel?: string | null,
 ): StructuredContextItem[] {
   // 1. Check if penalty should be applied
   if (!shouldApplyEmojiPenalty(contextItems)) {
@@ -196,7 +199,7 @@ export function applyEmojiPenaltyIfNeeded(
   }
 
   // 2. Generate and append penalty message
-  const penaltyMessage = generateEmojiPenaltyMessage(botName);
+  const penaltyMessage = generateEmojiPenaltyMessage(speakerLabel);
 
   // 3. Return new array with penalty message appended
   return [...contextItems, penaltyMessage];

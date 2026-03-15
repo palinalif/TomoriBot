@@ -6,11 +6,13 @@
 
 import { log } from "../../../utils/misc/logger";
 import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
+import { getMCPManager } from "../../../utils/mcp/mcpManager";
 import type {
-  MCPServerBehaviorHandler,
-  MCPExecutionContext,
-  MCPServerResponse,
-  TypedMCPToolResult,
+	DuckDuckGoWebSearchResponse,
+	MCPServerBehaviorHandler,
+	MCPExecutionContext,
+	MCPServerResponse,
+	TypedMCPToolResult,
 } from "../../../types/tool/mcpTypes";
 
 /**
@@ -21,14 +23,17 @@ import type {
 export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
   public readonly serverName = "duckduckgo-search";
 
-  /**
-   * Supported DuckDuckGo Search functions
-   * Note: felo-search and fetch-url are disabled at the adapter level
-   */
-  private readonly SUPPORTED_FUNCTIONS = [
-    "web-search", // DuckDuckGo web search with HTML scraping
-    "url-metadata", // URL metadata extraction (title, description, images)
-  ];
+	/**
+	 * Supported DuckDuckGo Search functions
+	 * Note: felo-search remains hidden from providers and is only used as an
+	 * internal fallback when DuckDuckGo web-search hits rate limits or returns
+	 * no usable results.
+	 */
+	private readonly SUPPORTED_FUNCTIONS = [
+		"web-search", // DuckDuckGo web search with HTML scraping
+		"felo-search", // Internal AI fallback for DuckDuckGo rate limits
+		"url-metadata", // URL metadata extraction (title, description, images)
+	];
 
   /**
    * Check if this handler supports a specific function
@@ -59,16 +64,21 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
         return await this.processWebSearch(mcpResult, args, context);
       }
 
-      // Handle URL metadata extraction
-      if (functionName === "url-metadata") {
-        return await this.processUrlMetadata(mcpResult, args);
-      }
+		// Handle URL metadata extraction
+		if (functionName === "url-metadata") {
+			return await this.processUrlMetadata(mcpResult, args);
+		}
 
-      // Fallback for any unhandled functions
-      return this.processStandardDuckDuckGoResult(
-        functionName,
-        mcpResult,
-        context,
+		// Handle Felo AI fallback/search results
+		if (functionName === "felo-search") {
+			return this.processFeloSearch(mcpResult, args, context);
+		}
+
+		// Fallback for any unhandled functions
+		return this.processStandardDuckDuckGoResult(
+			functionName,
+			mcpResult,
+			context,
         args,
       );
     } catch (error) {
@@ -96,83 +106,97 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
    * @param args - The modified arguments used for the search (contains query)
    * @returns Promise<TypedMCPToolResult> - Enhanced result with fetch capability reminder
    */
-  private async processWebSearch(
-    mcpResult: MCPServerResponse,
-    args: Record<string, unknown>,
-    context: MCPExecutionContext,
-  ): Promise<TypedMCPToolResult> {
-    try {
-      // Send search status embed to Discord (consistent with Brave Search UX)
-      // Non-fatal: missing permissions should not prevent search results from reaching the AI
-      try {
-        await sendStandardEmbed(
-          context.channel,
-          context.locale,
-          {
-            titleKey: "genai.search.web_search_title",
-            titleVars: { query: String(args.query || args.q || "your search") },
-            descriptionKey: "genai.search.disclaimer_description",
-          },
-          {
-            webhook: context.webhook,
+	private async processWebSearch(
+		mcpResult: MCPServerResponse,
+		args: Record<string, unknown>,
+		context: MCPExecutionContext,
+	): Promise<TypedMCPToolResult> {
+		try {
+			const query = String(args.query || args.q || "your search");
+
+			// Send search status embed to Discord (consistent with Brave Search UX)
+			// Non-fatal: missing permissions should not prevent search results from reaching the AI
+			try {
+				await sendStandardEmbed(
+					context.channel,
+					context.locale,
+					{
+						titleKey: "genai.search.web_search_title",
+						titleVars: { query },
+						descriptionKey: "genai.search.disclaimer_description",
+					},
+					{
+						webhook: context.webhook,
             personaUsername: context.personaUsername,
             personaAvatarUrl: context.personaAvatarUrl,
           },
-        );
-      } catch (embedError) {
-        log.warn(
-          "Failed to send DuckDuckGo search status embed (non-fatal)",
-          embedError as Error,
-        );
-      }
+				);
+			} catch (embedError) {
+				log.warn(
+					"Failed to send DuckDuckGo search status embed (non-fatal)",
+					embedError as Error,
+				);
+			}
 
-      // Check for errors or rate limits before processing
-      if (mcpResult.isError || this.isRateLimitError(mcpResult)) {
-        await sendStandardEmbed(
-          context.channel,
-          context.locale,
-          {
-            titleKey: "general.errors.duckduckgo_rate_limit.title",
-            descriptionKey: "general.errors.duckduckgo_rate_limit.description",
-            footerKey: "general.errors.duckduckgo_rate_limit.footer",
-          },
-          {
-            webhook: context.webhook,
-            personaUsername: context.personaUsername,
-            personaAvatarUrl: context.personaAvatarUrl,
-          },
-        );
-        return {
-          success: false,
-          message:
-            "DuckDuckGo search failed due to rate limiting. Consider using Brave Search for more reliable results.",
-          error: mcpResult.text || "Rate limit error",
-          data: {
-            source: "mcp",
-            functionName: "web-search",
-            serverName: this.serverName,
-            rawResult: mcpResult,
-            executionTime: Date.now() - context.executionStartTime,
-            status: "failed",
-            errorType: "duckduckgo_rate_limit",
-          },
-        };
-      }
-      // Extract the original search result text
-      let originalText = "";
-      if (mcpResult.text) {
-        originalText = mcpResult.text;
-      } else if (mcpResult.functionResponse?.response?.text) {
-        originalText = mcpResult.functionResponse.response.text;
-      } else {
-        // Fallback: try to stringify the result
-        originalText = JSON.stringify(mcpResult, null, 2);
-      }
+			const fallbackReason = this.getFeloFallbackReason(mcpResult);
+			if (fallbackReason) {
+				const fallbackResult = await this.tryFeloSearchFallback(
+					query,
+					context,
+					fallbackReason,
+				);
+				if (fallbackResult) {
+					return fallbackResult;
+				}
 
-      // Extract URLs from the search results for logging
-      const urlPattern = /https?:\/\/[^\s)]+/g;
-      const foundUrls = originalText.match(urlPattern) || [];
-      const urlCount = foundUrls.length;
+				if (fallbackReason === "duckduckgo_rate_limit") {
+					await this.sendDuckDuckGoRateLimitEmbed(context);
+				}
+
+				return {
+					success: false,
+					message:
+						fallbackReason === "duckduckgo_rate_limit"
+							? "DuckDuckGo search failed due to rate limiting, and Felo fallback was unavailable."
+							: "DuckDuckGo search returned no usable results, and Felo fallback was unavailable.",
+					error: this.extractResultText(mcpResult),
+					data: {
+						source: "mcp",
+						functionName: "web-search",
+						serverName: this.serverName,
+						rawResult: mcpResult,
+						executionTime: Date.now() - context.executionStartTime,
+						status: "failed",
+						errorType: fallbackReason,
+					},
+				};
+			}
+
+			// Surface non-rate-limit MCP errors without mislabeling them as throttling.
+			if (mcpResult.isError) {
+				const errorText = this.extractResultText(mcpResult);
+				return {
+					success: false,
+					message: "DuckDuckGo web search failed",
+					error: errorText,
+					data: {
+						source: "mcp",
+						functionName: "web-search",
+						serverName: this.serverName,
+						rawResult: mcpResult,
+						executionTime: Date.now() - context.executionStartTime,
+						status: "failed",
+						errorType: "duckduckgo_web_search_error",
+					},
+				};
+			}
+
+			const originalText = this.extractResultText(mcpResult);
+
+			// Extract URLs from the search results for logging
+			const urlPattern = /https?:\/\/[^\s)]+/g;
+			const foundUrls = originalText.match(urlPattern) || [];
+			const urlCount = foundUrls.length;
 
       // Add a note that this is from DuckDuckGo search
       const prefixMessage = `[DuckDuckGo Web Search Results]\n\n${originalText}`;
@@ -180,11 +204,11 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       // Log the search response
       log.info(
         `DuckDuckGo search response: ${prefixMessage.substring(0, 200)}...`,
-      );
-      log.info(`DuckDuckGo search - Found ${urlCount} URLs`);
+			);
+			log.info(`DuckDuckGo search - Found ${urlCount} URLs`);
 
-      return {
-        success: true,
+			return {
+				success: true,
         message: prefixMessage,
         data: {
           source: "mcp",
@@ -193,26 +217,27 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
           rawResult: mcpResult,
           executionTime: 0, // Will be set by caller
           urlsFound: urlCount,
-          status: "completed",
-          // DuckDuckGo specific metadata
-          searchProvider: "DuckDuckGo (Enhanced HTML Scraping)",
-        },
-      };
+					status: "completed",
+					// DuckDuckGo specific metadata
+					searchProvider: "DuckDuckGo (Enhanced HTML Scraping)",
+				},
+			};
     } catch (error) {
-      log.error(
-        "Error processing DuckDuckGo web search result:",
-        error as Error,
-      );
-      // Fall back to original behavior
-      return {
-        success: true,
-        message:
-          mcpResult.text || "DuckDuckGo web search completed successfully",
-        data: {
-          source: "mcp",
-          functionName: "web-search",
-          serverName: this.serverName,
-          rawResult: mcpResult,
+			log.error(
+				"Error processing DuckDuckGo web search result:",
+				error as Error,
+			);
+			// Fall back to original behavior
+			return {
+				success: true,
+				message:
+					this.extractResultText(mcpResult) ||
+					"DuckDuckGo web search completed successfully",
+				data: {
+					source: "mcp",
+					functionName: "web-search",
+					serverName: this.serverName,
+					rawResult: mcpResult,
           executionTime: 0, // Will be set by caller
           status: "completed",
           searchProvider: "DuckDuckGo (Enhanced HTML Scraping)",
@@ -227,23 +252,15 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
    * @param mcpResult - The raw MCP result from URL metadata extraction
    * @param args - The modified arguments used (contains url)
    * @returns Promise<TypedMCPToolResult> - Structured metadata result
-   */
-  private async processUrlMetadata(
-    mcpResult: MCPServerResponse,
-    args: Record<string, unknown>,
-  ): Promise<TypedMCPToolResult> {
-    try {
-      // Extract the metadata
-      let metadataContent = "";
-      if (mcpResult.text) {
-        metadataContent = mcpResult.text;
-      } else if (mcpResult.functionResponse?.response?.text) {
-        metadataContent = mcpResult.functionResponse.response.text;
-      } else {
-        metadataContent = JSON.stringify(mcpResult, null, 2);
-      }
+	 */
+	private async processUrlMetadata(
+		mcpResult: MCPServerResponse,
+		args: Record<string, unknown>,
+	): Promise<TypedMCPToolResult> {
+		try {
+			const metadataContent = this.extractResultText(mcpResult);
 
-      const url = (args.url as string) || "unknown URL";
+			const url = (args.url as string) || "unknown URL";
 
       // Format the result message
       const prefixMessage = `[URL Metadata for: ${url}]\n\n${metadataContent}`;
@@ -282,108 +299,310 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
           status: "completed",
           searchProvider: "DuckDuckGo MCP (URL Metadata Extraction)",
         },
-      };
-    }
-  }
+			};
+		}
+	}
 
-  /**
-   * Process standard DuckDuckGo Search results for other functions
-   * @param functionName - Name of the executed function
-   * @param mcpResult - Raw result from MCP server
-   * @param context - Execution context
-   * @param args - Function arguments used
-   * @returns TypedMCPToolResult - Standard processed result
-   */
-  private processStandardDuckDuckGoResult(
-    functionName: string,
-    mcpResult: MCPServerResponse,
-    context: MCPExecutionContext,
-    _args: Record<string, unknown>,
-  ): TypedMCPToolResult {
-    try {
-      // Extract result text from various possible locations in MCP response
-      let resultText = "";
-      if (mcpResult.text) {
-        resultText = mcpResult.text;
-      } else if (mcpResult.functionResponse?.response?.text) {
-        resultText = mcpResult.functionResponse.response.text;
-      } else {
-        // Fallback: try to stringify the result
-        resultText = JSON.stringify(mcpResult, null, 2);
-      }
+	/**
+	 * Process Felo AI search results.
+	 * This remains available to the handler even when providers do not expose the
+	 * raw MCP function directly.
+	 */
+	private processFeloSearch(
+		mcpResult: MCPServerResponse,
+		args: Record<string, unknown>,
+		context: MCPExecutionContext,
+	): TypedMCPToolResult {
+		const baseResult = this.processStandardDuckDuckGoResult(
+			"felo-search",
+			mcpResult,
+			context,
+			args,
+		);
+		if (!baseResult.success) {
+			return baseResult;
+		}
 
-      // Check if this is an error result
-      if (mcpResult.isError) {
-        return {
-          success: false,
-          message: resultText || `${functionName} execution failed`,
-          error: resultText || "Unknown MCP error",
-          data: {
-            source: "mcp",
-            functionName,
-            serverName: this.serverName,
-            rawResult: mcpResult,
-            executionTime: Date.now() - context.executionStartTime,
-            status: "failed",
-          },
-        };
-      }
+		if (!baseResult.data) {
+			return baseResult;
+		}
 
-      // Successful execution - add DuckDuckGo & Felo AI branding
-      const enhancedMessage = `[DuckDuckGo & Felo AI Search Results]\n\n${resultText}`;
+		const resultText = this.extractResultText(mcpResult);
+		const urlsFound = this.countUrls(resultText);
+		const query = String(args.query || args.q || "your search");
 
-      return {
-        success: true,
-        message: enhancedMessage,
-        data: {
-          source: "mcp",
-          functionName,
-          serverName: this.serverName,
-          rawResult: mcpResult,
-          executionTime: Date.now() - context.executionStartTime,
-          status: "completed",
-          searchProvider: "DuckDuckGo & Felo AI Search MCP",
-        },
-      };
-    } catch (error) {
-      log.error(
-        `Error processing standard DuckDuckGo result for ${functionName}:`,
-        error as Error,
-      );
-      return {
-        success: false,
-        message: `Failed to process ${functionName} result`,
-        error: error instanceof Error ? error.message : String(error),
-        data: {
-          source: "mcp",
-          functionName,
-          serverName: this.serverName,
-          rawResult: mcpResult,
-          executionTime: Date.now() - context.executionStartTime,
-          status: "failed",
-        },
-      };
-    }
-  }
+		return {
+			...baseResult,
+			message: `[Felo AI Search Fallback Results for: ${query}]\n\n${resultText}`,
+			data: {
+				...baseResult.data,
+				functionName: "felo-search",
+				rawResult: mcpResult,
+				urlsFound,
+				searchProvider: "Felo AI Search (DuckDuckGo rate-limit fallback)",
+				fallbackFrom: "web-search",
+			},
+		};
+	}
 
-  /**
-   * Detect if an MCP result indicates a rate limit error
-   * @param mcpResult - The MCP server response to check
-   * @returns True if the result indicates rate limiting
-   */
-  private isRateLimitError(mcpResult: MCPServerResponse): boolean {
-    const errorIndicators = [
-      "rate limit",
-      "too many requests",
-      "429",
-      "throttled",
-      "rate limited",
-    ];
-    const resultText = mcpResult.text || JSON.stringify(mcpResult);
-    return errorIndicators.some((indicator) =>
-      resultText.toLowerCase().includes(indicator),
-    );
-  }
+	/**
+	 * Retry a rate-limited DuckDuckGo web search with Felo AI.
+	 */
+	private async tryFeloSearchFallback(
+		query: string,
+		context: MCPExecutionContext,
+		reason: "duckduckgo_rate_limit" | "duckduckgo_empty_results",
+	): Promise<TypedMCPToolResult | null> {
+		if (!query || query === "your search") {
+			return null;
+		}
+
+		try {
+			const mcpManager = getMCPManager();
+			if (!mcpManager.isReady()) {
+				return null;
+			}
+
+			const mcpTools = mcpManager.getMCPTools();
+			for (const mcpTool of mcpTools) {
+				const geminiTool = await mcpTool.tool();
+				const functionNames =
+					geminiTool.functionDeclarations?.map((declaration) => declaration.name) ||
+					[];
+
+				if (!functionNames.includes("felo-search")) {
+					continue;
+				}
+
+				log.warn(
+					`DuckDuckGo web-search fallback triggered (${reason}) for "${query}". Retrying with felo-search.`,
+				);
+
+				const fallbackArgs = {
+					query,
+					stream: false,
+				};
+				const fallbackResult = await mcpTool.callTool([
+					{ name: "felo-search", args: fallbackArgs },
+				]);
+				if (!fallbackResult || fallbackResult.length === 0) {
+					log.warn(
+						`Felo fallback returned no results after DuckDuckGo web-search fallback (${reason}).`,
+					);
+					return null;
+				}
+
+				const processedResult = this.processFeloSearch(
+					fallbackResult[0],
+					fallbackArgs,
+					context,
+				);
+				if (!processedResult.success) {
+					log.warn(
+						`Felo fallback failed after DuckDuckGo fallback (${reason}): ${processedResult.error || processedResult.message || "unknown error"}`,
+					);
+					return null;
+				}
+
+				if (processedResult.data) {
+					processedResult.data.fallbackReason = reason;
+				}
+
+				log.info(
+					`Felo fallback succeeded for DuckDuckGo query "${query}" after ${reason}.`,
+				);
+				return processedResult;
+			}
+		} catch (error) {
+			log.warn(`Felo fallback execution failed after DuckDuckGo fallback (${reason}).`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+
+		return null;
+	}
+
+	/**
+	 * Send the standard DuckDuckGo rate-limit embed when all fallbacks are exhausted.
+	 */
+	private async sendDuckDuckGoRateLimitEmbed(
+		context: MCPExecutionContext,
+	): Promise<void> {
+		await sendStandardEmbed(
+			context.channel,
+			context.locale,
+			{
+				titleKey: "general.errors.duckduckgo_rate_limit.title",
+				descriptionKey: "general.errors.duckduckgo_rate_limit.description",
+				footerKey: "general.errors.duckduckgo_rate_limit.footer",
+			},
+			{
+				webhook: context.webhook,
+				personaUsername: context.personaUsername,
+				personaAvatarUrl: context.personaAvatarUrl,
+			},
+		);
+	}
+
+	/**
+	 * Process standard DuckDuckGo Search results for other functions
+	 * @param functionName - Name of the executed function
+	 * @param mcpResult - Raw result from MCP server
+	 * @param context - Execution context
+	 * @param args - Function arguments used
+	 * @returns TypedMCPToolResult - Standard processed result
+	 */
+	private processStandardDuckDuckGoResult(
+		functionName: string,
+		mcpResult: MCPServerResponse,
+		context: MCPExecutionContext,
+		_args: Record<string, unknown>,
+	): TypedMCPToolResult {
+		try {
+			const resultText = this.extractResultText(mcpResult);
+
+			// Check if this is an error result
+			if (mcpResult.isError) {
+				return {
+					success: false,
+					message: resultText || `${functionName} execution failed`,
+					error: resultText || "Unknown MCP error",
+					data: {
+						source: "mcp",
+						functionName,
+						serverName: this.serverName,
+						rawResult: mcpResult,
+						executionTime: Date.now() - context.executionStartTime,
+						status: "failed",
+					},
+				};
+			}
+
+			// Successful execution - add DuckDuckGo & Felo AI branding
+			const enhancedMessage = `[DuckDuckGo & Felo AI Search Results]\n\n${resultText}`;
+
+			return {
+				success: true,
+				message: enhancedMessage,
+				data: {
+					source: "mcp",
+					functionName,
+					serverName: this.serverName,
+					rawResult: mcpResult,
+					executionTime: Date.now() - context.executionStartTime,
+					status: "completed",
+					searchProvider: "DuckDuckGo & Felo AI Search MCP",
+				},
+			};
+		} catch (error) {
+			log.error(
+				`Error processing standard DuckDuckGo result for ${functionName}:`,
+				error as Error,
+			);
+			return {
+				success: false,
+				message: `Failed to process ${functionName} result`,
+				error: error instanceof Error ? error.message : String(error),
+				data: {
+					source: "mcp",
+					functionName,
+					serverName: this.serverName,
+					rawResult: mcpResult,
+					executionTime: Date.now() - context.executionStartTime,
+					status: "failed",
+				},
+			};
+		}
+	}
+
+	/**
+	 * Extract a readable text payload from an MCP result.
+	 */
+	private extractResultText(mcpResult: MCPServerResponse): string {
+		if (mcpResult.text) {
+			return mcpResult.text;
+		}
+
+		if (mcpResult.functionResponse?.response?.text) {
+			return mcpResult.functionResponse.response.text;
+		}
+
+		return JSON.stringify(mcpResult, null, 2);
+	}
+
+	/**
+	 * Count URL-like strings in a search response.
+	 */
+	private countUrls(resultText: string): number {
+		const urlPattern = /https?:\/\/[^\s)]+/g;
+		return (resultText.match(urlPattern) || []).length;
+	}
+
+	/**
+	 * Decide whether DuckDuckGo should fall back to Felo AI.
+	 */
+	private getFeloFallbackReason(
+		mcpResult: MCPServerResponse,
+	): "duckduckgo_rate_limit" | "duckduckgo_empty_results" | null {
+		if (this.isRateLimitError(mcpResult)) {
+			return "duckduckgo_rate_limit";
+		}
+
+		if (this.hasNoUsableSearchResults(mcpResult)) {
+			return "duckduckgo_empty_results";
+		}
+
+		return null;
+	}
+
+	/**
+	 * Detect clearly empty or unusable DuckDuckGo web-search responses.
+	 */
+	private hasNoUsableSearchResults(mcpResult: MCPServerResponse): boolean {
+		const duckDuckGoResult = mcpResult as Partial<DuckDuckGoWebSearchResponse>;
+		if (Array.isArray(duckDuckGoResult.results)) {
+			return duckDuckGoResult.results.length === 0;
+		}
+
+		const resultText = this.extractResultText(mcpResult).trim();
+		if (!resultText || resultText === "{}" || resultText === "[]" || resultText === "null") {
+			return true;
+		}
+
+		const normalizedText = resultText.toLowerCase();
+		const noResultIndicators = [
+			"no results",
+			"0 results",
+			"no search results",
+			"no relevant results",
+			"no matches found",
+			"nothing found",
+			"could not find any results",
+			"couldn't find any results",
+			"did not return any results",
+		];
+
+		if (noResultIndicators.some((indicator) => normalizedText.includes(indicator))) {
+			return true;
+		}
+
+		return this.countUrls(resultText) === 0 && normalizedText.length < 40;
+	}
+
+	/**
+	 * Detect if an MCP result indicates a rate limit error.
+	 */
+	private isRateLimitError(mcpResult: MCPServerResponse): boolean {
+		const errorIndicators = [
+			"rate limit",
+			"too many requests",
+			"429",
+			"throttled",
+			"rate limited",
+		];
+		const resultText = this.extractResultText(mcpResult).toLowerCase();
+		return errorIndicators.some((indicator) => resultText.includes(indicator));
+	}
 }
 
 /**

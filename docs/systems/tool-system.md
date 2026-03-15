@@ -78,6 +78,9 @@ Centralized helper:
 Additional routing logic:
 
 - when Brave API is available, DuckDuckGo MCP search functions are excluded to prefer Brave.
+- when Brave is unavailable, DuckDuckGo `web-search` remains the primary free search path.
+- if DuckDuckGo `web-search` is rate-limited or returns no usable result, the DuckDuckGo handler may retry internally with `felo-search`.
+- `felo-search` remains hidden from provider tool lists; it is used as an internal fallback, not a first-class exposed tool.
 
 ## Tool Categories
 

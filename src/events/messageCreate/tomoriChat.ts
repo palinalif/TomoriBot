@@ -4637,9 +4637,11 @@ export default async function tomoriChat(
             // Apply emoji repetition penalty if bot has been using too many emojis
             const emojiPenaltyDirective = getEmojiPenaltyDirective(
               contextSegments,
-              tomoriState?.tomori_nickname ??
-                process.env.DEFAULT_BOTNAME ??
-                "Tomori",
+              isUserImpersonation
+                ? null
+                : (tomoriState?.tomori_nickname ??
+                    process.env.DEFAULT_BOTNAME ??
+                    "Tomori"),
             );
             if (emojiPenaltyDirective) {
               tailDirectives.push(emojiPenaltyDirective);
@@ -6235,9 +6237,11 @@ export default async function tomoriChat(
                       // Apply emoji repetition penalty after rebuilding context
                       const emojiPenaltyDirective = getEmojiPenaltyDirective(
                         contextSegments,
-                        tomoriState?.tomori_nickname ??
-                          process.env.DEFAULT_BOTNAME ??
-                          "Tomori",
+                        isUserImpersonation
+                          ? null
+                          : (tomoriState?.tomori_nickname ??
+                              process.env.DEFAULT_BOTNAME ??
+                              "Tomori"),
                       );
                       if (emojiPenaltyDirective) {
                         tailDirectives.push(emojiPenaltyDirective);
