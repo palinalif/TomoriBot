@@ -1184,8 +1184,8 @@ export function replaceMentionHandles(
  * @returns Cleaned text suitable for Discord messages
  */
 export function cleanLLMOutput(
-  text: string,
-  botName?: string,
+	text: string,
+	botName?: string,
   emojiStrings?: string[],
   emojiUsageEnabled = true, // New parameter, defaults to true
   mentionMap?: Map<string, string[]>,
@@ -1361,13 +1361,59 @@ export function cleanLLMOutput(
   // 4.5. Convert @{name} handles into mentions when resolvable
   cleanedText = replaceMentionHandles(cleanedText, mentionMap, mentionIdSet);
 
-  // 5. Remove trailing speaker indicator
-  return cleanedText.replace(/\n([^:]+):$/, "");
+	// 5. Remove trailing speaker indicator
+	return cleanedText.replace(/\n([^:]+):$/, "");
+}
+
+export function truncateBeforeRegisteredSpeakerLine(
+	text: string,
+	registeredSpeakerNamesLower?: ReadonlySet<string>,
+): {
+	text: string;
+	stopTriggered: boolean;
+	matchedSpeaker?: string;
+} {
+	if (!text || !registeredSpeakerNamesLower || registeredSpeakerNamesLower.size === 0) {
+		return {
+			text,
+			stopTriggered: false,
+		};
+	}
+
+	const speakerLinePattern = /(^|\n+)\s*([^\n:]{1,64}):\s*/g;
+	let match: RegExpExecArray | null = null;
+
+	while (true) {
+		match = speakerLinePattern.exec(text);
+		if (match === null) {
+			break;
+		}
+
+		const rawLabel = match[2]?.trim();
+		if (!rawLabel) {
+			continue;
+		}
+
+		if (!registeredSpeakerNamesLower.has(rawLabel.toLowerCase())) {
+			continue;
+		}
+
+		return {
+			text: text.slice(0, match.index),
+			stopTriggered: true,
+			matchedSpeaker: rawLabel,
+		};
+	}
+
+	return {
+		text,
+		stopTriggered: false,
+	};
 }
 
 /** Helper to escape special RegExp characters in a string */
 export function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

@@ -33,11 +33,12 @@ import {
   invalidateWebhookCache,
 } from "./webhookManager";
 import {
-  chunkMessage,
-  cleanLLMOutput,
-  humanizeString,
-  replaceMentionHandles,
-  createSentenceSplitRegex,
+	chunkMessage,
+	cleanLLMOutput,
+	humanizeString,
+	replaceMentionHandles,
+	createSentenceSplitRegex,
+	truncateBeforeRegisteredSpeakerLine,
 } from "../text/stringHelper";
 import { filterDuplicateCustomEmojis } from "../text/emojiPenalty";
 
@@ -297,8 +298,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           const stopRequest = StreamOrchestrator.activeStopRequests.get(
             context.channel.id,
           );
-          const isFlushLimitStop =
-            stopRequest?.requesterId === "system" && !stopRequest?.stopContext;
+					const shouldSkipBufferFlush =
+						(stopRequest?.requesterId === "flush_limit" ||
+							stopRequest?.requesterId === "speaker_guard") &&
+						!stopRequest?.stopContext;
 
           // 2. Clear the stop request
           StreamOrchestrator.clearStopRequest(context.channel.id);
@@ -306,18 +309,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           // 3. Only flush buffer if this is NOT a flush limit stop
           // Flush limit stops shouldn't try to send more messages as they'd just hit the limit again
           // This prevents the duplicate "Response Length Limit Reached" embed
-          if (state.buffer.length > 0 && !isFlushLimitStop) {
-            await this.flushPendingBuffer(
-              state,
-              this.createTextProcessingConfig(config, context),
-              createTypingSimulationConfig(config.humanizerDegree),
-              context,
-            );
-          } else if (isFlushLimitStop) {
-            log.info(
-              "Stream: Skipping buffer flush due to flush limit stop to prevent duplicate embed",
-            );
-          }
+					if (state.buffer.length > 0 && !shouldSkipBufferFlush) {
+						await this.flushPendingBuffer(
+							state,
+							this.createTextProcessingConfig(config, context),
+							createTypingSimulationConfig(config.humanizerDegree),
+							context,
+						);
+					} else if (shouldSkipBufferFlush) {
+						log.info(
+							"Stream: Skipping buffer flush due to internal no-flush stop",
+						);
+					}
 
           return { status: "stopped_by_user" };
         }
@@ -384,10 +387,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         };
       }
 
-      await this.flushFinalBuffer(state, textConfig, typingConfig, context);
+			await this.flushFinalBuffer(state, textConfig, typingConfig, context);
 
-      // Complete metrics and return success with message count for empty response detection
-      metrics.endTime = Date.now();
+			if (
+				StreamOrchestrator.activeStopRequests.get(context.channel.id)?.requesterId ===
+				"speaker_guard"
+			) {
+				StreamOrchestrator.clearStopRequest(context.channel.id);
+			}
+
+			// Complete metrics and return success with message count for empty response detection
+			metrics.endTime = Date.now();
 
       // Don't clear stop request here - let the finally block handle it after lock release
 
@@ -461,15 +471,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             log.info(
               `Stream: Flushing ${state.buffer.length} chars of buffered text before error handling`,
             );
-            await this.flushPendingBuffer(
-              state,
-              textConfig,
-              typingConfig,
-              context,
-            );
-          }
-          if (!context.suppressUserErrors) {
-            await this.handleProviderError(chunk.error, _provider, context);
+					await this.flushPendingBuffer(
+						state,
+						textConfig,
+						typingConfig,
+						context,
+					);
+					if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+						return { status: "stopped_by_user" };
+					}
+				}
+				if (!context.suppressUserErrors) {
+					await this.handleProviderError(chunk.error, _provider, context);
           } else {
             log.warn(
               "Stream: Suppressing provider error embed due to retryable failure",
@@ -484,16 +497,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         if (chunk.functionCall) {
           // Flush any pending buffer before function call
           if (state.buffer.length > 0) {
-            await this.flushPendingBuffer(
-              state,
-              textConfig,
-              typingConfig,
-              context,
-              true,
-            );
-          }
-          return {
-            status: "function_call",
+					await this.flushPendingBuffer(
+						state,
+						textConfig,
+						typingConfig,
+						context,
+						true,
+					);
+					if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+						return { status: "stopped_by_user" };
+					}
+				}
+				return {
+					status: "function_call",
             data: chunk.functionCall,
             accumulatedText: state.accumulatedText,
           };
@@ -582,18 +598,21 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       processedSomething = false;
       const processingResult = this.processBufferContent(state, config);
 
-      if (processingResult.shouldFlush && processingResult.segmentToFlush) {
-        await this.sendBufferSegment(
-          processingResult.segmentToFlush,
-          textConfig,
+			if (processingResult.shouldFlush && processingResult.segmentToFlush) {
+				await this.sendBufferSegment(
+					processingResult.segmentToFlush,
+					textConfig,
           typingConfig,
           context,
           state,
-        );
+				);
 
-        state.buffer = processingResult.updatedBuffer;
-        processedSomething = true;
-      }
+				state.buffer = processingResult.updatedBuffer;
+				if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+					return;
+				}
+				processedSomething = true;
+			}
 
       // Update code block state regardless of whether we flushed or not
       // This ensures we properly track when we enter/exit code blocks
@@ -625,16 +644,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         `Stream Seg: Flushing oversized regular buffer at safe breakpoint (total: ${state.buffer.length}, flush: ${segmentToFlush.length}, retain: ${updatedBuffer.length})`,
       );
 
-      await this.sendBufferSegment(
-        segmentToFlush,
-        textConfig,
-        typingConfig,
-        context,
-        state,
-      );
-      state.buffer = updatedBuffer;
-    }
-  }
+			await this.sendBufferSegment(
+				segmentToFlush,
+				textConfig,
+				typingConfig,
+				context,
+				state,
+			);
+			state.buffer = updatedBuffer;
+			if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+				return;
+			}
+		}
+	}
 
   private deduplicateIncomingTextChunk(
     textContent: string,
@@ -1154,24 +1176,46 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     let segmentToSend = prefixedSegment;
     const injectedPrefillThisSegment =
       !wasPrefillInjected && state.prefillInjected;
-    if (
-      injectedPrefillThisSegment &&
-      state.prefillTarget &&
-      /^\s+/.test(strippedSegment)
-    ) {
-      segmentToSend = `${state.prefillTarget}${StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL}${strippedSegment}`;
-    }
-    if (!segmentToSend.trim()) return;
+		if (
+			injectedPrefillThisSegment &&
+			state.prefillTarget &&
+			/^\s+/.test(strippedSegment)
+		) {
+			segmentToSend = `${state.prefillTarget}${StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL}${strippedSegment}`;
+		}
+		let shouldStopForSpeakerGuard = false;
+		const speakerGuardResult = truncateBeforeRegisteredSpeakerLine(
+			segmentToSend,
+			textConfig.registeredSpeakerNamesLower,
+		);
+		if (speakerGuardResult.stopTriggered) {
+			log.warn(
+				`Stream speaker guard: stopping before registered speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
+			);
+			segmentToSend = speakerGuardResult.text;
+			shouldStopForSpeakerGuard = true;
+		}
 
-    // Send the processed segment
-    await this.sendSegment(
-      segmentToSend,
-      textConfig,
+		if (!segmentToSend.trim()) {
+			if (shouldStopForSpeakerGuard) {
+				StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
+			}
+			return;
+		}
+
+		// Send the processed segment
+		await this.sendSegment(
+			segmentToSend,
+			textConfig,
       typingConfig,
-      context,
-      state,
-    );
-  }
+			context,
+			state,
+		);
+
+		if (shouldStopForSpeakerGuard) {
+			StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
+		}
+	}
 
   private async sendOutputPrefillIfNeeded(
     context: StreamContext,
@@ -1609,9 +1653,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       });
 
       // Request graceful stop
-      StreamOrchestrator.requestStop(context.channel.id, "system");
-      return;
-    }
+			StreamOrchestrator.requestStop(context.channel.id, "flush_limit");
+			return;
+		}
 
     try {
       const threadId = resolveWebhookThreadId(context.channel);
@@ -2226,38 +2270,92 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   /**
    * Create text processing configuration from stream config and context
    */
-  private createTextProcessingConfig(
-    config: StreamConfig,
-    context: StreamContext,
-  ): TextProcessingConfig {
-    const { mentionMap, mentionIdSet } = this.buildMentionLookup(
-      context.contextItems,
-    );
-    this.applyForcedMentions(mentionMap, mentionIdSet, context.forcedMentions);
+	private createTextProcessingConfig(
+		config: StreamConfig,
+		context: StreamContext,
+	): TextProcessingConfig {
+		const { mentionMap, mentionIdSet } = this.buildMentionLookup(
+			context.contextItems,
+		);
+		this.applyForcedMentions(mentionMap, mentionIdSet, context.forcedMentions);
+		const botName =
+			context.prefixStrippingName ??
+			context.personaUsername ??
+			context.tomoriState.tomori_nickname;
 
-    return {
-      humanizerDegree: config.humanizerDegree,
-      emojiUsageEnabled: config.emojiUsageEnabled,
-      emojiStrings: context.emojiStrings || [],
-      mentionMap,
-      mentionIdSet,
-      // Use prefixStrippingName for prefix stripping if provided (e.g., database nickname for user impersonation)
-      // Falls back to personaUsername (webhook display name), then bot's nickname
-      botName:
-        context.prefixStrippingName ??
-        context.personaUsername ??
-        context.tomoriState.tomori_nickname,
-      maxMessageLength: config.maxMessageLength,
-      uncensorUnicodeSpacesEnabled:
-        context.tomoriState.config.uncensor_unicode_space_enabled ?? false,
+		return {
+			humanizerDegree: config.humanizerDegree,
+			emojiUsageEnabled: config.emojiUsageEnabled,
+			emojiStrings: context.emojiStrings || [],
+			mentionMap,
+			mentionIdSet,
+			// Use prefixStrippingName for prefix stripping if provided (e.g., database nickname for user impersonation)
+			// Falls back to personaUsername (webhook display name), then bot's nickname
+			botName,
+			registeredSpeakerNamesLower: this.collectRegisteredSpeakerNames(
+				context.contextItems,
+				botName,
+			),
+			maxMessageLength: config.maxMessageLength,
+			uncensorUnicodeSpacesEnabled:
+				context.tomoriState.config.uncensor_unicode_space_enabled ?? false,
       uncensorSanitizeEnabled:
         context.tomoriState.config.uncensor_sanitize_enabled ?? false,
-    };
-  }
+		};
+	}
 
-  private applyForcedMentions(
-    mentionMap: Map<string, string[]>,
-    mentionIdSet: Set<string>,
+	private collectRegisteredSpeakerNames(
+		contextItems: StructuredContextItem[],
+		activeSpeakerName?: string,
+	): Set<string> {
+		const registeredSpeakerNamesLower = new Set<string>();
+		const activeSpeakerNameLower = activeSpeakerName?.trim().toLowerCase();
+
+		for (const item of contextItems) {
+			if (item.role !== "user" && item.role !== "model") {
+				continue;
+			}
+
+			for (const part of item.parts) {
+				if (part.type !== "text") {
+					continue;
+				}
+
+				const lines = part.text.split("\n");
+				for (const line of lines) {
+					const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
+					if (!match?.[1]) {
+						continue;
+					}
+
+					const rawName = match[1].trim();
+					if (!rawName) {
+						continue;
+					}
+
+					if (rawName.startsWith("[") || rawName.startsWith("<")) {
+						continue;
+					}
+
+					const normalizedName = rawName.toLowerCase();
+					if (
+						activeSpeakerNameLower &&
+						normalizedName === activeSpeakerNameLower
+					) {
+						continue;
+					}
+
+					registeredSpeakerNamesLower.add(normalizedName);
+				}
+			}
+		}
+
+		return registeredSpeakerNamesLower;
+	}
+
+	private applyForcedMentions(
+		mentionMap: Map<string, string[]>,
+		mentionIdSet: Set<string>,
     forcedMentions?: Array<{ handle: string; userId: string }>,
   ): void {
     if (!forcedMentions || forcedMentions.length === 0) return;

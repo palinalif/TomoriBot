@@ -22,7 +22,9 @@ import {
   joinMatrixRoom,
   isRoomEncrypted,
   invalidateMatrixLinkCache,
+  sendMatrixLinkedSetupNotice,
 } from "@/utils/matrix";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
@@ -194,6 +196,10 @@ export async function execute(
     // 14. Reply success (with note if join failed)
     const botUserId =
       process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
+    const helpMatrixMention = commandRegistry.getCommandMention(
+      "help",
+      "matrix",
+    );
 
     if (joinFailed) {
       await replyInfoEmbed(interaction, locale, {
@@ -204,6 +210,7 @@ export async function execute(
           channel_id: channel.id,
           room_id: roomId,
           bot_user_id: botUserId,
+          help_matrix: helpMatrixMention,
         },
       });
     } else {
@@ -214,8 +221,22 @@ export async function execute(
         descriptionVars: {
           channel_id: channel.id,
           room_id: roomId,
+          help_matrix: helpMatrixMention,
         },
       });
+    }
+
+    if (!joinFailed && oldRoomId !== roomId) {
+      const channelName = channel.name ?? channel.id;
+
+      void sendMatrixLinkedSetupNotice(roomId, locale, channelName).catch(
+        (noticeError) => {
+          log.warn(
+            `Matrix link: failed to post onboarding notice to room ${roomId}`,
+            noticeError,
+          );
+        },
+      );
     }
 
     log.info(

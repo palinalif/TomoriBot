@@ -21,4 +21,6 @@ export {
   sendMatrixTypingIndicator,
   resolveBridgeUserId,
   sendMatrixReminderMention,
+  sendMatrixInviteSetupNotice,
+  sendMatrixLinkedSetupNotice,
 } from "./matrixManager";

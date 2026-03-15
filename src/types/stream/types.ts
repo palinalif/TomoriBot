@@ -66,15 +66,16 @@ export interface ProcessedSegment {
  * Configuration for text processing and humanization
  */
 export interface TextProcessingConfig {
-  humanizerDegree: HumanizerDegree;
-  emojiUsageEnabled: boolean;
-  emojiStrings: string[];
-  mentionMap?: Map<string, string[]>;
-  mentionIdSet?: Set<string>;
-  botName: string;
-  maxMessageLength: number;
-  uncensorUnicodeSpacesEnabled?: boolean;
-  uncensorSanitizeEnabled?: boolean;
+	humanizerDegree: HumanizerDegree;
+	emojiUsageEnabled: boolean;
+	emojiStrings: string[];
+	mentionMap?: Map<string, string[]>;
+	mentionIdSet?: Set<string>;
+	botName: string;
+	registeredSpeakerNamesLower: Set<string>;
+	maxMessageLength: number;
+	uncensorUnicodeSpacesEnabled?: boolean;
+	uncensorSanitizeEnabled?: boolean;
 }
 
 /**

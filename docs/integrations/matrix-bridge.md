@@ -37,6 +37,7 @@ TomoriBot includes a built-in [Matrix](https://matrix.org/) appservice bridge th
 
 - Messages from Matrix users are relayed into Discord via webhook, where TomoriBot reads and responds to them normally.
 - TomoriBot's AI responses are relayed back to the Matrix room, appearing under the persona's own Matrix virtual user identity (e.g., `@_tomori_lilya:yourdomain.com`).
+- The room receives short onboarding notices when the bot is invited and when the bridge is linked, so Matrix-side users see the remaining setup steps and current limitations in-context.
 
 The bridge is entirely optional — if Matrix credentials are not configured, TomoriBot starts normally with no Matrix functionality.
 
@@ -84,7 +85,9 @@ Remaining degraded features are listed in the table above. Current parity work f
 
 Setting up the bridge requires **two steps**:
 1. Invite `@tomoribot:yourdomain.com` to a Matrix room.
+   - TomoriBot auto-accepts the invite and posts a short setup hint in the Matrix room telling users to finish the link from Discord, where to find the Internal Room ID, and that the room must stay unencrypted.
 2. Run `/server matrix link` in the Discord channel to link them.
+   - On a successful link, TomoriBot posts a second Matrix-side onboarding note summarizing the usable Matrix commands (`/kill`, `/refresh`) and the main Matrix-specific limitations.
 
 That's it. The homeserver infrastructure is invisible to server admins — the same way Discord server admins don't think about Discord's servers when they add a bot.
 

@@ -26,17 +26,20 @@ For each incoming provider text chunk:
 1. Raw text is appended to stream buffer.
 2. `processBufferContent(...)` decides whether to flush part of buffer now.
 3. If a segment is flushed, `sendBufferSegment(...)` runs text preprocessing.
-4. `sendSegment(...)` chunks the segment into Discord-sized messages.
-5. Chunks are optionally humanized (D3) and sent.
+4. Registered-speaker guard truncates any known non-active `Name:` line before send.
+5. `sendSegment(...)` chunks the segment into Discord-sized messages.
+6. Chunks are optionally humanized (D3) and sent.
 
 Execution order for a flushed segment:
 
 1. `filterDuplicateCustomEmojis(...)` (pre-conversion, `:name:` form)
 2. `cleanLLMOutput(...)` (emoji normalization/conversion + text cleanup)
 3. `resolveGuildMentions(...)`
-4. `chunkMessage(...)`
-5. `humanizeString(...)` only when degree is `HEAVY` (3)
-6. Send each final chunk to Discord
+4. Prefix stripping / output prefill handling
+5. Registered-speaker guard truncation for known non-active `Name:` lines
+6. `chunkMessage(...)`
+7. `humanizeString(...)` only when degree is `HEAVY` (3)
+8. Send each final chunk to Discord
 
 ## Buffer Flush Triggers
 
@@ -53,6 +56,7 @@ Additional guards:
 - No flush on newline if newline is the current last buffered char (wait for more text).
 - If sentence punctuation immediately follows newline, punctuation is carried into same flush.
   - Carried punctuation excludes `:` intentionally to avoid splitting `:emoji:` tokens.
+- Immediately before send, the orchestrator truncates at any registered non-active speaker line (`Name:`) and requests a graceful stop so later flushes cannot leak that turn.
 
 ## Semantic Marker Protection
 

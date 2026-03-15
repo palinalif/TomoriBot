@@ -338,6 +338,72 @@ export function isMatrixConfigured(): boolean {
 }
 
 /**
+ * Send a non-chat informational notice to a Matrix room as the bot account.
+ * Used for bridge onboarding messages so they do not appear as persona chat.
+ *
+ * @param roomId - The Matrix room ID to send the notice to
+ * @param text   - Plain-text notice body
+ */
+async function sendMatrixNotice(roomId: string, text: string): Promise<void> {
+  if (!matrixBridge) return;
+
+  try {
+    const botIntent = matrixBridge.getIntent();
+    await botIntent.sendMessage(roomId, {
+      msgtype: "m.notice",
+      body: text,
+    });
+  } catch (error) {
+    log.warn(`Matrix bridge: failed to send notice to room ${roomId}`, error);
+  }
+}
+
+/**
+ * Send the initial setup hint after the bot auto-accepts a room invite.
+ * Uses en-US because there is no linked Discord server locale yet.
+ *
+ * @param roomId - The invited Matrix room ID
+ */
+export async function sendMatrixInviteSetupNotice(
+  roomId: string,
+): Promise<void> {
+  await sendMatrixNotice(
+    roomId,
+    localizer("en-US", "matrix.notices.invited", {
+      link_command: "/server matrix link",
+      help_command: "/help matrix",
+      room_id_path: "Room Settings -> Advanced -> Internal Room ID",
+      kill_command: "/kill",
+      refresh_command: "/refresh",
+    }),
+  );
+}
+
+/**
+ * Send a post-link onboarding notice in the Matrix room describing what to do
+ * next and the current Matrix-specific limitations.
+ *
+ * @param roomId      - The linked Matrix room ID
+ * @param locale      - Locale of the Discord admin who linked the room
+ * @param channelName - Name of the Discord channel linked to the room
+ */
+export async function sendMatrixLinkedSetupNotice(
+  roomId: string,
+  locale: string,
+  channelName: string,
+): Promise<void> {
+  await sendMatrixNotice(
+    roomId,
+    localizer(locale, "matrix.notices.linked", {
+      channel_name: `#${channelName}`,
+      help_command: "/help matrix",
+      kill_command: "/kill",
+      refresh_command: "/refresh",
+    }),
+  );
+}
+
+/**
  * Timeout in milliseconds for the Matrix typing indicator.
  * The homeserver automatically clears the typing state after this duration,
  * so no explicit stop call is needed for normal response times.
@@ -1292,6 +1358,7 @@ async function handleMatrixEvent(
       if (!botIntent) return;
       await botIntent.join(event.room_id, getJoinViaServers(event.room_id));
       log.info(`Matrix bridge: auto-accepted invite to ${event.room_id}`);
+      await sendMatrixInviteSetupNotice(event.room_id);
     } catch (err) {
       const safeMsg = err instanceof Error ? err.message : String(err);
       log.warn(

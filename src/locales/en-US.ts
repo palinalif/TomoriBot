@@ -1352,6 +1352,40 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 Setting up TomoriBot means that you and your server members agree to its \`/legal terms\` and \`/legal privacy\` notices`,
       },
 
+      // /help matrix
+      matrix: {
+        description: `Learn how to set up and use the Matrix bridge`,
+        title: `Matrix Bridge Guide`,
+        embed_description: `How to link a Matrix room to a Discord channel, and what currently works from Matrix.`,
+        bot_user_fallback: `the configured Matrix bot account`,
+        setup_title: `Setup`,
+        setup_description: `1. Invite {botUserId} to an unencrypted Matrix room.
+2. Copy that room's Internal Room ID.
+3. Run {serverMatrixLink} in the Discord channel you want to bridge and paste the room ID there.`,
+        room_id_title: `Finding the Room ID`,
+        room_id_description: `In most Matrix clients, open Room Settings -> Advanced -> Internal Room ID.
+The ID looks like \`!abc:matrix.org\`.
+
+After the bot accepts an invite, it now posts a short reminder in the Matrix room, but you still need to finish the link from Discord with {serverMatrixLink}.`,
+        usage_title: `Using It From Matrix`,
+        usage_description: `- Talk in Matrix normally after the room is linked
+- Matrix messages relay into the linked Discord channel as webhook messages
+- TomoriBot replies back into the Matrix room
+- The only Matrix text commands are /kill and /refresh`,
+        limitations_title: `Current Limitations`,
+        limitations_description: `- No slash commands from Matrix
+- No DMs / DM-based cooldown reminders
+- Matrix user profile pictures are not visible to TomoriBot
+- Cannot pin messages
+- Custom emojis and Markdown do not render reliably
+- Embeds relay as plain text
+- Personal memories for Matrix users fall back to attributed server memories`,
+        troubleshooting_title: `Important Notes`,
+        troubleshooting_description: `- If the bot does not auto-join, invite {botUserId} manually and rerun {serverMatrixLink} if needed
+- Matrix encryption cannot be disabled later, so encrypted rooms must be replaced with a fresh unencrypted room
+- If a limitation is not listed above, assume it should work and report bugs in {supportServer}`,
+      },
+
       // /help data
       data: {
         description: `Learn about data management and privacy`,
@@ -2955,10 +2989,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           channel_description: `The Discord channel to link`,
           room_description: `The Matrix room ID to link (e.g., !abc:matrix.org)`,
           success_title: `Matrix Room Linked`,
-          success_description: `<#{channel_id}> is now bridged to \`{room_id}\`. Messages from TomoriBot will appear in the Matrix room, and Matrix messages will appear here.`,
+          success_description: `<#{channel_id}> is now bridged to \`{room_id}\`. Messages from TomoriBot will appear in the Matrix room, and Matrix messages will appear here.
+
+Use {help_matrix} for setup steps, Matrix-only command notes, and the current limitation list.`,
           invalid_room_title: `Invalid Room ID`,
           invalid_room_description: `The Matrix room ID must start with \`!\` and contain a \`:\` (e.g., \`!abc:matrix.org\`). Please check the room ID and try again.`,
-          join_failed_description: `<#{channel_id}> has been linked to \`{room_id}\`, but I couldn't join the Matrix room automatically. Please invite \`{bot_user_id}\` to the room manually.`,
+          join_failed_description: `<#{channel_id}> has been linked to \`{room_id}\`, but I couldn't join the Matrix room automatically. Please invite \`{bot_user_id}\` to the room manually, then use {help_matrix} if you need the setup steps and limitation list.`,
           encrypted_room_title: `Cannot Link Encrypted Room`,
           encrypted_room_description: `\`{room_id}\` has end-to-end encryption enabled. Matrix encryption cannot be disabled once set, so this room cannot be used for bridging. Please create a new Matrix room **without** encryption and invite \`{bot_user_id}\` to it instead.`,
           matrix_not_configured_title: `Matrix Bridge Not Available`,
@@ -3595,6 +3631,30 @@ You can change this anytime using \`/personal privacy\`.`,
       reminder_set: `[⏰ {description}]`,
       task_set: `[✅ {description}]`,
       recurring_task_set: `[🔁 {description}]`,
+    },
+    notices: {
+      invited: `TomoriBot joined this room.
+
+To finish setup:
+1. In Discord, run {link_command} in the channel you want to bridge.
+2. Paste this room's Internal Room ID from {room_id_path}.
+
+Important:
+- This room must stay unencrypted.
+- Once linked, you can talk here normally.
+- The only Matrix text commands are {kill_command} and {refresh_command}.
+
+Use {help_command} in Discord for the full guide and limitation list.`,
+      linked: `This room is now bridged to the Discord channel {channel_name}.
+
+Quick tips:
+- Chat here normally to talk to TomoriBot.
+- The only Matrix text commands are {kill_command} and {refresh_command}.
+- Slash commands, DMs, and pinning are not available from Matrix.
+- Custom emojis/Markdown do not render reliably, and embeds relay as plain text.
+- Personal memories for Matrix users fall back to server memories.
+
+Use {help_command} in Discord for the full guide and current limitations.`,
     },
   },
 };
