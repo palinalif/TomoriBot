@@ -1,5 +1,5 @@
 /**
- * /config novelaiapi delete
+ * /optionalkey novelai remove
  * Removes the stored NovelAI API key for this server and clears the exclusive image gen flag.
  */
 
@@ -25,7 +25,7 @@ import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
 import { updateTomoriConfig } from "../../../utils/db/dbWrite";
 
 /**
- * Configure the subcommand for deleting NovelAI API key
+ * Configure the subcommand for removing NovelAI API key
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
@@ -33,9 +33,9 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("delete")
+		.setName("remove")
 		.setDescription(
-			localizer("en-US", "commands.config.novelaiapi.delete.description"),
+			localizer("en-US", "commands.optionalkey.novelai.remove.description"),
 		);
 
 /**
@@ -85,9 +85,9 @@ export async function execute(
 		const hasKey = await hasOptApiKey(tomoriState.server_id, "novelai");
 		if (!hasKey) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.novelaiapi.delete.no_key_title",
+				titleKey: "commands.optionalkey.novelai.remove.no_key_title",
 				descriptionKey:
-					"commands.config.novelaiapi.delete.no_key_description",
+					"commands.optionalkey.novelai.remove.no_key_description",
 				color: ColorCode.WARN,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -107,7 +107,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config novelaiapi delete",
+					command: "optionalkey novelai remove",
 					guildId: interaction.guild?.id ?? interaction.user.id,
 					serviceName: "novelai",
 				},
@@ -136,9 +136,9 @@ export async function execute(
 
 		// 8. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.novelaiapi.delete.success_title",
+			titleKey: "commands.optionalkey.novelai.remove.success_title",
 			descriptionKey:
-				"commands.config.novelaiapi.delete.success_description",
+				"commands.optionalkey.novelai.remove.success_description",
 			color: ColorCode.SUCCESS,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -149,14 +149,14 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config novelaiapi delete",
+				command: "optionalkey novelai remove",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				serviceName: "novelai",
 			},
 		};
 		await log.error(
-			`Error executing /config novelaiapi delete for user ${userData.user_disc_id}`,
+			`Error executing /optionalkey novelai remove for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);

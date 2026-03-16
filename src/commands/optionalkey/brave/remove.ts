@@ -19,7 +19,7 @@ import type {
 import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
 
 /**
- * Configure the subcommand for deleting Brave Search API key
+ * Configure the subcommand for removing Brave Search API key
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
@@ -27,9 +27,9 @@ export const configureSubcommand = (
   subcommand: SlashCommandSubcommandBuilder,
 ) =>
   subcommand
-    .setName("delete")
+    .setName("remove")
     .setDescription(
-      localizer("en-US", "commands.config.braveapi.delete.description"),
+      localizer("en-US", "commands.optionalkey.brave.remove.description"),
     );
 
 /**
@@ -79,8 +79,8 @@ export async function execute(
     const hasKey = await hasOptApiKey(tomoriState.server_id, "brave-search");
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.braveapi.delete.no_key_title",
-        descriptionKey: "commands.config.braveapi.delete.no_key_description",
+        titleKey: "commands.optionalkey.brave.remove.no_key_title",
+        descriptionKey: "commands.optionalkey.brave.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -100,7 +100,7 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config braveapidelete",
+          command: "optionalkey brave remove",
           guildId: interaction.guild?.id ?? interaction.user.id,
           serviceName: "brave-search",
         },
@@ -124,8 +124,8 @@ export async function execute(
 
     // 7. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.braveapi.delete.success_title",
-      descriptionKey: "commands.config.braveapi.delete.success_description",
+      titleKey: "commands.optionalkey.brave.remove.success_title",
+      descriptionKey: "commands.optionalkey.brave.remove.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -137,14 +137,14 @@ export async function execute(
       tomoriId: tomoriState?.tomori_id ?? null,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config braveapidelete",
+        command: "optionalkey brave remove",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
         serviceName: "brave-search",
       },
     };
     await log.error(
-      `Error executing /config braveapidelete for user ${userData.user_disc_id}`,
+      `Error executing /optionalkey brave remove for user ${userData.user_disc_id}`,
       error as Error,
       context,
     );

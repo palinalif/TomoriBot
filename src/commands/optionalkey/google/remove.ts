@@ -1,5 +1,5 @@
 /**
- * /config googleapi delete
+ * /optionalkey google remove
  * Removes the stored Google API key for this server.
  */
 
@@ -24,7 +24,7 @@ import type {
 import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
 
 /**
- * Configure the subcommand for deleting Google API key
+ * Configure the subcommand for removing Google API key
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
@@ -32,9 +32,9 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("delete")
+		.setName("remove")
 		.setDescription(
-			localizer("en-US", "commands.config.googleapi.delete.description"),
+			localizer("en-US", "commands.optionalkey.google.remove.description"),
 		);
 
 /**
@@ -84,9 +84,9 @@ export async function execute(
 		const hasKey = await hasOptApiKey(tomoriState.server_id, "google");
 		if (!hasKey) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.googleapi.delete.no_key_title",
+				titleKey: "commands.optionalkey.google.remove.no_key_title",
 				descriptionKey:
-					"commands.config.googleapi.delete.no_key_description",
+					"commands.optionalkey.google.remove.no_key_description",
 				color: ColorCode.WARN,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -103,7 +103,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config googleapi delete",
+					command: "optionalkey google remove",
 					guildId: interaction.guild?.id ?? interaction.user.id,
 					serviceName: "google",
 				},
@@ -127,9 +127,9 @@ export async function execute(
 
 		// 7. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.googleapi.delete.success_title",
+			titleKey: "commands.optionalkey.google.remove.success_title",
 			descriptionKey:
-				"commands.config.googleapi.delete.success_description",
+				"commands.optionalkey.google.remove.success_description",
 			color: ColorCode.SUCCESS,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -140,14 +140,14 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config googleapi delete",
+				command: "optionalkey google remove",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				serviceName: "google",
 			},
 		};
 		await log.error(
-			`Error executing /config googleapi delete for user ${userData.user_disc_id}`,
+			`Error executing /optionalkey google remove for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);

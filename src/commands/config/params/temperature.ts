@@ -21,7 +21,7 @@ import { sql } from "@/utils/db/client";
 // Define constants at the top (Rule #20)
 const TEMPERATURE_MIN = 1.0;
 const TEMPERATURE_MAX = 2.0;
-const TEMPERATURE_DEFAULT = 1.5;
+const TEMPERATURE_DEFAULT = 1.2;
 
 // Configure the subcommand
 export const configureSubcommand = (

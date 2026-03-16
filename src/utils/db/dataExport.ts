@@ -203,7 +203,7 @@ export async function exportServerData(
     const configRows = await sql`
 			SELECT
 				COALESCE(tc_server.llm_temperature, tc_legacy.llm_temperature) as llm_temperature,
-				COALESCE(tc_server.llm_top_p, tc_legacy.llm_top_p, 1.0) as llm_top_p,
+				COALESCE(tc_server.llm_top_p, tc_legacy.llm_top_p, 0.95) as llm_top_p,
 				COALESCE(tc_server.llm_top_k, tc_legacy.llm_top_k, 0) as llm_top_k,
 				COALESCE(tc_server.llm_frequency_penalty, tc_legacy.llm_frequency_penalty, 0.0) as llm_frequency_penalty,
 				COALESCE(tc_server.llm_presence_penalty, tc_legacy.llm_presence_penalty, 0.0) as llm_presence_penalty,

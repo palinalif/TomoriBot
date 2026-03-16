@@ -49,7 +49,7 @@ export type CommandCooldownMap = Map<string, number>;
 // Categories that are completely restricted to guilds only
 const GUILD_ONLY_CATEGORIES: string[] = ["server"];
 // Categories that require manage permissions in guild context
-const MANAGER_ONLY_CATEGORIES = ["config", "server"];
+const MANAGER_ONLY_CATEGORIES = ["config", "optionalkey", "server"];
 
 // Note: Individual subcommand restrictions are no longer needed.
 // Guild-only commands are now in the "server" category which is entirely guild-restricted.

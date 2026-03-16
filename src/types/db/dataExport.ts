@@ -89,7 +89,7 @@ export type PersonalExport = z.infer<
  */
 export const serverConfigExportSchema = z.object({
   llm_temperature: z.number().min(1.0).max(2.0),
-  llm_top_p: z.number().min(0.0).max(1.0).default(1.0),
+  llm_top_p: z.number().min(0.0).max(1.0).default(0.95),
   llm_top_k: z.number().int().min(0).max(40).default(0),
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0),
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0),

@@ -30,13 +30,13 @@ export const configureSubcommand = (
   subcommand
     .setName("set")
     .setDescription(
-      localizer("en-US", "commands.config.braveapi.set.description"),
+      localizer("en-US", "commands.optionalkey.brave.set.description"),
     )
     .addStringOption((option) =>
       option
         .setName("key")
         .setDescription(
-          localizer("en-US", "commands.config.braveapi.set.key_description"),
+          localizer("en-US", "commands.optionalkey.brave.set.key_description"),
         )
         .setRequired(true),
     );
@@ -78,8 +78,9 @@ export async function execute(
     // 3. Basic validation (no specific Brave API validation available)
     if (!apiKey || apiKey.length < 10) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.braveapi.set.invalid_key_title",
-        descriptionKey: "commands.config.braveapi.set.invalid_key_description",
+        titleKey: "commands.optionalkey.brave.set.invalid_key_title",
+        descriptionKey:
+          "commands.optionalkey.brave.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -113,9 +114,10 @@ export async function execute(
           `Brave API key validation failed for server ${tomoriState.server_id}`,
         );
         await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.config.braveapi.set.key_validation_failed_title",
+          titleKey:
+            "commands.optionalkey.brave.set.key_validation_failed_title",
           descriptionKey:
-            "commands.config.braveapi.set.key_validation_failed_description",
+            "commands.optionalkey.brave.set.key_validation_failed_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -126,9 +128,9 @@ export async function execute(
         `Brave API key validation error for server ${tomoriState.server_id}`,
       );
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.braveapi.set.key_validation_failed_title",
+        titleKey: "commands.optionalkey.brave.set.key_validation_failed_title",
         descriptionKey:
-          "commands.config.braveapi.set.key_validation_failed_description",
+          "commands.optionalkey.brave.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -148,7 +150,7 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config braveapiset",
+          command: "optionalkey brave set",
           guildId: interaction.guild?.id ?? interaction.user.id,
           serviceName: "brave-search",
         },
@@ -172,8 +174,8 @@ export async function execute(
 
     // 11. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.braveapi.set.success_title",
-      descriptionKey: "commands.config.braveapi.set.success_description",
+      titleKey: "commands.optionalkey.brave.set.success_title",
+      descriptionKey: "commands.optionalkey.brave.set.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -185,7 +187,7 @@ export async function execute(
       tomoriId: tomoriState?.tomori_id ?? null,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config braveapiset",
+        command: "optionalkey brave set",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
         serviceName: "brave-search",
@@ -193,7 +195,7 @@ export async function execute(
       },
     };
     await log.error(
-      `Error executing /config braveapiset for user ${userData.user_disc_id}`,
+      `Error executing /optionalkey brave set for user ${userData.user_disc_id}`,
       error as Error,
       context,
     );

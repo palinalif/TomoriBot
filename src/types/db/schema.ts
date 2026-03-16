@@ -165,8 +165,8 @@ export const tomoriConfigSchema = z.object({
   llm_id: z.number(),
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
   diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
-  llm_temperature: z.number().min(1.0).max(2.0).default(1.5),
-  llm_top_p: z.number().min(0.0).max(1.0).default(1.0), // Added February 2026 - Nucleus sampling (1.0=disabled)
+  llm_temperature: z.number().min(1.0).max(2.0).default(1.2),
+  llm_top_p: z.number().min(0.0).max(1.0).default(0.95), // Added February 2026 - Nucleus sampling
   llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)

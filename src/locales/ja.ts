@@ -98,13 +98,13 @@ export default {
       brave_api: {
         missing_key: {
           title: `Brave APIキーがありません`,
-          description: `検索を実行するにはBrave Search APIキーが必要ですが、このサーバーには設定されていません。\`サーバー管理\`権限を持つメンバーが\`/config braveapi set\`を使用して設定できます。`,
+          description: `検索を実行するにはBrave Search APIキーが必要ですが、このサーバーには設定されていません。\`サーバー管理\`権限を持つメンバーが\`/optionalkey brave set\`を使用して設定できます。`,
           footer: `/help apikeyで詳細を確認してください`,
         },
       },
       duckduckgo_rate_limit: {
         title: `DuckDuckGoがレート制限されています`,
-        description: `DuckDuckGo検索は現在レート制限されています。より信頼性の高い検索のために、\`サーバー管理\`権限を持つメンバーが\`/config braveapi set\`を使用してBrave Searchを設定できます。`,
+        description: `DuckDuckGo検索は現在レート制限されています。より信頼性の高い検索のために、\`サーバー管理\`権限を持つメンバーが\`/optionalkey brave set\`を使用してBrave Searchを設定できます。`,
         footer: `/help apikeyで詳細を確認してください`,
       },
       operation_failed_title: `操作に失敗しました`,
@@ -1215,7 +1215,7 @@ export default {
 - 共有された埋め込み（ツイート、記事など）の内容を見ることができます`,
         search_title: `検索＆情報 `,
         search_description: `- 最新情報をウェブ検索できます
-- 画像、動画、ニュース検索も可能です（\`/config braveapi set\`経由）
+- 画像、動画、ニュース検索も可能です（\`/optionalkey brave set\`経由）
 - URLからコンテンツを取得して読むことができます`,
         personality_title: `パーソナリティ＆カスタマイズ`,
         personality_description: `- \`/config rename\`と\`/server avatar\`で名前とアバターを変更できます
@@ -1987,74 +1987,6 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           no_keys_description: `削除するローテーションキーがありません。メインAPIキーのみが設定されています。`,
         },
       },
-      // Brave Search APIキー管理（サブコマンドグループ）
-      braveapi: {
-        description: `Brave Search APIキーを管理`,
-        set: {
-          description: `このサーバーのBrave Search APIキーを設定します。`,
-          key_description: `あなたのBrave Search APIキー。`,
-          invalid_key_title: `無効なAPIキー形式`,
-          invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なキーを提供してください。`,
-          validating_key: `Brave Search APIキーを検証中...`,
-          validation_error_title: `APIキーの検証エラー`,
-          validation_error_description: `Brave Search APIキーの検証中にエラーが発生しました。再度お試しいただくか、接続を確認してください。`,
-          key_validation_failed_title: `Brave APIキーの検証に失敗しました`,
-          key_validation_failed_description: `提供されたBrave Search APIキーは無効です。キーを確認してもう一度お試しください。`,
-          success_title: `Brave APIキーが設定されました`,
-          success_description: `Brave Search APIキーが正常に検証、暗号化、保存されました。`,
-        },
-        delete: {
-          description: `現在設定されているBrave Search APIキーを削除します。`,
-          no_key_title: `Brave APIキーが設定されていません`,
-          no_key_description: `現在削除するBrave Search APIキーが設定されていません。`,
-          success_title: `Brave APIキーが削除されました`,
-          success_description: `Brave Search APIキーが正常に削除されました。`,
-        },
-      },
-      // Google APIキー管理（サブコマンドグループ）
-      googleapi: {
-        description: `補助Google APIキーを管理（画像インペインティング用）`,
-        set: {
-          description: `画像セグメンテーション用Google APIキー。Googleがメインプロバイダーの場合は不要。`,
-          key_description: `あなたのGoogle APIキー。`,
-          invalid_key_title: `無効なAPIキー形式`,
-          invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なGoogle APIキーを提供してください。`,
-          key_validation_failed_title: `Google APIキーの検証に失敗しました`,
-          key_validation_failed_description: `提供されたGoogle APIキーは無効です。キーを確認してもう一度お試しください。`,
-          success_title: `Google APIキーが設定されました`,
-          success_description: `Google APIキーが正常に検証、暗号化、保存されました。AIの画像セグメンテーション（インペインティング）に使用されます。メインプロバイダーがすでにGoogleの場合、このキーがセグメンテーションで優先されます。`,
-        },
-        delete: {
-          description: `現在設定されているGoogle APIキーを削除します。`,
-          no_key_title: `Google APIキーが設定されていません`,
-          no_key_description: `現在削除するGoogle APIキーが設定されていません。`,
-          success_title: `Google APIキーが削除されました`,
-          success_description: `Google APIキーが正常に削除されました。`,
-        },
-      },
-      // NovelAI APIキー管理（サブコマンドグループ）
-      novelaiapi: {
-        description: `補助NovelAI APIキーを管理（画像生成用）`,
-        set: {
-          description: `画像生成用NovelAI APIキー。NovelAIがメインプロバイダーの場合は不要。`,
-          key_description: `あなたのNovelAI APIキー。`,
-          disable_other_imggen_description: `trueの場合、標準の画像生成ツールを非表示にし、NovelAI画像生成のみを利用可能にします。`,
-          invalid_key_title: `無効なAPIキー形式`,
-          invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なNovelAI APIキーを提供してください。`,
-          key_validation_failed_title: `NovelAI APIキーの検証に失敗しました`,
-          key_validation_failed_description: `提供されたNovelAI APIキーは無効です。キーを確認し、有効なサブスクリプションがあることを確認してください。`,
-          success_title: `NovelAI APIキーが設定されました`,
-          success_description: `NovelAI APIキーが正常に検証、暗号化、保存されました。アクティブなLLMプロバイダーに関係なく、NovelAI画像生成が利用可能になりました。`,
-          success_exclusive_description: `NovelAI APIキーが正常に検証、暗号化、保存されました。NovelAI画像生成がこのサーバーの唯一の画像生成ツールになりました。`,
-        },
-        delete: {
-          description: `現在設定されているNovelAI APIキーを削除します。`,
-          no_key_title: `NovelAI APIキーが設定されていません`,
-          no_key_description: `現在削除するNovelAI APIキーが設定されていません。`,
-          success_title: `NovelAI APIキーが削除されました`,
-          success_description: `NovelAI APIキーと排他的画像生成設定が削除されました。`,
-        },
-      },
       // カスタムプロバイダー設定（非本番環境のみ）
       custom: {
         // エンドポイントURLフィールドのヘルプテキスト（カスタムプロバイダーのAPIキーフィールドの代わりに表示）
@@ -2398,8 +2330,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       params: {
         description: `AI生成品質のサンプリングパラメーターを調整します。`,
         temperature: {
-          description: `応答の創造性/ランダム性を設定します（1.0〜2.0、デフォルト: 1.5）。`,
-          value_description: `1.0（予測可能）から2.0（非常にランダム）の間の値。デフォルト: 1.5。`,
+          description: `応答の創造性/ランダム性を設定します（1.0〜2.0、デフォルト: 1.2）。`,
+          value_description: `1.0（予測可能）から2.0（非常にランダム）の間の値。デフォルト: 1.2。`,
           invalid_value_title: `無効なTemperature`,
           invalid_value_description: `Temperatureは {min} から {max} の間でなければなりません。`,
           already_set_title: `Temperatureは既に設定済みです`,
@@ -2408,8 +2340,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           success_description: `LLMのTemperatureが \`{previous_temperature}\` から \`{temperature}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI`,
         },
         "top-p": {
-          description: `Top-P（核サンプリング）のしきい値を設定します（デフォルト: 1.0）。`,
-          value_description: `サンプリングする確率質量（0.0=非常に制限的、1.0=無効/完全分布）。デフォルト: 1.0。`,
+          description: `Top-P（核サンプリング）のしきい値を設定します（デフォルト: 0.95）。`,
+          value_description: `サンプリングする確率質量（0.0=非常に制限的、1.0=完全分布）。デフォルト: 0.95。`,
           invalid_value_title: `無効なTop-P値`,
           invalid_value_description: `Top-Pは {min} から {max} の間でなければなりません。`,
           already_set_title: `Top-Pは既に設定済みです`,
@@ -2645,6 +2577,75 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           none_description: `このサーバーにはフォールバックモデルが設定されていません。`,
           success_title: `フォールバックを削除しました`,
           success_description: `\`{model}\`がフォールバックチェーンから削除されました。残り{remaining_count}件。`,
+        },
+      },
+    },
+
+    optionalkey: {
+      description: `オプションのサービスAPIキーを管理`,
+      brave: {
+        description: `Brave Search APIキーを管理`,
+        set: {
+          description: `このサーバーのBrave Search APIキーを設定します。`,
+          key_description: `あなたのBrave Search APIキー。`,
+          invalid_key_title: `無効なAPIキー形式`,
+          invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なキーを提供してください。`,
+          validating_key: `Brave Search APIキーを検証中...`,
+          validation_error_title: `APIキーの検証エラー`,
+          validation_error_description: `Brave Search APIキーの検証中にエラーが発生しました。再度お試しいただくか、接続を確認してください。`,
+          key_validation_failed_title: `Brave APIキーの検証に失敗しました`,
+          key_validation_failed_description: `提供されたBrave Search APIキーは無効です。キーを確認してもう一度お試しください。`,
+          success_title: `Brave APIキーが設定されました`,
+          success_description: `Brave Search APIキーが正常に検証、暗号化、保存されました。`,
+        },
+        remove: {
+          description: `現在設定されているBrave Search APIキーを削除します。`,
+          no_key_title: `Brave APIキーが設定されていません`,
+          no_key_description: `現在削除するBrave Search APIキーが設定されていません。`,
+          success_title: `Brave APIキーが削除されました`,
+          success_description: `Brave Search APIキーが正常に削除されました。`,
+        },
+      },
+      google: {
+        description: `補助Google APIキーを管理（画像インペインティング用）`,
+        set: {
+          description: `画像セグメンテーション用Google APIキー。Googleがメインプロバイダーの場合は不要。`,
+          key_description: `あなたのGoogle APIキー。`,
+          invalid_key_title: `無効なAPIキー形式`,
+          invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なGoogle APIキーを提供してください。`,
+          key_validation_failed_title: `Google APIキーの検証に失敗しました`,
+          key_validation_failed_description: `提供されたGoogle APIキーは無効です。キーを確認してもう一度お試しください。`,
+          success_title: `Google APIキーが設定されました`,
+          success_description: `Google APIキーが正常に検証、暗号化、保存されました。AIの画像セグメンテーション（インペインティング）に使用されます。メインプロバイダーがすでにGoogleの場合、このキーがセグメンテーションで優先されます。`,
+        },
+        remove: {
+          description: `現在設定されているGoogle APIキーを削除します。`,
+          no_key_title: `Google APIキーが設定されていません`,
+          no_key_description: `現在削除するGoogle APIキーが設定されていません。`,
+          success_title: `Google APIキーが削除されました`,
+          success_description: `Google APIキーが正常に削除されました。`,
+        },
+      },
+      novelai: {
+        description: `補助NovelAI APIキーを管理（画像生成用）`,
+        set: {
+          description: `画像生成用NovelAI APIキー。NovelAIがメインプロバイダーの場合は不要。`,
+          key_description: `あなたのNovelAI APIキー。`,
+          disable_other_imggen_description: `trueの場合、標準の画像生成ツールを非表示にし、NovelAI画像生成のみを利用可能にします。`,
+          invalid_key_title: `無効なAPIキー形式`,
+          invalid_key_description: `提供されたAPIキーは短すぎるか無効のようです。有効なNovelAI APIキーを提供してください。`,
+          key_validation_failed_title: `NovelAI APIキーの検証に失敗しました`,
+          key_validation_failed_description: `提供されたNovelAI APIキーは無効です。キーを確認し、有効なサブスクリプションがあることを確認してください。`,
+          success_title: `NovelAI APIキーが設定されました`,
+          success_description: `NovelAI APIキーが正常に検証、暗号化、保存されました。アクティブなLLMプロバイダーに関係なく、NovelAI画像生成が利用可能になりました。`,
+          success_exclusive_description: `NovelAI APIキーが正常に検証、暗号化、保存されました。NovelAI画像生成がこのサーバーの唯一の画像生成ツールになりました。`,
+        },
+        remove: {
+          description: `現在設定されているNovelAI APIキーを削除します。`,
+          no_key_title: `NovelAI APIキーが設定されていません`,
+          no_key_description: `現在削除するNovelAI APIキーが設定されていません。`,
+          success_title: `NovelAI APIキーが削除されました`,
+          success_description: `NovelAI APIキーと排他的画像生成設定が削除されました。`,
         },
       },
     },
@@ -3620,7 +3621,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       quota_remaining: `本日はあと {remaining} 枚の画像を生成できます。`,
     },
     generate_image_nai: {
-      no_google_api_key: `インペインティングには画像セグメンテーション用のGoogle APIキーが必要です。/config googleapi setで設定するか、Googleプロバイダーに切り替えてください。`,
+      no_google_api_key: `インペインティングには画像セグメンテーション用のGoogle APIキーが必要です。/optionalkey google setで設定するか、Googleプロバイダーに切り替えてください。`,
     },
   },
 

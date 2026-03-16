@@ -420,7 +420,8 @@ export async function execute(
       let updatedRows = await sql<Array<{ tomori_config_id: number }>>`
 				UPDATE tomori_configs
 				SET
-					llm_temperature = 1.5,
+					llm_temperature = 1.2,
+					llm_top_p = 0.95,
 					humanizer_degree = 1,
 					timezone_offset = 0,
 					message_fetch_limit = 80,
@@ -452,7 +453,8 @@ export async function execute(
           updatedRows = await sql<Array<{ tomori_config_id: number }>>`
 						UPDATE tomori_configs
 						SET
-							llm_temperature = 1.5,
+							llm_temperature = 1.2,
+							llm_top_p = 0.95,
 							humanizer_degree = 1,
 							timezone_offset = 0,
 							message_fetch_limit = 80,

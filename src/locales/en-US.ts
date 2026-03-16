@@ -98,13 +98,13 @@ export default {
       brave_api: {
         missing_key: {
           title: `Brave API Key Missing`,
-          description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/config braveapi set\`.`,
+          description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/optionalkey brave set\`.`,
           footer: `Learn how using /help apikey`,
         },
       },
       duckduckgo_rate_limit: {
         title: `DuckDuckGo Rate Limited`,
-        description: `DuckDuckGo search is currently rate limited. For more reliable searching, a server member with \`Manage Server\` permissions can set up Brave Search using \`/config braveapi set\`.`,
+        description: `DuckDuckGo search is currently rate limited. For more reliable searching, a server member with \`Manage Server\` permissions can set up Brave Search using \`/optionalkey brave set\`.`,
         footer: `Learn how using /help apikey`,
       },
       operation_failed_title: `Operation Failed`,
@@ -1214,7 +1214,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - I can see content within shared embeds (like tweets, articles, etc.)`,
         search_title: `Search & Information`,
         search_description: `- I can search the web for current information
-- I can also do image, video, and news search (via \`/config braveapi set\`)
+- I can also do image, video, and news search (via \`/optionalkey brave set\`)
 - I can fetch and read content from URLs`,
         personality_title: `Personality & Customization`,
         personality_description: `- I can change my name and avatar using \`/config rename\` and \`/server avatar\`
@@ -1978,74 +1978,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_keys_description: `There are no rotation keys to purge. Only your main API key is configured.`,
         },
       },
-      // Brave Search API key management (subcommand group)
-      braveapi: {
-        description: `Manage Brave Search API key`,
-        set: {
-          description: `Set the Brave Search API key for this server.`,
-          key_description: `Your Brave Search API key.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
-          validating_key: `Validating Brave Search API key...`,
-          validation_error_title: `API Key Validation Error`,
-          validation_error_description: `An error occurred while validating the Brave Search API key. Please try again or check your connection.`,
-          key_validation_failed_title: `Brave API Key Validation Failed`,
-          key_validation_failed_description: `The provided Brave Search API key is not valid. Please check the key and try again.`,
-          success_title: `Brave API Key Set`,
-          success_description: `The Brave Search API key has been successfully validated, encrypted, and saved.`,
-        },
-        delete: {
-          description: `Remove the currently configured Brave Search API key.`,
-          no_key_title: `No Brave API Key Set`,
-          no_key_description: `There is no Brave Search API key currently configured to remove.`,
-          success_title: `Brave API Key Removed`,
-          success_description: `The Brave Search API key has been successfully removed.`,
-        },
-      },
-      // Google API key management (subcommand group)
-      googleapi: {
-        description: `Manage supplementary Google API key (for image inpainting)`,
-        set: {
-          description: `Set a Google API key for AI image segmentation. Not needed if Google is already your AI provider.`,
-          key_description: `Your Google API key.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid Google API key.`,
-          key_validation_failed_title: `Google API Key Validation Failed`,
-          key_validation_failed_description: `The provided Google API key is not valid. Please check the key and try again.`,
-          success_title: `Google API Key Set`,
-          success_description: `The Google API key has been saved for AI image segmentation (inpainting). If your main provider is already Google, this key takes priority over it for segmentation.`,
-        },
-        delete: {
-          description: `Remove the currently configured Google API key.`,
-          no_key_title: `No Google API Key Set`,
-          no_key_description: `There is no Google API key currently configured to remove.`,
-          success_title: `Google API Key Removed`,
-          success_description: `The Google API key has been successfully removed.`,
-        },
-      },
-      // NovelAI API key management (subcommand group)
-      novelaiapi: {
-        description: `Manage supplementary NovelAI API key (for image generation)`,
-        set: {
-          description: `Set a NovelAI API key for image generation. Not needed if NovelAI is already your AI provider.`,
-          key_description: `Your NovelAI API key.`,
-          disable_other_imggen_description: `If true, hides the standard image generation tool so only NovelAI image gen is available.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid NovelAI API key.`,
-          key_validation_failed_title: `NovelAI API Key Validation Failed`,
-          key_validation_failed_description: `The provided NovelAI API key is not valid. Please check the key and ensure you have an active subscription.`,
-          success_title: `NovelAI API Key Set`,
-          success_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now available regardless of your active LLM provider.`,
-          success_exclusive_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now the exclusive image generation tool for this server.`,
-        },
-        delete: {
-          description: `Remove the currently configured NovelAI API key.`,
-          no_key_title: `No NovelAI API Key Set`,
-          no_key_description: `There is no NovelAI API key currently configured to remove.`,
-          success_title: `NovelAI API Key Removed`,
-          success_description: `The NovelAI API key and exclusive image generation setting have been removed.`,
-        },
-      },
       // Custom provider configuration (non-production only)
       custom: {
         // Endpoint URL field help text (shown instead of API key for custom provider)
@@ -2391,8 +2323,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       params: {
         description: `Adjust AI sampling parameters for generation quality.`,
         temperature: {
-          description: `Set response creativity/randomness (1.0-2.0, default: 1.5).`,
-          value_description: `Value between 1.0 (predictable) and 2.0 (very random). Default: 1.5.`,
+          description: `Set response creativity/randomness (1.0-2.0, default: 1.2).`,
+          value_description: `Value between 1.0 (predictable) and 2.0 (very random). Default: 1.2.`,
           invalid_value_title: `Invalid Temperature`,
           invalid_value_description: `Temperature must be between {min} and {max}.`,
           already_set_title: `Temperature Already Set`,
@@ -2401,8 +2333,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** Google, OpenRouter, NovelAI`,
         },
         "top-p": {
-          description: `Set top-P nucleus sampling threshold (default: 1.0).`,
-          value_description: `Probability mass to sample from (0.0=very restricted, 1.0=disabled/full distribution). Default: 1.0.`,
+          description: `Set top-P nucleus sampling threshold (default: 0.95).`,
+          value_description: `Probability mass to sample from (0.0=very restricted, 1.0=full distribution). Default: 0.95.`,
           invalid_value_title: `Invalid Top-P Value`,
           invalid_value_description: `Top-P must be between {min} and {max}.`,
           already_set_title: `Top-P Already Set`,
@@ -2638,6 +2570,75 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           none_description: `This server has no fallback models configured.`,
           success_title: `Fallback Removed`,
           success_description: `\`{model}\` has been removed from the fallback chain. {remaining_count} fallback(s) remaining.`,
+        },
+      },
+    },
+
+    optionalkey: {
+      description: `Manage optional service API keys`,
+      brave: {
+        description: `Manage Brave Search API key`,
+        set: {
+          description: `Set the Brave Search API key for this server.`,
+          key_description: `Your Brave Search API key.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
+          validating_key: `Validating Brave Search API key...`,
+          validation_error_title: `API Key Validation Error`,
+          validation_error_description: `An error occurred while validating the Brave Search API key. Please try again or check your connection.`,
+          key_validation_failed_title: `Brave API Key Validation Failed`,
+          key_validation_failed_description: `The provided Brave Search API key is not valid. Please check the key and try again.`,
+          success_title: `Brave API Key Set`,
+          success_description: `The Brave Search API key has been successfully validated, encrypted, and saved.`,
+        },
+        remove: {
+          description: `Remove the currently configured Brave Search API key.`,
+          no_key_title: `No Brave API Key Set`,
+          no_key_description: `There is no Brave Search API key currently configured to remove.`,
+          success_title: `Brave API Key Removed`,
+          success_description: `The Brave Search API key has been successfully removed.`,
+        },
+      },
+      google: {
+        description: `Manage supplementary Google API key (for image inpainting)`,
+        set: {
+          description: `Set a Google API key for AI image segmentation. Not needed if Google is already your AI provider.`,
+          key_description: `Your Google API key.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid Google API key.`,
+          key_validation_failed_title: `Google API Key Validation Failed`,
+          key_validation_failed_description: `The provided Google API key is not valid. Please check the key and try again.`,
+          success_title: `Google API Key Set`,
+          success_description: `The Google API key has been saved for AI image segmentation (inpainting). If your main provider is already Google, this key takes priority over it for segmentation.`,
+        },
+        remove: {
+          description: `Remove the currently configured Google API key.`,
+          no_key_title: `No Google API Key Set`,
+          no_key_description: `There is no Google API key currently configured to remove.`,
+          success_title: `Google API Key Removed`,
+          success_description: `The Google API key has been successfully removed.`,
+        },
+      },
+      novelai: {
+        description: `Manage supplementary NovelAI API key (for image generation)`,
+        set: {
+          description: `Set a NovelAI API key for image generation. Not needed if NovelAI is already your AI provider.`,
+          key_description: `Your NovelAI API key.`,
+          disable_other_imggen_description: `If true, hides the standard image generation tool so only NovelAI image gen is available.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid NovelAI API key.`,
+          key_validation_failed_title: `NovelAI API Key Validation Failed`,
+          key_validation_failed_description: `The provided NovelAI API key is not valid. Please check the key and ensure you have an active subscription.`,
+          success_title: `NovelAI API Key Set`,
+          success_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now available regardless of your active LLM provider.`,
+          success_exclusive_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now the exclusive image generation tool for this server.`,
+        },
+        remove: {
+          description: `Remove the currently configured NovelAI API key.`,
+          no_key_title: `No NovelAI API Key Set`,
+          no_key_description: `There is no NovelAI API key currently configured to remove.`,
+          success_title: `NovelAI API Key Removed`,
+          success_description: `The NovelAI API key and exclusive image generation setting have been removed.`,
         },
       },
     },
@@ -3615,7 +3616,7 @@ You can change this anytime using \`/personal privacy\`.`,
       quota_remaining: `You have {remaining} image(s) remaining for today.`,
     },
     generate_image_nai: {
-      no_google_api_key: `Inpainting requires a Google API key for image segmentation. Set one with /config googleapi set, or switch to the Google provider.`,
+      no_google_api_key: `Inpainting requires a Google API key for image segmentation. Set one with /optionalkey google set, or switch to the Google provider.`,
     },
   },
 

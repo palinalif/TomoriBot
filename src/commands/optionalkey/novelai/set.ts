@@ -1,5 +1,5 @@
 /**
- * /config novelaiapi set
+ * /optionalkey novelai set
  * Validates and stores a NovelAI API key for the server.
  * When set, the generate_image_nai tool becomes available regardless of the active LLM provider.
  * Optional: disable_other_imggen flag hides the standard generate_image tool when this key is present.
@@ -46,7 +46,7 @@ export const configureSubcommand = (
 	subcommand
 		.setName("set")
 		.setDescription(
-			localizer("en-US", "commands.config.novelaiapi.set.description"),
+			localizer("en-US", "commands.optionalkey.novelai.set.description"),
 		)
 		.addStringOption((option) =>
 			option
@@ -54,7 +54,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.novelaiapi.set.key_description",
+						"commands.optionalkey.novelai.set.key_description",
 					),
 				)
 				.setRequired(true),
@@ -65,7 +65,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.novelaiapi.set.disable_other_imggen_description",
+						"commands.optionalkey.novelai.set.disable_other_imggen_description",
 					),
 				)
 				.addChoices(
@@ -147,9 +147,9 @@ export async function execute(
 		// 4. Basic format validation
 		if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.novelaiapi.set.invalid_key_title",
+				titleKey: "commands.optionalkey.novelai.set.invalid_key_title",
 				descriptionKey:
-					"commands.config.novelaiapi.set.invalid_key_description",
+					"commands.optionalkey.novelai.set.invalid_key_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -176,9 +176,9 @@ export async function execute(
 			);
 			await replyInfoEmbed(interaction, locale, {
 				titleKey:
-					"commands.config.novelaiapi.set.key_validation_failed_title",
+					"commands.optionalkey.novelai.set.key_validation_failed_title",
 				descriptionKey:
-					"commands.config.novelaiapi.set.key_validation_failed_description",
+					"commands.optionalkey.novelai.set.key_validation_failed_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -198,7 +198,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config novelaiapi set",
+					command: "optionalkey novelai set",
 					guildId: interaction.guild?.id ?? interaction.user.id,
 					serviceName: "novelai",
 				},
@@ -227,11 +227,11 @@ export async function execute(
 
 		// 10. Success message — include note about exclusive mode if enabled
 		const successDescriptionKey = disableOtherImggen
-			? "commands.config.novelaiapi.set.success_exclusive_description"
-			: "commands.config.novelaiapi.set.success_description";
+			? "commands.optionalkey.novelai.set.success_exclusive_description"
+			: "commands.optionalkey.novelai.set.success_description";
 
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.novelaiapi.set.success_title",
+			titleKey: "commands.optionalkey.novelai.set.success_title",
 			descriptionKey: successDescriptionKey,
 			color: ColorCode.SUCCESS,
 			flags: MessageFlags.Ephemeral,
@@ -243,14 +243,14 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config novelaiapi set",
+				command: "optionalkey novelai set",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				serviceName: "novelai",
 			},
 		};
 		await log.error(
-			`Error executing /config novelaiapi set for user ${userData.user_disc_id}`,
+			`Error executing /optionalkey novelai set for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);

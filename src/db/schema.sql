@@ -271,7 +271,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   server_id INT, -- Server-scoped config (nullable for legacy rows)
   llm_id INT NOT NULL,
   embedding_model_id INT,
-  llm_temperature REAL NOT NULL DEFAULT 1.5 CHECK (llm_temperature >= 1.0 AND llm_temperature <= 2.0),
+  llm_temperature REAL NOT NULL DEFAULT 1.2 CHECK (llm_temperature >= 1.0 AND llm_temperature <= 2.0),
   api_key BYTEA, -- encrypted
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
@@ -503,8 +503,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'welcome_prompt', 'TEXT', 'NUL
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_persona_id', 'INTEGER', 'NULL');
 
 -- Add LLM sampling parameter columns (February 2026)
--- llm_top_p: Nucleus sampling — probability mass threshold (1.0=neutral/disabled, 0.0=most restricted)
-SELECT add_column_if_not_exists('tomori_configs', 'llm_top_p', 'REAL', '1.0');
+-- llm_top_p: Nucleus sampling — probability mass threshold (0.95=default, 0.0=most restricted)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_top_p', 'REAL', '0.95');
 -- llm_top_k: Top-K sampling — candidate token count (0=neutral/disabled, max 40)
 SELECT add_column_if_not_exists('tomori_configs', 'llm_top_k', 'INTEGER', '0');
 -- llm_frequency_penalty: Penalize frequently used tokens (-2.0 to 2.0, 0.0=neutral)

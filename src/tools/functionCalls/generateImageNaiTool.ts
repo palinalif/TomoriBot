@@ -334,7 +334,7 @@ export class GenerateImageNaiTool extends BaseTool {
    * Resolve a Google API key for Gemini segmentation.
    *
    * Resolution order:
-   * 1. Google opt key from `/config googleapi set` (stored as opt_api_keys service_name='google')
+   * 1. Google opt key from `/optionalkey google set` (stored as opt_api_keys service_name='google')
    * 2. Main config API key when the active provider is Google
    *
    * @param context - Tool execution context
@@ -792,7 +792,7 @@ export class GenerateImageNaiTool extends BaseTool {
       // Resolve NovelAI API key — prefer opt key (cross-provider), fall back to main config key (NovelAI provider)
       let apiKey: string | null = null;
 
-      // 1st priority: opt_api_keys entry for "novelai" (set via /config novelaiapi set)
+      // 1st priority: opt_api_keys entry for "novelai" (set via /optionalkey novelai set)
       apiKey = await getOptApiKey(context.tomoriState.server_id, "novelai");
 
       // 2nd priority: main config key when the active provider is NovelAI
@@ -809,7 +809,7 @@ export class GenerateImageNaiTool extends BaseTool {
         return {
           success: false,
           error:
-            "No NovelAI API key available. Set one with /config novelaiapi set, or switch to the NovelAI provider.",
+            "No NovelAI API key available. Set one with /optionalkey novelai set, or switch to the NovelAI provider.",
         };
       }
 

@@ -1,5 +1,5 @@
 /**
- * /config googleapi set
+ * /optionalkey google set
  * Validates and stores a Google API key for the server.
  * Used primarily for Gemini image segmentation (inpainting masks).
  */
@@ -41,13 +41,13 @@ export const configureSubcommand = (
 	subcommand
 		.setName("set")
 		.setDescription(
-			localizer("en-US", "commands.config.googleapi.set.description"),
+			localizer("en-US", "commands.optionalkey.google.set.description"),
 		)
 		.addStringOption((option) =>
 			option
 				.setName("key")
 				.setDescription(
-					localizer("en-US", "commands.config.googleapi.set.key_description"),
+					localizer("en-US", "commands.optionalkey.google.set.key_description"),
 				)
 				.setRequired(true),
 		);
@@ -112,9 +112,9 @@ export async function execute(
 		// 4. Basic format validation
 		if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.googleapi.set.invalid_key_title",
+				titleKey: "commands.optionalkey.google.set.invalid_key_title",
 				descriptionKey:
-					"commands.config.googleapi.set.invalid_key_description",
+					"commands.optionalkey.google.set.invalid_key_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -141,9 +141,9 @@ export async function execute(
 			);
 			await replyInfoEmbed(interaction, locale, {
 				titleKey:
-					"commands.config.googleapi.set.key_validation_failed_title",
+					"commands.optionalkey.google.set.key_validation_failed_title",
 				descriptionKey:
-					"commands.config.googleapi.set.key_validation_failed_description",
+					"commands.optionalkey.google.set.key_validation_failed_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -163,7 +163,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config googleapi set",
+					command: "optionalkey google set",
 					guildId: interaction.guild?.id ?? interaction.user.id,
 					serviceName: "google",
 				},
@@ -187,8 +187,8 @@ export async function execute(
 
 		// 9. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.googleapi.set.success_title",
-			descriptionKey: "commands.config.googleapi.set.success_description",
+			titleKey: "commands.optionalkey.google.set.success_title",
+			descriptionKey: "commands.optionalkey.google.set.success_description",
 			color: ColorCode.SUCCESS,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -199,14 +199,14 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config googleapi set",
+				command: "optionalkey google set",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				serviceName: "google",
 			},
 		};
 		await log.error(
-			`Error executing /config googleapi set for user ${userData.user_disc_id}`,
+			`Error executing /optionalkey google set for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);

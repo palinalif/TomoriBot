@@ -21,7 +21,7 @@ import { sql } from "@/utils/db/client";
 // Neutral value: 1.0 = full probability distribution (disabled)
 const TOP_P_MIN = 0.0;
 const TOP_P_MAX = 1.0;
-const TOP_P_DEFAULT = 1.0;
+const TOP_P_DEFAULT = 0.95;
 
 // Configure the subcommand
 export const configureSubcommand = (
