@@ -263,6 +263,14 @@ function estimateToolSchemaTokens(): number {
   try {
     const stateForContext = {
       server_id: "0",
+      llm: {
+        llm_codename: "schema-estimate",
+        has_tools: true,
+        sees_images: true,
+        sees_videos: true,
+        sees_youtube: true,
+        supports_structoutput: true,
+      },
       config: {
         // Defaults match DB defaults in schema.sql (true)
         sticker_usage_enabled: true,

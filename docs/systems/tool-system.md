@@ -67,6 +67,7 @@ From `src/tools/mcpServers/`:
 `ToolRegistry` filters tools by:
 
 - provider availability (`isAvailableFor` / context-aware checks)
+- declared model capability requirements (`requiredModelCapabilities`)
 - feature flags (mapped by `featureFlagMapper.ts`)
 - permission requirements (`requiresPermissions`)
 
@@ -74,6 +75,7 @@ Centralized helper:
 
 - `getAvailableToolsWithMCP(provider, stateForContext)`
   - returns filtered built-in tools + filtered MCP function names
+  - the first pass uses `stateForContext.llm` to filter capability-gated tools before any streaming-context-only checks run
 
 Additional routing logic:
 
@@ -101,6 +103,7 @@ Additional routing logic:
    - JSON-schema-like `parameters`
    - `execute(args, context)`
 4. Optionally set:
+   - `requiredModelCapabilities`
    - `requiresFeatureFlag`
    - `requiresPermissions`
    - `requiresFollowUp`

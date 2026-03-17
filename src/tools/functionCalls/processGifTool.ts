@@ -36,6 +36,9 @@ export class ProcessGifTool extends BaseTool {
   description =
     "Extract and analyze keyframes from a GIF attachment in a Discord message. DEV ONLY - memory intensive (100-130 MB per GIF). Use sparingly when GIF context is truly needed for understanding the conversation.";
   category = "utility" as const;
+  requiredModelCapabilities = {
+    sees_images: true,
+  };
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -57,12 +60,13 @@ export class ProcessGifTool extends BaseTool {
   /**
    * Check if GIF processing tool is available for the given provider.
    * Only available in development (GUARDS_ENABLED = false).
-   * Disabled for NovelAI — GLM 4.6 is text-only with no image/vision capabilities.
+   * Model vision support is handled by `requiredModelCapabilities` and
+   * `isAvailableForContext()`.
    *
-   * @param provider - LLM provider name
+   * @param _provider - LLM provider name
    * @returns True only if not in production and provider supports vision
    */
-  isAvailableFor(provider: string): boolean {
+  isAvailableFor(_provider: string): boolean {
     // Block in production to prevent memory exhaustion
     if (GUARDS_ENABLED) {
       log.info(
@@ -71,7 +75,6 @@ export class ProcessGifTool extends BaseTool {
       return false;
     }
 
-    if (provider === "novelai") return false;
     return true;
   }
 

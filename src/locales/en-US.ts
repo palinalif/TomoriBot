@@ -1715,25 +1715,28 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
     // NovelAI image generation commands
     novelai: {
-      charactertags: {
-        description: `Configure NovelAI character tags for a persona's self-portraits.`,
-        modal_title: `Character Tags`,
-        persona_select_label: `Persona`,
-        persona_select_description: `Select which persona to configure character tags for.`,
-        persona_select_placeholder: `Choose a persona...`,
-        tags_input_label: `Character Tags`,
-        tags_input_description: `Comma-separated imageboard-style tags (e.g. 1girl, short hair, red eyes). Case-sensitive.`,
-        tags_input_placeholder: `1girl, short hair, red eyes, school uniform`,
-        no_tags_title: `No Tags Provided`,
-        no_tags_description: `Please provide at least one character tag.`,
-        too_many_tags_title: `Too Many Tags`,
-        too_many_tags_description: `You can set a maximum of {max_tags} tags per persona.`,
-        tag_too_long_title: `Tag Too Long`,
-        tag_too_long_description: `Each tag must be {max_length} characters or less.`,
-        success_title: `Character Tags Updated`,
-        success_description: `Updated character tags for **{persona_name}**:\n\`\`\`\n{tag_list}\n\`\`\``,
-        cleared_title: `Character Tags Cleared`,
-        cleared_description: `Cleared all character tags for **{persona_name}**.`,
+      tags: {
+        description: `Manage NovelAI tag configuration for personas.`,
+        character: {
+          description: `Configure NovelAI character tags for a persona's self-portraits.`,
+          modal_title: `Character Tags`,
+          persona_select_label: `Persona`,
+          persona_select_description: `Select which persona to configure character tags for.`,
+          persona_select_placeholder: `Choose a persona...`,
+          tags_input_label: `Character Tags`,
+          tags_input_description: `Comma-separated imageboard-style tags (e.g. 1girl, short hair, red eyes). Case-sensitive.`,
+          tags_input_placeholder: `1girl, short hair, red eyes, school uniform`,
+          no_tags_title: `No Tags Provided`,
+          no_tags_description: `Please provide at least one character tag.`,
+          too_many_tags_title: `Too Many Tags`,
+          too_many_tags_description: `You can set a maximum of {max_tags} tags per persona.`,
+          tag_too_long_title: `Tag Too Long`,
+          tag_too_long_description: `Each tag must be {max_length} characters or less.`,
+          success_title: `Character Tags Updated`,
+          success_description: `Updated character tags for **{persona_name}**:\n\`\`\`\n{tag_list}\n\`\`\``,
+          cleared_title: `Character Tags Cleared`,
+          cleared_description: `Cleared all character tags for **{persona_name}**.`,
+        },
       },
       preset: {
         text: {

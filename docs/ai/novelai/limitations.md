@@ -11,14 +11,16 @@ See also: [`tool-calling.md`](./tool-calling.md) for how prompt-based tool calli
 
 ## Built-in Tools Disabled
 
-These tools return `false` from `isAvailableFor()` when `provider === "novelai"`, so they are never included in the system prompt or offered to the model.
+Some tools are disabled by provider-specific `isAvailableFor()` checks, while
+vision-dependent tools are removed by the registry's first-pass capability
+filter because NovelAI models have `sees_images = false`.
 
 | Tool | File | Reason |
 |------|------|--------|
 | `select_sticker_for_response` | `src/tools/functionCalls/stickerTool.ts:144` | GLM 4.6 cannot reliably generate CJK/Japanese sticker names as tool arguments — token-level instability causes garbled output. |
 | `update_short_term_memory` | `src/tools/functionCalls/updateShortTermMemoryTool.ts:56` | Token budget too constrained; the tool definition and invocation overhead is not worth the benefit at GLM's prompt size. |
-| `peek_profile_picture` | `src/tools/functionCalls/peekProfilePictureTool.ts:67` | Text-only model — no vision capability. |
-| `process_gif` | `src/tools/functionCalls/processGifTool.ts:74` | Text-only model — no vision capability. |
+| `peek_profile_picture` | `src/tools/functionCalls/peekProfilePictureTool.ts` | Requires `requiredModelCapabilities = { sees_images: true }`; NovelAI models are text-only. |
+| `process_gif` | `src/tools/functionCalls/processGifTool.ts` | Requires `requiredModelCapabilities = { sees_images: true }`; NovelAI models are text-only. |
 
 ---
 
@@ -135,7 +137,16 @@ Other providers do **not** get this fallback — they must explicitly set the fi
 
 ## Adding Future Exclusions
 
-When adding a new tool that should be disabled for NovelAI, override `isAvailableFor()` in the tool class:
+When adding a new tool that depends on model capabilities, declare them directly on the tool:
+
+```typescript
+requiredModelCapabilities = {
+    sees_images: true,
+};
+```
+
+When adding a new tool that should be disabled for NovelAI for provider-specific reasons
+(token budget, GLM argument instability, etc.), override `isAvailableFor()` in the tool class:
 
 ```typescript
 isAvailableFor(provider: string, _context: unknown): boolean {

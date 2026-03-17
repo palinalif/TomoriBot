@@ -31,6 +31,9 @@ export class IncreaseMediaContextTool extends BaseTool {
   description =
     "Expand the media context window to view images and videos from older messages that were hidden for optimization. Use when you see placeholders indicating hidden media. The placeholder text tells you the exact extend_by value needed.";
   category = "utility" as const;
+  requiredModelCapabilities = {
+    sees_images: true,
+  };
 
   parameters: ToolParameterSchema = {
     type: "object",

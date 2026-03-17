@@ -666,6 +666,14 @@ export async function execute(
 
       const toolStateForContext = {
         server_id: tomoriState.server_id.toString(),
+        llm: {
+          llm_codename: tomoriState.llm.llm_codename,
+          has_tools: tomoriState.llm.has_tools,
+          sees_images: tomoriState.llm.sees_images,
+          sees_videos: tomoriState.llm.sees_videos,
+          sees_youtube: tomoriState.llm.sees_youtube,
+          supports_structoutput: tomoriState.llm.supports_structoutput,
+        },
         config: {
           sticker_usage_enabled: false,
           web_search_enabled: true,

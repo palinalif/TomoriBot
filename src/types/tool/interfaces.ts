@@ -3,7 +3,7 @@
  * This abstracts tools away from specific LLM provider formats
  */
 
-import type { TomoriState } from "../db/schema";
+import type { LlmRow, TomoriState } from "../db/schema";
 import type {
   BaseGuildTextChannel,
   BaseGuildVoiceChannel,
@@ -119,6 +119,25 @@ export interface ToolResult {
 export type ToolCategory = "discord" | "search" | "memory" | "utility" | "mcp";
 
 /**
+ * Model capability flags that tools may require to be exposed.
+ */
+export type ToolModelCapabilityKey =
+  | "has_tools"
+  | "sees_images"
+  | "sees_videos"
+  | "sees_youtube"
+  | "supports_structoutput";
+
+export type ToolModelCapabilityRequirements = Partial<
+  Pick<LlmRow, ToolModelCapabilityKey>
+>;
+
+export type ToolAvailabilityLlmState = Pick<
+  LlmRow,
+  "llm_codename" | ToolModelCapabilityKey
+>;
+
+/**
  * Generic tool interface
  * All tools must implement this interface regardless of provider
  */
@@ -141,6 +160,7 @@ export interface Tool {
   isAvailableFor(provider: string): boolean;
 
   // Optional tool configuration
+  requiredModelCapabilities?: ToolModelCapabilityRequirements;
   requiresPermissions?: string[];
   requiresFeatureFlag?: string;
   requiresFollowUp?: boolean; // If true, always allow follow-up generation after tool execution (e.g., search/fetch tools)
@@ -154,6 +174,7 @@ export abstract class BaseTool implements Tool {
   abstract description: string;
   abstract category: ToolCategory;
   abstract parameters: ToolParameterSchema;
+  requiredModelCapabilities?: ToolModelCapabilityRequirements;
 
   // Default implementation - available for all providers
   isAvailableFor(_provider: string): boolean {

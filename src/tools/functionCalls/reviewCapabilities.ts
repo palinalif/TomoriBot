@@ -720,6 +720,14 @@ export class ReviewCapabilitiesTool extends BaseTool {
           context.provider,
           {
             server_id: serverId.toString(),
+            llm: {
+              llm_codename: llm.llm_codename,
+              has_tools: llm.has_tools,
+              sees_images: llm.sees_images,
+              sees_videos: llm.sees_videos,
+              sees_youtube: llm.sees_youtube,
+              supports_structoutput: llm.supports_structoutput,
+            },
             config: {
               sticker_usage_enabled: config.sticker_usage_enabled,
               web_search_enabled: config.web_search_enabled,

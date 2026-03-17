@@ -34,6 +34,9 @@ export class PeekProfilePictureTool extends BaseTool {
   description =
     "Process and analyze a Discord user's profile picture using AI vision capabilities. ONLY use this when specifically asked to look at someone's avatar. If you don't see a user ID or mention in recent messages, avoid calling this function.";
   category = "utility" as const;
+  requiredModelCapabilities = {
+    sees_images: true,
+  };
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -61,12 +64,12 @@ export class PeekProfilePictureTool extends BaseTool {
 
   /**
    * Check if profile picture tool is available for the given provider.
-   * Disabled for NovelAI — GLM 4.6 is text-only with no image/vision capabilities.
-   * @param provider - LLM provider name
+   * Availability is provider-agnostic; model vision support is handled by
+   * `requiredModelCapabilities` and `isAvailableForContext()`.
+   * @param _provider - LLM provider name
    * @returns True if provider supports image analysis (actual vision check in isAvailableForContext)
    */
-  isAvailableFor(provider: string): boolean {
-    if (provider === "novelai") return false;
+  isAvailableFor(_provider: string): boolean {
     return true;
   }
 

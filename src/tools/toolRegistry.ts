@@ -7,6 +7,7 @@ import { ChannelType } from "discord.js";
 import { log } from "../utils/misc/logger";
 import type {
   Tool,
+  ToolAvailabilityLlmState,
   ToolContext,
   ToolResult,
   ToolRegistryInterface,
@@ -27,6 +28,7 @@ import { hasOptApiKey } from "../utils/security/crypto";
  */
 export interface ToolStateForContext {
   server_id: string;
+  llm: ToolAvailabilityLlmState;
   config: {
     sticker_usage_enabled: boolean;
     web_search_enabled: boolean;
@@ -100,6 +102,12 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           continue;
         }
 
+        if (
+          !this.meetsModelCapabilityRequirements(tool, context.tomoriState.llm)
+        ) {
+          continue;
+        }
+
         // Check feature flag requirements
         if (tool.requiresFeatureFlag) {
           const isFeatureEnabled = this.checkFeatureFlag(
@@ -152,10 +160,14 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
     for (const tool of this.tools.values()) {
       try {
-        // Check if tool supports this provider
-        // Note: This method intentionally uses basic isAvailableFor() instead of context-aware checking
-        // because ToolStateForContext lacks streamContext needed for streaming-specific availability logic
+        // Check if tool supports this provider. This contextless pass intentionally
+        // skips streamContext-dependent checks, but still applies declared model
+        // capability requirements such as image/video support.
         if (!tool.isAvailableFor(provider)) {
+          continue;
+        }
+
+        if (!this.meetsModelCapabilityRequirements(tool, stateForContext.llm)) {
           continue;
         }
 
@@ -186,6 +198,20 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     );
 
     return availableTools;
+  }
+
+  private meetsModelCapabilityRequirements(
+    tool: Tool,
+    llm: ToolAvailabilityLlmState,
+  ): boolean {
+    if (!tool.requiredModelCapabilities) {
+      return true;
+    }
+
+    return Object.entries(tool.requiredModelCapabilities).every(
+      ([capability, expectedValue]) =>
+        llm[capability as keyof ToolAvailabilityLlmState] === expectedValue,
+    );
   }
 
   /**

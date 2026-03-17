@@ -300,6 +300,14 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
       // Get built-in tools from the registry
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
+        llm: {
+          llm_codename: tomoriState.llm.llm_codename,
+          has_tools: tomoriState.llm.has_tools,
+          sees_images: tomoriState.llm.sees_images,
+          sees_videos: tomoriState.llm.sees_videos,
+          sees_youtube: tomoriState.llm.sees_youtube,
+          supports_structoutput: tomoriState.llm.supports_structoutput,
+        },
         config: {
           sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
           web_search_enabled: tomoriState.config.web_search_enabled,

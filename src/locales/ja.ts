@@ -1725,25 +1725,28 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
     // NovelAI画像生成コマンド
     novelai: {
-      charactertags: {
-        description: `ペルソナの自画像用NovelAIキャラクタータグを設定します。`,
-        modal_title: `キャラクタータグ`,
-        persona_select_label: `ペルソナ`,
-        persona_select_description: `キャラクタータグを設定するペルソナを選択してください。`,
-        persona_select_placeholder: `ペルソナを選択...`,
-        tags_input_label: `キャラクタータグ`,
-        tags_input_description: `カンマ区切りの画像ボードスタイルのタグ（例：1girl, short hair, red eyes）。大文字小文字を区別します。`,
-        tags_input_placeholder: `1girl, short hair, red eyes, school uniform`,
-        no_tags_title: `タグが未入力です`,
-        no_tags_description: `少なくとも1つのキャラクタータグを入力してください。`,
-        too_many_tags_title: `タグが多すぎます`,
-        too_many_tags_description: `1ペルソナあたり最大{max_tags}タグまで設定できます。`,
-        tag_too_long_title: `タグが長すぎます`,
-        tag_too_long_description: `各タグは{max_length}文字以下にしてください。`,
-        success_title: `キャラクタータグを更新しました`,
-        success_description: `**{persona_name}**のキャラクタータグを更新しました：\n\`\`\`\n{tag_list}\n\`\`\``,
-        cleared_title: `キャラクタータグをクリアしました`,
-        cleared_description: `**{persona_name}**のキャラクタータグをすべてクリアしました。`,
+      tags: {
+        description: `ペルソナ向けのNovelAIタグ設定を管理します。`,
+        character: {
+          description: `ペルソナの自画像用NovelAIキャラクタータグを設定します。`,
+          modal_title: `キャラクタータグ`,
+          persona_select_label: `ペルソナ`,
+          persona_select_description: `キャラクタータグを設定するペルソナを選択してください。`,
+          persona_select_placeholder: `ペルソナを選択...`,
+          tags_input_label: `キャラクタータグ`,
+          tags_input_description: `カンマ区切りの画像ボードスタイルのタグ（例：1girl, short hair, red eyes）。大文字小文字を区別します。`,
+          tags_input_placeholder: `1girl, short hair, red eyes, school uniform`,
+          no_tags_title: `タグが未入力です`,
+          no_tags_description: `少なくとも1つのキャラクタータグを入力してください。`,
+          too_many_tags_title: `タグが多すぎます`,
+          too_many_tags_description: `1ペルソナあたり最大{max_tags}タグまで設定できます。`,
+          tag_too_long_title: `タグが長すぎます`,
+          tag_too_long_description: `各タグは{max_length}文字以下にしてください。`,
+          success_title: `キャラクタータグを更新しました`,
+          success_description: `**{persona_name}**のキャラクタータグを更新しました：\n\`\`\`\n{tag_list}\n\`\`\``,
+          cleared_title: `キャラクタータグをクリアしました`,
+          cleared_description: `**{persona_name}**のキャラクタータグをすべてクリアしました。`,
+        },
       },
       preset: {
         text: {

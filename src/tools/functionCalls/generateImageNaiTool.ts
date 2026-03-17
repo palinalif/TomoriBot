@@ -104,7 +104,7 @@ export class GenerateImageNaiTool extends BaseTool {
       is_self_portrait: {
         type: "boolean",
         description:
-          "If true, automatically prepends the persona's configured character tags (from /nai charactertags) to the prompt for consistent self-portraits.",
+          "If true, automatically prepends the persona's configured character tags (from /novelai tags character) to the prompt for consistent self-portraits.",
       },
       message_id: {
         type: "string",
