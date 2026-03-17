@@ -89,6 +89,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.
 - `tomori_configs.nai_style_tags` stores server-wide NovelAI style/quality tags prepended to every `generate_image_nai` prompt.
 - `tomori_configs.nai_negative_tags` stores server-wide NovelAI negative tags; an empty array falls back to the `NAI_IMAGE_NEGATIVE_PROMPT` env value.
+- `tomori_configs.nai_diffusion_model_id` stores the dedicated NovelAI image-model override for `generate_image_nai`; `NULL` means follow `diffusion_model_id` only when that shared model is already a NovelAI diffusion model, otherwise use the seeded default NovelAI model.
 - `tomori_configs.nai_sampler`, `nai_steps`, `nai_scale`, `nai_noise_schedule`, and `nai_cfg_rescale` store optional server overrides for NovelAI image generation params; `NULL` means use the env fallback.
 
 ### NovelAI profile tags

@@ -27,17 +27,52 @@ import type { FunctionResponseImageMetadata } from "../provider/interfaces";
  * Tool parameter schema definition
  * Provider-agnostic parameter specification
  */
-export interface ToolParameterSchema {
+export type ToolParameterType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "array"
+  | "object";
+
+interface ToolParameterSchemaBase {
+  type: ToolParameterType;
+  description?: string;
+  enum?: string[];
+}
+
+export interface ToolStringParameterSchema extends ToolParameterSchemaBase {
+  type: "string";
+}
+
+export interface ToolNumberParameterSchema extends ToolParameterSchemaBase {
+  type: "number";
+}
+
+export interface ToolBooleanParameterSchema extends ToolParameterSchemaBase {
+  type: "boolean";
+}
+
+export interface ToolArrayParameterSchema extends ToolParameterSchemaBase {
+  type: "array";
+  items: ToolParameterPropertySchema;
+}
+
+export interface ToolObjectParameterSchema extends ToolParameterSchemaBase {
   type: "object";
-  properties: Record<
-    string,
-    {
-      type: "string" | "number" | "boolean" | "array" | "object";
-      description: string;
-      enum?: string[];
-      items?: { type: string };
-    }
-  >;
+  properties: Record<string, ToolParameterPropertySchema>;
+  required?: string[];
+}
+
+export type ToolParameterPropertySchema =
+  | ToolStringParameterSchema
+  | ToolNumberParameterSchema
+  | ToolBooleanParameterSchema
+  | ToolArrayParameterSchema
+  | ToolObjectParameterSchema;
+
+export interface ToolParameterSchema extends ToolObjectParameterSchema {
+  type: "object";
+  properties: Record<string, ToolParameterPropertySchema>;
   required: string[];
 }
 
@@ -217,25 +252,9 @@ export abstract class BaseTool implements Tool {
 
       const paramSchema = this.parameters.properties[paramName];
       if (paramSchema) {
-        const expectedType = paramSchema.type;
-        const actualType = Array.isArray(paramValue)
-          ? "array"
-          : typeof paramValue;
-
-        if (expectedType !== actualType) {
-          errors.push(
-            `Parameter '${paramName}' expected type '${expectedType}' but got '${actualType}'`,
-          );
-        }
-
-        // Check enum constraints
-        if (paramSchema.enum && typeof paramValue === "string") {
-          if (!paramSchema.enum.includes(paramValue)) {
-            errors.push(
-              `Parameter '${paramName}' must be one of: ${paramSchema.enum.join(", ")}`,
-            );
-          }
-        }
+        errors.push(
+          ...this.validateParameterValue(paramValue, paramSchema, paramName),
+        );
       }
     }
 
@@ -244,6 +263,74 @@ export abstract class BaseTool implements Tool {
       missingParams: missingParams.length > 0 ? missingParams : undefined,
       errors: errors.length > 0 ? errors : undefined,
     };
+  }
+
+  private validateParameterValue(
+    value: unknown,
+    schema: ToolParameterPropertySchema,
+    path: string,
+  ): string[] {
+    const errors: string[] = [];
+    const actualType = Array.isArray(value) ? "array" : typeof value;
+
+    if (schema.type !== actualType) {
+      errors.push(
+        `Parameter '${path}' expected type '${schema.type}' but got '${actualType}'`,
+      );
+      return errors;
+    }
+
+    if (schema.enum && typeof value === "string") {
+      if (!schema.enum.includes(value)) {
+        errors.push(
+          `Parameter '${path}' must be one of: ${schema.enum.join(", ")}`,
+        );
+      }
+    }
+
+    if (schema.type === "array") {
+      for (const [index, item] of (value as unknown[]).entries()) {
+        errors.push(
+          ...this.validateParameterValue(
+            item,
+            schema.items,
+            `${path}[${index}]`,
+          ),
+        );
+      }
+      return errors;
+    }
+
+    if (schema.type === "object") {
+      const objectValue = value as Record<string, unknown>;
+
+      for (const requiredParam of schema.required ?? []) {
+        if (
+          !(requiredParam in objectValue) ||
+          objectValue[requiredParam] === undefined ||
+          objectValue[requiredParam] === null
+        ) {
+          errors.push(`Parameter '${path}.${requiredParam}' is required`);
+        }
+      }
+
+      for (const [key, nestedValue] of Object.entries(objectValue)) {
+        const nestedSchema = schema.properties[key];
+        if (!nestedSchema || nestedValue === undefined || nestedValue === null) {
+          continue;
+        }
+
+        errors.push(
+          ...this.validateParameterValue(
+            nestedValue,
+            nestedSchema,
+            `${path}.${key}`,
+          ),
+        );
+      }
+    }
+
+    return errors;
   }
 
   /**

@@ -8,10 +8,17 @@ The implementation lives primarily in `src/providers/novelai/novelaiStreamAdapte
 
 ## Image Generation State
 
-- `generate_image_nai` now resolves its sampler, steps, scale, noise schedule, and `cfg_rescale` from `tomori_configs` first, falling back to the `NAI_IMAGE_*` / `NAI_CFG_RESCALE` env values when the server override is `NULL`.
-- `/novelai imggen params` is the admin-facing command for those overrides.
+ - `generate_image_nai` now resolves its diffusion model from `tomori_configs.nai_diffusion_model_id` first, then from the shared `diffusion_model_id` only when that shared image model already belongs to provider `novelai`, otherwise from the seeded default NovelAI diffusion model.
+ - `/novelai imggen model` is the admin-facing command for that dedicated model override.
+ - `generate_image_nai` now resolves its sampler, steps, scale, noise schedule, and `cfg_rescale` from `tomori_configs` first, falling back to the `NAI_IMAGE_*` / `NAI_CFG_RESCALE` env values when the server override is `NULL`.
+ - `/novelai imggen params` is the admin-facing command for those parameter overrides.
 - `/novelai charreference` now persists persona/user reference images through `src/utils/storage/charrefStorage.ts`.
-- Those reference assets are stored and reloadable now, but they are not injected into the NovelAI payload until the planned `characters[]` identity-resolution work lands.
+- `generate_image_nai` now supports a structured `characters[]` array for V4 models.
+- Each character entry may resolve a persona profile (`self`, `persona:<tomori_id>`, or short numeric persona ID) or a Discord user profile (snowflake) and inject saved appearance tags into the NovelAI payload. Tool guidance now explicitly prefers `id`-driven known-character entries, keeps the top-level `prompt` focused on composition/background, uses `self` for the current active persona instead of the bot's Discord user ID, and treats `characters[].tags` as action-first data for known IDs: pose, action, expression, gaze, framing, or interaction cues. Full appearance tags should only be supplied there when no `id` is present, or when deliberately overriding a saved profile.
+- Saved character references now normalize each resolved image onto NovelAI's supported reference canvases (`1024x1536`, `1472x1472`, or `1536x1024`) with black padding, then send them via `director_reference_images` only for single-character generations. If NovelAI rejects the ref payload, the tool retries once without refs.
+- Multi-character generations intentionally skip saved reference images and rely on per-character tags only, because NovelAI still treats Director/Precise Reference as whole-image guidance rather than strict per-character binding.
+- Character placement now populates both top-level `characterPrompts[]` and `v4_prompt.caption.char_captions[]`, with mirrored empty captions in `v4_negative_prompt`. Coordinate mode is enabled when two or more characters are present.
+- Nested tool schemas are now preserved recursively by the provider adapters, so structured array/object params such as `characters[]` survive tool conversion instead of being flattened to `items.type`.
 
 ## Architecture
 

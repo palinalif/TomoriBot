@@ -39,7 +39,14 @@ Current `generate_image_nai` runtime notes:
 
 - server-wide style tags come from `/novelai tags style` via `tomori_configs.nai_style_tags`
 - server-wide negative tags come from `/novelai tags negative` via `tomori_configs.nai_negative_tags`
-- persona and user appearance tags are stored separately on `tomoris.nai_tags` and `users.nai_char_tags`
+- the dedicated `generate_image_nai` model override comes from `/novelai imggen model` via `tomori_configs.nai_diffusion_model_id`, with fallback to the shared image model only when that shared model is already NovelAI
+- `characters[]` now drives V4 multi-character prompting for `generate_image_nai`; coordinate mode is enabled when two or more characters are present
+- persona and user appearance tags are resolved from `tomoris.nai_tags` and `users.nai_char_tags`
+- tool guidance for `generate_image_nai` now prefers `id`-driven entries for known persona/user profiles, keeps the top-level prompt focused on composition/background, uses `self` for the current active persona, treats the bot's Discord user ID as an alias for that persona during execution, and treats `characters[].tags` as action-first data for known IDs while reserving full appearance tags for no-ID characters or explicit per-image overrides
+- persona and user reference images are resolved from `tomoris.nai_char_ref_url` and `users.nai_char_ref_url`, normalized onto NovelAI's supported reference canvases with black padding, and sent through `director_reference_images` only for single-character generations when `NAI_ENABLE_CHAR_REFERENCES` is enabled
+- avatar-targeting tools that share `avatarResolver.ts` now accept `self` for the current active persona and also treat the bot's Discord user ID as an execution-time alias for that persona, keeping `peek_profile_picture`, `generate_image.user_id`, and `generate_image_nai.characters[].id` aligned
+- tool-facing schema guidance now also explicitly prefers `self` over the bot's Discord user ID when the active persona is the intended target, without assuming a specific bot or persona name
+- provider tool adapters now preserve nested array/object tool schemas recursively, so structured tool params such as `characters[]` survive provider conversion
 
 ## REST API Tools
 

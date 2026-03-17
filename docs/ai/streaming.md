@@ -66,7 +66,7 @@ Each flushed segment goes through:
 2. `cleanLLMOutput(...)`
 3. mention resolution
 4. prefix strip/prefill handling
-5. registered-speaker guard truncation (`Name:` lines for known non-active speakers)
+5. registered-speaker guard truncation (`Name:` lines for known non-active speakers, plus reserved `Assistant:` lines)
 6. `sendSegment(...)`
 
 ### 6) Message chunking and sending
@@ -145,7 +145,7 @@ Provider adapter safeguards:
 - Speaker-boundary holdback tails are force-flushed before non-text chunks (tool call/error/finish) to prevent truncated text when a stream exits early on tool execution.
 
 Stream-level safeguard:
-- Right before Discord send, `StreamOrchestrator` truncates any flushed segment at the first line that starts with a registered non-active speaker label (`Name:`) and then stops the stream. This applies to every provider, including providers that already have adapter-level speaker guards.
+- Right before Discord send, `StreamOrchestrator` truncates any flushed segment at the first line that starts with a registered non-active speaker label (`Name:`) or reserved `Assistant:` label, then stops the stream. This applies to every provider, including providers that already have adapter-level speaker guards.
 
 Loop control and max iterations are managed by `tomoriChat` (function-call safety loop).
 

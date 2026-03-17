@@ -125,7 +125,7 @@ SELECT add_column_if_not_exists('tomoris', 'webhook_avatar_url', 'TEXT');
 SELECT add_column_if_not_exists('tomoris', 'alter_triggers', 'TEXT[]', 'ARRAY[]::TEXT[]');
 -- persona_lineage_id: Shared identity namespace for cross-server personal memory pooling
 SELECT add_column_if_not_exists('tomoris', 'persona_lineage_id', 'BIGINT');
--- nai_tags: Imageboard-style character tags for NovelAI self-portrait generation
+-- nai_tags: Imageboard-style persona appearance tags for NovelAI character profile resolution
 SELECT add_column_if_not_exists('tomoris', 'nai_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
 -- nai_char_ref_url: Stored reference image URL/path for NovelAI character consistency
 SELECT add_column_if_not_exists('tomoris', 'nai_char_ref_url', 'TEXT');
@@ -1671,6 +1671,21 @@ SELECT add_column_if_not_exists('tomori_configs', 'nai_steps', 'SMALLINT', 'NULL
 SELECT add_column_if_not_exists('tomori_configs', 'nai_scale', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'nai_noise_schedule', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'nai_cfg_rescale', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'nai_diffusion_model_id', 'INTEGER', 'NULL');
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'tomori_configs_nai_diffusion_model_id_fkey'
+	) THEN
+		ALTER TABLE tomori_configs
+		ADD CONSTRAINT tomori_configs_nai_diffusion_model_id_fkey
+		FOREIGN KEY (nai_diffusion_model_id)
+		REFERENCES image_diffusion_models(diffusion_model_id)
+		ON DELETE SET NULL;
+	END IF;
+END $$;
 
 -- Bun SQL currently fails on INT[] binary decoding in some code paths.
 -- Migrate fallback_llm_ids to JSONB for stable SELECT */RETURNING * behavior.

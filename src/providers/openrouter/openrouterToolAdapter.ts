@@ -10,6 +10,8 @@ import type {
   MCPCapableToolAdapter,
   ToolContext,
   ToolResult,
+  ToolParameterPropertySchema,
+  ToolParameterType,
 } from "../../types/tool/interfaces";
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
@@ -22,21 +24,22 @@ import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchSe
 interface OpenAIFunctionDeclaration extends Record<string, unknown> {
   name: string;
   description: string;
-  parameters: {
-    type: "object";
-    properties: Record<
-      string,
-      {
-        type: "string" | "number" | "boolean" | "array" | "object";
-        description: string;
-        enum?: string[];
-        items?: {
-          type: "string" | "number" | "boolean" | "object";
-        };
-      }
-    >;
-    required: string[];
-  };
+  parameters: OpenAIObjectSchema;
+}
+
+interface OpenAIParameterSchema extends Record<string, unknown> {
+  type: ToolParameterType;
+  description?: string;
+  enum?: string[];
+  items?: OpenAIParameterSchema;
+  properties?: Record<string, OpenAIParameterSchema>;
+  required?: string[];
+}
+
+interface OpenAIObjectSchema extends OpenAIParameterSchema {
+  type: "object";
+  properties: Record<string, OpenAIParameterSchema>;
+  required: string[];
 }
 
 /**
@@ -70,66 +73,14 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
    */
   convertTool(tool: Tool): Record<string, unknown> {
     try {
-      // Convert parameter schema to OpenAI format
-      const openaiProperties: Record<
-        string,
-        {
-          type: "string" | "number" | "boolean" | "array" | "object";
-          description: string;
-          enum?: string[];
-          items?: {
-            type: "string" | "number" | "boolean" | "object";
-          };
-        }
-      > = {};
-
-      for (const [paramName, paramSchema] of Object.entries(
-        tool.parameters.properties,
-      )) {
-        openaiProperties[paramName] = {
-          type: this.convertParameterType(
-            paramSchema.type as
-              | "string"
-              | "number"
-              | "boolean"
-              | "array"
-              | "object",
-          ),
-          description: paramSchema.description,
-        };
-
-        // Add enum if specified
-        if (paramSchema.enum) {
-          openaiProperties[paramName].enum = paramSchema.enum;
-        }
-
-        // Add items for array type
-        if (paramSchema.type === "array" && paramSchema.items) {
-          const itemType = this.convertParameterType(
-            paramSchema.items.type as
-              | "string"
-              | "number"
-              | "boolean"
-              | "object",
-          );
-          openaiProperties[paramName].items = {
-            type: itemType as "string" | "number" | "boolean" | "object",
-          };
-        }
-      }
-
       const openaiFunction: OpenAIFunctionDeclaration = {
         name: tool.name,
         description: tool.description,
-        parameters: {
-          type: "object",
-          properties: openaiProperties,
-          required: tool.parameters.required,
-        },
+        parameters: this.cloneParameterSchema(tool.parameters),
       };
 
       log.info(
-        `Converted tool '${tool.name}' (${tool.category}) to OpenAI format with ${Object.keys(openaiProperties).length} parameters`,
+        `Converted tool '${tool.name}' (${tool.category}) to OpenAI format with ${Object.keys(tool.parameters.properties).length} parameters`,
       );
 
       return openaiFunction;
@@ -491,27 +442,11 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
       for (const [paramName, paramSchema] of Object.entries(
         tool.parameters.properties,
       )) {
-        const paramType = paramSchema.type as string;
-        if (
-          !["string", "number", "boolean", "array", "object"].includes(
-            paramType,
-          )
-        ) {
+        if (!this.isSupportedParameterSchema(paramSchema)) {
           log.warn(
-            `Tool '${tool.name}' has unsupported parameter type: ${paramType} (param: ${paramName})`,
+            `Tool '${tool.name}' has unsupported parameter schema (param: ${paramName})`,
           );
           return false;
-        }
-
-        // Validate array items if present
-        if (paramType === "array" && paramSchema.items) {
-          const itemType = paramSchema.items.type as string;
-          if (!["string", "number", "boolean", "object"].includes(itemType)) {
-            log.warn(
-              `Tool '${tool.name}' has unsupported array item type: ${itemType} (param: ${paramName})`,
-            );
-            return false;
-          }
         }
       }
 
@@ -525,11 +460,38 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
   /**
    * Convert generic parameter type to OpenAI type
    */
-  private convertParameterType(
-    genericType: "string" | "number" | "boolean" | "array" | "object",
-  ): "string" | "number" | "boolean" | "array" | "object" {
-    // OpenAI uses the same type strings, so direct mapping
-    return genericType;
+  private cloneParameterSchema(
+    schema: Tool["parameters"],
+  ): OpenAIObjectSchema {
+    return JSON.parse(JSON.stringify(schema)) as OpenAIObjectSchema;
+  }
+
+  private isSupportedParameterSchema(
+    schema: ToolParameterPropertySchema,
+  ): boolean {
+    const supportedTypes: ToolParameterType[] = [
+      "string",
+      "number",
+      "boolean",
+      "array",
+      "object",
+    ];
+
+    if (!supportedTypes.includes(schema.type)) {
+      return false;
+    }
+
+    if (schema.type === "array") {
+      return this.isSupportedParameterSchema(schema.items);
+    }
+
+    if (schema.type === "object") {
+      return Object.values(schema.properties).every((propertySchema) =>
+        this.isSupportedParameterSchema(propertySchema),
+      );
+    }
+
+    return true;
   }
 
   /**

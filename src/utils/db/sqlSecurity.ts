@@ -72,6 +72,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
 	"self_reply_limit",
   "triggered_persona_limit",
   "diffusion_model_id",
+  "nai_diffusion_model_id",
   "pin_message_enabled",
   "hide_respond_embed",
   "hide_impersonation_embeds",

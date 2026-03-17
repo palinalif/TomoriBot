@@ -36,7 +36,7 @@ export class GenerateImageTool extends BaseTool {
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN = /^(?:persona:)?\d{1,10}$/i;
+  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -54,7 +54,7 @@ export class GenerateImageTool extends BaseTool {
       user_id: {
         type: "string",
         description:
-          "Optional: Target ID whose profile picture/avatar should be used as a reference image. Accepts a Discord/webhook ID (17-19 digits) or a persona DB ID (short numeric). Can be combined with message_id references.",
+          "Optional: Target ID whose profile picture/avatar should be used as a reference image. Accepts 'self' for the current active persona, a Discord/webhook ID (17-19 digits), or a persona DB ID (short numeric or persona:<tomori_id>). Prefer 'self' when you mean the active persona instead of the bot's Discord user ID. Can be combined with message_id references.",
       },
       aspect_ratio: {
         type: "string",
@@ -687,7 +687,7 @@ export class GenerateImageTool extends BaseTool {
             success: false,
             error: "Invalid target ID format",
             message:
-              "The provided user_id is invalid. Use a 17-19 digit Discord/webhook ID or a short numeric persona ID.",
+              "The provided user_id is invalid. Use 'self', a 17-19 digit Discord/webhook ID, or a short numeric persona ID.",
           };
         }
 
@@ -721,7 +721,7 @@ export class GenerateImageTool extends BaseTool {
             error:
               "Failed to fetch profile picture for user_id (user/webhook/persona)",
             message:
-              "Could not fetch an avatar for that ID. Please confirm it is a valid Discord/webhook ID or persona ID and try again.",
+              "Could not fetch an avatar for that ID. Please confirm it is 'self', a valid Discord/webhook ID, or a persona ID and try again.",
           };
         }
       }

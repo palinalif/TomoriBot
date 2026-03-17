@@ -10,6 +10,8 @@ import type {
   MCPCapableToolAdapter,
   ToolContext,
   ToolResult,
+  ToolParameterPropertySchema,
+  ToolParameterType,
 } from "../../types/tool/interfaces";
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
@@ -22,30 +24,29 @@ import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchSe
 interface GoogleFunctionDeclaration extends Record<string, unknown> {
   name: string;
   description: string;
-  parameters: {
-    type: typeof Type.OBJECT;
-    properties: Record<
-      string,
-      {
-        type:
-          | typeof Type.STRING
-          | typeof Type.NUMBER
-          | typeof Type.BOOLEAN
-          | typeof Type.ARRAY
-          | typeof Type.OBJECT;
-        description: string;
-        enum?: string[];
-        items?: {
-          type:
-            | typeof Type.STRING
-            | typeof Type.NUMBER
-            | typeof Type.BOOLEAN
-            | typeof Type.OBJECT;
-        };
-      }
-    >;
-    required: string[];
-  };
+  parameters: GoogleObjectSchema;
+}
+
+type GoogleTypeValue =
+  | typeof Type.STRING
+  | typeof Type.NUMBER
+  | typeof Type.BOOLEAN
+  | typeof Type.ARRAY
+  | typeof Type.OBJECT;
+
+interface GoogleParameterSchema extends Record<string, unknown> {
+  type: GoogleTypeValue;
+  description?: string;
+  enum?: string[];
+  items?: GoogleParameterSchema;
+  properties?: Record<string, GoogleParameterSchema>;
+  required?: string[];
+}
+
+interface GoogleObjectSchema extends GoogleParameterSchema {
+  type: typeof Type.OBJECT;
+  properties: Record<string, GoogleParameterSchema>;
+  required: string[];
 }
 
 /**
@@ -79,79 +80,14 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
    */
   convertTool(tool: Tool): Record<string, unknown> {
     try {
-      // Convert parameter schema to Google format
-      const googleProperties: Record<
-        string,
-        {
-          type:
-            | typeof Type.STRING
-            | typeof Type.NUMBER
-            | typeof Type.BOOLEAN
-            | typeof Type.ARRAY
-            | typeof Type.OBJECT;
-          description: string;
-          enum?: string[];
-          items?: {
-            type:
-              | typeof Type.STRING
-              | typeof Type.NUMBER
-              | typeof Type.BOOLEAN
-              | typeof Type.OBJECT;
-          };
-        }
-      > = {};
-
-      for (const [paramName, paramSchema] of Object.entries(
-        tool.parameters.properties,
-      )) {
-        googleProperties[paramName] = {
-          type: this.convertParameterType(
-            paramSchema.type as
-              | "string"
-              | "number"
-              | "boolean"
-              | "array"
-              | "object",
-          ),
-          description: paramSchema.description,
-        };
-
-        // Add enum if specified
-        if (paramSchema.enum) {
-          googleProperties[paramName].enum = paramSchema.enum;
-        }
-
-        // Add items for array type
-        if (paramSchema.type === "array" && paramSchema.items) {
-          const itemType = this.convertParameterType(
-            paramSchema.items.type as
-              | "string"
-              | "number"
-              | "boolean"
-              | "object",
-          );
-          googleProperties[paramName].items = {
-            type: itemType as
-              | typeof Type.STRING
-              | typeof Type.NUMBER
-              | typeof Type.BOOLEAN
-              | typeof Type.OBJECT,
-          };
-        }
-      }
-
       const googleFunction: GoogleFunctionDeclaration = {
         name: tool.name,
         description: tool.description,
-        parameters: {
-          type: Type.OBJECT,
-          properties: googleProperties,
-          required: tool.parameters.required,
-        },
+        parameters: this.convertObjectSchema(tool.parameters),
       };
 
       log.info(
-        `Converted tool '${tool.name}' (${tool.category}) to Google format with ${Object.keys(googleProperties).length} parameters`,
+        `Converted tool '${tool.name}' (${tool.category}) to Google format with ${Object.keys(tool.parameters.properties).length} parameters`,
       );
 
       return googleFunction;
@@ -526,13 +462,8 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
    * @returns Google Type enum value
    */
   private convertParameterType(
-    genericType: "string" | "number" | "boolean" | "array" | "object",
-  ):
-    | typeof Type.STRING
-    | typeof Type.NUMBER
-    | typeof Type.BOOLEAN
-    | typeof Type.ARRAY
-    | typeof Type.OBJECT {
+    genericType: ToolParameterType,
+  ): GoogleTypeValue {
     switch (genericType) {
       case "string":
         return Type.STRING;
@@ -551,6 +482,53 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
         );
         return Type.STRING;
     }
+  }
+
+  private convertParameterSchema(
+    schema: ToolParameterPropertySchema,
+  ): GoogleParameterSchema {
+    const convertedSchema: GoogleParameterSchema = {
+      type: this.convertParameterType(schema.type),
+    };
+
+    if (schema.description) {
+      convertedSchema.description = schema.description;
+    }
+
+    if (schema.enum) {
+      convertedSchema.enum = [...schema.enum];
+    }
+
+    if (schema.type === "array") {
+      convertedSchema.items = this.convertParameterSchema(schema.items);
+    }
+
+    if (schema.type === "object") {
+      convertedSchema.properties = Object.fromEntries(
+        Object.entries(schema.properties).map(([key, nestedSchema]) => [
+          key,
+          this.convertParameterSchema(nestedSchema),
+        ]),
+      );
+
+      if (schema.required?.length) {
+        convertedSchema.required = [...schema.required];
+      }
+    }
+
+    return convertedSchema;
+  }
+
+  private convertObjectSchema(
+    schema: Tool["parameters"],
+  ): GoogleObjectSchema {
+    const convertedSchema = this.convertParameterSchema(schema);
+    return {
+      ...convertedSchema,
+      type: Type.OBJECT,
+      properties: convertedSchema.properties ?? {},
+      required: [...schema.required],
+    };
   }
 
   /**
@@ -616,16 +594,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
       // Check parameter types are supported
       for (const paramSchema of Object.values(tool.parameters.properties)) {
-        const supportedTypes = [
-          "string",
-          "number",
-          "boolean",
-          "array",
-          "object",
-        ];
-        if (!supportedTypes.includes(paramSchema.type)) {
-          return false;
-        }
+        if (!this.isSupportedParameterSchema(paramSchema)) return false;
       }
 
       return true;
@@ -636,6 +605,34 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
       );
       return false;
     }
+  }
+
+  private isSupportedParameterSchema(
+    schema: ToolParameterPropertySchema,
+  ): boolean {
+    const supportedTypes: ToolParameterType[] = [
+      "string",
+      "number",
+      "boolean",
+      "array",
+      "object",
+    ];
+
+    if (!supportedTypes.includes(schema.type)) {
+      return false;
+    }
+
+    if (schema.type === "array") {
+      return this.isSupportedParameterSchema(schema.items);
+    }
+
+    if (schema.type === "object") {
+      return Object.values(schema.properties).every((propertySchema) =>
+        this.isSupportedParameterSchema(propertySchema),
+      );
+    }
+
+    return true;
   }
 }
 

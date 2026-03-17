@@ -6,6 +6,30 @@
 import sharp from "sharp";
 import { log } from "../misc/logger";
 
+const NAI_REFERENCE_CANVASES = [
+  { width: 1024, height: 1536 },
+  { width: 1472, height: 1472 },
+  { width: 1536, height: 1024 },
+] as const;
+
+function selectClosestNaiReferenceCanvas(
+  width: number,
+  height: number,
+): { width: number; height: number } {
+  const aspectRatio = width / height;
+
+  return NAI_REFERENCE_CANVASES.reduce((bestCanvas, candidateCanvas) => {
+    const bestDistance = Math.abs(
+      Math.log(aspectRatio / (bestCanvas.width / bestCanvas.height)),
+    );
+    const candidateDistance = Math.abs(
+      Math.log(aspectRatio / (candidateCanvas.width / candidateCanvas.height)),
+    );
+
+    return candidateDistance < bestDistance ? candidateCanvas : bestCanvas;
+  });
+}
+
 /**
  * Center-crop an image to a 1:1 square aspect ratio
  * This is ideal for Discord avatar images which display best as squares
@@ -92,6 +116,54 @@ export async function resizeImage(
     log.error("Failed to resize image:", error);
     throw new Error(
       `Image resize failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+}
+
+/**
+ * Normalize a NovelAI character/director reference image onto one of the
+ * accepted canvases using black padding.
+ *
+ * NovelAI's reference pipeline fits images into 1024x1536, 1472x1472, or
+ * 1536x1024. This helper mirrors that preprocessing so API requests don't send
+ * arbitrary image dimensions directly.
+ *
+ * @param buffer - Input image buffer
+ * @returns Promise<Buffer> - PNG buffer normalized to a supported NAI canvas
+ */
+export async function normalizeNaiReferenceImage(
+  buffer: Buffer,
+): Promise<Buffer> {
+  try {
+    const metadata = await sharp(buffer).metadata();
+    if (!metadata.width || !metadata.height) {
+      throw new Error("Unable to read image dimensions");
+    }
+
+    const canvas = selectClosestNaiReferenceCanvas(
+      metadata.width,
+      metadata.height,
+    );
+
+    const normalizedBuffer = await sharp(buffer)
+      .flatten({ background: { r: 0, g: 0, b: 0 } })
+      .resize(canvas.width, canvas.height, {
+        fit: "contain",
+        position: "centre",
+        background: { r: 0, g: 0, b: 0, alpha: 1 },
+      })
+      .png()
+      .toBuffer();
+
+    log.info(
+      `[NAI] Normalized reference image ${metadata.width}x${metadata.height} -> ${canvas.width}x${canvas.height} with black padding`,
+    );
+
+    return normalizedBuffer;
+  } catch (error) {
+    log.error("Failed to normalize NovelAI reference image:", error);
+    throw new Error(
+      `NovelAI reference normalization failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
   }
 }

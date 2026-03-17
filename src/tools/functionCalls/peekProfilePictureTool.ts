@@ -32,7 +32,7 @@ export class PeekProfilePictureTool extends BaseTool {
   static pendingEnhancedContextItems = new Map<string, StructuredContextItem>();
   name = "peek_profile_picture";
   description =
-    "Process and analyze a Discord user's profile picture using AI vision capabilities. ONLY use this when specifically asked to look at someone's avatar. If you don't see a user ID or mention in recent messages, avoid calling this function.";
+    "Process and analyze a Discord user's profile picture using AI vision capabilities. ONLY use this when specifically asked to look at someone's avatar. The target may be 'self' for the current active persona, a Discord/webhook ID, or a persona ID. Prefer 'self' when you mean the active persona instead of the bot's Discord user ID. If you don't see a user ID or mention in recent messages, avoid calling this function.";
   category = "utility" as const;
   requiredModelCapabilities = {
     sees_images: true,
@@ -44,7 +44,7 @@ export class PeekProfilePictureTool extends BaseTool {
       user_id: {
         type: "string",
         description:
-          "The target ID to analyze. Accepts a Discord/webhook ID (17-19 digits) or a persona DB ID (short numeric).",
+          "The target ID to analyze. Accepts 'self' for the current active persona, a Discord/webhook ID (17-19 digits), or a persona DB ID (short numeric or persona:<tomori_id>). Prefer 'self' when you mean the active persona instead of the bot's Discord user ID.",
       },
       reason: {
         type: "string",
@@ -60,7 +60,7 @@ export class PeekProfilePictureTool extends BaseTool {
    * Discord IDs are 17-19 digit snowflakes
    */
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN = /^(?:persona:)?\d{1,10}$/i;
+  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   /**
    * Check if profile picture tool is available for the given provider.
@@ -166,12 +166,12 @@ export class PeekProfilePictureTool extends BaseTool {
           success: false,
           error: "Invalid target ID format",
           message:
-            "The provided ID is invalid. Use a 17-19 digit Discord/webhook ID or a short numeric persona ID.",
+            "The provided ID is invalid. Use 'self', a 17-19 digit Discord/webhook ID, or a short numeric persona ID.",
           data: {
             status: "invalid_user_id",
             provided_id: userId,
             expected_format:
-              "17-19 digit Discord/webhook ID or short numeric persona ID",
+              "'self', 17-19 digit Discord/webhook ID, or short numeric persona ID",
           },
         };
       }
@@ -279,7 +279,7 @@ export class PeekProfilePictureTool extends BaseTool {
           (error.message.includes("User with ID") &&
             error.message.includes("not found"))
         ) {
-          errorMessage = `No Discord user or webhook with ID ${userId} was found. Please check the ID and try again.`;
+          errorMessage = `No Discord user, webhook, or active persona avatar with ID ${userId} was found. Please check the ID and try again.`;
           errorStatus = "user_or_webhook_not_found";
         } else if (error.message.includes("privacy settings")) {
           errorMessage =

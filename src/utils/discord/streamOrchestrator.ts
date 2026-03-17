@@ -1219,7 +1219,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		);
 		if (speakerGuardResult.stopTriggered) {
 			log.warn(
-				`Stream speaker guard: stopping before registered speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
+				`Stream speaker guard: stopping before speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
 			);
 			segmentToSend = speakerGuardResult.text;
 			shouldStopForSpeakerGuard = true;

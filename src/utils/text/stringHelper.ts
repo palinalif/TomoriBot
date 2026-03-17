@@ -1365,6 +1365,8 @@ export function cleanLLMOutput(
 	return cleanedText.replace(/\n([^:]+):$/, "");
 }
 
+const RESERVED_INVALID_SPEAKER_LABELS_LOWER = new Set(["assistant"]);
+
 export function truncateBeforeRegisteredSpeakerLine(
 	text: string,
 	registeredSpeakerNamesLower?: ReadonlySet<string>,
@@ -1373,7 +1375,7 @@ export function truncateBeforeRegisteredSpeakerLine(
 	stopTriggered: boolean;
 	matchedSpeaker?: string;
 } {
-	if (!text || !registeredSpeakerNamesLower || registeredSpeakerNamesLower.size === 0) {
+	if (!text) {
 		return {
 			text,
 			stopTriggered: false,
@@ -1394,7 +1396,13 @@ export function truncateBeforeRegisteredSpeakerLine(
 			continue;
 		}
 
-		if (!registeredSpeakerNamesLower.has(rawLabel.toLowerCase())) {
+		const normalizedLabel = rawLabel.toLowerCase();
+		const isRegisteredSpeaker =
+			registeredSpeakerNamesLower?.has(normalizedLabel) ?? false;
+		const isReservedInvalidSpeakerLabel =
+			RESERVED_INVALID_SPEAKER_LABELS_LOWER.has(normalizedLabel);
+
+		if (!isRegisteredSpeaker && !isReservedInvalidSpeakerLabel) {
 			continue;
 		}
 
