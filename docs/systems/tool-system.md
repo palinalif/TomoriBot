@@ -35,6 +35,12 @@ From `src/tools/functionCalls/`:
 - `generate_image_nai` (`generateImageNaiTool.ts`)
 - `review_capabilities` (`reviewCapabilities.ts`)
 
+Current `generate_image_nai` runtime notes:
+
+- server-wide style tags come from `/novelai tags style` via `tomori_configs.nai_style_tags`
+- server-wide negative tags come from `/novelai tags negative` via `tomori_configs.nai_negative_tags`
+- persona and user appearance tags are stored separately on `tomoris.nai_tags` and `users.nai_char_tags`
+
 ## REST API Tools
 
 - Brave REST tool classes in `src/tools/restAPIs/brave/braveTools.ts`:

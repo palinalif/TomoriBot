@@ -35,6 +35,7 @@ const NAI_STEPS = Number.parseInt(process.env.NAI_IMAGE_STEPS || "28", 10);
 const NAI_SCALE = Number.parseFloat(process.env.NAI_IMAGE_SCALE || "5");
 const NAI_SAMPLER = process.env.NAI_IMAGE_SAMPLER || "k_euler_ancestral";
 const NAI_NOISE_SCHEDULE = process.env.NAI_IMAGE_NOISE_SCHEDULE || "karras";
+// Fallback only when the server-scoped nai_negative_tags array is empty.
 const NAI_NEGATIVE_PROMPT =
   process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
   "blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page";
@@ -379,6 +380,7 @@ export class GenerateImageNaiTool extends BaseTool {
     apiKey: string,
     model: string,
     prompt: string,
+    negativePrompt: string,
     imageBase64: string,
     maskBase64: string,
     width: number,
@@ -425,7 +427,7 @@ export class GenerateImageNaiTool extends BaseTool {
           },
           v4_negative_prompt: {
             caption: {
-              base_caption: NAI_NEGATIVE_PROMPT,
+              base_caption: negativePrompt,
               char_captions: [],
             },
             use_coords: false,
@@ -451,7 +453,7 @@ export class GenerateImageNaiTool extends BaseTool {
           uncond_per_vibe: true,
           wonky_vibe_correlation: true,
           version: 1,
-          uc: NAI_NEGATIVE_PROMPT,
+          uc: negativePrompt,
           request_type: "PromptGenerateRequest",
         },
       };
@@ -474,7 +476,7 @@ export class GenerateImageNaiTool extends BaseTool {
           mask: maskBase64,
           add_original_image: true,
           strength: NAI_INPAINT_STRENGTH,
-          negative_prompt: NAI_NEGATIVE_PROMPT,
+          negative_prompt: negativePrompt,
         },
       };
     }
@@ -521,6 +523,7 @@ export class GenerateImageNaiTool extends BaseTool {
     apiKey: string,
     model: string,
     prompt: string,
+    negativePrompt: string,
     orientation: string,
   ): Promise<Buffer> {
     const dimensions =
@@ -564,7 +567,7 @@ export class GenerateImageNaiTool extends BaseTool {
           },
           v4_negative_prompt: {
             caption: {
-              base_caption: NAI_NEGATIVE_PROMPT,
+              base_caption: negativePrompt,
               char_captions: [],
             },
             use_coords: false,
@@ -590,7 +593,7 @@ export class GenerateImageNaiTool extends BaseTool {
           uncond_per_vibe: true,
           wonky_vibe_correlation: true,
           version: 1,
-          uc: NAI_NEGATIVE_PROMPT,
+          uc: negativePrompt,
           request_type: "PromptGenerateRequest",
         },
       };
@@ -609,7 +612,7 @@ export class GenerateImageNaiTool extends BaseTool {
           noise_schedule: NAI_NOISE_SCHEDULE,
           n_samples: 1,
           seed,
-          negative_prompt: NAI_NEGATIVE_PROMPT,
+          negative_prompt: negativePrompt,
         },
       };
     }
@@ -813,15 +816,21 @@ export class GenerateImageNaiTool extends BaseTool {
         };
       }
 
-      // 4. Build tag list — quality tags and character tags are trusted (no normalization needed)
-      const qualityTags = [
-        "8k",
-        "absurdres",
-        "masterpiece",
-        "best quality",
-        "good quality",
-        "newest",
-      ];
+      // 4. Build tag list — server style tags and persona character tags are trusted
+      //    and should bypass suggest-tags normalization.
+      const styleTags = context.tomoriState.config.nai_style_tags ?? [];
+      const configuredNegativeTags =
+        context.tomoriState.config.nai_negative_tags ?? [];
+      const effectiveNegativePrompt =
+        configuredNegativeTags.length > 0
+          ? configuredNegativeTags.join(", ")
+          : NAI_NEGATIVE_PROMPT;
+
+      if (configuredNegativeTags.length === 0) {
+        log.info(
+          "[NAI] Server negative tags are empty; using fallback negative prompt from env",
+        );
+      }
 
       // Parse model-provided tags (these need normalization)
       const modelTags = prompt
@@ -829,11 +838,13 @@ export class GenerateImageNaiTool extends BaseTool {
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
-      // Trusted tags: quality + persona character tags (skip normalization)
+      // Trusted tags: server style tags + current self-portrait persona tags
+      // (kept temporarily until the Task 5 character-array migration moves persona
+      // tags into char_captions instead of base_caption).
       // In inpaint mode, character tags are skipped — the character already exists
       // in the source image, and prepending identity tags would conflict with the
       // inpainting prompt that describes *what to change*, not who the character is.
-      const trustedTags = [...qualityTags];
+      const trustedTags = [...styleTags];
 
       if (isSelfPortrait && !isInpaintMode) {
         const naiTags = context.tomoriState.nai_tags || [];
@@ -958,6 +969,7 @@ export class GenerateImageNaiTool extends BaseTool {
           apiKey,
           inpaintModel,
           normalizedPrompt,
+          effectiveNegativePrompt,
           sourceImage.data,
           segResult.maskBase64,
           segResult.imageWidth,
@@ -972,6 +984,7 @@ export class GenerateImageNaiTool extends BaseTool {
           apiKey,
           baseModelCodename,
           normalizedPrompt,
+          effectiveNegativePrompt,
           orientation,
         );
       }

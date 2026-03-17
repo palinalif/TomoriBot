@@ -1,5 +1,9 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
+import {
+	DEFAULT_NAI_NEGATIVE_TAGS,
+	DEFAULT_NAI_STYLE_TAGS,
+} from "@/utils/image/naiTagDefaults";
 
 export enum HumanizerDegree {
   NONE = 0,
@@ -31,6 +35,7 @@ export const userSchema = z.object({
   registration_locale: z.string().nullable(), // Static locale captured at registration
   privacy_level: z.nativeEnum(PrivacyLevel).default(PrivacyLevel.MINIMAL),
   personal_memories: z.array(z.string()).default([]),
+  nai_char_tags: z.array(z.string()).default([]), // Added March 2026 - User-specific NovelAI character tags
   shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
@@ -165,6 +170,8 @@ export const tomoriConfigSchema = z.object({
   llm_id: z.number(),
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
   diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
+  nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
+  nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
   llm_temperature: z.number().min(1.0).max(2.0).default(1.2),
   llm_top_p: z.number().min(0.0).max(1.0).default(0.95), // Added February 2026 - Nucleus sampling
   llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)

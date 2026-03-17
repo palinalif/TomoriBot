@@ -87,6 +87,13 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.welcome_prompt` stores the required additional greeting instruction shown in `/server welcomechannel`.
 - `tomori_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.
+- `tomori_configs.nai_style_tags` stores server-wide NovelAI style/quality tags prepended to every `generate_image_nai` prompt.
+- `tomori_configs.nai_negative_tags` stores server-wide NovelAI negative tags; an empty array falls back to the `NAI_IMAGE_NEGATIVE_PROMPT` env value.
+
+### NovelAI profile tags
+
+- `tomoris.nai_tags` stores per-persona NovelAI character tags.
+- `users.nai_char_tags` stores per-user NovelAI character tags keyed by Discord snowflake (`users.user_disc_id`).
 
 ### Memory split
 

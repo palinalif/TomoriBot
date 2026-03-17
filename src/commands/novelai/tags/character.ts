@@ -17,26 +17,18 @@ import type { TomoriState, UserRow } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import type { SelectOption } from "../../../types/discord/modal";
 import { loadAllPersonasForServer } from "../../../utils/db/dbRead";
-
-// Configurable limits via environment variables
-const MAX_TAGS = Number.parseInt(process.env.NAI_MAX_TAGS || "100", 10);
-const MAX_TAG_LENGTH = Number.parseInt(
-  process.env.NAI_MAX_TAG_LENGTH || "200",
-  10,
-);
+import {
+  formatTextArrayLiteral,
+  MAX_TAG_LENGTH,
+  MAX_TAGS,
+  parseAndValidateNaiTags,
+  TAGS_MODAL_MAX_LENGTH,
+} from "./tagHelpers";
 
 // Modal field IDs
 const MODAL_CUSTOM_ID = "novelai_tags_character_modal";
 const PERSONA_SELECT_ID = "persona_select";
 const TAGS_INPUT_ID = "tags_input";
-
-/**
- * Formats a TEXT[] value for PostgreSQL array literal
- * @param items - Array of strings to format
- * @returns PostgreSQL-compatible array literal string
- */
-const formatTextArrayLiteral = (items: string[]): string =>
-  `{${items.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
 /**
  * Configure the subcommand for Discord slash command registration
@@ -53,8 +45,7 @@ export const configureSubcommand = (
     );
 
 /**
- * Configures NovelAI character tags (imageboard-style) for a persona's self-portrait generation.
- * Tags are used by the generate_image_nai tool when is_self_portrait is true.
+ * Configures NovelAI character tags (imageboard-style) for a persona profile.
  *
  * Flow:
  * 1. Load all personas for the server
@@ -153,7 +144,7 @@ export async function execute(
             "commands.novelai.tags.character.tags_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: false, // Empty input clears tags
-          maxLength: 4000,
+          maxLength: TAGS_MODAL_MAX_LENGTH,
         },
       ],
     });
@@ -215,24 +206,10 @@ export async function execute(
       return;
     }
 
-    // 7. Parse tags: split by comma (ASCII and fullwidth), trim, deduplicate
-    //    Note: Do NOT lowercase — NAI tags are case-sensitive for some tags
-    const parsedTags = tagsInput
-      .split(/[,\u3001]/)
-      .map((tag) => tag.trim())
-      .filter((tag) => tag.length > 0);
+    // 7. Parse, deduplicate, and validate the submitted tags.
+    const validationResult = parseAndValidateNaiTags(tagsInput);
 
-    const uniqueTags: string[] = [];
-    const seenTags = new Set<string>();
-    for (const tag of parsedTags) {
-      if (!seenTags.has(tag)) {
-        seenTags.add(tag);
-        uniqueTags.push(tag);
-      }
-    }
-
-    // 8. Validate: at least 1 tag
-    if (uniqueTags.length === 0) {
+    if (!validationResult.isValid && validationResult.reason === "empty") {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.tags.character.no_tags_title",
         descriptionKey: "commands.novelai.tags.character.no_tags_description",
@@ -241,8 +218,7 @@ export async function execute(
       return;
     }
 
-    // 9. Validate: max tag count
-    if (uniqueTags.length > MAX_TAGS) {
+    if (!validationResult.isValid && validationResult.reason === "too_many") {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.tags.character.too_many_tags_title",
         descriptionKey:
@@ -253,21 +229,32 @@ export async function execute(
       return;
     }
 
-    // 10. Validate: individual tag length
-    for (const tag of uniqueTags) {
-      if (tag.length > MAX_TAG_LENGTH) {
-        await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.novelai.tags.character.tag_too_long_title",
-          descriptionKey:
-            "commands.novelai.tags.character.tag_too_long_description",
-          descriptionVars: { max_length: MAX_TAG_LENGTH.toString() },
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
+    if (
+      !validationResult.isValid &&
+      validationResult.reason === "tag_too_long"
+    ) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, {
+        titleKey: "commands.novelai.tags.character.tag_too_long_title",
+        descriptionKey:
+          "commands.novelai.tags.character.tag_too_long_description",
+        descriptionVars: { max_length: MAX_TAG_LENGTH.toString() },
+        color: ColorCode.ERROR,
+      });
+      return;
     }
 
-    // 11. Replace all existing tags in the database
+    if (!validationResult.isValid) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const uniqueTags = validationResult.tags;
+
+    // 8. Replace all existing tags in the database
     const personaId = selectedPersona.tomori_id;
     const tagArrayLiteral = formatTextArrayLiteral(uniqueTags);
 
@@ -277,10 +264,10 @@ export async function execute(
 			WHERE tomori_id = ${personaId}
 		`;
 
-    // 12. Invalidate cache so next access gets fresh data
+    // 9. Invalidate cache so next access gets fresh data
     invalidateTomoriStateCache(interaction.guild.id);
 
-    // 13. Success response with tag list
+    // 10. Success response with tag list
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.novelai.tags.character.success_title",
       descriptionKey: "commands.novelai.tags.character.success_description",

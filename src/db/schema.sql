@@ -704,6 +704,9 @@ SELECT add_column_if_not_exists('users', 'registration_locale', 'TEXT');
 -- Add cross-server short-term memory sharing opt-in (Phase 1: Short-term memory system)
 SELECT add_column_if_not_exists('users', 'shortterm_cache_crossserver_opt_in', 'BOOLEAN', 'false');
 
+-- User-specific NovelAI character tags (March 2026)
+SELECT add_column_if_not_exists('users', 'nai_char_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
+
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;
 CREATE TRIGGER update_users_timestamp
@@ -1640,6 +1643,23 @@ SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'JSONB', '
 
 -- When true, hides the standard generate_image tool so only generate_image_nai is available (March 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'nai_exclusive_imggen', 'BOOLEAN', 'false');
+
+-- Server-wide NovelAI image prompt tag overrides (March 2026)
+-- Style tags replace the old hardcoded quality tag list in generate_image_nai.
+SELECT add_column_if_not_exists(
+	'tomori_configs',
+	'nai_style_tags',
+	'TEXT[]',
+	'{"8k","absurdres","masterpiece","best quality","good quality","newest"}'
+);
+
+-- Negative tags replace the old hardcoded NAI negative prompt in generate_image_nai.
+SELECT add_column_if_not_exists(
+	'tomori_configs',
+	'nai_negative_tags',
+	'TEXT[]',
+	'{"lowres","worst quality","low quality","bad quality","old","oldest","unfinished","scan artifacts","jpeg artifacts","jaggy lines","unclear","sketch","blurry","bad anatomy","very displeasing","displeasing","bad hands","bad fingers","missing fingers","bad proportions","bad perspective","bad eyes","bad pupils","multiple heads","extra faces","many arms","poorly drawn face","poorly drawn hands","fused hands","bad feet","too many legs","malformed limbs","extra arms","multiple ears","fat","mutation","monster","amputee","guro","extra digits","fewer digits","twitter username","username","watermark","signature","2koma","4koma","comic"}'
+);
 
 -- Bun SQL currently fails on INT[] binary decoding in some code paths.
 -- Migrate fallback_llm_ids to JSONB for stable SELECT */RETURNING * behavior.
