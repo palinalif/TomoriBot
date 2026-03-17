@@ -56,7 +56,12 @@ Use these helpers instead of hardcoding provider names in commands/tools:
 - `normalizeProviderName()`
 - `getStaticProviderInfo()`
 - `providerSupportsFeature()`
-- `resolveProviderFeatureImplementation()`
+- `resolveProviderFeatureImplementation()` (legacy runtime routing for untouched paths)
+
+Runtime capability resolution lives in:
+
+- `src/types/provider/featureInterfaces.ts`
+- `src/utils/provider/providerCapabilityResolver.ts`
 
 `ProviderInfo.featureSupport` is the source of truth for app-level feature gating such as:
 
@@ -72,7 +77,7 @@ Use these helpers instead of hardcoding provider names in commands/tools:
 Rule:
 
 - If a command only needs to know whether a provider supports a feature, use `providerSupportsFeature()`.
-- If a command needs to call a provider-specific implementation, route through a shared executor instead of checking `provider === "google"` inline.
+- If a command needs to execute a provider-owned runtime feature, resolve the optional capability from the provider instance instead of checking `provider === "google"` inline.
 
 ## Model Source of Truth
 
@@ -115,28 +120,66 @@ Tools are provider-agnostic at registry level, then adapted per provider by each
 
 All providers rely on centralized tool filtering via `getAvailableToolsWithMCP()`.
 
-## Shared Feature Executors
+## Provider Runtime Capabilities
 
-Provider-specific feature dispatch that still needs multiple backends is centralized in:
+Optional provider-owned runtime capabilities now live on provider classes instead of a central implementation switch table.
 
-- `src/providers/utils/providerFeatureExecutors.ts`
+Current capability layer:
 
-Current shared executors cover:
+- capability interfaces: `src/types/provider/featureInterfaces.ts`
+- typed resolver: `src/utils/provider/providerCapabilityResolver.ts`
+- thin app-level wrappers: `src/providers/utils/providerFeatureExecutors.ts`
 
+Google and OpenRouter currently own runtime execution for:
+
+- embeddings
+- structured output execution
 - preset generation
 - conversation compaction
 - roleplay compaction
-- expression initialization
-- history extraction
+- history extraction (via structured output capability)
 
 Rule:
 
-- Keep provider-name branching inside provider utilities/registries, not scattered across commands.
-- Adding a new provider should usually mean:
-  1. add/update that provider's `providerInfo.ts`
-  2. implement the provider-specific feature code
-  3. register the feature implementation in `providerInfoRegistry.ts` or a provider utility
-  4. avoid touching unrelated commands unless user-facing behavior changes
+- Keep `providerSupportsFeature()` as the common early-gating helper.
+- Put runtime execution on the provider instance when the feature is app-level and provider-specific.
+- Keep provider-specific implementation code inside `src/providers/{providerName}/` or shared family internals.
+- `resolveProviderFeatureImplementation()` is now temporary legacy routing for the runtime paths that have not been migrated yet.
+
+## Writing Provider-Aware Commands
+
+When adding a new command or tool flow that depends on provider support:
+
+1. Decide whether the command only needs static gating, or also needs runtime execution.
+2. Add or reuse a `ProviderInfo.featureSupport` flag for the app-level feature.
+3. In the command, fail early with `providerSupportsFeature(providerName, featureName)`.
+4. If runtime execution is needed, resolve the provider-owned capability instead of switching on provider names.
+
+Use this pattern:
+
+- static gating only:
+  - examples: hide/deny a feature before execution, validate setup, choose UI availability
+  - use `providerSupportsFeature()`
+- migrated runtime execution:
+  - examples: embeddings, structured output, preset generation, compaction, history extraction
+  - use `src/utils/provider/providerCapabilityResolver.ts` directly or a thin wrapper such as `src/providers/utils/providerFeatureExecutors.ts`
+- legacy runtime execution:
+  - examples: native image generation, live token counting
+  - these still use `resolveProviderFeatureImplementation()` temporarily until migrated
+
+Rules for command authors:
+
+- Do not add new `provider === "google"` or `provider === "openrouter"` checks in commands for app-level features.
+- Keep provider identity separate even when internals are shared across a family.
+- If a provider does not implement the runtime capability, return a clean unsupported error near the command boundary.
+- If a new feature will be reused by multiple commands, prefer adding a new optional capability interface over creating another central switch table.
+
+Current command examples:
+
+- `src/commands/server/initialize/expressions.ts`
+- `src/commands/persona/generate.ts`
+- `src/commands/tool/compact.ts`
+- `src/commands/teach/history.ts`
 
 ## Intentional Exceptions
 
@@ -144,6 +187,7 @@ Some literal provider names are still correct and should remain explicit:
 
 - flows that require a truly provider-specific optional credential
 - direct vendor-specific capabilities that are not abstracted yet
+- remaining legacy runtime paths such as native image generation and live token counting until they are moved onto provider capabilities
 
 Example:
 

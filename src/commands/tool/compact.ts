@@ -39,10 +39,7 @@ import {
   generateConversationSummaryForProvider,
   generateRoleplaySummaryForProvider,
 } from "@/providers/utils/providerFeatureExecutors";
-import {
-  providerSupportsFeature,
-  resolveProviderFeatureImplementation,
-} from "@/utils/provider/providerInfoRegistry";
+import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 
 const MODAL_CUSTOM_ID = "tool_compact_modal";
 const TYPE_FIELD_ID = "summary_type";
@@ -915,15 +912,8 @@ export async function execute(
   const messageFetchLimit = normalizeMessageFetchLimit(
     tomoriState.config.message_fetch_limit,
   );
-  const compactionImplementation = resolveProviderFeatureImplementation(
-    providerName,
-    "conversationCompaction",
-  );
 
-  if (
-    !providerSupportsFeature(providerName, "conversationCompaction") ||
-    !compactionImplementation
-  ) {
+  if (!providerSupportsFeature(providerName, "conversationCompaction")) {
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
@@ -1087,10 +1077,7 @@ export async function execute(
         model: tomoriState.llm.llm_codename,
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,
-        googleImages: analyzeImages ? imagePayload : undefined,
-        openrouterImages: analyzeImages
-          ? imageReferences.map((img) => ({ url: img.url }))
-          : undefined,
+        images: analyzeImages ? imagePayload : undefined,
       });
 
       if (result.error || !result.summary) {
@@ -1148,10 +1135,7 @@ export async function execute(
         model: tomoriState.llm.llm_codename,
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,
-        googleImages: analyzeImages ? imagePayload : undefined,
-        openrouterImages: analyzeImages
-          ? imageReferences.map((img) => ({ url: img.url }))
-          : undefined,
+        images: analyzeImages ? imagePayload : undefined,
       });
 
       if (result.error || !result.summary) {

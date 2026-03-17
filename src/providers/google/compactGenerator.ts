@@ -4,27 +4,18 @@ import {
   type GenerateContentConfig,
   type Part,
 } from "@google/genai";
+import type {
+  CompactConversationResult,
+  CompactRoleplayResult,
+  ProviderCompactSummaryRequest as CompactSummaryRequest,
+} from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import type { CompactRoleplaySummary } from "@/types/misc/compact";
-
-export interface CompactSummaryRequest {
-  apiKey: string;
-  model: string;
-  systemPrompt?: string;
-  userPrompt: string;
-  temperature?: number;
-  images?: Array<{ url: string; mimeType?: string }>;
-}
-
-export interface CompactConversationResult {
-  summary?: string;
-  error?: string;
-}
-
-export interface CompactRoleplayResult {
-  summary?: CompactRoleplaySummary;
-  error?: string;
-}
+export type {
+  CompactConversationResult,
+  CompactRoleplayResult,
+  ProviderCompactSummaryRequest as CompactSummaryRequest,
+} from "@/types/provider/featureInterfaces";
 
 async function buildUserParts(
   userPrompt: string,

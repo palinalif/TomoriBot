@@ -1741,8 +1741,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           tag_too_long_description: `各スタイルタグは{max_length}文字以下にしてください。`,
           success_title: `スタイルタグを更新しました`,
           success_description: `サーバー全体のスタイルタグを更新しました：\n\`\`\`\n{tag_list}\n\`\`\``,
-          cleared_title: `スタイルタグをクリアしました`,
-          cleared_description: `サーバー全体のNovelAIスタイルタグをすべてクリアしました。`,
+          cleared_title: `スタイルタグを初期値に戻しました`,
+          cleared_description: `サーバー全体のスタイルタグを初期値に戻しました：\n\`\`\`\n{tag_list}\n\`\`\``,
         },
         negative: {
           description: `このサーバー全体で使うNovelAIネガティブタグを設定します。`,
@@ -1758,8 +1758,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           tag_too_long_description: `各ネガティブタグは{max_length}文字以下にしてください。`,
           success_title: `ネガティブタグを更新しました`,
           success_description: `サーバー全体のネガティブタグを更新しました：\n\`\`\`\n{tag_list}\n\`\`\``,
-          cleared_title: `ネガティブタグをクリアしました`,
-          cleared_description: `サーバー全体のネガティブタグ上書きをクリアしました。これ以降はフォールバックのネガティブプロンプトが使われます。`,
+          cleared_title: `ネガティブタグを初期値に戻しました`,
+          cleared_description: `サーバー全体のネガティブタグを初期値に戻しました：\n\`\`\`\n{tag_list}\n\`\`\``,
         },
         me: {
           description: `自分用のNovelAIキャラクタータグを設定します。`,

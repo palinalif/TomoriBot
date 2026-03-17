@@ -8,6 +8,10 @@ import { GoogleGenAI } from "@google/genai";
 import type { Content, GenerateContentConfig, Part } from "@google/genai";
 import { z } from "zod";
 import { getAllEmotionKeys } from "@/types/misc/emotions";
+import type {
+	ProviderStructuredJsonRequest,
+	StructuredOutputResult as SharedStructuredOutputResult,
+} from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 
 /**
@@ -58,7 +62,7 @@ export type ExpressionBatchResult = z.infer<typeof ExpressionBatchResultSchema>;
 /**
  * Build JSON schema object for structured output (shared across providers)
  */
-function buildExpressionResponseSchema(expectedExpressionCount?: number) {
+export function buildExpressionResponseSchema(expectedExpressionCount?: number) {
   return {
     type: "object" as const,
     properties: {
@@ -96,84 +100,10 @@ function buildExpressionResponseSchema(expectedExpressionCount?: number) {
   };
 }
 
-/**
- * Request parameters for Google structured output
- */
-export interface GoogleStructuredOutputRequest {
-  // API key for authentication
-  apiKey: string;
-
-  // Model codename (e.g., "gemini-2.5-flash")
-  model: string;
-
-  // System instruction prompt
-  systemPrompt: string;
-
-  // User prompt describing the task
-  userPrompt: string;
-
-  // Array of Discord CDN image URLs with names
-  images: Array<{ url: string; name: string }>;
-
-  // Optional temperature (default: 1.0)
-  temperature?: number;
-}
-
-/**
- * Request parameters for OpenRouter structured output
- */
-export interface OpenrouterStructuredOutputRequest {
-  // API key for authentication
-  apiKey: string;
-
-  // Model codename (e.g., "x-ai/grok-4-fast")
-  model: string;
-
-  // System instruction prompt
-  systemPrompt: string;
-
-  // User prompt describing the task
-  userPrompt: string;
-
-  // Array of Discord CDN image URLs with names
-  images: Array<{ url: string; name: string }>;
-
-  // Optional temperature (default: 1.0)
-  temperature?: number;
-}
-
-/**
- * Result type for structured output calls
- */
-export type StructuredOutputResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
-
-/**
- * Generic request parameters for structured JSON output (no images required)
- */
-export interface GenericStructuredOutputRequest {
-  /** API key for authentication */
-  apiKey: string;
-
-  /** Model codename (e.g., "gemini-2.5-flash") */
-  model: string;
-
-  /** System instruction prompt */
-  systemPrompt: string;
-
-  /** User prompt describing the task */
-  userPrompt: string;
-
-  /** Optional images (for vision tasks) */
-  images?: Array<{ url: string; name: string }>;
-
-  /** Optional temperature (default: 1.0) */
-  temperature?: number;
-
-  /** Optional max output tokens (default: 8192) */
-  maxOutputTokens?: number;
-}
+export type GoogleStructuredOutputRequest = ProviderStructuredJsonRequest;
+export type OpenrouterStructuredOutputRequest = ProviderStructuredJsonRequest;
+export type GenericStructuredOutputRequest = ProviderStructuredJsonRequest;
+export type StructuredOutputResult<T> = SharedStructuredOutputResult<T>;
 
 /**
  * Call Google Gemini with structured output using a generic JSON schema.
@@ -529,6 +459,8 @@ export async function callOpenrouterStructuredJSON<T>(
 export async function callGoogleStructuredOutput(
   request: GoogleStructuredOutputRequest,
 ): Promise<StructuredOutputResult<ExpressionBatchResult>> {
+  const images = request.images ?? [];
+
   try {
     // 1. Initialize Google GenAI client
     const genAI = new GoogleGenAI({ apiKey: request.apiKey });
@@ -537,7 +469,7 @@ export async function callGoogleStructuredOutput(
     const parts: Part[] = [{ text: request.userPrompt }];
 
     // 3. Fetch and convert images to base64 inlineData format
-    for (const image of request.images) {
+    for (const image of images) {
       try {
         // Fetch image from Discord CDN
         const response = await fetch(image.url);
@@ -575,7 +507,7 @@ export async function callGoogleStructuredOutput(
 
     // 4. Build JSON schema object for structured output
     // Google's responseSchema expects a plain object (not Zod)
-    const responseSchema = buildExpressionResponseSchema(request.images.length);
+    const responseSchema = buildExpressionResponseSchema(images.length);
 
     // 5. Build generation config with structured output
     const generationConfig: GenerateContentConfig = {
@@ -610,7 +542,7 @@ export async function callGoogleStructuredOutput(
           errorType: "GoogleStructuredOutputEmptyResponse",
           metadata: {
             model: request.model,
-            imageCount: request.images.length,
+            imageCount: images.length,
             finishReason: result.candidates?.[0]?.finishReason,
             finishMessage: result.candidates?.[0]?.finishMessage,
           },
@@ -635,7 +567,7 @@ export async function callGoogleStructuredOutput(
           errorType: "GoogleStructuredOutputParseError",
           metadata: {
             model: request.model,
-            imageCount: request.images.length,
+            imageCount: images.length,
             finishReason,
             finishMessage: result.candidates?.[0]?.finishMessage,
             responseLength: responseText.length,
@@ -677,7 +609,7 @@ export async function callGoogleStructuredOutput(
       errorType: "GoogleStructuredOutputError",
       metadata: {
         model: request.model,
-        imageCount: request.images.length,
+        imageCount: images.length,
       },
     });
 
@@ -697,6 +629,8 @@ export async function callGoogleStructuredOutput(
 export async function callOpenrouterStructuredOutput(
   request: OpenrouterStructuredOutputRequest,
 ): Promise<StructuredOutputResult<ExpressionBatchResult>> {
+  const images = request.images ?? [];
+
   try {
     type OpenrouterContentPart =
       | { type: "text"; text: string }
@@ -711,7 +645,7 @@ export async function callOpenrouterStructuredOutput(
     ];
 
     // 3. Fetch and convert images to base64 data URLs
-    for (const image of request.images) {
+    for (const image of images) {
       try {
         const response = await fetch(image.url);
 
@@ -761,7 +695,7 @@ export async function callOpenrouterStructuredOutput(
     ];
 
     // 5. Build JSON schema object for structured output
-    const responseSchema = buildExpressionResponseSchema(request.images.length);
+    const responseSchema = buildExpressionResponseSchema(images.length);
 
     const responseFormat = {
       type: "json_schema" as const,
@@ -892,7 +826,7 @@ export async function callOpenrouterStructuredOutput(
       errorType: "OpenrouterStructuredOutputError",
       metadata: {
         model: request.model,
-        imageCount: request.images.length,
+        imageCount: images.length,
       },
     });
 

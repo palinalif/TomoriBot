@@ -9,9 +9,17 @@ import {
   type Content,
   type GenerateContentConfig,
 } from "@google/genai";
+import type {
+  GeneratePresetParams,
+  PresetGenerationResult,
+} from "@/types/provider/featureInterfaces";
 import type { PresetExportData } from "../../types/preset/presetExport";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+export type {
+  GeneratePresetParams,
+  PresetGenerationResult,
+} from "@/types/provider/featureInterfaces";
 
 /**
  * USE_HARDCODED_DUAL_AGENT_MODELS
@@ -23,20 +31,6 @@ import { localizer } from "../../utils/text/localizer";
  * When FALSE: Use the user's configured model for both search and generation agents
  */
 const USE_HARDCODED_DUAL_AGENT_MODELS = true;
-
-/**
- * Parameters for preset generation
- */
-export interface GeneratePresetParams {
-  characterName: string; // Used for nickname and trigger words
-  characterDescription: string; // Core personality description
-  speechExamples: string; // How the character speaks
-  additionalInstructions?: string; // Extra generation instructions
-  imageBase64?: string; // Optional image for visual context
-  imageMimeType?: string; // MIME type of the image (e.g., "image/png")
-  useWebSearch?: boolean; // Enable Google Search + URL context tools (Gemini 3 only)
-  modelName?: string; // Model name to use for generation (determines single vs dual-agent approach)
-}
 
 /**
  * Additional context for character search
@@ -61,25 +55,6 @@ export interface CharacterSearchResult {
     | "MODEL_ERROR"
     | "TIMEOUT"
     | "EMPTY_RESPONSE"
-    | "UNKNOWN";
-}
-
-/**
- * Result of preset generation
- */
-export interface PresetGenerationResult {
-  preset?: PresetExportData; // Generated preset data
-  error?: string; // Error message if generation failed
-  errorType?:
-    | "RATE_LIMIT"
-    | "BLOCKED_CONTENT"
-    | "API_KEY"
-    | "CONNECTION"
-    | "MODEL_ERROR"
-    | "TIMEOUT"
-    | "EMPTY_RESPONSE"
-    | "INVALID_JSON"
-    | "VALIDATION_ERROR"
     | "UNKNOWN";
 }
 

@@ -15,14 +15,14 @@ Today, adding a provider usually means all of the following:
 2. Add static provider metadata in `providerInfo.ts`.
 3. Register that metadata in `src/utils/provider/providerInfoRegistry.ts`.
 4. Seed provider model inventory in the database.
-5. If the provider supports app-level features beyond core chat, wire those feature implementations into the shared provider utilities.
+5. If the provider supports app-level runtime features beyond core chat, implement the relevant optional capability interfaces on the provider class.
 
 Important rules:
 
 - `ProviderFactory` auto-discovers provider classes, not all provider metadata and feature executors.
 - Text model defaults come from the database/cache, not from hardcoded model arrays in provider code.
 - If a command only needs to know whether a provider supports a feature, use `providerSupportsFeature()`.
-- If a command needs provider-specific execution, route through a shared provider utility instead of hardcoding `provider === "google"` style checks.
+- If a command needs provider-specific runtime execution, resolve a provider-owned capability instead of hardcoding `provider === "google"` style checks.
 
 ## 1. Decide Scope First
 
@@ -142,26 +142,28 @@ You must also update `src/utils/provider/providerInfoRegistry.ts`:
 
 1. import your `providerInfo.ts`
 2. add it to the `providerInfos` array
-3. extend `ProviderFeatureImplementation` if the new provider can own shared feature execution
-
 This registry is what powers:
 
 - alias normalization
 - capability checks via `providerSupportsFeature()`
-- shared provider execution routing via `resolveProviderFeatureImplementation()`
+- legacy runtime execution routing via `resolveProviderFeatureImplementation()`
 
 If you skip this step, the provider may stream chat successfully but still behave as unsupported in feature-gated commands.
 
-## 7. Wire Shared Feature Execution When Needed
+## 7. Implement Optional Runtime Capabilities When Needed
 
-Some app features are dispatched through shared provider utilities rather than the main chat path.
+Some app features execute outside the main chat streaming path.
 
-Current shared executor entry point:
+Current capability entry points:
 
+- `src/types/provider/featureInterfaces.ts`
+- `src/utils/provider/providerCapabilityResolver.ts`
 - `src/providers/utils/providerFeatureExecutors.ts`
 
-Current examples include:
+Current provider-owned examples include:
 
+- embeddings
+- structured output execution
 - preset generation
 - conversation compaction
 - roleplay compaction
@@ -171,9 +173,9 @@ Current examples include:
 Use this rule:
 
 - If `featureSupport.{feature}` is `false`, no extra wiring is needed.
-- If `featureSupport.{feature}` is `true` and the app uses a shared executor for that feature, you must add the implementation and route to it.
+- If `featureSupport.{feature}` is `true` and the app executes that feature at runtime, implement the matching optional capability on the provider class.
 
-Do not scatter exact provider-name checks across commands. Put routing in provider registries/utilities.
+Do not scatter exact provider-name checks across commands. Put routing in the provider capability layer.
 
 ## 8. Seed Model Inventory
 
@@ -200,8 +202,8 @@ Do not hardcode default models in provider code when the app already resolves th
 When integrating provider-specific behavior:
 
 - prefer `providerInfo.ts`
-- prefer `providerInfoRegistry.ts`
-- prefer shared provider utilities such as `providerFeatureExecutors.ts`
+- prefer provider class capability methods
+- prefer `providerCapabilityResolver.ts` and thin shared wrappers such as `providerFeatureExecutors.ts`
 - keep provider helpers inside `src/providers/{providerName}/`
 
 Avoid adding new command-level checks like:
@@ -215,7 +217,7 @@ if (providerName === "example") {
 Prefer:
 
 - `providerSupportsFeature(providerName, "structuredOutput")`
-- `resolveProviderFeatureImplementation(providerName, "presetGeneration")`
+- `resolveProviderCapability(providerName, "presetGeneration")`
 - provider-local code paths behind shared executor helpers
 
 Literal provider names are still correct when the behavior is truly vendor-specific, such as an optional credential that only exists for one vendor integration.
@@ -247,16 +249,19 @@ Run `bun run check-locales` only if you changed locale files or command metadata
 
 - Forgetting `providerInfo.ts` and trying to keep metadata only inside `getInfo()`
 - Marking a feature as supported without wiring its shared executor path
+- Marking a feature as supported without implementing the matching provider capability
 - Assuming provider-folder auto-discovery also handles static metadata registration
 - Hardcoding model lists in code instead of using the database-backed inventory
-- Adding new provider checks directly in commands instead of the provider utilities
+- Adding new provider checks directly in commands instead of the provider capability layer
 - Treating vendor API capability as the same thing as app-level support
 
 ## Related Files
 
 - `docs/ai/providers.md`
 - `src/types/provider/interfaces.ts`
+- `src/types/provider/featureInterfaces.ts`
 - `src/utils/provider/providerFactory.ts`
 - `src/utils/provider/providerInfoRegistry.ts`
+- `src/utils/provider/providerCapabilityResolver.ts`
 - `src/providers/utils/providerFeatureExecutors.ts`
 - `src/db/seed.sql`

@@ -35,39 +35,17 @@ export type ProviderFeatureImplementation =
 	| "novelai"
 	| "custom";
 
-const providerFeatureImplementations: Record<
-	ProviderFeatureName,
-	Partial<Record<string, ProviderFeatureImplementation>>
+const providerFeatureImplementations: Partial<
+	Record<
+		ProviderFeatureName,
+		Partial<Record<string, ProviderFeatureImplementation>>
+	>
 > = {
 	nativeImageGeneration: {
 		google: "google",
 		openrouter: "openrouter",
 	},
-	embeddings: {
-		google: "google",
-		openrouter: "openrouter",
-	},
-	structuredOutput: {
-		google: "google",
-		openrouter: "openrouter",
-	},
-	presetGeneration: {
-		google: "google",
-		openrouter: "openrouter",
-	},
-	expressionInitialization: {
-		google: "google",
-		openrouter: "openrouter",
-	},
 	liveTokenCounting: {
-		google: "google",
-		openrouter: "openrouter",
-	},
-	conversationCompaction: {
-		google: "google",
-		openrouter: "openrouter",
-	},
-	historyExtraction: {
 		google: "google",
 		openrouter: "openrouter",
 	},
@@ -104,5 +82,5 @@ export function resolveProviderFeatureImplementation(
 	featureName: ProviderFeatureName,
 ): ProviderFeatureImplementation | null {
 	const canonicalName = normalizeProviderName(providerName);
-	return providerFeatureImplementations[featureName][canonicalName] ?? null;
+	return providerFeatureImplementations[featureName]?.[canonicalName] ?? null;
 }

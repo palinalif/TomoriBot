@@ -18,6 +18,9 @@ import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import type { UserRow } from "@/types/db/schema";
 import {
+	DEFAULT_NAI_NEGATIVE_TAGS,
+} from "@/utils/image/naiTagDefaults";
+import {
 	formatTextArrayLiteral,
 	MAX_TAG_LENGTH,
 	MAX_TAGS,
@@ -101,9 +104,12 @@ export async function execute(
 		const tagsInput = modalResult.values?.[TAGS_INPUT_ID] ?? "";
 
 		if (tagsInput.trim().length === 0) {
+			const defaultTagArrayLiteral = formatTextArrayLiteral(
+				DEFAULT_NAI_NEGATIVE_TAGS,
+			);
 			const cleared = await sql<Array<{ tomori_config_id: number }>>`
 				UPDATE tomori_configs
-				SET nai_negative_tags = ARRAY[]::TEXT[]
+				SET nai_negative_tags = ${defaultTagArrayLiteral}::TEXT[]
 				WHERE server_id = ${tomoriState.server_id}
 				RETURNING tomori_config_id
 			`;
@@ -122,6 +128,9 @@ export async function execute(
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.novelai.tags.negative.cleared_title",
 				descriptionKey: "commands.novelai.tags.negative.cleared_description",
+				descriptionVars: {
+					tag_list: DEFAULT_NAI_NEGATIVE_TAGS.join(", "),
+				},
 				color: ColorCode.SUCCESS,
 			});
 			return;

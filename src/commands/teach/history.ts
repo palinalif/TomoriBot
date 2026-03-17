@@ -469,7 +469,7 @@ async function storeExtractedFacts(params: {
     apiKey,
     model: embeddingCodename,
     inputs: chunks,
-    taskType: providerSupportsEmbeddingTaskType(embeddingProvider)
+    taskType: (await providerSupportsEmbeddingTaskType(embeddingProvider))
       ? "RETRIEVAL_DOCUMENT"
       : undefined,
     batchSize: 16,

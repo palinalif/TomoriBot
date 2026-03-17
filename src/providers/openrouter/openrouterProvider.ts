@@ -6,6 +6,7 @@
  * and OpenrouterStreamAdapter for better code organization and maintainability.
  */
 
+import { OpenRouter } from "@openrouter/sdk";
 import type {
   BaseGuildTextChannel,
   BaseGuildVoiceChannel,
@@ -15,11 +16,17 @@ import type {
   DMChannel,
   AnyThreadChannel,
 } from "discord.js";
+import type { ZodType } from "zod";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   OpenrouterStreamAdapter,
   type OpenrouterStreamConfig,
 } from "./openrouterStreamAdapter";
+import {
+  generateConversationSummaryOpenrouter,
+  generateRoleplaySummaryOpenrouter,
+} from "./compactGenerator";
+import { generatePresetFromPromptOpenrouter } from "./presetGenerator";
 import type {
   ProviderError,
   StreamContext,
@@ -29,10 +36,24 @@ import {
   type ToolStateForContext,
   getAvailableToolsWithMCP,
 } from "../../tools/toolRegistry";
-import type { StreamingContext } from "../../types/tool/interfaces";
+import type { StreamingContext, ToolContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import type {
+  CompactConversationResult,
+  CompactRoleplayResult,
+  EmbeddingRequest,
+  PresetGenerationResult,
+  ProviderCompactSummaryRequest,
+  ProviderPresetGenerationRequest,
+  ProviderStructuredJsonRequest,
+  StructuredOutputResult,
+  SupportsConversationCompaction,
+  SupportsEmbeddings,
+  SupportsPresetGeneration,
+  SupportsStructuredOutput,
+} from "../../types/provider/featureInterfaces";
 import {
   BaseLLMProvider,
   type FunctionCall,
@@ -44,6 +65,7 @@ import {
   type ApiKeyValidationResult,
 } from "../../types/provider/interfaces";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
+import { callOpenrouterStructuredJSON } from "../utils/structuredOutput";
 import {
   getCachedDefaultLLM,
   isLLMCacheReady,
@@ -57,6 +79,8 @@ import {
   loadDefaultModelForProvider,
   loadAvailableModelsForProvider,
 } from "../../utils/db/dbRead";
+import { getMCPManager } from "../../utils/mcp/mcpManager";
+import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 import { openrouterProviderInfo } from "./providerInfo";
 
 /**
@@ -119,6 +143,14 @@ async function getDefaultOpenrouterModel(): Promise<string> {
   );
 }
 
+function extractOpenRouterEmbeddings(response: unknown): number[][] {
+  const raw = response as { data?: Array<{ embedding?: number[] }> };
+  const data = Array.isArray(raw?.data) ? raw.data : [];
+  return data
+    .map((entry) => (Array.isArray(entry.embedding) ? entry.embedding : []))
+    .filter((values) => values.length > 0);
+}
+
 // OpenRouter-specific configuration extending the base ProviderConfig
 export interface OpenrouterProviderConfig extends ProviderConfig {
   // OpenRouter uses OpenAI-compatible API, simple configuration
@@ -136,7 +168,15 @@ export interface OpenrouterProviderConfig extends ProviderConfig {
 /**
  * OpenRouter provider implementation
  */
-export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
+export class OpenrouterProvider
+  extends BaseLLMProvider
+  implements
+    LLMProvider,
+    SupportsEmbeddings,
+    SupportsStructuredOutput,
+    SupportsPresetGeneration,
+    SupportsConversationCompaction
+{
   /**
    * Get provider information and capabilities
    */
@@ -276,6 +316,140 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
   formatErrorDescription(error: ProviderError, locale: string): string | null {
     const openrouterAdapter = new OpenrouterStreamAdapter();
     return openrouterAdapter.createErrorDescription(error, locale);
+  }
+
+  supportsEmbeddingTaskType(): boolean {
+    return false;
+  }
+
+  async generateEmbeddings(request: EmbeddingRequest): Promise<number[][]> {
+    if (request.inputs.length === 0) {
+      return [];
+    }
+
+    const openRouter = new OpenRouter({ apiKey: request.apiKey });
+    const response = await openRouter.embeddings.generate({
+      model: request.model,
+      input: request.inputs,
+    });
+
+    return extractOpenRouterEmbeddings(response);
+  }
+
+  getExpressionInitializationBatchSize(): number {
+    return 50;
+  }
+
+  async callStructuredJSON<T>(
+    request: ProviderStructuredJsonRequest,
+    responseSchema: Record<string, unknown>,
+    zodSchema: ZodType<T>,
+  ): Promise<StructuredOutputResult<T>> {
+    return await callOpenrouterStructuredJSON(
+      request,
+      responseSchema,
+      zodSchema,
+      request.schemaName ?? "structured_output_result",
+    );
+  }
+
+  private async getPresetGenerationTools(
+    request: ProviderPresetGenerationRequest,
+  ): Promise<Array<Record<string, unknown>> | undefined> {
+    if (!request.params.useWebSearch) {
+      return undefined;
+    }
+
+    if (!request.toolContext) {
+      log.warn(
+        "OpenRouter preset generation skipped search tools: no tool context available.",
+      );
+      return undefined;
+    }
+
+    const hasBraveApiKey = await isBraveSearchAvailable(
+      request.tomoriState.server_id,
+    );
+
+    if (!hasBraveApiKey) {
+      const mcpManager = getMCPManager();
+      if (!mcpManager.isReady()) {
+        await mcpManager.initializeMCPServers();
+      }
+    }
+
+    const toolStateForContext: ToolStateForContext = {
+      server_id: request.tomoriState.server_id.toString(),
+      llm: {
+        llm_codename: request.tomoriState.llm.llm_codename,
+        has_tools: request.tomoriState.llm.has_tools,
+        sees_images: request.tomoriState.llm.sees_images,
+        sees_videos: request.tomoriState.llm.sees_videos,
+        sees_youtube: request.tomoriState.llm.sees_youtube,
+        supports_structoutput: request.tomoriState.llm.supports_structoutput,
+      },
+      config: {
+        sticker_usage_enabled: false,
+        web_search_enabled: true,
+        self_teaching_enabled: false,
+        pin_message_enabled: false,
+        imagegen_enabled: false,
+        nai_exclusive_imggen: false,
+      },
+    };
+
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
+      "openrouter",
+      toolStateForContext,
+    );
+
+    const searchTools = builtInTools.filter(
+      (tool) =>
+        tool.category === "search" ||
+        tool.requiresFeatureFlag === "web_search",
+    );
+
+    const openrouterAdapter = getOpenrouterToolAdapter();
+    return await openrouterAdapter.getAllToolsInOpenrouterFormat(
+      searchTools,
+      request.tomoriState.server_id,
+      mcpFunctionNames,
+    );
+  }
+
+  async generatePreset(
+    request: ProviderPresetGenerationRequest,
+  ): Promise<PresetGenerationResult> {
+    const tools = await this.getPresetGenerationTools(request);
+    const adjustedTemperature = Math.max(
+      0.2,
+      Math.min(1.2, request.tomoriState.config.llm_temperature - 0.8),
+    );
+
+    return await generatePresetFromPromptOpenrouter(
+      request.apiKey,
+      request.params,
+      request.locale,
+      {
+        model: request.tomoriState.llm.llm_codename,
+        temperature: adjustedTemperature,
+        tools,
+        toolContext: request.toolContext as ToolContext | undefined,
+        maxToolRounds: request.maxToolRounds,
+      },
+    );
+  }
+
+  async generateConversationSummary(
+    request: ProviderCompactSummaryRequest,
+  ): Promise<CompactConversationResult> {
+    return await generateConversationSummaryOpenrouter(request);
+  }
+
+  async generateRoleplaySummary(
+    request: ProviderCompactSummaryRequest,
+  ): Promise<CompactRoleplayResult> {
+    return await generateRoleplaySummaryOpenrouter(request);
   }
 
   /**

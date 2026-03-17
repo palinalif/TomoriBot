@@ -6,9 +6,11 @@
 import { log } from "../../utils/misc/logger";
 import {
   sanitizeSampleDialogueText,
-  type GeneratePresetParams,
-  type PresetGenerationResult,
 } from "../google/presetGenerator";
+import type {
+  GeneratePresetParams,
+  PresetGenerationResult,
+} from "@/types/provider/featureInterfaces";
 import type { ToolContext, ToolResult } from "../../types/tool/interfaces";
 import { executeTool } from "../../tools/toolRegistry";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";

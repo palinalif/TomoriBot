@@ -33,13 +33,8 @@ import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
 import { callExpressionInitializationForProvider } from "@/providers/utils/providerFeatureExecutors";
 import {
   providerSupportsFeature,
-  resolveProviderFeatureImplementation,
 } from "@/utils/provider/providerInfoRegistry";
-
-const EXPRESSION_BATCH_SIZE_BY_IMPLEMENTATION = {
-  google: 30,
-  openrouter: 50,
-} as const;
+import { resolveStructuredOutputCapability } from "@/utils/provider/providerCapabilityResolver";
 
 /**
  * Configure the subcommand
@@ -399,15 +394,12 @@ export async function execute(
     // Different providers have different token limits and cost constraints
     // User should re-run the command to process remaining expressions
     const provider = tomoriState.llm.llm_provider.toLowerCase();
-    const expressionImplementation = resolveProviderFeatureImplementation(
+    const structuredOutputCapability = await resolveStructuredOutputCapability(
       provider,
-      "expressionInitialization",
     );
     const expressionBatchSize =
-      expressionImplementation === "google" ||
-      expressionImplementation === "openrouter"
-        ? EXPRESSION_BATCH_SIZE_BY_IMPLEMENTATION[expressionImplementation]
-        : null;
+      structuredOutputCapability?.getExpressionInitializationBatchSize?.() ??
+      null;
     let isBatchLimited = false;
     let batchSize = images.length;
 

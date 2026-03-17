@@ -38,15 +38,8 @@ import {
 import type { PresetExport } from "../../types/preset/presetExport";
 import type { ModalComponent } from "../../types/discord/modal";
 import type { ToolContext } from "../../types/tool/interfaces";
-import { getAvailableToolsWithMCP } from "../../tools/toolRegistry";
-import { getOpenrouterToolAdapter } from "../../providers/openrouter/openrouterToolAdapter";
-import { getMCPManager } from "../../utils/mcp/mcpManager";
-import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 import { generatePresetForProvider } from "@/providers/utils/providerFeatureExecutors";
-import {
-  providerSupportsFeature,
-  resolveProviderFeatureImplementation,
-} from "@/utils/provider/providerInfoRegistry";
+import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 
 // Modal constants
 const MODAL_CUSTOM_ID = "preset_generate_modal";
@@ -201,15 +194,8 @@ export async function execute(
 
     // 3. Validate provider and model capabilities
     const providerName = tomoriState.llm.llm_provider.toLowerCase();
-    const presetGenerationImplementation = resolveProviderFeatureImplementation(
-      providerName,
-      "presetGeneration",
-    );
 
-    if (
-      !providerSupportsFeature(providerName, "presetGeneration") ||
-      !presetGenerationImplementation
-    ) {
+    if (!providerSupportsFeature(providerName, "presetGeneration")) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.wrong_provider_title",
         descriptionKey: "commands.persona.generate.wrong_provider_description",
@@ -651,108 +637,34 @@ export async function execute(
       imageBase64,
       imageMimeType,
       useWebSearch,
-      modelName:
-        presetGenerationImplementation === "google"
-          ? tomoriState.llm.llm_codename
-          : undefined,
     };
 
-    let openrouterTools: Array<Record<string, unknown>> | undefined;
-    let openrouterToolContext: ToolContext | undefined;
-
-    if (presetGenerationImplementation === "openrouter" && useWebSearch) {
-      const hasBraveApiKey = await isBraveSearchAvailable(
-        tomoriState.server_id,
-      );
-
-      if (!hasBraveApiKey) {
-        const mcpManager = getMCPManager();
-        if (!mcpManager.isReady()) {
-          await mcpManager.initializeMCPServers();
-        }
-      }
-
-      const toolStateForContext = {
-        server_id: tomoriState.server_id.toString(),
-        llm: {
-          llm_codename: tomoriState.llm.llm_codename,
-          has_tools: tomoriState.llm.has_tools,
-          sees_images: tomoriState.llm.sees_images,
-          sees_videos: tomoriState.llm.sees_videos,
-          sees_youtube: tomoriState.llm.sees_youtube,
-          supports_structoutput: tomoriState.llm.supports_structoutput,
-        },
-        config: {
-          sticker_usage_enabled: false,
-          web_search_enabled: true,
-          self_teaching_enabled: false,
-          pin_message_enabled: false,
-          imagegen_enabled: false,
-          nai_exclusive_imggen: false,
-        },
+    let presetToolContext: ToolContext | undefined;
+    const toolChannel = modalSubmitInteraction.channel ?? interaction.channel;
+    if (useWebSearch && isToolContextChannel(toolChannel)) {
+      presetToolContext = {
+        channel: toolChannel,
+        client,
+        tomoriState,
+        locale,
+        provider: providerName,
+        userId: interaction.user.id,
+        guildId: interaction.guild?.id,
       };
-
-      const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
-        "openrouter",
-        toolStateForContext,
-      );
-
-      const searchTools = builtInTools.filter(
-        (tool) =>
-          tool.category === "search" ||
-          tool.requiresFeatureFlag === "web_search",
-      );
-
-      const openrouterAdapter = getOpenrouterToolAdapter();
-      openrouterTools = await openrouterAdapter.getAllToolsInOpenrouterFormat(
-        searchTools,
-        tomoriState.server_id,
-        mcpFunctionNames,
-      );
-
-      const toolChannel = modalSubmitInteraction.channel ?? interaction.channel;
-      if (isToolContextChannel(toolChannel)) {
-        openrouterToolContext = {
-          channel: toolChannel,
-          client,
-          tomoriState,
-          locale,
-          provider: "openrouter",
-          userId: interaction.user.id,
-          guildId: interaction.guild?.id,
-        };
-      } else {
-        openrouterTools = undefined;
-        log.warn(
-          "OpenRouter web search tools skipped: no channel context available.",
-        );
-      }
+    } else if (useWebSearch) {
+      log.warn("Preset generation web search skipped: no channel context available.");
     }
 
     // 13. Generate preset data
-    const providerLabel =
-      presetGenerationImplementation === "openrouter"
-        ? "OpenRouter"
-        : tomoriState.llm.llm_provider;
-    log.info(`Generating preset data with ${providerLabel}...`);
+    log.info(`Generating preset data with ${tomoriState.llm.llm_provider}...`);
 
     const genResult = await generatePresetForProvider({
       providerName,
       apiKey: decryptedApiKey,
+      tomoriState,
       params: genParams,
       locale,
-      openrouter:
-        presetGenerationImplementation === "openrouter"
-          ? {
-              model: tomoriState.llm.llm_codename,
-              temperature: Math.max(
-                0.2,
-                Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
-              ),
-              tools: openrouterTools,
-              toolContext: openrouterToolContext,
-            }
-          : undefined,
+      toolContext: presetToolContext,
     });
 
     if (genResult.error || !genResult.preset) {

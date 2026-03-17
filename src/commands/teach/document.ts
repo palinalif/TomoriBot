@@ -656,7 +656,7 @@ export async function execute(
       apiKey: decryptedKey,
       model: embeddingModel.codename,
       inputs: chunks,
-      taskType: providerSupportsEmbeddingTaskType(embeddingModel.provider)
+      taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider))
         ? "RETRIEVAL_DOCUMENT"
         : undefined,
       batchSize: 16,

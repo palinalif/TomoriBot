@@ -1,118 +1,32 @@
-import { GoogleGenAI } from "@google/genai";
-import { OpenRouter } from "@openrouter/sdk";
+import type {
+  EmbeddingRequest,
+} from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveEmbeddingsCapability } from "@/utils/provider/providerCapabilityResolver";
 
 export type EmbeddingProviderName = string;
+export type { EmbeddingTaskType, EmbeddingRequest } from "@/types/provider/featureInterfaces";
 
-export type EmbeddingTaskType =
-  | "SEMANTIC_SIMILARITY"
-  | "CLASSIFICATION"
-  | "CLUSTERING"
-  | "RETRIEVAL_DOCUMENT"
-  | "RETRIEVAL_QUERY"
-  | "CODE_RETRIEVAL_QUERY"
-  | "QUESTION_ANSWERING"
-  | "FACT_VERIFICATION";
-
-export interface EmbeddingRequest {
-  provider: EmbeddingProviderName;
-  apiKey: string;
-  model: string;
-  inputs: string[];
-  taskType?: EmbeddingTaskType;
-}
-
-type EmbeddingProviderImplementation = "google" | "openrouter";
-
-function resolveEmbeddingProvider(
+export async function providerSupportsEmbeddingTaskType(
   providerName: string,
-): EmbeddingProviderImplementation | null {
-  const implementation = resolveProviderFeatureImplementation(
-    providerName,
-    "embeddings",
-  );
-
-  if (implementation === "google" || implementation === "openrouter") {
-    return implementation;
-  }
-
-  return null;
-}
-
-export function providerSupportsEmbeddingTaskType(
-  providerName: string,
-): boolean {
-  return resolveEmbeddingProvider(providerName) === "google";
-}
-
-function extractGoogleEmbeddings(response: unknown): number[][] {
-  const raw = response as {
-    embeddings?: Array<{ values?: number[] } | number[]>;
-    embedding?: { values?: number[] } | number[];
-  };
-
-  const embeddingsList = Array.isArray(raw?.embeddings)
-    ? raw.embeddings
-    : raw?.embedding
-      ? [raw.embedding]
-      : [];
-
-  return embeddingsList
-    .map((entry) => {
-      if (Array.isArray(entry)) {
-        return entry;
-      }
-      if (entry && Array.isArray(entry.values)) {
-        return entry.values;
-      }
-      return [];
-    })
-    .filter((values) => values.length > 0);
-}
-
-function extractOpenRouterEmbeddings(response: unknown): number[][] {
-  const raw = response as { data?: Array<{ embedding?: number[] }> };
-  const data = Array.isArray(raw?.data) ? raw.data : [];
-  return data
-    .map((entry) => (Array.isArray(entry.embedding) ? entry.embedding : []))
-    .filter((values) => values.length > 0);
+): Promise<boolean> {
+  const capability = await resolveEmbeddingsCapability(providerName);
+  return capability?.supportsEmbeddingTaskType() ?? false;
 }
 
 async function generateEmbeddingsOnce(
   request: EmbeddingRequest,
 ): Promise<number[][]> {
-  const { apiKey, model, inputs, taskType } = request;
-  const provider = resolveEmbeddingProvider(request.provider);
-
-  if (inputs.length === 0) {
+  if (request.inputs.length === 0) {
     return [];
   }
 
-  if (!provider) {
+  const capability = await resolveEmbeddingsCapability(request.provider);
+  if (!capability) {
     throw new Error(`Unsupported embedding provider: ${request.provider}`);
   }
 
-  if (provider === "google") {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.embedContent({
-      model,
-      contents: inputs,
-      config: taskType ? { taskType } : undefined,
-    });
-    return extractGoogleEmbeddings(response);
-  }
-
-  if (provider === "openrouter") {
-    const openRouter = new OpenRouter({ apiKey });
-    const response = await openRouter.embeddings.generate({
-      model,
-      input: inputs,
-    });
-    return extractOpenRouterEmbeddings(response);
-  }
-
-  throw new Error(`Unsupported embedding provider: ${request.provider}`);
+  return await capability.generateEmbeddings(request);
 }
 
 export async function generateEmbeddings(

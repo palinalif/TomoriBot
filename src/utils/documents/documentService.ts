@@ -186,7 +186,7 @@ export async function retrieveRelevantDocumentChunks(params: {
     apiKey,
     model: embeddingModel.codename,
     inputs: [query],
-    taskType: providerSupportsEmbeddingTaskType(embeddingModel.provider)
+    taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider))
       ? "RETRIEVAL_QUERY"
       : undefined,
     batchSize,
@@ -344,7 +344,7 @@ export async function reembedServerDocuments(params: {
       apiKey,
       model: embeddingModel.codename,
       inputs: chunks,
-      taskType: providerSupportsEmbeddingTaskType(embeddingModel.provider)
+      taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider))
         ? "RETRIEVAL_DOCUMENT"
         : undefined,
       batchSize: 16,

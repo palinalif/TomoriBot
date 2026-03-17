@@ -21,11 +21,17 @@ import type {
   DMChannel,
   AnyThreadChannel,
 } from "discord.js";
+import type { ZodType } from "zod";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   GoogleStreamAdapter,
   type GoogleStreamConfig,
 } from "./googleStreamAdapter";
+import {
+  generateConversationSummaryGoogle,
+  generateRoleplaySummaryGoogle,
+} from "./compactGenerator";
+import { generatePresetFromPrompt } from "./presetGenerator";
 import type {
   ProviderError,
   StreamContext,
@@ -39,6 +45,20 @@ import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import type {
+  CompactConversationResult,
+  CompactRoleplayResult,
+  EmbeddingRequest,
+  PresetGenerationResult,
+  ProviderCompactSummaryRequest,
+  ProviderPresetGenerationRequest,
+  ProviderStructuredJsonRequest,
+  StructuredOutputResult,
+  SupportsConversationCompaction,
+  SupportsEmbeddings,
+  SupportsPresetGeneration,
+  SupportsStructuredOutput,
+} from "../../types/provider/featureInterfaces";
 import {
   BaseLLMProvider,
   type FunctionCall,
@@ -49,6 +69,7 @@ import {
   type ApiKeyValidationResult,
 } from "../../types/provider/interfaces";
 import { getGoogleToolAdapter } from "./googleToolAdapter";
+import { callGoogleStructuredJSON } from "../utils/structuredOutput";
 import {
   getCachedDefaultLLM,
   isLLMCacheReady,
@@ -117,6 +138,31 @@ async function getDefaultGoogleModel(): Promise<string> {
   throw new Error(
     `No default model found for provider: ${providerName}. Please configure models in the database.`,
   );
+}
+
+function extractGoogleEmbeddings(response: unknown): number[][] {
+  const raw = response as {
+    embeddings?: Array<{ values?: number[] } | number[]>;
+    embedding?: { values?: number[] } | number[];
+  };
+
+  const embeddingsList = Array.isArray(raw?.embeddings)
+    ? raw.embeddings
+    : raw?.embedding
+      ? [raw.embedding]
+      : [];
+
+  return embeddingsList
+    .map((entry) => {
+      if (Array.isArray(entry)) {
+        return entry;
+      }
+      if (entry && Array.isArray(entry.values)) {
+        return entry.values;
+      }
+      return [];
+    })
+    .filter((values) => values.length > 0);
 }
 
 // Google-specific configuration extending the base ProviderConfig
@@ -206,7 +252,15 @@ function logSkippedGooglePenaltyParams(
 /**
  * Google Gemini provider implementation
  */
-export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
+export class GoogleProvider
+  extends BaseLLMProvider
+  implements
+    LLMProvider,
+    SupportsEmbeddings,
+    SupportsStructuredOutput,
+    SupportsPresetGeneration,
+    SupportsConversationCompaction
+{
   /**
    * Get provider information and capabilities
    */
@@ -282,6 +336,62 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
   formatErrorDescription(error: ProviderError, locale: string): string | null {
     const googleAdapter = new GoogleStreamAdapter();
     return googleAdapter.createErrorDescription(error, locale);
+  }
+
+  supportsEmbeddingTaskType(): boolean {
+    return true;
+  }
+
+  async generateEmbeddings(request: EmbeddingRequest): Promise<number[][]> {
+    if (request.inputs.length === 0) {
+      return [];
+    }
+
+    const genAI = new GoogleGenAI({ apiKey: request.apiKey });
+    const response = await genAI.models.embedContent({
+      model: request.model,
+      contents: request.inputs,
+      config: request.taskType ? { taskType: request.taskType } : undefined,
+    });
+
+    return extractGoogleEmbeddings(response);
+  }
+
+  getExpressionInitializationBatchSize(): number {
+    return 30;
+  }
+
+  async callStructuredJSON<T>(
+    request: ProviderStructuredJsonRequest,
+    responseSchema: Record<string, unknown>,
+    zodSchema: ZodType<T>,
+  ): Promise<StructuredOutputResult<T>> {
+    return await callGoogleStructuredJSON(request, responseSchema, zodSchema);
+  }
+
+  async generatePreset(
+    request: ProviderPresetGenerationRequest,
+  ): Promise<PresetGenerationResult> {
+    return await generatePresetFromPrompt(
+      request.apiKey,
+      {
+        ...request.params,
+        modelName: request.tomoriState.llm.llm_codename,
+      },
+      request.locale,
+    );
+  }
+
+  async generateConversationSummary(
+    request: ProviderCompactSummaryRequest,
+  ): Promise<CompactConversationResult> {
+    return await generateConversationSummaryGoogle(request);
+  }
+
+  async generateRoleplaySummary(
+    request: ProviderCompactSummaryRequest,
+  ): Promise<CompactRoleplayResult> {
+    return await generateRoleplaySummaryGoogle(request);
   }
 
   /**

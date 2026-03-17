@@ -1650,7 +1650,7 @@ SELECT add_column_if_not_exists(
 	'tomori_configs',
 	'nai_style_tags',
 	'TEXT[]',
-	'{"8k","absurdres","masterpiece","best quality","good quality","newest"}'
+	'''{"8k","absurdres","masterpiece","best quality","good quality","newest"}'''
 );
 
 -- Negative tags replace the old hardcoded NAI negative prompt in generate_image_nai.
@@ -1658,7 +1658,7 @@ SELECT add_column_if_not_exists(
 	'tomori_configs',
 	'nai_negative_tags',
 	'TEXT[]',
-	'{"lowres","worst quality","low quality","bad quality","old","oldest","unfinished","scan artifacts","jpeg artifacts","jaggy lines","unclear","sketch","blurry","bad anatomy","very displeasing","displeasing","bad hands","bad fingers","missing fingers","bad proportions","bad perspective","bad eyes","bad pupils","multiple heads","extra faces","many arms","poorly drawn face","poorly drawn hands","fused hands","bad feet","too many legs","malformed limbs","extra arms","multiple ears","fat","mutation","monster","amputee","guro","extra digits","fewer digits","twitter username","username","watermark","signature","2koma","4koma","comic"}'
+	'''{"lowres","worst quality","low quality","bad quality","old","oldest","unfinished","scan artifacts","jpeg artifacts","jaggy lines","unclear","sketch","blurry","bad anatomy","very displeasing","displeasing","bad hands","bad fingers","missing fingers","bad proportions","bad perspective","bad eyes","bad pupils","multiple heads","extra faces","many arms","poorly drawn face","poorly drawn hands","fused hands","bad feet","too many legs","malformed limbs","extra arms","multiple ears","extra digits","fewer digits","twitter username","username","watermark","signature","2koma","4koma","comic"}'''
 );
 
 -- Bun SQL currently fails on INT[] binary decoding in some code paths.
