@@ -6,6 +6,13 @@ NovelAI's GLM 4.6 model uses **prompt-based tool calling** — tools are defined
 
 The implementation lives primarily in `src/providers/novelai/novelaiStreamAdapter.ts`.
 
+## Image Generation State
+
+- `generate_image_nai` now resolves its sampler, steps, scale, noise schedule, and `cfg_rescale` from `tomori_configs` first, falling back to the `NAI_IMAGE_*` / `NAI_CFG_RESCALE` env values when the server override is `NULL`.
+- `/novelai imggen params` is the admin-facing command for those overrides.
+- `/novelai charreference` now persists persona/user reference images through `src/utils/storage/charrefStorage.ts`.
+- Those reference assets are stored and reloadable now, but they are not injected into the NovelAI payload until the planned `characters[]` identity-resolution work lands.
+
 ## Architecture
 
 ### Pipeline Flow

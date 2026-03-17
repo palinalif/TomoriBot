@@ -90,6 +90,7 @@ This is a current map of shared utility modules under `src/utils/`.
 
 - `avatarHelper.ts`, `imageProcessor.ts`, `pngMetadata.ts`
 - `avatarStorage.ts` for S3/public avatar URL support
+- `charrefStorage.ts` for NovelAI character reference storage (S3 in production, local filesystem in non-production)
 
 ### `utils/misc`
 

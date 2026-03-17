@@ -34,9 +34,10 @@ export const userSchema = z.object({
   language_pref: z.string().default("en-US"),
   registration_locale: z.string().nullable(), // Static locale captured at registration
   privacy_level: z.nativeEnum(PrivacyLevel).default(PrivacyLevel.MINIMAL),
-  personal_memories: z.array(z.string()).default([]),
-  nai_char_tags: z.array(z.string()).default([]), // Added March 2026 - User-specific NovelAI character tags
-  shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
+	personal_memories: z.array(z.string()).default([]),
+	nai_char_tags: z.array(z.string()).default([]), // Added March 2026 - User-specific NovelAI character tags
+	nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - User-specific NovelAI character reference image
+	shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -73,9 +74,10 @@ export const tomoriSchema = z.object({
   autoch_counter: z.number().default(0),
   is_alter: z.boolean().default(false), // Added January 2026 - Distinguishes main persona (false) from alter personas (true)
   webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Discord CDN URL for alter persona avatars from import embed
-  alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
-  nai_tags: z.array(z.string()).default([]), // Imageboard-style character tags for NovelAI self-portrait generation
-  nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
+	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
+	nai_tags: z.array(z.string()).default([]), // Imageboard-style character tags for NovelAI self-portrait generation
+	nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - Persona-specific NovelAI character reference image
+	nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
   nai_attg_title: z.string().nullable().optional(), // Added March 2026 - ATTG: Story title
   nai_attg_tags: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre/style tags
   nai_attg_genre: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre categories
@@ -169,10 +171,15 @@ export const tomoriConfigSchema = z.object({
   server_id: z.number().nullable().optional(), // Added January 2026 - Server-scoped config (nullable for legacy rows)
   llm_id: z.number(),
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
-  diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
-  nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
-  nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
-  llm_temperature: z.number().min(1.0).max(2.0).default(1.2),
+	diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
+	nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
+	nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
+	nai_sampler: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI image sampler
+	nai_steps: z.number().int().min(1).max(50).nullable().optional(), // Added March 2026 - Server override for NovelAI image steps
+	nai_scale: z.number().min(0.0).max(10.0).nullable().optional(), // Added March 2026 - Server override for NovelAI image scale
+	nai_noise_schedule: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI noise schedule
+	nai_cfg_rescale: z.number().min(0.0).max(1.0).nullable().optional(), // Added March 2026 - Server override for NovelAI cfg_rescale
+	llm_temperature: z.number().min(1.0).max(2.0).default(1.2),
   llm_top_p: z.number().min(0.0).max(1.0).default(0.95), // Added February 2026 - Nucleus sampling
   llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)

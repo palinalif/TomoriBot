@@ -127,6 +127,8 @@ SELECT add_column_if_not_exists('tomoris', 'alter_triggers', 'TEXT[]', 'ARRAY[]:
 SELECT add_column_if_not_exists('tomoris', 'persona_lineage_id', 'BIGINT');
 -- nai_tags: Imageboard-style character tags for NovelAI self-portrait generation
 SELECT add_column_if_not_exists('tomoris', 'nai_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
+-- nai_char_ref_url: Stored reference image URL/path for NovelAI character consistency
+SELECT add_column_if_not_exists('tomoris', 'nai_char_ref_url', 'TEXT');
 
 -- Create lineage sequence (start high so reserved low IDs stay available)
 CREATE SEQUENCE IF NOT EXISTS persona_lineage_id_seq
@@ -706,6 +708,8 @@ SELECT add_column_if_not_exists('users', 'shortterm_cache_crossserver_opt_in', '
 
 -- User-specific NovelAI character tags (March 2026)
 SELECT add_column_if_not_exists('users', 'nai_char_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
+-- User-specific NovelAI character reference image (March 2026)
+SELECT add_column_if_not_exists('users', 'nai_char_ref_url', 'TEXT');
 
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;
@@ -1660,6 +1664,13 @@ SELECT add_column_if_not_exists(
 	'TEXT[]',
 	'''{"lowres","worst quality","low quality","bad quality","old","oldest","unfinished","scan artifacts","jpeg artifacts","jaggy lines","unclear","sketch","blurry","bad anatomy","very displeasing","displeasing","bad hands","bad fingers","missing fingers","bad proportions","bad perspective","bad eyes","bad pupils","multiple heads","extra faces","many arms","poorly drawn face","poorly drawn hands","fused hands","bad feet","too many legs","malformed limbs","extra arms","multiple ears","extra digits","fewer digits","twitter username","username","watermark","signature","2koma","4koma","comic"}'''
 );
+
+-- Per-server NovelAI image generation parameter overrides (March 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'nai_sampler', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'nai_steps', 'SMALLINT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'nai_scale', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'nai_noise_schedule', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'nai_cfg_rescale', 'REAL', 'NULL');
 
 -- Bun SQL currently fails on INT[] binary decoding in some code paths.
 -- Migrate fallback_llm_ids to JSONB for stable SELECT */RETURNING * behavior.

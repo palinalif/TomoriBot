@@ -53,6 +53,18 @@ if (secrets.AVATAR_S3_PREFIX) {
 if (secrets.AVATAR_PUBLIC_BASE_URL) {
   process.env.AVATAR_PUBLIC_BASE_URL = secrets.AVATAR_PUBLIC_BASE_URL;
 }
+if (secrets.CHARREF_S3_BUCKET) {
+  process.env.CHARREF_S3_BUCKET = secrets.CHARREF_S3_BUCKET;
+}
+if (secrets.CHARREF_S3_REGION) {
+  process.env.CHARREF_S3_REGION = secrets.CHARREF_S3_REGION;
+}
+if (secrets.CHARREF_S3_PREFIX) {
+  process.env.CHARREF_S3_PREFIX = secrets.CHARREF_S3_PREFIX;
+}
+if (secrets.CHARREF_PUBLIC_BASE_URL) {
+  process.env.CHARREF_PUBLIC_BASE_URL = secrets.CHARREF_PUBLIC_BASE_URL;
+}
 
 // Optional Matrix Appservice Bridge credentials
 if (secrets.MATRIX_HOMESERVER_URL) {

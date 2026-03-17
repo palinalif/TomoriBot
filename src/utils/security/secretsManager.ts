@@ -32,6 +32,10 @@ export interface TomoriSecrets {
   AVATAR_S3_REGION?: string;
   AVATAR_S3_PREFIX?: string;
   AVATAR_PUBLIC_BASE_URL?: string;
+  CHARREF_S3_BUCKET?: string;
+  CHARREF_S3_REGION?: string;
+  CHARREF_S3_PREFIX?: string;
+  CHARREF_PUBLIC_BASE_URL?: string;
   // Matrix Appservice Bridge (optional — leave unset to disable the bridge entirely)
   MATRIX_HOMESERVER_URL?: string; // e.g., http://localhost:8448 or https://your-hs.example.com
   MATRIX_ACCESS_TOKEN?: string; // Appservice token (as_token) used to authenticate to the homeserver
@@ -133,6 +137,18 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
     if (process.env.AVATAR_PUBLIC_BASE_URL) {
       secrets.AVATAR_PUBLIC_BASE_URL = process.env.AVATAR_PUBLIC_BASE_URL;
     }
+    if (process.env.CHARREF_S3_BUCKET) {
+      secrets.CHARREF_S3_BUCKET = process.env.CHARREF_S3_BUCKET;
+    }
+    if (process.env.CHARREF_S3_REGION) {
+      secrets.CHARREF_S3_REGION = process.env.CHARREF_S3_REGION;
+    }
+    if (process.env.CHARREF_S3_PREFIX) {
+      secrets.CHARREF_S3_PREFIX = process.env.CHARREF_S3_PREFIX;
+    }
+    if (process.env.CHARREF_PUBLIC_BASE_URL) {
+      secrets.CHARREF_PUBLIC_BASE_URL = process.env.CHARREF_PUBLIC_BASE_URL;
+    }
 
     // Optional Matrix Appservice Bridge credentials
     if (process.env.MATRIX_HOMESERVER_URL) {
@@ -228,6 +244,18 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
     }
     if (rawSecrets.AVATAR_PUBLIC_BASE_URL) {
       secrets.AVATAR_PUBLIC_BASE_URL = rawSecrets.AVATAR_PUBLIC_BASE_URL;
+    }
+    if (rawSecrets.CHARREF_S3_BUCKET) {
+      secrets.CHARREF_S3_BUCKET = rawSecrets.CHARREF_S3_BUCKET;
+    }
+    if (rawSecrets.CHARREF_S3_REGION) {
+      secrets.CHARREF_S3_REGION = rawSecrets.CHARREF_S3_REGION;
+    }
+    if (rawSecrets.CHARREF_S3_PREFIX) {
+      secrets.CHARREF_S3_PREFIX = rawSecrets.CHARREF_S3_PREFIX;
+    }
+    if (rawSecrets.CHARREF_PUBLIC_BASE_URL) {
+      secrets.CHARREF_PUBLIC_BASE_URL = rawSecrets.CHARREF_PUBLIC_BASE_URL;
     }
 
     // Optional Matrix Appservice Bridge credentials

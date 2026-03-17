@@ -29,12 +29,11 @@ import {
 } from "../../utils/quota/imageQuotaManager";
 import { extractImagesFromMessage } from "../../utils/image/imageExtractor";
 import { segmentImage } from "../../utils/image/segmentationService";
+import {
+  resolveNaiImageParams,
+  type EffectiveNaiImageParams,
+} from "@/utils/image/naiImageParams";
 
-// Configurable generation parameters via environment variables
-const NAI_STEPS = Number.parseInt(process.env.NAI_IMAGE_STEPS || "28", 10);
-const NAI_SCALE = Number.parseFloat(process.env.NAI_IMAGE_SCALE || "5");
-const NAI_SAMPLER = process.env.NAI_IMAGE_SAMPLER || "k_euler_ancestral";
-const NAI_NOISE_SCHEDULE = process.env.NAI_IMAGE_NOISE_SCHEDULE || "karras";
 // Fallback only when the server-scoped nai_negative_tags array is empty.
 const NAI_NEGATIVE_PROMPT =
   process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
@@ -385,6 +384,7 @@ export class GenerateImageNaiTool extends BaseTool {
     maskBase64: string,
     width: number,
     height: number,
+    imageParams: EffectiveNaiImageParams,
   ): Promise<Buffer> {
     const seed = Math.floor(Math.random() * 2147483647);
 
@@ -403,12 +403,12 @@ export class GenerateImageNaiTool extends BaseTool {
           n_samples: 1,
           width,
           height,
-          steps: NAI_STEPS,
-          scale: NAI_SCALE,
+          steps: imageParams.steps,
+          scale: imageParams.scale,
           uncond_scale: 0.0,
-          cfg_rescale: 0.0,
-          sampler: NAI_SAMPLER,
-          noise_schedule: NAI_NOISE_SCHEDULE,
+          cfg_rescale: imageParams.cfgRescale,
+          sampler: imageParams.sampler,
+          noise_schedule: imageParams.noiseSchedule,
           legacy_v3_extend: false,
           image: imageBase64,
           mask: maskBase64,
@@ -466,10 +466,10 @@ export class GenerateImageNaiTool extends BaseTool {
         parameters: {
           width,
           height,
-          steps: NAI_STEPS,
-          scale: NAI_SCALE,
-          sampler: NAI_SAMPLER,
-          noise_schedule: NAI_NOISE_SCHEDULE,
+          steps: imageParams.steps,
+          scale: imageParams.scale,
+          sampler: imageParams.sampler,
+          noise_schedule: imageParams.noiseSchedule,
           n_samples: 1,
           seed,
           image: imageBase64,
@@ -525,6 +525,7 @@ export class GenerateImageNaiTool extends BaseTool {
     prompt: string,
     negativePrompt: string,
     orientation: string,
+    imageParams: EffectiveNaiImageParams,
   ): Promise<Buffer> {
     const dimensions =
       ORIENTATION_PRESETS[orientation] || ORIENTATION_PRESETS.portrait;
@@ -545,14 +546,14 @@ export class GenerateImageNaiTool extends BaseTool {
           prompt,
           seed,
           n_samples: 1,
-          steps: NAI_STEPS,
+          steps: imageParams.steps,
           height: dimensions.height,
           width: dimensions.width,
-          scale: NAI_SCALE,
+          scale: imageParams.scale,
           uncond_scale: 0.0,
-          cfg_rescale: 0.0,
-          sampler: NAI_SAMPLER,
-          noise_schedule: NAI_NOISE_SCHEDULE,
+          cfg_rescale: imageParams.cfgRescale,
+          sampler: imageParams.sampler,
+          noise_schedule: imageParams.noiseSchedule,
           legacy_v3_extend: false,
           reference_information_extracted_multiple: [],
           reference_strength_multiple: [],
@@ -606,10 +607,10 @@ export class GenerateImageNaiTool extends BaseTool {
         parameters: {
           width: dimensions.width,
           height: dimensions.height,
-          steps: NAI_STEPS,
-          scale: NAI_SCALE,
-          sampler: NAI_SAMPLER,
-          noise_schedule: NAI_NOISE_SCHEDULE,
+          steps: imageParams.steps,
+          scale: imageParams.scale,
+          sampler: imageParams.sampler,
+          noise_schedule: imageParams.noiseSchedule,
           n_samples: 1,
           seed,
           negative_prompt: negativePrompt,
@@ -818,6 +819,9 @@ export class GenerateImageNaiTool extends BaseTool {
 
       // 4. Build tag list — server style tags and persona character tags are trusted
       //    and should bypass suggest-tags normalization.
+      const effectiveImageParams = resolveNaiImageParams(
+        context.tomoriState.config,
+      );
       const styleTags = context.tomoriState.config.nai_style_tags ?? [];
       const configuredNegativeTags =
         context.tomoriState.config.nai_negative_tags ?? [];
@@ -974,6 +978,7 @@ export class GenerateImageNaiTool extends BaseTool {
           segResult.maskBase64,
           segResult.imageWidth,
           segResult.imageHeight,
+          effectiveImageParams,
         );
 
         log.success(`[NAI] Inpainting complete with model "${inpaintModel}"`);
@@ -986,6 +991,7 @@ export class GenerateImageNaiTool extends BaseTool {
           normalizedPrompt,
           effectiveNegativePrompt,
           orientation,
+          effectiveImageParams,
         );
       }
 

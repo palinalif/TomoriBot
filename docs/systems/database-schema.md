@@ -89,11 +89,14 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.
 - `tomori_configs.nai_style_tags` stores server-wide NovelAI style/quality tags prepended to every `generate_image_nai` prompt.
 - `tomori_configs.nai_negative_tags` stores server-wide NovelAI negative tags; an empty array falls back to the `NAI_IMAGE_NEGATIVE_PROMPT` env value.
+- `tomori_configs.nai_sampler`, `nai_steps`, `nai_scale`, `nai_noise_schedule`, and `nai_cfg_rescale` store optional server overrides for NovelAI image generation params; `NULL` means use the env fallback.
 
 ### NovelAI profile tags
 
 - `tomoris.nai_tags` stores per-persona NovelAI character tags.
+- `tomoris.nai_char_ref_url` stores the persisted persona reference image URL/path used by the `/novelai charreference` workflow.
 - `users.nai_char_tags` stores per-user NovelAI character tags keyed by Discord snowflake (`users.user_disc_id`).
+- `users.nai_char_ref_url` stores the persisted user reference image URL/path keyed by Discord snowflake.
 
 ### Memory split
 
