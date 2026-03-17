@@ -22,8 +22,6 @@ import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import { getAllEmotionKeys } from "@/types/misc/emotions";
 import {
-  callGoogleStructuredOutput,
-  callOpenrouterStructuredOutput,
   type ExpressionClassification,
   type ExpressionBatchResult,
   ExpressionBatchResultSchema,
@@ -32,6 +30,16 @@ import {
 import { decryptApiKey } from "@/utils/security/crypto";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
+import { callExpressionInitializationForProvider } from "@/providers/utils/providerFeatureExecutors";
+import {
+  providerSupportsFeature,
+  resolveProviderFeatureImplementation,
+} from "@/utils/provider/providerInfoRegistry";
+
+const EXPRESSION_BATCH_SIZE_BY_IMPLEMENTATION = {
+  google: 30,
+  openrouter: 50,
+} as const;
 
 /**
  * Configure the subcommand
@@ -297,6 +305,25 @@ export async function execute(
       return;
     }
 
+    if (!providerSupportsFeature(llm.llm_provider, "expressionInitialization")) {
+      await interaction.editReply({
+        embeds: [
+          {
+            title: localizer(
+              locale,
+              "general.errors.provider_not_supported_title",
+            ),
+            description: localizer(
+              locale,
+              "general.errors.provider_not_supported_description",
+            ),
+            color: hexToNumber(ColorCode.ERROR),
+          },
+        ],
+      });
+      return;
+    }
+
     // 6. Query database for uninitialized emojis
     const uninitializedEmojis = await sql<UninitializedEmoji[]>`
 			SELECT emoji_disc_id, emoji_name, is_animated
@@ -372,30 +399,25 @@ export async function execute(
     // Different providers have different token limits and cost constraints
     // User should re-run the command to process remaining expressions
     const provider = tomoriState.llm.llm_provider.toLowerCase();
-    // Gemini responses can truncate at larger multimodal batches, causing invalid JSON.
-    const GEMINI_BATCH_SIZE = 30;
-    const OPENROUTER_BATCH_SIZE = 50;
+    const expressionImplementation = resolveProviderFeatureImplementation(
+      provider,
+      "expressionInitialization",
+    );
+    const expressionBatchSize =
+      expressionImplementation === "google" ||
+      expressionImplementation === "openrouter"
+        ? EXPRESSION_BATCH_SIZE_BY_IMPLEMENTATION[expressionImplementation]
+        : null;
     let isBatchLimited = false;
     let batchSize = images.length;
 
-    if (provider === "google" && images.length > GEMINI_BATCH_SIZE) {
-      batchSize = GEMINI_BATCH_SIZE;
-      images.splice(GEMINI_BATCH_SIZE);
-      items.splice(GEMINI_BATCH_SIZE);
+    if (expressionBatchSize && images.length > expressionBatchSize) {
+      batchSize = expressionBatchSize;
+      images.splice(batchSize);
+      items.splice(batchSize);
       isBatchLimited = true;
       log.info(
-        `[Initialize Expressions] Limited batch to ${GEMINI_BATCH_SIZE} items for Gemini provider (was ${totalUninitialized})`,
-      );
-    } else if (
-      provider === "openrouter" &&
-      images.length > OPENROUTER_BATCH_SIZE
-    ) {
-      batchSize = OPENROUTER_BATCH_SIZE;
-      images.splice(OPENROUTER_BATCH_SIZE);
-      items.splice(OPENROUTER_BATCH_SIZE);
-      isBatchLimited = true;
-      log.info(
-        `[Initialize Expressions] Limited batch to ${OPENROUTER_BATCH_SIZE} items for OpenRouter provider (was ${totalUninitialized})`,
+        `[Initialize Expressions] Limited batch to ${batchSize} items for ${provider} provider (was ${totalUninitialized})`,
       );
     }
 
@@ -472,45 +494,15 @@ export async function execute(
     // 14. Call structured output for the current provider
     let result: StructuredOutputResult<ExpressionBatchResult>;
 
-    switch (provider) {
-      case "google":
-        result = await callGoogleStructuredOutput({
-          apiKey: decryptedApiKey,
-          model: llm.llm_codename,
-          systemPrompt,
-          userPrompt,
-          images,
-          temperature,
-        });
-        break;
-      case "openrouter":
-        result = await callOpenrouterStructuredOutput({
-          apiKey: decryptedApiKey,
-          model: llm.llm_codename,
-          systemPrompt,
-          userPrompt,
-          images,
-          temperature,
-        });
-        break;
-      default:
-        await interaction.editReply({
-          embeds: [
-            {
-              title: localizer(
-                locale,
-                "general.errors.provider_not_supported_title",
-              ),
-              description: localizer(
-                locale,
-                "general.errors.provider_not_supported_description",
-              ),
-              color: hexToNumber(ColorCode.ERROR),
-            },
-          ],
-        });
-        return;
-    }
+    result = await callExpressionInitializationForProvider({
+      providerName: provider,
+      apiKey: decryptedApiKey,
+      model: llm.llm_codename,
+      systemPrompt,
+      userPrompt,
+      images,
+      temperature,
+    });
 
     log.info(
       `LLM structured output response: ${JSON.stringify(result, null, 2)}`,

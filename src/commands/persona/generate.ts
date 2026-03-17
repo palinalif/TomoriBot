@@ -25,11 +25,9 @@ import {
   reservePersonaQuota,
 } from "../../utils/security/rateLimiter";
 import { safeDownload } from "../../utils/security/safeDownload";
-import {
-  generatePresetFromPrompt,
-  type GeneratePresetParams,
+import type {
+  GeneratePresetParams,
 } from "../../providers/google/presetGenerator";
-import { generatePresetFromPromptOpenrouter } from "../../providers/openrouter/presetGenerator";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
 import { centerCropToSquare } from "../../utils/image/imageProcessor";
 import { embedMetadataInPNG } from "../../utils/image/pngMetadata";
@@ -44,6 +42,11 @@ import { getAvailableToolsWithMCP } from "../../tools/toolRegistry";
 import { getOpenrouterToolAdapter } from "../../providers/openrouter/openrouterToolAdapter";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
+import { generatePresetForProvider } from "@/providers/utils/providerFeatureExecutors";
+import {
+  providerSupportsFeature,
+  resolveProviderFeatureImplementation,
+} from "@/utils/provider/providerInfoRegistry";
 
 // Modal constants
 const MODAL_CUSTOM_ID = "preset_generate_modal";
@@ -198,11 +201,15 @@ export async function execute(
 
     // 3. Validate provider and model capabilities
     const providerName = tomoriState.llm.llm_provider.toLowerCase();
-    const isGoogleProvider =
-      providerName === "google" || providerName === "gemini";
-    const isOpenrouterProvider = providerName === "openrouter";
+    const presetGenerationImplementation = resolveProviderFeatureImplementation(
+      providerName,
+      "presetGeneration",
+    );
 
-    if (!isGoogleProvider && !isOpenrouterProvider) {
+    if (
+      !providerSupportsFeature(providerName, "presetGeneration") ||
+      !presetGenerationImplementation
+    ) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.wrong_provider_title",
         descriptionKey: "commands.persona.generate.wrong_provider_description",
@@ -644,15 +651,16 @@ export async function execute(
       imageBase64,
       imageMimeType,
       useWebSearch,
-      modelName: isOpenrouterProvider
-        ? undefined
-        : tomoriState.llm.llm_codename, // Pass model for Google/Gemini
+      modelName:
+        presetGenerationImplementation === "google"
+          ? tomoriState.llm.llm_codename
+          : undefined,
     };
 
     let openrouterTools: Array<Record<string, unknown>> | undefined;
     let openrouterToolContext: ToolContext | undefined;
 
-    if (isOpenrouterProvider && useWebSearch) {
+    if (presetGenerationImplementation === "openrouter" && useWebSearch) {
       const hasBraveApiKey = await isBraveSearchAvailable(
         tomoriState.server_id,
       );
@@ -722,25 +730,30 @@ export async function execute(
     }
 
     // 13. Generate preset data
-    const providerLabel = isOpenrouterProvider ? "OpenRouter" : "Gemini";
+    const providerLabel =
+      presetGenerationImplementation === "openrouter"
+        ? "OpenRouter"
+        : tomoriState.llm.llm_provider;
     log.info(`Generating preset data with ${providerLabel}...`);
 
-    const genResult = isOpenrouterProvider
-      ? await generatePresetFromPromptOpenrouter(
-          decryptedApiKey,
-          genParams,
-          locale,
-          {
-            model: tomoriState.llm.llm_codename,
-            temperature: Math.max(
-              0.2,
-              Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
-            ),
-            tools: openrouterTools,
-            toolContext: openrouterToolContext,
-          },
-        )
-      : await generatePresetFromPrompt(decryptedApiKey, genParams, locale);
+    const genResult = await generatePresetForProvider({
+      providerName,
+      apiKey: decryptedApiKey,
+      params: genParams,
+      locale,
+      openrouter:
+        presetGenerationImplementation === "openrouter"
+          ? {
+              model: tomoriState.llm.llm_codename,
+              temperature: Math.max(
+                0.2,
+                Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
+              ),
+              tools: openrouterTools,
+              toolContext: openrouterToolContext,
+            }
+          : undefined,
+    });
 
     if (genResult.error || !genResult.preset) {
       // Show error embed

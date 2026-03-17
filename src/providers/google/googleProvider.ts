@@ -26,7 +26,10 @@ import {
   GoogleStreamAdapter,
   type GoogleStreamConfig,
 } from "./googleStreamAdapter";
-import type { StreamContext } from "../../types/stream/interfaces";
+import type {
+  ProviderError,
+  StreamContext,
+} from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
   type ToolStateForContext,
@@ -54,6 +57,7 @@ import {
   loadDefaultModelForProvider,
   loadAvailableModelsForProvider,
 } from "../../utils/db/dbRead";
+import { googleProviderInfo } from "./providerInfo";
 
 /**
  * Gets the default Google Gemini model with a robust fallback chain:
@@ -207,17 +211,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
    * Get provider information and capabilities
    */
   getInfo(): ProviderInfo {
-    return {
-      name: "google",
-      displayName: "Google Gemini",
-      aliases: ["gemini"], // Support "gemini" as an alias for "google"
-      supportedModels: [], // Models are loaded dynamically from database
-      requiresApiKey: true,
-      supportsStreaming: true,
-      supportsFunctionCalling: true,
-      supportsImages: true,
-      supportsVideos: true,
-    };
+    return googleProviderInfo;
   }
 
   /**
@@ -283,6 +277,11 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
       });
       return { valid: false, error: providerError };
     }
+  }
+
+  formatErrorDescription(error: ProviderError, locale: string): string | null {
+    const googleAdapter = new GoogleStreamAdapter();
+    return googleAdapter.createErrorDescription(error, locale);
   }
 
   /**

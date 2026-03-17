@@ -225,13 +225,7 @@ async function handleAddAction(
 
   // 3. Validate the API key with the provider
   try {
-    const provider = await ProviderFactory.getProvider({
-      llm: { llm_provider: currentProvider, llm_codename: "" },
-      server_id: tomoriState.server_id,
-      tomori_id: tomoriState.tomori_id,
-      config: tomoriState.config,
-      // biome-ignore lint/suspicious/noExplicitAny: Minimal object structure for factory pattern
-    } as any);
+    const provider = await ProviderFactory.getProviderByName(currentProvider);
 
     const validationResult = await provider.validateApiKey(apiKey);
 

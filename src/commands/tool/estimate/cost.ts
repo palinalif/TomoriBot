@@ -45,6 +45,10 @@ import {
   type OpenrouterProviderConfig,
 } from "@/providers/openrouter/openrouterProvider";
 import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
+import {
+  normalizeProviderName,
+  resolveProviderFeatureImplementation,
+} from "@/utils/provider/providerInfoRegistry";
 
 /**
  * Token estimation constants
@@ -591,18 +595,17 @@ function formatPricePerMillion(value: number): string {
 }
 
 function resolveProvider(providerName: string): LiveProvider | null {
-  const normalized = providerName.toLowerCase();
-  if (normalized === "google" || normalized === "gemini") {
-    return "google";
-  }
-  if (normalized === "openrouter") {
-    return "openrouter";
-  }
-  return null;
+  const implementation = resolveProviderFeatureImplementation(
+    providerName,
+    "liveTokenCounting",
+  );
+  return implementation === "google" || implementation === "openrouter"
+    ? implementation
+    : null;
 }
 
 function providerHasNoUsageCosts(providerName: string): boolean {
-  const normalized = providerName.toLowerCase();
+  const normalized = normalizeProviderName(providerName);
   return normalized === "novelai" || normalized === "custom";
 }
 

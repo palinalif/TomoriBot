@@ -18,6 +18,23 @@ import type { StructuredContextItem } from "../misc/context";
 import type { StreamingContext } from "../tool/interfaces";
 import type { ProviderError } from "../stream/interfaces";
 
+export type ProviderApiFamily =
+  | "google-genai"
+  | "openrouter"
+  | "novelai"
+  | "openai-compatible";
+
+export interface ProviderFeatureSupport {
+  nativeImageGeneration: boolean;
+  embeddings: boolean;
+  structuredOutput: boolean;
+  presetGeneration: boolean;
+  expressionInitialization: boolean;
+  liveTokenCounting: boolean;
+  conversationCompaction: boolean;
+  historyExtraction: boolean;
+}
+
 /**
  * Result of API key validation with structured error information
  */
@@ -68,6 +85,8 @@ export interface ProviderInfo {
   supportsFunctionCalling: boolean;
   supportsImages: boolean;
   supportsVideos: boolean;
+  apiFamily: ProviderApiFamily;
+  featureSupport: ProviderFeatureSupport;
 }
 
 /**
@@ -125,6 +144,12 @@ export interface LLMProvider {
    * @returns Promise<ApiKeyValidationResult> - Validation result with detailed error info if failed
    */
   validateApiKey(apiKey: string): Promise<ApiKeyValidationResult>;
+
+  /**
+   * Create a localized provider-specific error description for user-facing embeds.
+   * This keeps formatting logic inside the provider abstraction instead of command switches.
+   */
+  formatErrorDescription(error: ProviderError, locale: string): string | null;
 
   /**
    * Get available tools/functions based on Tomori's configuration
@@ -206,6 +231,10 @@ export interface LLMProvider {
 export abstract class BaseLLMProvider implements LLMProvider {
   abstract getInfo(): ProviderInfo;
   abstract validateApiKey(apiKey: string): Promise<ApiKeyValidationResult>;
+  abstract formatErrorDescription(
+    error: ProviderError,
+    locale: string,
+  ): string | null;
   abstract getTools(
     tomoriState: TomoriState,
   ): Promise<Array<Record<string, unknown>>>;

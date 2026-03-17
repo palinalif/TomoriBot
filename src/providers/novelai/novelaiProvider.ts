@@ -23,7 +23,10 @@ import {
   NovelaiStreamAdapter,
   type NovelaiStreamConfig,
 } from "./novelaiStreamAdapter";
-import type { StreamContext } from "@/types/stream/interfaces";
+import type {
+  ProviderError,
+  StreamContext,
+} from "@/types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
 import type { TomoriState } from "@/types/db/schema";
@@ -49,6 +52,7 @@ import {
 } from "@/utils/db/dbRead";
 import { getNovelaiToolAdapter } from "./novelaiToolAdapter";
 import { usesOpenAIEndpoint, validateNovelAIApiKey } from "./novelaiService";
+import { novelaiProviderInfo } from "./providerInfo";
 
 /**
  * Gets the default NovelAI model with a robust fallback chain:
@@ -127,17 +131,7 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
    * Get provider information and capabilities
    */
   getInfo(): ProviderInfo {
-    return {
-      name: "novelai",
-      displayName: "NovelAI",
-      aliases: ["nai"], // Support "nai" as an alias
-      supportedModels: [], // Models are loaded dynamically from database
-      requiresApiKey: true,
-      supportsStreaming: true,
-      supportsFunctionCalling: true, // Prompt-based tool calling supported for GLM-4.6
-      supportsImages: false, // NovelAI is text-only
-      supportsVideos: false, // NovelAI is text-only
-    };
+    return novelaiProviderInfo;
   }
 
   /**
@@ -176,6 +170,11 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
       });
       return { valid: false, error: providerError };
     }
+  }
+
+  formatErrorDescription(error: ProviderError, locale: string): string | null {
+    const novelaiAdapter = new NovelaiStreamAdapter();
+    return novelaiAdapter.createErrorDescription(error, locale);
   }
 
   /**

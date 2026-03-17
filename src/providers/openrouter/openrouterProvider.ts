@@ -20,7 +20,10 @@ import {
   OpenrouterStreamAdapter,
   type OpenrouterStreamConfig,
 } from "./openrouterStreamAdapter";
-import type { StreamContext } from "../../types/stream/interfaces";
+import type {
+  ProviderError,
+  StreamContext,
+} from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
   type ToolStateForContext,
@@ -54,6 +57,7 @@ import {
   loadDefaultModelForProvider,
   loadAvailableModelsForProvider,
 } from "../../utils/db/dbRead";
+import { openrouterProviderInfo } from "./providerInfo";
 
 /**
  * Gets the default OpenRouter model with a robust fallback chain:
@@ -137,17 +141,7 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
    * Get provider information and capabilities
    */
   getInfo(): ProviderInfo {
-    return {
-      name: "openrouter",
-      displayName: "OpenRouter",
-      aliases: ["or"], // Support "or" as an alias
-      supportedModels: [], // Models are loaded dynamically from database
-      requiresApiKey: true,
-      supportsStreaming: true,
-      supportsFunctionCalling: true,
-      supportsImages: true, // Depends on specific models
-      supportsVideos: true, // Supported on video-capable models (e.g. Gemini via OpenRouter)
-    };
+    return openrouterProviderInfo;
   }
 
   /**
@@ -277,6 +271,11 @@ export class OpenrouterProvider extends BaseLLMProvider implements LLMProvider {
       });
       return { valid: false, error: providerError };
     }
+  }
+
+  formatErrorDescription(error: ProviderError, locale: string): string | null {
+    const openrouterAdapter = new OpenrouterStreamAdapter();
+    return openrouterAdapter.createErrorDescription(error, locale);
   }
 
   /**

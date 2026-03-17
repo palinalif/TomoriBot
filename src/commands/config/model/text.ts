@@ -653,18 +653,12 @@ export async function execute(
         // Create provider instance for validation using factory
         let isKeyCompatible = false;
         try {
-          // Use factory to get provider instance (handles all providers and aliases)
           const { ProviderFactory } = await import(
             "../../../utils/provider/providerFactory"
           );
-          // Partial TomoriState for validation only - provider doesn't use these fields during validateApiKey()
-          const provider = await ProviderFactory.getProvider({
-            llm: { llm_provider: newModelProvider, llm_codename: "" },
-            server_id: tomoriState.server_id,
-            tomori_id: tomoriState.tomori_id,
-            config: tomoriState.config,
-            // biome-ignore lint/suspicious/noExplicitAny: Minimal object structure needed for factory pattern
-          } as any);
+          const provider = await ProviderFactory.getProviderByName(
+            newModelProvider,
+          );
 
           const validationResult =
             await provider.validateApiKey(decryptedApiKey);

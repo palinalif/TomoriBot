@@ -1,8 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import { OpenRouter } from "@openrouter/sdk";
 import { log } from "@/utils/misc/logger";
+import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 
-export type EmbeddingProviderName = "google" | "openrouter";
+export type EmbeddingProviderName = string;
 
 export type EmbeddingTaskType =
   | "SEMANTIC_SIMILARITY"
@@ -20,6 +21,29 @@ export interface EmbeddingRequest {
   model: string;
   inputs: string[];
   taskType?: EmbeddingTaskType;
+}
+
+type EmbeddingProviderImplementation = "google" | "openrouter";
+
+function resolveEmbeddingProvider(
+  providerName: string,
+): EmbeddingProviderImplementation | null {
+  const implementation = resolveProviderFeatureImplementation(
+    providerName,
+    "embeddings",
+  );
+
+  if (implementation === "google" || implementation === "openrouter") {
+    return implementation;
+  }
+
+  return null;
+}
+
+export function providerSupportsEmbeddingTaskType(
+  providerName: string,
+): boolean {
+  return resolveEmbeddingProvider(providerName) === "google";
 }
 
 function extractGoogleEmbeddings(response: unknown): number[][] {
@@ -58,10 +82,15 @@ function extractOpenRouterEmbeddings(response: unknown): number[][] {
 async function generateEmbeddingsOnce(
   request: EmbeddingRequest,
 ): Promise<number[][]> {
-  const { provider, apiKey, model, inputs, taskType } = request;
+  const { apiKey, model, inputs, taskType } = request;
+  const provider = resolveEmbeddingProvider(request.provider);
 
   if (inputs.length === 0) {
     return [];
+  }
+
+  if (!provider) {
+    throw new Error(`Unsupported embedding provider: ${request.provider}`);
   }
 
   if (provider === "google") {
@@ -83,7 +112,7 @@ async function generateEmbeddingsOnce(
     return extractOpenRouterEmbeddings(response);
   }
 
-  throw new Error(`Unsupported embedding provider: ${provider}`);
+  throw new Error(`Unsupported embedding provider: ${request.provider}`);
 }
 
 export async function generateEmbeddings(

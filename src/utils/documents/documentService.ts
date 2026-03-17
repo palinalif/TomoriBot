@@ -1,6 +1,9 @@
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
-import { generateEmbeddingsBatched } from "@/utils/embeddings/embeddingProvider";
+import {
+  generateEmbeddingsBatched,
+  providerSupportsEmbeddingTaskType,
+} from "@/utils/embeddings/embeddingProvider";
 import type { EmbeddingModelRow } from "@/types/db/schema";
 
 export interface RetrievedDocumentChunk {
@@ -179,12 +182,13 @@ export async function retrieveRelevantDocumentChunks(params: {
   }
 
   const queryEmbeddings = await generateEmbeddingsBatched({
-    provider: embeddingModel.provider as "google" | "openrouter",
+    provider: embeddingModel.provider,
     apiKey,
     model: embeddingModel.codename,
     inputs: [query],
-    taskType:
-      embeddingModel.provider === "google" ? "RETRIEVAL_QUERY" : undefined,
+    taskType: providerSupportsEmbeddingTaskType(embeddingModel.provider)
+      ? "RETRIEVAL_QUERY"
+      : undefined,
     batchSize,
   });
 
@@ -336,12 +340,13 @@ export async function reembedServerDocuments(params: {
     }
 
     const embeddings = await generateEmbeddingsBatched({
-      provider: embeddingModel.provider as "google" | "openrouter",
+      provider: embeddingModel.provider,
       apiKey,
       model: embeddingModel.codename,
       inputs: chunks,
-      taskType:
-        embeddingModel.provider === "google" ? "RETRIEVAL_DOCUMENT" : undefined,
+      taskType: providerSupportsEmbeddingTaskType(embeddingModel.provider)
+        ? "RETRIEVAL_DOCUMENT"
+        : undefined,
       batchSize: 16,
     });
 

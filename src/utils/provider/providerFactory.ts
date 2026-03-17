@@ -256,6 +256,19 @@ export namespace ProviderFactory {
   }
 
   /**
+   * Get a provider instance directly by canonical name or alias.
+   * Prefer this when the caller only needs provider behavior and does not have
+   * a full TomoriState available.
+   * @param providerName - Provider canonical name or alias
+   * @returns The provider instance
+   */
+  export async function getProviderByName(
+    providerName: string,
+  ): Promise<LLMProvider> {
+    return getProviderInstance(providerName);
+  }
+
+  /**
    * Get all available providers and their information
    * @returns Array of provider information objects
    */

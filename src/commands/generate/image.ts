@@ -30,6 +30,10 @@ import {
   checkImageQuota,
   incrementImageQuota,
 } from "../../utils/quota/imageQuotaManager";
+import {
+  providerSupportsFeature,
+  resolveProviderFeatureImplementation,
+} from "@/utils/provider/providerInfoRegistry";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
@@ -305,9 +309,9 @@ export async function execute(
     return;
   }
 
-  // 5. Validate provider is Google or OpenRouter
+  // 5. Validate provider supports image generation
   const provider = tomoriState.llm.llm_provider.toLowerCase();
-  if (provider !== "google" && provider !== "openrouter") {
+  if (!providerSupportsFeature(provider, "nativeImageGeneration")) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.image.wrong_provider_title",
       descriptionKey: "commands.generate.image.wrong_provider_description",
@@ -575,8 +579,12 @@ export async function execute(
     // 16. Call provider API to generate image
     let generatedImageData: string | null = null;
     let generatedImageMimeType: string | null = null;
+    const imageGenerationImplementation = resolveProviderFeatureImplementation(
+      provider,
+      "nativeImageGeneration",
+    );
 
-    if (provider === "openrouter") {
+    if (imageGenerationImplementation === "openrouter") {
       // Use OpenRouter API
       const result = await generateImageWithOpenRouter(
         apiKey,
@@ -587,7 +595,7 @@ export async function execute(
       );
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
-    } else if (provider === "google") {
+    } else if (imageGenerationImplementation === "google") {
       // Use Google Gemini API
       const ai = new GoogleGenAI({ apiKey });
       const chat = ai.chats.create({
@@ -632,7 +640,11 @@ export async function execute(
             break;
           }
         }
-      }
+    } else {
+      throw new Error(
+        `Image generation is not implemented for provider ${tomoriState.llm.llm_provider}`,
+      );
+    }
     }
 
     // 17. Calculate generation time

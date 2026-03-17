@@ -250,21 +250,17 @@ export async function execute(
       let validationResult: { valid: boolean; error?: ProviderError } = {
         valid: false,
       };
+      let providerInstance:
+        | Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>
+        | undefined;
       try {
         const providerName = selectedProvider.toLowerCase();
 
-        // Use factory to get provider instance (handles all providers and aliases)
-        // Partial TomoriState for validation only - provider doesn't use these fields during validateApiKey()
-        const provider = await ProviderFactory.getProvider({
-          llm: { llm_provider: providerName, llm_codename: "" },
-          server_id: tomoriState.server_id,
-          tomori_id: tomoriState.tomori_id,
-          config: tomoriState.config,
-          // biome-ignore lint/suspicious/noExplicitAny: Minimal object structure needed for factory pattern
-        } as any);
+        // Use factory to get provider instance directly by canonical name or alias
+        providerInstance = await ProviderFactory.getProviderByName(providerName);
 
         // Validate the API key with the provider
-        validationResult = await provider.validateApiKey(apiKey);
+        validationResult = await providerInstance.validateApiKey(apiKey);
       } catch (error) {
         log.error(
           `Error validating API key for provider ${selectedProvider}`,
@@ -297,50 +293,12 @@ export async function execute(
 
       // Handle validation failure with detailed error information
       if (!validationResult.valid) {
-        // Get stream adapter to format the error message
         let errorDescription = "API key validation failed";
 
         if (validationResult.error) {
-          // Use provider-specific error description formatting
           try {
-            // Dynamically get the appropriate stream adapter based on provider
-            let adapter:
-              | {
-                  createErrorDescription: (
-                    error: ProviderError,
-                    locale: string,
-                  ) => string | null;
-                }
-              | undefined;
-
-            if (
-              normalizedProvider === "google" ||
-              normalizedProvider === "gemini"
-            ) {
-              const { GoogleStreamAdapter } = await import(
-                "../../../providers/google/googleStreamAdapter"
-              );
-              adapter = new GoogleStreamAdapter();
-            } else if (
-              normalizedProvider === "novelai" ||
-              normalizedProvider === "nai"
-            ) {
-              const { NovelaiStreamAdapter } = await import(
-                "../../../providers/novelai/novelaiStreamAdapter"
-              );
-              adapter = new NovelaiStreamAdapter();
-            } else if (
-              normalizedProvider === "openrouter" ||
-              normalizedProvider === "or"
-            ) {
-              const { OpenrouterStreamAdapter } = await import(
-                "../../../providers/openrouter/openrouterStreamAdapter"
-              );
-              adapter = new OpenrouterStreamAdapter();
-            }
-
-            if (adapter) {
-              const formattedError = adapter.createErrorDescription(
+            if (providerInstance) {
+              const formattedError = providerInstance.formatErrorDescription(
                 validationResult.error,
                 locale,
               );
@@ -348,14 +306,12 @@ export async function execute(
                 errorDescription = formattedError;
               }
             } else {
-              // Fallback for unknown providers
               errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
             }
-          } catch (adapterError) {
-            // Fallback if adapter creation fails
+          } catch (providerError) {
             log.warn(
-              "Failed to create stream adapter for error formatting",
-              adapterError,
+              "Failed to format provider error description",
+              providerError,
             );
             errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
           }

@@ -43,4 +43,5 @@ This folder is organized by topic instead of numeric filenames.
 ## Guides
 
 - [`guides/development-tasks.md`](./guides/development-tasks.md)
+- [`guides/adding-new-provider.md`](./guides/adding-new-provider.md)
 - [`guides/coding-standards.md`](./guides/coding-standards.md)

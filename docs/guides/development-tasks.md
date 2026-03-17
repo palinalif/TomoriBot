@@ -61,11 +61,14 @@ bun run lint
 
 ## 6) Add a New AI Provider
 
-1. Add folder `src/providers/{providerName}/`.
-2. Implement provider class named `{ProviderNameCapitalized}Provider` in `{providerName}Provider.ts`.
-3. Implement required adapters (`*StreamAdapter.ts`, `*ToolAdapter.ts`) as needed.
-4. Add provider/model rows in `llms` seed/migrations.
-5. ProviderFactory will auto-discover folder/class if naming conventions are followed.
+Follow `docs/guides/adding-new-provider.md`.
+
+Important:
+
+1. Provider class auto-discovery is only one part of provider integration.
+2. New providers also need static metadata in `providerInfo.ts` and registration in `src/utils/provider/providerInfoRegistry.ts`.
+3. If the provider supports app-level features beyond core chat, wire those feature executors too.
+4. Seed the correct model tables for the features you support.
 
 ## 7) Add a New Feature Flag-Controlled Tool
 

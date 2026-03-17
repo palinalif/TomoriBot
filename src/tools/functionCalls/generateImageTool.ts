@@ -21,6 +21,10 @@ import {
   checkImageQuota,
   incrementImageQuota,
 } from "../../utils/quota/imageQuotaManager";
+import {
+  providerSupportsFeature,
+  resolveProviderFeatureImplementation,
+} from "@/utils/provider/providerInfoRegistry";
 
 /**
  * Tool for generating images using Gemini Imagen API
@@ -75,12 +79,12 @@ export class GenerateImageTool extends BaseTool {
 
   /**
    * Check if image generation is available for the given provider
-   * Supports Google Gemini (direct API) and OpenRouter (via their API)
+   * Uses provider capability metadata instead of hardcoded provider checks.
    * @param provider - LLM provider name
-   * @returns True if provider is Google or OpenRouter
+   * @returns True if provider supports native image generation
    */
   isAvailableFor(provider: string): boolean {
-    return provider === "google" || provider === "openrouter";
+    return providerSupportsFeature(provider, "nativeImageGeneration");
   }
 
   /**
@@ -728,8 +732,12 @@ export class GenerateImageTool extends BaseTool {
       );
 
       let generatedImageData: string | null = null;
+      const imageGenerationImplementation = resolveProviderFeatureImplementation(
+        context.provider,
+        "nativeImageGeneration",
+      );
 
-      if (context.provider === "openrouter") {
+      if (imageGenerationImplementation === "openrouter") {
         // Use OpenRouter API
         const result = await this.generateImageWithOpenRouter(
           apiKey,
@@ -739,7 +747,7 @@ export class GenerateImageTool extends BaseTool {
           referenceImages.length > 0 ? referenceImages : undefined,
         );
         generatedImageData = result.imageData;
-      } else if (context.provider === "google") {
+      } else if (imageGenerationImplementation === "google") {
         // Use Google Gemini API
         const ai = new GoogleGenAI({ apiKey });
         const chat = ai.chats.create({
@@ -784,6 +792,11 @@ export class GenerateImageTool extends BaseTool {
             }
           }
         }
+      } else {
+        return {
+          success: false,
+          error: `Image generation is not implemented for provider ${context.provider}`,
+        };
       }
 
       if (!generatedImageData) {

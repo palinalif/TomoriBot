@@ -36,7 +36,10 @@ import {
   normalizeDocumentText,
 } from "../../utils/documents/documentService";
 import { extractTextFromBuffer } from "../../utils/documents/textExtractor";
-import { generateEmbeddingsBatched } from "../../utils/embeddings/embeddingProvider";
+import {
+  generateEmbeddingsBatched,
+  providerSupportsEmbeddingTaskType,
+} from "../../utils/embeddings/embeddingProvider";
 import type { ErrorContext, TomoriState, UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 
@@ -649,12 +652,13 @@ export async function execute(
     );
 
     const embeddings = await generateEmbeddingsBatched({
-      provider: embeddingModel.provider as "google" | "openrouter",
+      provider: embeddingModel.provider,
       apiKey: decryptedKey,
       model: embeddingModel.codename,
       inputs: chunks,
-      taskType:
-        embeddingModel.provider === "google" ? "RETRIEVAL_DOCUMENT" : undefined,
+      taskType: providerSupportsEmbeddingTaskType(embeddingModel.provider)
+        ? "RETRIEVAL_DOCUMENT"
+        : undefined,
       batchSize: 16,
     });
 

@@ -8,7 +8,6 @@ import { sql } from "@/utils/db/client";
 import type { SetupConfig, UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { setupConfigSchema } from "../../types/db/schema";
-import type { ProviderError } from "../../types/stream/interfaces";
 import { localizer, getDefaultBotName } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
@@ -436,78 +435,28 @@ export async function execute(
         });
 
         try {
-          // Use factory to get provider instance (handles all providers and aliases)
-          // Partial TomoriState for validation only - provider doesn't use these fields during validateApiKey()
-          const provider = await ProviderFactory.getProvider({
-            llm: { llm_provider: normalizedProvider, llm_codename: "" },
-            server_id: 0, // Temporary, not used for validation
-            tomori_id: 0, // Temporary, not used for validation
-            // biome-ignore lint/suspicious/noExplicitAny: Empty config object is sufficient for validation
-            config: {} as any,
-            // biome-ignore lint/suspicious/noExplicitAny: Minimal object structure needed for factory pattern
-          } as any);
+          const provider =
+            await ProviderFactory.getProviderByName(normalizedProvider);
 
           const validationResult = await provider.validateApiKey(apiKey);
           if (!validationResult.valid) {
-            // Get stream adapter to format the error message
             let errorDescription = "API key validation failed";
 
             if (validationResult.error) {
-              // Use provider-specific error description formatting
               try {
-                // Dynamically get the appropriate stream adapter based on provider
-                let adapter:
-                  | {
-                      createErrorDescription: (
-                        error: ProviderError,
-                        locale: string,
-                      ) => string | null;
-                    }
-                  | undefined;
-
-                if (
-                  normalizedProvider === "google" ||
-                  normalizedProvider === "gemini"
-                ) {
-                  const { GoogleStreamAdapter } = await import(
-                    "../../providers/google/googleStreamAdapter"
-                  );
-                  adapter = new GoogleStreamAdapter();
-                } else if (
-                  normalizedProvider === "novelai" ||
-                  normalizedProvider === "nai"
-                ) {
-                  const { NovelaiStreamAdapter } = await import(
-                    "../../providers/novelai/novelaiStreamAdapter"
-                  );
-                  adapter = new NovelaiStreamAdapter();
-                } else if (
-                  normalizedProvider === "openrouter" ||
-                  normalizedProvider === "or"
-                ) {
-                  const { OpenrouterStreamAdapter } = await import(
-                    "../../providers/openrouter/openrouterStreamAdapter"
-                  );
-                  adapter = new OpenrouterStreamAdapter();
-                }
-
-                if (adapter) {
-                  const formattedError = adapter.createErrorDescription(
-                    validationResult.error,
-                    locale,
-                  );
-                  if (formattedError) {
-                    errorDescription = formattedError;
-                  }
+                const formattedError = provider.formatErrorDescription(
+                  validationResult.error,
+                  locale,
+                );
+                if (formattedError) {
+                  errorDescription = formattedError;
                 } else {
-                  // Fallback for unknown providers
                   errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
                 }
-              } catch (adapterError) {
-                // Fallback if adapter creation fails
+              } catch (formatError) {
                 log.warn(
-                  "Failed to create stream adapter for error formatting",
-                  adapterError,
+                  "Failed to format provider error description",
+                  formatError,
                 );
                 errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
               }

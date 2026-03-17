@@ -17,6 +17,7 @@ import { localizer } from "../../utils/text/localizer";
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import { ToolRegistry } from "../toolRegistry";
 import { getBraveApiKeyStatus } from "../../utils/db/dbRead";
+import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 
 /**
  * Tool for reviewing TomoriBot's capabilities and available commands
@@ -137,8 +138,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const hasTools = llm.has_tools ?? false;
       const isReasoning = llm.is_reasoning ?? false;
       const isUncensored = llm.is_uncensored ?? false;
-      const supportsImageGen =
-        provider === "google" || provider === "openrouter";
+      const supportsImageGen = providerSupportsFeature(
+        provider,
+        "nativeImageGeneration",
+      );
 
       // 2. Build dynamic capabilities markdown with model information
       let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";
@@ -265,7 +268,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "Image generation is available for this provider but **disabled** by server configuration.\n\n";
       } else {
         capabilitiesContent +=
-          "Image generation is not available with the current provider (requires Google or OpenRouter).\n\n";
+          "Image generation is not available with the current provider.\n\n";
       }
 
       // 6. Memory & Personalization section (always available)

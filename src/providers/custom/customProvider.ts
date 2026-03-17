@@ -28,7 +28,10 @@ import {
   CustomStreamAdapter,
   type CustomStreamConfig,
 } from "./customStreamAdapter";
-import type { StreamContext } from "../../types/stream/interfaces";
+import type {
+  ProviderError,
+  StreamContext,
+} from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
   type ToolStateForContext,
@@ -49,6 +52,7 @@ import {
   type ApiKeyValidationResult,
 } from "../../types/provider/interfaces";
 import { getCustomToolAdapter } from "./customToolAdapter";
+import { customProviderInfo } from "./providerInfo";
 
 /**
  * Default model name placeholder for custom provider
@@ -82,17 +86,7 @@ export class CustomProvider extends BaseLLMProvider implements LLMProvider {
    * Get provider information and capabilities
    */
   getInfo(): ProviderInfo {
-    return {
-      name: "custom",
-      displayName: "Custom Endpoint",
-      aliases: [], // No aliases for custom provider
-      supportedModels: [], // Models are user-defined, not pre-registered
-      requiresApiKey: false, // API key is optional for local endpoints
-      supportsStreaming: true,
-      supportsFunctionCalling: true, // Depends on user-declared capabilities
-      supportsImages: true, // Depends on user-declared capabilities
-      supportsVideos: false, // Most local models don't support video
-    };
+    return customProviderInfo;
   }
 
   /**
@@ -113,6 +107,11 @@ export class CustomProvider extends BaseLLMProvider implements LLMProvider {
       "Custom provider: Skipping strict API key validation (endpoint health checked on first use)",
     );
     return { valid: true };
+  }
+
+  formatErrorDescription(error: ProviderError, locale: string): string | null {
+    const customAdapter = new CustomStreamAdapter();
+    return customAdapter.createErrorDescription(error, locale);
   }
 
   /**

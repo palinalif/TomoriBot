@@ -42,24 +42,23 @@ import {
 } from "@/utils/security/rateLimiter";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { insertDocumentWithChunks } from "@/utils/documents/documentService";
-import { generateEmbeddingsBatched } from "@/utils/embeddings/embeddingProvider";
+import {
+  generateEmbeddingsBatched,
+  providerSupportsEmbeddingTaskType,
+} from "@/utils/embeddings/embeddingProvider";
 import { fetchHistoryUntilMarker } from "@/utils/discord/historyFetcher";
 import { formatMessagesForExtraction } from "@/utils/discord/historyFormatter";
 import {
   buildExtractionSystemPrompt,
   buildExtractionUserPrompt,
 } from "@/utils/documents/historyExtractionPrompt";
-import {
-  buildHistoryExtractionResponseSchema,
-  HistoryExtractionResultSchema,
-  type HistoryMemoryEntry,
+import type {
+  HistoryMemoryEntry,
 } from "@/providers/utils/historyExtractionSchema";
-import {
-  callGoogleStructuredJSON,
-  callOpenrouterStructuredJSON,
-} from "@/providers/utils/structuredOutput";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import { extractHistoryWindowForProvider } from "@/providers/utils/providerFeatureExecutors";
+import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 
 /** Maximum document name length */
 const MAX_DOCUMENT_NAME_LENGTH = 64;
@@ -163,38 +162,15 @@ async function extractWindow(
     windowText,
     previousRestatements,
   );
-  const responseSchema = buildHistoryExtractionResponseSchema();
-
-  const request = {
+  return await extractHistoryWindowForProvider({
+    providerName: provider,
     apiKey,
     model,
     systemPrompt,
     userPrompt,
     temperature: 0.3,
     maxOutputTokens: 8192,
-  };
-
-  if (provider === "google") {
-    const result = await callGoogleStructuredJSON(
-      request,
-      responseSchema,
-      HistoryExtractionResultSchema,
-    );
-    if (result.success) return result.data.memories;
-    log.warn(`History extraction failed (Google): ${result.error}`);
-    return [];
-  }
-
-  // OpenRouter (and any other provider falls through here)
-  const result = await callOpenrouterStructuredJSON(
-    request,
-    responseSchema,
-    HistoryExtractionResultSchema,
-    "history_extraction_result",
-  );
-  if (result.success) return result.data.memories;
-  log.warn(`History extraction failed (OpenRouter): ${result.error}`);
-  return [];
+  });
 }
 
 /**
@@ -489,11 +465,13 @@ async function storeExtractedFacts(params: {
 
   // 5. Generate embeddings
   const embeddings = await generateEmbeddingsBatched({
-    provider: embeddingProvider as "google" | "openrouter",
+    provider: embeddingProvider,
     apiKey,
     model: embeddingCodename,
     inputs: chunks,
-    taskType: embeddingProvider === "google" ? "RETRIEVAL_DOCUMENT" : undefined,
+    taskType: providerSupportsEmbeddingTaskType(embeddingProvider)
+      ? "RETRIEVAL_DOCUMENT"
+      : undefined,
     batchSize: 16,
   });
 
@@ -626,6 +604,16 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.history.model_incompatible_title",
         descriptionKey: "commands.teach.history.model_incompatible_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (!providerSupportsFeature(tomoriState.llm.llm_provider, "historyExtraction")) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.provider_not_supported_title",
+        descriptionKey: "general.errors.provider_not_supported_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });

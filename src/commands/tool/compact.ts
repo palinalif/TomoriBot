@@ -29,20 +29,20 @@ import {
 } from "@/utils/cache/userCache";
 import { resolvePersonaAvatarURL } from "@/utils/discord/webhookManager";
 import type { ModalComponent } from "@/types/discord/modal";
-import {
-  generateConversationSummaryGoogle,
-  generateRoleplaySummaryGoogle,
-} from "@/providers/google/compactGenerator";
-import {
-  generateConversationSummaryOpenrouter,
-  generateRoleplaySummaryOpenrouter,
-} from "@/providers/openrouter/compactGenerator";
 import { escapeRegExp } from "@/utils/text/stringHelper";
 import type {
   CompactRoleplaySummary,
   CompactSummaryMode,
 } from "@/types/misc/compact";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import {
+  generateConversationSummaryForProvider,
+  generateRoleplaySummaryForProvider,
+} from "@/providers/utils/providerFeatureExecutors";
+import {
+  providerSupportsFeature,
+  resolveProviderFeatureImplementation,
+} from "@/utils/provider/providerInfoRegistry";
 
 const MODAL_CUSTOM_ID = "tool_compact_modal";
 const TYPE_FIELD_ID = "summary_type";
@@ -915,10 +915,15 @@ export async function execute(
   const messageFetchLimit = normalizeMessageFetchLimit(
     tomoriState.config.message_fetch_limit,
   );
-  const isGoogle = providerName === "google" || providerName === "gemini";
-  const isOpenrouter = providerName === "openrouter";
+  const compactionImplementation = resolveProviderFeatureImplementation(
+    providerName,
+    "conversationCompaction",
+  );
 
-  if (!isGoogle && !isOpenrouter) {
+  if (
+    !providerSupportsFeature(providerName, "conversationCompaction") ||
+    !compactionImplementation
+  ) {
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
@@ -1076,23 +1081,17 @@ export async function execute(
       log.info(`[Compact] Conversation system prompt:\n${prompt.systemPrompt}`);
       log.info(`[Compact] Conversation user prompt:\n${prompt.userPrompt}`);
 
-      const result = isGoogle
-        ? await generateConversationSummaryGoogle({
-            apiKey,
-            model: tomoriState.llm.llm_codename,
-            systemPrompt: prompt.systemPrompt,
-            userPrompt: prompt.userPrompt,
-            images: analyzeImages ? imagePayload : undefined,
-          })
-        : await generateConversationSummaryOpenrouter({
-            apiKey,
-            model: tomoriState.llm.llm_codename,
-            systemPrompt: prompt.systemPrompt,
-            userPrompt: prompt.userPrompt,
-            images: analyzeImages
-              ? imageReferences.map((img) => ({ url: img.url }))
-              : undefined,
-          });
+      const result = await generateConversationSummaryForProvider({
+        providerName,
+        apiKey,
+        model: tomoriState.llm.llm_codename,
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+        googleImages: analyzeImages ? imagePayload : undefined,
+        openrouterImages: analyzeImages
+          ? imageReferences.map((img) => ({ url: img.url }))
+          : undefined,
+      });
 
       if (result.error || !result.summary) {
         await submitInteraction.editReply({
@@ -1143,23 +1142,17 @@ export async function execute(
         avatarMap.set(key, value);
       }
 
-      const result = isGoogle
-        ? await generateRoleplaySummaryGoogle({
-            apiKey,
-            model: tomoriState.llm.llm_codename,
-            systemPrompt: prompt.systemPrompt,
-            userPrompt: prompt.userPrompt,
-            images: analyzeImages ? imagePayload : undefined,
-          })
-        : await generateRoleplaySummaryOpenrouter({
-            apiKey,
-            model: tomoriState.llm.llm_codename,
-            systemPrompt: prompt.systemPrompt,
-            userPrompt: prompt.userPrompt,
-            images: analyzeImages
-              ? imageReferences.map((img) => ({ url: img.url }))
-              : undefined,
-          });
+      const result = await generateRoleplaySummaryForProvider({
+        providerName,
+        apiKey,
+        model: tomoriState.llm.llm_codename,
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+        googleImages: analyzeImages ? imagePayload : undefined,
+        openrouterImages: analyzeImages
+          ? imageReferences.map((img) => ({ url: img.url }))
+          : undefined,
+      });
 
       if (result.error || !result.summary) {
         await submitInteraction.editReply({
