@@ -3,8 +3,9 @@
  * These mirror the schema defaults in `src/db/schema.sql`.
  */
 export const DEFAULT_NAI_STYLE_TAGS = [
-  "8k",
   "absurdres",
+  "aesthetic",
+  "very aesthetic",
   "masterpiece",
   "best quality",
   "good quality",

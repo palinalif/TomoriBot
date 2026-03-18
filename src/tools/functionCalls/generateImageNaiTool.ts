@@ -125,6 +125,7 @@ interface GenerateImageNaiCharacterArg {
   id?: string;
   tags?: string;
   remove_tags?: string | string[];
+  spoken_text?: string;
   x: CharacterXPosition;
   y: CharacterYPosition;
 }
@@ -187,6 +188,16 @@ export class GenerateImageNaiTool extends BaseTool {
         description:
           "Imageboard-style tags for the shared scene: background, composition, camera, lighting, atmosphere, style, and quality, separated by commas (e.g. 'indoors, wooden chair, dutch angle'). When 'characters' is provided, keep this scene-level only; put each character's appearance, action, interaction, nudity/outfit state, and other per-character details in that character's 'tags'. For inpainting, describe what should replace the masked region.",
       },
+      artist: {
+        type: "string",
+        description:
+          "Optional comma-separated artist names to emulate their art style (e.g. 'jjune, wanke'). Do not fill up if user did not explicitly mention a style.",
+      },
+      location: {
+        type: "string",
+        description:
+          "Optional comma-separated location/background setting tags (e.g. 'park, cherry blossoms').",
+      },
       orientation: {
         type: "string",
         description:
@@ -196,7 +207,7 @@ export class GenerateImageNaiTool extends BaseTool {
       characters: {
         type: "array",
         description:
-          "Visible characters in the image. Each array item is one character instance. In multi-character scenes, give every intended visible character its own entry and its own role tags. Always describe that character's full appearance plus what they are doing in that same entry's 'tags'. If saved appearance tags for a known character are shown in conversation context, copy the relevant ones into 'tags'.",
+          "Visible characters in the image. Each array item is one character instance. In multi-character scenes, give every intended visible character its own entry and its own role tags. Always describe that character's full appearance plus what they are doing in that same entry's 'tags', especially exact name tag if it exists (eg. hataya misuzu, hatsune miku. If saved appearance tags for a known character are shown in conversation context, copy the relevant ones into 'tags'.",
         items: {
           type: "object",
           properties: {
@@ -204,6 +215,11 @@ export class GenerateImageNaiTool extends BaseTool {
               type: "string",
               description:
                 "Required. Imageboard-style tags for this character. Include the full appearance plus that character's role in the scene: hair, eyes, outfit or nude state, body traits, pose, action, expression, gaze, and interaction as needed (eg. '1girl, black hair, ponytail, brown eyes, medium breasts, white shirt, black skirt, school uniform, eating, hotdog, sitting'). In multi-character scenes, every visible character needs their own full tags. If saved appearance tags for a known character are shown in conversation context, copy them here before adding scene-specific actions or expressions. For erotic scenes, feel free to omit relevant clothing tags and directly use explicit tags saying what's visible and what the act/position is (eg. 'nude, pussy, penis, pussy juice, doggystyle) when that is the intended result.",
+            },
+            spoken_text: {
+              type: "string",
+              description:
+                "Optional speech/dialogue text this character is saying (e.g. 'Hello there!'). Only use this if user explicitly asks for it. Only English is available.",
             },
             x: {
               type: "string",
@@ -1355,6 +1371,8 @@ export class GenerateImageNaiTool extends BaseTool {
     // Extract arguments
     const prompt = args.prompt as string;
     const orientation = (args.orientation as string) || "portrait";
+    const artistRaw = (args.artist as string | undefined)?.trim();
+    const locationRaw = (args.location as string | undefined)?.trim();
     const characters = Array.isArray(args.characters)
       ? (args.characters as GenerateImageNaiCharacterArg[])
       : [];
@@ -1459,10 +1477,79 @@ export class GenerateImageNaiTool extends BaseTool {
         );
       }
 
-      // Combine: trusted tags first (as-is), then resolved/raw model tags
-      const normalizedTags = [...trustedTags, ...resolvedModelTags];
+      // Prepend artist:/location: prefixed tags when provided (trusted, skip normalization)
+      const specialPrefixTags: string[] = [];
+      if (artistRaw) {
+        for (const name of artistRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)) {
+          specialPrefixTags.push(`artist:${name}`);
+        }
+      }
+      if (locationRaw) {
+        for (const loc of locationRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)) {
+          specialPrefixTags.push(`location:${loc}`);
+        }
+      }
 
-      const normalizedPrompt = normalizedTags.join(", ");
+      // Combine: trusted tags first (as-is), then resolved/raw model tags
+      const normalizedTags = [
+        ...specialPrefixTags,
+        ...trustedTags,
+        ...resolvedModelTags,
+      ];
+
+      // Build spoken text section for the base prompt when characters have dialogue.
+      // NAI expects "text, english text" tags, a natural-language attribution line per
+      // speaking character, and a trailing "Text: ..." line (newline-separated if multiple).
+      const spokenEntries: { index: number; text: string }[] = [];
+      for (let i = 0; i < characters.length; i++) {
+        const raw = characters[i].spoken_text;
+        const trimmed = typeof raw === "string" ? raw.trim() : "";
+        if (trimmed) {
+          spokenEntries.push({ index: i, text: trimmed });
+        }
+      }
+
+      if (spokenEntries.length > 0) {
+        // Inject meta tags so NAI knows to render text
+        normalizedTags.push("text", "english text");
+      }
+
+      // Base tag portion of the prompt
+      let normalizedPrompt = normalizedTags.join(", ");
+
+      // Append natural-language attribution + "Text:" lines
+      if (spokenEntries.length > 0) {
+        const ordinals = [
+          "first",
+          "second",
+          "third",
+          "fourth",
+          "fifth",
+          "sixth",
+          "seventh",
+          "eighth",
+          "ninth",
+          "tenth",
+        ];
+        const attributions = spokenEntries.map(({ index, text }) => {
+          const label =
+            characters.length === 1
+              ? "The character"
+              : `The ${ordinals[index] ?? `#${index + 1}`} character`;
+          return `${label} is saying "${text}"`;
+        });
+        const combinedDialogue = spokenEntries
+          .map(({ text }) => text)
+          .join(" ");
+
+        normalizedPrompt += `. ${attributions.join(", and ")}. Text: ${combinedDialogue}`;
+      }
       log.info(
         `[NAI] Normalized prompt: "${normalizedPrompt.substring(0, 200)}${normalizedPrompt.length > 200 ? "..." : ""}"`,
       );

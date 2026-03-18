@@ -47,27 +47,62 @@ let cacheHits = 0;
 let cacheMisses = 0;
 
 /**
- * Checks whether a recent DB error was recorded for a server.
+ * Tracks when the bot process started so the UI layer can treat "not set up"
+ * results as "currently updating" during the startup grace period.
+ * During fresh container starts (e.g. ECS deployments), the DB may be
+ * available but the first query can return empty results before connections
+ * stabilise. This grace period prevents showing the misleading
+ * "Initial Setup Required" embed to users of servers that ARE set up.
+ */
+const botStartTimestamp = Date.now();
+
+/**
+ * How long after process start to treat empty persona results as "updating"
+ * rather than "not set up". Configurable via env (default 3 minutes).
+ */
+const STARTUP_GRACE_PERIOD_MS =
+	(Number(process.env.STARTUP_GRACE_PERIOD_MINUTES) || 3) * 60 * 1000;
+
+/**
+ * Checks whether the current "not set up" state is likely a transient
+ * deployment artifact rather than a genuinely unconfigured server.
+ *
+ * Returns a synthetic error entry when:
+ * 1. A real DB error was recently recorded for this server, OR
+ * 2. The bot is still within the startup grace period (fresh container start)
+ *
  * Used by the UI layer (replyInfoEmbed / sendStandardEmbed) to swap
- * "Initial Setup Required" for "Currently Updating..." when the DB
- * is transiently unreachable (e.g. during ECS deployments).
+ * "Initial Setup Required" for "Currently Updating..." when appropriate.
  *
  * @param serverDiscId - Discord server ID (or user ID for DMs)
- * @returns The error entry if fresh (within staleness threshold), or null
+ * @returns The error entry if fresh (within staleness threshold) or within
+ *          startup grace period, or null if this is genuinely "not set up"
  */
 export function getLastDbError(
 	serverDiscId: string,
 ): { message: string; timestamp: number } | null {
+	// 1. Check for a real DB error recorded by getCachedAllPersonas
 	const entry = lastDbError.get(serverDiscId);
-	if (!entry) return null;
-
-	// Discard stale entries
-	if (Date.now() - entry.timestamp > DB_ERROR_STALENESS_MS) {
-		lastDbError.delete(serverDiscId);
-		return null;
+	if (entry) {
+		// Discard stale entries
+		if (Date.now() - entry.timestamp > DB_ERROR_STALENESS_MS) {
+			lastDbError.delete(serverDiscId);
+		} else {
+			return entry;
+		}
 	}
 
-	return entry;
+	// 2. During startup grace period, treat empty results as "updating"
+	//    so users don't see "Initial Setup Required" on servers that ARE
+	//    configured but whose data hasn't been fetched yet.
+	if (Date.now() - botStartTimestamp < STARTUP_GRACE_PERIOD_MS) {
+		return {
+			message: "Bot is still starting up (startup grace period)",
+			timestamp: botStartTimestamp,
+		};
+	}
+
+	return null;
 }
 
 /**
