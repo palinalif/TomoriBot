@@ -276,7 +276,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         const braveServerIdNumber = stateForContext.server_id
           ? Number.parseInt(stateForContext.server_id, 10)
           : undefined;
-        const hasBraveApiKey = await isBraveSearchAvailable(braveServerIdNumber);
+        const hasBraveApiKey =
+          await isBraveSearchAvailable(braveServerIdNumber);
         if (hasBraveApiKey) {
           // DuckDuckGo search function names to exclude when Brave is available
           const duckduckgoSearchFunctions = [
@@ -329,10 +330,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         }
 
         // 2. If NovelAI opt key exists AND nai_exclusive_imggen is enabled, remove generate_image
-        if (
-          hasNovelAiOptKey &&
-          stateForContext.config.nai_exclusive_imggen
-        ) {
+        if (hasNovelAiOptKey && stateForContext.config.nai_exclusive_imggen) {
           const beforeCount = builtInTools.length;
           builtInTools = builtInTools.filter(
             (tool) => tool.name !== "generate_image",
@@ -355,8 +353,11 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             if (tool.name !== "generate_image_nai") return tool;
 
             // Create a shallow proxy that hides inpainting-only parameters
-            const { message_id: _msgId, edit_target: _editTarget, ...baseProps } =
-              tool.parameters.properties;
+            const {
+              message_id: _msgId,
+              edit_target: _editTarget,
+              ...baseProps
+            } = tool.parameters.properties;
 
             const strippedDescription = tool.description.replace(
               / For editing\/inpainting:.*?The image will be sent directly to the Discord channel\./,

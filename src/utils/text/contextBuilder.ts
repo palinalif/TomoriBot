@@ -51,6 +51,7 @@ import {
   getShortTermMemoryForChannel,
   getRelativeTimestamp,
 } from "../cache/shortTermMemoryCache";
+import { getCachedAllPersonas } from "../cache/tomoriStateCache";
 import { getCachedUserRow } from "../cache/userCache";
 import { formatMemoryWithId } from "../memory/memoryId";
 
@@ -395,42 +396,44 @@ function buildMediaDescription(msg: SimplifiedMessageForContext): string {
  * @returns Attribution string (e.g., "Misuzu sent this image", "Misuzu sent these 2 images and a video")
  */
 function buildMediaAttributionText(
-	msg: SimplifiedMessageForContext,
-	authorName: string,
+  msg: SimplifiedMessageForContext,
+  authorName: string,
 ): string {
-	const imageCount = msg.imageAttachments.length;
-	const videoCount = msg.videoAttachments.length;
-	const hasGif = msg.imageAttachments.some((att) =>
-		att.mimeType?.includes("gif"),
-	);
-	const isMixed = imageCount > 0 && videoCount > 0;
+  const imageCount = msg.imageAttachments.length;
+  const videoCount = msg.videoAttachments.length;
+  const hasGif = msg.imageAttachments.some((att) =>
+    att.mimeType?.includes("gif"),
+  );
+  const isMixed = imageCount > 0 && videoCount > 0;
 
-	const mediaParts: string[] = [];
+  const mediaParts: string[] = [];
 
-	// Build image/GIF description
-	if (imageCount > 0) {
-		if (hasGif && imageCount === 1) {
-			mediaParts.push("this GIF");
-		} else if (hasGif) {
-			mediaParts.push(`these ${imageCount} images (including a GIF)`);
-		} else if (imageCount === 1) {
-			mediaParts.push("this image");
-		} else {
-			mediaParts.push(`these ${imageCount} images`);
-		}
-	}
+  // Build image/GIF description
+  if (imageCount > 0) {
+    if (hasGif && imageCount === 1) {
+      mediaParts.push("this GIF");
+    } else if (hasGif) {
+      mediaParts.push(`these ${imageCount} images (including a GIF)`);
+    } else if (imageCount === 1) {
+      mediaParts.push("this image");
+    } else {
+      mediaParts.push(`these ${imageCount} images`);
+    }
+  }
 
-	// Use "a/N video(s)" when mixed with images so "sent this image and a video" reads naturally
-	if (videoCount > 0) {
-		if (isMixed) {
-			mediaParts.push(videoCount === 1 ? "a video" : `${videoCount} videos`);
-		} else {
-			mediaParts.push(videoCount === 1 ? "this video" : `these ${videoCount} videos`);
-		}
-	}
+  // Use "a/N video(s)" when mixed with images so "sent this image and a video" reads naturally
+  if (videoCount > 0) {
+    if (isMixed) {
+      mediaParts.push(videoCount === 1 ? "a video" : `${videoCount} videos`);
+    } else {
+      mediaParts.push(
+        videoCount === 1 ? "this video" : `these ${videoCount} videos`,
+      );
+    }
+  }
 
-	const mediaDescription = mediaParts.join(" and ") || "this media";
-	return `${authorName} sent ${mediaDescription}`;
+  const mediaDescription = mediaParts.join(" and ") || "this media";
+  return `${authorName} sent ${mediaDescription}`;
 }
 
 function getLatestUserQuery(
@@ -738,6 +741,24 @@ export function formatTimestampInline(createdAt: number): string {
  */
 export function formatMessageTimestamp(createdAt: number): string {
   return `[System: Sent ${formatTimestampInline(createdAt)}]`;
+}
+
+function pushDialogueHistoryContextItem(
+  contextItems: StructuredContextItem[],
+  role: "user" | "model",
+  parts: ContextPart[],
+  messageId: string,
+): void {
+  if (parts.length === 0) {
+    return;
+  }
+
+  contextItems.push({
+    role,
+    parts,
+    metadataTag: ContextItemTag.DIALOGUE_HISTORY,
+    messageId,
+  });
 }
 
 export async function buildContext({
@@ -1424,6 +1445,7 @@ export async function buildContext({
       userId: string;
       displayName: string;
       detailLines: string[];
+      imageAppearanceTags?: string[];
       isBot: boolean;
       mentionAliases: string[];
       primaryAlias: string | null;
@@ -1440,6 +1462,13 @@ export async function buildContext({
       const key = alias.toLowerCase();
       aliasCounts.set(key, (aliasCounts.get(key) ?? 0) + 1);
     };
+    const normalizeImageAppearanceTags = (
+      tags: string[] | null | undefined,
+    ): string[] | undefined => {
+      const normalizedTags =
+        tags?.map((tag) => tag.trim()).filter((tag) => tag.length > 0) ?? [];
+      return normalizedTags.length > 0 ? normalizedTags : undefined;
+    };
 
     // 3. Process each user (including bot itself)
     for (const userIdToProcess of userList) {
@@ -1451,6 +1480,10 @@ export async function buildContext({
           detailLines: [
             "- Status: Online - Currently active and responding to messages",
           ],
+          imageAppearanceTags:
+            !isUserImpersonation && tomoriConfig.imagegen_enabled
+              ? normalizeImageAppearanceTags(tomoriState?.nai_tags)
+              : undefined,
           isBot: true,
           mentionAliases: [],
           primaryAlias: null,
@@ -1486,6 +1519,7 @@ export async function buildContext({
             userId: userIdToProcess,
             displayName: syntheticEntry.displayName,
             detailLines: [],
+            imageAppearanceTags: undefined,
             isBot: false,
             mentionAliases: Array.from(syntheticAliasSet),
             primaryAlias: syntheticEntry.displayName || null,
@@ -1696,10 +1730,69 @@ export async function buildContext({
         userId: userRow.user_disc_id,
         displayName,
         detailLines,
+        imageAppearanceTags:
+          !isUserImpersonation && tomoriConfig.imagegen_enabled
+            ? normalizeImageAppearanceTags(userRow.nai_char_tags)
+            : undefined,
         isBot: false,
         mentionAliases: Array.from(aliasSet),
         primaryAlias,
       });
+    }
+
+    if (
+      !isUserImpersonation &&
+      tomoriConfig.imagegen_enabled &&
+      syntheticUsers &&
+      syntheticUsers.size > 0
+    ) {
+      const hasSyntheticPersonas = Array.from(syntheticUsers.values()).some(
+        (entry) => entry.type === "persona",
+      );
+      if (hasSyntheticPersonas) {
+        const allPersonas = await getCachedAllPersonas(guildId).catch(
+          (error) => {
+            log.warn(
+              "Failed to load personas for image profile context",
+              error,
+            );
+            return [];
+          },
+        );
+        const personaById = new Map(
+          allPersonas
+            .filter((persona) => persona.tomori_id != null)
+            .map((persona) => [persona.tomori_id as number, persona]),
+        );
+
+        for (const [syntheticId, syntheticEntry] of syntheticUsers.entries()) {
+          if (
+            syntheticEntry.type !== "persona" ||
+            !/^\d{1,10}$/.test(syntheticId)
+          ) {
+            continue;
+          }
+
+          const personaId = Number.parseInt(syntheticId, 10);
+          if (personaId === tomoriState?.tomori_id) {
+            continue;
+          }
+
+          const persona = personaById.get(personaId);
+          if (!persona) {
+            continue;
+          }
+
+          const targetEntry = userEntries.find(
+            (entry) => entry.userId === syntheticId,
+          );
+          if (targetEntry) {
+            targetEntry.imageAppearanceTags = normalizeImageAppearanceTags(
+              persona.nai_tags,
+            );
+          }
+        }
+      }
     }
 
     const formatMentionHandle = (alias: string, userId: string) => {
@@ -1728,6 +1821,10 @@ export async function buildContext({
         const mentionInfo =
           mentionParts.length > 0 ? ` (${mentionParts.join("; ")})` : "";
         usersInConversationText += `${entry.displayName} (User ID: ${entry.userId})${mentionInfo}\n`;
+      }
+
+      if (entry.imageAppearanceTags && entry.imageAppearanceTags.length > 0) {
+        usersInConversationText += `- Appearance Tags: ${entry.imageAppearanceTags.join(", ")}\n`;
       }
 
       for (const line of entry.detailLines) {
@@ -1988,6 +2085,9 @@ export async function buildContext({
     }
 
     const parts: ContextPart[] = [];
+    // Media/tooling annotations are kept off the speaker-authored turn so models
+    // do not treat bracketed [System: ...] metadata as dialogue they produced.
+    const detachedSystemParts: ContextPart[] = [];
 
     // Determine if this message is within the media context window
     const isWithinMediaWindow = index >= mediaWindowCutoff;
@@ -2004,8 +2104,10 @@ export async function buildContext({
     // Prefer the caller-supplied override (resolved from the provider capability cache) so
     // the context builder stays in sync with what the stream adapter will actually send.
     // Fall back to the DB flag when no override is provided (e.g. non-OpenRouter providers).
-    const seesImages = seesImagesOverride ?? tomoriState?.llm.sees_images ?? false;
-    const seesVideos = seesVideosOverride ?? tomoriState?.llm.sees_videos ?? false;
+    const seesImages =
+      seesImagesOverride ?? tomoriState?.llm.sees_images ?? false;
+    const seesVideos =
+      seesVideosOverride ?? tomoriState?.llm.sees_videos ?? false;
 
     // If message has significant media but is outside window, add placeholder.
     // Only shown if the model actually supports the relevant media type — no point
@@ -2021,7 +2123,7 @@ export async function buildContext({
       const mediaDescription = buildMediaDescription(msg);
 
       // Add placeholder text
-      parts.push({
+      detachedSystemParts.push({
         type: "text",
         text: `[System: This message (ID: ${msg.id}) contained ${mediaDescription} - use increase_media_context with extend_by=${extendByNeeded} to view]`,
       });
@@ -2062,7 +2164,7 @@ export async function buildContext({
             imageDescription = `${imageCount === 1 ? "an image" : `${imageCount} images`}`;
           }
 
-          parts.push({
+          detachedSystemParts.push({
             type: "text",
             text: `[System: This message contains ${imageDescription}. Current model cannot see images, please do not describe or claim to see the image contents.]`,
           });
@@ -2098,7 +2200,7 @@ export async function buildContext({
           const videoDescription =
             videoCount === 1 ? "a video" : `${videoCount} videos`;
 
-          parts.push({
+          detachedSystemParts.push({
             type: "text",
             text: `[System: This message contains ${videoDescription}. Current model cannot see videos, please do not describe or claim to see the video contents.]`,
           });
@@ -2172,7 +2274,7 @@ export async function buildContext({
           text: formatMessageTimestamp(msg.createdAt),
         });
       }
-    } else if (parts.length > 0) {
+    } else if (parts.length > 0 || detachedSystemParts.length > 0) {
       // Media-only message (no text content): synthesize an attribution line so the model
       // knows who sent it. Prose form is used ("Misuzu sent this image") rather than the
       // "authorName:" prefix, which is reserved strictly for actual utterances.
@@ -2201,20 +2303,19 @@ export async function buildContext({
         mediaMessageIds.length === 1
           ? `[System: Media message ID for tool use: ${mediaMessageIds[0]}]`
           : `[System: Media message IDs for tool use: ${mediaMessageIds.join(", ")}]`;
-      parts.push({
+      detachedSystemParts.push({
         type: "text",
         text: hintText,
       });
     }
 
-    if (parts.length > 0) {
-      contextItems.push({
-        role,
-        parts,
-        metadataTag: ContextItemTag.DIALOGUE_HISTORY, // Tagging
-        messageId: msg.id, // Include Discord message ID for tools
-      });
-    }
+    pushDialogueHistoryContextItem(
+      contextItems,
+      "user",
+      detachedSystemParts,
+      msg.id,
+    );
+    pushDialogueHistoryContextItem(contextItems, role, parts, msg.id);
   }
 
   // Inject user impersonation system prompt as the LAST message (February 2026)

@@ -82,6 +82,10 @@ const NAI_CHAR_REF_DESCRIPTION =
   process.env.NAI_CHAR_REF_DESCRIPTION?.trim() || "character&style";
 const NAI_ENABLE_CHAR_REFERENCES =
   (process.env.NAI_ENABLE_CHAR_REFERENCES || "true").toLowerCase() === "true";
+// Temporarily disabled: inline per-character tags are currently more reliable than
+// profile-driven autofill for `generate_image_nai`.
+const NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL = false;
+const NAI_ENABLE_PROFILE_CHARACTER_REMOVE_TAGS = false;
 
 /** Base URL for NovelAI's image generation API */
 const NAI_IMAGE_BASE_URL = "https://image.novelai.net";
@@ -120,6 +124,7 @@ type CharacterYPosition = "top" | "upper" | "middle" | "lower" | "bottom";
 interface GenerateImageNaiCharacterArg {
   id?: string;
   tags?: string;
+  remove_tags?: string | string[];
   x: CharacterXPosition;
   y: CharacterYPosition;
 }
@@ -139,6 +144,7 @@ interface NAICharacterPrompt {
 interface NAICharacterPayload {
   useCoords: boolean;
   charCaptions: NAICharacterCaption[];
+  negativeCharCaptions: NAICharacterCaption[];
   characterPrompts: NAICharacterPrompt[];
   referenceImages: string[];
   referenceStrengths: number[];
@@ -168,7 +174,7 @@ interface SuggestTagsResponse {
 export class GenerateImageNaiTool extends BaseTool {
   name = "generate_image_nai";
   description =
-    "Generate or edit an anime-styled AI image using NovelAI's uncensored diffusion models. For generation: put shared background, composition, camera, lighting, atmosphere, and style tags in 'prompt' (e.g. 'sunset, classroom, tree, dutch angle, artist:{artist}'). When using 'characters', prefer passing persona IDs or Discord user IDs for known profiles so saved appearance tags define how they look. Use 'self' for the current active persona instead of the bot's Discord user ID. For known IDs, each character's 'tags' should focus on what that character is doing in this image, such as pose, action, expression, gaze, framing, or interaction cues (e.g. 'sitting, smug, cowgirl position'). Do not restate base hair, eyes, outfit, accessories, species, or body traits for known IDs unless you intentionally want to override them for this one image. If no 'id' is provided, then 'tags' must describe the full character appearance plus the action. For editing/inpainting: also provide message_id (referencing a message with an image) and edit_target (what to change, e.g. 'the background'). The image will be sent directly to the Discord channel.";
+    "Generate or edit an anime-styled AI image with NovelAI diffusion's uncensored. Put shared scene, background, composition, camera, lighting, atmosphere, and style tags in 'prompt'. Use 'characters' for visible people in the image, and describe each character fully in that character's 'tags'.";
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
   requiresFollowUp = true; // Allow model to generate a text response after image is sent, preventing orphaned self-reply
@@ -179,7 +185,7 @@ export class GenerateImageNaiTool extends BaseTool {
       prompt: {
         type: "string",
         description:
-          "Imageboard-style tags for shared background, composition, camera, lighting, atmosphere, style, and quality, separated by commas (e.g. 'cozy room, wooden chair, soft warm lighting, masterpiece'). When 'characters' is provided, do NOT put character appearance or action tags here; keep this focused on the overall image composition and background. For inpainting, describe what should replace the masked region.",
+          "Imageboard-style tags for the shared scene: background, composition, camera, lighting, atmosphere, style, and quality, separated by commas (e.g. 'indoors, wooden chair, dutch angle'). When 'characters' is provided, keep this scene-level only; put each character's appearance, action, interaction, nudity/outfit state, and other per-character details in that character's 'tags'. For inpainting, describe what should replace the masked region.",
       },
       orientation: {
         type: "string",
@@ -190,19 +196,14 @@ export class GenerateImageNaiTool extends BaseTool {
       characters: {
         type: "array",
         description:
-          "Characters to place in the scene. When provided, 'prompt' should stay focused on the overall image composition and background. Prefer 'id' for known persona/user profiles so saved appearance tags are reused automatically. Use 'self' for the current active persona instead of the bot's Discord user ID. For known IDs, use each character's 'tags' mainly for what that character is doing in this image: pose, action, expression, gaze, framing, or interaction cues. If no 'id' is provided, then that character's 'tags' must describe the full appearance plus the action.",
+          "Visible characters in the image. Each array item is one character instance. In multi-character scenes, give every intended visible character its own entry and its own role tags. Always describe that character's full appearance plus what they are doing in that same entry's 'tags'. If saved appearance tags for a known character are shown in conversation context, copy the relevant ones into 'tags'.",
         items: {
           type: "object",
           properties: {
-            id: {
-              type: "string",
-              description:
-                "Optional identity to resolve. Use 'self' for the current active persona, persona:<tomori_id> (or short numeric persona ID) for another persona in this server, or a Discord user snowflake (e.g. '123456789012345678') to load that user's saved profile. Do not use the bot's Discord user ID when you mean the active persona; use 'self' instead. For known characters, prefer using this ID plus position, then add only minimal per-image action/expression/framing tags if needed. Avoid repeating appearance tags like hair, eyes, outfit, accessories, species, or body traits when 'id' is present.",
-            },
             tags: {
               type: "string",
               description:
-                "Imageboard-style tags for this character. Required if 'id' is not provided, and then should include the full appearance plus the action. If 'id' is provided, use this mainly for per-image pose, action, expression, gaze, interaction, or camera framing. Good with 'id': 'hugging from behind, arms around waist, smiling warmly'. Avoid with 'id': 'purple bob hair, white flower ornament, school uniform'. Only include appearance traits here when you intentionally want to override the saved profile for this one image.",
+                "Required. Imageboard-style tags for this character. Include the full appearance plus that character's role in the scene: hair, eyes, outfit or nude state, body traits, pose, action, expression, gaze, and interaction as needed (eg. '1girl, black hair, ponytail, brown eyes, medium breasts, white shirt, black skirt, school uniform, eating, hotdog, sitting'). In multi-character scenes, every visible character needs their own full tags. If saved appearance tags for a known character are shown in conversation context, copy them here before adding scene-specific actions or expressions. For erotic scenes, feel free to omit relevant clothing tags and directly use explicit tags saying what's visible and what the act/position is (eg. 'nude, pussy, penis, pussy juice, doggystyle) when that is the intended result.",
             },
             x: {
               type: "string",
@@ -215,7 +216,7 @@ export class GenerateImageNaiTool extends BaseTool {
               enum: ["top", "upper", "middle", "lower", "bottom"],
             },
           },
-          required: ["x", "y"],
+          required: ["tags", "x", "y"],
         },
       },
       message_id: {
@@ -518,29 +519,36 @@ export class GenerateImageNaiTool extends BaseTool {
     context: ToolContext,
   ): Promise<NAICharacterPayload> {
     const allowCharacterReferences =
-      NAI_ENABLE_CHAR_REFERENCES && characters.length === 1;
+      NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL &&
+      NAI_ENABLE_CHAR_REFERENCES &&
+      characters.length === 1;
     const charCaptions: NAICharacterCaption[] = [];
+    const negativeCharCaptions: NAICharacterCaption[] = [];
     const characterPrompts: NAICharacterPrompt[] = [];
     const referenceImages: string[] = [];
     const referenceStrengths: number[] = [];
     const referenceInfoExtracted: number[] = [];
     let skippedReferenceBecauseDisabled = false;
     let skippedReferenceBecauseMultiCharacter = false;
+    let skippedReferenceBecauseTagRemoval = false;
+    const seenCharacterIds = new Set<string>();
 
     for (const character of characters) {
       const rawId =
         typeof character.id === "string" ? character.id.trim() : undefined;
       const clientUserId = context.client.user?.id;
-      const normalizedId =
-        (rawId === "self" ||
-          (clientUserId &&
-            rawId === clientUserId &&
-            context.tomoriState.tomori_id != null)) &&
-        context.tomoriState.tomori_id
+      const normalizedId = NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL
+        ? (rawId === "self" ||
+            (clientUserId &&
+              rawId === clientUserId &&
+              context.tomoriState.tomori_id != null)) &&
+          context.tomoriState.tomori_id
           ? `persona:${context.tomoriState.tomori_id}`
-          : rawId;
+          : rawId
+        : undefined;
 
       if (
+        NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL &&
         rawId &&
         clientUserId &&
         rawId === clientUserId &&
@@ -549,6 +557,22 @@ export class GenerateImageNaiTool extends BaseTool {
         log.info(
           `[NAI] Remapped bot user ID ${rawId} to active persona persona:${context.tomoriState.tomori_id} for character profile resolution`,
         );
+      }
+
+      if (!NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL && rawId) {
+        log.info(
+          `[NAI] Character ${charCaptions.length + 1} provided id=${rawId}, but profile-driven character autofill is currently disabled; using inline tags only`,
+        );
+      }
+
+      if (normalizedId) {
+        if (seenCharacterIds.has(normalizedId)) {
+          log.warn(
+            `[NAI] Duplicate character id=${normalizedId} detected in one generation request; each characters[] entry is treated as a separate character instance, so remove_tags and tags do not carry across entries`,
+          );
+        } else {
+          seenCharacterIds.add(normalizedId);
+        }
       }
 
       let resolvedTags: string[] = [];
@@ -620,26 +644,128 @@ export class GenerateImageNaiTool extends BaseTool {
               .map((tag) => tag.trim())
               .filter((tag) => tag.length > 0)
           : [];
-      const finalTags = [...manualTags, ...resolvedTags].join(", ");
+      const removeTags = NAI_ENABLE_PROFILE_CHARACTER_REMOVE_TAGS
+        ? typeof character.remove_tags === "string"
+          ? character.remove_tags
+              .split(/[,\u3001]/)
+              .map((tag) => tag.trim())
+              .filter((tag) => tag.length > 0 && tag.toLowerCase() !== "none")
+          : Array.isArray(character.remove_tags)
+            ? character.remove_tags.flatMap((tag) =>
+                typeof tag === "string"
+                  ? tag
+                      .split(/[,\u3001]/)
+                      .map((innerTag) => innerTag.trim())
+                      .filter(
+                        (innerTag) =>
+                          innerTag.length > 0 &&
+                          innerTag.toLowerCase() !== "none",
+                      )
+                  : [],
+              )
+            : []
+        : [];
+      if (
+        !NAI_ENABLE_PROFILE_CHARACTER_REMOVE_TAGS &&
+        ((typeof character.remove_tags === "string" &&
+          character.remove_tags.trim().length > 0 &&
+          character.remove_tags.trim().toLowerCase() !== "none") ||
+          (Array.isArray(character.remove_tags) &&
+            character.remove_tags.some(
+              (tag) => typeof tag === "string" && tag.trim().length > 0,
+            )))
+      ) {
+        log.info(
+          `[NAI] Character ${charCaptions.length + 1} provided remove_tags, but remove-tag suppression is currently disabled; using inline tags only`,
+        );
+      }
+      if (manualTags.length === 0) {
+        throw new Error(
+          "Each generate_image_nai character now requires inline tags describing that character's appearance and role in the scene.",
+        );
+      }
+      const removeTagSet = new Set(removeTags.map((tag) => tag.toLowerCase()));
+      if (normalizedId && removeTags.length > 0 && manualTags.length === 0) {
+        log.warn(
+          `[NAI] Character ${charCaptions.length + 1} uses remove_tags without replacement tags; removing old appearance tags alone does not imply a new state, so NovelAI may invent defaults unless the desired replacement is added in tags`,
+        );
+      }
+      const matchedResolvedRemoveTags = resolvedTags.filter((tag) =>
+        removeTagSet.has(tag.toLowerCase()),
+      );
+      const matchedManualRemoveTags = manualTags.filter((tag) =>
+        removeTagSet.has(tag.toLowerCase()),
+      );
+      const matchedRemoveTags = [
+        ...matchedManualRemoveTags,
+        ...matchedResolvedRemoveTags,
+      ];
+      const unmatchedRemoveTags = removeTags.filter(
+        (tag) =>
+          !manualTags.some(
+            (manualTag) => manualTag.toLowerCase() === tag.toLowerCase(),
+          ) &&
+          !resolvedTags.some(
+            (resolvedTag) => resolvedTag.toLowerCase() === tag.toLowerCase(),
+          ),
+      );
+      const filteredManualTags = manualTags.filter(
+        (tag) => !removeTagSet.has(tag.toLowerCase()),
+      );
+      const filteredResolvedTags = resolvedTags.filter(
+        (tag) => !removeTagSet.has(tag.toLowerCase()),
+      );
+      const finalTags = [...filteredManualTags, ...filteredResolvedTags].join(
+        ", ",
+      );
+      const negativeTags = removeTags.join(", ");
+      const logCharacterId =
+        normalizedId ??
+        (rawId && !NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL
+          ? `ignored(${rawId})`
+          : "manual");
       const center = {
         x: POSITION_TO_COORD[character.x],
         y: POSITION_TO_COORD[character.y],
       };
 
       log.info(
-        `[NAI] Character payload ${charCaptions.length + 1}: id=${normalizedId ?? "manual"}, tags="${finalTags.substring(0, 200)}${finalTags.length > 200 ? "..." : ""}"`,
+        `[NAI] Character payload ${charCaptions.length + 1}: id=${logCharacterId}, tags="${finalTags.substring(0, 200)}${finalTags.length > 200 ? "..." : ""}", remove_tags="${negativeTags.substring(0, 200)}${negativeTags.length > 200 ? "..." : ""}"`,
+      );
+      if (
+        NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL ||
+        NAI_ENABLE_PROFILE_CHARACTER_REMOVE_TAGS
+      ) {
+        log.info(
+          `[NAI] Character resolution ${charCaptions.length + 1}: profile_tags="${resolvedTags.join(", ").substring(0, 240)}${resolvedTags.join(", ").length > 240 ? "..." : ""}", matched_remove_tags="${matchedRemoveTags.join(", ").substring(0, 240)}${matchedRemoveTags.join(", ").length > 240 ? "..." : ""}", unmatched_remove_tags="${unmatchedRemoveTags.join(", ").substring(0, 240)}${unmatchedRemoveTags.join(", ").length > 240 ? "..." : ""}"`,
+        );
+      }
+      log.info(
+        `[NAI][debug] Character ${charCaptions.length + 1} full positive tags: ${finalTags}`,
+      );
+      log.info(
+        `[NAI][debug] Character ${charCaptions.length + 1} full negative tags: ${negativeTags}`,
       );
 
       charCaptions.push({
         char_caption: finalTags,
         centers: [center],
       });
+      negativeCharCaptions.push({
+        char_caption: negativeTags,
+        centers: [center],
+      });
       characterPrompts.push({
         center,
         enabled: true,
         prompt: finalTags,
-        uc: "",
+        uc: negativeTags,
       });
+
+      if (refImageBase64 && removeTags.length > 0) {
+        skippedReferenceBecauseTagRemoval = true;
+        refImageBase64 = null;
+      }
 
       if (refImageBase64) {
         try {
@@ -668,10 +794,16 @@ export class GenerateImageNaiTool extends BaseTool {
         "[NAI] Character references were skipped because multi-character generations use whole-image reference guidance; positioned character prompting will continue with character tags only",
       );
     }
+    if (skippedReferenceBecauseTagRemoval) {
+      log.warn(
+        "[NAI] Character references were skipped because remove_tags was used; saved refs can reinforce suppressed appearance traits, so positioned character prompting will continue with tags plus per-character negatives only",
+      );
+    }
 
     return {
       useCoords: charCaptions.length > 1,
       charCaptions,
+      negativeCharCaptions,
       characterPrompts,
       referenceImages,
       referenceStrengths,
@@ -853,6 +985,7 @@ export class GenerateImageNaiTool extends BaseTool {
       ORIENTATION_PRESETS[orientation] || ORIENTATION_PRESETS.portrait;
     const seed = Math.floor(Math.random() * 2147483647);
     const charCaptions = characterPayload?.charCaptions ?? [];
+    const negativeCharCaptions = characterPayload?.negativeCharCaptions ?? [];
     const characterPrompts = characterPayload?.characterPrompts ?? [];
     const referenceImages = characterPayload?.referenceImages ?? [];
     const referenceStrengths = characterPayload?.referenceStrengths ?? [];
@@ -938,10 +1071,13 @@ export class GenerateImageNaiTool extends BaseTool {
             v4_negative_prompt: {
               caption: {
                 base_caption: negativePrompt,
-                char_captions: charCaptions.map((charCaption) => ({
-                  char_caption: "",
-                  centers: charCaption.centers,
-                })),
+                char_captions:
+                  negativeCharCaptions.length > 0
+                    ? negativeCharCaptions
+                    : charCaptions.map((charCaption) => ({
+                        char_caption: "",
+                        centers: charCaption.centers,
+                      })),
               },
               legacy_uc: false,
             },
@@ -1339,6 +1475,10 @@ export class GenerateImageNaiTool extends BaseTool {
         );
         log.info(
           `[NAI] Resolved ${characterPayload.charCaptions.length} character(s) with ${characterPayload.referenceImages.length} reference image(s)`,
+        );
+        log.info(`[NAI][debug] Full base prompt: ${normalizedPrompt}`);
+        log.info(
+          `[NAI][debug] Full base negative prompt: ${effectiveNegativePrompt}`,
         );
       } else if (isInpaintMode && characters.length > 0) {
         log.info(

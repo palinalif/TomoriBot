@@ -134,6 +134,10 @@ interface AccumulatedToolCall {
   functionArguments: string;
 }
 
+const OPENROUTER_VERBOSE_FETCH =
+  (process.env.OPENROUTER_VERBOSE_FETCH ?? "true").trim().toLowerCase() ===
+  "true";
+
 /**
  * OpenRouter streaming adapter implementation
  */
@@ -771,14 +775,20 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           );
         }
 
+        const requestInit: RequestInit & { verbose?: boolean } = {
+          method: "POST",
+          headers,
+          body: JSON.stringify(attempt.body),
+          signal: controller.signal,
+        };
+
+        if (OPENROUTER_VERBOSE_FETCH) {
+          requestInit.verbose = true;
+        }
+
         const attemptResponse = await fetch(
           "https://openrouter.ai/api/v1/chat/completions",
-          {
-            method: "POST",
-            headers,
-            body: JSON.stringify(attempt.body),
-            signal: controller.signal,
-          },
+          requestInit,
         );
 
         if (attemptResponse.ok) {

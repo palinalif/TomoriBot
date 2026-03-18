@@ -5620,6 +5620,25 @@ export default async function tomoriChat(
                       );
                     }
                   }
+
+                  const finalErrorData = streamResult.data as {
+                    type?: string;
+                    message?: string;
+                    code?: string;
+                  };
+                  if (
+                    finalErrorData?.type === "timeout" &&
+                    streamingContext.suppressUserErrors
+                  ) {
+                    await sendStandardEmbed(channel, locale, {
+                      color: ColorCode.WARN,
+                      titleKey: "genai.error_stream_timeout_title",
+                      descriptionKey: "genai.error_stream_timeout_description",
+                    }).catch((e) =>
+                      log.warn("Failed to send timeout embed to channel", e),
+                    );
+                  }
+
                   // streamGeminiToDiscord already attempts to send an error message.
                   finalStreamCompleted = true; // Consider it "completed" to break loop, error handled.
                   break;

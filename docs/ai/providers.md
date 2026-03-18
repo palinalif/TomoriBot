@@ -209,6 +209,9 @@ Critical rule:
 
 - If an instruction must appear in conversation history, inject with `DIALOGUE_HISTORY`
   and the correct role (`"user"`/`"model"`), not with `SYSTEM_*`/`KNOWLEDGE_*`.
+- Generated media annotations such as `[System: This message contains an image...]`
+  or media tool-use hints should be detached into their own synthetic `"user"`
+  `DIALOGUE_HISTORY` item so assistant turns only carry speaker-authored content.
 
 Why this matters:
 
