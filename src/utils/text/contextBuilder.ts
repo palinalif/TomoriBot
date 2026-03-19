@@ -1354,81 +1354,6 @@ export async function buildContext({
     }
   }
 
-  // 6.5 Server Documents (RAG)
-  // Placed after all static system content (personality, memories, emojis, stickers) so that
-  // the stable prefix stays cache-friendly — RAG results change per query and would invalidate
-  // everything that follows if left higher in the prompt.
-  try {
-    if (
-      (IS_PRODUCTION || ENABLE_LOCAL_RAG) &&
-      memoryGuard.getStatus() !== "critical" &&
-      tomoriState &&
-      tomoriState.server_id &&
-      tomoriState.config.embedding_model_id &&
-      tomoriState.config.api_key
-    ) {
-      const queryText = getLatestUserQuery(simplifiedMessageHistory);
-      if (queryText && queryText.length >= DOCUMENT_QUERY_MIN_LENGTH) {
-        const [documentRow] =
-          tomoriState.tomori_id === null || tomoriState.tomori_id === undefined
-            ? await sql`
-							SELECT document_id
-							FROM documents
-							WHERE server_id = ${tomoriState.server_id}
-							  AND tomori_id IS NULL
-							LIMIT 1
-						`
-            : await sql`
-							SELECT document_id
-							FROM documents
-							WHERE server_id = ${tomoriState.server_id}
-							  AND (
-								tomori_id = ${tomoriState.tomori_id}
-								OR tomori_id IS NULL
-							  )
-							LIMIT 1
-						`;
-
-        if (documentRow?.document_id) {
-          const embeddingModel = await loadEmbeddingModelById(
-            tomoriState.config.embedding_model_id,
-          );
-          if (embeddingModel) {
-            const decryptedKey = await decryptApiKey(
-              tomoriState.config.api_key,
-              tomoriState.config.key_version || 1,
-            );
-
-            const chunks = await retrieveRelevantDocumentChunks({
-              serverId: tomoriState.server_id,
-              tomoriId: tomoriState.tomori_id ?? null,
-              query: queryText,
-              embeddingModel,
-              apiKey: decryptedKey,
-              maxResults: DOCUMENT_MAX_RESULTS,
-              minSimilarity: DOCUMENT_MIN_SIMILARITY,
-            });
-
-            const documentContext = formatRetrievedChunksForPrompt(
-              chunks,
-              DOCUMENT_CONTEXT_MAX_CHARS,
-            );
-
-            if (documentContext) {
-              contextItems.push({
-                role: "system",
-                parts: [{ type: "text", text: documentContext }],
-                metadataTag: ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS,
-              });
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    log.warn("Failed to add server document context", error);
-  }
-
   // 7. Users in Conversation (ALL user-specific dynamic data)
   // This section combines: time/date, channel, user status, memories, and reminders
   if (userList.length > 0) {
@@ -1916,6 +1841,81 @@ export async function buildContext({
     log.warn("Failed to build short-term memory context", error);
   }
 
+  // 7.5 Server Documents (RAG)
+  // Placed after short-term memory so that the stable prefix (system prompt, personality,
+  // server knowledge, users, STM) stays cache-friendly — RAG results change per query
+  // and would invalidate everything that follows if left higher in the prompt.
+  try {
+    if (
+      (IS_PRODUCTION || ENABLE_LOCAL_RAG) &&
+      memoryGuard.getStatus() !== "critical" &&
+      tomoriState &&
+      tomoriState.server_id &&
+      tomoriState.config.embedding_model_id &&
+      tomoriState.config.api_key
+    ) {
+      const queryText = getLatestUserQuery(simplifiedMessageHistory);
+      if (queryText && queryText.length >= DOCUMENT_QUERY_MIN_LENGTH) {
+        const [documentRow] =
+          tomoriState.tomori_id === null || tomoriState.tomori_id === undefined
+            ? await sql`
+							SELECT document_id
+							FROM documents
+							WHERE server_id = ${tomoriState.server_id}
+							  AND tomori_id IS NULL
+							LIMIT 1
+						`
+            : await sql`
+							SELECT document_id
+							FROM documents
+							WHERE server_id = ${tomoriState.server_id}
+							  AND (
+								tomori_id = ${tomoriState.tomori_id}
+								OR tomori_id IS NULL
+							  )
+							LIMIT 1
+						`;
+
+        if (documentRow?.document_id) {
+          const embeddingModel = await loadEmbeddingModelById(
+            tomoriState.config.embedding_model_id,
+          );
+          if (embeddingModel) {
+            const decryptedKey = await decryptApiKey(
+              tomoriState.config.api_key,
+              tomoriState.config.key_version || 1,
+            );
+
+            const chunks = await retrieveRelevantDocumentChunks({
+              serverId: tomoriState.server_id,
+              tomoriId: tomoriState.tomori_id ?? null,
+              query: queryText,
+              embeddingModel,
+              apiKey: decryptedKey,
+              maxResults: DOCUMENT_MAX_RESULTS,
+              minSimilarity: DOCUMENT_MIN_SIMILARITY,
+            });
+
+            const documentContext = formatRetrievedChunksForPrompt(
+              chunks,
+              DOCUMENT_CONTEXT_MAX_CHARS,
+            );
+
+            if (documentContext) {
+              contextItems.push({
+                role: "user",
+                parts: [{ type: "text", text: documentContext }],
+                metadataTag: ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS,
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    log.warn("Failed to add server document context", error);
+  }
+
   // Skip sample dialogues for user impersonation (users don't need examples of bot's speech)
   if (
     !isUserImpersonation &&
@@ -1939,8 +1939,6 @@ export async function buildContext({
 			metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
 		});*/
 
-    let hasUnpairedSampleDialogues = false;
-
     // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
     for (let i = 0; i < tomoriState!.sample_dialogues_in.length; i++) {
       // 8.a. User's part of the sample dialogue
@@ -1948,9 +1946,7 @@ export async function buildContext({
       let userSampleText = tomoriState!.sample_dialogues_in[i];
       const isUnpairedSample =
         userSampleText === UNPAIRED_SAMPLE_DIALOGUE_SENTINEL;
-      if (isUnpairedSample) {
-        hasUnpairedSampleDialogues = true;
-      } else {
+      if (!isUnpairedSample) {
         // No username prefix - prevents associating examples with the triggerer
         if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY) {
           userSampleText = humanizeString(userSampleText);
@@ -2006,42 +2002,30 @@ export async function buildContext({
       });
     }
 
-    if (hasUnpairedSampleDialogues) {
-      const spacerText = `[System: Above are only examples of how {{char}} acts and talks. Use them as reference for a completely new scene that starts now.]`;
-      contextItems.push({
-        role: "user",
-        parts: [
-          {
-            type: "text",
-            text: applyUncensorInputTransforms(
-              await convertMentions(
-                spacerText,
-                client,
-                guildId,
-                triggererName,
-                botName,
-                tomoriConfig.personal_memories_enabled,
-              ),
-              uncensorInputOptions,
+    // 8.c. Always add a spacer after sample dialogues to clearly delineate examples
+    // from the actual conversation. This prevents models from continuing sample
+    // dialogue as if it were real conversation history.
+    const spacerText = `[System: Above are only examples of how {{char}} acts and talks. Use them as reference for a completely new scene that starts now.]`;
+    contextItems.push({
+      role: "user",
+      parts: [
+        {
+          type: "text",
+          text: applyUncensorInputTransforms(
+            await convertMentions(
+              spacerText,
+              client,
+              guildId,
+              triggererName,
+              botName,
+              tomoriConfig.personal_memories_enabled,
             ),
-          },
-        ],
-        metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
-      });
-    }
-
-    // 8.c. Add closing system message for sample dialogues
-    /*
-		contextItems.push({
-			role: "user",
-			parts: [
-				{
-					type: "text",
-					text: `[System: That ends the example dialogues, the following is an actual ongoing conversation ${botName} is currently participating in]`,
-				},
-			],
-			metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
-		});*/
+            uncensorInputOptions,
+          ),
+        },
+      ],
+      metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
+    });
   }
 
   // 9. Conversation History (Main Dialogue)

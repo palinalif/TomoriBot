@@ -742,6 +742,13 @@ export async function execute(
               inline: true,
             },
             {
+              nameKey: "commands.tool.status.field_always_reply",
+              value: config.always_reply_enabled
+                ? localizer(locale, "commands.choices.enabled")
+                : localizer(locale, "commands.choices.disabled"),
+              inline: true,
+            },
+            {
               nameKey: "commands.tool.status.field_triggered_persona_limit",
               value: String(config.triggered_persona_limit),
               inline: true,

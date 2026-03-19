@@ -677,6 +677,7 @@ export default {
         field_cooldown_length: `クールダウン時間`,
         field_cooldown_length_value: `{seconds}秒`,
         field_self_reply_limit: `自己返信上限`,
+        field_always_reply: `常時応答`,
         field_triggered_persona_limit: `トリガーペルソナ上限`,
         field_personalization: `個人の記憶`,
         field_self_teach: `自己学習`,
@@ -3278,6 +3279,13 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           not_linked_title: `リンクされていません`,
           not_linked_description: `<#{channel_id}>にはMatrixルームがリンクされていません。`,
         },
+      },
+      alwaysreply: {
+        description: `メインペルソナの常時応答モードを切り替えます。`,
+        enabled_title: `常時応答が有効になりました`,
+        enabled_description: `**{persona_name}** はトリガーワードなしでもこのサーバーのすべてのメッセージに返信します。オルタペルソナは引き続きトリガーワードが必要です — オルタがトリガーされた場合、**{persona_name}** は二重応答を避けるために応答しません。`,
+        disabled_title: `常時応答が無効になりました`,
+        disabled_description: `**{persona_name}** はトリガーワード、メンション、またはリプライでのみ応答します。`,
       },
     },
 

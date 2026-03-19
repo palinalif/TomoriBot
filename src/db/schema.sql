@@ -485,6 +485,11 @@ SELECT add_column_if_not_exists('tomori_configs', 'triggered_persona_limit', 'IN
 -- Min 20, max 100 enforced by command and schema validation
 SELECT add_column_if_not_exists('tomori_configs', 'message_fetch_limit', 'INTEGER', '80');
 
+-- Always-reply mode (March 2026)
+-- When enabled, main persona replies to all user messages in guild channels (like DMs)
+-- Alter personas still require explicit trigger words; main persona defers if an alter is triggered
+SELECT add_column_if_not_exists('tomori_configs', 'always_reply_enabled', 'BOOLEAN', 'false');
+
 -- Add custom endpoint URL for self-hosted OpenAI-compatible LLM endpoints (January 2026)
 -- Only used when llm_provider is 'custom', blocked in production environment
 SELECT add_column_if_not_exists('tomori_configs', 'custom_endpoint_url', 'TEXT');

@@ -278,12 +278,13 @@ export function formatRetrievedChunksForPrompt(
     return null;
   }
 
-  let output = "# Server Documents (Chunks referenced through RAG)\n";
+  let output =
+    "[System: The following are relevant excerpts from server documents:\n\n";
   let currentDoc = "";
 
   for (const chunk of chunks) {
     if (chunk.document_name !== currentDoc) {
-      const header = `\n## ${chunk.document_name}\n`;
+      const header = `${currentDoc ? "\n" : ""}${chunk.document_name}:\n`;
       if (output.length + header.length > maxChars) {
         break;
       }
@@ -291,16 +292,16 @@ export function formatRetrievedChunksForPrompt(
       currentDoc = chunk.document_name;
     }
 
-    // const scoreText = `score ${chunk.similarity.toFixed(2)}`;
-    const line = `- ${chunk.content}\n`;
+    const line = `${chunk.content}\n`;
     if (output.length + line.length > maxChars) {
       break;
     }
     output += line;
   }
 
+  // Close the [System: ...] block
   const trimmed = output.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  return trimmed.length > 0 ? `${trimmed}]` : null;
 }
 
 export async function reembedServerDocuments(params: {

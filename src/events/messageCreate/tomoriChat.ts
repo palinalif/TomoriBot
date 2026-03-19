@@ -2939,6 +2939,14 @@ export default async function tomoriChat(
           tomoriState.autoch_counter > 0 &&
           tomoriState.autoch_counter % config.autoch_threshold === 0;
 
+        // Check if always-reply mode applies to this message:
+        // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
+        const isAlwaysReplyActive =
+          !!config?.always_reply_enabled &&
+          !isSelfMessage &&
+          !message.author.bot &&
+          !(message.channel instanceof DMChannel);
+
         // Determine matching personas using the helper function
         personasToRespond = determineMatchingPersonas(
           message,
@@ -2948,6 +2956,7 @@ export default async function tomoriChat(
           replyPersona,
           isBotMentioned,
           !!isAutoMsgHit, // Convert to boolean
+          isAlwaysReplyActive,
         );
 
         // Consecutive persona filter: prevent the same persona from triggering in
@@ -7251,6 +7260,7 @@ export function isSelfTriggerMessage(
  * @param replyPersona - Persona that the message is replying to (if any)
  * @param isBotMentioned - Whether bot is mentioned in the message
  * @param isAutoMsgHit - Whether auto-message threshold is hit
+ * @param isAlwaysReply - Whether always-reply mode triggered this message
  * @returns Array of matching personas in deterministic trigger order
  */
 export function determineMatchingPersonas(
@@ -7261,6 +7271,7 @@ export function determineMatchingPersonas(
   replyPersona: TomoriState | null,
   isBotMentioned: boolean,
   isAutoMsgHit: boolean,
+  isAlwaysReply = false,
 ): TomoriState[] {
   // 1. Special cases: Only main persona responds
   // (reply to a persona, reply to bot, bot mentioned, auto-message hit)
@@ -7369,7 +7380,21 @@ export function determineMatchingPersonas(
     return a.insertionOrder - b.insertionOrder;
   });
 
-  return matchingPersonas.map((entry) => entry.persona);
+  const result = matchingPersonas.map((entry) => entry.persona);
+
+  // 4. Always-reply fallback:
+  // If always-reply mode is active and no trigger matched any persona, the main persona responds.
+  // If an alter persona's trigger matched, only the alter(s) respond — main persona stays quiet
+  // to avoid doubling up. If the main persona's OWN trigger matched, it's already in the list
+  // so no duplicate is added.
+  if (isAlwaysReply && result.length === 0) {
+    const mainPersona = allPersonas.find((p) => !p.is_alter);
+    if (mainPersona) {
+      return [mainPersona];
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -7534,7 +7559,18 @@ export function shouldBotReply(
     currentCount > 0 && // Ensure counter has started (avoid trigger on first message after reset)
     currentCount % autoMsgThreshold === 0;
 
-  // 6. Determine if bot should reply:
+  // 6. Check always-reply mode:
+  // When enabled, main persona replies to all real user messages in guild channels.
+  // Does NOT apply to: bot messages, persona webhook messages, or Matrix relay messages.
+  // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
+  const isAlwaysReplyHit =
+    config.always_reply_enabled &&
+    !isSelfMessage &&
+    !message.author.bot &&
+    !isMatrixRelayMessage &&
+    !(message.channel instanceof DMChannel);
+
+  // 7. Determine if bot should reply:
   // Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit.
   // isMatrixReplyToPersona: Matrix webhooks cannot carry Discord reply references, so
   // matrixManager.ts registers the channel in pendingMatrixReplyChannels when it relays
@@ -7550,6 +7586,7 @@ export function shouldBotReply(
     isBotMentioned ||
     triggersActive ||
     isAutoMsgHit ||
+    isAlwaysReplyHit ||
     isMatrixReplyToPersona
   );
 }

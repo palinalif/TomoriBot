@@ -675,6 +675,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_cooldown_length: `Cooldown Duration`,
         field_cooldown_length_value: `{seconds}s`,
         field_self_reply_limit: `Self-Reply Limit`,
+        field_always_reply: `Always-Reply`,
         field_triggered_persona_limit: `Triggered Persona Limit`,
         field_personalization: `Personal Memories`,
         field_self_teach: `Self-Teaching`,
@@ -3272,6 +3273,13 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           not_linked_title: `Not Linked`,
           not_linked_description: `<#{channel_id}> doesn't have a Matrix room linked to it.`,
         },
+      },
+      alwaysreply: {
+        description: `Toggle always-reply mode for the main persona.`,
+        enabled_title: `Always-Reply Enabled`,
+        enabled_description: `**{persona_name}** will now reply to all messages in this server, even without a trigger word. Alter personas still require their trigger words — if an alter is triggered, **{persona_name}** will stay quiet to avoid doubling up.`,
+        disabled_title: `Always-Reply Disabled`,
+        disabled_description: `**{persona_name}** will now only reply when triggered by a trigger word, mention, or reply.`,
       },
     },
 
