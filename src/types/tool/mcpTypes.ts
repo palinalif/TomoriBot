@@ -460,6 +460,41 @@ export const MCPTypeGuards = {
 };
 
 /**
+ * Guild MCP connection state — represents an active remote MCP connection
+ * for a specific guild. Managed by GuildMcpManager's connection pool.
+ *
+ * @property guildMcpId - Database row PK (guild_mcp_servers.guild_mcp_id)
+ * @property serverId - TomoriBot internal server_id (FK to servers table)
+ * @property name - Human-readable server name (unique per guild)
+ * @property client - MCP SDK Client instance for this connection
+ * @property callableTool - Google GenAI CallableTool from mcpToTool()
+ * @property functionNames - Discovered tool names after listTools()
+ * @property connectedAt - Epoch ms when the connection was established
+ * @property lastUsedAt - Epoch ms of last tool execution (for TTL eviction)
+ */
+export interface GuildMCPConnection {
+	guildMcpId: number;
+	serverId: number;
+	name: string;
+	client: unknown; // MCP Client — typed as unknown to avoid coupling mcpTypes to SDK imports
+	callableTool: unknown; // CallableTool from @google/genai — same reason
+	functionNames: string[];
+	connectedAt: number;
+	lastUsedAt: number;
+}
+
+/**
+ * Result from GuildMcpManager.testConnection() — used by /config mcp add
+ * to validate a remote MCP server before persisting the registration.
+ */
+export interface GuildMCPTestResult {
+	success: boolean;
+	toolCount: number;
+	functionNames: string[];
+	error?: string;
+}
+
+/**
  * MCP error types for better error handling
  */
 export class MCPExecutionError extends Error {

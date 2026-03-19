@@ -24,6 +24,9 @@ const ALLOWED_USER_FIELDS = new Set<keyof UserRow>([
   "registration_locale", // Static field (set once at registration, but whitelisted for safety)
   "personal_memories",
   "privacy_level",
+  "nai_char_tags",
+  "nai_char_ref_url",
+  "shortterm_cache_crossserver_opt_in",
   // Exclude: user_id (primary key), created_at, updated_at (auto-managed)
 ]);
 
@@ -34,6 +37,13 @@ const ALLOWED_TOMORI_FIELDS = new Set<keyof TomoriRow>([
   "sample_dialogues_in",
   "sample_dialogues_out",
   "autoch_counter",
+  "nai_tags",
+  "nai_char_ref_url",
+  "nai_attg_author",
+  "nai_attg_title",
+  "nai_attg_tags",
+  "nai_attg_genre",
+  "nai_attg_stars",
   // Exclude: tomori_id (primary key), created_at, updated_at (auto-managed)
 ]);
 
@@ -86,6 +96,14 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
   "custom_endpoint_url",
   "custom_model_name",
   "nai_exclusive_imggen",
+  "nai_style_tags",
+  "nai_negative_tags",
+  "nai_sampler",
+  "nai_steps",
+  "nai_scale",
+  "nai_noise_schedule",
+  "nai_cfg_rescale",
+  "fallback_llm_ids",
   // Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
 ]);
 

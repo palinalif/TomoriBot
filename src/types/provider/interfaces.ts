@@ -107,6 +107,12 @@ export interface FunctionCall {
    */
   // biome-ignore lint/suspicious/noExplicitAny: reasoning_details has complex nested structure that varies by provider
   reasoning_details?: any[];
+  /**
+   * DeepSeek thinking-mode continuation payload.
+   * When a DeepSeek thinking response issues a tool call, the assistant message must
+   * be replayed with its reasoning_content so the same turn can continue.
+   */
+  deepseekReasoningContent?: string;
 }
 
 /**

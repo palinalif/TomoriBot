@@ -16,6 +16,7 @@ import type {
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { getMCPExecutor } from "../../utils/mcp/mcpExecutor";
+import { getGuildMcpManager } from "../../utils/mcp/guildMcpManager";
 import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 
 /**
@@ -409,6 +410,35 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
         }
       }
 
+      // Add guild MCP tools (per-guild remote servers)
+      if (serverId && allowedMCPFunctions) {
+        try {
+          const guildMcpManager = getGuildMcpManager();
+          const guildTools = await guildMcpManager.getGuildMCPTools(serverId);
+          const allowedFunctionSet = new Set(allowedMCPFunctions);
+
+          for (const guildTool of guildTools) {
+            try {
+              const geminiTool = await guildTool.tool();
+              if (geminiTool.functionDeclarations) {
+                const declarations = (
+                  geminiTool.functionDeclarations as Record<string, unknown>[]
+                ).filter((decl) => allowedFunctionSet.has(decl.name as string));
+
+                if (declarations.length > 0) {
+                  allFunctionDeclarations.push(...declarations);
+                  log.info(`Added ${declarations.length} guild MCP tool declaration(s) to Google format`);
+                }
+              }
+            } catch (error) {
+              log.warn("Failed to extract guild MCP tool declarations:", error as Error);
+            }
+          }
+        } catch (error) {
+          log.warn("Failed to get guild MCP tools for Google format:", error as Error);
+        }
+      }
+
       // Return in Google's expected format
       if (allFunctionDeclarations.length === 0) {
         return [];
@@ -427,14 +457,17 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
   }
 
   /**
-   * Check if a function name belongs to an MCP tool
-   * Delegates to the provider-agnostic MCP executor
+   * Check if a function name belongs to an MCP tool (global or guild)
+   * Delegates to the provider-agnostic MCP executor for global,
+   * and checks guild MCP manager for per-guild tools
    * @param functionName - Name of the function to check
    * @returns Promise<boolean> - True if this is an MCP tool function
    */
   async isMCPFunction(functionName: string): Promise<boolean> {
     const mcpExecutor = getMCPExecutor();
     return mcpExecutor.isMCPFunction(functionName);
+    // Note: Guild MCP is checked separately in toolRegistry.executeTool()
+    // because isMCPFunction here doesn't have serverId context
   }
 
   /**

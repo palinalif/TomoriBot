@@ -1,4 +1,6 @@
 import { getMCPManager } from "../../utils/mcp/mcpManager";
+import { getGuildMcpManager } from "../../utils/mcp/guildMcpManager";
+import { loadAllEnabledGuildMcpServers } from "../../utils/db/guildMcpDb";
 import { log } from "../../utils/misc/logger";
 import type { ErrorContext } from "../../types/db/schema";
 import { registerMCPAdapter } from "../../tools/toolRegistry";
@@ -59,6 +61,41 @@ export default async (): Promise<void> => {
       log.info(
         "No MCP servers connected - this is normal if API keys are not configured",
       );
+    }
+
+    // ─── Guild MCP setup ─────────────────────────────────────────────
+    const guildMcpManager = getGuildMcpManager();
+
+    // Register cleanup hook for graceful shutdown
+    // Uses "once" to avoid double-fire, and re-raises the signal after cleanup
+    // so the default handler (or other listeners) can terminate the process.
+    const cleanupHandler = async (signal: string) => {
+      log.info("Shutting down guild MCP connections...");
+      await guildMcpManager.cleanup();
+      process.kill(process.pid, signal);
+    };
+    process.once("SIGINT", () => cleanupHandler("SIGINT"));
+    process.once("SIGTERM", () => cleanupHandler("SIGTERM"));
+
+    // Dev/local: eager-connect all enabled guild MCP servers
+    const runEnv = process.env.RUN_ENV || "development";
+    if (runEnv !== "production") {
+      try {
+        const allEnabled = await loadAllEnabledGuildMcpServers();
+        if (allEnabled.length > 0) {
+          log.info(`[GuildMCP] Dev mode: eager-connecting ${allEnabled.length} enabled guild MCP server(s)...`);
+          // Non-blocking — failures are logged but don't prevent startup
+          guildMcpManager.eagerConnectAll(allEnabled).catch((err) => {
+            log.warn("[GuildMCP] Eager connect encountered errors (non-fatal)", err);
+          });
+        } else {
+          log.info("[GuildMCP] No enabled guild MCP servers found for eager connect");
+        }
+      } catch (error) {
+        log.warn("[GuildMCP] Failed to load guild MCP servers for eager connect (non-fatal)", error);
+      }
+    } else {
+      log.info("[GuildMCP] Production mode: guild MCP connections will be established on-demand");
     }
   } catch (error) {
     // Use structured error context for consistent error handling

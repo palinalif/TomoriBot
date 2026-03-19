@@ -46,6 +46,11 @@ import {
 } from "@/providers/openrouter/openrouterProvider";
 import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
 import {
+  DeepseekProvider,
+  type DeepseekProviderConfig,
+} from "@/providers/deepseek/deepseekProvider";
+import { buildOpenAICompatibleMessages } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
+import {
   normalizeProviderName,
   resolveProviderFeatureImplementation,
 } from "@/utils/provider/providerInfoRegistry";
@@ -107,6 +112,16 @@ const GOOGLE_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
   2.5,
   0,
 );
+const DEEPSEEK_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_DEEPSEEK_INPUT_PRICE_PER_MILLION,
+  0.28,
+  0,
+);
+const DEEPSEEK_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_DEEPSEEK_OUTPUT_PRICE_PER_MILLION,
+  0.42,
+  0,
+);
 
 const SUPPORTED_VIDEO_MIME_TYPES = [
   "video/mp4",
@@ -126,7 +141,7 @@ const YOUTUBE_URL_PATTERNS = [
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
 ];
 
-type LiveProvider = "google" | "openrouter";
+type LiveProvider = "google" | "openrouter" | "deepseek";
 
 /**
  * Scenario definitions for cost estimation
@@ -196,6 +211,19 @@ interface OpenRouterProbeUsage {
 interface OpenRouterProbeResponse {
   id?: string;
   usage?: OpenRouterProbeUsage;
+}
+
+interface DeepseekProbeUsage {
+  promptTokens?: number;
+  prompt_tokens?: number;
+  completionTokens?: number;
+  completion_tokens?: number;
+  totalTokens?: number;
+  total_tokens?: number;
+}
+
+interface DeepseekProbeResponse {
+  usage?: DeepseekProbeUsage;
 }
 
 function parseIntegerEnv(
@@ -554,6 +582,16 @@ function parseOpenRouterPromptTokens(
   return Math.round(value);
 }
 
+function parseDeepseekPromptTokens(
+  usage: DeepseekProbeUsage | undefined,
+): number | undefined {
+  const value = usage?.promptTokens ?? usage?.prompt_tokens;
+  if (typeof value !== "number" || Number.isNaN(value) || value < 0) {
+    return undefined;
+  }
+  return Math.round(value);
+}
+
 function parseOpenRouterNativePromptTokens(
   payload: unknown,
 ): number | undefined {
@@ -599,7 +637,9 @@ function resolveProvider(providerName: string): LiveProvider | null {
     providerName,
     "liveTokenCounting",
   );
-  return implementation === "google" || implementation === "openrouter"
+  return implementation === "google" ||
+    implementation === "openrouter" ||
+    implementation === "deepseek"
     ? implementation
     : null;
 }
@@ -1142,6 +1182,71 @@ async function measureOpenRouterInputTokens(
   };
 }
 
+async function measureDeepseekInputTokens(
+  tomoriState: TomoriState,
+  apiKey: string,
+  contextItems: StructuredContextItem[],
+): Promise<LiveCostMeasurement> {
+  const provider = new DeepseekProvider();
+  const providerConfig = (await provider.createConfig(
+    tomoriState,
+    apiKey,
+  )) as DeepseekProviderConfig;
+  const messages = await buildOpenAICompatibleMessages({
+    adapterName: "ToolEstimateCostDeepSeek",
+    contextItems,
+    currentTurnModelParts: [],
+    seesImages: providerConfig.seesImages ?? false,
+  });
+
+  const requestBody: Record<string, unknown> = {
+    model: providerConfig.model,
+    messages,
+    max_tokens: 1,
+    stream: false,
+  };
+
+  if (providerConfig.tools && providerConfig.tools.length > 0) {
+    requestBody.tools = providerConfig.tools;
+  }
+
+  if (providerConfig.model !== "deepseek-reasoner") {
+    requestBody.temperature = providerConfig.temperature;
+  }
+
+  const response = await fetch(providerConfig.endpointUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `DeepSeek probe failed (${response.status}): ${errorText.slice(0, 400)}`,
+    );
+  }
+
+  const data = (await response.json()) as DeepseekProbeResponse;
+  const measuredPromptTokens = parseDeepseekPromptTokens(data.usage);
+  if (measuredPromptTokens === undefined) {
+    throw new Error("DeepSeek probe response missing prompt token usage");
+  }
+
+  return {
+    provider: "deepseek",
+    providerLabel: "DeepSeek",
+    model: providerConfig.model,
+    inputTokens: measuredPromptTokens,
+    inputPricePerMillion: DEEPSEEK_INPUT_PRICE_PER_MILLION,
+    outputPricePerMillion: DEEPSEEK_OUTPUT_PRICE_PER_MILLION,
+  };
+}
+
 async function sendLiveEstimateEmbed(
   interaction: ChatInputCommandInteraction,
   locale: string,
@@ -1472,11 +1577,17 @@ export async function execute(
               decryptedApiKey,
               contextItems,
             )
-          : await measureOpenRouterInputTokens(
-              tomoriState,
-              decryptedApiKey,
-              contextItems,
-            );
+          : provider === "openrouter"
+            ? await measureOpenRouterInputTokens(
+                tomoriState,
+                decryptedApiKey,
+                contextItems,
+              )
+            : await measureDeepseekInputTokens(
+                tomoriState,
+                decryptedApiKey,
+                contextItems,
+              );
       await sendLiveEstimateEmbed(interaction, locale, measurement);
     } catch (countError) {
       await log.error(

@@ -44,4 +44,5 @@ This folder is organized by topic instead of numeric filenames.
 
 - [`guides/development-tasks.md`](./guides/development-tasks.md)
 - [`guides/adding-new-provider.md`](./guides/adding-new-provider.md)
+- [`guides/openai-compatible-provider-family.md`](./guides/openai-compatible-provider-family.md)
 - [`guides/coding-standards.md`](./guides/coding-standards.md)

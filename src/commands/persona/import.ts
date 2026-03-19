@@ -1007,7 +1007,11 @@ export async function execute(
         .map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
         .join(",")}}`;
 
-      // 11h. Insert new alter persona row with lineage mode behavior
+      const naiTagsArrayLiteral = `{${(presetData.nai_tags ?? [])
+        .map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
+        .join(",")}}`;
+
+      // 11h. Insert new alter persona row with lineage mode behavior and NovelAI fields
       const importedLineageId = presetData.persona_lineage_id ?? null;
       let newAlterRow: { tomori_id: number } | undefined;
       try {
@@ -1021,7 +1025,14 @@ export async function execute(
 							sample_dialogues_in,
 							sample_dialogues_out,
 							is_alter,
-							persona_lineage_id
+							persona_lineage_id,
+							nai_tags,
+							nai_char_ref_url,
+							nai_attg_author,
+							nai_attg_title,
+							nai_attg_tags,
+							nai_attg_genre,
+							nai_attg_stars
 						) VALUES (
 							${mainPersona.server_id},
 							${presetData.tomori_nickname},
@@ -1029,7 +1040,14 @@ export async function execute(
 							${dialoguesInArrayLiteral}::text[],
 							${dialoguesOutArrayLiteral}::text[],
 							true,
-							${importedLineageId}
+							${importedLineageId},
+							${naiTagsArrayLiteral}::text[],
+							${presetData.nai_char_ref_url ?? null},
+							${presetData.nai_attg_author ?? null},
+							${presetData.nai_attg_title ?? null},
+							${presetData.nai_attg_tags ?? null},
+							${presetData.nai_attg_genre ?? null},
+							${presetData.nai_attg_stars ?? null}
 						)
 						RETURNING tomori_id
 					`
@@ -1040,14 +1058,28 @@ export async function execute(
 							attribute_list,
 							sample_dialogues_in,
 							sample_dialogues_out,
-							is_alter
+							is_alter,
+							nai_tags,
+							nai_char_ref_url,
+							nai_attg_author,
+							nai_attg_title,
+							nai_attg_tags,
+							nai_attg_genre,
+							nai_attg_stars
 						) VALUES (
 							${mainPersona.server_id},
 							${presetData.tomori_nickname},
 							${attributeArrayLiteral}::text[],
 							${dialoguesInArrayLiteral}::text[],
 							${dialoguesOutArrayLiteral}::text[],
-							true
+							true,
+							${naiTagsArrayLiteral}::text[],
+							${presetData.nai_char_ref_url ?? null},
+							${presetData.nai_attg_author ?? null},
+							${presetData.nai_attg_title ?? null},
+							${presetData.nai_attg_tags ?? null},
+							${presetData.nai_attg_genre ?? null},
+							${presetData.nai_attg_stars ?? null}
 						)
 						RETURNING tomori_id
 					`;

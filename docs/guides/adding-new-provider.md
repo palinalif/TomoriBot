@@ -54,6 +54,10 @@ Use existing providers as references:
 - `src/providers/novelai/`
 - `src/providers/custom/`
 
+If the vendor exposes an OpenAI-style chat/completions API, read this before cloning provider code:
+
+- `docs/guides/openai-compatible-provider-family.md`
+
 ## 3. Define Static Provider Metadata
 
 Create `providerInfo.ts` and export a `ProviderInfo` object.
@@ -222,7 +226,84 @@ Prefer:
 
 Literal provider names are still correct when the behavior is truly vendor-specific, such as an optional credential that only exists for one vendor integration.
 
-## 10. Test the Integration
+## 10. Verify Vendor Capability Contracts
+
+Before you mark a feature as supported, verify the vendor's exact request/response contract instead of relying on the provider being "OpenAI-compatible".
+
+Checklist:
+
+- tool calling:
+  - confirm which seeded models actually support tools
+  - confirm the assistant/tool loop shape matches TomoriBot's runtime
+- reasoning or thinking mode:
+  - check for continuation-only fields that must be replayed within the same turn
+  - DeepSeek example: preserve `reasoning_content` across tool sub-turns, but do not treat it as normal cross-turn chat history
+- structured output:
+  - determine whether the provider offers strict schema mode or only JSON-object mode
+  - implement provider-owned `callStructuredJSON()` for the contract the vendor actually supports
+  - only seed `supports_structoutput = true` after end-to-end validation
+- assistant prefill or prefix completion:
+  - if TomoriBot uses assistant prefills, verify whether the vendor requires a beta endpoint, a trailing assistant message, or a message flag such as `prefix: true`
+- live cost estimation:
+  - if `/tool estimate cost` should support the provider, add a minimal non-streaming token probe
+  - parse prompt token usage from the vendor response
+  - add env-backed pricing defaults and document where those defaults came from
+- unsupported parameters:
+  - check whether reasoning models ignore or reject parameters like `temperature`, `top_p`, or logprob settings
+  - strip or avoid unsupported parameters inside the provider layer
+
+Rule:
+
+- vendor capability claims are not the same thing as TomoriBot app-level support
+- `ProviderInfo.featureSupport` should describe the runtime TomoriBot has actually implemented
+
+## 11. Capability Implementation Reminders
+
+Use this as the last pass before you call a provider integration "done".
+
+### Tool Calling
+
+- seed `llms.has_tools` conservatively per model instead of assuming all chat models support tools
+- implement or reuse the provider tool adapter and confirm schema serialization matches the vendor contract
+- verify the full assistant -> tool call -> tool result -> assistant continuation loop, not just first-turn tool emission
+- if the vendor has special reasoning-mode tool requirements, keep that logic in the provider layer
+- if strict tool-schema mode exists, treat it as optional follow-up work unless the runtime is fully validated
+
+### Structured Output
+
+- determine whether the vendor supports strict schema mode, JSON-object mode, or only prompt-steered JSON
+- implement provider-owned `callStructuredJSON()` for the actual supported contract
+- if the provider only guarantees JSON objects, inject the required prompt guidance and validate locally with Zod
+- seed `llms.supports_structoutput` only for models validated end-to-end in TomoriBot
+- if history extraction depends on structured output, do not enable `featureSupport.historyExtraction` until that path works
+
+### Live Cost Estimation
+
+- if the provider should support `/tool estimate cost`, add a minimal non-streaming prompt-token probe
+- parse prompt token usage from the vendor response instead of estimating locally when the API exposes usage
+- keep pricing source explicit:
+  - use live/cached provider pricing when available
+  - otherwise use env-backed defaults with documented provenance
+- do not quietly hardcode marketing-page assumptions without making them overrideable
+- document any caveats such as cache-hit vs cache-miss pricing, account-default models, or unsupported token-count endpoints
+
+### Native Image Generation
+
+- only implement this if the app already has a native image-generation path for the provider
+- implement the provider-owned image-generation capability instead of faking it through text chat
+- seed `image_diffusion_models` only for models that are actually wired and tested
+- confirm `/config model image` and any image-generation commands use the provider cleanly
+- if the provider has no native image generation, leave `featureSupport.nativeImageGeneration = false` and do not seed image rows
+
+### Embedding Models
+
+- only implement embeddings if the provider has a real embedding API path wired into TomoriBot
+- implement the provider-owned embedding capability and seed `embedding_models`
+- verify any provider-specific dimensionality, batching, or input limits
+- confirm embedding selection/config flows behave correctly for the provider
+- if embeddings are not implemented, leave `featureSupport.embeddings = false` and do not seed embedding rows
+
+## 12. Test the Integration
 
 Minimum test checklist:
 
@@ -233,6 +314,11 @@ Minimum test checklist:
 - `/config model text` shows the provider's seeded models
 - normal chat streaming works
 - tool calling works if supported
+- structured output works if supported
+- history extraction works if supported
+- reasoning-mode tool continuation works if the vendor requires replay fields
+- assistant-prefill behavior works if the provider supports native prefix completion
+- `/tool estimate cost` works if `featureSupport.liveTokenCounting = true`
 - unsupported features fail cleanly instead of throwing deep runtime errors
 - feature-gated commands behave correctly for your `featureSupport` values
 
@@ -258,6 +344,7 @@ Run `bun run check-locales` only if you changed locale files or command metadata
 ## Related Files
 
 - `docs/ai/providers.md`
+- `docs/guides/openai-compatible-provider-family.md`
 - `src/types/provider/interfaces.ts`
 - `src/types/provider/featureInterfaces.ts`
 - `src/utils/provider/providerFactory.ts`

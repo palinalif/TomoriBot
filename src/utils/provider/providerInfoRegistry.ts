@@ -4,6 +4,7 @@ import type {
 	ProviderInfo,
 } from "@/types/provider/interfaces";
 import { customProviderInfo } from "@/providers/custom/providerInfo";
+import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
 import { googleProviderInfo } from "@/providers/google/providerInfo";
 import { novelaiProviderInfo } from "@/providers/novelai/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
@@ -13,6 +14,7 @@ const providerInfos: readonly ProviderInfo[] = [
 	openrouterProviderInfo,
 	novelaiProviderInfo,
 	customProviderInfo,
+	deepseekProviderInfo,
 ] as const;
 
 const providerInfoByCanonicalName = new Map<string, ProviderInfo>(
@@ -33,7 +35,8 @@ export type ProviderFeatureImplementation =
 	| "google"
 	| "openrouter"
 	| "novelai"
-	| "custom";
+	| "custom"
+	| "deepseek";
 
 const providerFeatureImplementations: Partial<
 	Record<
@@ -48,6 +51,7 @@ const providerFeatureImplementations: Partial<
 	liveTokenCounting: {
 		google: "google",
 		openrouter: "openrouter",
+		deepseek: "deepseek",
 	},
 };
 
@@ -61,6 +65,10 @@ export function getStaticProviderInfo(
 ): ProviderInfo | null {
 	const canonicalName = normalizeProviderName(providerName);
 	return providerInfoByCanonicalName.get(canonicalName) ?? null;
+}
+
+export function getProviderDisplayName(providerName: string): string {
+	return getStaticProviderInfo(providerName)?.displayName ?? providerName;
 }
 
 export function providerSupportsFeature(

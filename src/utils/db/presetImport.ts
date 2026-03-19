@@ -168,7 +168,12 @@ export async function importPresetData(
     const shouldUseImportedLineage =
       identityMode === "preserve" && importedLineageId !== null;
 
-    // 6. Update tomoris table with personality data and lineage behavior
+    // 5.5. Build NAI tags array literal for safe insertion
+    const naiTagsArrayLiteral = `{${(importData.nai_tags ?? [])
+      .map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
+      .join(",")}}`;
+
+    // 6. Update tomoris table with personality data, lineage behavior, and NovelAI fields
     try {
       await sql`
 				UPDATE tomoris
@@ -181,7 +186,14 @@ export async function importPresetData(
 						WHEN ${identityMode} = 'fork' THEN nextval('persona_lineage_id_seq')
 						WHEN ${shouldUseImportedLineage} THEN ${importedLineageId}::bigint
 						ELSE persona_lineage_id
-					END
+					END,
+					nai_tags = ${naiTagsArrayLiteral}::text[],
+					nai_char_ref_url = ${importData.nai_char_ref_url ?? null},
+					nai_attg_author = ${importData.nai_attg_author ?? null},
+					nai_attg_title = ${importData.nai_attg_title ?? null},
+					nai_attg_tags = ${importData.nai_attg_tags ?? null},
+					nai_attg_genre = ${importData.nai_attg_genre ?? null},
+					nai_attg_stars = ${importData.nai_attg_stars ?? null}
 				WHERE tomori_id = ${mainTomoriId}
 			`;
     } catch (error) {

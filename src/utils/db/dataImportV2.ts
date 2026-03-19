@@ -193,20 +193,34 @@ export async function importPersonalSettings(
   importData: PersonalSettingsExportData,
 ): Promise<ImportResult> {
   try {
+    // 1. Build the NAI char tags PostgreSQL array literal for safe insertion
+    const naiCharTags = importData.nai_char_tags ?? [];
+    const naiCharTagsArrayLiteral = `{${naiCharTags
+      .map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`)
+      .join(",")}}`;
+    const naiCharRefUrl = importData.nai_char_ref_url ?? null;
+
+    // 2. Upsert user row with settings and NovelAI character fields
     const updateResult = await sql`
 			INSERT INTO users (
 				user_disc_id,
 				user_nickname,
-				language_pref
+				language_pref,
+				nai_char_tags,
+				nai_char_ref_url
 			) VALUES (
 				${userDiscId},
 				${importData.user_nickname},
-				${importData.language_pref}
+				${importData.language_pref},
+				${naiCharTagsArrayLiteral}::text[],
+				${naiCharRefUrl}
 			)
 			ON CONFLICT (user_disc_id) DO UPDATE
 			SET
 				user_nickname = EXCLUDED.user_nickname,
-				language_pref = EXCLUDED.language_pref
+				language_pref = EXCLUDED.language_pref,
+				nai_char_tags = EXCLUDED.nai_char_tags,
+				nai_char_ref_url = EXCLUDED.nai_char_ref_url
 			RETURNING user_id
 		`;
 
@@ -217,10 +231,15 @@ export async function importPersonalSettings(
       };
     }
 
+    // 3. Count imported fields (base 2 + optional NAI fields)
+    let fieldsCount = 2;
+    if (naiCharTags.length > 0) fieldsCount++;
+    if (naiCharRefUrl) fieldsCount++;
+
     return {
       success: true,
       itemsImported: {
-        configFieldsCount: 2,
+        configFieldsCount: fieldsCount,
       },
     };
   } catch (error) {
@@ -259,6 +278,12 @@ export async function importServerConfig(
       };
     }
 
+    // Build NAI tag array literals for safe insertion
+    const naiStyleTagsLiteral = config.nai_style_tags
+      ? `{${config.nai_style_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}` : null;
+    const naiNegativeTagsLiteral = config.nai_negative_tags
+      ? `{${config.nai_negative_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}` : null;
+
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
 			UPDATE tomori_configs
 			SET
@@ -281,7 +306,15 @@ export async function importServerConfig(
 				emoji_usage_enabled = ${config.emoji_usage_enabled},
 				sticker_usage_enabled = ${config.sticker_usage_enabled},
 				imagegen_enabled = ${config.imagegen_enabled},
-				self_debug_enabled = ${config.self_debug_enabled}
+				self_debug_enabled = ${config.self_debug_enabled},
+				nai_style_tags = COALESCE(${naiStyleTagsLiteral}::text[], nai_style_tags),
+				nai_negative_tags = COALESCE(${naiNegativeTagsLiteral}::text[], nai_negative_tags),
+				nai_sampler = COALESCE(${config.nai_sampler ?? null}, nai_sampler),
+				nai_steps = COALESCE(${config.nai_steps ?? null}, nai_steps),
+				nai_scale = COALESCE(${config.nai_scale ?? null}, nai_scale),
+				nai_noise_schedule = COALESCE(${config.nai_noise_schedule ?? null}, nai_noise_schedule),
+				nai_cfg_rescale = COALESCE(${config.nai_cfg_rescale ?? null}, nai_cfg_rescale),
+				nai_exclusive_imggen = ${config.nai_exclusive_imggen ?? false}
 			WHERE server_id = ${serverId}
 			RETURNING tomori_config_id
 		`;
@@ -311,7 +344,15 @@ export async function importServerConfig(
 						emoji_usage_enabled = ${config.emoji_usage_enabled},
 						sticker_usage_enabled = ${config.sticker_usage_enabled},
 						imagegen_enabled = ${config.imagegen_enabled},
-						self_debug_enabled = ${config.self_debug_enabled}
+						self_debug_enabled = ${config.self_debug_enabled},
+						nai_style_tags = COALESCE(${naiStyleTagsLiteral}::text[], nai_style_tags),
+						nai_negative_tags = COALESCE(${naiNegativeTagsLiteral}::text[], nai_negative_tags),
+						nai_sampler = COALESCE(${config.nai_sampler ?? null}, nai_sampler),
+						nai_steps = COALESCE(${config.nai_steps ?? null}, nai_steps),
+						nai_scale = COALESCE(${config.nai_scale ?? null}, nai_scale),
+						nai_noise_schedule = COALESCE(${config.nai_noise_schedule ?? null}, nai_noise_schedule),
+						nai_cfg_rescale = COALESCE(${config.nai_cfg_rescale ?? null}, nai_cfg_rescale),
+						nai_exclusive_imggen = ${config.nai_exclusive_imggen ?? false}
 					WHERE tomori_id = ${mainTomoriId}
 					RETURNING tomori_config_id
 				`;
@@ -479,6 +520,8 @@ export async function importPersonalData(
   const settingsResult = await importPersonalSettings(userDiscId, {
     user_nickname: importData.user_nickname,
     language_pref: importData.language_pref,
+    nai_char_tags: [],
+    nai_char_ref_url: null,
   });
   if (!settingsResult.success) {
     return settingsResult;

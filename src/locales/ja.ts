@@ -389,6 +389,38 @@ export default {
       unknown_default_message: "予期しないエラーが発生しました",
     },
 
+    deepseek: {
+      connection_refused:
+        "DeepSeek APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
+
+      "401_default_message":
+        "DeepSeekのAPIキーが無効か、このモデルへのアクセス権がありません。",
+
+      "402_default_message":
+        "このリクエストを実行するためのDeepSeekクレジットが不足しています。",
+
+      "403_default_message":
+        "DeepSeekによってこのリクエストが拒否されました。アカウント状態とモデル権限を確認してください。",
+
+      "404_default_message":
+        "要求されたDeepSeekモデルまたはAPIルートが見つかりませんでした。",
+
+      "408_default_message":
+        "DeepSeekからの応答前にリクエストがタイムアウトしました。",
+
+      "429_default_message":
+        "DeepSeekでレート制限が発生しています。しばらくしてから再度お試しください。",
+
+      "500_default_message":
+        "DeepSeekで内部サーバーエラーが発生しました。",
+
+      "503_default_message":
+        "DeepSeekは現在利用できないか、過負荷状態です。",
+
+      unknown_default_message:
+        "DeepSeekとの通信中に予期しないエラーが発生しました。",
+    },
+
     // カスタムプロバイダー固有のエラーメッセージ（セルフホスト型のOpenAI互換エンドポイント用）
     custom: {
       // 接続エラー
@@ -2722,6 +2754,72 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           none_description: `このサーバーにはフォールバックモデルが設定されていません。`,
           success_title: `フォールバックを削除しました`,
           success_description: `\`{model}\`がフォールバックチェーンから削除されました。残り{remaining_count}件。`,
+        },
+      },
+      mcp: {
+        description: `リモートMCP（Model Context Protocol）ツールサーバーを管理`,
+        add: {
+          description: `このギルドに新しいリモートMCPサーバーを登録します。`,
+          modal_title: `MCPサーバーを追加`,
+          name_label: `サーバー名`,
+          name_placeholder: `my-mcp-server`,
+          url_label: `サーバーURL`,
+          url_placeholder: `https://mcp.example.com/sse`,
+          auth_token_label: `認証トークン（任意）`,
+          auth_token_placeholder: `認証用Bearerトークン（不要な場合は空白）`,
+          invalid_input_title: `入力不足`,
+          invalid_input_description: `サーバー名とURLの両方が必要です。`,
+          invalid_name_title: `無効なサーバー名`,
+          invalid_name_description: `サーバー名は英数字とハイフンのみ使用可能（1〜32文字）で、英数字で始まる必要があります。`,
+          invalid_url_title: `無効なURL`,
+          limit_reached_title: `サーバー上限に達しました`,
+          limit_reached_description: `このギルドはMCPサーバーの上限（{max}台）に達しています。新しいサーバーを追加する前に既存のサーバーを削除してください。`,
+          connection_failed_title: `接続失敗`,
+          connection_failed_description: `MCPサーバーに接続できませんでした。\n**エラー:** {error}`,
+          duplicate_name_title: `名前が重複`,
+          duplicate_name_description: `"{name}"という名前のMCPサーバーはこのギルドに既に存在します。`,
+          success_title: `MCPサーバーを追加しました`,
+          success_description: `**{name}**の登録に成功しました。\n**URL:** \`{url}\`\n**発見されたツール:** {tool_count}件 ({tool_names})`,
+        },
+        remove: {
+          description: `このギルドから登録済みのMCPサーバーを削除します。`,
+          modal_title: `MCPサーバーを削除`,
+          select_label: `サーバーを選択`,
+          select_description: `削除するMCPサーバーを選択してください`,
+          select_placeholder: `削除するサーバーを選択...`,
+          not_found_title: `サーバーが見つかりません`,
+          not_found_description: `"{name}"という名前のMCPサーバーはこのギルドに見つかりませんでした。`,
+          success_title: `MCPサーバーを削除しました`,
+          success_description: `MCPサーバー"{name}"が削除され、切断されました。`,
+        },
+        list: {
+          description: `このギルドの登録済みMCPサーバーを一覧表示します。`,
+          empty_title: `MCPサーバーなし`,
+          empty_description: `このギルドにはMCPサーバーが登録されていません。\`/config mcp add\`で登録してください。`,
+          title: `登録済みMCPサーバー`,
+          header_description: `**{count}**台のサーバーが登録済み:\n\n{servers}`,
+        },
+        toggle: {
+          description: `登録済みMCPサーバーの有効/無効を切り替えます。`,
+          modal_title: `MCPサーバーの切り替え`,
+          select_label: `サーバーを選択`,
+          select_description: `切り替えるMCPサーバーを選択してください`,
+          select_placeholder: `切り替えるサーバーを選択...`,
+          state_label: `有効/無効`,
+          state_description: `サーバーを有効にするか無効にするかを選択`,
+          state_placeholder: `状態を選択...`,
+          currently_enabled: `有効`,
+          currently_disabled: `無効`,
+          enable_option: `有効にする`,
+          enable_option_description: `このMCPサーバーをツール呼び出しに有効化`,
+          disable_option: `無効にする`,
+          disable_option_description: `このMCPサーバーを無効化して切断`,
+          not_found_title: `サーバーが見つかりません`,
+          not_found_description: `"{name}"という名前のMCPサーバーはこのギルドに見つかりませんでした。`,
+          enabled_success_title: `MCPサーバーを有効化しました`,
+          enabled_success_description: `MCPサーバー"{name}"が有効化され、ツール呼び出しに使用可能になりました。`,
+          disabled_success_title: `MCPサーバーを無効化しました`,
+          disabled_success_description: `MCPサーバー"{name}"が無効化され、切断されました。`,
         },
       },
     },

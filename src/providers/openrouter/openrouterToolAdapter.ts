@@ -16,6 +16,7 @@ import type {
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { getMCPExecutor } from "../../utils/mcp/mcpExecutor";
+import { getGuildMcpManager } from "../../utils/mcp/guildMcpManager";
 import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 
 /**
@@ -332,6 +333,46 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
               `Excluded ${disabledFunctionsCount} disabled DuckDuckGo functions (${disabledDDGFunctions.join(", ")})`,
             );
           }
+        }
+      }
+
+      // Add guild MCP tools (per-guild remote servers)
+      if (serverId && allowedMCPFunctions) {
+        try {
+          const guildMcpManager = getGuildMcpManager();
+          const guildTools = await guildMcpManager.getGuildMCPTools(serverId);
+          const allowedFunctionSet = new Set(allowedMCPFunctions);
+
+          for (const guildTool of guildTools) {
+            try {
+              const geminiTool = await guildTool.tool();
+              if (geminiTool.functionDeclarations) {
+                const declarations = (
+                  geminiTool.functionDeclarations as Record<string, unknown>[]
+                ).filter((decl) => allowedFunctionSet.has(decl.name as string));
+
+                for (const declaration of declarations) {
+                  // Convert MCP schema format to OpenAI format
+                  const openAIDeclaration: Record<string, unknown> = { ...declaration };
+                  if ("parametersJsonSchema" in declaration) {
+                    delete openAIDeclaration.parametersJsonSchema;
+                    openAIDeclaration.parameters = declaration.parametersJsonSchema;
+                  }
+
+                  allTools.push({
+                    type: "function",
+                    function: openAIDeclaration,
+                  });
+                }
+
+                log.info(`Added ${declarations.length} guild MCP tool(s) to OpenRouter format`);
+              }
+            } catch (error) {
+              log.warn("Failed to extract guild MCP tool declarations:", error as Error);
+            }
+          }
+        } catch (error) {
+          log.warn("Failed to get guild MCP tools for OpenRouter format:", error as Error);
         }
       }
 

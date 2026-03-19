@@ -53,7 +53,14 @@ export async function exportPresetData(
 						sample_dialogues_in,
 						sample_dialogues_out,
 						is_alter,
-						alter_triggers
+						alter_triggers,
+						nai_tags,
+						nai_char_ref_url,
+						nai_attg_author,
+						nai_attg_title,
+						nai_attg_tags,
+						nai_attg_genre,
+						nai_attg_stars
 					FROM tomoris
 					WHERE server_id = ${serverId}
 					  AND tomori_id = ${targetTomoriId}
@@ -68,7 +75,14 @@ export async function exportPresetData(
 						sample_dialogues_in,
 						sample_dialogues_out,
 						is_alter,
-						alter_triggers
+						alter_triggers,
+						nai_tags,
+						nai_char_ref_url,
+						nai_attg_author,
+						nai_attg_title,
+						nai_attg_tags,
+						nai_attg_genre,
+						nai_attg_stars
 					FROM tomoris
 					WHERE server_id = ${serverId}
 					  AND is_alter = false
@@ -152,7 +166,7 @@ export async function exportPresetData(
       triggerWords = presetData.alter_triggers ?? null;
     }
 
-    // 4. Build export object with metadata
+    // 4. Build export object with metadata (includes NovelAI persona fields)
     const exportData: PresetExport = {
       version: PRESET_EXPORT_VERSION,
       type: "preset",
@@ -165,6 +179,13 @@ export async function exportPresetData(
         trigger_words: triggerWords || [],
         persona_prompt: personaPrompt,
         persona_lineage_id: lineageId,
+        nai_tags: presetData.nai_tags || [],
+        nai_char_ref_url: presetData.nai_char_ref_url ?? null,
+        nai_attg_author: presetData.nai_attg_author ?? null,
+        nai_attg_title: presetData.nai_attg_title ?? null,
+        nai_attg_tags: presetData.nai_attg_tags ?? null,
+        nai_attg_genre: presetData.nai_attg_genre ?? null,
+        nai_attg_stars: presetData.nai_attg_stars ?? null,
       },
     };
 

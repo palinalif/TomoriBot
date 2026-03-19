@@ -85,9 +85,9 @@ export async function exportPersonalData(
   includeGlobalMemories = true,
 ): Promise<ExportResult> {
   try {
-    // 1. Query user data from database
+    // 1. Query user data from database (includes NovelAI character fields)
     const rows = await sql`
-			SELECT user_id, user_nickname, language_pref
+			SELECT user_id, user_nickname, language_pref, nai_char_tags, nai_char_ref_url
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
@@ -221,7 +221,15 @@ export async function exportServerData(
 				COALESCE(tc_server.emoji_usage_enabled, tc_legacy.emoji_usage_enabled) as emoji_usage_enabled,
 				COALESCE(tc_server.sticker_usage_enabled, tc_legacy.sticker_usage_enabled) as sticker_usage_enabled,
 				COALESCE(tc_server.imagegen_enabled, tc_legacy.imagegen_enabled) as imagegen_enabled,
-				COALESCE(tc_server.self_debug_enabled, tc_legacy.self_debug_enabled, false) as self_debug_enabled
+				COALESCE(tc_server.self_debug_enabled, tc_legacy.self_debug_enabled, false) as self_debug_enabled,
+				COALESCE(tc_server.nai_style_tags, tc_legacy.nai_style_tags) as nai_style_tags,
+				COALESCE(tc_server.nai_negative_tags, tc_legacy.nai_negative_tags) as nai_negative_tags,
+				COALESCE(tc_server.nai_sampler, tc_legacy.nai_sampler) as nai_sampler,
+				COALESCE(tc_server.nai_steps, tc_legacy.nai_steps) as nai_steps,
+				COALESCE(tc_server.nai_scale, tc_legacy.nai_scale) as nai_scale,
+				COALESCE(tc_server.nai_noise_schedule, tc_legacy.nai_noise_schedule) as nai_noise_schedule,
+				COALESCE(tc_server.nai_cfg_rescale, tc_legacy.nai_cfg_rescale) as nai_cfg_rescale,
+				COALESCE(tc_server.nai_exclusive_imggen, tc_legacy.nai_exclusive_imggen, false) as nai_exclusive_imggen
 			FROM tomoris t
 			LEFT JOIN tomori_configs tc_server ON tc_server.server_id = t.server_id
 			LEFT JOIN tomori_configs tc_legacy ON tc_legacy.tomori_id = t.tomori_id
@@ -352,6 +360,14 @@ export async function exportServerData(
           sticker_usage_enabled: configData.sticker_usage_enabled,
           imagegen_enabled: configData.imagegen_enabled,
           self_debug_enabled: configData.self_debug_enabled,
+          nai_style_tags: configData.nai_style_tags ?? undefined,
+          nai_negative_tags: configData.nai_negative_tags ?? undefined,
+          nai_sampler: configData.nai_sampler ?? null,
+          nai_steps: configData.nai_steps ?? null,
+          nai_scale: configData.nai_scale ?? null,
+          nai_noise_schedule: configData.nai_noise_schedule ?? null,
+          nai_cfg_rescale: configData.nai_cfg_rescale ?? null,
+          nai_exclusive_imggen: configData.nai_exclusive_imggen ?? false,
         },
         server_memories: sanitizedServerMemories,
       },
@@ -482,50 +498,70 @@ export async function exportGlobalPersonalMemories(
 }
 
 /**
- * Exports personal settings only.
+ * Exports personal settings only (nickname, language, NovelAI character data).
  * @param userDiscId - Discord user ID to export data for
  */
 export async function exportPersonalSettings(
   userDiscId: string,
 ): Promise<ExportResult> {
-  const baseExport = await exportPersonalData(userDiscId, 0, false);
-  if (
-    !baseExport.success ||
-    !baseExport.data ||
-    baseExport.data.type !== "personal"
-  ) {
-    return {
-      success: false,
-      error: baseExport.error || "commands.data.export.error_export_failed",
+  try {
+    // 1. Query user settings including NovelAI character fields
+    const rows = await sql`
+			SELECT user_nickname, language_pref, nai_char_tags, nai_char_ref_url
+			FROM users
+			WHERE user_disc_id = ${userDiscId}
+			LIMIT 1
+		`;
+
+    if (!rows.length) {
+      return {
+        success: false,
+        error: "commands.data.export.error_no_user_data",
+      };
+    }
+
+    const userData = rows[0];
+
+    // 2. Build export object with NAI character fields
+    const exportData: PersonalSettingsExport = {
+      version: EXPORT_VERSION,
+      type: "personal_settings",
+      exported_at: new Date().toISOString(),
+      data: {
+        user_nickname: userData.user_nickname,
+        language_pref: userData.language_pref,
+        nai_char_tags: userData.nai_char_tags ?? [],
+        nai_char_ref_url: userData.nai_char_ref_url ?? null,
+      },
     };
-  }
 
-  const exportData: PersonalSettingsExport = {
-    version: EXPORT_VERSION,
-    type: "personal_settings",
-    exported_at: baseExport.data.exported_at,
-    data: {
-      user_nickname: baseExport.data.data.user_nickname,
-      language_pref: baseExport.data.data.language_pref,
-    },
-  };
+    // 3. Validate export data structure
+    const validated = personalSettingsExportSchema.safeParse(exportData);
+    if (!validated.success) {
+      log.error(
+        `Personal settings export validation failed for user ${userDiscId}:`,
+        validated.error,
+      );
+      return {
+        success: false,
+        error: "commands.data.export.error_validation_failed",
+      };
+    }
 
-  const validated = personalSettingsExportSchema.safeParse(exportData);
-  if (!validated.success) {
+    return {
+      success: true,
+      data: validated.data,
+    };
+  } catch (error) {
     log.error(
-      `Personal settings export validation failed for user ${userDiscId}:`,
-      validated.error,
+      `Error exporting personal settings for user ${userDiscId}:`,
+      error,
     );
     return {
       success: false,
-      error: "commands.data.export.error_validation_failed",
+      error: "commands.data.export.error_export_failed",
     };
   }
-
-  return {
-    success: true,
-    data: validated.data,
-  };
 }
 
 /**

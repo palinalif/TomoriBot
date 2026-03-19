@@ -388,6 +388,38 @@ export default {
       unknown_default_message: "An unexpected error occurred",
     },
 
+    deepseek: {
+      connection_refused:
+        "Could not connect to the DeepSeek API endpoint. Please try again later.",
+
+      "401_default_message":
+        "Your DeepSeek API key is invalid or does not have access to this model.",
+
+      "402_default_message":
+        "Your DeepSeek account does not have sufficient credits for this request.",
+
+      "403_default_message":
+        "DeepSeek denied this request. Please verify your account and model access.",
+
+      "404_default_message":
+        "The requested DeepSeek model or API route could not be found.",
+
+      "408_default_message":
+        "The DeepSeek request timed out before the provider responded.",
+
+      "429_default_message":
+        "DeepSeek is rate limiting this request. Please wait a moment and try again.",
+
+      "500_default_message":
+        "DeepSeek returned an internal server error.",
+
+      "503_default_message":
+        "DeepSeek is currently unavailable or overloaded.",
+
+      unknown_default_message:
+        "An unexpected error occurred while communicating with DeepSeek.",
+    },
+
     // Custom provider error messages (self-hosted OpenAI-compatible endpoints)
     custom: {
       // Connection errors
@@ -2715,6 +2747,72 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           none_description: `This server has no fallback models configured.`,
           success_title: `Fallback Removed`,
           success_description: `\`{model}\` has been removed from the fallback chain. {remaining_count} fallback(s) remaining.`,
+        },
+      },
+      mcp: {
+        description: `Manage remote MCP (Model Context Protocol) tool servers`,
+        add: {
+          description: `Register a new remote MCP server for this guild.`,
+          modal_title: `Add MCP Server`,
+          name_label: `Server Name`,
+          name_placeholder: `my-mcp-server`,
+          url_label: `Server URL`,
+          url_placeholder: `https://mcp.example.com/sse`,
+          auth_token_label: `Auth Token (Optional)`,
+          auth_token_placeholder: `Bearer token for authentication (leave blank if none)`,
+          invalid_input_title: `Missing Input`,
+          invalid_input_description: `Both server name and URL are required.`,
+          invalid_name_title: `Invalid Server Name`,
+          invalid_name_description: `Server name must be 1-32 characters using only letters, numbers, and hyphens. It must start with a letter or number.`,
+          invalid_url_title: `Invalid URL`,
+          limit_reached_title: `Server Limit Reached`,
+          limit_reached_description: `This guild has reached the maximum of {max} MCP servers. Remove an existing server before adding a new one.`,
+          connection_failed_title: `Connection Failed`,
+          connection_failed_description: `Could not connect to the MCP server.\n**Error:** {error}`,
+          duplicate_name_title: `Duplicate Name`,
+          duplicate_name_description: `An MCP server named "{name}" already exists in this guild.`,
+          success_title: `MCP Server Added`,
+          success_description: `**{name}** has been registered successfully.\n**URL:** \`{url}\`\n**Tools discovered:** {tool_count} ({tool_names})`,
+        },
+        remove: {
+          description: `Remove a registered MCP server from this guild.`,
+          modal_title: `Remove MCP Server`,
+          select_label: `Select Server`,
+          select_description: `Choose the MCP server to remove`,
+          select_placeholder: `Select a server to remove...`,
+          not_found_title: `Server Not Found`,
+          not_found_description: `No MCP server named "{name}" was found in this guild.`,
+          success_title: `MCP Server Removed`,
+          success_description: `MCP server "{name}" has been removed and disconnected.`,
+        },
+        list: {
+          description: `List all registered MCP servers for this guild.`,
+          empty_title: `No MCP Servers`,
+          empty_description: `This guild has no registered MCP servers. Use \`/config mcp add\` to register one.`,
+          title: `Registered MCP Servers`,
+          header_description: `**{count}** server(s) registered:\n\n{servers}`,
+        },
+        toggle: {
+          description: `Enable or disable a registered MCP server.`,
+          modal_title: `Toggle MCP Server`,
+          select_label: `Select Server`,
+          select_description: `Choose the MCP server to toggle`,
+          select_placeholder: `Select a server to toggle...`,
+          state_label: `Enable or Disable`,
+          state_description: `Choose whether to enable or disable the server`,
+          state_placeholder: `Select a state...`,
+          currently_enabled: `Enabled`,
+          currently_disabled: `Disabled`,
+          enable_option: `Enable`,
+          enable_option_description: `Enable this MCP server for tool calling`,
+          disable_option: `Disable`,
+          disable_option_description: `Disable this MCP server and disconnect it`,
+          not_found_title: `Server Not Found`,
+          not_found_description: `No MCP server named "{name}" was found in this guild.`,
+          enabled_success_title: `MCP Server Enabled`,
+          enabled_success_description: `MCP server "{name}" has been enabled and will be available for tool calling.`,
+          disabled_success_title: `MCP Server Disabled`,
+          disabled_success_description: `MCP server "{name}" has been disabled and disconnected.`,
         },
       },
     },

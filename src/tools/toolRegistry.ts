@@ -19,6 +19,7 @@ import {
   filterToolsByFeatureFlags,
 } from "../utils/tools/featureFlagMapper";
 import { getMCPManager } from "../utils/mcp/mcpManager";
+import { getGuildMcpManager } from "../utils/mcp/guildMcpManager";
 import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchService";
 import { hasOptApiKey } from "../utils/security/crypto";
 
@@ -309,6 +310,40 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         );
       }
 
+      // Append guild MCP function names (admin-registered, skip feature flag filtering)
+      const serverIdNum = stateForContext.server_id
+        ? Number.parseInt(stateForContext.server_id, 10)
+        : undefined;
+      if (serverIdNum) {
+        try {
+          const guildMcpManager = getGuildMcpManager();
+          const guildFunctionNames = await guildMcpManager.getGuildMCPFunctionNames(serverIdNum);
+
+          if (guildFunctionNames.length > 0) {
+            // Collision check: skip guild functions that shadow built-in or global MCP names
+            const builtInNames = new Set(builtInTools.map((t) => t.name));
+            const globalMcpNames = new Set(mcpFunctionNames);
+
+            const safeGuildNames = guildFunctionNames.filter((name) => {
+              if (builtInNames.has(name) || globalMcpNames.has(name)) {
+                log.warn(
+                  `[GuildMCP] Skipping guild MCP function "${name}" — collides with built-in or global MCP tool`,
+                );
+                return false;
+              }
+              return true;
+            });
+
+            mcpFunctionNames.push(...safeGuildNames);
+            log.info(
+              `Guild MCP tools: ${guildFunctionNames.length} discovered, ${safeGuildNames.length} after collision check (server: ${serverIdNum})`,
+            );
+          }
+        } catch (error) {
+          log.warn("[GuildMCP] Failed to get guild MCP function names, continuing without", error);
+        }
+      }
+
       // Apply NovelAI opt API key preference logic for image generation tools
       const serverIdNumber = stateForContext.server_id
         ? Number.parseInt(stateForContext.server_id, 10)
@@ -455,30 +490,40 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
   /**
    * Check if a tool requires a follow-up generation after execution
-   * Built-in tools check the `requiresFollowUp` property; MCP tools always return true
+   * Built-in tools check the `requiresFollowUp` property; MCP tools (global + guild) always return true
    * (all MCP tools are search/fetch and need the model to present results)
    * @param functionName - Name of the function to check
    * @param provider - Provider name for MCP adapter lookup
+   * @param serverId - Optional internal server_id for guild MCP check
    * @returns Promise<boolean> - True if the tool needs a follow-up generation
    */
   async requiresFollowUp(
     functionName: string,
     provider: string,
+    serverId?: number,
   ): Promise<boolean> {
-    // 1. Check if it's an MCP function — all MCP tools require follow-up
+    // 1. Check if it's a global MCP function — all MCP tools require follow-up
     const isMcp = await this.isMCPFunction(functionName, provider);
     if (isMcp) {
       return true;
     }
 
-    // 2. Check built-in tool property
+    // 2. Check if it's a guild MCP function — also requires follow-up
+    if (serverId) {
+      try {
+        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(serverId, functionName);
+        if (isGuildMcp) return true;
+      } catch { /* fall through */ }
+    }
+
+    // 3. Check built-in tool property
     const tool = this.getTool(functionName);
     return tool?.requiresFollowUp ?? false;
   }
 
   /**
    * Execute a tool by name with given arguments and context
-   * Now supports both built-in tools and MCP functions seamlessly
+   * Now supports built-in tools, global MCP, and guild MCP functions seamlessly
    * @param toolName - Name of the tool/function to execute
    * @param args - Arguments to pass to the tool
    * @param context - Execution context
@@ -491,15 +536,49 @@ class ToolRegistryImpl implements ToolRegistryInterface {
   ): Promise<ToolResult> {
     const startTime = Date.now();
 
-    // First check if this is an MCP function
+    // 1. Check global MCP first
     const isMcp = await this.isMCPFunction(toolName, context.provider);
-
     if (isMcp) {
-      // Execute as MCP function
       return this.executeMCPFunction(toolName, args, context, startTime);
     }
 
-    // Execute as built-in tool
+    // 2. Check guild MCP
+    const serverId = context.tomoriState?.server_id;
+    if (serverId) {
+      try {
+        const guildMcpManager = getGuildMcpManager();
+        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(serverId, toolName);
+        if (isGuildMcp) {
+          log.info(`Executing guild MCP function: ${toolName} for server ${serverId}`);
+          const result = await guildMcpManager.executeGuildMCPFunction(serverId, toolName, args, context);
+          const executionTime = Date.now() - startTime;
+
+          // Record execution event
+          this.recordExecution({
+            toolName,
+            provider: context.provider,
+            serverId: serverId.toString(),
+            userId: context.userId,
+            parameters: args,
+            result,
+            executionTime,
+            timestamp: new Date(),
+          });
+
+          if (result.success) {
+            log.success(`Guild MCP function executed successfully: ${toolName} (${executionTime}ms)`);
+          } else {
+            log.warn(`Guild MCP function execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`);
+          }
+
+          return result;
+        }
+      } catch (error) {
+        log.warn(`Error checking/executing guild MCP function '${toolName}':`, error as Error);
+      }
+    }
+
+    // 3. Execute as built-in tool
     return this.executeBuiltInTool(toolName, args, context, startTime);
   }
 
@@ -942,8 +1021,9 @@ export async function isMCPFunction(
 export async function requiresFollowUp(
   functionName: string,
   provider: string,
+  serverId?: number,
 ): Promise<boolean> {
-  return ToolRegistry.requiresFollowUp(functionName, provider);
+  return ToolRegistry.requiresFollowUp(functionName, provider, serverId);
 }
 
 export async function getAvailableToolsWithMCP(

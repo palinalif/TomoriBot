@@ -43,6 +43,20 @@ export interface PresetExportData {
   trigger_words: string[];
   persona_prompt?: string | null;
   persona_lineage_id?: number;
+  /** Imageboard-style persona appearance tags for NovelAI character rendering */
+  nai_tags?: string[];
+  /** Persona-specific NovelAI character reference image URL */
+  nai_char_ref_url?: string | null;
+  /** ATTG: Story author name */
+  nai_attg_author?: string | null;
+  /** ATTG: Story title */
+  nai_attg_title?: string | null;
+  /** ATTG: Genre/style tags */
+  nai_attg_tags?: string | null;
+  /** ATTG: Genre categories */
+  nai_attg_genre?: string | null;
+  /** ATTG: Quality stars (Erato only, 1-5) */
+  nai_attg_stars?: number | null;
 }
 
 /**
@@ -128,6 +142,13 @@ export const presetExportDataSchema = z.object({
       return value;
     }, z.number().int().nonnegative())
     .optional(),
+  nai_tags: z.array(z.string().max(MAX_STRING_LENGTH)).optional(),
+  nai_char_ref_url: z.string().max(MAX_STRING_LENGTH).nullable().optional(),
+  nai_attg_author: z.string().max(MAX_STRING_LENGTH).nullable().optional(),
+  nai_attg_title: z.string().max(MAX_STRING_LENGTH).nullable().optional(),
+  nai_attg_tags: z.string().max(MAX_STRING_LENGTH).nullable().optional(),
+  nai_attg_genre: z.string().max(MAX_STRING_LENGTH).nullable().optional(),
+  nai_attg_stars: z.number().int().min(1).max(5).nullable().optional(),
 });
 
 /**

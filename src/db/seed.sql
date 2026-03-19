@@ -70,6 +70,9 @@ VALUES
   ('openrouter', 'moonshotai/kimi-k2.5', false, false, false, false, false, true, true, false, false, false, true, 'Moonshot AI''s state-of-the-art native multimodal model', 'Moonshot AIの最先端ネイティブ・マルチモーダルモデル'),
   ('openrouter', 'aion-labs/aion-2.0', false, false, false, false, false, false, false, false, false, false, false, 'Cheap role-play fine-tune of DeepSeek with no tools, vision, or structured output support', 'ツール・画像理解・構造化出力に対応しない、DeepSeekベースの低コストなロールプレイ特化ファインチューニングモデル'),
   ('openrouter', 'account-setting', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Uses your OpenRouter account default model', '上級者向け：OpenRouterアカウントのデフォルトモデルを使用'),
+  -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
+  ('deepseek', 'deepseek-chat', false, true, false, false, false, true, false, false, false, false, true, 'Default DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekのデフォルトチャットモデル'),
+  ('deepseek', 'deepseek-reasoner', true, false, true, false, false, true, false, false, false, false, true, 'Reasoning-focused DeepSeek model with thinking mode, seeded tool use, and JSON structured output', 'シンキングモード、シード済みツール利用、JSON構造化出力に対応した、推論特化のDeepSeekモデル'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint
   ('custom', 'custom/bootstrap', false, false, false, false, true, false, false, false, false, true, false, 'Self-hosted OpenAI-compatible endpoint (Ollama, KoboldCPP, vLLM, LocalAI)', 'セルフホスト型OpenAI互換エンドポイント（Ollama、KoboldCPP、vLLM、LocalAI）')

@@ -1717,3 +1717,27 @@ BEGIN
             ALTER COLUMN fallback_llm_ids SET DEFAULT '[]'::JSONB;
     END IF;
 END $$;
+
+-- ============================================================
+-- Guild MCP Servers (per-guild remote MCP server registrations)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS guild_mcp_servers (
+  guild_mcp_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  auth_token BYTEA,                -- PGP-encrypted bearer token (nullable — not all servers require auth)
+  key_version INT DEFAULT 1,       -- Encryption key version for lazy rotation
+  is_enabled BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (server_id, name),
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_guild_mcp_servers_server ON guild_mcp_servers(server_id);
+
+-- Trigger for updated_at auto-update
+DROP TRIGGER IF EXISTS update_guild_mcp_servers_timestamp ON guild_mcp_servers;
+CREATE TRIGGER update_guild_mcp_servers_timestamp
+  BEFORE UPDATE ON guild_mcp_servers
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();

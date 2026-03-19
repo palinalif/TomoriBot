@@ -43,10 +43,13 @@ export type PersonalExportData = z.infer<
 
 /**
  * Personal settings-only export schema.
+ * Includes user-specific NovelAI character tags and reference image URL.
  */
 export const personalSettingsExportDataSchema = z.object({
   user_nickname: z.string().min(1).max(100),
   language_pref: z.string().min(2).max(10),
+  nai_char_tags: z.array(z.string()).default([]),
+  nai_char_ref_url: z.string().nullable().optional(),
 });
 
 export type PersonalSettingsExportData = z.infer<
@@ -108,6 +111,14 @@ export const serverConfigExportSchema = z.object({
   sticker_usage_enabled: z.boolean(),
   imagegen_enabled: z.boolean().default(true),
   self_debug_enabled: z.boolean().default(false),
+  nai_style_tags: z.array(z.string()).optional(),
+  nai_negative_tags: z.array(z.string()).optional(),
+  nai_sampler: z.string().nullable().optional(),
+  nai_steps: z.number().int().min(1).max(50).nullable().optional(),
+  nai_scale: z.number().min(0.0).max(10.0).nullable().optional(),
+  nai_noise_schedule: z.string().nullable().optional(),
+  nai_cfg_rescale: z.number().min(0.0).max(1.0).nullable().optional(),
+  nai_exclusive_imggen: z.boolean().default(false),
 });
 
 export type ServerConfigExport = z.infer<typeof serverConfigExportSchema>;

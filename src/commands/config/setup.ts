@@ -17,6 +17,7 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ProviderFactory } from "../../utils/provider/providerFactory";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
 import {
@@ -186,7 +187,7 @@ export async function execute(
     // Create provider options for the select menu
     const providerSelectOptions: SelectOption[] = uniqueProviders.map(
       (provider) => ({
-        label: provider.charAt(0).toUpperCase() + provider.slice(1), // Capitalize first letter
+        label: getProviderDisplayName(provider),
         value: provider,
         description: undefined,
       }),

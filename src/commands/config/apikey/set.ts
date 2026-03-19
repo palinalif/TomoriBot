@@ -35,6 +35,7 @@ import type {
   ModalComponent,
 } from "../../../types/discord/modal";
 import { ProviderFactory } from "../../../utils/provider/providerFactory";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { encryptApiKey } from "../../../utils/security/crypto";
 import { sql } from "@/utils/db/client";
 import {
@@ -114,7 +115,7 @@ export async function execute(
   // 4. Create provider select options with descriptions
   const providerSelectOptions: SelectOption[] = uniqueProviders.map(
     (provider) => ({
-      label: provider.charAt(0).toUpperCase() + provider.slice(1),
+      label: getProviderDisplayName(provider),
       value: provider.toLowerCase(),
       description: undefined,
     }),
@@ -404,8 +405,7 @@ export async function execute(
             descriptionKey:
               "commands.config.apikey.set.no_default_model_description",
             descriptionVars: {
-              provider:
-                newProvider.charAt(0).toUpperCase() + newProvider.slice(1),
+              provider: getProviderDisplayName(newProvider),
             },
             color: ColorCode.ERROR,
           });
@@ -613,8 +613,7 @@ export async function execute(
           : "commands.config.apikey.set.success_description";
 
     const descriptionVars: Record<string, string> = {
-      provider:
-        selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1),
+      provider: getProviderDisplayName(selectedProvider),
     };
 
     // Add model name if provider changed

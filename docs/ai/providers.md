@@ -27,6 +27,7 @@ Provider folders under `src/providers/`:
 - `openrouter` (`OpenrouterProvider`)
 - `novelai` (`NovelaiProvider`)
 - `custom` (`CustomProvider`)
+- `deepseek` (`DeepseekProvider`)
 
 ## Provider Factory
 
@@ -48,6 +49,11 @@ Static provider metadata is defined in each provider folder:
 - `src/providers/openrouter/providerInfo.ts`
 - `src/providers/novelai/providerInfo.ts`
 - `src/providers/custom/providerInfo.ts`
+- `src/providers/deepseek/providerInfo.ts`
+
+OpenAI-compatible family internals shared by `custom` and `deepseek` live in:
+
+- `src/providers/openaiCompatible/`
 
 Registry helpers live in `src/utils/provider/providerInfoRegistry.ts`.
 
@@ -109,6 +115,21 @@ Rule:
 - model capabilities are user-declared and stored in `llms`
 - designed for non-production usage
 
+## DeepSeek Provider Notes
+
+`deepseek` uses the shared OpenAI-compatible family layer for bounded text/chat support.
+
+- text chat streaming is supported
+- tool calling is only enabled for models explicitly seeded with `has_tools = true`
+- JSON structured output is supported on seeded DeepSeek text models through DeepSeek JSON Output plus local Zod validation
+- `deepseek-reasoner` tool continuation preserves DeepSeek `reasoning_content` within the same turn
+- manual `/bot respond` prefills use DeepSeek beta prefix completion when the request ends with an assistant prefill
+- history extraction is enabled through the provider-owned structured output capability
+- `/tool estimate cost` supports DeepSeek using conservative cache-miss input pricing by default
+- no native image generation rows are seeded
+- no embedding rows are seeded
+- provider-level feature flags remain disabled for native image generation, embeddings, preset generation, expression initialization, and compaction
+
 ## Tool Integration Across Providers
 
 Tools are provider-agnostic at registry level, then adapted per provider by each provider tool adapter.
@@ -138,6 +159,13 @@ Google and OpenRouter currently own runtime execution for:
 - conversation compaction
 - roleplay compaction
 - history extraction (via structured output capability)
+
+DeepSeek currently owns runtime execution for:
+
+- structured output execution
+- history extraction (via structured output capability)
+
+Live token counting for `/tool estimate cost` still uses a temporary legacy command path for Google, OpenRouter, and DeepSeek.
 
 Rule:
 
@@ -223,6 +251,7 @@ Why this matters:
 - `/config apikey set provider:google key:...`
 - `/config apikey set provider:openrouter key:...`
 - `/config apikey set provider:novelai key:...`
+- `/config apikey set provider:deepseek key:...`
 
 Provider choice/model selection commands:
 
