@@ -25,8 +25,8 @@ import {
   type ExpressionClassification,
   type ExpressionBatchResult,
   ExpressionBatchResultSchema,
-  type StructuredOutputResult,
 } from "@/providers/utils/structuredOutput";
+import type { StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";

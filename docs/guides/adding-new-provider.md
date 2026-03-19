@@ -178,6 +178,7 @@ Use this rule:
 
 - If `featureSupport.{feature}` is `false`, no extra wiring is needed.
 - If `featureSupport.{feature}` is `true` and the app executes that feature at runtime, implement the matching optional capability on the provider class.
+- If a helper is truly generic, keep it in a shared utility. If it contains provider-specific HTTP calls, prompt shaping, or response parsing, keep it in `src/providers/{providerName}/`.
 
 Do not scatter exact provider-name checks across commands. Put routing in the provider capability layer.
 
@@ -201,6 +202,17 @@ Examples:
 
 Do not hardcode default models in provider code when the app already resolves them from the database/cache.
 
+## 8.5 Update User-Facing Help
+
+When adding a provider, update the user-facing setup/help copy in the same change.
+
+Minimum reminders:
+
+- update `/help apikey` provider choices in `src/commands/help/apikey.ts`
+- add localized `/help apikey` copy in both `src/locales/en-US.ts` and `src/locales/ja.ts`
+- if the provider changes onboarding guidance, also review `/help setup`
+- if the provider changes pricing guidance or model-tag expectations, review `/help cost` and any related help text
+
 ## 9. Keep New Logic Inside the Provider Layer
 
 When integrating provider-specific behavior:
@@ -209,6 +221,13 @@ When integrating provider-specific behavior:
 - prefer provider class capability methods
 - prefer `providerCapabilityResolver.ts` and thin shared wrappers such as `providerFeatureExecutors.ts`
 - keep provider helpers inside `src/providers/{providerName}/`
+- use shared provider utilities only for code that is genuinely cross-provider
+
+Current structured-output examples:
+
+- `src/providers/google/googleStructuredOutput.ts`
+- `src/providers/openrouter/openrouterStructuredOutput.ts`
+- `src/providers/deepseek/deepseekStructuredOutput.ts`
 
 Avoid adding new command-level checks like:
 

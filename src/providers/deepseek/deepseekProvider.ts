@@ -20,7 +20,7 @@ import {
 	createOpenAICompatibleHttpError,
 	normalizeOpenAICompatibleProviderError,
 } from "@/providers/openaiCompatible/openaiCompatibleErrorFormatter";
-import { callDeepseekStructuredJSON } from "@/providers/utils/structuredOutput";
+import { callDeepseekStructuredJSON } from "@/providers/deepseek/deepseekStructuredOutput";
 import type { TomoriState } from "@/types/db/schema";
 import type { StructuredContextItem } from "@/types/misc/context";
 import type {
@@ -28,6 +28,7 @@ import type {
 	StructuredOutputResult,
 	SupportsStructuredOutput,
 } from "@/types/provider/featureInterfaces";
+import type { ZodType } from "zod";
 import type {
 	ApiKeyValidationResult,
 	FunctionCall,
@@ -115,7 +116,7 @@ export class DeepseekProvider
 	async callStructuredJSON<T>(
 		request: ProviderStructuredJsonRequest,
 		responseSchema: Record<string, unknown>,
-		zodSchema: import("zod").ZodType<T>,
+		zodSchema: ZodType<T>,
 	): Promise<StructuredOutputResult<T>> {
 		return await callDeepseekStructuredJSON(
 			request,

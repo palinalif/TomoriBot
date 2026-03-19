@@ -150,6 +150,11 @@ Current capability layer:
 - capability interfaces: `src/types/provider/featureInterfaces.ts`
 - typed resolver: `src/utils/provider/providerCapabilityResolver.ts`
 - thin app-level wrappers: `src/providers/utils/providerFeatureExecutors.ts`
+- shared schema/builders only: `src/providers/utils/structuredOutput.ts`
+- provider-local structured output runtimes:
+  - `src/providers/google/googleStructuredOutput.ts`
+  - `src/providers/openrouter/openrouterStructuredOutput.ts`
+  - `src/providers/deepseek/deepseekStructuredOutput.ts`
 
 Google and OpenRouter currently own runtime execution for:
 
@@ -172,6 +177,7 @@ Rule:
 - Keep `providerSupportsFeature()` as the common early-gating helper.
 - Put runtime execution on the provider instance when the feature is app-level and provider-specific.
 - Keep provider-specific implementation code inside `src/providers/{providerName}/` or shared family internals.
+- If a shared utility exists, keep it genuinely generic; provider-specific HTTP requests, prompt shaping, and response parsing should stay in the provider folder.
 - `resolveProviderFeatureImplementation()` is now temporary legacy routing for the runtime paths that have not been migrated yet.
 
 ## Writing Provider-Aware Commands

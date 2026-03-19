@@ -69,7 +69,7 @@ import {
   type ApiKeyValidationResult,
 } from "../../types/provider/interfaces";
 import { getGoogleToolAdapter } from "./googleToolAdapter";
-import { callGoogleStructuredJSON } from "../utils/structuredOutput";
+import { callGoogleStructuredJSON } from "./googleStructuredOutput";
 import {
   getCachedDefaultLLM,
   isLLMCacheReady,

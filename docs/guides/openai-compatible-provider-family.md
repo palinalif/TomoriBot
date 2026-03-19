@@ -111,6 +111,18 @@ Keep these provider-owned:
 - request parameter policy
 - feature flags in `ProviderInfo.featureSupport`
 - optional runtime capability implementations such as embeddings or structured output
+- provider-specific structured-output, image-generation, embedding, and cost helpers when they make vendor-specific HTTP requests
+
+Shared files should stay generic. If a helper contains vendor-specific endpoints, prompt shaping, or response parsing, it belongs in `src/providers/{providerName}/`.
+
+Current examples:
+
+- `src/providers/openrouter/openrouterStructuredOutput.ts`
+- `src/providers/deepseek/deepseekStructuredOutput.ts`
+
+User-facing reminder:
+
+- when adding a new provider in this family, also update `/help apikey` choices and localized provider instructions
 
 ## File Layout
 

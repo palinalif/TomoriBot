@@ -47,6 +47,13 @@ export const configureSubcommand = (
           {
             name: localizer(
               "en-US",
+              "commands.help.apikey.provider_choice_deepseek",
+            ),
+            value: "deepseek",
+          },
+          {
+            name: localizer(
+              "en-US",
               "commands.help.apikey.provider_choice_novelai",
             ),
             value: "novelai",
@@ -157,6 +164,40 @@ export async function execute(
             },
           ],
           footerKey: "commands.help.apikey.google_footer",
+          footerVars: {
+            configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "deepseek":
+        embedOptions = {
+          titleKey: "commands.help.apikey.deepseek_title",
+          descriptionKey: "commands.help.apikey.deepseek_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.apikey.deepseek_getting_key_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.deepseek_getting_key_description",
+                {
+                  configSetup: configSetupMention,
+                  configApikeySet: configApikeySetMention,
+                },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.apikey.deepseek_model_notes_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.deepseek_model_notes_description",
+              ),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.apikey.deepseek_footer",
           footerVars: {
             configModel: configModelMention,
           },

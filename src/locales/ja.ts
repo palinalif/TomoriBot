@@ -1468,6 +1468,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_description: `AIプロバイダーを選択`,
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
+        provider_choice_deepseek: `DeepSeek`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
         // Brave Search
@@ -1498,6 +1499,24 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 2. 右上の\`APIキーを作成\`をクリック（必要に応じて新しいプロジェクトを作成）
 3. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
         google_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        // DeepSeek
+        deepseek_title: `DeepSeek APIキーの設定`,
+        deepseek_description: `DeepSeekは従量課金制で、自社のチャットモデルと推論モデルへ直接アクセスできます。
+- TomoriBotではDeepSeekのチャットモデルと推論モデルを利用できます
+- TomoriBotではツール対応および構造化出力対応のテキストモデルを利用できます
+- TomoriBotのDeepSeekプロバイダーでは、ネイティブ画像生成と埋め込みは現在利用できません
+- [DeepSeek APIドキュメント](https://api-docs.deepseek.com/)`,
+        deepseek_getting_key_title: `APIキーの取得：`,
+        deepseek_getting_key_description: `1. [DeepSeek API Keys](https://platform.deepseek.com/api_keys)にアクセス
+2. DeepSeekのプラットフォームアカウントにログイン、または新規作成
+3. 新しいAPIキーを作成
+4. 必要に応じて、使用前にDeepSeekプラットフォームアカウントへ残高を追加
+5. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
+        deepseek_model_notes_title: `モデルに関するメモ：`,
+        deepseek_model_notes_description: `- \`deepseek-chat\` は汎用チャットモデルです
+- \`deepseek-reasoner\` はシンキング／推論モデルで、応答が遅くなる場合があります
+- セットアップ後は利用可能なDeepSeekテキストモデル間で切り替えられます`,
+        deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
         // NovelAI
         novelai_title: `NovelAI APIキーの設定`,
         novelai_description: `NovelAIはクリエイティブなストーリーテリングとロールプレイに焦点を当てたサブスクリプションベースのサービスです。
@@ -1528,6 +1547,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 	  - (IMG) = 画像を認識
 	  - (VID) = 動画を認識
 	  - (STRUCT) = 構造化出力をサポート（ペルソナ生成や表情の初期化に必要）
+	  - (REASON) = 推論／シンキング特化モデル
 	  - (FREE) = 無料ですが、レート制限がある場合があります
 	- 希望のモデルが見つからない場合は、\`account-setting\`プロバイダーオプションを試してみてください
 	- {supportServer}で追加のモデルを提案してください`,

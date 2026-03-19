@@ -65,7 +65,7 @@ import {
   type ApiKeyValidationResult,
 } from "../../types/provider/interfaces";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
-import { callOpenrouterStructuredJSON } from "../utils/structuredOutput";
+import { callOpenrouterStructuredJSON } from "./openrouterStructuredOutput";
 import {
   getCachedDefaultLLM,
   isLLMCacheReady,
