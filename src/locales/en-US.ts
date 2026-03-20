@@ -2793,7 +2793,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           duplicate_name_title: `Duplicate Name`,
           duplicate_name_description: `An MCP server named "{name}" already exists in this guild.`,
           success_title: `MCP Server Added`,
-          success_description: `**{name}** has been registered successfully.\n**URL:** \`{url}\`\n**Tools discovered:** {tool_count} ({tool_names})`,
+          success_description: `**{name}** has been registered successfully.\n**URL:** \`{url}\`\n**Tools discovered:** {tool_count} ({tool_names})\n\nOnly add MCP servers you trust.\nA malicious server may send misleading instructions, collect data sent to its tools, or return harmful or false results.`,
         },
         remove: {
           description: `Remove a registered MCP server from this guild.`,

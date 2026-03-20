@@ -2800,7 +2800,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           duplicate_name_title: `名前が重複`,
           duplicate_name_description: `"{name}"という名前のMCPサーバーはこのギルドに既に存在します。`,
           success_title: `MCPサーバーを追加しました`,
-          success_description: `**{name}**の登録に成功しました。\n**URL:** \`{url}\`\n**発見されたツール:** {tool_count}件 ({tool_names})`,
+          success_description: `**{name}**の登録に成功しました。\n**URL:** \`{url}\`\n**発見されたツール:** {tool_count}件 ({tool_names})\n\n信頼できるMCPサーバーだけを追加してください。\n悪意のあるサーバーは、まぎらわしい指示を返したり、ツールに送られた情報を集めたり、危険または誤った結果を返すおそれがあります。`,
         },
         remove: {
           description: `このギルドから登録済みのMCPサーバーを削除します。`,

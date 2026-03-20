@@ -53,7 +53,8 @@ export interface StreamResult {
     | "error"
     | "timeout"
     | "stopped_by_user"
-    | "empty_response";
+    | "empty_response"
+    | "follow_up_interrupt";
   data?: unknown | Error; // Function call data or error details
   accumulatedText?: string; // Text sent to Discord (for short-term memory storage)
   /** NAI GLM-4.6: incomplete trailing sentence dropped by sentenceTrailingBuffer, available for prompt continuation on retry */

@@ -106,6 +106,12 @@ Rule:
   - `src/utils/cache/novelaiCapabilityCache.ts`
 - used for context/token budgeting behavior.
 
+## Multimodal Context Throttles
+
+- `MEDIA_CONTEXT_WINDOW` limits how many recent messages can carry full media parts in context.
+- `MEDIA_IMAGE_MESSAGE_LIMIT` further limits how many of those recent messages may include non-emoji, non-sticker image payloads.
+- Messages outside those limits still keep text and system hints, so the model knows media exists without loading every image into provider payloads.
+
 ## Custom Provider Notes
 
 `custom` provider is for self-hosted OpenAI-compatible endpoints (Ollama, KoboldCPP, vLLM, LocalAI, etc.).

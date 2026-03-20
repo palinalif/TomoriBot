@@ -1154,6 +1154,12 @@ function appendInjectedContextItems(
 const CHANNEL_LOCK_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes for a lock to be considered stale
 const TEXT_QUOTA_TRIGGER_TTL_MS = 10 * 60 * 1000; // Keep trigger consumption state for 10 minutes
 
+/** Maximum consecutive follow-up interrupts before messages are queued normally (prevents infinite restart loops) */
+const MAX_FOLLOW_UP_INTERRUPTS = Number.parseInt(
+  process.env.MAX_FOLLOW_UP_INTERRUPTS || "3",
+  10,
+);
+
 // New: In-memory store for channel locks and message queues
 type TextQuotaSource = "user" | "system";
 
@@ -1178,6 +1184,7 @@ interface ChannelLockEntry {
   serverDiscId: string; // Server/DM channel Discord ID for rate limiting
   userDiscId?: string; // Discord ID of user whose message is currently being processed
   currentIsPersonaJob?: boolean; // Skip user rate limits for internal persona jobs
+  followUpCount: number; // Consecutive follow-up interrupts for rate limiting
   messageQueue: Array<{
     message: Message;
     isManuallyTriggered?: boolean;
@@ -1185,6 +1192,7 @@ interface ChannelLockEntry {
     reasoningQuery?: string; // Query to inject as system message for reasoning mode
     llmOverrideCodename?: string;
     isStopResponse?: boolean; // Flag to prevent stopping stop responses
+    isFollowUp?: boolean; // Flag to identify follow-up messages that interrupted a generation
     selectedPersonaId?: number;
     isPersonaJob?: boolean;
     isUserImpersonation?: boolean; // Preserve user impersonation flag through queue
@@ -1923,6 +1931,7 @@ export default async function tomoriChat(
         serverDiscId: serverDiscId, // Track server for rate limiting
         userDiscId: undefined, // Set when lock is acquired
         currentIsPersonaJob: false,
+        followUpCount: 0,
         messageQueue: [],
       };
       channelLocks.set(channelLockId, lockEntry);
@@ -1944,11 +1953,13 @@ export default async function tomoriChat(
     }
 
     // Handle stop requests while locked before rate limiting
+    // Only the user whose generation is active can stop it with natural language stop words
     if (
       lockEntry.isLocked &&
       !isStopResponse &&
       !message.author.bot &&
       !message.webhookId &&
+      lockEntry.userDiscId === message.author.id &&
       isNaturalStopMessage(message.content)
     ) {
       log.info(
@@ -1967,6 +1978,47 @@ export default async function tomoriChat(
       log.info(
         `Stop signal sent for channel ${channelLockId}. Stop response will be generated after stream completes.`,
       );
+      return;
+    }
+
+    // Follow-up messaging: same user sends a non-stop message during their active generation.
+    // This triggers a mid-stream interrupt so the bot rebuilds context (now including the
+    // follow-up from Discord history) and regenerates from scratch — a more natural flow.
+    if (
+      lockEntry.isLocked &&
+      !isStopResponse &&
+      !isPersonaJob &&
+      !message.author.bot &&
+      !message.webhookId &&
+      lockEntry.userDiscId === userDiscId &&
+      !isNaturalStopMessage(message.content) &&
+      lockEntry.followUpCount < MAX_FOLLOW_UP_INTERRUPTS
+    ) {
+      const { StreamOrchestrator } = await import(
+        "../../utils/discord/streamOrchestrator"
+      );
+
+      StreamOrchestrator.requestFollowUp(channelLockId, userDiscId);
+
+      // Put at FRONT of queue (unshift) — this is the next thing to process after the
+      // interrupted generation completes its teardown, so the follow-up gets immediate attention.
+      lockEntry.messageQueue.unshift({
+        message,
+        isManuallyTriggered: true, // Bypass trigger/cooldown checks since already validated
+        forceReason: false,
+        isFollowUp: true,
+        textQuotaSource,
+        textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
+        textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
+      });
+
+      log.info(
+        `Follow-up message detected in channel ${channelLockId} from user ${userDiscId}. ` +
+          `Interrupt requested. Follow-up count: ${lockEntry.followUpCount + 1}/${MAX_FOLLOW_UP_INTERRUPTS}. ` +
+          `Queue size: ${lockEntry.messageQueue.length}`,
+      );
+
+      // No "busy" embed for follow-ups — silent interrupt
       return;
     }
 
@@ -5140,6 +5192,26 @@ export default async function tomoriChat(
           let naiConsecutiveToolFailures = 0; // Tracks consecutive tool failures for NAI GLM retry logic (Case 2)
 
           for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
+            // Check for follow-up interrupt between tool-call iterations.
+            // On iteration 0 the stream loop itself handles this, but on subsequent
+            // iterations (after tool execution) we need to catch it before the next
+            // runWithFallbackModels() call to avoid starting a new stream that would
+            // be immediately interrupted.
+            if (i > 0 && StreamOrchestrator.hasStopRequest(channel.id)) {
+              if (StreamOrchestrator.isFollowUpRequest(channel.id)) {
+                log.info(
+                  `Follow-up interrupt detected between tool-call iterations (iteration ${i}) for channel ${channel.id}. Aborting multi-turn loop.`,
+                );
+                StreamOrchestrator.clearStopRequest(channel.id);
+                // Treat the same as the stream-loop follow-up case
+                const midToolLockEntry = channelLocks.get(channel.id);
+                if (midToolLockEntry) midToolLockEntry.followUpCount++;
+                finalStreamCompleted = true;
+                break;
+              }
+              // Regular stop requests fall through to the stream loop's built-in handling
+            }
+
             log.info(
               `Streaming LLM Call Iteration: ${i + 1}/${MAX_FUNCTION_CALL_ITERATIONS}. History items: ${functionInteractionHistory.length}`,
             );
@@ -5237,7 +5309,7 @@ export default async function tomoriChat(
                     providerConfig.apiKey = decryptedApiKey;
                   }
 
-                  const streamProviderPromise = await provider.streamToDiscord(
+                  const streamProviderPromise = provider.streamToDiscord(
                     channel,
                     client,
                     activeTomoriState,
@@ -5576,7 +5648,7 @@ export default async function tomoriChat(
 
               // Use switch statement for exhaustive status checking
               switch (streamResult.status) {
-                case "completed":
+                case "completed": {
                   log.success("Streaming to Discord completed successfully.");
                   // Record success for rotation key if one was used
                   if (selectedKeyResult?.rotationKeyId) {
@@ -5587,7 +5659,11 @@ export default async function tomoriChat(
                   if (streamResult.accumulatedText) {
                     finalAccumulatedText = streamResult.accumulatedText;
                   }
+                  // Reset follow-up counter on successful terminal completion
+                  const completedLockEntry = channelLocks.get(channel.id);
+                  if (completedLockEntry) completedLockEntry.followUpCount = 0;
                   break; // Exit loop, final text stream was handled by streamGeminiToDiscord
+                }
 
                 case "error": {
                   log.error(
@@ -5650,6 +5726,9 @@ export default async function tomoriChat(
 
                   // streamGeminiToDiscord already attempts to send an error message.
                   finalStreamCompleted = true; // Consider it "completed" to break loop, error handled.
+                  // Reset follow-up counter — error is a terminal event
+                  const errorLockEntry = channelLocks.get(channel.id);
+                  if (errorLockEntry) errorLockEntry.followUpCount = 0;
                   break;
                 }
 
@@ -5736,7 +5815,7 @@ export default async function tomoriChat(
                   }
                 }
 
-                case "timeout":
+                case "timeout": {
                   // This is the internal stream inactivity timeout from streamGeminiToDiscord
                   log.warn(
                     `Streaming to Discord timed out due to inactivity for channel ${channel.id}.`,
@@ -5748,7 +5827,11 @@ export default async function tomoriChat(
                     descriptionKey: "genai.error_stream_timeout_description",
                   });
                   finalStreamCompleted = true;
+                  // Reset follow-up counter — timeout is a terminal event
+                  const timeoutLockEntry = channelLocks.get(channel.id);
+                  if (timeoutLockEntry) timeoutLockEntry.followUpCount = 0;
                   break;
+                }
 
                 case "stopped_by_user": {
                   // Handle user-requested stop (natural stop triggers)
@@ -5756,6 +5839,10 @@ export default async function tomoriChat(
                     `Streaming was stopped by user request for channel ${channel.id}.`,
                   );
                   finalStreamCompleted = true;
+
+                  // Reset follow-up counter — stop is a terminal event
+                  const stoppedLockEntry = channelLocks.get(channel.id);
+                  if (stoppedLockEntry) stoppedLockEntry.followUpCount = 0;
 
                   // Check if we have stop context to create a response
                   const stopContext = StreamOrchestrator.getAndClearStopContext(
@@ -5787,6 +5874,28 @@ export default async function tomoriChat(
                   }
 
                   break; // Exit the loop gracefully, stop response will be handled by queue
+                }
+
+                case "follow_up_interrupt": {
+                  // User sent a follow-up message during generation — skip quota/cooldown
+                  // and let the queued follow-up message trigger a fresh regeneration
+                  log.info(
+                    `Stream interrupted by follow-up message for channel ${channel.id}. ` +
+                      `Skipping quota/cooldown. Follow-up count: ${lockEntry?.followUpCount ?? "?"}`,
+                  );
+
+                  // 1. Increment follow-up counter to enforce the per-chain interrupt cap
+                  const followUpLockEntry = channelLocks.get(channel.id);
+                  if (followUpLockEntry) {
+                    followUpLockEntry.followUpCount++;
+                  }
+
+                  // 2. Mark stream as completed to exit the streaming loop
+                  finalStreamCompleted = true;
+
+                  // Do NOT push to personaResponses — this prevents quota consumption.
+                  // Do NOT store accumulatedText — partial/interrupted text is discarded.
+                  break;
                 }
 
                 case "function_call": {

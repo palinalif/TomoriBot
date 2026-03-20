@@ -133,6 +133,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       channelId: string;
       timestamp: number;
       requesterId: string;
+      type: "stop" | "follow_up";
       stopContext?: {
         originalStopMessage: Message;
         client: Client;
@@ -160,6 +161,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       channelId,
       timestamp: Date.now(),
       requesterId: requesterId || "system",
+      type: "stop",
       stopContext,
     });
 
@@ -211,6 +213,51 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       return context;
     }
     return null;
+  }
+
+  /**
+   * Request a follow-up interrupt for the current stream in a channel.
+   * If a "stop" request already exists, it takes priority and is not overridden.
+   * @param channelId - The Discord channel ID where the follow-up should trigger a regeneration
+   * @param requesterId - The ID of the user who sent the follow-up message
+   * @returns True if the follow-up request was registered, false if a stop request already exists
+   */
+  public static requestFollowUp(
+    channelId: string,
+    requesterId: string,
+  ): boolean {
+    // 1. Don't override an existing stop request — stop always takes priority
+    const existing = StreamOrchestrator.activeStopRequests.get(channelId);
+    if (existing?.type === "stop") {
+      log.info(
+        `Follow-up request for channel ${channelId} ignored — stop request already active.`,
+      );
+      return false;
+    }
+
+    // 2. Register the follow-up interrupt request
+    StreamOrchestrator.activeStopRequests.set(channelId, {
+      channelId,
+      timestamp: Date.now(),
+      requesterId,
+      type: "follow_up",
+    });
+
+    log.info(
+      `Follow-up interrupt request registered for channel ${channelId} by user ${requesterId}.`,
+    );
+    return true;
+  }
+
+  /**
+   * Check if the active stop request for a channel is a follow-up interrupt
+   * @param channelId - The Discord channel ID to check
+   * @returns True if the pending request is a follow-up (not a regular stop)
+   */
+  public static isFollowUpRequest(channelId: string): boolean {
+    return (
+      StreamOrchestrator.activeStopRequests.get(channelId)?.type === "follow_up"
+    );
   }
 
   /**
@@ -298,10 +345,31 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       // Begin provider streaming
       const streamGenerator = provider.startStream(config, context);
 
+      // Pre-stream check: if a follow-up arrived during context building, return immediately
+      if (
+        StreamOrchestrator.hasStopRequest(context.channel.id) &&
+        StreamOrchestrator.isFollowUpRequest(context.channel.id)
+      ) {
+        log.info(
+          `Follow-up interrupt detected before stream started for channel ${context.channel.id}. Returning immediately.`,
+        );
+        StreamOrchestrator.activeStopRequests.delete(context.channel.id);
+        return { status: "follow_up_interrupt" };
+      }
+
       // Process the stream
       for await (const rawChunk of streamGenerator) {
-        // Check for stop request first (highest priority)
+        // Check for stop/follow-up request first (highest priority)
         if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+          // Follow-up interrupt: skip buffer flush, return immediately for regeneration
+          if (StreamOrchestrator.isFollowUpRequest(context.channel.id)) {
+            log.info(
+              `Stream interrupted by follow-up message for channel ${context.channel.id}. Skipping buffer flush.`,
+            );
+            StreamOrchestrator.activeStopRequests.delete(context.channel.id);
+            return { status: "follow_up_interrupt" };
+          }
+
           log.info(
             `Stream loop breaking due to stop request for channel ${context.channel.id}.`,
           );

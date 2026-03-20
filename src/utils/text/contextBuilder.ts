@@ -78,6 +78,10 @@ const DOCUMENT_MAX_RESULTS = 6;
 const DOCUMENT_MIN_SIMILARITY = 0.2;
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const ENABLE_LOCAL_RAG = process.env.ACTIVATE_LOCAL_RAG === "true";
+const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
+  const parsed = Number.parseInt(process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3", 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
+})();
 
 export const DEFAULT_SYSTEM_PROMPT =
   "\n{bot} makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
@@ -434,6 +438,52 @@ function buildMediaAttributionText(
 
   const mediaDescription = mediaParts.join(" and ") || "this media";
   return `${authorName} sent ${mediaDescription}`;
+}
+
+function isStickerImageAttachment(
+  attachment: SimplifiedMessageForContext["imageAttachments"][number],
+): boolean {
+  return (
+    attachment.proxyUrl.includes("/stickers/") ||
+    attachment.url.includes("/stickers/")
+  );
+}
+
+function isCountedRenderedImageAttachment(
+  attachment: SimplifiedMessageForContext["imageAttachments"][number],
+): boolean {
+  return !attachment.isEmoji && !isStickerImageAttachment(attachment);
+}
+
+function getRenderedImageMessageIdsWithinWindow(
+  simplifiedMessageHistory: SimplifiedMessageForContext[],
+  mediaWindowCutoff: number,
+): Set<string> {
+  const renderedMessageIds = new Set<string>();
+  if (MEDIA_IMAGE_MESSAGE_LIMIT <= 0) {
+    return renderedMessageIds;
+  }
+
+  for (let i = simplifiedMessageHistory.length - 1; i >= 0; i -= 1) {
+    if (i < mediaWindowCutoff) {
+      break;
+    }
+
+    const message = simplifiedMessageHistory[i];
+    const hasCountedImages = message.imageAttachments.some(
+      isCountedRenderedImageAttachment,
+    );
+    if (!hasCountedImages) {
+      continue;
+    }
+
+    renderedMessageIds.add(message.id);
+    if (renderedMessageIds.size >= MEDIA_IMAGE_MESSAGE_LIMIT) {
+      break;
+    }
+  }
+
+  return renderedMessageIds;
 }
 
 function getLatestUserQuery(
@@ -2045,6 +2095,10 @@ export async function buildContext({
     configuredMessageFetchLimit - effectiveMediaWindow,
   );
   const mediaWindowCutoff = totalMessages - effectiveMediaWindow;
+  const renderedImageMessageIds = getRenderedImageMessageIdsWithinWindow(
+    simplifiedMessageHistory,
+    mediaWindowCutoff,
+  );
 
   const botNameLower = botName.toLowerCase();
   for (const [index, msg] of simplifiedMessageHistory.entries()) {
@@ -2118,8 +2172,25 @@ export async function buildContext({
       // 9.a. Add image parts if attachments exist
       if (msg.imageAttachments.length > 0) {
         if (seesImages) {
+          const hasCountedImages = msg.imageAttachments.some(
+            isCountedRenderedImageAttachment,
+          );
+          const shouldRenderCountedImages =
+            !hasCountedImages || renderedImageMessageIds.has(msg.id);
+          let skippedCountedImageCount = 0;
+
           // Model supports images - add them normally
           for (const attachment of msg.imageAttachments) {
+            const countsTowardRenderedImageLimit =
+              isCountedRenderedImageAttachment(attachment);
+            if (
+              countsTowardRenderedImageLimit &&
+              !shouldRenderCountedImages
+            ) {
+              skippedCountedImageCount++;
+              continue;
+            }
+
             if (attachment.mimeType) {
               parts.push({
                 type: "image",
@@ -2131,6 +2202,20 @@ export async function buildContext({
                 `Skipping image attachment due to missing mimeType: ${attachment.filename} from user ${msg.authorName}`,
               );
             }
+          }
+
+          if (skippedCountedImageCount > 0) {
+            const skippedImageDescription =
+              skippedCountedImageCount === 1
+                ? "an image"
+                : `${skippedCountedImageCount} images`;
+            detachedSystemParts.push({
+              type: "text",
+              text: `[System: This message contains ${skippedImageDescription}, but direct image rendering was skipped because the per-turn rendered-image message limit was reached. Do not describe or claim to see the hidden image contents.]`,
+            });
+            log.info(
+              `Skipped ${skippedCountedImageCount} counted image(s) for message ${msg.id} due to MEDIA_IMAGE_MESSAGE_LIMIT=${MEDIA_IMAGE_MESSAGE_LIMIT}`,
+            );
           }
         } else {
           // Model doesn't support images - add placeholder text
