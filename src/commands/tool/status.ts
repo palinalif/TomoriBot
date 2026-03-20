@@ -752,6 +752,13 @@ export async function execute(
               inline: true,
             },
             {
+              nameKey: "commands.tool.status.field_send_message_limit",
+              value: (config.send_message_limit ?? 0) > 0
+                ? String(config.send_message_limit)
+                : localizer(locale, "commands.choices.disabled"),
+              inline: true,
+            },
+            {
               nameKey: "commands.tool.status.field_always_reply",
               value: config.always_reply_enabled
                 ? localizer(locale, "commands.choices.enabled")

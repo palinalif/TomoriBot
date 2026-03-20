@@ -1729,7 +1729,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       return;
     }
 
-    // Check for flush limit before Discord API call
+    // Check for per-server send message limit before Discord API call (0 = unlimited)
+    // Silent drop — this is an opt-in setting, so no embed is shown to preserve conversational naturalness
+    const sendMessageLimit = context.tomoriState.config.send_message_limit ?? 0;
+    if (sendMessageLimit > 0 && state.messageSentCount >= sendMessageLimit) {
+      log.info(
+        `Send message limit reached: ${state.messageSentCount} messages sent (server limit: ${sendMessageLimit})`,
+      );
+      StreamOrchestrator.requestStop(context.channel.id, "send_message_limit");
+      return;
+    }
+
+    // Check for safety flush limit before Discord API call
     if (state.messageSentCount >= STREAMING_LIMITS.MAX_FLUSH_COUNT) {
       log.warn(
         `Flush limit exceeded: ${state.messageSentCount} messages sent (limit: ${STREAMING_LIMITS.MAX_FLUSH_COUNT})`,
