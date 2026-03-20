@@ -2207,11 +2207,11 @@ export async function buildContext({
           if (skippedCountedImageCount > 0) {
             const skippedImageDescription =
               skippedCountedImageCount === 1
-                ? "an image"
-                : `${skippedCountedImageCount} images`;
+                ? "1 image omitted due to rendered-image limit. Do not claim to see it."
+                : `${skippedCountedImageCount} images omitted due to rendered-image limit. Do not claim to see them.`;
             detachedSystemParts.push({
               type: "text",
-              text: `[System: This message contains ${skippedImageDescription}, but direct image rendering was skipped because the per-turn rendered-image message limit was reached. Do not describe or claim to see the hidden image contents.]`,
+              text: `[System: ${skippedImageDescription}]`,
             });
             log.info(
               `Skipped ${skippedCountedImageCount} counted image(s) for message ${msg.id} due to MEDIA_IMAGE_MESSAGE_LIMIT=${MEDIA_IMAGE_MESSAGE_LIMIT}`,

@@ -640,11 +640,29 @@ export async function execute(
             break;
           }
         }
+      }
+    } else if (imageGenerationImplementation === "zai") {
+      // Use Z.ai native image generation API
+      if (referenceImages.length > 0) {
+        await interaction.followUp({
+          content: localizer(locale, "commands.generate.image.zai_no_img2img_warning"),
+        });
+      }
+      const { generateZaiNativeImage } = await import(
+        "@/providers/zai/zaiImageGeneration"
+      );
+      const result = await generateZaiNativeImage({
+        apiKey,
+        model: modelCodename,
+        prompt,
+        aspectRatio,
+      });
+      generatedImageData = result.imageData;
+      generatedImageMimeType = result.mimeType;
     } else {
       throw new Error(
         `Image generation is not implemented for provider ${tomoriState.llm.llm_provider}`,
       );
-    }
     }
 
     // 17. Calculate generation time

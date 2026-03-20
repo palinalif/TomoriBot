@@ -792,6 +792,18 @@ export class GenerateImageTool extends BaseTool {
             }
           }
         }
+      } else if (imageGenerationImplementation === "zai") {
+        // Use Z.ai native image generation API
+        const { generateZaiNativeImage } = await import(
+          "@/providers/zai/zaiImageGeneration"
+        );
+        const result = await generateZaiNativeImage({
+          apiKey,
+          model: modelCodename,
+          prompt,
+          aspectRatio,
+        });
+        generatedImageData = result.imageData;
       } else {
         return {
           success: false,

@@ -65,6 +65,13 @@ export const configureSubcommand = (
             ),
             value: "openrouter",
           },
+          {
+            name: localizer(
+              "en-US",
+              "commands.help.apikey.provider_choice_zai",
+            ),
+            value: "zai",
+          },
         ),
     );
 
@@ -277,6 +284,40 @@ export async function execute(
             },
           ],
           footerKey: "commands.help.apikey.openrouter_footer",
+          footerVars: {
+            configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "zai":
+        embedOptions = {
+          titleKey: "commands.help.apikey.zai_title",
+          descriptionKey: "commands.help.apikey.zai_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.apikey.zai_getting_key_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.zai_getting_key_description",
+                {
+                  configSetup: configSetupMention,
+                  configApikeySet: configApikeySetMention,
+                },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.apikey.zai_model_notes_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.zai_model_notes_description",
+              ),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.apikey.zai_footer",
           footerVars: {
             configModel: configModelMention,
           },

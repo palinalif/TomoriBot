@@ -5,6 +5,7 @@ import type {
 } from "@/types/provider/interfaces";
 import { customProviderInfo } from "@/providers/custom/providerInfo";
 import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
+import { zaiProviderInfo } from "@/providers/zai/providerInfo";
 import { googleProviderInfo } from "@/providers/google/providerInfo";
 import { novelaiProviderInfo } from "@/providers/novelai/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
@@ -15,6 +16,7 @@ const providerInfos: readonly ProviderInfo[] = [
 	novelaiProviderInfo,
 	customProviderInfo,
 	deepseekProviderInfo,
+	zaiProviderInfo,
 ] as const;
 
 const providerInfoByCanonicalName = new Map<string, ProviderInfo>(
@@ -36,7 +38,8 @@ export type ProviderFeatureImplementation =
 	| "openrouter"
 	| "novelai"
 	| "custom"
-	| "deepseek";
+	| "deepseek"
+	| "zai";
 
 const providerFeatureImplementations: Partial<
 	Record<
@@ -47,6 +50,7 @@ const providerFeatureImplementations: Partial<
 	nativeImageGeneration: {
 		google: "google",
 		openrouter: "openrouter",
+		zai: "zai",
 	},
 	liveTokenCounting: {
 		google: "google",

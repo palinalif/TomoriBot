@@ -421,6 +421,36 @@ export default {
         "DeepSeekとの通信中に予期しないエラーが発生しました。",
     },
 
+    // Z.ai（Coding）プロバイダー固有のエラーメッセージ
+    zai: {
+      connection_refused:
+        "Z.ai APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
+
+      "401_default_message":
+        "Z.aiのAPIキーが無効か、このモデルへのアクセス権がありません。",
+
+      "402_default_message":
+        "このリクエストを実行するためのZ.aiクレジットが不足しています。",
+
+      "403_default_message":
+        "Z.aiによってこのリクエストが拒否されました。アカウント状態とモデル権限を確認してください。",
+
+      "404_default_message":
+        "要求されたZ.aiモデルまたはAPIルートが見つかりませんでした。",
+
+      "429_default_message":
+        "Z.aiでレート制限が発生しています。しばらくしてから再度お試しください。",
+
+      "500_default_message":
+        "Z.aiで内部サーバーエラーが発生しました。",
+
+      "503_default_message":
+        "Z.aiは現在利用できないか、過負荷状態です。",
+
+      unknown_default_message:
+        "Z.aiとの通信中に予期しないエラーが発生しました。",
+    },
+
     // カスタムプロバイダー固有のエラーメッセージ（セルフホスト型のOpenAI互換エンドポイント用）
     custom: {
       // 接続エラー
@@ -1518,6 +1548,27 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`deepseek-reasoner\` はシンキング／推論モデルで、応答が遅くなる場合があります
 - セットアップ後は利用可能なDeepSeekテキストモデル間で切り替えられます`,
         deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        // Z.ai (Coding)
+        provider_choice_zai: `Zai (Coding)`,
+        zai_title: `Z.ai (Coding) APIキーの設定`,
+        zai_description: `Z.ai (Coding)はGLMモデルファミリーへのアクセスを提供し、チャット、推論、画像生成機能を備えています。
+- ビジョンや推論バリアントを含む4つのチャットモデルをサポート
+- \`glm-image\`によるネイティブ画像生成
+- すべてのチャットモデルでツール呼び出しと構造化出力に対応
+- \`/config mcp add\`でZ.aiビジョンMCPサーバーを追加すると、任意のモデルに画像・動画分析機能を付与できます`,
+        zai_getting_key_title: `APIキーの取得：`,
+        zai_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
+2. ログインまたはアカウントを作成
+3. ダッシュボードでAPIキーに移動
+4. 新しいAPIキーを作成
+5. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
+        zai_model_notes_title: `モデルに関するメモ：`,
+        zai_model_notes_description: `- \`glm-5\` は高度な推論を備えた最も高性能なモデルです
+- \`glm-4.7\` は推論/シンキングモードをサポートします
+- \`glm-4.7-flash\` は高速で無料のモデルです
+- \`glm-4.6v\` は画像を見ることができるビジョン対応モデルです
+- \`glm-image\` はテキストプロンプトから画像を生成します`,
+        zai_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
         // NovelAI
         novelai_title: `NovelAI APIキーの設定`,
         novelai_description: `NovelAIはクリエイティブなストーリーテリングとロールプレイに焦点を当てたサブスクリプションベースのサービスです。
@@ -3793,6 +3844,10 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         field_model: "モデル",
         field_generation_time: "生成時間",
         field_aspect_ratio: "アスペクト比",
+
+        // プロバイダー固有の警告
+        zai_no_img2img_warning:
+          "Z.aiは画像から画像への生成に対応していません。参照画像は無視されましたが、テキストプロンプトから画像は生成されます。",
 
         // エラー
         disabled_title: "🔴 画像生成が無効です",

@@ -420,6 +420,35 @@ export default {
         "An unexpected error occurred while communicating with DeepSeek.",
     },
 
+    // Z.ai (Coding) provider error messages
+    zai: {
+      connection_refused:
+        "Could not connect to the Z.ai API endpoint. Please try again later.",
+
+      "401_default_message":
+        "Your Z.ai API key is invalid or does not have access to this model.",
+
+      "402_default_message":
+        "Your Z.ai account does not have sufficient credits for this request.",
+
+      "403_default_message":
+        "Z.ai denied this request. Please verify your account and model access.",
+
+      "404_default_message":
+        "The requested Z.ai model or API route could not be found.",
+
+      "429_default_message":
+        "Z.ai is rate limiting this request. Please wait a moment and try again.",
+
+      "500_default_message": "Z.ai returned an internal server error.",
+
+      "503_default_message":
+        "Z.ai is currently unavailable or overloaded.",
+
+      unknown_default_message:
+        "An unexpected error occurred while communicating with Z.ai.",
+    },
+
     // Custom provider error messages (self-hosted OpenAI-compatible endpoints)
     custom: {
       // Connection errors
@@ -1517,6 +1546,27 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`deepseek-reasoner\` is the thinking/reasoning model and may respond more slowly
 - You can switch between available DeepSeek text models after setup`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        // Z.ai (Coding)
+        provider_choice_zai: `Zai (Coding)`,
+        zai_title: `Setting Up Z.ai (Coding) API Key`,
+        zai_description: `Z.ai (Coding) provides access to the GLM model family with chat, reasoning, and image generation capabilities.
+- Supports 4 chat models including vision and reasoning variants
+- Native image generation via \`glm-image\`
+- Tool calling and structured output on all chat models
+- Add the Z.ai Vision MCP server via \`/config mcp add\` to give any model image and video analysis capabilities`,
+        zai_getting_key_title: `Getting Your API Key:`,
+        zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
+2. Sign in or create an account
+3. Navigate to API Keys in your dashboard
+4. Create a new API key
+5. Copy this API key into {configSetup} or {configApikeySet}`,
+        zai_model_notes_title: `Model Notes:`,
+        zai_model_notes_description: `- \`glm-5\` is the most capable model with advanced reasoning
+- \`glm-4.7\` supports reasoning/thinking mode
+- \`glm-4.7-flash\` is the fast, free model
+- \`glm-4.6v\` is the vision-capable model that can see images
+- \`glm-image\` generates images from text prompts`,
+        zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // NovelAI
         novelai_title: `Setting Up NovelAI API Key`,
         novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
@@ -3787,6 +3837,10 @@ You can change this anytime using \`/personal privacy\`.`,
         field_model: "Model",
         field_generation_time: "Generation Time",
         field_aspect_ratio: "Aspect Ratio",
+
+        // Provider-specific warnings
+        zai_no_img2img_warning:
+          "Z.ai does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.",
 
         // Errors
         disabled_title: "🔴 Image Generation Disabled",

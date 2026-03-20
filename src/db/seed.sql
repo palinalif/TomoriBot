@@ -73,6 +73,11 @@ VALUES
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
   ('deepseek', 'deepseek-chat', false, true, false, false, false, true, false, false, false, false, true, 'Default DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekのデフォルトチャットモデル'),
   ('deepseek', 'deepseek-reasoner', true, false, true, false, false, true, false, false, false, false, true, 'Reasoning-focused DeepSeek model with thinking mode, seeded tool use, and JSON structured output', 'シンキングモード、シード済みツール利用、JSON構造化出力に対応した、推論特化のDeepSeekモデル'),
+  -- Z.ai (Coding) Models (GLM family with reasoning, vision, and tool support)
+  ('zai', 'zai/glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),
+  ('zai', 'zai/glm-4.7', false, false, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model with thinking mode, tool use, and structured output', 'シンキングモード、ツール利用、構造化出力に対応した推論対応GLMモデル'),
+  ('zai', 'zai/glm-4.7-flash', false, false, false, false, true, true, false, false, false, false, true, 'Fast and free GLM model with tool use and structured output', 'ツール利用と構造化出力に対応した高速で無料のGLMモデル'),
+  ('zai', 'zai/glm-5', true, true, true, false, false, true, false, false, false, false, true, 'Most capable GLM model with advanced reasoning, tool use, and structured output', '高度な推論、ツール利用、構造化出力に対応した最も高性能なGLMモデル'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint
   ('custom', 'custom/bootstrap', false, false, false, false, true, false, false, false, false, true, false, 'Self-hosted OpenAI-compatible endpoint (Ollama, KoboldCPP, vLLM, LocalAI)', 'セルフホスト型OpenAI互換エンドポイント（Ollama、KoboldCPP、vLLM、LocalAI）')
@@ -172,6 +177,10 @@ VALUES
   ('openrouter', 'bytedance-seed/seedream-4.5', false, false, false, false,
    'Latest in-house image generation model developed by ByteDance. Cheap and high performance',
    'ByteDanceが開発した最新の自社製画像生成モデル。低コストかつ高性能'),
+  -- Z.ai (Coding) Image Generation Models
+  ('zai', 'zai/glm-image', true, false, false, false,
+   'Z.ai native image generation model with HD quality output',
+   'HD品質の出力に対応したZ.aiネイティブ画像生成モデル'),
   -- NovelAI Diffusion Models
   ('novelai', 'nai-diffusion-3-furry', false, false, false, true,
    'NovelAI furry-specialized diffusion model',

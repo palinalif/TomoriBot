@@ -228,6 +228,7 @@ Current structured-output examples:
 - `src/providers/google/googleStructuredOutput.ts`
 - `src/providers/openrouter/openrouterStructuredOutput.ts`
 - `src/providers/deepseek/deepseekStructuredOutput.ts`
+- `src/providers/zai/zaiStructuredOutput.ts`
 
 Avoid adding new command-level checks like:
 
@@ -257,6 +258,7 @@ Checklist:
 - reasoning or thinking mode:
   - check for continuation-only fields that must be replayed within the same turn
   - DeepSeek example: preserve `reasoning_content` across tool sub-turns, but do not treat it as normal cross-turn chat history
+  - Z.ai example: reasoning models (`glm-5`, `glm-4.7`) use `thinking: { type: "enabled", budget_tokens: 8192 }` with temperature/sampling params deleted
 - structured output:
   - determine whether the provider offers strict schema mode or only JSON-object mode
   - implement provider-owned `callStructuredJSON()` for the contract the vendor actually supports
