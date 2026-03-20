@@ -1,0 +1,897 @@
+import {
+	MessageFlags,
+	TextInputStyle,
+	type ChatInputCommandInteraction,
+	type Client,
+	type SlashCommandSubcommandBuilder,
+} from "discord.js";
+import {
+	loadUniqueProviders,
+	loadDefaultModelForProvider,
+	loadSavedProviderConfigs,
+	getAllChannelLlmOverridesForServer,
+	loadPersonaLlmOverridesForServer,
+} from "@/utils/db/dbRead";
+import {
+	clearAllChannelLlmOverridesForServer,
+	clearAllPersonaLlmOverridesForServer,
+	upsertSavedProviderConfig,
+	restoreOverridesFromSnapshot,
+	cleanupDeadChannelOverrides,
+} from "@/utils/db/dbWrite";
+import { invalidateAllChannelLlmCacheForServer } from "@/utils/cache/channelLlmCache";
+import {
+	getCachedTomoriState,
+	invalidateTomoriStateCache,
+} from "@/utils/cache/tomoriStateCache";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import {
+	replyInfoEmbed,
+	promptWithRawModal,
+} from "@/utils/discord/interactionHelper";
+import {
+	type UserRow,
+	type ErrorContext,
+	tomoriConfigSchema,
+	type SavedProviderConfigUpsert,
+} from "@/types/db/schema";
+import type { ProviderError } from "@/types/stream/interfaces";
+import type {
+	SelectOption,
+	ModalComponent,
+} from "@/types/discord/modal";
+import { ProviderFactory } from "@/utils/provider/providerFactory";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { encryptApiKey } from "@/utils/security/crypto";
+import { sql } from "@/utils/db/client";
+import {
+	isCustomProvider,
+	validateEndpointUrl,
+	promptCustomCapabilities,
+	deleteCustomLLMEntry,
+	CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
+	type CustomCapabilitiesResult,
+} from "@/utils/discord/customProviderModal";
+
+// Modal configuration constants
+const MODAL_CUSTOM_ID = "config_provider_switch_modal";
+const PROVIDER_SELECT_ID = "provider_select";
+const API_KEY_INPUT_ID = "api_key_input";
+const SAVE_CURRENT_SELECT_ID = "save_current_select";
+
+// Configure the subcommand
+export const configureSubcommand = (
+	subcommand: SlashCommandSubcommandBuilder,
+) =>
+	subcommand
+		.setName("switch")
+		.setDescription(
+			localizer("en-US", "commands.config.provider.switch.description"),
+		);
+
+/**
+ * Switches AI provider with automatic config save/restore.
+ * Saves the current provider config before switching (opt-out),
+ * and restores saved configs when returning to a previously-used provider.
+ * @param _client - Discord client instance
+ * @param interaction - Command interaction
+ * @param userData - User data from database
+ * @param locale - Locale of the interaction
+ */
+export async function execute(
+	_client: Client,
+	interaction: ChatInputCommandInteraction,
+	userData: UserRow,
+	locale: string,
+): Promise<void> {
+	// 1. Ensure command is run in a channel context
+	if (!interaction.channel) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	// 2. Load the Tomori state for this server/user
+	const serverId = interaction.guild?.id ?? interaction.user.id;
+	const tomoriState = await getCachedTomoriState(serverId);
+	if (!tomoriState) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.tomori_not_setup_title",
+			descriptionKey: "general.errors.tomori_not_setup_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	// 3. Load unique providers and saved configs in parallel
+	const [uniqueProviders, savedConfigs] = await Promise.all([
+		loadUniqueProviders(),
+		loadSavedProviderConfigs(tomoriState.server_id),
+	]);
+
+	if (!uniqueProviders || uniqueProviders.length === 0) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "commands.config.apikey.set.no_providers_title",
+			descriptionKey: "commands.config.apikey.set.no_providers_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	// 4. Build provider select options with "(saved)" indicator
+	const savedProviderSet = new Set(
+		savedConfigs.map((c) => c.provider.toLowerCase()),
+	);
+	const savedIndicator = localizer(
+		locale,
+		"commands.config.provider.switch.saved_indicator",
+	);
+
+	const providerSelectOptions: SelectOption[] = uniqueProviders.map(
+		(provider) => {
+			const isSaved = savedProviderSet.has(provider.toLowerCase());
+			return {
+				label: isSaved
+					? `${getProviderDisplayName(provider)} ${savedIndicator}`
+					: getProviderDisplayName(provider),
+				value: provider.toLowerCase(),
+				description: undefined,
+			};
+		},
+	);
+
+	// 5. Build "Save current config?" options (default Yes)
+	const saveCurrentOptions: SelectOption[] = [
+		{
+			label: localizer(locale, "commands.config.provider.switch.save_yes_label"),
+			value: "yes",
+			description: undefined,
+		},
+		{
+			label: localizer(locale, "commands.config.provider.switch.save_no_label"),
+			value: "no",
+			description: undefined,
+		},
+	];
+
+	// Track modal submit interaction for error handling in catch block
+	let modalSubmitInteraction:
+		| import("discord.js").ModalSubmitInteraction
+		| undefined;
+
+	try {
+		// 6. Show modal with provider selection, optional API key, and save toggle
+		const modalComponents: ModalComponent[] = [
+			{
+				customId: PROVIDER_SELECT_ID,
+				labelKey: "commands.config.provider.switch.provider_label",
+				descriptionKey:
+					"commands.config.provider.switch.provider_description",
+				placeholder: "commands.config.provider.switch.provider_placeholder",
+				required: true,
+				options: providerSelectOptions,
+			},
+			{
+				customId: API_KEY_INPUT_ID,
+				labelKey: "commands.config.provider.switch.api_key_label",
+				descriptionKey:
+					process.env.RUN_ENV !== "production"
+						? "commands.config.provider.switch.api_key_description_with_custom"
+						: "commands.config.provider.switch.api_key_description",
+				placeholder: "commands.config.provider.switch.api_key_placeholder",
+				required: false,
+				style: TextInputStyle.Short,
+				maxLength: 200,
+			},
+			{
+				customId: SAVE_CURRENT_SELECT_ID,
+				labelKey: "commands.config.provider.switch.save_current_label",
+				descriptionKey:
+					"commands.config.provider.switch.save_current_description",
+				required: true,
+				options: saveCurrentOptions,
+			},
+		];
+
+		const modalResult = await promptWithRawModal(
+			interaction,
+			locale,
+			{
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.config.provider.switch.modal_title",
+				components: modalComponents,
+			},
+			MessageFlags.Ephemeral,
+		);
+
+		// 7. Handle modal outcome
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Provider switch modal ${modalResult.outcome} for user ${userData.user_id}`,
+			);
+			return;
+		}
+
+		modalSubmitInteraction = modalResult.interaction;
+		const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
+		const apiKeyInput = modalResult.values?.[API_KEY_INPUT_ID]?.trim() || null;
+		const saveCurrentChoice =
+			modalResult.values?.[SAVE_CURRENT_SELECT_ID] ?? "yes";
+
+		if (!modalSubmitInteraction || !selectedProvider) {
+			log.error(
+				"Provider switch modal result unexpectedly missing interaction or values",
+			);
+			return;
+		}
+
+		const normalizedProvider = selectedProvider.toLowerCase();
+		const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
+		const isSameProvider = currentProvider === normalizedProvider;
+
+		// 8. Save current config if requested (and there's an API key to save)
+		// Also snapshot current channel/persona LLM overrides for later restoration
+		if (saveCurrentChoice === "yes" && !isSameProvider && tomoriState.config.api_key) {
+			// Load current overrides to include in snapshot
+			const [currentChannelOverrides, currentPersonaOverrides] =
+				await Promise.all([
+					getAllChannelLlmOverridesForServer(tomoriState.server_id),
+					loadPersonaLlmOverridesForServer(tomoriState.server_id),
+				]);
+
+			const currentConfig: SavedProviderConfigUpsert = {
+				server_id: tomoriState.server_id,
+				provider: currentProvider,
+				api_key: tomoriState.config.api_key,
+				key_version: tomoriState.config.key_version ?? 1,
+				llm_id: tomoriState.config.llm_id,
+				diffusion_model_id: tomoriState.config.diffusion_model_id ?? null,
+				embedding_model_id: tomoriState.config.embedding_model_id ?? null,
+				nai_diffusion_model_id:
+					tomoriState.config.nai_diffusion_model_id ?? null,
+				vision_llm_id: tomoriState.config.vision_llm_id ?? null,
+				nai_preset_name: tomoriState.config.nai_preset_name ?? null,
+				custom_endpoint_url: tomoriState.config.custom_endpoint_url ?? null,
+				custom_model_name: tomoriState.config.custom_model_name ?? null,
+				fallback_llm_ids: tomoriState.config.fallback_llm_ids ?? [],
+				channel_llm_overrides: currentChannelOverrides
+					.filter((o): o is typeof o & { llm: { llm_id: number } } =>
+						o.llm.llm_id != null,
+					)
+					.map((o) => ({
+						channel_disc_id: o.channelDiscId,
+						llm_id: o.llm.llm_id,
+					})),
+				persona_llm_overrides: currentPersonaOverrides,
+			};
+
+			const saved = await upsertSavedProviderConfig(
+				tomoriState.server_id,
+				currentConfig,
+			);
+			if (saved) {
+				log.info(
+					`Saved current provider config for ${currentProvider} (with ${currentChannelOverrides.length} channel + ${currentPersonaOverrides.length} persona overrides) before switching to ${normalizedProvider}`,
+				);
+			} else {
+				log.warn(
+					`Failed to save current provider config for ${currentProvider} — continuing with switch`,
+				);
+			}
+		}
+
+		// 9. Resolve new config: check for saved config for target provider
+		// Use already-loaded savedConfigs array instead of a second DB query
+		const savedConfig =
+			savedConfigs.find(
+				(c) => c.provider.toLowerCase() === normalizedProvider,
+			) ?? null;
+		const hasApiKeyInput = apiKeyInput !== null && apiKeyInput.length > 0;
+		const isRestoringFromSaved = savedConfig !== null && !hasApiKeyInput;
+
+		// 10. Handle Custom Provider vs Regular Provider
+		let encrypted: Buffer;
+		let version: number;
+		let customCapabilitiesResult: CustomCapabilitiesResult | null = null;
+		let customEndpointUrl: string | null = null;
+		let customModelName: string | null = null;
+		let newLlmId = tomoriState.config.llm_id;
+		let newDiffusionModelId = tomoriState.config.diffusion_model_id;
+		let newEmbeddingModelId = tomoriState.config.embedding_model_id;
+		let newNaiDiffusionModelId = tomoriState.config.nai_diffusion_model_id;
+		let newVisionLlmId = tomoriState.config.vision_llm_id;
+		let newNaiPresetName = tomoriState.config.nai_preset_name;
+		let newFallbackLlmIds: number[] = tomoriState.config.fallback_llm_ids ?? [];
+
+		if (isRestoringFromSaved) {
+			// Restoring from saved config — use saved values
+			// Guard: saved config must have a non-null API key to restore
+			if (!savedConfig.api_key) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey:
+						"commands.config.provider.switch.first_time_no_key_title",
+					descriptionKey:
+						"commands.config.provider.switch.first_time_no_key_description",
+					descriptionVars: {
+						provider: getProviderDisplayName(normalizedProvider),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			log.info(
+				`Restoring saved config for provider ${normalizedProvider}, server ${tomoriState.server_id}`,
+			);
+
+			encrypted = savedConfig.api_key;
+			version = savedConfig.key_version;
+			newLlmId = savedConfig.llm_id ?? newLlmId;
+			newDiffusionModelId = savedConfig.diffusion_model_id;
+			newEmbeddingModelId = savedConfig.embedding_model_id;
+			newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
+			newVisionLlmId = savedConfig.vision_llm_id ?? null;
+			newNaiPresetName = savedConfig.nai_preset_name;
+			customEndpointUrl = savedConfig.custom_endpoint_url;
+			customModelName = savedConfig.custom_model_name;
+			newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
+		} else if (isCustomProvider(normalizedProvider)) {
+			// Custom provider flow: apiKeyInput contains the endpoint URL
+			if (!hasApiKeyInput && !savedConfig) {
+				// First-time custom with no URL
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey:
+						"commands.config.provider.switch.first_time_no_key_title",
+					descriptionKey:
+						"commands.config.provider.switch.first_time_no_key_description",
+					descriptionVars: {
+						provider: getProviderDisplayName(normalizedProvider),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			// Use the provided endpoint URL, or fall back to saved one
+			const endpointUrl = hasApiKeyInput
+				? apiKeyInput
+				: savedConfig?.custom_endpoint_url;
+
+			if (!endpointUrl || !validateEndpointUrl(endpointUrl)) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.config.custom.endpoint_url_invalid_title",
+					descriptionKey:
+						"commands.config.custom.endpoint_url_invalid_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			customEndpointUrl = endpointUrl;
+
+			// Show capabilities modal for custom model configuration
+			customCapabilitiesResult = await promptCustomCapabilities(
+				modalSubmitInteraction,
+				locale,
+				serverId,
+			);
+
+			if (!customCapabilitiesResult.success) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					description:
+						customCapabilitiesResult.error ||
+						localizer(
+							locale,
+							"commands.config.custom.capabilities_timeout",
+						),
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			customModelName = customCapabilitiesResult.modelName || null;
+
+			// Use placeholder API key for custom provider
+			const placeholderResult = await encryptApiKey(
+				CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
+			);
+			encrypted = placeholderResult.encrypted;
+			version = placeholderResult.version;
+
+			if (customCapabilitiesResult.llmId) {
+				newLlmId = customCapabilitiesResult.llmId;
+			}
+			newDiffusionModelId = null;
+			newEmbeddingModelId = null;
+		} else {
+			// Regular provider flow
+			if (!hasApiKeyInput && !savedConfig) {
+				// First-time provider with no key
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey:
+						"commands.config.provider.switch.first_time_no_key_title",
+					descriptionKey:
+						"commands.config.provider.switch.first_time_no_key_description",
+					descriptionVars: {
+						provider: getProviderDisplayName(normalizedProvider),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			// Determine which API key to use: provided key overrides saved key
+			const apiKeyToUse = hasApiKeyInput ? apiKeyInput : null;
+
+			if (apiKeyToUse) {
+				// Validate the new API key
+				if (apiKeyToUse.length < 10) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "commands.config.apikey.set.invalid_key_title",
+						descriptionKey:
+							"commands.config.apikey.set.invalid_key_description",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				// Validate with provider
+				let validationResult: { valid: boolean; error?: ProviderError } = {
+					valid: false,
+				};
+				let providerInstance:
+					| Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>
+					| undefined;
+
+				try {
+					providerInstance =
+						await ProviderFactory.getProviderByName(normalizedProvider);
+					validationResult =
+						await providerInstance.validateApiKey(apiKeyToUse);
+				} catch (error) {
+					log.error(
+						`Error validating API key for provider ${normalizedProvider}`,
+						error as Error,
+					);
+
+					const errorMessage =
+						error instanceof Error ? error.message : String(error);
+					if (errorMessage.includes("Unsupported provider")) {
+						await replyInfoEmbed(modalSubmitInteraction, locale, {
+							titleKey:
+								"commands.config.apikey.set.unsupported_provider_title",
+							descriptionKey:
+								"commands.config.apikey.set.unsupported_provider_description",
+							descriptionVars: { provider: selectedProvider },
+							color: ColorCode.ERROR,
+						});
+					} else {
+						await replyInfoEmbed(modalSubmitInteraction, locale, {
+							titleKey:
+								"commands.config.apikey.set.validation_error_title",
+							descriptionKey:
+								"commands.config.apikey.set.validation_error_description",
+							color: ColorCode.ERROR,
+						});
+					}
+					return;
+				}
+
+				if (!validationResult.valid) {
+					let errorDescription = "API key validation failed";
+					if (validationResult.error) {
+						try {
+							if (providerInstance) {
+								const formattedError =
+									providerInstance.formatErrorDescription(
+										validationResult.error,
+										locale,
+									);
+								if (formattedError) {
+									errorDescription = formattedError;
+								}
+							} else {
+								errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
+							}
+						} catch {
+							errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
+						}
+					}
+
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey:
+							"commands.config.apikey.set.key_validation_failed_title",
+						description: errorDescription,
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				// Warm NovelAI subscription cache for new key
+				if (
+					normalizedProvider === "novelai" ||
+					normalizedProvider === "nai"
+				) {
+					const guildIdForSubscription = interaction.guildId;
+					if (guildIdForSubscription) {
+						const { refreshNovelAISubscription: refreshNAISub } =
+							await import(
+								"../../../utils/cache/novelaiSubscriptionCache"
+							);
+						refreshNAISub(guildIdForSubscription, apiKeyToUse).catch(
+							(err) => {
+								log.warn(
+									"Non-critical: failed to warm NovelAI subscription cache during provider switch",
+									err,
+								);
+							},
+						);
+					}
+				}
+
+				// Encrypt the new key
+				const encryptionResult = await encryptApiKey(apiKeyToUse);
+				encrypted = encryptionResult.encrypted;
+				version = encryptionResult.version;
+			} else {
+				// Use saved key (savedConfig is guaranteed non-null here from the
+				// earlier guard that returns if both are missing)
+				if (!savedConfig?.api_key) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey:
+							"commands.config.provider.switch.first_time_no_key_title",
+						descriptionKey:
+							"commands.config.provider.switch.first_time_no_key_description",
+						descriptionVars: {
+							provider: getProviderDisplayName(normalizedProvider),
+						},
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+				encrypted = savedConfig.api_key;
+				version = savedConfig.key_version;
+			}
+
+			// If same provider, keep current models (only updating key)
+			if (isSameProvider) {
+				// Models stay the same; only key changes
+			} else if (savedConfig && !hasApiKeyInput) {
+				// Restoring saved models for this provider
+				newLlmId = savedConfig.llm_id ?? newLlmId;
+				newDiffusionModelId = savedConfig.diffusion_model_id;
+				newEmbeddingModelId = savedConfig.embedding_model_id;
+				newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
+				newVisionLlmId = savedConfig.vision_llm_id ?? null;
+				newNaiPresetName = savedConfig.nai_preset_name;
+				newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
+			} else {
+				// Fresh provider switch — load default models
+				const defaultModel =
+					await loadDefaultModelForProvider(normalizedProvider);
+				if (!defaultModel || !defaultModel.llm_id) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey:
+							"commands.config.apikey.set.no_default_model_title",
+						descriptionKey:
+							"commands.config.apikey.set.no_default_model_description",
+						descriptionVars: {
+							provider: getProviderDisplayName(normalizedProvider),
+						},
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				newLlmId = defaultModel.llm_id;
+				log.info(
+					`Switching to default model for ${normalizedProvider}: ${defaultModel.llm_codename} (ID: ${newLlmId})`,
+				);
+
+				// Load default diffusion model
+				const defaultDiffusionModel = (
+					await sql`
+						SELECT * FROM image_diffusion_models
+						WHERE provider = ${normalizedProvider}
+						  AND is_default = true
+						  AND is_deprecated = false
+						ORDER BY diffusion_model_id ASC
+						LIMIT 1
+					`
+				)[0];
+
+				if (!defaultDiffusionModel) {
+					const fallbackDiffusionModel = (
+						await sql`
+							SELECT * FROM image_diffusion_models
+							WHERE provider = ${normalizedProvider}
+							  AND is_deprecated = false
+							ORDER BY diffusion_model_id ASC
+							LIMIT 1
+						`
+					)[0];
+
+					newDiffusionModelId = fallbackDiffusionModel
+						? fallbackDiffusionModel.diffusion_model_id
+						: null;
+				} else {
+					newDiffusionModelId =
+						defaultDiffusionModel.diffusion_model_id;
+				}
+
+				// Load default embedding model
+				const defaultEmbeddingModel = (
+					await sql`
+						SELECT * FROM embedding_models
+						WHERE provider = ${normalizedProvider}
+						  AND is_default = true
+						  AND is_deprecated = false
+						ORDER BY embedding_model_id ASC
+						LIMIT 1
+					`
+				)[0];
+
+				if (!defaultEmbeddingModel) {
+					const fallbackEmbeddingModel = (
+						await sql`
+							SELECT * FROM embedding_models
+							WHERE provider = ${normalizedProvider}
+							  AND is_deprecated = false
+							ORDER BY embedding_model_id ASC
+							LIMIT 1
+						`
+					)[0];
+
+					newEmbeddingModelId = fallbackEmbeddingModel
+						? fallbackEmbeddingModel.embedding_model_id
+						: null;
+				} else {
+					newEmbeddingModelId =
+						defaultEmbeddingModel.embedding_model_id;
+				}
+
+				// Reset provider-specific fields for fresh switch
+				newNaiDiffusionModelId = null;
+				newNaiPresetName = null;
+				newFallbackLlmIds = [];
+			}
+		}
+
+		// 11. Track if we need to clean up custom LLM entry (AFTER updating llm_id reference)
+		const shouldCleanupCustomLLM =
+			isCustomProvider(currentProvider) && !isCustomProvider(normalizedProvider);
+
+		// 12. Apply config to database
+		const [updatedRow] = await sql`
+			UPDATE tomori_configs
+			SET api_key = ${encrypted},
+			    key_version = ${version},
+			    llm_id = ${newLlmId},
+			    diffusion_model_id = ${newDiffusionModelId},
+			    embedding_model_id = ${newEmbeddingModelId},
+			    nai_diffusion_model_id = ${newNaiDiffusionModelId},
+			    vision_llm_id = ${newVisionLlmId},
+			    nai_preset_name = ${newNaiPresetName},
+			    custom_endpoint_url = ${customEndpointUrl},
+			    custom_model_name = ${customModelName},
+			    fallback_llm_ids = ${JSON.stringify(newFallbackLlmIds)}::jsonb
+			WHERE server_id = ${tomoriState.server_id}
+			RETURNING *
+		`;
+
+		// 13. Validate the returned data
+		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+
+		if (!validatedConfig.success || !updatedRow) {
+			const context: ErrorContext = {
+				tomoriId: tomoriState.tomori_id,
+				serverId: tomoriState.server_id,
+				userId: userData.user_id,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					command: "config provider switch",
+					selectedProvider,
+					validationErrors: validatedConfig.success
+						? null
+						: validatedConfig.error.flatten(),
+				},
+			};
+			await log.error(
+				"Failed to update or validate config after provider switch",
+				validatedConfig.success
+					? new Error(
+							"Database update returned no rows or unexpected data",
+						)
+					: new Error("Updated config data failed validation"),
+				context,
+			);
+
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 14. NovelAI auto-disable: when switching TO NovelAI for the first time
+		// (not restoring a saved config), flip emoji and sticker usage off.
+		// Runs BEFORE cache invalidation so a single invalidation covers both writes.
+		if (
+			!isSameProvider &&
+			normalizedProvider === "novelai" &&
+			!isRestoringFromSaved
+		) {
+			try {
+				await sql`
+					UPDATE tomori_configs
+					SET emoji_usage_enabled = false,
+					    sticker_usage_enabled = false
+					WHERE server_id = ${tomoriState.server_id}
+				`;
+				log.info(
+					`Auto-disabled emoji/sticker usage after switching to NovelAI for server ${tomoriState.server_id}`,
+				);
+			} catch (disableError) {
+				log.warn(
+					`Failed to auto-disable emoji/sticker for NovelAI switch: ${disableError}`,
+				);
+			}
+		}
+
+		// 14.1. On provider change, handle channel/persona overrides
+		// Build valid channel ID set for dead override cleanup (guild channels only)
+		const validChannelIds = new Set<string>();
+		if (interaction.guild) {
+			for (const [id] of interaction.guild.channels.cache) {
+				validChannelIds.add(id);
+			}
+		}
+
+		if (!isSameProvider && isRestoringFromSaved) {
+			// Restoring from saved config — clear current overrides, then restore saved ones
+			// This replaces old-provider overrides with the saved snapshot for the target provider
+			await clearAllChannelLlmOverridesForServer(tomoriState.server_id);
+			await clearAllPersonaLlmOverridesForServer(tomoriState.server_id);
+
+			const savedChannelOverrides = savedConfig?.channel_llm_overrides ?? [];
+			const savedPersonaOverrides = savedConfig?.persona_llm_overrides ?? [];
+
+			if (savedChannelOverrides.length > 0 || savedPersonaOverrides.length > 0) {
+				const restoreResult = await restoreOverridesFromSnapshot(
+					tomoriState.server_id,
+					savedChannelOverrides,
+					savedPersonaOverrides,
+					validChannelIds,
+				);
+				log.info(
+					`Provider restore ${currentProvider}→${normalizedProvider}: ` +
+						`${restoreResult.channelRestored} channel + ${restoreResult.personaRestored} persona overrides restored, ${restoreResult.skipped} skipped`,
+				);
+			}
+		} else if (!isSameProvider) {
+			// Fresh switch (no saved config) — clear all overrides
+			const channelCleared = await clearAllChannelLlmOverridesForServer(
+				tomoriState.server_id,
+			);
+			const personaCleared = await clearAllPersonaLlmOverridesForServer(
+				tomoriState.server_id,
+			);
+			log.info(
+				`Provider switch ${currentProvider}→${normalizedProvider}: ` +
+					`channel overrides cleared=${channelCleared}, persona overrides cleared=${personaCleared}`,
+			);
+		}
+
+		// 14.1.1. Dead override cleanup: remove channel overrides for deleted channels
+		// Runs on every switch (including same-provider) as a lightweight maintenance pass
+		if (interaction.guild && validChannelIds.size > 0) {
+			const deadCleaned = await cleanupDeadChannelOverrides(
+				tomoriState.server_id,
+				validChannelIds,
+			);
+			if (deadCleaned > 0) {
+				log.info(
+					`Cleaned up ${deadCleaned} dead channel override(s) during provider switch`,
+				);
+			}
+		}
+
+		// 14.2. Invalidate caches AFTER all DB writes are complete
+		invalidateTomoriStateCache(serverId);
+		if (!isSameProvider) {
+			invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
+		}
+
+		// 14.3. Clean up old custom LLM entry if switching away from custom provider
+		if (shouldCleanupCustomLLM) {
+			log.info(
+				`Switching away from custom provider — cleaning up old custom LLM entry`,
+			);
+			await deleteCustomLLMEntry(serverId);
+		}
+
+		// 15. Success message — always look up the active model by ID to handle
+		// all cases correctly (same provider key update, restored config, fresh switch)
+		const modelNameRow = (
+			await sql`SELECT llm_codename FROM llms WHERE llm_id = ${newLlmId} LIMIT 1`
+		)[0];
+		const modelName = modelNameRow?.llm_codename as string | undefined;
+
+		const descriptionVars: Record<string, string> = {
+			provider: getProviderDisplayName(normalizedProvider),
+			model_name: modelName ?? "unknown",
+		};
+
+		let successDescriptionKey: string;
+		if (
+			!isSameProvider &&
+			normalizedProvider === "novelai" &&
+			!isRestoringFromSaved
+		) {
+			successDescriptionKey =
+				"commands.config.provider.switch.success_novelai_description";
+		} else if (
+			!isSameProvider &&
+			normalizedProvider === "zai" &&
+			!isRestoringFromSaved
+		) {
+			successDescriptionKey =
+				"commands.config.provider.switch.success_zai_description";
+		} else if (isRestoringFromSaved) {
+			successDescriptionKey =
+				"commands.config.provider.switch.success_restored_description";
+		} else {
+			successDescriptionKey =
+				"commands.config.provider.switch.success_description";
+		}
+
+		await replyInfoEmbed(modalSubmitInteraction, locale, {
+			titleKey: "commands.config.provider.switch.success_title",
+			descriptionKey: successDescriptionKey,
+			descriptionVars,
+			color: ColorCode.SUCCESS,
+		});
+	} catch (error) {
+		// Error handling
+		let serverIdForError: number | null = null;
+		let tomoriIdForError: number | null = null;
+		const errorServerId = interaction.guild?.id ?? interaction.user.id;
+		const state = await getCachedTomoriState(errorServerId);
+		serverIdForError = state?.server_id ?? null;
+		tomoriIdForError = state?.tomori_id ?? null;
+
+		const context: ErrorContext = {
+			userId: userData.user_id,
+			serverId: serverIdForError,
+			tomoriId: tomoriIdForError,
+			errorType: "CommandExecutionError",
+			metadata: {
+				command: "config provider switch",
+				guildId: interaction.guild?.id,
+				executorDiscordId: interaction.user.id,
+			},
+		};
+		await log.error(
+			`Error executing /config provider switch for user ${userData.user_disc_id}`,
+			error as Error,
+			context,
+		);
+
+		const replyTarget = modalSubmitInteraction ?? interaction;
+		await replyInfoEmbed(replyTarget, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+	}
+}

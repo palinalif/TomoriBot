@@ -20,6 +20,7 @@ import {
 } from "../utils/tools/featureFlagMapper";
 import { getMCPManager } from "../utils/mcp/mcpManager";
 import { getGuildMcpManager } from "../utils/mcp/guildMcpManager";
+import { getCachedEnabledGuildMcpConfigs } from "../utils/cache/guildMcpConfigCache";
 import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchService";
 import { hasOptApiKey } from "../utils/security/crypto";
 
@@ -341,6 +342,55 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           }
         } catch (error) {
           log.warn("[GuildMCP] Failed to get guild MCP function names, continuing without", error);
+        }
+      }
+
+      // Deduplicate global MCP tools when guild MCP servers provide equivalent functionality.
+      // A guild server with server_type = 'web_search' replaces built-in Brave + DuckDuckGo search.
+      // A guild server with server_type = 'url_fetcher' replaces the built-in 'fetch' MCP tool.
+      if (serverIdNum) {
+        try {
+          const enabledConfigs = await getCachedEnabledGuildMcpConfigs(serverIdNum);
+          const guildServerTypes = new Set(
+            enabledConfigs.map((c) => c.server_type).filter(Boolean),
+          );
+
+          if (guildServerTypes.has("web_search")) {
+            const webSearchFunctions = [
+              // Brave search functions
+              "brave_web_search", "brave_image_search", "brave_video_search",
+              "brave_news_search", "brave_local_search", "brave_summarizer",
+              // DuckDuckGo search functions
+              "web-search", "felo-search", "iask-search", "monica-search",
+              "url-metadata",
+            ];
+            const beforeCount = mcpFunctionNames.length;
+            mcpFunctionNames = mcpFunctionNames.filter(
+              (name) => !webSearchFunctions.includes(name),
+            );
+            const excludedCount = beforeCount - mcpFunctionNames.length;
+            if (excludedCount > 0) {
+              log.info(
+                `Excluded ${excludedCount} web search MCP functions (guild has web_search server type)`,
+              );
+            }
+          }
+
+          if (guildServerTypes.has("url_fetcher")) {
+            const fetchFunctions = ["fetch", "fetch-url"];
+            const beforeCount = mcpFunctionNames.length;
+            mcpFunctionNames = mcpFunctionNames.filter(
+              (name) => !fetchFunctions.includes(name),
+            );
+            const excludedCount = beforeCount - mcpFunctionNames.length;
+            if (excludedCount > 0) {
+              log.info(
+                `Excluded ${excludedCount} URL fetch MCP functions (guild has url_fetcher server type)`,
+              );
+            }
+          }
+        } catch (error) {
+          log.warn("[GuildMCP] Failed to check server types for deduplication, continuing without", error);
         }
       }
 

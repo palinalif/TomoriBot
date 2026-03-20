@@ -403,6 +403,41 @@ export async function purgeRotationKeys(serverId: number): Promise<number> {
 }
 
 /**
+ * Purges all rotation keys for a specific server+provider pair.
+ * Used when removing a saved provider config to ensure a clean break.
+ *
+ * @param serverId - The internal server ID
+ * @param provider - The provider name (lowercase) to purge keys for
+ * @returns The number of keys deleted
+ */
+export async function purgeRotationKeysForProvider(
+  serverId: number,
+  provider: string,
+): Promise<number> {
+  try {
+    const result = await sql`
+			DELETE FROM api_key_rotation
+			WHERE server_id = ${serverId}
+			  AND provider = ${provider.toLowerCase()}
+		`;
+
+    const deletedCount = result.count || 0;
+    if (deletedCount > 0) {
+      log.success(
+        `Purged ${deletedCount} rotation key(s) for server ${serverId}, provider ${provider}`,
+      );
+    }
+    return deletedCount;
+  } catch (error) {
+    log.error(
+      `Error purging rotation keys for server ${serverId}, provider ${provider}:`,
+      error,
+    );
+    return 0;
+  }
+}
+
+/**
  * Gets the count of rotation keys for a server (excluding main key pointer).
  *
  * @param serverId - The internal server ID

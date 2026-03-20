@@ -49,6 +49,10 @@ import {
   DeepseekProvider,
   type DeepseekProviderConfig,
 } from "@/providers/deepseek/deepseekProvider";
+import {
+  ZaiProvider,
+  type ZaiProviderConfig,
+} from "@/providers/zai/zaiProvider";
 import { buildOpenAICompatibleMessages } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
 import {
   normalizeProviderName,
@@ -122,6 +126,16 @@ const DEEPSEEK_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
   0.42,
   0,
 );
+const ZAI_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ZAI_INPUT_PRICE_PER_MILLION,
+  1.0,
+  0,
+);
+const ZAI_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ZAI_OUTPUT_PRICE_PER_MILLION,
+  3.0,
+  0,
+);
 
 const SUPPORTED_VIDEO_MIME_TYPES = [
   "video/mp4",
@@ -141,7 +155,7 @@ const YOUTUBE_URL_PATTERNS = [
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
 ];
 
-type LiveProvider = "google" | "openrouter" | "deepseek";
+type LiveProvider = "google" | "openrouter" | "deepseek" | "zai";
 
 /**
  * Scenario definitions for cost estimation
@@ -639,7 +653,8 @@ function resolveProvider(providerName: string): LiveProvider | null {
   );
   return implementation === "google" ||
     implementation === "openrouter" ||
-    implementation === "deepseek"
+    implementation === "deepseek" ||
+    implementation === "zai"
     ? implementation
     : null;
 }
@@ -1247,6 +1262,84 @@ async function measureDeepseekInputTokens(
   };
 }
 
+/** Z.ai reasoning models where temperature must be omitted from probe requests */
+const ZAI_REASONING_MODELS = ["glm-5", "glm-4.7"];
+
+/**
+ * Send a minimal probe request to Z.ai to measure actual input token count.
+ * Uses the same OpenAI-compatible usage response pattern as DeepSeek.
+ * @param tomoriState - Current server state
+ * @param apiKey - Decrypted API key
+ * @param contextItems - Structured context items for token measurement
+ * @returns Live cost measurement with Z.ai pricing
+ */
+async function measureZaiInputTokens(
+  tomoriState: TomoriState,
+  apiKey: string,
+  contextItems: StructuredContextItem[],
+): Promise<LiveCostMeasurement> {
+  const provider = new ZaiProvider();
+  const providerConfig = (await provider.createConfig(
+    tomoriState,
+    apiKey,
+  )) as ZaiProviderConfig;
+  const messages = await buildOpenAICompatibleMessages({
+    adapterName: "ToolEstimateCostZai",
+    contextItems,
+    currentTurnModelParts: [],
+    seesImages: providerConfig.seesImages ?? false,
+  });
+
+  const requestBody: Record<string, unknown> = {
+    model: providerConfig.model,
+    messages,
+    max_tokens: 1,
+    stream: false,
+  };
+
+  if (providerConfig.tools && providerConfig.tools.length > 0) {
+    requestBody.tools = providerConfig.tools;
+  }
+
+  // Skip temperature for reasoning models
+  if (!ZAI_REASONING_MODELS.includes(providerConfig.model)) {
+    requestBody.temperature = providerConfig.temperature;
+  }
+
+  const response = await fetch(providerConfig.endpointUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Z.ai probe failed (${response.status}): ${errorText.slice(0, 400)}`,
+    );
+  }
+
+  // Reuse DeepSeek probe response type — same OpenAI-compatible usage format
+  const data = (await response.json()) as DeepseekProbeResponse;
+  const measuredPromptTokens = parseDeepseekPromptTokens(data.usage);
+  if (measuredPromptTokens === undefined) {
+    throw new Error("Z.ai probe response missing prompt token usage");
+  }
+
+  return {
+    provider: "zai",
+    providerLabel: "Zai (Coding)",
+    model: providerConfig.model,
+    inputTokens: measuredPromptTokens,
+    inputPricePerMillion: ZAI_INPUT_PRICE_PER_MILLION,
+    outputPricePerMillion: ZAI_OUTPUT_PRICE_PER_MILLION,
+  };
+}
+
 async function sendLiveEstimateEmbed(
   interaction: ChatInputCommandInteraction,
   locale: string,
@@ -1583,11 +1676,17 @@ export async function execute(
                 decryptedApiKey,
                 contextItems,
               )
-            : await measureDeepseekInputTokens(
-                tomoriState,
-                decryptedApiKey,
-                contextItems,
-              );
+            : provider === "deepseek"
+              ? await measureDeepseekInputTokens(
+                  tomoriState,
+                  decryptedApiKey,
+                  contextItems,
+                )
+              : await measureZaiInputTokens(
+                  tomoriState,
+                  decryptedApiKey,
+                  contextItems,
+                );
       await sendLiveEstimateEmbed(interaction, locale, measurement);
     } catch (countError) {
       await log.error(

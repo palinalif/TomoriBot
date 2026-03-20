@@ -172,6 +172,7 @@ export const tomoriConfigSchema = z.object({
   llm_id: z.number(),
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
 	diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
+	vision_llm_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated vision model for non-vision chat models (FK to llms)
 	nai_diffusion_model_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated NovelAI image model override for generate_image_nai
 	nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
 	nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
@@ -701,6 +702,7 @@ export const tomoriStateSchema = tomoriSchema.extend({
   server_memories: z.array(z.string()).default([]), // Changed to array of strings
   rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
   persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
+  vision_llm: llmSchema.optional(), // Added March 2026 - Dedicated vision model for non-vision chat models
   nai_preset: naiPresetSchema.optional(), // Added March 2026 - Active NovelAI sampling preset
   fallback_llms: z.array(llmSchema).optional(), // Added March 2026 - Resolved fallback LLM rows
 });
@@ -746,7 +748,58 @@ export const guildMcpServerSchema = z.object({
 	auth_token: z.instanceof(Buffer).nullable().optional(),
 	key_version: z.number().int().default(1),
 	is_enabled: z.boolean().default(true),
+	server_type: z.string().nullable().optional(),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
 export type GuildMcpServerRow = z.infer<typeof guildMcpServerSchema>;
+
+/**
+ * Saved Provider Config — snapshot of provider-specific settings stored in
+ * saved_provider_configs. One row per provider per server; UPSERT on save.
+ */
+export const savedProviderConfigSchema = z.object({
+	saved_config_id: z.number().optional(),
+	server_id: z.number(),
+	provider: z.string(),
+	api_key: z.instanceof(Buffer).nullable(),
+	key_version: z.number().int().default(1),
+	llm_id: z.number().nullable(),
+	diffusion_model_id: z.number().nullable(),
+	embedding_model_id: z.number().nullable(),
+	nai_diffusion_model_id: z.number().nullable(),
+	vision_llm_id: z.number().nullable().optional(), // Added March 2026 - Vision model snapshot
+	nai_preset_name: z.string().nullable(),
+	custom_endpoint_url: z.string().nullable(),
+	custom_model_name: z.string().nullable(),
+	fallback_llm_ids: z.preprocess(
+		(value) => normalizeFallbackLlmIds(value),
+		z.array(z.number().int()).default([]),
+	),
+	channel_llm_overrides: z.preprocess(
+		(value) => (Array.isArray(value) ? value : []),
+		z.array(z.object({
+			channel_disc_id: z.string(),
+			llm_id: z.number().int(),
+		})).default([]),
+	),
+	persona_llm_overrides: z.preprocess(
+		(value) => (Array.isArray(value) ? value : []),
+		z.array(z.object({
+			tomori_id: z.number().int(),
+			llm_id: z.number().int(),
+		})).default([]),
+	),
+	saved_at: z.coerce.date().optional(),
+	updated_at: z.coerce.date().optional(),
+});
+export type SavedProviderConfigRow = z.infer<typeof savedProviderConfigSchema>;
+
+/**
+ * Input type for upserting a saved provider config.
+ * Omits auto-generated fields (saved_config_id, saved_at, updated_at).
+ */
+export type SavedProviderConfigUpsert = Omit<
+	SavedProviderConfigRow,
+	"saved_config_id" | "saved_at" | "updated_at"
+>;

@@ -56,6 +56,7 @@ const providerFeatureImplementations: Partial<
 		google: "google",
 		openrouter: "openrouter",
 		deepseek: "deepseek",
+		zai: "zai",
 	},
 };
 

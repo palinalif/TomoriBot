@@ -13,9 +13,12 @@ import {
 } from "@/utils/cache/guildMcpConfigCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
-import { promptWithRawModal } from "@/utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	promptWithRawModal,
+} from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
+import type { SelectOption } from "@/types/discord/modal";
 import { insertGuildMcpServer, countGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
 
@@ -25,6 +28,7 @@ const MODAL_CUSTOM_ID = "config_mcp_add_modal";
 const NAME_INPUT_ID = "mcp_server_name";
 const URL_INPUT_ID = "mcp_server_url";
 const AUTH_TOKEN_INPUT_ID = "mcp_auth_token";
+const SERVER_TYPE_SELECT_ID = "mcp_server_type";
 
 /** Max guild MCP servers per guild (configurable via env) */
 const MAX_SERVERS_PER_GUILD = Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 5;
@@ -48,7 +52,7 @@ const PRIVATE_IP_PATTERNS = [
 
 /**
  * Configure the /config mcp add subcommand.
- * Shows a modal for name, URL, and optional auth token.
+ * Shows a modal for name, URL, optional auth token, and optional server type.
  * @param subcommand - The subcommand builder
  */
 export const configureSubcommand = (
@@ -101,7 +105,26 @@ export async function execute(
 	}
 
 	try {
-		// 2. Show modal (modal is the acknowledgment — no pre-defer)
+		// 2. Build server type select options for tool deduplication
+		const serverTypeOptions: SelectOption[] = [
+			{
+				label: localizer(locale, "commands.config.mcp.add.none_option"),
+				value: "none",
+				description: localizer(locale, "commands.config.mcp.add.none_option_description"),
+			},
+			{
+				label: localizer(locale, "commands.config.mcp.add.web_search_option"),
+				value: "web_search",
+				description: localizer(locale, "commands.config.mcp.add.web_search_option_description"),
+			},
+			{
+				label: localizer(locale, "commands.config.mcp.add.url_fetcher_option"),
+				value: "url_fetcher",
+				description: localizer(locale, "commands.config.mcp.add.url_fetcher_option_description"),
+			},
+		];
+
+		// 3. Show modal (modal is the acknowledgment — no pre-defer)
 		const modalResult = await promptWithRawModal(
 			interaction,
 			locale,
@@ -133,6 +156,14 @@ export async function execute(
 						style: TextInputStyle.Paragraph,
 						maxLength: 500,
 					},
+					{
+						customId: SERVER_TYPE_SELECT_ID,
+						labelKey: "commands.config.mcp.add.server_type_label",
+						descriptionKey: "commands.config.mcp.add.server_type_description",
+						placeholder: "commands.config.mcp.add.server_type_placeholder",
+						required: false,
+						options: serverTypeOptions,
+					},
 				],
 			},
 			MessageFlags.Ephemeral,
@@ -146,6 +177,9 @@ export async function execute(
 		const name = modalResult.values?.[NAME_INPUT_ID]?.trim();
 		const url = modalResult.values?.[URL_INPUT_ID]?.trim();
 		const authToken = modalResult.values?.[AUTH_TOKEN_INPUT_ID]?.trim() || undefined;
+		const serverTypeRaw = modalResult.values?.[SERVER_TYPE_SELECT_ID]?.trim();
+		// "none" or empty means no type — store as null
+		const serverType = serverTypeRaw && serverTypeRaw !== "none" ? serverTypeRaw : null;
 
 		if (!modalResult.interaction) {
 			log.error("[MCP Add] Modal submit interaction is undefined");
@@ -162,7 +196,7 @@ export async function execute(
 			return;
 		}
 
-		// 3. Validate name format
+		// 4. Validate name format
 		if (!NAME_REGEX.test(name)) {
 			await replyInfoEmbed(replyInteraction, locale, {
 				titleKey: "commands.config.mcp.add.invalid_name_title",
@@ -172,7 +206,7 @@ export async function execute(
 			return;
 		}
 
-		// 4. Validate URL format + security
+		// 5. Validate URL format + security
 		const urlValidation = validateMcpUrl(url);
 		if (!urlValidation.valid) {
 			await replyInfoEmbed(replyInteraction, locale, {
@@ -183,7 +217,7 @@ export async function execute(
 			return;
 		}
 
-		// 5. Check server count limit
+		// 6. Check server count limit
 		const currentCount = await countGuildMcpServers(tomoriState.server_id);
 		if (currentCount >= MAX_SERVERS_PER_GUILD) {
 			await replyInfoEmbed(replyInteraction, locale, {
@@ -195,7 +229,7 @@ export async function execute(
 			return;
 		}
 
-		// 6. Test connection before persisting
+		// 7. Test connection before persisting
 		const guildMcpManager = getGuildMcpManager();
 		const testResult = await guildMcpManager.testConnection(url, authToken);
 
@@ -209,12 +243,13 @@ export async function execute(
 			return;
 		}
 
-		// 7. Persist to database (token is encrypted inline)
+		// 8. Persist to database (token is encrypted inline, server_type for tool deduplication)
 		const insertedRow = await insertGuildMcpServer(
 			tomoriState.server_id,
 			name,
 			url,
 			authToken,
+			serverType,
 		);
 
 		if (!insertedRow) {
@@ -227,10 +262,10 @@ export async function execute(
 			return;
 		}
 
-		// 8. Invalidate cache after successful DB write
+		// 9. Invalidate cache after successful DB write
 		invalidateGuildMcpConfigCache(tomoriState.server_id);
 
-		// 9. Mask the URL for display (show domain only)
+		// 10. Mask the URL for display (show domain only)
 		let maskedUrl: string;
 		try {
 			const parsed = new URL(url);
@@ -239,7 +274,7 @@ export async function execute(
 			maskedUrl = `${url.substring(0, 30)}...`;
 		}
 
-		// 10. Success reply
+		// 11. Success reply
 		await replyInfoEmbed(replyInteraction, locale, {
 			titleKey: "commands.config.mcp.add.success_title",
 			descriptionKey: "commands.config.mcp.add.success_description",

@@ -28,6 +28,8 @@ import {
   randomTriggerSchema,
   type RandomTriggerRow,
   naiPresetSchema,
+  savedProviderConfigSchema,
+  type SavedProviderConfigRow,
   type NaiPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
@@ -411,7 +413,21 @@ export async function loadTomoriState(
       );
     }
 
-    // 9. Combine and validate the full state
+    // 9. Load vision model if configured (for non-vision chat model image analysis delegation)
+    let visionLlm: LlmRow | undefined;
+    if (configData.vision_llm_id) {
+      visionLlm = getCachedLLM(configData.vision_llm_id) as LlmRow | undefined;
+      if (!visionLlm) {
+        const visionLlmRows = await sql`
+					SELECT * FROM llms WHERE llm_id = ${configData.vision_llm_id} LIMIT 1
+				`;
+        if (visionLlmRows.length) {
+          visionLlm = visionLlmRows[0] as LlmRow;
+        }
+      }
+    }
+
+    // 10. Combine and validate the full state
     const fallbackTriggerWords =
       tomoriData.is_alter === true
         ? (tomoriData.alter_triggers ?? [])
@@ -424,6 +440,7 @@ export async function loadTomoriState(
       persona_prompt: personaConfig?.persona_prompt ?? null,
       server_memories: serverMemories, // Add server memories to the state
       rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
+      vision_llm: visionLlm, // Dedicated vision model (undefined when not configured)
       nai_preset: naiPreset, // Active NAI sampling preset (undefined when not configured)
       fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined, // Resolved fallback model chain
     };
@@ -611,7 +628,21 @@ export async function loadAllPersonasForServer(
           memoriesByLineage.set(lineageId, existing);
         }
 
-        // 8. Build persona states
+        // 8. Load vision model if configured (server-scoped, loaded once for all personas)
+        let visionLlm: LlmRow | undefined;
+        if (configData.vision_llm_id) {
+          visionLlm = getCachedLLM(configData.vision_llm_id) as LlmRow | undefined;
+          if (!visionLlm) {
+            const visionLlmRows = await sql`
+							SELECT * FROM llms WHERE llm_id = ${configData.vision_llm_id} LIMIT 1
+						`;
+            if (visionLlmRows.length) {
+              visionLlm = visionLlmRows[0] as LlmRow;
+            }
+          }
+        }
+
+        // 9. Build persona states
         const personas: TomoriState[] = [];
         for (const tomoriRow of tomoriRows) {
           const tomoriId = tomoriRow.tomori_id;
@@ -665,6 +696,7 @@ export async function loadAllPersonasForServer(
             persona_prompt: personaConfig?.persona_prompt ?? null,
             server_memories: serverMemories,
             rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
+            vision_llm: visionLlm, // Dedicated vision model (undefined when not configured)
             fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined,
             persona_llm: personaLlm, // undefined if no override set
           };
@@ -2404,5 +2436,118 @@ export async function getAllChannelLlmOverridesForServer(
       error,
     );
     return [];
+  }
+}
+
+/**
+ * Loads all persona LLM overrides for a server as raw {tomori_id, llm_id} pairs.
+ * Only returns personas that have a non-null llm_id override set.
+ * Used for snapshotting overrides during provider switch.
+ *
+ * @param serverId - The database server_id (numeric)
+ * @returns Array of {tomori_id, llm_id} pairs
+ */
+export async function loadPersonaLlmOverridesForServer(
+  serverId: number,
+): Promise<{ tomori_id: number; llm_id: number }[]> {
+  try {
+    const rows = await sql`
+			SELECT pc.tomori_id, pc.llm_id
+			FROM persona_configs pc
+			JOIN tomoris t ON t.tomori_id = pc.tomori_id
+			WHERE t.server_id = ${serverId}
+			  AND pc.llm_id IS NOT NULL
+		`;
+    return rows.map((row: { tomori_id: number; llm_id: number }) => ({
+      tomori_id: row.tomori_id,
+      llm_id: row.llm_id,
+    }));
+  } catch (error) {
+    log.error(
+      `Error loading persona LLM overrides for server ${serverId}:`,
+      error,
+    );
+    return [];
+  }
+}
+
+/**
+ * Loads all saved provider configs for a server.
+ * Returns an array of validated SavedProviderConfigRow objects.
+ * @param serverId - The database server_id (numeric)
+ * @returns Array of saved provider configs, or empty array on error/no results
+ */
+export async function loadSavedProviderConfigs(
+  serverId: number,
+): Promise<SavedProviderConfigRow[]> {
+  try {
+    const rows = await sql`
+			SELECT * FROM saved_provider_configs
+			WHERE server_id = ${serverId}
+			ORDER BY provider ASC
+		`;
+
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    // Validate each row with Zod schema
+    const validated: SavedProviderConfigRow[] = [];
+    for (const row of rows) {
+      const parsed = savedProviderConfigSchema.safeParse(row);
+      if (parsed.success) {
+        validated.push(parsed.data);
+      } else {
+        log.warn(
+          `Invalid saved provider config row for server ${serverId}, provider ${row.provider}: ${parsed.error.message}`,
+        );
+      }
+    }
+    return validated;
+  } catch (error) {
+    log.error(
+      `Error loading saved provider configs for server ${serverId}:`,
+      error,
+    );
+    return [];
+  }
+}
+
+/**
+ * Loads a specific saved provider config for a server+provider pair.
+ * @param serverId - The database server_id (numeric)
+ * @param provider - The provider name (lowercase)
+ * @returns The saved config row, or null if not found/error
+ */
+export async function loadSavedProviderConfig(
+  serverId: number,
+  provider: string,
+): Promise<SavedProviderConfigRow | null> {
+  try {
+    const rows = await sql`
+			SELECT * FROM saved_provider_configs
+			WHERE server_id = ${serverId}
+			  AND provider = ${provider.toLowerCase()}
+			LIMIT 1
+		`;
+
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+
+    const parsed = savedProviderConfigSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(
+        `Invalid saved provider config for server ${serverId}, provider ${provider}: ${parsed.error.message}`,
+      );
+      return null;
+    }
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error loading saved provider config for server ${serverId}, provider ${provider}:`,
+      error,
+    );
+    return null;
   }
 }

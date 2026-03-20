@@ -15,6 +15,8 @@ import {
   randomTriggerSchema,
   type RandomTriggerRow,
   type NaiPresetRow,
+  savedProviderConfigSchema,
+  type SavedProviderConfigUpsert,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import {
@@ -1904,5 +1906,259 @@ export async function clearAllPersonaLlmOverridesForServer(
       error,
     );
     return false;
+  }
+}
+
+/**
+ * Upserts a saved provider config snapshot. Inserts a new row if none exists
+ * for this server+provider, otherwise updates the existing row.
+ * @param serverId - The database server_id (numeric)
+ * @param config - The provider config fields to save
+ * @returns True on success, false on failure
+ */
+export async function upsertSavedProviderConfig(
+  serverId: number,
+  config: SavedProviderConfigUpsert,
+): Promise<boolean> {
+  try {
+    const provider = config.provider.toLowerCase();
+    const fallbackJson = JSON.stringify(config.fallback_llm_ids ?? []);
+    const channelOverridesJson = JSON.stringify(config.channel_llm_overrides ?? []);
+    const personaOverridesJson = JSON.stringify(config.persona_llm_overrides ?? []);
+
+    const rows = await sql`
+			INSERT INTO saved_provider_configs (
+				server_id, provider, api_key, key_version,
+				llm_id, diffusion_model_id, embedding_model_id,
+				nai_diffusion_model_id, vision_llm_id, nai_preset_name,
+				custom_endpoint_url, custom_model_name,
+				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides
+			) VALUES (
+				${serverId}, ${provider}, ${config.api_key}, ${config.key_version},
+				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
+				${config.nai_diffusion_model_id}, ${config.vision_llm_id ?? null}, ${config.nai_preset_name},
+				${config.custom_endpoint_url}, ${config.custom_model_name},
+				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb
+			)
+			ON CONFLICT (server_id, provider) DO UPDATE SET
+				api_key = EXCLUDED.api_key,
+				key_version = EXCLUDED.key_version,
+				llm_id = EXCLUDED.llm_id,
+				diffusion_model_id = EXCLUDED.diffusion_model_id,
+				embedding_model_id = EXCLUDED.embedding_model_id,
+				nai_diffusion_model_id = EXCLUDED.nai_diffusion_model_id,
+				vision_llm_id = EXCLUDED.vision_llm_id,
+				nai_preset_name = EXCLUDED.nai_preset_name,
+				custom_endpoint_url = EXCLUDED.custom_endpoint_url,
+				custom_model_name = EXCLUDED.custom_model_name,
+				fallback_llm_ids = EXCLUDED.fallback_llm_ids,
+				channel_llm_overrides = EXCLUDED.channel_llm_overrides,
+				persona_llm_overrides = EXCLUDED.persona_llm_overrides
+			RETURNING *
+		`;
+
+    // Validate the returned row
+    if (rows.length > 0) {
+      const parsed = savedProviderConfigSchema.safeParse(rows[0]);
+      if (!parsed.success) {
+        log.warn(
+          `Upserted saved provider config failed validation for server ${serverId}, provider ${provider}: ${parsed.error.message}`,
+        );
+        return false;
+      }
+    }
+
+    log.info(
+      `Upserted saved provider config for server ${serverId}, provider ${provider}`,
+    );
+    return true;
+  } catch (error) {
+    log.error(
+      `Error upserting saved provider config for server ${serverId}, provider ${config.provider}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+/**
+ * Deletes a saved provider config for a server+provider pair.
+ * @param serverId - The database server_id (numeric)
+ * @param provider - The provider name (lowercase)
+ * @returns True if a row was deleted, false if not found or error
+ */
+export async function deleteSavedProviderConfig(
+  serverId: number,
+  provider: string,
+): Promise<boolean> {
+  try {
+    const result = await sql`
+			DELETE FROM saved_provider_configs
+			WHERE server_id = ${serverId}
+			  AND provider = ${provider.toLowerCase()}
+		`;
+
+    const deleted = result.count > 0;
+    if (deleted) {
+      log.info(
+        `Deleted saved provider config for server ${serverId}, provider ${provider}`,
+      );
+    }
+    return deleted;
+  } catch (error) {
+    log.error(
+      `Error deleting saved provider config for server ${serverId}, provider ${provider}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+/**
+ * Restores channel and persona LLM overrides from a saved provider config snapshot.
+ * Validates that each referenced llm_id still exists in the database before restoring.
+ * Dead overrides (missing LLM, deleted channel handled by caller) are silently skipped.
+ *
+ * @param serverId - The database server_id (numeric)
+ * @param channelOverrides - Array of {channel_disc_id, llm_id} from saved config
+ * @param personaOverrides - Array of {tomori_id, llm_id} from saved config
+ * @param validChannelIds - Set of Discord channel IDs that currently exist in the guild (for dead override cleanup)
+ * @returns Object with counts of restored/skipped overrides
+ */
+export async function restoreOverridesFromSnapshot(
+  serverId: number,
+  channelOverrides: { channel_disc_id: string; llm_id: number }[],
+  personaOverrides: { tomori_id: number; llm_id: number }[],
+  validChannelIds: Set<string>,
+): Promise<{ channelRestored: number; personaRestored: number; skipped: number }> {
+  let channelRestored = 0;
+  let personaRestored = 0;
+  let skipped = 0;
+
+  // 1. Restore channel overrides (validate llm_id exists and channel still exists)
+  for (const override of channelOverrides) {
+    // Skip overrides for channels that no longer exist in the guild
+    if (!validChannelIds.has(override.channel_disc_id)) {
+      skipped++;
+      log.info(
+        `Skipping dead channel override: channel ${override.channel_disc_id} no longer exists`,
+      );
+      continue;
+    }
+
+    // Verify the LLM still exists
+    const llmCheck = await sql`
+			SELECT llm_id FROM llms WHERE llm_id = ${override.llm_id} LIMIT 1
+		`;
+    if (llmCheck.length === 0) {
+      skipped++;
+      log.info(
+        `Skipping channel override for ${override.channel_disc_id}: llm_id ${override.llm_id} no longer exists`,
+      );
+      continue;
+    }
+
+    const success = await setChannelLlmOverride(
+      serverId,
+      override.channel_disc_id,
+      override.llm_id,
+    );
+    if (success) {
+      channelRestored++;
+    } else {
+      skipped++;
+    }
+  }
+
+  // 2. Restore persona overrides (validate llm_id exists and persona still exists)
+  for (const override of personaOverrides) {
+    // Verify the persona still exists for this server
+    const personaCheck = await sql`
+			SELECT tomori_id FROM tomoris
+			WHERE tomori_id = ${override.tomori_id} AND server_id = ${serverId}
+			LIMIT 1
+		`;
+    if (personaCheck.length === 0) {
+      skipped++;
+      log.info(
+        `Skipping persona override: tomori_id ${override.tomori_id} no longer exists for server ${serverId}`,
+      );
+      continue;
+    }
+
+    // Verify the LLM still exists
+    const llmCheck = await sql`
+			SELECT llm_id FROM llms WHERE llm_id = ${override.llm_id} LIMIT 1
+		`;
+    if (llmCheck.length === 0) {
+      skipped++;
+      log.info(
+        `Skipping persona override for tomori_id ${override.tomori_id}: llm_id ${override.llm_id} no longer exists`,
+      );
+      continue;
+    }
+
+    const success = await setPersonaLlmOverride(
+      override.tomori_id,
+      override.llm_id,
+    );
+    if (success) {
+      personaRestored++;
+    } else {
+      skipped++;
+    }
+  }
+
+  log.info(
+    `Override restore for server ${serverId}: ${channelRestored} channel, ${personaRestored} persona restored, ${skipped} skipped`,
+  );
+  return { channelRestored, personaRestored, skipped };
+}
+
+/**
+ * Cleans up dead channel LLM overrides for a server by removing entries
+ * that reference Discord channels no longer present in the guild.
+ *
+ * @param serverId - The database server_id (numeric)
+ * @param validChannelIds - Set of Discord channel IDs that currently exist in the guild
+ * @returns Number of dead overrides removed
+ */
+export async function cleanupDeadChannelOverrides(
+  serverId: number,
+  validChannelIds: Set<string>,
+): Promise<number> {
+  try {
+    // 1. Fetch all channel overrides for this server
+    const overrideRows = await sql`
+			SELECT channel_disc_id FROM channel_llm_overrides
+			WHERE server_id = ${serverId}
+		`;
+
+    if (!overrideRows.length) return 0;
+
+    // 2. Find dead overrides (channel no longer exists in guild)
+    const deadChannelIds = overrideRows
+      .map((row: { channel_disc_id: string }) => row.channel_disc_id)
+      .filter((channelId: string) => !validChannelIds.has(channelId));
+
+    if (deadChannelIds.length === 0) return 0;
+
+    // 3. Delete dead overrides
+    await sql`
+			DELETE FROM channel_llm_overrides
+			WHERE server_id = ${serverId}
+			  AND channel_disc_id = ANY(${deadChannelIds})
+		`;
+
+    log.info(
+      `Cleaned up ${deadChannelIds.length} dead channel override(s) for server ${serverId}`,
+    );
+    return deadChannelIds.length;
+  } catch (error) {
+    log.error(
+      `Error cleaning up dead channel overrides for server ${serverId}:`,
+      error,
+    );
+    return 0;
   }
 }

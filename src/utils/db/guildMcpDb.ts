@@ -16,7 +16,7 @@ export async function loadGuildMcpServers(
 	try {
 		const rows = await sql`
 			SELECT guild_mcp_id, server_id, name, url, auth_token, key_version,
-			       is_enabled, created_at, updated_at
+			       is_enabled, server_type, created_at, updated_at
 			FROM guild_mcp_servers
 			WHERE server_id = ${serverId}
 			ORDER BY created_at ASC
@@ -37,6 +37,7 @@ export async function loadGuildMcpServers(
  * @param name - Unique server name within the guild (alphanumeric + hyphens)
  * @param url - Remote MCP server URL (HTTPS required in production)
  * @param rawAuthToken - Optional bearer token (plaintext — will be encrypted)
+ * @param serverType - Optional server type for deduplicating default tools ('web_search' | 'url_fetcher')
  * @returns The inserted row, or null on failure (e.g., duplicate name)
  */
 export async function insertGuildMcpServer(
@@ -44,6 +45,7 @@ export async function insertGuildMcpServer(
 	name: string,
 	url: string,
 	rawAuthToken?: string,
+	serverType?: string | null,
 ): Promise<GuildMcpServerRow | null> {
 	try {
 		const currentKey = keyManager.getCurrentKey();
@@ -54,13 +56,14 @@ export async function insertGuildMcpServer(
 		if (rawAuthToken) {
 			// Encrypt the auth token inline using pgp_sym_encrypt (same pattern as opt_api_keys)
 			const [result] = await sql`
-				INSERT INTO guild_mcp_servers (server_id, name, url, auth_token, key_version)
+				INSERT INTO guild_mcp_servers (server_id, name, url, auth_token, key_version, server_type)
 				VALUES (
 					${serverId},
 					${name},
 					${url},
 					pgp_sym_encrypt(${rawAuthToken.trim()}, ${currentKey}, 'compress-algo=1, cipher-algo=aes256'),
-					${currentVersion}
+					${currentVersion},
+					${serverType ?? null}
 				)
 				RETURNING *
 			`;
@@ -68,8 +71,8 @@ export async function insertGuildMcpServer(
 		} else {
 			// No auth token — insert without encryption
 			const [result] = await sql`
-				INSERT INTO guild_mcp_servers (server_id, name, url)
-				VALUES (${serverId}, ${name}, ${url})
+				INSERT INTO guild_mcp_servers (server_id, name, url, server_type)
+				VALUES (${serverId}, ${name}, ${url}, ${serverType ?? null})
 				RETURNING *
 			`;
 			row = result as GuildMcpServerRow;
@@ -233,7 +236,7 @@ export async function loadAllEnabledGuildMcpServers(): Promise<GuildMcpServerRow
 	try {
 		const rows = await sql`
 			SELECT guild_mcp_id, server_id, name, url, auth_token, key_version,
-			       is_enabled, created_at, updated_at
+			       is_enabled, server_type, created_at, updated_at
 			FROM guild_mcp_servers
 			WHERE is_enabled = true
 			ORDER BY server_id ASC, created_at ASC

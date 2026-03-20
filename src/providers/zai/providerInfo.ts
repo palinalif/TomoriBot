@@ -17,7 +17,7 @@ export const zaiProviderInfo: ProviderInfo = {
 		structuredOutput: true,
 		presetGeneration: false,
 		expressionInitialization: false,
-		liveTokenCounting: false,
+		liveTokenCounting: true,
 		conversationCompaction: false,
 		historyExtraction: true,
 	},

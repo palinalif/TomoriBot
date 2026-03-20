@@ -1553,7 +1553,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Supports 4 chat models including vision and reasoning variants
 - Native image generation via \`glm-image\`
 - Tool calling and structured output on all chat models
-- Add the Z.ai Vision MCP server via \`/config mcp add\` to give any model image and video analysis capabilities`,
+- Optional MCP add-ons: Web Search, Web Reader, and Zread (GitHub repo Q&A) via \`/config mcp add\` using your Z.ai API key as the auth token`,
         zai_getting_key_title: `Getting Your API Key:`,
         zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
 2. Sign in or create an account
@@ -2174,7 +2174,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           provider_description: `Choose the AI provider for your API key`,
           provider_placeholder: `Select a provider...`,
           api_key_label: `Provider API Key`,
-          api_key_description: `This key will be securely stored. Use the '/help apikey' command for instructions in getting one`,
+          api_key_description: `This key will be securely stored. Use the '/help apikey' command for instructions in getting one. Tip: Use /config provider switch for saved config persistence.`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
           no_providers_title: `No Providers Available`,
@@ -2259,6 +2259,51 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         capabilities_timeout: `Model capabilities configuration timed out. Please try again.`,
         // Provider description shown in select menus
         provider_description: `Self-hosted OpenAI-compatible endpoint (non-production only)`,
+      },
+      // Provider configuration persistence — switch/remove saved provider configs
+      provider: {
+        description: `Manage saved provider configurations`,
+        switch: {
+          description: `Switch AI provider (saves current config for easy return).`,
+          modal_title: `Switch Provider`,
+          provider_label: `Target Provider`,
+          provider_description: `Choose the provider to switch to. Providers marked (saved) have stored configs.`,
+          provider_placeholder: `Select a provider...`,
+          api_key_label: `API Key (Optional)`,
+          api_key_description: `Leave blank to restore a saved key, or enter a new key to override it.`,
+          api_key_description_with_custom: `Leave blank to restore, or enter an OpenAI endpoint URL for a new custom setup.`,
+          api_key_placeholder: `Leave blank to use saved key`,
+          save_current_label: `Save Current Config?`,
+          save_current_description: `Save your current provider settings so you can restore them later.`,
+          save_yes_label: `Yes`,
+          save_no_label: `No`,
+          saved_indicator: `(saved)`,
+          // Error states
+          first_time_no_key_title: `API Key Required`,
+          first_time_no_key_description: `No saved config exists for **{provider}**. Please provide an API key when switching to a new provider for the first time.`,
+          // Success states
+          success_title: `Provider Switched`,
+          success_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
+          success_restored_description: `Switched to **{provider}** with restored settings. Your model is now \`{model_name}\`.`,
+          success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config permissions\`.`,
+          success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.
+
+💡 **Z.ai MCP Servers** — Enhance your bot with these free add-ons using your Z.ai API key:
+- **Web Search** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_search_prime/mcp\`
+- **Web Reader** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_reader/mcp\`
+- **Zread** (GitHub repo Q&A) — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/zread/mcp\`
+Use your Z.ai API key as the Auth Token for each server.`,
+        },
+        remove: {
+          description: `Remove a saved provider configuration.`,
+          no_saved_title: `No Saved Configs`,
+          no_saved_description: `There are no saved provider configurations to remove. Saved configs are created when you use \`/config provider switch\` with "Save Current Config" enabled.`,
+          select_placeholder: `Select a provider to remove...`,
+          success_title: `Saved Config Removed`,
+          success_description: `The saved configuration for **{provider}** has been removed. You'll need to provide an API key next time you switch to this provider.`,
+          confirm_title: `Remove Saved Config?`,
+          confirm_description: `Are you sure you want to remove the saved configuration for **{provider}**? This will delete the stored API key and model selections.`,
+        },
       },
       humanizer: {
         description: `Set how 'human-like' my responses should be. For custom prompts, use /config sysprompt change.`,
@@ -2482,6 +2527,28 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_title: `Image Model Updated`,
           success_description: `Image generation will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
           current_none: `None`,
+        },
+        vision: {
+          description: `Set a dedicated vision model for image analysis when your chat model can't see images.`,
+          modal_title: `Select Vision Model`,
+          select_label: `Vision Model`,
+          select_description: `Choose a vision-capable model to analyze images on behalf of your chat model.`,
+          select_placeholder: `Choose a vision model...`,
+          no_api_key_title: `No API Key Set`,
+          no_api_key_description: `An API key must be configured before setting a vision model. Please use \`/config apikey set\` first.`,
+          no_models_title: `No Vision Models Available`,
+          no_models_description: `Your current provider ({provider}) has no vision-capable models. Switch to a provider with vision models first.`,
+          invalid_model_title: `Invalid Model`,
+          invalid_model_description: `The selected vision model is not valid or available.`,
+          already_selected_title: `Model Already Selected`,
+          already_selected_description: `Already using \`{model_name}\` as the vision model.`,
+          not_needed_title: `Vision Model Not Needed`,
+          not_needed_description: `Your current chat model (\`{model_name}\`) already supports image vision. A separate vision model is only useful for non-vision chat models.`,
+          success_title: `Vision Model Updated`,
+          success_description: `Non-vision chat models will now use \`{model_name}\` to analyze images via the \`analyze_image\` tool.`,
+          cleared_title: `Vision Model Cleared`,
+          cleared_description: `Vision model has been removed. Non-vision chat models will no longer be able to analyze images.`,
+          clear_option: `None (disable vision tool)`,
         },
       },
       rename: {
@@ -2831,6 +2898,15 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           url_placeholder: `https://mcp.example.com/sse`,
           auth_token_label: `Auth Token (Optional)`,
           auth_token_placeholder: `Bearer token for authentication (leave blank if none)`,
+          server_type_label: `Server Type (Optional)`,
+          server_type_description: `What this server replaces (disables matching built-in tools)`,
+          server_type_placeholder: `Select a server type...`,
+          none_option: `General Purpose`,
+          none_option_description: `No built-in tools will be disabled`,
+          web_search_option: `Web Search`,
+          web_search_option_description: `Disables built-in Brave and DuckDuckGo search tools`,
+          url_fetcher_option: `URL Fetcher`,
+          url_fetcher_option_description: `Disables built-in URL fetch tool`,
           invalid_input_title: `Missing Input`,
           invalid_input_description: `Both server name and URL are required.`,
           invalid_name_title: `Invalid Server Name`,

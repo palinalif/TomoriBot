@@ -1555,7 +1555,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - ビジョンや推論バリアントを含む4つのチャットモデルをサポート
 - \`glm-image\`によるネイティブ画像生成
 - すべてのチャットモデルでツール呼び出しと構造化出力に対応
-- \`/config mcp add\`でZ.aiビジョンMCPサーバーを追加すると、任意のモデルに画像・動画分析機能を付与できます`,
+- オプションMCPアドオン：Web Search、Web Reader、Zread（GitHubリポジトリQ&A）を\`/config mcp add\`でZ.ai APIキーを認証トークンとして追加可能`,
         zai_getting_key_title: `APIキーの取得：`,
         zai_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
 2. ログインまたはアカウントを作成
@@ -2184,7 +2184,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           provider_description: `APIキーに対応するAIプロバイダーを選択してください`,
           provider_placeholder: `プロバイダーを選択...`,
           api_key_label: `プロバイダーAPIキー`,
-          api_key_description: `このキーは安全に保存されます。取得方法については、'/help apikey'コマンドを使用してください。`,
+          api_key_description: `このキーは安全に保存されます。取得方法については、'/help apikey'コマンドを使用してください。ヒント：設定の保存には /config provider switch をお使いください。`,
           api_key_description_with_custom: `APIキー、またはCustomの場合はOpenAIエンドポイントURL（例：http://localhost:11434/v1）`,
           api_key_placeholder: `このキーは誰とも共有しないでください`,
           no_providers_title: `利用可能なプロバイダーがありません`,
@@ -2269,6 +2269,51 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         capabilities_timeout: `モデル機能の設定がタイムアウトしました。もう一度お試しください。`,
         // セレクトメニューに表示されるプロバイダー説明
         provider_description: `セルフホスト型のOpenAI互換エンドポイント（非本番環境のみ）`,
+      },
+      // プロバイダー設定の永続化 — 保存されたプロバイダー設定の切替/削除
+      provider: {
+        description: `保存されたプロバイダー設定を管理`,
+        switch: {
+          description: `AIプロバイダーを切り替えます（現在の設定を保存して簡単に復元可能）。`,
+          modal_title: `プロバイダーの切替`,
+          provider_label: `切替先プロバイダー`,
+          provider_description: `切り替えるプロバイダーを選択してください。(保存済み)のプロバイダーは設定が保存されています。`,
+          provider_placeholder: `プロバイダーを選択...`,
+          api_key_label: `APIキー（任意）`,
+          api_key_description: `保存済みキーを復元するには空欄のまま、新しいキーで上書きする場合は入力してください。`,
+          api_key_description_with_custom: `保存済みを復元するには空欄のまま、新規カスタムの場合はOpenAIエンドポイントURLを入力してください。`,
+          api_key_placeholder: `保存済みキーを使用するには空欄`,
+          save_current_label: `現在の設定を保存しますか？`,
+          save_current_description: `現在のプロバイダー設定を保存して、後で復元できるようにします。`,
+          save_yes_label: `はい`,
+          save_no_label: `いいえ`,
+          saved_indicator: `(保存済み)`,
+          // エラー状態
+          first_time_no_key_title: `APIキーが必要です`,
+          first_time_no_key_description: `**{provider}**の保存済み設定がありません。新しいプロバイダーに初めて切り替える場合は、APIキーを入力してください。`,
+          // 成功状態
+          success_title: `プロバイダーを切り替えました`,
+          success_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。`,
+          success_restored_description: `保存済みの設定で**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。`,
+          success_novelai_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。⚠️ **絵文字とスタンプの使用は自動的に無効化されました**。NovelAIのコンテキストを安定させるためです。\`/config permissions\`でいつでも再有効化できます。`,
+          success_zai_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。
+
+💡 **Z.ai MCPサーバー** — Z.ai APIキーでボットを強化する無料アドオン：
+- **Web Search** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_search_prime/mcp\`
+- **Web Reader** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_reader/mcp\`
+- **Zread**（GitHubリポジトリQ&A） — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/zread/mcp\`
+各サーバーの認証トークンにはZ.ai APIキーを使用してください。`,
+        },
+        remove: {
+          description: `保存されたプロバイダー設定を削除します。`,
+          no_saved_title: `保存済み設定がありません`,
+          no_saved_description: `削除する保存済みプロバイダー設定がありません。保存済み設定は「現在の設定を保存」を有効にして\`/config provider switch\`を使用すると作成されます。`,
+          select_placeholder: `削除するプロバイダーを選択...`,
+          success_title: `保存済み設定を削除しました`,
+          success_description: `**{provider}**の保存済み設定を削除しました。次回このプロバイダーに切り替える際はAPIキーが必要です。`,
+          confirm_title: `保存済み設定を削除しますか？`,
+          confirm_description: `**{provider}**の保存済み設定を削除してもよろしいですか？保存されたAPIキーとモデル選択が削除されます。`,
+        },
       },
       humanizer: {
         description: `私の応答がどれだけ「人間らしい」か設定します。カスタムプロンプトを設定するには \`/config sysprompt change\` を使用してください。`,
@@ -2490,6 +2535,28 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           success_title: `画像モデルが更新されました`,
           success_description: `画像生成には \`{model_name}\` モデルを使用します（以前は \`{previous_model}\`）。`,
           current_none: `なし`,
+        },
+        vision: {
+          description: `チャットモデルが画像を見られない場合に画像分析用のビジョンモデルを設定します。`,
+          modal_title: `ビジョンモデルの選択`,
+          select_label: `ビジョンモデル`,
+          select_description: `チャットモデルの代わりに画像を分析するビジョン対応モデルを選択してください。`,
+          select_placeholder: `ビジョンモデルを選択...`,
+          no_api_key_title: `APIキー未設定`,
+          no_api_key_description: `ビジョンモデルを設定する前にAPIキーを設定してください。\`/config apikey set\` を使用してください。`,
+          no_models_title: `ビジョンモデルがありません`,
+          no_models_description: `現在のプロバイダー（{provider}）にはビジョン対応モデルがありません。先にビジョンモデルのあるプロバイダーに切り替えてください。`,
+          invalid_model_title: `無効なモデル`,
+          invalid_model_description: `選択されたビジョンモデルは無効または利用できません。`,
+          already_selected_title: `モデルは既に選択済みです`,
+          already_selected_description: `既に \`{model_name}\` をビジョンモデルとして使用しています。`,
+          not_needed_title: `ビジョンモデルは不要です`,
+          not_needed_description: `現在のチャットモデル（\`{model_name}\`）は既に画像ビジョンをサポートしています。別のビジョンモデルはビジョン非対応のチャットモデルにのみ有用です。`,
+          success_title: `ビジョンモデルが更新されました`,
+          success_description: `ビジョン非対応のチャットモデルは \`{model_name}\` を使用して \`analyze_image\` ツールで画像を分析します。`,
+          cleared_title: `ビジョンモデルを削除しました`,
+          cleared_description: `ビジョンモデルが削除されました。ビジョン非対応のチャットモデルは画像を分析できなくなります。`,
+          clear_option: `なし（ビジョンツールを無効化）`,
         },
       },
       rename: {
@@ -2839,6 +2906,15 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           url_placeholder: `https://mcp.example.com/sse`,
           auth_token_label: `認証トークン（任意）`,
           auth_token_placeholder: `認証用Bearerトークン（不要な場合は空白）`,
+          server_type_label: `サーバータイプ（任意）`,
+          server_type_description: `このサーバーが置き換える機能（対応する内蔵ツールを無効化）`,
+          server_type_placeholder: `サーバータイプを選択...`,
+          none_option: `汎用`,
+          none_option_description: `内蔵ツールは無効化されません`,
+          web_search_option: `ウェブ検索`,
+          web_search_option_description: `内蔵のBraveおよびDuckDuckGo検索ツールを無効化`,
+          url_fetcher_option: `URL取得`,
+          url_fetcher_option_description: `内蔵のURL取得ツールを無効化`,
           invalid_input_title: `入力不足`,
           invalid_input_description: `サーバー名とURLの両方が必要です。`,
           invalid_name_title: `無効なサーバー名`,

@@ -1692,6 +1692,23 @@ BEGIN
 	END IF;
 END $$;
 
+-- Migration: add vision_llm_id column (March 2026 — dedicated vision model for non-vision chat models)
+SELECT add_column_if_not_exists('tomori_configs', 'vision_llm_id', 'INTEGER', 'NULL');
+
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'tomori_configs_vision_llm_id_fkey'
+	) THEN
+		ALTER TABLE tomori_configs
+		ADD CONSTRAINT tomori_configs_vision_llm_id_fkey
+		FOREIGN KEY (vision_llm_id)
+		REFERENCES llms(llm_id)
+		ON DELETE SET NULL;
+	END IF;
+END $$;
+
 -- Bun SQL currently fails on INT[] binary decoding in some code paths.
 -- Migrate fallback_llm_ids to JSONB for stable SELECT */RETURNING * behavior.
 DO $$
@@ -1741,8 +1758,60 @@ CREATE TABLE IF NOT EXISTS guild_mcp_servers (
 );
 CREATE INDEX IF NOT EXISTS idx_guild_mcp_servers_server ON guild_mcp_servers(server_id);
 
+-- Optional server_type column for deduplicating default MCP tools.
+-- Values: NULL (general), 'web_search', 'url_fetcher'
+SELECT add_column_if_not_exists('guild_mcp_servers', 'server_type', 'TEXT');
+
 -- Trigger for updated_at auto-update
 DROP TRIGGER IF EXISTS update_guild_mcp_servers_timestamp ON guild_mcp_servers;
 CREATE TRIGGER update_guild_mcp_servers_timestamp
   BEFORE UPDATE ON guild_mcp_servers
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- Saved Provider Configs (per-server provider config snapshots)
+-- Stores API key, model selections, and endpoint config per provider
+-- so users can switch between providers without losing their setup.
+-- One row per provider per server. UPSERT on save, DELETE on remove.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS saved_provider_configs (
+  saved_config_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key BYTEA,                              -- Encrypted API key snapshot
+  key_version INTEGER DEFAULT 1,              -- Encryption key version
+  llm_id INT,                                 -- Text model at time of save
+  diffusion_model_id INT,                     -- Image model at time of save
+  embedding_model_id INT,                     -- Embedding model at time of save
+  nai_diffusion_model_id INT,                 -- Dedicated NovelAI image model at time of save
+  nai_preset_name TEXT,                       -- NovelAI sampling preset at time of save
+  custom_endpoint_url TEXT,                   -- Custom provider endpoint URL
+  custom_model_name TEXT,                     -- Custom provider model name
+  fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- Ordered fallback model IDs
+  channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{channel_disc_id, llm_id}, ...]
+  persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{tomori_id, llm_id}, ...]
+  saved_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(server_id, provider),
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (llm_id) REFERENCES llms(llm_id) ON DELETE SET NULL,
+  FOREIGN KEY (diffusion_model_id) REFERENCES image_diffusion_models(diffusion_model_id) ON DELETE SET NULL,
+  FOREIGN KEY (embedding_model_id) REFERENCES embedding_models(embedding_model_id) ON DELETE SET NULL,
+  FOREIGN KEY (nai_diffusion_model_id) REFERENCES image_diffusion_models(diffusion_model_id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_provider_configs_server
+  ON saved_provider_configs(server_id);
+
+-- Migration: add override snapshot columns (for existing deployments)
+SELECT add_column_if_not_exists('saved_provider_configs', 'channel_llm_overrides', 'JSONB', '''[]''::JSONB');
+SELECT add_column_if_not_exists('saved_provider_configs', 'persona_llm_overrides', 'JSONB', '''[]''::JSONB');
+
+-- Migration: add vision_llm_id column (for existing deployments)
+SELECT add_column_if_not_exists('saved_provider_configs', 'vision_llm_id', 'INTEGER', 'NULL');
+
+-- Auto-update timestamp trigger
+DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;
+CREATE TRIGGER update_saved_provider_configs_timestamp
+  BEFORE UPDATE ON saved_provider_configs
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
