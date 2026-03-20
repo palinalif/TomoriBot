@@ -1286,9 +1286,9 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - A custom system prompt can be set with \`/config sysprompt\` to further shape my behavior
 - Learn more with \`/help customization\``,
         memory_title: `Memory & Personalization`,
-        memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
+		memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
 - Personal memories persist across servers (try talking to me in another server!)
-- I also keep short-term memory of recent conversations for cross-channel awareness (opt into cross-server sharing with \`/personal cache\`)
+- I also keep STM (short-term memory) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal stm\`)
 - Change what I call you using \`/personal nickname\`
 - Use \`/teach\` to manually help me remember things, \`/forget\` to remove them
 - I can use server emojis and stickers more accurately after registration with \`/server initialize expressions\`
@@ -1644,12 +1644,12 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Use \`/forget document\` to remove uploaded documents
 - Requires an embedding model configured via \`/config model embedding\``,
         shortterm_title: `Short-Term Memory`,
-        shortterm_description: `In addition to persistent memories, I keep short-term memory of recent conversations:
-- Recent messages are cached per channel so I stay aware of context across channels
+		shortterm_description: `In addition to persistent memories, I keep STM (short-term memory) of recent conversations:
+- Recent messages are cached per channel, and each persona carries the latest STM across channels within the same server
 - I can automatically summarize older conversations to keep context efficient
-- **Cross-server sharing** is opt-in: use {personalCache} with the \`crossserver\` option to let me reference your conversations from other servers
-- Clear all short-term memories with {personalCacheClear}
-- Short-term memories expire automatically over time`,
+- **Cross-server sharing** is opt-in: use {personalStm} with the \`crossserver\` option to let me reference your own conversations from other servers
+- Clear your user-specific STM with {personalStmClear}
+- STM expires automatically over time`,
       },
 
       // /help customization
@@ -3472,21 +3472,21 @@ You can change this anytime using \`/personal privacy\`.`,
 **Warning:** Personalization is currently disabled on this server, so I won't use this nickname here. I'll still use it on other servers where personalization is enabled.`, // Natural line break
       },
 
-      cache: {
-        description: `Configure short-term memory settings`,
-        option_description: `Which setting to configure`,
-        crossserver_option: `Cross-server memory sharing`,
-        clear_option: `Clear all short-term memories`,
-        crossserver: {
-          title: `Cross-Server Memory Sharing`,
-          enabled: `Cross-server memory sharing is now **enabled**. I can now reference conversations from other servers when talking to you.`,
-          disabled: `Cross-server memory sharing is now **disabled**. I will only reference conversations from the same server.`,
-        },
-        clear: {
-          title: `Short-Term Memory Cleared`,
-          success: `All your short-term memories have been cleared across all channels.`,
-        },
-      },
+		stm: {
+			description: `Configure STM (short-term memory) settings`,
+			option_description: `Which STM setting to configure`,
+			crossserver_option: `Cross-server STM sharing`,
+			clear_option: `Clear personal STM`,
+			crossserver: {
+				title: `Cross-Server STM Sharing`,
+				enabled: `Cross-server STM sharing is now **enabled**. I can now reference your conversations from other servers when talking to you.`,
+				disabled: `Cross-server STM sharing is now **disabled**. I will only reference your conversations from this server.`,
+			},
+			clear: {
+				title: `STM Cleared`,
+				success: `Your user-specific STM has been cleared across all channels.`,
+			},
+		},
     },
 
     // Commands for teaching Tomori

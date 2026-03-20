@@ -284,10 +284,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
         "- **Conversation history** (previous messages in context)\n";
       capabilitiesContent +=
         "- **Short-term memory** (recent conversations cached per channel for cross-channel context awareness)\n";
-      capabilitiesContent +=
-        "- Short-term memories expire automatically and can be summarized by you for efficiency\n";
-      capabilitiesContent +=
-        "- Cross-server short-term memory sharing is available when the user opts in via `/personal cache`\n\n";
+		capabilitiesContent +=
+			"- Short-term memories expire automatically and can be summarized by you for efficiency\n";
+		capabilitiesContent +=
+			"- Cross-server short-term memory sharing is available when the user opts in via `/personal stm`\n\n";
 
       // 6b. Document Knowledge Base section (conditional on embedding model)
       capabilitiesContent += "## Document Knowledge Base\n\n";

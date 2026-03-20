@@ -7173,18 +7173,21 @@ export default async function tomoriChat(
             ];
 
             if (uniqueTomoriIds.length > 0) {
-              // Multi-persona or single-persona: store under each responding persona's key
-              for (const tomoriId of uniqueTomoriIds) {
+					// Multi-persona or single-persona: store user-scoped STM and, in guilds, server-shared STM
+					for (const tomoriId of uniqueTomoriIds) {
                 // Look up the lineage ID for this persona from the responses
                 const matchingResponse = personaResponses.find(
                   (r) => r.tomoriId === tomoriId,
                 );
                 const personaLineageId =
                   matchingResponse?.personaLineageId ?? null;
-                const cacheKey = `shortterm:${userDiscId}:${channel.id}:${tomoriId}`;
-                log.info(
-                  `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - cacheKey=${cacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
-                );
+						const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}:${tomoriId}`;
+						const serverCacheKey = isDMChannel
+							? "n/a"
+							: `shortterm:server:${serverDiscId}:${channel.id}:${tomoriId}`;
+						log.info(
+							`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
+						);
 
                 storeShortTermMemory(
                   userDiscId,
@@ -7197,16 +7200,19 @@ export default async function tomoriChat(
                   personaLineageId,
                 );
 
-                log.info(
-                  `[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - cacheKey=${cacheKey}`,
-                );
-              }
-            } else {
-              // Fallback: no persona responses captured (e.g., all failed), store without tomoriId
-              const cacheKey = `shortterm:${userDiscId}:${channel.id}`;
-              log.info(
-                `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - cacheKey=${cacheKey}, messageCount=${messagesToStore.length}`,
-              );
+						log.info(
+							`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
+						);
+					}
+				} else {
+					// Fallback: no persona responses captured (e.g., all failed), store without tomoriId
+					const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}`;
+					const serverCacheKey = isDMChannel
+						? "n/a"
+						: `shortterm:server:${serverDiscId}:${channel.id}`;
+					log.info(
+						`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}`,
+					);
 
               storeShortTermMemory(
                 userDiscId,
@@ -7217,10 +7223,10 @@ export default async function tomoriChat(
                 channelName,
               );
 
-              log.info(
-                `[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - cacheKey=${cacheKey}`,
-              );
-            }
+					log.info(
+						`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
+					);
+				}
           }
         }
       } catch (storageError) {

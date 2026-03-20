@@ -45,14 +45,18 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
 
 ### 5) Short-term memory cache (`shortTermMemoryCache.ts`)
 
-- Key: `shortterm:{userId}:{channelId}` (persona-scoped variant includes `:{tomoriId}`)
+- Keys:
+  - user-scoped: `shortterm:user:{userId}:{channelId}` (persona-scoped variant includes `:{tomoriId}`)
+  - server-shared: `shortterm:server:{serverId}:{channelId}` (persona-scoped variant includes `:{tomoriId}`)
 - Stores per-channel conversation snippets and optional summaries
+- Guild behavior: the latest STM for a persona in a channel is shared across that server's other channels; user-scoped STM is retained for cross-server opt-in behavior
 - TTL env vars:
   - `SHORT_TERM_MEMORY_TTL_HOURS`
   - `SHORT_TERM_MEMORY_SUMMARY_TTL_HOURS`
 - Code fallback defaults are 12h/24h; deployers commonly override in `.env`.
 - APIs:
-  - `storeShortTermMemory`, `getShortTermMemoryForChannel`, `getShortTermMemoriesForUser`
+  - `storeShortTermMemory`, `getShortTermMemoryForUserChannel`, `getShortTermMemoryForServerChannel`
+  - `getShortTermMemoriesForUser`, `getShortTermMemoriesForServer`
   - `updateShortTermMemorySummary`
   - `clearShortTermMemoryForUser`, `clearShortTermMemoryForChannel`
 

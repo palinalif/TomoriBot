@@ -47,9 +47,11 @@ import {
   retrieveRelevantDocumentChunks,
 } from "../documents/documentService";
 import {
-  getShortTermMemoriesForUser,
-  getShortTermMemoryForChannel,
-  getRelativeTimestamp,
+	getShortTermMemoriesForServer,
+	getShortTermMemoriesForUser,
+	getShortTermMemoryForServerChannel,
+	getShortTermMemoryForUserChannel,
+	getRelativeTimestamp,
 } from "../cache/shortTermMemoryCache";
 import { getCachedAllPersonas } from "../cache/tomoriStateCache";
 import { getCachedUserRow } from "../cache/userCache";
@@ -538,73 +540,100 @@ async function buildShortTermMemoryContext(
   const memoryItems: StructuredContextItem[] = [];
   let createPromptText: string | undefined;
 
-  try {
-    // 1. Check if user has cross-server opt-in enabled
-    const userRow = await getCachedUserRow(triggeringUserId);
-    const crossServerOptIn =
-      userRow?.shortterm_cache_crossserver_opt_in ?? false;
+	try {
+		// 1. Check if user has cross-server opt-in enabled
+		const userRow = await getCachedUserRow(triggeringUserId);
+		const crossServerOptIn =
+			userRow?.shortterm_cache_crossserver_opt_in ?? false;
 
-    // 2. Get short-term memories for user (excluding current channel, scoped to current persona's lineage)
-    const otherChannelMemories = getShortTermMemoriesForUser(
-      triggeringUserId,
-      currentChannelId,
-      tomoriState?.persona_lineage_id,
-    );
+		const personaLineageId = tomoriState?.persona_lineage_id;
+		let otherChannelMemories =
+			currentServerId === "DM"
+				? getShortTermMemoriesForUser(
+						triggeringUserId,
+						currentChannelId,
+						personaLineageId,
+					).filter(
+						(memory) =>
+							crossServerOptIn || memory.serverId === currentServerId,
+						)
+				: getShortTermMemoriesForServer(
+						currentServerId,
+						currentChannelId,
+						personaLineageId,
+					);
 
-    // 3. Filter based on cross-server setting
-    const filteredMemories = otherChannelMemories.filter((memory) => {
-      // If cross-server disabled, only include memories from same server
-      if (!crossServerOptIn && memory.serverId !== currentServerId) {
-        return false;
-      }
-      return true;
-    });
+		if (currentServerId !== "DM" && crossServerOptIn) {
+			const crossServerUserMemories = getShortTermMemoriesForUser(
+				triggeringUserId,
+				currentChannelId,
+				personaLineageId,
+			).filter((memory) => memory.serverId !== currentServerId);
 
-    // 4. Limit to max number of other-channel memories (most recent first)
-    const limitedMemories = filteredMemories.slice(
-      0,
-      MAX_OTHER_CHANNEL_MEMORIES,
-    );
+			otherChannelMemories = [
+				...otherChannelMemories,
+				...crossServerUserMemories,
+			];
+		}
 
-    // 5. Build OTHER-CHANNEL MEMORIES context (Phase 2)
-    // Show summaries when available, fall back to crude conversations
-    if (limitedMemories.length > 0) {
-      let otherChannelText = "";
+		otherChannelMemories.sort((a, b) => b.lastUpdated - a.lastUpdated);
 
-      for (const memory of limitedMemories) {
-        const relativeTime = getRelativeTimestamp(memory.lastUpdated);
+		// 2. Limit to max number of other-channel memories (most recent first)
+		const limitedMemories = otherChannelMemories.slice(
+			0,
+			MAX_OTHER_CHANNEL_MEMORIES,
+		);
 
-        // Determine channel reference (privacy-safe)
-        let channelReference: string;
-        if (memory.serverId === currentServerId && memory.channelName) {
-          // Same server: use channel mention
-          channelReference = `#${memory.channelName}`;
-        } else {
-          // Different server: generic reference
-          channelReference = "a channel in another server";
-        }
+		// 3. Build OTHER-CHANNEL MEMORIES context (Phase 2)
+		// Show summaries when available, fall back to crude conversations
+		if (limitedMemories.length > 0) {
+			let otherChannelText = "";
 
-        // Show summary if available, otherwise show crude conversation
-        if (memory.summary) {
-          // SUMMARY FORMAT (preferred)
-          const memoryPrefix = isUserImpersonation
-            ? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
-            : `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`;
-          otherChannelText += memoryPrefix;
-        } else {
-          // CRUDE CONVERSATION FORMAT (fallback)
-          const memoryPrefix = isUserImpersonation
-            ? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`
-            : `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
-          otherChannelText += memoryPrefix;
+			for (const memory of limitedMemories) {
+				const relativeTime = getRelativeTimestamp(memory.lastUpdated);
+				const isSameServerSharedMemory =
+					currentServerId !== "DM" && memory.serverId === currentServerId;
 
-          for (const msg of memory.messages) {
-            // Use stored speaker name if available, otherwise fall back to role-based naming
-            const speaker =
-              msg.speakerName ||
-              (msg.role === "user" ? triggererName : botName);
-            otherChannelText += `${speaker}: "${msg.content}"\n`;
-          }
+				// Determine channel reference (privacy-safe)
+				let channelReference: string;
+				if (memory.serverId === currentServerId) {
+					channelReference = memory.channelName
+						? `#${memory.channelName}`
+						: "another channel in this server";
+				} else {
+					channelReference = "a channel in another server";
+				}
+
+				// Show summary if available, otherwise show crude conversation
+				if (memory.summary) {
+					const memoryPrefix = isSameServerSharedMemory
+						? isUserImpersonation
+							? `[System: Recent conversation in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+							: `[System: ${botName} remembers a recent conversation in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+						: isUserImpersonation
+							? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+							: `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`;
+					otherChannelText += memoryPrefix;
+				} else {
+					const memoryPrefix = isSameServerSharedMemory
+						? isUserImpersonation
+							? `[System: Recent conversation in ${channelReference} (${relativeTime}):\n`
+							: `[System: ${botName} remembers a recent conversation in ${channelReference} (${relativeTime}):\n`
+						: isUserImpersonation
+							? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`
+							: `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
+					otherChannelText += memoryPrefix;
+
+					for (const msg of memory.messages) {
+						const speaker =
+							msg.speakerName ||
+							(msg.role === "user"
+								? isSameServerSharedMemory
+									? "Someone"
+									: triggererName
+								: botName);
+						otherChannelText += `${speaker}: "${msg.content}"\n`;
+					}
 
           otherChannelText += "]\n\n";
         }
@@ -631,7 +660,7 @@ async function buildShortTermMemoryContext(
       }
     }
 
-    // 5. Build SAME-CHANNEL context (Phase 3)
+		// 4. Build SAME-CHANNEL context (Phase 3)
     // Only shown for tool-calling models
     // - Summary (if exists): Goes with other memories (middle of context)
     // - Create prompt (if no summary): Goes at end as instruction
@@ -641,12 +670,18 @@ async function buildShortTermMemoryContext(
     if (tomoriState?.llm?.has_tools) {
       const isStmToolAvailable = tomoriState.llm.llm_provider !== "novelai";
 
-      // Persona-scoped: each persona only sees its own same-channel STM
-      const sameChannelMemory = getShortTermMemoryForChannel(
-        triggeringUserId,
-        currentChannelId,
-        tomoriState?.tomori_id,
-      );
+			const sameChannelMemory =
+				currentServerId === "DM"
+					? getShortTermMemoryForUserChannel(
+							triggeringUserId,
+							currentChannelId,
+							tomoriState?.tomori_id,
+						)
+					: getShortTermMemoryForServerChannel(
+							currentServerId,
+							currentChannelId,
+							tomoriState?.tomori_id,
+						);
 
       if (sameChannelMemory?.summary) {
         // EXISTING SUMMARY - Add to memoryItems (middle of context, with other memories)

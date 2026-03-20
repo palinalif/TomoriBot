@@ -7,11 +7,12 @@
  * Features:
  * - Cache-only storage (no database persistence)
  * - TTL-based expiration (2 hours for conversations, 4 hours for summaries)
- * - Privacy-respecting cross-server sharing (opt-in)
+ * - Persona-shared guild STM plus privacy-respecting cross-server user STM
  * - Relative timestamp formatting (e.g., "2 hours ago")
  *
  * Design:
- * - Key pattern: `shortterm:${userId}:${channelId}` or `shortterm:${userId}:${channelId}:${tomoriId}` (persona-scoped)
+ * - User key pattern: `shortterm:user:${userId}:${channelId}` or `shortterm:user:${userId}:${channelId}:${tomoriId}`
+ * - Server key pattern: `shortterm:server:${serverId}:${channelId}` or `shortterm:server:${serverId}:${channelId}:${tomoriId}`
  * - Conversations: Last 10 condensed turns (user + model messages)
  * - Summaries: Tool-generated summaries replace crude conversations
  * - Cross-model compatible: Summaries created by any model work for all models
@@ -31,7 +32,7 @@ interface ShortTermMessage {
 }
 
 /**
- * A short-term memory entry for a user in a specific channel
+ * A short-term memory entry for a specific channel
  */
 export interface ShortTermMemoryEntry {
   /** Array of conversation messages (max 10 condensed turns) */
@@ -98,7 +99,10 @@ const SUMMARY_TTL_MS = SUMMARY_TTL_HOURS * 60 * 60 * 1000;
 // Export constants for use in tools and context builders
 export { MAX_SUMMARY_LENGTH };
 
-// In-memory cache: Map<userId:channelId, ShortTermMemoryEntry>
+const USER_CACHE_PREFIX = "shortterm:user";
+const SERVER_CACHE_PREFIX = "shortterm:server";
+
+// In-memory cache: Map<scope:key, ShortTermMemoryEntry>
 const cache = new Map<string, ShortTermMemoryEntry>();
 
 // Cache statistics
@@ -116,13 +120,30 @@ const stats: CacheStats = {
  * @param channelId - Discord channel ID
  * @param tomoriId - Optional persona ID for persona-scoped memory
  */
-function getCacheKey(
-  userId: string,
-  channelId: string,
-  tomoriId?: number | null,
+function getUserCacheKey(
+	userId: string,
+	channelId: string,
+	tomoriId?: number | null,
 ): string {
-  if (tomoriId) return `shortterm:${userId}:${channelId}:${tomoriId}`;
-  return `shortterm:${userId}:${channelId}`;
+	if (tomoriId) return `${USER_CACHE_PREFIX}:${userId}:${channelId}:${tomoriId}`;
+	return `${USER_CACHE_PREFIX}:${userId}:${channelId}`;
+}
+
+/**
+ * Generate cache key for a server-shared channel memory, optionally scoped to a persona
+ * @param serverId - Discord server ID
+ * @param channelId - Discord channel ID
+ * @param tomoriId - Optional persona ID for persona-scoped memory
+ */
+function getServerCacheKey(
+	serverId: string,
+	channelId: string,
+	tomoriId?: number | null,
+): string {
+	if (tomoriId) {
+		return `${SERVER_CACHE_PREFIX}:${serverId}:${channelId}:${tomoriId}`;
+	}
+	return `${SERVER_CACHE_PREFIX}:${serverId}:${channelId}`;
 }
 
 /**
@@ -170,6 +191,166 @@ export function getRelativeTimestamp(timestamp: number): string {
   return "over a week ago";
 }
 
+function storeMemoryEntry(
+	key: string,
+	channelId: string,
+	messages: Array<{
+		role: "user" | "model";
+		content: string;
+		timestamp: number;
+		speakerName?: string;
+	}>,
+	serverId: string,
+	serverName?: string,
+	channelName?: string,
+	tomoriId?: number | null,
+	personaLineageId?: number | null,
+): void {
+	const existing = cache.get(key);
+
+	log.info(
+		`[shortTermMemoryCache] [STORAGE] Before store - key=${key}, existingEntry=${!!existing}, existingSummary=${!!existing?.summary}, existingSummaryLength=${existing?.summary?.length || 0}`,
+	);
+
+	const entry: ShortTermMemoryEntry = {
+		messages,
+		summary: existing?.summary,
+		serverId,
+		serverName,
+		channelId,
+		channelName,
+		tomoriId,
+		personaLineageId,
+		lastUpdated: Date.now(),
+	};
+
+	cache.set(key, entry);
+	stats.stores++;
+
+	log.info(
+		`[shortTermMemoryCache] [STORAGE] After store - key=${key}, messageCount=${messages.length}, hasSummary=${!!entry.summary}, summaryLength=${entry.summary?.length || 0}, summaryPreserved=${!!existing?.summary && !!entry.summary}`,
+	);
+}
+
+function collectMemories(
+	keyPrefix: string,
+	excludeChannelId?: string,
+	personaLineageId?: number | null,
+): ShortTermMemoryEntry[] {
+	const memories: ShortTermMemoryEntry[] = [];
+	const expiredKeys: string[] = [];
+
+	for (const [key, entry] of cache.entries()) {
+		if (!key.startsWith(keyPrefix)) {
+			continue;
+		}
+
+		if (excludeChannelId && entry.channelId === excludeChannelId) {
+			continue;
+		}
+
+		if (personaLineageId && entry.personaLineageId !== personaLineageId) {
+			continue;
+		}
+
+		if (isExpired(entry)) {
+			expiredKeys.push(key);
+			continue;
+		}
+
+		memories.push(entry);
+		stats.hits++;
+	}
+
+	for (const key of expiredKeys) {
+		cache.delete(key);
+		stats.expirations++;
+	}
+
+	memories.sort((a, b) => b.lastUpdated - a.lastUpdated);
+	return memories;
+}
+
+function getShortTermMemoryByKey(key: string): ShortTermMemoryEntry | undefined {
+	const entry = cache.get(key);
+
+	log.info(
+		`[shortTermMemoryCache] [RETRIEVAL] Get memory - key=${key}, entryFound=${!!entry}, hasSummary=${!!entry?.summary}, summaryLength=${entry?.summary?.length || 0}, messageCount=${entry?.messages.length || 0}`,
+	);
+
+	if (!entry) {
+		stats.misses++;
+		log.info(
+			`[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`,
+		);
+		return undefined;
+	}
+
+	if (isExpired(entry)) {
+		cache.delete(key);
+		stats.expirations++;
+		stats.misses++;
+		log.info(
+			`[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`,
+		);
+		return undefined;
+	}
+
+	stats.hits++;
+	log.info(
+		`[shortTermMemoryCache] [RETRIEVAL] Cache hit - returning entry with summary=${!!entry.summary}, messages=${entry.messages.length}`,
+	);
+	return entry;
+}
+
+function updateSummaryForKey(
+	key: string,
+	summary: string,
+	serverId: string,
+	channelId: string,
+	serverName?: string,
+	channelName?: string,
+	tomoriId?: number | null,
+	personaLineageId?: number | null,
+): void {
+	let existing = cache.get(key);
+
+	log.info(
+		`[shortTermMemoryCache] [SUMMARY_UPDATE] Before update - key=${key}, existingEntry=${!!existing}, existingMessages=${existing?.messages.length || 0}, existingSummary=${!!existing?.summary}`,
+	);
+
+	if (!existing) {
+		log.info(
+			`[shortTermMemoryCache] [SUMMARY_UPDATE] Creating new entry with summary - key=${key}, summaryLength=${summary.length}`,
+		);
+
+		existing = {
+			messages: [],
+			summary,
+			serverId,
+			serverName,
+			channelId,
+			channelName,
+			tomoriId,
+			personaLineageId,
+			lastUpdated: Date.now(),
+		};
+	} else {
+		log.info(
+			`[shortTermMemoryCache] [SUMMARY_UPDATE] Updating existing entry - previousSummary=${!!existing.summary}, newSummaryLength=${summary.length}`,
+		);
+		existing.summary = summary;
+		existing.lastUpdated = Date.now();
+	}
+
+	cache.set(key, existing);
+
+	const stored = cache.get(key);
+	log.info(
+		`[shortTermMemoryCache] [SUMMARY_UPDATE] After update - key=${key}, storedEntry=${!!stored}, storedSummary=${!!stored?.summary}, storedSummaryLength=${stored?.summary?.length || 0}, storedMessages=${stored?.messages.length || 0}`,
+	);
+}
+
 /**
  * Store a short-term memory for a user in a channel
  *
@@ -197,51 +378,42 @@ export function storeShortTermMemory(
   tomoriId?: number | null,
   personaLineageId?: number | null,
 ): void {
-  try {
-    // 1. Validate inputs
-    if (!userId || !channelId || !serverId) {
-      log.warn(
-        `[shortTermMemoryCache] Invalid parameters for storeShortTermMemory - userId=${!!userId}, channelId=${!!channelId}, serverId=${!!serverId}`,
-      );
-      return;
-    }
+	try {
+		if (!userId || !channelId || !serverId) {
+			log.warn(
+				`[shortTermMemoryCache] Invalid parameters for storeShortTermMemory - userId=${!!userId}, channelId=${!!channelId}, serverId=${!!serverId}`,
+			);
+			return;
+		}
 
-    // 2. Limit messages to MAX_MESSAGES_PER_CHANNEL (take most recent)
-    const limitedMessages = messages.slice(-MAX_MESSAGES_PER_CHANNEL);
+		const limitedMessages = messages.slice(-MAX_MESSAGES_PER_CHANNEL);
 
-    // 3. Get existing entry (preserve summary if exists)
-    const key = getCacheKey(userId, channelId, tomoriId);
-    const existing = cache.get(key);
+		storeMemoryEntry(
+			getUserCacheKey(userId, channelId, tomoriId),
+			channelId,
+			limitedMessages,
+			serverId,
+			serverName,
+			channelName,
+			tomoriId,
+			personaLineageId,
+		);
 
-    // 🔍 DEBUG: Log existing entry state BEFORE creating new entry
-    log.info(
-      `[shortTermMemoryCache] [STORAGE] Before store - key=${key}, existingEntry=${!!existing}, existingSummary=${!!existing?.summary}, existingSummaryLength=${existing?.summary?.length || 0}`,
-    );
-
-    // 4. Create new entry
-    const entry: ShortTermMemoryEntry = {
-      messages: limitedMessages,
-      summary: existing?.summary, // Preserve existing summary
-      serverId,
-      serverName,
-      channelId,
-      channelName,
-      tomoriId,
-      personaLineageId,
-      lastUpdated: Date.now(),
-    };
-
-    // 5. Store in cache
-    cache.set(key, entry);
-    stats.stores++;
-
-    // 🔍 DEBUG: Log final entry state AFTER storing
-    log.info(
-      `[shortTermMemoryCache] [STORAGE] After store - key=${key}, messageCount=${limitedMessages.length}, hasSummary=${!!entry.summary}, summaryLength=${entry.summary?.length || 0}, summaryPreserved=${!!existing?.summary && !!entry.summary}`,
-    );
-  } catch (error) {
-    log.error(
-      `[shortTermMemoryCache] Failed to store short-term memory - userId=${userId}, channelId=${channelId}`,
+		if (serverId !== "DM") {
+			storeMemoryEntry(
+				getServerCacheKey(serverId, channelId, tomoriId),
+				channelId,
+				limitedMessages,
+				serverId,
+				serverName,
+				channelName,
+				tomoriId,
+				personaLineageId,
+			);
+		}
+	} catch (error) {
+		log.error(
+			`[shortTermMemoryCache] Failed to store short-term memory - userId=${userId}, channelId=${channelId}`,
       error,
       {
         errorType: "CACHE_STORAGE_ERROR",
@@ -260,47 +432,19 @@ export function storeShortTermMemory(
  * @returns Array of non-expired memory entries
  */
 export function getShortTermMemoriesForUser(
-  userId: string,
-  excludeChannelId?: string,
-  personaLineageId?: number | null,
+	userId: string,
+	excludeChannelId?: string,
+	personaLineageId?: number | null,
 ): ShortTermMemoryEntry[] {
-  try {
-    const memories: ShortTermMemoryEntry[] = [];
+	try {
+		const memories = collectMemories(
+			`${USER_CACHE_PREFIX}:${userId}:`,
+			excludeChannelId,
+			personaLineageId,
+		);
 
-    // 1. Iterate through cache and find entries for this user
-    for (const [key, entry] of cache.entries()) {
-      // Check if key matches user
-      if (!key.startsWith(`shortterm:${userId}:`)) {
-        continue;
-      }
-
-      // Exclude specified channel if provided
-      if (excludeChannelId && entry.channelId === excludeChannelId) {
-        continue;
-      }
-
-      // Filter by persona lineage if provided (persona-scoped cross-channel/cross-server)
-      // Only include entries that match the requesting persona's lineage
-      if (personaLineageId && entry.personaLineageId !== personaLineageId) {
-        continue;
-      }
-
-      // Check expiration
-      if (isExpired(entry)) {
-        // Mark for removal but don't remove during iteration
-        continue;
-      }
-
-      // Add to results
-      memories.push(entry);
-      stats.hits++;
-    }
-
-    // 2. Sort by lastUpdated (most recent first)
-    memories.sort((a, b) => b.lastUpdated - a.lastUpdated);
-
-    log.info(
-      `[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
+		log.info(
+			`[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
     );
 
     return memories;
@@ -318,68 +462,122 @@ export function getShortTermMemoriesForUser(
 }
 
 /**
- * Get short-term memory for a specific channel, optionally scoped to a persona
+ * Get all server-shared short-term memories for a guild, optionally scoped to a persona lineage
+ *
+ * @param serverId - Discord server ID
+ * @param excludeChannelId - Optional channel ID to exclude (e.g., current channel)
+ * @param personaLineageId - Optional persona lineage ID to filter by
+ * @returns Array of non-expired memory entries
+ */
+export function getShortTermMemoriesForServer(
+	serverId: string,
+	excludeChannelId?: string,
+	personaLineageId?: number | null,
+): ShortTermMemoryEntry[] {
+	try {
+		if (!serverId || serverId === "DM") {
+			return [];
+		}
+
+		const memories = collectMemories(
+			`${SERVER_CACHE_PREFIX}:${serverId}:`,
+			excludeChannelId,
+			personaLineageId,
+		);
+
+		log.info(
+			`[shortTermMemoryCache] Retrieved server-shared short-term memories - serverId=${serverId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
+		);
+
+		return memories;
+	} catch (error) {
+		log.error(
+			`[shortTermMemoryCache] Failed to get server-shared short-term memories - serverId=${serverId}`,
+			error,
+			{
+				errorType: "CACHE_RETRIEVAL_ERROR",
+				metadata: { serverId },
+			},
+		);
+		return [];
+	}
+}
+
+/**
+ * Get short-term memory for a specific user/channel pair, optionally scoped to a persona
  *
  * @param userId - Discord user ID
  * @param channelId - Discord channel ID
  * @param tomoriId - Optional persona ID for persona-scoped memory
  * @returns Memory entry if found and not expired, undefined otherwise
  */
-export function getShortTermMemoryForChannel(
-  userId: string,
-  channelId: string,
-  tomoriId?: number | null,
+export function getShortTermMemoryForUserChannel(
+	userId: string,
+	channelId: string,
+	tomoriId?: number | null,
 ): ShortTermMemoryEntry | undefined {
-  try {
-    const key = getCacheKey(userId, channelId, tomoriId);
-    const entry = cache.get(key);
-
-    // 🔍 DEBUG: Log what we found in cache
-    log.info(
-      `[shortTermMemoryCache] [RETRIEVAL] Get memory for channel - key=${key}, entryFound=${!!entry}, hasSummary=${!!entry?.summary}, summaryLength=${entry?.summary?.length || 0}, messageCount=${entry?.messages.length || 0}`,
-    );
-
-    // Check if entry exists
-    if (!entry) {
-      stats.misses++;
-      log.info(
-        `[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`,
-      );
-      return undefined;
-    }
-
-    // Check expiration
-    if (isExpired(entry)) {
-      // Remove expired entry
-      cache.delete(key);
-      stats.expirations++;
-      stats.misses++;
-      log.info(
-        `[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`,
-      );
-      return undefined;
-    }
-
-    stats.hits++;
-    log.info(
-      `[shortTermMemoryCache] [RETRIEVAL] Cache hit - returning entry with summary=${!!entry.summary}, messages=${entry.messages.length}`,
-    );
-    return entry;
-  } catch (error) {
-    log.error(
-      `[shortTermMemoryCache] Failed to get short-term memory for channel - userId=${userId}, channelId=${channelId}`,
-      error,
-      {
-        errorType: "CACHE_RETRIEVAL_ERROR",
+	try {
+		return getShortTermMemoryByKey(getUserCacheKey(userId, channelId, tomoriId));
+	} catch (error) {
+		log.error(
+			`[shortTermMemoryCache] Failed to get user short-term memory for channel - userId=${userId}, channelId=${channelId}`,
+			error,
+			{
+				errorType: "CACHE_RETRIEVAL_ERROR",
         metadata: { userDiscId: userId, channelId },
       },
     );
     return undefined;
-  }
+	}
 }
 
 /**
- * Update the summary for a short-term memory (used by update_short_term_memory tool)
+ * Get short-term memory for a specific server/channel pair, optionally scoped to a persona
+ *
+ * @param serverId - Discord server ID
+ * @param channelId - Discord channel ID
+ * @param tomoriId - Optional persona ID for persona-scoped memory
+ * @returns Memory entry if found and not expired, undefined otherwise
+ */
+export function getShortTermMemoryForServerChannel(
+	serverId: string,
+	channelId: string,
+	tomoriId?: number | null,
+): ShortTermMemoryEntry | undefined {
+	try {
+		if (!serverId || serverId === "DM") {
+			return undefined;
+		}
+
+		return getShortTermMemoryByKey(
+			getServerCacheKey(serverId, channelId, tomoriId),
+		);
+	} catch (error) {
+		log.error(
+			`[shortTermMemoryCache] Failed to get server short-term memory for channel - serverId=${serverId}, channelId=${channelId}`,
+			error,
+			{
+				errorType: "CACHE_RETRIEVAL_ERROR",
+				metadata: { serverId, channelId },
+			},
+		);
+		return undefined;
+	}
+}
+
+/**
+ * Backwards-compatible alias for user-scoped channel lookup
+ */
+export function getShortTermMemoryForChannel(
+	userId: string,
+	channelId: string,
+	tomoriId?: number | null,
+): ShortTermMemoryEntry | undefined {
+	return getShortTermMemoryForUserChannel(userId, channelId, tomoriId);
+}
+
+/**
+ * Update the summary for short-term memory entries (used by update_short_term_memory tool)
  *
  * @param userId - Discord user ID
  * @param channelId - Discord channel ID
@@ -400,67 +598,45 @@ export function updateShortTermMemorySummary(
   tomoriId?: number | null,
   personaLineageId?: number | null,
 ): void {
-  try {
-    // 1. Validate inputs
-    if (!userId || !channelId || !summary) {
-      log.warn(
-        `[shortTermMemoryCache] Invalid parameters for updateShortTermMemorySummary - userId=${!!userId}, channelId=${!!channelId}, summary=${!!summary}`,
+	try {
+		if (!userId || !channelId || !summary) {
+			log.warn(
+				`[shortTermMemoryCache] Invalid parameters for updateShortTermMemorySummary - userId=${!!userId}, channelId=${!!channelId}, summary=${!!summary}`,
       );
-      return;
-    }
+			return;
+		}
 
-    // 2. Validate summary length (use configured max)
-    const truncatedSummary =
-      summary.length > MAX_SUMMARY_LENGTH
-        ? summary.slice(0, MAX_SUMMARY_LENGTH)
-        : summary;
+		const truncatedSummary =
+			summary.length > MAX_SUMMARY_LENGTH
+				? summary.slice(0, MAX_SUMMARY_LENGTH)
+				: summary;
 
-    // 3. Get existing entry
-    const key = getCacheKey(userId, channelId, tomoriId);
-    let existing = cache.get(key);
+		updateSummaryForKey(
+			getUserCacheKey(userId, channelId, tomoriId),
+			truncatedSummary,
+			serverId || "unknown",
+			channelId,
+			serverName,
+			channelName,
+			tomoriId,
+			personaLineageId,
+		);
 
-    // 🔍 DEBUG: Log state BEFORE updating summary
-    log.info(
-      `[shortTermMemoryCache] [SUMMARY_UPDATE] Before update - key=${key}, existingEntry=${!!existing}, existingMessages=${existing?.messages.length || 0}, existingSummary=${!!existing?.summary}`,
-    );
-
-    // 4. If no existing entry, create a minimal one (tool was called before conversation storage)
-    if (!existing) {
-      log.info(
-        `[shortTermMemoryCache] [SUMMARY_UPDATE] Creating new entry with summary - userId=${userId}, channelId=${channelId}, summaryLength=${truncatedSummary.length}`,
-      );
-
-      existing = {
-        messages: [], // Empty messages array - will be populated when conversation is stored
-        summary: truncatedSummary,
-        serverId: serverId || "unknown",
-        serverName,
-        channelId,
-        channelName,
-        tomoriId,
-        personaLineageId,
-        lastUpdated: Date.now(),
-      };
-    } else {
-      // Update existing entry
-      log.info(
-        `[shortTermMemoryCache] [SUMMARY_UPDATE] Updating existing entry - previousSummary=${!!existing.summary}, newSummaryLength=${truncatedSummary.length}`,
-      );
-      existing.summary = truncatedSummary;
-      existing.lastUpdated = Date.now();
-    }
-
-    // 5. Store updated entry
-    cache.set(key, existing);
-
-    // 🔍 DEBUG: Verify entry was stored correctly
-    const stored = cache.get(key);
-    log.info(
-      `[shortTermMemoryCache] [SUMMARY_UPDATE] After update - key=${key}, storedEntry=${!!stored}, storedSummary=${!!stored?.summary}, storedSummaryLength=${stored?.summary?.length || 0}, storedMessages=${stored?.messages.length || 0}`,
-    );
-  } catch (error) {
-    log.error(
-      `[shortTermMemoryCache] Failed to update short-term memory summary - userId=${userId}, channelId=${channelId}`,
+		if (serverId && serverId !== "DM") {
+			updateSummaryForKey(
+				getServerCacheKey(serverId, channelId, tomoriId),
+				truncatedSummary,
+				serverId,
+				channelId,
+				serverName,
+				channelName,
+				tomoriId,
+				personaLineageId,
+			);
+		}
+	} catch (error) {
+		log.error(
+			`[shortTermMemoryCache] Failed to update short-term memory summary - userId=${userId}, channelId=${channelId}`,
       error,
       {
         errorType: "CACHE_UPDATE_ERROR",
@@ -478,22 +654,34 @@ export function updateShortTermMemorySummary(
  * @param tomoriId - Optional persona ID for persona-scoped memory
  */
 export function invalidateShortTermMemory(
-  userId: string,
-  channelId: string,
-  tomoriId?: number | null,
+	userId: string,
+	channelId: string,
+	tomoriId?: number | null,
+	serverId?: string,
 ): void {
-  try {
-    const key = getCacheKey(userId, channelId, tomoriId);
-    const deleted = cache.delete(key);
+	try {
+		let clearedCount = 0;
 
-    if (deleted) {
-      stats.invalidations++;
-      log.info(
-        `[shortTermMemoryCache] Invalidated short-term memory - userId=${userId}, channelId=${channelId}`,
-      );
-    }
-  } catch (error) {
-    log.error(
+		if (cache.delete(getUserCacheKey(userId, channelId, tomoriId))) {
+			clearedCount++;
+		}
+
+		if (
+			serverId &&
+			serverId !== "DM" &&
+			cache.delete(getServerCacheKey(serverId, channelId, tomoriId))
+		) {
+			clearedCount++;
+		}
+
+		if (clearedCount > 0) {
+			stats.invalidations += clearedCount;
+			log.info(
+				`[shortTermMemoryCache] Invalidated short-term memory - userId=${userId}, channelId=${channelId}, clearedCount=${clearedCount}`,
+			);
+		}
+	} catch (error) {
+		log.error(
       `[shortTermMemoryCache] Failed to invalidate short-term memory - userId=${userId}, channelId=${channelId}`,
       error,
       {
@@ -539,20 +727,20 @@ export function clearShortTermMemoryForChannel(channelId: string): void {
 }
 
 /**
- * Clear all short-term memories for a user (used by /personal cache clear)
+ * Clear all user-scoped short-term memories for a user (used by /personal stm clear)
  *
  * @param userId - Discord user ID
  */
 export function clearShortTermMemoryForUser(userId: string): void {
-  try {
+	try {
     let clearedCount = 0;
 
-    // Find and delete all entries for this user
-    for (const key of cache.keys()) {
-      if (key.startsWith(`shortterm:${userId}:`)) {
-        cache.delete(key);
-        clearedCount++;
-      }
+		// Find and delete all user-scoped entries for this user
+		for (const key of cache.keys()) {
+			if (key.startsWith(`${USER_CACHE_PREFIX}:${userId}:`)) {
+				cache.delete(key);
+				clearedCount++;
+			}
     }
 
     stats.invalidations += clearedCount;
