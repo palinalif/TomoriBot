@@ -219,15 +219,10 @@ export class DeepseekProvider
 		tomoriState: TomoriState,
 		apiKey: string,
 	): Promise<DeepseekProviderConfig> {
-		const adjustedTemperature = Math.max(
-			0.2,
-			Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
-		);
-
 		const config: DeepseekProviderConfig = {
 			model: tomoriState.llm.llm_codename,
 			apiKey,
-			temperature: adjustedTemperature,
+			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 4096,
 			endpointUrl: DEEPSEEK_CHAT_COMPLETIONS_URL,
 			seesImages: tomoriState.llm.sees_images,

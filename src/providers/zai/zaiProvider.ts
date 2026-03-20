@@ -270,16 +270,10 @@ export class ZaiProvider
 			? tomoriState.llm.llm_codename.slice(4)
 			: tomoriState.llm.llm_codename;
 
-		// Same temperature adjustment as DeepSeek: shift down by 0.8, clamp to [0.2, 1.2]
-		const adjustedTemperature = Math.max(
-			0.2,
-			Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
-		);
-
 		const config: ZaiProviderConfig = {
 			model: apiModel,
 			apiKey,
-			temperature: adjustedTemperature,
+			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 4096,
 			endpointUrl: ZAI_CHAT_COMPLETIONS_URL,
 			seesImages: tomoriState.llm.sees_images,

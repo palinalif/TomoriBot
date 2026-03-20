@@ -182,7 +182,7 @@ export const tomoriConfigSchema = z.object({
 	nai_scale: z.number().min(0.0).max(10.0).nullable().optional(), // Added March 2026 - Server override for NovelAI image scale
 	nai_noise_schedule: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI noise schedule
 	nai_cfg_rescale: z.number().min(0.0).max(1.0).nullable().optional(), // Added March 2026 - Server override for NovelAI cfg_rescale
-	llm_temperature: z.number().min(1.0).max(2.0).default(1.2),
+	llm_temperature: z.number().min(0.0).max(2.0).default(1.0),
   llm_top_p: z.number().min(0.0).max(1.0).default(0.95), // Added February 2026 - Nucleus sampling
   llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
@@ -774,6 +774,12 @@ export const savedProviderConfigSchema = z.object({
 	nai_diffusion_model_id: z.number().nullable(),
 	vision_llm_id: z.number().nullable().optional(), // Added March 2026 - Vision model snapshot
 	nai_preset_name: z.string().nullable(),
+	llm_temperature: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+	llm_top_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+	llm_top_k: z.number().int().nullable().optional(), // Added March 2026 - Sampler snapshot
+	llm_frequency_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+	llm_presence_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+	llm_min_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
 	custom_endpoint_url: z.string().nullable(),
 	custom_model_name: z.string().nullable(),
 	fallback_llm_ids: z.preprocess(

@@ -220,37 +220,18 @@ export function getGlmParameters(): NovelAIParameters {
 }
 
 /**
- * Convert temperature from Gemini scale to NovelAI scale
- * Database stores temperature in Gemini's optimal range (1.0 to 2.0, default 1.5)
- * NovelAI models have different optimal ranges, so we need to convert
+ * Previously converted temperature from a Gemini-centric scale to NovelAI model scale.
+ * Now a direct passthrough — temperature is used as-is across all providers.
  *
- * @param geminiTemp - Temperature in Gemini scale (1.0 to 2.0)
- * @param model - Target NovelAI model
- * @returns Converted temperature for the target model
+ * @param temperature - Temperature value from the database
+ * @param _model - Target NovelAI model (unused, kept for call-site compatibility)
+ * @returns The temperature unchanged
  */
 export function convertTemperatureToNovelAI(
-  geminiTemp: number,
-  model: string,
+  temperature: number,
+  _model: string,
 ): number {
-  if (model === "kayra-v1" || model === "llama-3-erato-v1") {
-    // Kayra-v1: Simple offset conversion
-    // Gemini 1.5 (default) → Kayra 1.35 (default)
-    // Just subtract 0.15 from Gemini temperature
-    return geminiTemp - 0.15;
-  }
-
-  // glm-4-6: Piecewise linear mapping (recentered around 1.0 default)
-  // Low range:  [1.0, 1.5] gemini → [0.6, 1.0] glm
-  // High range: [1.5, 2.0] gemini → [1.0, 1.6] glm
-  if (geminiTemp <= 1.5) {
-    // Below or at Gemini default: interpolate between 0.6 and 1.0
-    // slope = (1.0 - 0.6) / (1.5 - 1.0) = 0.8
-    return 0.6 + (geminiTemp - 1.0) * 0.8;
-  }
-
-  // Above Gemini default: interpolate between 1.0 and 1.6
-  // slope = (1.6 - 1.0) / (2.0 - 1.5) = 1.2
-  return 1.0 + (geminiTemp - 1.5) * 1.2;
+  return temperature;
 }
 
 /**

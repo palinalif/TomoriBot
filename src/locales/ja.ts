@@ -411,11 +411,9 @@ export default {
       "429_default_message":
         "DeepSeekでレート制限が発生しています。しばらくしてから再度お試しください。",
 
-      "500_default_message":
-        "DeepSeekで内部サーバーエラーが発生しました。",
+      "500_default_message": "DeepSeekで内部サーバーエラーが発生しました。",
 
-      "503_default_message":
-        "DeepSeekは現在利用できないか、過負荷状態です。",
+      "503_default_message": "DeepSeekは現在利用できないか、過負荷状態です。",
 
       unknown_default_message:
         "DeepSeekとの通信中に予期しないエラーが発生しました。",
@@ -441,11 +439,9 @@ export default {
       "429_default_message":
         "Z.aiでレート制限が発生しています。しばらくしてから再度お試しください。",
 
-      "500_default_message":
-        "Z.aiで内部サーバーエラーが発生しました。",
+      "500_default_message": "Z.aiで内部サーバーエラーが発生しました。",
 
-      "503_default_message":
-        "Z.aiは現在利用できないか、過負荷状態です。",
+      "503_default_message": "Z.aiは現在利用できないか、過負荷状態です。",
 
       unknown_default_message:
         "Z.aiとの通信中に予期しないエラーが発生しました。",
@@ -1290,7 +1286,7 @@ export default {
 - \`/config sysprompt\`でカスタムシステムプロンプトを設定し、行動をさらに形張ることができます
 - 詳しくは\`/help customization\`をご覧ください`,
         memory_title: `記憶＆パーソナライゼーション`,
-		memory_description: `- ユーザーやサーバーに関する事実を記憶し、会話を跨いで保持します
+        memory_description: `- ユーザーやサーバーに関する事実を記憶し、会話を跨いで保持します
 - 個人的な記憶は全サーバーで保持されます（他のサーバーでも私に話しかけてみて！）
 - 最近の会話はSTM（短期記憶）として保持し、チャンネルやサーバーをまたいで文脈を把握します（クロスサーバー共有は\`/personal stm\`でオプトインできます）
 - \`/personal nickname\`であなたを呼ぶ名前を変更できます
@@ -1648,7 +1644,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`/forget document\`でアップロードしたドキュメントを削除
 - \`/config model embedding\`で埋め込みモデルの設定が必要`,
         shortterm_title: `短期記憶`,
-		shortterm_description: `永続的な記憶に加え、最近の会話はSTM（短期記憶）として保持しています：
+        shortterm_description: `永続的な記憶に加え、最近の会話はSTM（短期記憶）として保持しています：
 - 最近のメッセージはチャンネルごとにキャッシュされ、各ペルソナは同じサーバー内の他チャンネルにも最新のSTMを持ち越します
 - 古い会話を自動的に要約し、文脈を効率的に保つことができます
 - **クロスサーバー共有**はオプトイン制です：{personalStm}の\`crossserver\`オプションを使うと、あなた自身の他サーバーでの会話も参照できるようになります
@@ -2660,8 +2656,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       params: {
         description: `AI生成品質のサンプリングパラメーターを調整します。`,
         temperature: {
-          description: `応答の創造性/ランダム性を設定します（1.0〜2.0、デフォルト: 1.2）。`,
-          value_description: `1.0（予測可能）から2.0（非常にランダム）の間の値。デフォルト: 1.2。`,
+          description: `応答の創造性/ランダム性を設定します（0〜2.0、デフォルト: 1.0）。`,
+          value_description: `0（決定的）から2.0（非常にランダム）の間の値。デフォルト: 1.0。`,
           invalid_value_title: `無効なTemperature`,
           invalid_value_description: `Temperatureは {min} から {max} の間でなければなりません。`,
           already_set_title: `Temperatureは既に設定済みです`,
@@ -3496,21 +3492,21 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 **警告:** 現在、このサーバーではパーソナライズが無効になっているため、このニックネームはここでは使用しません。パーソナライズが有効になっている他のサーバーでは使用します。`,
       },
 
-		stm: {
-			description: `STM（短期記憶）の設定を構成します`,
-			option_description: `設定するSTM項目を選んでください`,
-			crossserver_option: `サーバー間STM共有`,
-			clear_option: `個人用STMをクリア`,
-			crossserver: {
-				title: `サーバー間STM共有`,
-				enabled: `サーバー間STM共有が**有効**になりました。他のサーバーでのあなたの会話を参照できるようになります。`,
-				disabled: `サーバー間STM共有が**無効**になりました。このサーバーでのあなたの会話のみを参照します。`,
-			},
-			clear: {
-				title: `STMがクリアされました`,
-				success: `ユーザー固有のSTMがすべてのチャンネルでクリアされました。`,
-			},
-		},
+      stm: {
+        description: `STM（短期記憶）の設定を構成します`,
+        option_description: `設定するSTM項目を選んでください`,
+        crossserver_option: `サーバー間STM共有`,
+        clear_option: `個人用STMをクリア`,
+        crossserver: {
+          title: `サーバー間STM共有`,
+          enabled: `サーバー間STM共有が**有効**になりました。他のサーバーでのあなたの会話を参照できるようになります。`,
+          disabled: `サーバー間STM共有が**無効**になりました。このサーバーでのあなたの会話のみを参照します。`,
+        },
+        clear: {
+          title: `STMがクリアされました`,
+          success: `ユーザー固有のSTMがすべてのチャンネルでクリアされました。`,
+        },
+      },
     },
 
     // Tomoriに教えるためのコマンド

@@ -872,34 +872,15 @@ export async function updateTomoriConfig(
 }
 
 /**
- * Converts a NAI-scale temperature back to the Gemini scale used in tomori_configs.
- * This is the inverse of convertTemperatureToNovelAI() in novelaiService.ts.
+ * Previously converted NAI-scale temperature back to a Gemini-centric scale.
+ * Now a direct passthrough — temperature is stored as-is across all providers.
  *
- * @param naiTemp - Temperature in the NAI model's native scale
- * @param model - The LLM codename (e.g. "kayra-v1", "llama-3-erato-v1")
- * @returns Temperature clamped to the Gemini scale [1.0, 2.0]
+ * @param naiTemp - Temperature from the NAI preset
+ * @param _model - The LLM codename (unused, kept for call-site compatibility)
+ * @returns The temperature unchanged, clamped to the valid DB range [0.0, 2.0]
  */
-function invertNaiTemperature(naiTemp: number, model: string): number {
-  let geminiTemp: number;
-
-  if (model === "kayra-v1") {
-    // 1. Kayra: simple offset (Gemini 1.5 → Kayra 1.35), inverse is +0.15
-    geminiTemp = naiTemp + 0.15;
-  } else {
-    // 2. Erato / GLM piecewise linear inverse:
-    //    Forward low:  gemini [1.0,1.5] → nai = 0.6 + (gemini-1.0)*0.8
-    //    Inverse low:  nai ≤ 1.0 → gemini = 1.0 + (nai-0.6)/0.8
-    //    Forward high: gemini (1.5,2.0] → nai = 1.0 + (gemini-1.5)*1.2
-    //    Inverse high: nai > 1.0 → gemini = 1.5 + (nai-1.0)/1.2
-    if (naiTemp <= 1.0) {
-      geminiTemp = 1.0 + (naiTemp - 0.6) / 0.8;
-    } else {
-      geminiTemp = 1.5 + (naiTemp - 1.0) / 1.2;
-    }
-  }
-
-  // 3. Clamp to the valid tomori_configs range [1.0, 2.0]
-  return Math.min(2.0, Math.max(1.0, geminiTemp));
+function invertNaiTemperature(naiTemp: number, _model: string): number {
+  return Math.min(2.0, Math.max(0.0, naiTemp));
 }
 
 /**
@@ -1997,13 +1978,17 @@ export async function upsertSavedProviderConfig(
 				llm_id, diffusion_model_id, embedding_model_id,
 				nai_diffusion_model_id, vision_llm_id, nai_preset_name,
 				custom_endpoint_url, custom_model_name,
-				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides
+				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
+				llm_temperature, llm_top_p, llm_top_k,
+				llm_frequency_penalty, llm_presence_penalty, llm_min_p
 			) VALUES (
 				${serverId}, ${provider}, ${config.api_key}, ${config.key_version},
 				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
 				${config.nai_diffusion_model_id}, ${config.vision_llm_id ?? null}, ${config.nai_preset_name},
 				${config.custom_endpoint_url}, ${config.custom_model_name},
-				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb
+				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb,
+				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
+				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null}
 			)
 			ON CONFLICT (server_id, provider) DO UPDATE SET
 				api_key = EXCLUDED.api_key,
@@ -2018,7 +2003,13 @@ export async function upsertSavedProviderConfig(
 				custom_model_name = EXCLUDED.custom_model_name,
 				fallback_llm_ids = EXCLUDED.fallback_llm_ids,
 				channel_llm_overrides = EXCLUDED.channel_llm_overrides,
-				persona_llm_overrides = EXCLUDED.persona_llm_overrides
+				persona_llm_overrides = EXCLUDED.persona_llm_overrides,
+				llm_temperature = EXCLUDED.llm_temperature,
+				llm_top_p = EXCLUDED.llm_top_p,
+				llm_top_k = EXCLUDED.llm_top_k,
+				llm_frequency_penalty = EXCLUDED.llm_frequency_penalty,
+				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
+				llm_min_p = EXCLUDED.llm_min_p
 			RETURNING *
 		`;
 

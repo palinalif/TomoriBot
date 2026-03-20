@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   server_id INT, -- Server-scoped config (nullable for legacy rows)
   llm_id INT NOT NULL,
   embedding_model_id INT,
-  llm_temperature REAL NOT NULL DEFAULT 1.2 CHECK (llm_temperature >= 1.0 AND llm_temperature <= 2.0),
+  llm_temperature REAL NOT NULL DEFAULT 1.0 CHECK (llm_temperature >= 0.0 AND llm_temperature <= 2.0),
   api_key BYTEA, -- encrypted
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
@@ -535,6 +535,26 @@ SELECT add_column_if_not_exists('tomori_configs', 'llm_frequency_penalty', 'REAL
 SELECT add_column_if_not_exists('tomori_configs', 'llm_presence_penalty', 'REAL', '0.0');
 -- llm_min_p: Minimum probability threshold sampling (0.0=neutral/disabled, 1.0=most restricted)
 SELECT add_column_if_not_exists('tomori_configs', 'llm_min_p', 'REAL', '0.0');
+
+-- Migration: Update llm_temperature range from [1.0, 2.0] to [0.0, 2.0] and default from 1.2 to 1.0 (March 2026)
+DO $$
+BEGIN
+    -- Drop the old CHECK constraint (name may vary across deployments)
+    EXECUTE (
+        SELECT 'ALTER TABLE tomori_configs DROP CONSTRAINT ' || conname
+        FROM pg_constraint
+        WHERE conrelid = 'tomori_configs'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%llm_temperature%'
+        LIMIT 1
+    );
+EXCEPTION WHEN OTHERS THEN
+    -- No existing constraint found — that's fine
+    NULL;
+END $$;
+ALTER TABLE tomori_configs ADD CONSTRAINT tomori_configs_llm_temperature_check
+    CHECK (llm_temperature >= 0.0 AND llm_temperature <= 2.0);
+ALTER TABLE tomori_configs ALTER COLUMN llm_temperature SET DEFAULT 1.0;
 
 -- Add foreign key constraint if the column was just created
 DO $$
@@ -1824,6 +1844,14 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'persona_llm_overrides
 
 -- Migration: add vision_llm_id column (for existing deployments)
 SELECT add_column_if_not_exists('saved_provider_configs', 'vision_llm_id', 'INTEGER', 'NULL');
+
+-- Migration: add sampler/parameter columns to saved_provider_configs (March 2026)
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_temperature', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_top_p', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_top_k', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_frequency_penalty', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_presence_penalty', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
 
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;

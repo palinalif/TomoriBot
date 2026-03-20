@@ -261,6 +261,13 @@ export async function execute(
 				custom_endpoint_url: tomoriState.config.custom_endpoint_url ?? null,
 				custom_model_name: tomoriState.config.custom_model_name ?? null,
 				fallback_llm_ids: tomoriState.config.fallback_llm_ids ?? [],
+				// Snapshot sampler/parameter settings
+				llm_temperature: tomoriState.config.llm_temperature,
+				llm_top_p: tomoriState.config.llm_top_p,
+				llm_top_k: tomoriState.config.llm_top_k,
+				llm_frequency_penalty: tomoriState.config.llm_frequency_penalty,
+				llm_presence_penalty: tomoriState.config.llm_presence_penalty,
+				llm_min_p: tomoriState.config.llm_min_p,
 				channel_llm_overrides: currentChannelOverrides
 					.filter((o): o is typeof o & { llm: { llm_id: number } } =>
 						o.llm.llm_id != null,
@@ -309,6 +316,13 @@ export async function execute(
 		let newVisionLlmId = tomoriState.config.vision_llm_id;
 		let newNaiPresetName = tomoriState.config.nai_preset_name;
 		let newFallbackLlmIds: number[] = tomoriState.config.fallback_llm_ids ?? [];
+		// Sampler/parameter settings to carry over (null = keep current values)
+		let newTemperature: number | null = null;
+		let newTopP: number | null = null;
+		let newTopK: number | null = null;
+		let newFrequencyPenalty: number | null = null;
+		let newPresencePenalty: number | null = null;
+		let newMinP: number | null = null;
 
 		if (isRestoringFromSaved) {
 			// Restoring from saved config — use saved values
@@ -342,6 +356,13 @@ export async function execute(
 			customEndpointUrl = savedConfig.custom_endpoint_url;
 			customModelName = savedConfig.custom_model_name;
 			newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
+			// Restore sampler settings from snapshot
+			newTemperature = savedConfig.llm_temperature ?? null;
+			newTopP = savedConfig.llm_top_p ?? null;
+			newTopK = savedConfig.llm_top_k ?? null;
+			newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
+			newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
+			newMinP = savedConfig.llm_min_p ?? null;
 		} else if (isCustomProvider(normalizedProvider)) {
 			// Custom provider flow: apiKeyInput contains the endpoint URL
 			if (!hasApiKeyInput && !savedConfig) {
@@ -573,6 +594,13 @@ export async function execute(
 				newVisionLlmId = savedConfig.vision_llm_id ?? null;
 				newNaiPresetName = savedConfig.nai_preset_name;
 				newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
+				// Restore sampler settings from snapshot
+				newTemperature = savedConfig.llm_temperature ?? null;
+				newTopP = savedConfig.llm_top_p ?? null;
+				newTopK = savedConfig.llm_top_k ?? null;
+				newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
+				newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
+				newMinP = savedConfig.llm_min_p ?? null;
 			} else {
 				// Fresh provider switch — load default models
 				const defaultModel =
@@ -682,7 +710,13 @@ export async function execute(
 			    nai_preset_name = ${newNaiPresetName},
 			    custom_endpoint_url = ${customEndpointUrl},
 			    custom_model_name = ${customModelName},
-			    fallback_llm_ids = ${JSON.stringify(newFallbackLlmIds)}::jsonb
+			    fallback_llm_ids = ${JSON.stringify(newFallbackLlmIds)}::jsonb,
+			    llm_temperature = COALESCE(${newTemperature}, llm_temperature),
+			    llm_top_p = COALESCE(${newTopP}, llm_top_p),
+			    llm_top_k = COALESCE(${newTopK}, llm_top_k),
+			    llm_frequency_penalty = COALESCE(${newFrequencyPenalty}, llm_frequency_penalty),
+			    llm_presence_penalty = COALESCE(${newPresencePenalty}, llm_presence_penalty),
+			    llm_min_p = COALESCE(${newMinP}, llm_min_p)
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *
 		`;

@@ -421,10 +421,6 @@ export class OpenrouterProvider
     request: ProviderPresetGenerationRequest,
   ): Promise<PresetGenerationResult> {
     const tools = await this.getPresetGenerationTools(request);
-    const adjustedTemperature = Math.max(
-      0.2,
-      Math.min(1.2, request.tomoriState.config.llm_temperature - 0.8),
-    );
 
     return await generatePresetFromPromptOpenrouter(
       request.apiKey,
@@ -432,7 +428,7 @@ export class OpenrouterProvider
       request.locale,
       {
         model: request.tomoriState.llm.llm_codename,
-        temperature: adjustedTemperature,
+        temperature: request.tomoriState.config.llm_temperature,
         tools,
         toolContext: request.toolContext as ToolContext | undefined,
         maxToolRounds: request.maxToolRounds,
@@ -629,13 +625,6 @@ export class OpenrouterProvider
     }
 
     // Build config object - only include tools if model supports them
-    // NOTE: OpenRouter models are more sensitive to temperature than other providers.
-    // Database stores temperature in range 1.0-2.0, but OpenRouter works best with 0.2-1.2.
-    // We subtract 0.8 to adjust the range specifically for OpenRouter (hidden from user).
-    const adjustedTemperature = Math.max(
-      0.2,
-      Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
-    );
 
     // Resolve max output tokens from the OpenRouter capability cache.
     // If the model reports a max_completion_tokens value, use it — but cap it
@@ -669,7 +658,7 @@ export class OpenrouterProvider
     const config: OpenrouterProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey: apiKey,
-      temperature: adjustedTemperature,
+      temperature: tomoriState.config.llm_temperature,
       maxOutputTokens: resolvedMaxOutputTokens,
       seesImages: effectiveSeesImages, // Use effective value (may be overridden)
       seesVideos: effectiveSeesVideos, // Wire through video capability flag

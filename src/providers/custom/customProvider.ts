@@ -260,16 +260,10 @@ export class CustomProvider extends BaseLLMProvider implements LLMProvider {
     );
 
     // Build config object
-    // Note: Temperature adjustment similar to OpenRouter (database stores 1.0-2.0, most APIs prefer 0.2-1.2)
-    const adjustedTemperature = Math.max(
-      0.2,
-      Math.min(1.2, tomoriState.config.llm_temperature - 0.8),
-    );
-
     const config: CustomProviderConfig = {
       model: modelName, // Use custom_model_name if set, otherwise llm_codename
       apiKey: apiKey, // May be used for Bearer auth if endpoint requires it
-      temperature: adjustedTemperature,
+      temperature: tomoriState.config.llm_temperature,
       maxOutputTokens: 4096,
       endpointUrl: endpointUrl,
       seesImages: tomoriState.llm.sees_images,

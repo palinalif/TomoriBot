@@ -148,7 +148,7 @@ export default {
     generic_error_title: `Generation Error`,
     generic_error_description: `{error_message}`,
     generic_error_footer: `Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support discord\`.`,
-    error_stream_timeout_title: "Connection Timeout",
+    error_stream_timeout_title: "Connection Timeout, retrying...",
 
     // Provider error format template: "{Provider name} Error Code {number}: {message from Google}. {tip from us}"
     provider_error_format:
@@ -410,11 +410,9 @@ export default {
       "429_default_message":
         "DeepSeek is rate limiting this request. Please wait a moment and try again.",
 
-      "500_default_message":
-        "DeepSeek returned an internal server error.",
+      "500_default_message": "DeepSeek returned an internal server error.",
 
-      "503_default_message":
-        "DeepSeek is currently unavailable or overloaded.",
+      "503_default_message": "DeepSeek is currently unavailable or overloaded.",
 
       unknown_default_message:
         "An unexpected error occurred while communicating with DeepSeek.",
@@ -442,8 +440,7 @@ export default {
 
       "500_default_message": "Z.ai returned an internal server error.",
 
-      "503_default_message":
-        "Z.ai is currently unavailable or overloaded.",
+      "503_default_message": "Z.ai is currently unavailable or overloaded.",
 
       unknown_default_message:
         "An unexpected error occurred while communicating with Z.ai.",
@@ -1288,7 +1285,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - A custom system prompt can be set with \`/config sysprompt\` to further shape my behavior
 - Learn more with \`/help customization\``,
         memory_title: `Memory & Personalization`,
-		memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
+        memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
 - Personal memories persist across servers (try talking to me in another server!)
 - I also keep STM (short-term memory) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal stm\`)
 - Change what I call you using \`/personal nickname\`
@@ -1646,7 +1643,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Use \`/forget document\` to remove uploaded documents
 - Requires an embedding model configured via \`/config model embedding\``,
         shortterm_title: `Short-Term Memory`,
-		shortterm_description: `In addition to persistent memories, I keep STM (short-term memory) of recent conversations:
+        shortterm_description: `In addition to persistent memories, I keep STM (short-term memory) of recent conversations:
 - Recent messages are cached per channel, and each persona carries the latest STM across channels within the same server
 - I can automatically summarize older conversations to keep context efficient
 - **Cross-server sharing** is opt-in: use {personalStm} with the \`crossserver\` option to let me reference your own conversations from other servers
@@ -2652,8 +2649,8 @@ Use your Z.ai API key as the Auth Token for each server.`,
       params: {
         description: `Adjust AI sampling parameters for generation quality.`,
         temperature: {
-          description: `Set response creativity/randomness (1.0-2.0, default: 1.2).`,
-          value_description: `Value between 1.0 (predictable) and 2.0 (very random). Default: 1.2.`,
+          description: `Set response creativity/randomness (0-2.0, default: 1.0).`,
+          value_description: `Value between 0 (deterministic) and 2.0 (very random). Default: 1.0.`,
           invalid_value_title: `Invalid Temperature`,
           invalid_value_description: `Temperature must be between {min} and {max}.`,
           already_set_title: `Temperature Already Set`,
@@ -3489,21 +3486,21 @@ You can change this anytime using \`/personal privacy\`.`,
 **Warning:** Personalization is currently disabled on this server, so I won't use this nickname here. I'll still use it on other servers where personalization is enabled.`, // Natural line break
       },
 
-		stm: {
-			description: `Configure STM (short-term memory) settings`,
-			option_description: `Which STM setting to configure`,
-			crossserver_option: `Cross-server STM sharing`,
-			clear_option: `Clear personal STM`,
-			crossserver: {
-				title: `Cross-Server STM Sharing`,
-				enabled: `Cross-server STM sharing is now **enabled**. I can now reference your conversations from other servers when talking to you.`,
-				disabled: `Cross-server STM sharing is now **disabled**. I will only reference your conversations from this server.`,
-			},
-			clear: {
-				title: `STM Cleared`,
-				success: `Your user-specific STM has been cleared across all channels.`,
-			},
-		},
+      stm: {
+        description: `Configure STM (short-term memory) settings`,
+        option_description: `Which STM setting to configure`,
+        crossserver_option: `Cross-server STM sharing`,
+        clear_option: `Clear personal STM`,
+        crossserver: {
+          title: `Cross-Server STM Sharing`,
+          enabled: `Cross-server STM sharing is now **enabled**. I can now reference your conversations from other servers when talking to you.`,
+          disabled: `Cross-server STM sharing is now **disabled**. I will only reference your conversations from this server.`,
+        },
+        clear: {
+          title: `STM Cleared`,
+          success: `Your user-specific STM has been cleared across all channels.`,
+        },
+      },
     },
 
     // Commands for teaching Tomori
