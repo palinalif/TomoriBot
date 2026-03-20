@@ -687,6 +687,7 @@ export type TomoriState = TomoriRow & {
   server_memories: string[]; // Changed to string array to match implementation
   rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
   persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
+  vision_llm?: LlmRow; // Added March 2026 - Dedicated vision model for non-vision chat models
   nai_preset?: NaiPresetRow; // Added March 2026 - Active NovelAI sampling preset (null when not using NAI)
   fallback_llms?: LlmRow[]; // Added March 2026 - Resolved LLM rows for fallback model failover chain
 };

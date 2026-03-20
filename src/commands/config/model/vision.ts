@@ -158,7 +158,7 @@ export async function execute(
 			// Vision-capable models
 			...visionModels.map((model) => ({
 				label: safeSelectOptionText(model.llm_codename),
-				value: safeSelectOptionText(model.llm_id.toString()),
+				value: safeSelectOptionText(model.llm_codename),
 				description: safeSelectOptionText(
 					getLocalizedDescription(model, userData.language_pref),
 				),
@@ -238,10 +238,9 @@ export async function execute(
 			return;
 		}
 
-		// 9. Find the selected vision model by llm_id
-		const selectedModelId = Number.parseInt(selectedValue, 10);
+		// 9. Find the selected vision model by codename
 		selectedModel =
-			visionModels.find((model) => model.llm_id === selectedModelId) ?? null;
+			visionModels.find((model) => model.llm_codename === selectedValue) ?? null;
 
 		if (!selectedModel) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {

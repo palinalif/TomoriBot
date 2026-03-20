@@ -841,6 +841,7 @@ export async function buildContext({
   includeTimestamps = false,
   seesImages: seesImagesOverride,
   seesVideos: seesVideosOverride,
+  hasVisionTool = false,
 }: {
   guildId: string;
   serverName: string;
@@ -890,6 +891,12 @@ export async function buildContext({
    * When provided, takes precedence over `tomoriState.llm.sees_videos` (DB flag).
    */
   seesVideos?: boolean;
+  /**
+   * When true, the analyze_image tool is available for the current model.
+   * Changes the non-vision image placeholder from "do not claim to see" to
+   * "use analyze_image tool to view this image".
+   */
+  hasVisionTool?: boolean;
 }): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
@@ -2233,12 +2240,21 @@ export async function buildContext({
             imageDescription = `${imageCount === 1 ? "an image" : `${imageCount} images`}`;
           }
 
-          detachedSystemParts.push({
-            type: "text",
-            text: `[System: This message contains ${imageDescription}. Current model cannot see images, please do not describe or claim to see the image contents.]`,
-          });
+          if (hasVisionTool) {
+            // Vision tool available — prompt the model to use it instead of guessing
+            detachedSystemParts.push({
+              type: "text",
+              text: `[System: This message contains ${imageDescription}. Use the analyze_image tool to view and understand the image contents.]`,
+            });
+          } else {
+            // No vision tool — instruct the model to not pretend it can see
+            detachedSystemParts.push({
+              type: "text",
+              text: `[System: This message contains ${imageDescription}. Current model cannot see images, please do not describe or claim to see the image contents.]`,
+            });
+          }
           log.info(
-            `Images skipped for message ${msg.id} - model does not support images`,
+            `Images skipped for message ${msg.id} - model does not support images (visionTool=${hasVisionTool})`,
           );
         }
       }

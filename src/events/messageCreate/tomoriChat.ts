@@ -4607,6 +4607,10 @@ export default async function tomoriChat(
               // Pass API-resolved capability flags so the context builder matches the stream adapter
               seesImages: effectiveContextSeesImages,
               seesVideos: effectiveContextSeesVideos,
+              // Vision tool available when: vision model configured AND chat model can't see images
+              hasVisionTool:
+                !!tomoriState?.vision_llm &&
+                !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
             });
             contextSegments = appendInjectedContextItems(
               contextBuild.contextItems,
@@ -6279,6 +6283,9 @@ export default async function tomoriChat(
                         // Reuse the same API-resolved capability flags as the initial context build
                         seesImages: effectiveContextSeesImages,
                         seesVideos: effectiveContextSeesVideos,
+                        hasVisionTool:
+                          !!tomoriState?.vision_llm &&
+                          !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
                       });
                       contextSegments = appendInjectedContextItems(
                         contextBuild.contextItems,
