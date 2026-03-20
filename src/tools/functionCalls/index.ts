@@ -26,6 +26,7 @@ export { PeekProfilePictureTool } from "./peekProfilePictureTool";
 export { PinMessageTool } from "./pinMessageTool";
 export { ReminderTool } from "./reminderTool";
 export { ReviewCapabilitiesTool } from "./reviewCapabilities";
+export { CrossChannelMessageTool } from "./crossChannelMessageTool";
 
 // Re-export common types for convenience
 export type {

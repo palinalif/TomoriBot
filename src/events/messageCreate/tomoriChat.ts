@@ -7236,6 +7236,89 @@ export default async function tomoriChat(
           storageError,
         );
       }
+
+      // 13b. Cross-channel boomerang check — if a cross_channel_message tool dispatched
+      // to this channel with boomerang=true, trigger a follow-up generation in the source channel
+      try {
+        const { consumePendingBoomerang, buildBoomerangContext } = await import(
+          "../../tools/functionCalls/crossChannelMessageTool"
+        );
+        const boomerang = consumePendingBoomerang(channel.id);
+        if (boomerang) {
+          log.info(
+            `[tomoriChat] Boomerang detected for channel ${channel.id} → source ${boomerang.sourceChannelId}`,
+          );
+          setImmediate(async () => {
+            try {
+              // Fetch a context message from the source channel
+              const sourceChannel = await client.channels
+                .fetch(boomerang.sourceChannelId)
+                .catch(() => null);
+              if (!sourceChannel?.isTextBased()) {
+                log.warn(
+                  `Boomerang: Source channel ${boomerang.sourceChannelId} not found or not text-based`,
+                );
+                return;
+              }
+              const sourceMessages = await sourceChannel.messages
+                .fetch({ limit: 1 })
+                .catch(() => null);
+              const sourceLastMessage = sourceMessages?.first();
+              if (!sourceLastMessage) {
+                log.warn(
+                  `Boomerang: No messages in source channel ${boomerang.sourceChannelId}`,
+                );
+                return;
+              }
+
+              const boomerangContext = buildBoomerangContext(boomerang);
+              suppressNextSelfReply(sourceChannel.id);
+
+              await tomoriChat(
+                client,
+                sourceLastMessage,
+                false, // isFromQueue
+                true, // isManuallyTriggered
+                false, // forceReason
+                undefined, // reasoningQuery
+                undefined, // llmOverrideCodename
+                false, // isStopResponse
+                0, // retryCount
+                false, // skipLock
+                undefined, // reminderRecipientID
+                undefined, // reminderData
+                boomerang.personaId, // selectedPersonaId
+                false, // isPersonaJob
+                false, // isUserImpersonation
+                undefined, // impersonatedUserId
+                "system", // textQuotaSource
+                undefined, // textQuotaTriggerKey
+                undefined, // textQuotaUserDiscId
+                undefined, // manualSystemPrompt
+                undefined, // manualPrefill
+                undefined, // naiContinuationPrefill
+                undefined, // emptyResponseFinishReason
+                boomerangContext, // injectedContextItems
+              );
+
+              log.success(
+                `Boomerang: Follow-up generation completed in source channel ${boomerang.sourceChannelId}`,
+              );
+            } catch (boomerangError) {
+              log.error(
+                "Boomerang: Failed to generate follow-up:",
+                boomerangError,
+              );
+            }
+          });
+        }
+      } catch (boomerangCheckError) {
+        // Don't fail the conversation if boomerang check fails
+        log.warn(
+          "Failed to check/execute boomerang, but conversation completed successfully",
+          boomerangCheckError,
+        );
+      }
     } catch (error) {
       // 14. Global error handler for entire function
       log.error("Unhandled error in tomoriChat handler:", error);

@@ -346,6 +346,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent +=
           "- **create_reminder** (set reminders for users)\n";
         capabilitiesContent +=
+          "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
+        capabilitiesContent +=
           "- **select_sticker_for_response** (choose stickers)\n\n";
       }
 
