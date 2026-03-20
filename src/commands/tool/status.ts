@@ -631,6 +631,16 @@ export async function execute(
                 "commands.tool.status.field_cooldown_length_value",
                 { seconds: config.cooldown_length },
               );
+        const autochThresholdMax =
+          config.autoch_threshold_max > 0
+            ? Math.max(config.autoch_threshold_max, config.autoch_threshold)
+            : config.autoch_threshold;
+        const autochModeValue =
+          config.autoch_threshold === 0
+            ? localizer(locale, "commands.choices.always")
+            : autochThresholdMax > config.autoch_threshold
+              ? `${config.autoch_threshold}-${autochThresholdMax}`
+              : String(config.autoch_threshold);
 
         // 6. Format blacklisted members
         const blacklistedCount = blacklistedMemberIds.length;
@@ -765,10 +775,7 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_autoch_threshold",
-              value:
-                config.autoch_threshold > 0
-                  ? String(config.autoch_threshold)
-                  : localizer(locale, "commands.choices.disabled"),
+              value: autochModeValue,
               inline: true,
             },
           ],

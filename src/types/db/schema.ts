@@ -72,6 +72,7 @@ export const tomoriSchema = z.object({
   sample_dialogues_in: z.array(z.string()).default([]),
   sample_dialogues_out: z.array(z.string()).default([]),
   autoch_counter: z.number().default(0),
+  autoch_next_target: z.number().default(0),
   is_alter: z.boolean().default(false), // Added January 2026 - Distinguishes main persona (false) from alter personas (true)
   webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Discord CDN URL for alter persona avatars from import embed
 	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
@@ -196,8 +197,10 @@ export const tomoriConfigSchema = z.object({
 	welcome_prompt: z.string().nullable().optional(), // Added March 2026 - Additional prompt appended to join welcomes
 	welcome_persona_id: z.number().int().nullable().optional(), // Added March 2026 - NULL means random persona selection for welcomes
 	autoch_threshold: z.number().default(0),
+	autoch_threshold_max: z.number().default(0),
   always_reply_enabled: z.boolean().default(false), // Added March 2026 - Main persona replies to all user messages (guild only, alters still require triggers)
   self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
+	send_message_limit: z.number().int().min(0).max(40).default(0), // Added March 2026 - Max Discord messages per response (0 = unlimited, capped by MAX_FLUSH_COUNT)
   triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message
   message_fetch_limit: z.number().int().min(20).max(100).default(80), // Added February 2026 - Max recent messages fetched for context
   server_memteaching_enabled: z.boolean().default(true),

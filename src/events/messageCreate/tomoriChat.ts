@@ -97,6 +97,7 @@ import {
 
 import type {
   TomoriState,
+  TomoriConfigRow,
   ServerEmojiRow,
   ServerStickerRow,
 } from "@/types/db/schema";
@@ -2027,11 +2028,11 @@ export default async function tomoriChat(
       // Only enqueue and send "busy" message if Tomori is set up and would have replied.
       if (earlyTomoriState) {
         // 1. Create a modified version of earlyTomoriState for the shouldBotReply check.
-        // This simulates the autoch_counter as 1 for the decision to queue,
-        // preventing queueing based solely on an auto-reply hit while Tomori is busy.
+        // This clears the shared auto-chat cycle for the decision to queue,
+        // preventing queueing based solely on a periodic auto-chat hit while Tomori is busy.
         const modifiedEarlyTomoriStateForCheck: TomoriState = {
           ...earlyTomoriState,
-          autoch_counter: 1, // Simulate counter as 1 for this check
+          autoch_counter: 0,
         };
 
         // 2. Decide whether to enqueue based on the modified state.
@@ -2827,14 +2828,13 @@ export default async function tomoriChat(
 
       // 5. Auto-Counter Update (only needs to happen if Tomori is set up)
       const config = tomoriState.config;
-      const isAutoChannelActive =
-        config.autoch_threshold > 0 && config.autoch_disc_ids.length > 0;
+      const { minThreshold, maxThreshold } = getAutochatRange(config);
+      const isAutoCounterChannelActive = isAutochatCounterChannelActive(
+        config,
+        channel.id,
+      );
 
-      if (
-        !message.author.bot &&
-        isAutoChannelActive &&
-        config.autoch_disc_ids.includes(channel.id)
-      ) {
+      if (!message.author.bot && isAutoCounterChannelActive) {
         if (!tomoriState.tomori_id) {
           log.error(
             `Tomori ID missing for server ${serverDiscId} during counter increment.`,
@@ -2843,12 +2843,14 @@ export default async function tomoriChat(
           try {
             const updatedTomoriRow = await incrementTomoriCounter(
               tomoriState.tomori_id,
-              config.autoch_threshold,
+              minThreshold,
+              maxThreshold,
             );
             if (updatedTomoriRow) {
               tomoriState.autoch_counter = updatedTomoriRow.autoch_counter;
+              tomoriState.autoch_next_target = updatedTomoriRow.autoch_next_target;
               log.info(
-                `Auto-message counter updated for server ${serverDiscId}. New value: ${tomoriState.autoch_counter}`,
+                `Auto-message counter updated for server ${serverDiscId}. New value: ${tomoriState.autoch_counter}/${tomoriState.autoch_next_target}`,
               );
             } else {
               log.warn(
@@ -2981,23 +2983,25 @@ export default async function tomoriChat(
         // Only main persona for reminders and stop responses
         personasToRespond = tomoriState ? [tomoriState] : [];
       } else {
-        // Check if auto-message threshold is hit for this message
+        // Check if the shared auto-chat range hit for this message
         const config = tomoriState?.config;
         const isAutoMsgHit =
-          config &&
-          config.autoch_threshold > 0 &&
-          config.autoch_disc_ids.length > 0 &&
-          config.autoch_disc_ids.includes(message.channel.id) &&
-          tomoriState.autoch_counter > 0 &&
-          tomoriState.autoch_counter % config.autoch_threshold === 0;
+          !!config && isAutochatCounterHit(tomoriState, message.channel.id);
+        const isScopedAlwaysReplyActive =
+          !!config &&
+          isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
+          !isSelfMessage &&
+          !message.author.bot &&
+          !(message.channel instanceof DMChannel);
 
         // Check if always-reply mode applies to this message:
         // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
         const isAlwaysReplyActive =
-          !!config?.always_reply_enabled &&
-          !isSelfMessage &&
-          !message.author.bot &&
-          !(message.channel instanceof DMChannel);
+          ((!!config?.always_reply_enabled &&
+            !isSelfMessage &&
+            !message.author.bot &&
+            !(message.channel instanceof DMChannel)) ||
+            isScopedAlwaysReplyActive);
 
         // Determine matching personas using the helper function
         personasToRespond = determineMatchingPersonas(
@@ -7455,6 +7459,73 @@ export function isSelfTriggerMessage(
   );
 }
 
+function getAutochatRange(config: TomoriConfigRow): {
+  minThreshold: number;
+  maxThreshold: number;
+} {
+  const minThreshold = Math.max(config.autoch_threshold ?? 0, 0);
+  if (minThreshold === 0) {
+    return { minThreshold: 0, maxThreshold: 0 };
+  }
+
+  const rawMaxThreshold = Math.max(config.autoch_threshold_max ?? 0, 0);
+  return {
+    minThreshold,
+    maxThreshold:
+      rawMaxThreshold > 0
+        ? Math.max(rawMaxThreshold, minThreshold)
+        : minThreshold,
+  };
+}
+
+function isAutochatConfiguredChannel(
+  config: TomoriConfigRow,
+  channelId: string,
+): boolean {
+  return (
+    config.autoch_disc_ids.length > 0 && config.autoch_disc_ids.includes(channelId)
+  );
+}
+
+function isAutochatCounterChannelActive(
+  config: TomoriConfigRow,
+  channelId: string,
+): boolean {
+  const { minThreshold, maxThreshold } = getAutochatRange(config);
+  return (
+    minThreshold > 0 &&
+    maxThreshold > 0 &&
+    isAutochatConfiguredChannel(config, channelId)
+  );
+}
+
+function isAutochatAlwaysReplyChannelActive(
+  config: TomoriConfigRow,
+  channelId: string,
+): boolean {
+  const { minThreshold, maxThreshold } = getAutochatRange(config);
+  return (
+    minThreshold === 0 &&
+    maxThreshold === 0 &&
+    isAutochatConfiguredChannel(config, channelId)
+  );
+}
+
+function isAutochatCounterHit(
+  tomoriState: TomoriState,
+  channelId: string,
+): boolean {
+  if (!isAutochatCounterChannelActive(tomoriState.config, channelId)) {
+    return false;
+  }
+
+  return (
+    tomoriState.autoch_counter > 0 &&
+    tomoriState.autoch_next_target > 0 &&
+    tomoriState.autoch_counter >= tomoriState.autoch_next_target
+  );
+}
+
 /**
  * Determines which personas should respond to a message based on trigger matching.
  * All matching personas respond, ordered by the first trigger appearance in message text.
@@ -7464,7 +7535,7 @@ export function isSelfTriggerMessage(
  * @param isReplyToBot - Whether message is a reply to the bot
  * @param replyPersona - Persona that the message is replying to (if any)
  * @param isBotMentioned - Whether bot is mentioned in the message
- * @param isAutoMsgHit - Whether auto-message threshold is hit
+ * @param isAutoMsgHit - Whether the shared auto-chat range hit
  * @param isAlwaysReply - Whether always-reply mode triggered this message
  * @returns Array of matching personas in deterministic trigger order
  */
@@ -7479,7 +7550,7 @@ export function determineMatchingPersonas(
   isAlwaysReply = false,
 ): TomoriState[] {
   // 1. Special cases: Only main persona responds
-  // (reply to a persona, reply to bot, bot mentioned, auto-message hit)
+  // (reply to a persona, reply to bot, bot mentioned, shared auto-chat hit)
   if (replyPersona) {
     return [replyPersona];
   }
@@ -7749,34 +7820,30 @@ export function shouldBotReply(
     });
   });
 
-  // 5. Check if the auto-message counter threshold is met
-  const autoMsgThreshold = config.autoch_threshold;
-  const isAutoChannelActive =
-    autoMsgThreshold > 0 && config.autoch_disc_ids.length > 0;
-  // Use 'autoch_counter' directly from tomoriState (TomoriRow part)
-  const currentCount = tomoriState.autoch_counter;
-
-  // Check if auto-channel is active, threshold is positive, counter has started, AND modulo is 0
-  // Also ensure the message is in one of the designated auto-channels
-  const isAutoMsgHit =
-    isAutoChannelActive &&
-    config.autoch_disc_ids.includes(message.channel.id) && // Check if current channel is an auto-channel
-    currentCount > 0 && // Ensure counter has started (avoid trigger on first message after reset)
-    currentCount % autoMsgThreshold === 0;
-
-  // 6. Check always-reply mode:
-  // When enabled, main persona replies to all real user messages in guild channels.
-  // Does NOT apply to: bot messages, persona webhook messages, or Matrix relay messages.
-  // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
-  const isAlwaysReplyHit =
-    config.always_reply_enabled &&
+  // 5. Check if the shared auto-chat range hit for this message.
+  const isAutoMsgHit = isAutochatCounterHit(tomoriState, message.channel.id);
+  const isScopedAlwaysReplyHit =
+    isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
     !isSelfMessage &&
     !message.author.bot &&
     !isMatrixRelayMessage &&
     !(message.channel instanceof DMChannel);
 
+  // 6. Check always-reply mode:
+  // When enabled, main persona replies to all real user messages in guild channels.
+  // Does NOT apply to: bot messages, persona webhook messages, or Matrix relay messages.
+  // Auto-chat range 0-0 reuses this path, but only for configured auto-chat channels.
+  // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
+  const isAlwaysReplyHit =
+    ((config.always_reply_enabled &&
+      !isSelfMessage &&
+      !message.author.bot &&
+      !isMatrixRelayMessage &&
+      !(message.channel instanceof DMChannel)) ||
+      isScopedAlwaysReplyHit);
+
   // 7. Determine if bot should reply:
-  // Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit.
+  // Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the shared auto-chat range hit.
   // isMatrixReplyToPersona: Matrix webhooks cannot carry Discord reply references, so
   // matrixManager.ts registers the channel in pendingMatrixReplyChannels when it relays
   // a Matrix reply to a bot persona. Set.delete() returns true if the key existed

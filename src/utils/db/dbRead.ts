@@ -83,6 +83,13 @@ function normalizeTomoriConfigFromJson(rawConfig: unknown): unknown {
   // Convert JSON bytea string back to Buffer for decryption codepaths.
   normalizedConfig.api_key = parseJsonBytea(normalizedConfig.api_key);
 
+  // Backward compatibility: older rows only stored a single auto-chat threshold.
+  const threshold = Number(normalizedConfig.autoch_threshold ?? 0);
+  const thresholdMax = Number(normalizedConfig.autoch_threshold_max ?? 0);
+  if (Number.isFinite(threshold) && threshold > 0 && thresholdMax <= 0) {
+    normalizedConfig.autoch_threshold_max = threshold;
+  }
+
   // Normalize timestamps from JSON strings to Date objects expected by schemas.
   for (const key of ["created_at", "updated_at"] as const) {
     const value = normalizedConfig[key];

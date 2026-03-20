@@ -9,16 +9,31 @@ import {
   getCachedTomoriState,
   invalidateTomoriStateCache,
 } from "../../../utils/cache/tomoriStateCache";
-import { tomoriConfigSchema } from "../../../types/db/schema";
+import { tomoriConfigSchema, tomoriSchema } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../../types/db/schema";
 
 // Constants for threshold limits (Rule #20)
-const MIN_THRESHOLD = 0; // The absolute minimum value allowed (0)
-const RANGE_START_THRESHOLD = 30; // The start of the allowed upper range
+const MIN_THRESHOLD = 0; // 0 means always-reply in configured auto-chat channels
+const MIN_RANDOM_THRESHOLD = 1;
 const MAX_THRESHOLD = 100; // The absolute maximum value allowed
+
+function rollAutochatTarget(minThreshold: number, maxThreshold: number): number {
+  if (minThreshold <= 0 || maxThreshold <= 0) {
+    return 0;
+  }
+
+  if (minThreshold === maxThreshold) {
+    return minThreshold;
+  }
+
+  return (
+    Math.floor(Math.random() * (maxThreshold - minThreshold + 1)) +
+    minThreshold
+  );
+}
 
 // Configure the subcommand (Rule #21)
 export const configureSubcommand = (
@@ -41,13 +56,23 @@ export const configureSubcommand = (
         .setMinValue(MIN_THRESHOLD)
         .setMaxValue(MAX_THRESHOLD)
         .setRequired(true),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("max")
+        .setDescription(
+          localizer("en-US", "commands.server.autotrigger.threshold.max_description"),
+        )
+        .setMinValue(MIN_THRESHOLD)
+        .setMaxValue(MAX_THRESHOLD)
+        .setRequired(false),
     );
 
 /**
 
-Configures auto-chat threshold settings for Tomori.
-Once threshold is exceeded or met, Tomori will automatically chat.
-Setting to '0' will disable auto-chat
+Configures shared auto-chat range settings for Tomori.
+0 enables always-reply in configured auto-chat channels.
+Positive values use a shared fixed or random range.
 @param _client - Discord client instance
 @param interaction - Command interaction
 @param userData - User data from database
@@ -71,13 +96,21 @@ Setting to '0' will disable auto-chat
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
-    // Get the threshold value from options
+    // Get the threshold values from options
     const threshold = interaction.options.getInteger("threshold", true);
+    const maxThreshold = interaction.options.getInteger("max") ?? threshold;
+    const isAlwaysReplyMode =
+      threshold === MIN_THRESHOLD && maxThreshold === MIN_THRESHOLD;
+    const isRangeMode =
+      threshold >= MIN_RANDOM_THRESHOLD && maxThreshold > threshold;
 
-    // Validate the threshold against the specific allowed ranges (0 OR 30-100)
+    // Validate the threshold/range against the allowed values.
     const isValidThreshold =
-      threshold === MIN_THRESHOLD ||
-      (threshold >= RANGE_START_THRESHOLD && threshold <= MAX_THRESHOLD);
+      isAlwaysReplyMode ||
+      (threshold >= MIN_RANDOM_THRESHOLD &&
+        threshold <= MAX_THRESHOLD &&
+        maxThreshold >= threshold &&
+        maxThreshold <= MAX_THRESHOLD);
 
     if (!isValidThreshold) {
       await replyInfoEmbed(interaction, locale, {
@@ -85,8 +118,8 @@ Setting to '0' will disable auto-chat
         descriptionKey:
           "commands.server.autotrigger.threshold.invalid_range_specific_description",
         descriptionVars: {
-          min: MIN_THRESHOLD.toString(),
-          range_start: RANGE_START_THRESHOLD.toString(),
+          always: MIN_THRESHOLD.toString(),
+          min: MIN_RANDOM_THRESHOLD.toString(),
           max: MAX_THRESHOLD.toString(),
         },
         color: ColorCode.ERROR,
@@ -105,28 +138,52 @@ Setting to '0' will disable auto-chat
       return;
     }
 
-    // Update the threshold in the database with direct SQL (Rule #4, #15)
-    const [updatedRow] = await sql`
-  UPDATE tomori_configs
-  SET autoch_threshold = ${threshold}
-  WHERE server_id = ${tomoriState.server_id}
-  RETURNING *
-`;
+    const nextTarget = isAlwaysReplyMode
+      ? 0
+      : rollAutochatTarget(threshold, maxThreshold);
 
-    if (!updatedRow) {
+    // Update config and reset the shared cycle atomically.
+    const { updatedConfigRow, updatedTomoriRow } = await sql.transaction(
+      async (tx) => {
+        const [configRow] = await tx`
+          UPDATE tomori_configs
+          SET autoch_threshold = ${threshold},
+              autoch_threshold_max = ${maxThreshold}
+          WHERE server_id = ${tomoriState.server_id}
+          RETURNING *
+        `;
+
+        const [tomoriRow] = await tx`
+          UPDATE tomoris
+          SET autoch_counter = 0,
+              autoch_next_target = ${nextTarget}
+          WHERE tomori_id = ${tomoriState.tomori_id}
+          RETURNING *
+        `;
+
+        return {
+          updatedConfigRow: configRow ?? null,
+          updatedTomoriRow: tomoriRow ?? null,
+        };
+      },
+    );
+
+    if (!updatedConfigRow || !updatedTomoriRow) {
       const context: ErrorContext = {
         tomoriId: tomoriState.tomori_id,
         serverId: tomoriState.server_id,
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config autochthreshold",
+          command: "server autotrigger threshold",
           threshold,
-          targetTable: "tomori_config",
+          maxThreshold,
+          nextTarget,
+          targetTables: ["tomori_configs", "tomoris"],
         },
       };
       await log.error(
-        "Failed to update autoch_threshold config",
+        "Failed to update auto-chat range config/state",
         new Error("Database update returned no rows"),
         context,
       );
@@ -140,14 +197,14 @@ Setting to '0' will disable auto-chat
     }
 
     // Validate the returned data (Rules #3, #5)
-    const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+    const validatedConfig = tomoriConfigSchema.safeParse(updatedConfigRow);
     if (!validatedConfig.success) {
       const context: ErrorContext = {
         tomoriId: tomoriState.tomori_id,
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "config autochthreshold",
+          command: "server autotrigger threshold",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
@@ -165,22 +222,52 @@ Setting to '0' will disable auto-chat
       return;
     }
 
+    const validatedTomori = tomoriSchema.safeParse(updatedTomoriRow);
+    if (!validatedTomori.success) {
+      const context: ErrorContext = {
+        tomoriId: tomoriState.tomori_id,
+        serverId: tomoriState.server_id,
+        errorType: "SchemaValidationError",
+        metadata: {
+          command: "server autotrigger threshold",
+          validationErrors: validatedTomori.error.flatten(),
+        },
+      };
+      await log.error(
+        "Failed to validate updated Tomori auto-chat state",
+        validatedTomori.error,
+        context,
+      );
+
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
     // Invalidate cache so next message gets fresh config
     invalidateTomoriStateCache(interaction.guild.id);
 
-    // Success message based on auto-chat state
-    const isAutoTriggerEnabled = threshold > 0;
+    // Success message based on auto-chat mode
     await replyInfoEmbed(interaction, locale, {
-      titleKey: isAutoTriggerEnabled
-        ? "commands.server.autotrigger.threshold.success_title"
-        : "commands.server.autotrigger.threshold.success_disabled_title",
-      descriptionKey: isAutoTriggerEnabled
-        ? "commands.server.autotrigger.threshold.success_description"
-        : "commands.server.autotrigger.threshold.success_disabled_description",
+      titleKey: isAlwaysReplyMode
+        ? "commands.server.autotrigger.threshold.success_always_title"
+        : isRangeMode
+          ? "commands.server.autotrigger.threshold.success_range_title"
+          : "commands.server.autotrigger.threshold.success_title",
+      descriptionKey: isAlwaysReplyMode
+        ? "commands.server.autotrigger.threshold.success_always_description"
+        : isRangeMode
+          ? "commands.server.autotrigger.threshold.success_range_description"
+          : "commands.server.autotrigger.threshold.success_description",
       descriptionVars: {
         threshold: threshold.toString(),
+        min: threshold.toString(),
+        max: maxThreshold.toString(),
       },
-      color: isAutoTriggerEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
+      color: isAlwaysReplyMode ? ColorCode.WARN : ColorCode.SUCCESS,
     });
   } catch (error) {
     const context: ErrorContext = {
@@ -188,12 +275,12 @@ Setting to '0' will disable auto-chat
       serverId: (await getCachedTomoriState(interaction.guild.id))?.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config autochthreshold",
+        command: "server autotrigger threshold",
         options: interaction.options?.data,
       },
     };
     await log.error(
-      "Error in /config autochthreshold command",
+      "Error in /server autotrigger threshold command",
       error as Error,
       context,
     );

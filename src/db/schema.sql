@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS tomoris (
   sample_dialogues_in TEXT[] DEFAULT '{}', -- array index is soft id of sample dialogue pairs
   sample_dialogues_out TEXT[] DEFAULT '{}',
   autoch_counter INT DEFAULT 0,
+  autoch_next_target INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
@@ -277,7 +278,8 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   api_key BYTEA, -- encrypted
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
-  autoch_threshold INT DEFAULT 0, -- set to 0 for no autoch
+  autoch_threshold INT DEFAULT 0, -- 0 with configured channels means always-reply, otherwise minimum messages before auto-chat
+  autoch_threshold_max INT DEFAULT 0, -- 0 keeps fixed/always behavior; > autoch_threshold enables a shared random range
   message_fetch_limit INT DEFAULT 80,
 	server_memteaching_enabled BOOLEAN DEFAULT true,
 	attribute_memteaching_enabled BOOLEAN DEFAULT false,
@@ -485,10 +487,23 @@ SELECT add_column_if_not_exists('tomori_configs', 'triggered_persona_limit', 'IN
 -- Min 20, max 100 enforced by command and schema validation
 SELECT add_column_if_not_exists('tomori_configs', 'message_fetch_limit', 'INTEGER', '80');
 
+-- Send message limit (March 2026)
+-- Caps the number of Discord messages sent per response (0 = unlimited, capped by MAX_FLUSH_COUNT)
+-- Each message is a semantically complete chunk, so this produces clean cutoffs unlike maxOutputTokens
+SELECT add_column_if_not_exists('tomori_configs', 'send_message_limit', 'INTEGER', '0');
+
 -- Always-reply mode (March 2026)
 -- When enabled, main persona replies to all user messages in guild channels (like DMs)
 -- Alter personas still require explicit trigger words; main persona defers if an alter is triggered
 SELECT add_column_if_not_exists('tomori_configs', 'always_reply_enabled', 'BOOLEAN', 'false');
+
+-- Auto-chat shared range state (March 2026)
+SELECT add_column_if_not_exists('tomoris', 'autoch_next_target', 'INTEGER', '0');
+SELECT add_column_if_not_exists('tomori_configs', 'autoch_threshold_max', 'INTEGER', '0');
+UPDATE tomori_configs
+SET autoch_threshold_max = autoch_threshold
+WHERE COALESCE(autoch_threshold, 0) > 0
+  AND COALESCE(autoch_threshold_max, 0) = 0;
 
 -- Add custom endpoint URL for self-hosted OpenAI-compatible LLM endpoints (January 2026)
 -- Only used when llm_provider is 'custom', blocked in production environment

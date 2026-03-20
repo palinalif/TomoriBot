@@ -201,24 +201,48 @@ export async function toggleCrossServerShortTermMemoryOptIn(
   }
 }
 
+function rollAutochatTarget(minThreshold: number, maxThreshold: number): number {
+  const normalizedMin = Math.max(minThreshold, 0);
+  const normalizedMax = Math.max(maxThreshold, normalizedMin);
+
+  if (normalizedMin <= 0 || normalizedMax <= 0) {
+    return 0;
+  }
+
+  if (normalizedMin === normalizedMax) {
+    return normalizedMin;
+  }
+
+  return (
+    Math.floor(Math.random() * (normalizedMax - normalizedMin + 1)) +
+    normalizedMin
+  );
+}
+
 /**
- * Increments the autoch_counter for a Tomori instance.
- * When the counter reaches the threshold, it resets to 0.
+ * Advances the shared auto-chat cycle for a Tomori instance.
+ * Fixed thresholds are represented as min=max, while ranged thresholds reroll
+ * a new inclusive target after each successful auto-chat hit.
  * @param tomoriId - The ID of the Tomori instance.
- * @param threshold - The autoch_threshold value from config.
- * @returns The updated TomoriRow with the new counter value, or null on error.
+ * @param minThreshold - The minimum auto-chat threshold from config.
+ * @param maxThreshold - The maximum auto-chat threshold from config.
+ * @returns The updated TomoriRow with the new counter/target state, or null on error.
  */
 export async function incrementTomoriCounter(
   tomoriId: number,
-  threshold: number,
+  minThreshold: number,
+  maxThreshold: number,
 ): Promise<TomoriRow | null> {
   try {
-    // 1. First check if the threshold is positive and active
-    if (threshold <= 0) {
-      // If threshold is inactive, just increment without resetting
+    const normalizedMin = Math.max(minThreshold, 0);
+    const normalizedMax = Math.max(maxThreshold, normalizedMin);
+
+    // Range disabled or always-reply mode: keep counter inert.
+    if (normalizedMin <= 0 || normalizedMax <= 0) {
       const [incrementedTomori] = await sql`
 				UPDATE tomoris
-				SET autoch_counter = autoch_counter + 1
+				SET autoch_counter = 0,
+					autoch_next_target = 0
 				WHERE tomori_id = ${tomoriId}
 				RETURNING *
 			`;
@@ -228,20 +252,59 @@ export async function incrementTomoriCounter(
       return parsedTomori.success ? parsedTomori.data : null;
     }
 
-    // 2. If threshold is active, use CTE to check if we've reached it
-    const [updatedTomori] = await sql`
-			WITH incremented AS (
+    const updatedTomori = await sql.transaction(async (tx) => {
+      const [currentTomori] = await tx`
+				SELECT *
+				FROM tomoris
+				WHERE tomori_id = ${tomoriId}
+				FOR UPDATE
+			`;
+
+      if (!currentTomori) {
+        return null;
+      }
+
+      const parsedCurrentTomori = tomoriSchema.safeParse(currentTomori);
+      if (!parsedCurrentTomori.success) {
+        const context: ErrorContext = {
+          tomoriId,
+          errorType: "SchemaValidationError",
+          metadata: {
+            operation: "incrementTomoriCounter",
+            validationErrors: parsedCurrentTomori.error.flatten(),
+          },
+        };
+
+        await log.error(
+          "Failed to validate Tomori data before counter update",
+          parsedCurrentTomori.error,
+          context,
+        );
+        return null;
+      }
+
+      const currentTomoriRow = parsedCurrentTomori.data;
+      const currentTarget = currentTomoriRow.autoch_next_target;
+      const shouldStartNewCycle =
+        currentTarget > 0 && currentTomoriRow.autoch_counter >= currentTarget;
+      const nextTarget =
+        shouldStartNewCycle || currentTarget <= 0
+          ? rollAutochatTarget(normalizedMin, normalizedMax)
+          : currentTarget;
+      const nextCounter = shouldStartNewCycle
+        ? 1
+        : currentTomoriRow.autoch_counter + 1;
+
+      const [updatedRow] = await tx`
 				UPDATE tomoris
-				SET autoch_counter = 
-					CASE 
-						WHEN autoch_counter + 1 > ${threshold} THEN 0  -- Reset to 0 when threshold reached
-						ELSE autoch_counter + 1                         -- Otherwise increment
-					END
+				SET autoch_counter = ${nextCounter},
+					autoch_next_target = ${nextTarget}
 				WHERE tomori_id = ${tomoriId}
 				RETURNING *
-			)
-			SELECT * FROM incremented
-		`;
+			`;
+
+      return updatedRow ?? null;
+    });
 
     if (!updatedTomori) {
       const context: ErrorContext = {
@@ -249,12 +312,13 @@ export async function incrementTomoriCounter(
         errorType: "DatabaseUpdateError",
         metadata: {
           operation: "incrementTomoriCounter",
-          threshold,
+          minThreshold: normalizedMin,
+          maxThreshold: normalizedMax,
         },
       };
 
       await log.error(
-        `Failed to increment/reset counter for Tomori ${tomoriId}`,
+        `Failed to increment auto-chat counter for Tomori ${tomoriId}`,
         new Error("Tomori not found"),
         context,
       );
@@ -288,12 +352,13 @@ export async function incrementTomoriCounter(
       errorType: "DatabaseOperationError",
       metadata: {
         operation: "incrementTomoriCounter",
-        threshold,
+        minThreshold,
+        maxThreshold,
       },
     };
 
     await log.error(
-      `Error incrementing/resetting auto counter for Tomori ${tomoriId}`,
+      `Error incrementing auto counter for Tomori ${tomoriId}`,
       error,
       context,
     );

@@ -235,6 +235,8 @@ Rules:
 - `persona`: create, generate, import, export, default, swap, remove
 - `tool`: ping, status, refresh, compact, comment
 
+`/server autotrigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.
+
 ## Adding a New Command
 
 1. Add a `.ts` file under the correct command category/group path.
