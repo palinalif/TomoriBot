@@ -488,6 +488,61 @@ function getRenderedImageMessageIdsWithinWindow(
   return renderedMessageIds;
 }
 
+/**
+ * Pre-computes the last index at which each image proxyUrl appears across
+ * rendered messages within the media window. When the same image appears in
+ * multiple messages (e.g. the original message AND a reply that merges the
+ * referenced attachments), only the latest occurrence should be rendered as
+ * base64 to avoid sending duplicate payloads.
+ *
+ * @param simplifiedMessageHistory - Full ordered message history
+ * @param renderedImageMessageIds - Set of message IDs eligible for image rendering
+ * @param mediaWindowCutoff - Index threshold for the media window
+ * @returns Map of proxyUrl → last history index where that image should be rendered
+ */
+function getLastImageOccurrenceIndices(
+  simplifiedMessageHistory: SimplifiedMessageForContext[],
+  renderedImageMessageIds: Set<string>,
+  mediaWindowCutoff: number,
+): Map<string, number> {
+  // 1. Collect all proxyUrls from rendered messages and track every index they appear at
+  const urlToIndices = new Map<string, number[]>();
+
+  for (let i = simplifiedMessageHistory.length - 1; i >= 0; i -= 1) {
+    if (i < mediaWindowCutoff) {
+      break;
+    }
+
+    const message = simplifiedMessageHistory[i];
+    if (!renderedImageMessageIds.has(message.id)) {
+      continue;
+    }
+
+    for (const attachment of message.imageAttachments) {
+      if (!isCountedRenderedImageAttachment(attachment)) {
+        continue;
+      }
+
+      const indices = urlToIndices.get(attachment.proxyUrl);
+      if (indices) {
+        indices.push(i);
+      } else {
+        urlToIndices.set(attachment.proxyUrl, [i]);
+      }
+    }
+  }
+
+  // 2. For images appearing in multiple messages, record the last (highest) index
+  const lastOccurrence = new Map<string, number>();
+  for (const [url, indices] of urlToIndices) {
+    if (indices.length > 1) {
+      lastOccurrence.set(url, Math.max(...indices));
+    }
+  }
+
+  return lastOccurrence;
+}
+
 function getLatestUserQuery(
   messages: SimplifiedMessageForContext[],
 ): string | null {
@@ -2144,6 +2199,15 @@ export async function buildContext({
     mediaWindowCutoff,
   );
 
+  // Pre-compute duplicate image detection: when the same image (by proxyUrl)
+  // appears in multiple rendered messages (e.g. original + reply reference),
+  // only the latest occurrence gets rendered as base64 to avoid duplicate payloads.
+  const duplicateImageLastIndex = getLastImageOccurrenceIndices(
+    simplifiedMessageHistory,
+    renderedImageMessageIds,
+    mediaWindowCutoff,
+  );
+
   const botNameLower = botName.toLowerCase();
   for (const [index, msg] of simplifiedMessageHistory.entries()) {
     const isPersonaMessage = msg.authorType === "persona" && !!msg.personaName;
@@ -2224,6 +2288,7 @@ export async function buildContext({
           let skippedCountedImageCount = 0;
 
           // Model supports images - add them normally
+          let skippedDuplicateImageCount = 0;
           for (const attachment of msg.imageAttachments) {
             const countsTowardRenderedImageLimit =
               isCountedRenderedImageAttachment(attachment);
@@ -2232,6 +2297,20 @@ export async function buildContext({
               !shouldRenderCountedImages
             ) {
               skippedCountedImageCount++;
+              continue;
+            }
+
+            // Skip duplicate images that will be rendered later in a more recent message
+            // (e.g. original message image also appears in a reply that merged the reference)
+            const lastIndex = duplicateImageLastIndex.get(
+              attachment.proxyUrl,
+            );
+            if (
+              lastIndex !== undefined &&
+              countsTowardRenderedImageLimit &&
+              lastIndex !== index
+            ) {
+              skippedDuplicateImageCount++;
               continue;
             }
 
@@ -2246,6 +2325,12 @@ export async function buildContext({
                 `Skipping image attachment due to missing mimeType: ${attachment.filename} from user ${msg.authorName}`,
               );
             }
+          }
+
+          if (skippedDuplicateImageCount > 0) {
+            log.info(
+              `Skipped ${skippedDuplicateImageCount} duplicate image(s) for message ${msg.id} — same image rendered in a later message`,
+            );
           }
 
           if (skippedCountedImageCount > 0) {
