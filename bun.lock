@@ -11,6 +11,7 @@
         "@hono/node-server": "^1.19.11",
         "@modelcontextprotocol/sdk": "^1.27.1",
         "@openrouter/sdk": "0.1.27",
+        "@smithery/api": "^0.56.0",
         "@types/bun": "^1.3.10",
         "@types/dotenv": "^8.2.3",
         "@types/node": "^25.3.5",
@@ -289,6 +290,8 @@
     "@selderee/plugin-htmlparser2": ["@selderee/plugin-htmlparser2@0.11.0", "", { "dependencies": { "domhandler": "^5.0.3", "selderee": "^0.11.0" } }, "sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ=="],
 
     "@sindresorhus/is": ["@sindresorhus/is@4.6.0", "", {}, "sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw=="],
+
+    "@smithery/api": ["@smithery/api@0.56.0", "", { "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-Ndi/4SZBULLQ7AifhR1bt4w8XUw7WeeW/u5SjtGzX1nKWYscRbNN7/OYuf/vMfzZHOWYWptNFe+a8Tr+Qp9XSQ=="],
 
     "@smithy/abort-controller": ["@smithy/abort-controller@4.2.12", "", { "dependencies": { "@smithy/types": "^4.13.1", "tslib": "^2.6.2" } }, "sha512-xolrFw6b+2iYGl6EcOL7IJY71vvyZ0DJ3mcKtpykqPe2uscwtzDZJa1uVQXyP7w9Dd+kGwYnPbMsJrGISKiY/Q=="],
 

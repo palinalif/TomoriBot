@@ -53,7 +53,7 @@ import {
 } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
 
-const DEFAULT_ZAI_MODEL = "zai/glm-5";
+const DEFAULT_ZAI_MODEL = "glm-4.7";
 const ZAI_CHAT_COMPLETIONS_URL =
 	"https://api.z.ai/api/coding/paas/v4/chat/completions";
 
@@ -90,7 +90,7 @@ export class ZaiProvider
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({
-					model: "glm-5",
+					model: "glm-4.7-flash",
 					messages: [{ role: "user", content: "ping" }],
 					max_tokens: 1,
 					stream: false,
@@ -256,7 +256,6 @@ export class ZaiProvider
 
 	/**
 	 * Create a provider config from TomoriState.
-	 * Strips `zai/` prefix from model codename and adjusts temperature.
 	 * @param tomoriState - Current server state
 	 * @param apiKey - Decrypted API key
 	 * @returns Provider config ready for streaming
@@ -265,19 +264,29 @@ export class ZaiProvider
 		tomoriState: TomoriState,
 		apiKey: string,
 	): Promise<ZaiProviderConfig> {
-		// Strip zai/ prefix for the API — DB stores "zai/glm-5", API expects "glm-5"
-		const apiModel = tomoriState.llm.llm_codename.startsWith("zai/")
-			? tomoriState.llm.llm_codename.slice(4)
-			: tomoriState.llm.llm_codename;
-
 		const config: ZaiProviderConfig = {
-			model: apiModel,
+			model: tomoriState.llm.llm_codename,
 			apiKey,
 			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 4096,
 			endpointUrl: ZAI_CHAT_COMPLETIONS_URL,
 			seesImages: tomoriState.llm.sees_images,
 			seesVideos: tomoriState.llm.sees_videos,
+			...(tomoriState.config.llm_top_p < 1.0 && {
+				topP: tomoriState.config.llm_top_p,
+			}),
+			...(tomoriState.config.llm_top_k > 0 && {
+				topK: tomoriState.config.llm_top_k,
+			}),
+			...(tomoriState.config.llm_frequency_penalty !== 0 && {
+				frequencyPenalty: tomoriState.config.llm_frequency_penalty,
+			}),
+			...(tomoriState.config.llm_presence_penalty !== 0 && {
+				presencePenalty: tomoriState.config.llm_presence_penalty,
+			}),
+			...(tomoriState.config.llm_min_p > 0 && {
+				minP: tomoriState.config.llm_min_p,
+			}),
 		};
 
 		if (tomoriState.llm.has_tools) {

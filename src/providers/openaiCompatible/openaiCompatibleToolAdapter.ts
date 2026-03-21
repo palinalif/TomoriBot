@@ -12,6 +12,7 @@ import type {
 	ToolResult,
 } from "@/types/tool/interfaces";
 import type { TypedMCPToolResult } from "@/types/tool/mcpTypes";
+import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
 import { getMCPExecutor } from "@/utils/mcp/mcpExecutor";
 import { getMCPManager } from "@/utils/mcp/mcpManager";
 import { log } from "@/utils/misc/logger";
@@ -216,6 +217,62 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
 				log.info(
 					`${this.providerName} adapter: Added ${addedMCPToolsCount} MCP tools using centralized filtering`,
 				);
+			}
+
+			// Add guild MCP tools (per-guild remote servers)
+			if (serverId && allowedMCPFunctions) {
+				try {
+					const guildMcpManager = getGuildMcpManager();
+					const guildTools = await guildMcpManager.getGuildMCPTools(serverId);
+					const allowedFunctionSet = new Set(allowedMCPFunctions);
+					let addedGuildToolsCount = 0;
+
+					for (const guildTool of guildTools) {
+						try {
+							const geminiTool = await guildTool.tool();
+							if (!geminiTool.functionDeclarations) {
+								continue;
+							}
+
+							const declarations = (
+								geminiTool.functionDeclarations as Record<string, unknown>[]
+							).filter((decl) => allowedFunctionSet.has(decl.name as string));
+
+							for (const declaration of declarations) {
+								const openAIDeclaration: Record<string, unknown> = {
+									...declaration,
+								};
+								if ("parametersJsonSchema" in declaration) {
+									delete openAIDeclaration.parametersJsonSchema;
+									openAIDeclaration.parameters =
+										declaration.parametersJsonSchema;
+								}
+
+								allTools.push({
+									type: "function",
+									function: openAIDeclaration,
+								});
+								addedGuildToolsCount++;
+							}
+						} catch (error) {
+							log.warn(
+								`${this.providerName} adapter: Failed to extract guild MCP tool declarations`,
+								error as Error,
+							);
+						}
+					}
+
+					if (addedGuildToolsCount > 0) {
+						log.info(
+							`${this.providerName} adapter: Added ${addedGuildToolsCount} guild MCP tool(s)`,
+						);
+					}
+				} catch (error) {
+					log.warn(
+						`${this.providerName} adapter: Failed to get guild MCP tools`,
+						error as Error,
+					);
+				}
 			}
 
 			log.info(`${this.providerName} adapter: Total tools: ${allTools.length}`);

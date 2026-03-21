@@ -410,6 +410,9 @@ export default {
       "429_default_message":
         "DeepSeek is rate limiting this request. Please wait a moment and try again.",
 
+      "429_plan_access_default_message":
+        "Your DeepSeek subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
+
       "500_default_message": "DeepSeek returned an internal server error.",
 
       "503_default_message": "DeepSeek is currently unavailable or overloaded.",
@@ -437,6 +440,9 @@ export default {
 
       "429_default_message":
         "Z.ai is rate limiting this request. Please wait a moment and try again.",
+
+      "429_plan_access_default_message":
+        "Your Z.ai subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
 
       "500_default_message": "Z.ai returned an internal server error.",
 
@@ -1546,13 +1552,13 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - You can switch between available DeepSeek text models after setup`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // Z.ai (Coding)
-        provider_choice_zai: `Zai (Coding)`,
+        provider_choice_zai: `Z.ai (Coding)`,
         zai_title: `Setting Up Z.ai (Coding) API Key`,
         zai_description: `Z.ai (Coding) provides access to the GLM model family with chat, reasoning, and image generation capabilities.
 - Supports 4 chat models including vision and reasoning variants
 - Native image generation via \`glm-image\`
 - Tool calling and structured output on all chat models
-- Optional MCP add-ons: Web Search, Web Reader, and Zread (GitHub repo Q&A) via \`/config mcp add\` using your Z.ai API key as the auth token`,
+- Optional MCP add-ons available via \`/config mcp add\` (requires GLM Coding Plan)`,
         zai_getting_key_title: `Getting Your API Key:`,
         zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
 2. Sign in or create an account
@@ -2125,6 +2131,21 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         embed_title: `🫳 Headpat Time!`,
         embed_description: `{user} is currently headpatting {bot}.`,
       },
+      hug: {
+        description: `Give me a hug!`,
+        embed_title: `🤗 Hug Time!`,
+        embed_description: `{user} is giving {bot} a warm hug.`,
+      },
+      kiss: {
+        description: `Give me a kiss!`,
+        embed_title: `💋 Kiss Time!`,
+        embed_description: `{user} just kissed {bot}.`,
+      },
+      tickle: {
+        description: `Tickle me!`,
+        embed_title: `🤭 Tickle Time!`,
+        embed_description: `{user} is tickling {bot}.`,
+      },
     },
 
     // Support commands
@@ -2283,15 +2304,23 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           // Success states
           success_title: `Provider Switched`,
           success_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
-          success_restored_description: `Switched to **{provider}** with restored settings. Your model is now \`{model_name}\`.`,
+          success_restored_description: `Switched to **{provider}** with restored settings. Your model is now \`{model_name}\`.{restored_details}`,
+          // Config category labels for restored config summary
+          restored_label: `Restored`,
+          no_restores_label: `No Restores Found`,
+          carried_over_note: `*All other settings are carried over from current config.*`,
+          skipped_overrides_note: `⚠️ {count} override(s) skipped — channel or persona no longer exists.`,
+          config_label_chat_model: `Chat Model`,
+          config_label_vision_model: `Vision Model`,
+          config_label_image_model: `Image Model`,
+          config_label_embedding_model: `Embedding Model`,
+          config_label_sampler_settings: `Sampler Settings`,
+          config_label_fallback_models: `{count} Fallback Model(s)`,
+          config_label_channel_overrides: `{count} Channel Override(s)`,
+          config_label_persona_overrides: `{count} Persona Override(s)`,
+          config_label_custom_endpoint: `Custom Endpoint`,
           success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config permissions\`.`,
-          success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.
-
-💡 **Z.ai MCP Servers** — Enhance your bot with these free add-ons using your Z.ai API key:
-- **Web Search** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_search_prime/mcp\`
-- **Web Reader** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_reader/mcp\`
-- **Zread** (GitHub repo Q&A) — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/zread/mcp\`
-Use your Z.ai API key as the Auth Token for each server.`,
+          success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
         },
         remove: {
           description: `Remove a saved provider configuration.`,
@@ -2557,6 +2586,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           not_needed_description: `Your current chat model (\`{model_name}\`) already supports image vision. A separate vision model is only useful for non-vision chat models.`,
           success_title: `Vision Model Updated`,
           success_description: `Non-vision chat models will now use \`{model_name}\` to analyze images via the \`analyze_image\` tool.`,
+          success_no_tools_description: `Vision model set to \`{model_name}\`, but your current chat model (\`{chat_model}\`) does not support **tool calling**. The vision model requires the \`analyze_image\` tool to work — switch to a chat model with tool support, or it won't be able to use it.`,
           cleared_title: `Vision Model Cleared`,
           cleared_description: `Vision model has been removed. Non-vision chat models will no longer be able to analyze images.`,
           clear_option: `None (disable vision tool)`,
@@ -2656,7 +2686,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           already_set_title: `Temperature Already Set`,
           already_set_description: `The temperature is already set to \`{temperature}\`.`,
           success_title: `Temperature Updated`,
-          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** Google, OpenRouter, NovelAI`,
+          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai`,
         },
         "top-p": {
           description: `Set top-P nucleus sampling threshold (default: 0.95).`,
@@ -2666,7 +2696,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           already_set_title: `Top-P Already Set`,
           already_set_description: `Top-P is already set to \`{top_p}\`.`,
           success_title: `Top-P Updated`,
-          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** Google, OpenRouter, NovelAI`,
+          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai`,
         },
         "top-k": {
           description: `Set top-K candidate token limit (default: 0).`,
@@ -2676,7 +2706,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           already_set_title: `Top-K Already Set`,
           already_set_description: `Top-K is already set to \`{top_k}\`.`,
           success_title: `Top-K Updated`,
-          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** Google, OpenRouter, NovelAI`,
+          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai`,
         },
         "frequency-penalty": {
           description: `Set frequency penalty for repeated tokens (default: 0.0).`,
@@ -2686,7 +2716,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           already_set_title: `Frequency Penalty Already Set`,
           already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
           success_title: `Frequency Penalty Updated`,
-          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter, NovelAI`,
+          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai`,
         },
         "presence-penalty": {
           description: `Set presence penalty for repeated topics (default: 0.0).`,
@@ -2696,7 +2726,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           already_set_title: `Presence Penalty Already Set`,
           already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
           success_title: `Presence Penalty Updated`,
-          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter, NovelAI`,
+          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai`,
         },
         "min-p": {
           description: `Set min-P minimum probability threshold (default: 0.0).`,
@@ -2706,7 +2736,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           already_set_title: `Min-P Already Set`,
           already_set_description: `Min-P is already set to \`{min_p}\`.`,
           success_title: `Min-P Updated`,
-          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** OpenRouter, NovelAI (Google does not support min-P)`,
+          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai`,
         },
       },
       timezone: {
@@ -2908,7 +2938,7 @@ Use your Z.ai API key as the Auth Token for each server.`,
           url_label: `Server URL`,
           url_placeholder: `https://mcp.example.com/sse`,
           auth_token_label: `Auth Token (Optional)`,
-          auth_token_placeholder: `Bearer token for authentication (leave blank if none)`,
+          auth_token_placeholder: `Bearer token or Smithery API key (leave blank if none)`,
           server_type_label: `Server Type (Optional)`,
           server_type_description: `What this server replaces (disables matching built-in tools)`,
           server_type_placeholder: `Select a server type...`,
@@ -3417,7 +3447,7 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       alwaysreply: {
         description: `Toggle always-reply mode for the main persona.`,
         enabled_title: `Always-Reply Enabled`,
-        enabled_description: `**{persona_name}** will now reply to all messages in this server, even without a trigger word. Alter personas still require their trigger words — if an alter is triggered, **{persona_name}** will stay quiet to avoid doubling up.`,
+        enabled_description: `**{persona_name}** will now reply to all messages in this server, even without a trigger word. Alter personas still require their trigger words. If an alter is triggered, **{persona_name}** will stay quiet to avoid doubling up.`,
         disabled_title: `Always-Reply Disabled`,
         disabled_description: `**{persona_name}** will now only reply when triggered by a trigger word, mention, or reply.`,
       },

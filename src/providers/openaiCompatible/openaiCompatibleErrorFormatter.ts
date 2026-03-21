@@ -45,8 +45,21 @@ export function normalizeOpenAICompatibleProviderError(
 			if (status === 401 || status === 403 || status === 400 || status === 404) {
 				errorType = "api_error";
 			} else if (status === 429) {
-				errorType = "rate_limit";
-				retryable = true;
+				// Some providers (e.g. Z.ai) use 429 for plan/access denial, not just rate limiting.
+				// Detect these by checking the error message for subscription/plan keywords.
+				const lowerMessage = errorMessage.toLowerCase();
+				const isPlanAccessDenial =
+					lowerMessage.includes("subscription plan") ||
+					lowerMessage.includes("does not yet include access") ||
+					lowerMessage.includes("plan does not include");
+				if (isPlanAccessDenial) {
+					errorType = "api_error";
+					errorCode = "429_plan_access";
+					retryable = false;
+				} else {
+					errorType = "rate_limit";
+					retryable = true;
+				}
 			} else if (status === 408 || status === 504) {
 				errorType = "timeout";
 				retryable = true;

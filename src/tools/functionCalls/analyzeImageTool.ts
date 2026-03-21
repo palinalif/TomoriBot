@@ -153,13 +153,9 @@ export class AnalyzeImageTool extends BaseTool {
 				};
 			}
 
-			// 6. Strip provider prefix from the vision model codename
-			//    DB stores "zai/glm-4.6v", API expects "glm-4.6v"
+			// 6. Resolve API model name and provider from the vision LLM row
 			const provider = visionLlm.llm_provider.toLowerCase();
-			const rawCodename = visionLlm.llm_codename;
-			const apiModelName = rawCodename.includes("/")
-				? rawCodename.split("/").slice(1).join("/")
-				: rawCodename;
+			const apiModelName = visionLlm.llm_codename;
 
 			// 7. Route to the appropriate API based on provider family
 			let analysisResult: string;

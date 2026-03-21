@@ -790,6 +790,13 @@ export async function execute(
 			}
 		}
 
+		// Hoisted so the success message can reference restore counts
+		let restoreResult: {
+			channelRestored: number;
+			personaRestored: number;
+			skipped: number;
+		} | null = null;
+
 		if (!isSameProvider && isRestoringFromSaved) {
 			// Restoring from saved config — clear current overrides, then restore saved ones
 			// This replaces old-provider overrides with the saved snapshot for the target provider
@@ -800,7 +807,7 @@ export async function execute(
 			const savedPersonaOverrides = savedConfig?.persona_llm_overrides ?? [];
 
 			if (savedChannelOverrides.length > 0 || savedPersonaOverrides.length > 0) {
-				const restoreResult = await restoreOverridesFromSnapshot(
+				restoreResult = await restoreOverridesFromSnapshot(
 					tomoriState.server_id,
 					savedChannelOverrides,
 					savedPersonaOverrides,
@@ -864,6 +871,105 @@ export async function execute(
 			provider: getProviderDisplayName(normalizedProvider),
 			model_name: modelName ?? "unknown",
 		};
+
+		// 15.1. Build restored config summary for the success embed
+		// Lists which config categories were loaded back from the saved snapshot.
+		// Settings not in the snapshot are silently carried over from the current config.
+		if (isRestoringFromSaved && savedConfig) {
+			// Split to avoid false positive in locale scanner ("commands.config" + ".provider.switch")
+			const keyBase = "commands.config" + ".provider.switch";
+			const restoredItems: string[] = [];
+			const noRestoreItems: string[] = [];
+
+			// Helper to push to the appropriate list
+			const trackConfig = (hasData: boolean, label: string) => {
+				if (hasData) {
+					restoredItems.push(label);
+				} else {
+					noRestoreItems.push(label);
+				}
+			};
+
+			// Chat Model
+			trackConfig(!!savedConfig.llm_id, localizer(locale, `${keyBase}.config_label_chat_model`));
+
+			// Vision Model
+			trackConfig(!!savedConfig.vision_llm_id, localizer(locale, `${keyBase}.config_label_vision_model`));
+
+			// Image Model (standard diffusion or NAI diffusion)
+			trackConfig(
+				!!(savedConfig.diffusion_model_id || savedConfig.nai_diffusion_model_id),
+				localizer(locale, `${keyBase}.config_label_image_model`),
+			);
+
+			// Embedding Model
+			trackConfig(!!savedConfig.embedding_model_id, localizer(locale, `${keyBase}.config_label_embedding_model`));
+
+			// Sampler Settings — group all sampler fields as one category
+			const hasSamplers = [
+				savedConfig.llm_temperature,
+				savedConfig.llm_top_p,
+				savedConfig.llm_top_k,
+				savedConfig.llm_frequency_penalty,
+				savedConfig.llm_presence_penalty,
+				savedConfig.llm_min_p,
+			].some((v) => v != null);
+			trackConfig(hasSamplers, localizer(locale, `${keyBase}.config_label_sampler_settings`));
+
+			// Fallback Models (with count)
+			const fallbackCount = savedConfig.fallback_llm_ids?.length ?? 0;
+			if (fallbackCount > 0) {
+				restoredItems.push(
+					localizer(locale, `${keyBase}.config_label_fallback_models`, {
+						count: fallbackCount,
+					}),
+				);
+			}
+
+			// Channel Overrides (use actual restore counts if available)
+			const channelRestoredCount = restoreResult?.channelRestored ?? 0;
+			if (channelRestoredCount > 0) {
+				restoredItems.push(
+					localizer(locale, `${keyBase}.config_label_channel_overrides`, {
+						count: channelRestoredCount,
+					}),
+				);
+			}
+
+			// Persona Overrides (use actual restore counts if available)
+			const personaRestoredCount = restoreResult?.personaRestored ?? 0;
+			if (personaRestoredCount > 0) {
+				restoredItems.push(
+					localizer(locale, `${keyBase}.config_label_persona_overrides`, {
+						count: personaRestoredCount,
+					}),
+				);
+			}
+
+			// Custom Endpoint (only relevant for custom providers)
+			if (savedConfig.custom_endpoint_url) {
+				restoredItems.push(localizer(locale, `${keyBase}.config_label_custom_endpoint`));
+			}
+
+			// Build the details string
+			let restoredDetails = "";
+			if (restoredItems.length > 0) {
+				restoredDetails += `\n\n✅ **${localizer(locale, `${keyBase}.restored_label`)}:** ${restoredItems.join(" · ")}`;
+			}
+			if (noRestoreItems.length > 0) {
+				restoredDetails += `\n➖ **${localizer(locale, `${keyBase}.no_restores_label`)}:** ${noRestoreItems.join(" · ")}`;
+			}
+			// Static note: settings not in the snapshot keep their current values
+			restoredDetails += `\n${localizer(locale, `${keyBase}.carried_over_note`)}`;
+
+			// Note skipped overrides (channels/personas that no longer exist)
+			const skippedCount = restoreResult?.skipped ?? 0;
+			if (skippedCount > 0) {
+				restoredDetails += `\n${localizer(locale, `${keyBase}.skipped_overrides_note`, { count: skippedCount })}`;
+			}
+
+			descriptionVars.restored_details = restoredDetails;
+		}
 
 		let successDescriptionKey: string;
 		if (

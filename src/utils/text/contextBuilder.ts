@@ -2094,30 +2094,32 @@ export async function buildContext({
       });
     }
 
-    // 8.c. Always add a spacer after sample dialogues to clearly delineate examples
-    // from the actual conversation. This prevents models from continuing sample
-    // dialogue as if it were real conversation history.
-    const spacerText = `[System: Above are only examples of how {{char}} acts and talks. Use them as reference for a completely new scene that starts now.]`;
-    contextItems.push({
-      role: "user",
-      parts: [
-        {
-          type: "text",
-          text: applyUncensorInputTransforms(
-            await convertMentions(
-              spacerText,
-              client,
-              guildId,
-              triggererName,
-              botName,
-              tomoriConfig.personal_memories_enabled,
+    // 8.c. Spacer message after sample dialogues to delineate examples from real conversation.
+    // Flip this flag to enable/disable the spacer.
+    const ENABLE_SAMPLE_DIALOGUE_SPACER = false;
+    if (ENABLE_SAMPLE_DIALOGUE_SPACER) {
+      const spacerText = `[System: Above are only examples of how {{char}} acts and talks. Use them as reference for a completely new scene that starts now.]`;
+      contextItems.push({
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: applyUncensorInputTransforms(
+              await convertMentions(
+                spacerText,
+                client,
+                guildId,
+                triggererName,
+                botName,
+                tomoriConfig.personal_memories_enabled,
+              ),
+              uncensorInputOptions,
             ),
-            uncensorInputOptions,
-          ),
-        },
-      ],
-      metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
-    });
+          },
+        ],
+        metadataTag: ContextItemTag.DIALOGUE_SAMPLE,
+      });
+    }
   }
 
   // 9. Conversation History (Main Dialogue)

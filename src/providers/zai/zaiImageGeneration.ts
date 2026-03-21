@@ -27,14 +27,6 @@ const ASPECT_RATIO_TO_SIZE: Record<string, string> = {
 const DEFAULT_SIZE = "1280x1280";
 
 /**
- * Strip the `zai/` prefix from a model codename for API calls.
- * The DB stores `zai/glm-image` but the API expects `glm-image`.
- */
-function stripZaiPrefix(model: string): string {
-	return model.startsWith("zai/") ? model.slice(4) : model;
-}
-
-/**
  * Generate an image using Z.ai's native image generation API.
  * Converts the aspect ratio to pixel dimensions and fetches the resulting image URL.
  *
@@ -44,7 +36,7 @@ function stripZaiPrefix(model: string): string {
 export async function generateZaiNativeImage(
 	request: ProviderNativeImageGenerationRequest,
 ): Promise<ProviderNativeImageGenerationResult> {
-	const apiModel = stripZaiPrefix(request.model);
+	const apiModel = request.model;
 	const size = ASPECT_RATIO_TO_SIZE[request.aspectRatio] ?? DEFAULT_SIZE;
 
 	// Log warning if reference images were provided — Z.ai doesn't support img2img

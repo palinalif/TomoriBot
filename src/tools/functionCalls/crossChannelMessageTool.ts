@@ -16,6 +16,7 @@ import {
 } from "../../types/tool/interfaces";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
+import { isRefreshMarkerEmbed } from "../../utils/discord/embedDetection";
 
 // ─── Boomerang Mechanism ─────────────────────────────────────────────
 // Stores pending boomerang data keyed by source channel ID.
@@ -447,7 +448,8 @@ export class CrossChannelMessageTool extends BaseTool {
 
       // 10. Handle boomerang — store data for follow-up generation in source channel
       if (boomerangArg) {
-        // Fetch last 10 messages from target channel (including the one the bot just sent)
+        // Fetch last 10 messages from target channel (including the one the bot just sent),
+        // but respect refresh embed boundaries — only include messages after the most recent one
         let targetMessages: Array<{
           author: string;
           content: string;
@@ -457,7 +459,20 @@ export class CrossChannelMessageTool extends BaseTool {
           const recentMessages = await targetChannel.messages.fetch({
             limit: 10,
           });
-          targetMessages = recentMessages.map((m) => ({
+          // Discord returns newest-first; truncate at refresh embed boundary
+          const messagesArray = [...recentMessages.values()];
+          const filteredMessages: Message[] = [];
+          for (const m of messagesArray) {
+            // Stop if we hit a refresh/reset embed — everything before it is stale context
+            if (m.embeds.length > 0 && m.embeds.some(isRefreshMarkerEmbed)) {
+              log.info(
+                `Cross-channel tool: Boomerang message fetch hit refresh embed at ${m.id} — truncating older messages`,
+              );
+              break;
+            }
+            filteredMessages.push(m);
+          }
+          targetMessages = filteredMessages.map((m) => ({
             author: m.author.displayName ?? m.author.username,
             content: m.content || "(no text content)",
             timestamp: m.createdAt.toISOString(),
@@ -484,14 +499,32 @@ export class CrossChannelMessageTool extends BaseTool {
         );
       }
 
+      // When boomerang is enabled, end the LLM's current turn immediately.
+      // The boomerang mechanism will trigger a separate generation with the actual
+      // target channel context, so we must prevent the LLM from fabricating a report here.
+      if (boomerangArg) {
+        return {
+          success: true,
+          endTurn: true,
+          message: `You visited #${targetChannel.name}, completed your task, and have now returned to this channel to report back.`,
+          data: {
+            status: "cross_channel_visit_complete",
+            target_channel_name: targetChannel.name,
+            target_channel_id: targetChannel.id,
+            boomerang: true,
+            note: `You have already visited #${targetChannel.name} and completed your task there. You are now back in this channel. Report what you found or did.`,
+          },
+        };
+      }
+
       return {
         success: true,
-        message: `Message sent to #${targetChannel.name}${boomerangArg ? " (boomerang report-back scheduled)" : ""}.`,
+        message: `Message sent to #${targetChannel.name}.`,
         data: {
           status: "cross_channel_message_sent",
           target_channel_name: targetChannel.name,
           target_channel_id: targetChannel.id,
-          boomerang: boomerangArg ?? false,
+          boomerang: false,
         },
       };
     } catch (error) {

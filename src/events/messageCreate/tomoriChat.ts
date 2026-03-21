@@ -76,7 +76,7 @@ import {
   recordKeyError,
   type SelectedKeyResult,
 } from "@/utils/security/keyRotation";
-import { localizer, getSupportedLocales } from "../../utils/text/localizer";
+import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/text/localizer";
 import {
   escapeRegExp,
   normalizeCustomEmojisForLlm,
@@ -2396,7 +2396,7 @@ export default async function tomoriChat(
           | "system_injection"
           | "compact_summary"
           | "compact_refresh"
-          | "reward_headpat"
+          | "reward"
           | null;
       } {
         if (!embedTitle) return { isTarget: false, type: null };
@@ -2459,10 +2459,12 @@ export default async function tomoriChat(
             supportedLocale,
             "commands.bot.impersonate.system_title",
           );
-          const rewardHeadpatTitle = localizer(
-            supportedLocale,
-            "commands.reward.headpat.embed_title",
-          );
+          // Reward embed titles — dynamically discovered from locale sub-keys
+          // so new reward commands are automatically recognized without updating this list
+          const rewardNames = getLocaleSubKeys(supportedLocale, "commands.reward");
+          const rewardTitles = rewardNames
+            .map((name) => localizer(supportedLocale, `commands.reward.${name}.embed_title`))
+            .filter((title) => !title.includes(".")); // Filter out unresolved keys
           const compactSummaryTitle = localizer(
             supportedLocale,
             "commands.tool.compact.summary_title",
@@ -2497,9 +2499,9 @@ export default async function tomoriChat(
           if (embedTitle === systemInjectionTitle) {
             return { isTarget: true, type: "system_injection" };
           }
-          // Check for reward headpat embed
-          if (embedTitle === rewardHeadpatTitle) {
-            return { isTarget: true, type: "reward_headpat" };
+          // Check for reward embeds (headpat, hug, kiss, tickle)
+          if (rewardTitles.some((title) => embedTitle === title)) {
+            return { isTarget: true, type: "reward" };
           }
           // Check for compact summary embeds (conversation/scene)
           if (
@@ -3754,7 +3756,7 @@ export default async function tomoriChat(
                 embedCheck.type === "system_injection" ||
                 embedCheck.type === "compact_summary" ||
                 embedCheck.type === "compact_refresh" ||
-                embedCheck.type === "reward_headpat") &&
+                embedCheck.type === "reward") &&
               embed.description
             ) {
               // Wrap system_injection embeds in [System: ...] wrapper
@@ -3805,7 +3807,7 @@ export default async function tomoriChat(
                 const embedBody = `${titleLine}${cleanedDescription}`;
                 const embedContent =
                   embedCheck.type === "memory_learning" ||
-                  embedCheck.type === "reward_headpat"
+                  embedCheck.type === "reward"
                     ? `[System: ${embedBody}]`
                     : `[The following is a system-produced embed]\n${embedBody}`;
                 messageContentForLlm = messageContentForLlm
@@ -6755,6 +6757,16 @@ export default async function tomoriChat(
                   }
 
                   functionInteractionHistory.push(historyEntry);
+
+                  // Tool requested immediate turn end (e.g., boomerang cross-channel message
+                  // that will trigger a separate follow-up generation with actual context)
+                  if (toolResult.endTurn) {
+                    log.info(
+                      `Tool "${funcName}" requested endTurn — ending LLM turn immediately to prevent premature response`,
+                    );
+                    finalStreamCompleted = true;
+                    break;
+                  }
 
                   // Disable STM after first successful call to prevent duplicate updates in one turn
                   if (

@@ -5,13 +5,16 @@
  * MCP servers registered by guild admins. Each connection is keyed by
  * "${serverId}:${name}" and auto-evicted after a configurable idle TTL.
  *
- * Transport: StreamableHTTPClientTransport → SSEClientTransport fallback
- * (following the MCP SDK's recommended pattern for remote servers).
+ * Transport: Smithery Connect → StreamableHTTPClientTransport → SSEClientTransport fallback.
+ * Smithery-hosted servers (*.run.tools) use @smithery/api's managed transport;
+ * all others follow the MCP SDK's recommended pattern for remote servers.
  */
 
 import { Client as MCPClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { Smithery } from "@smithery/api";
+import { createConnection as createSmitheryConnection } from "@smithery/api/mcp";
 import { type CallableTool, mcpToTool } from "@google/genai";
 import { log } from "@/utils/misc/logger";
 import type { GuildMcpServerRow } from "@/types/db/schema";
@@ -24,6 +27,18 @@ import type {
 import type { ToolContext } from "@/types/tool/interfaces";
 import { getCachedEnabledGuildMcpConfigs } from "@/utils/cache/guildMcpConfigCache";
 import { decryptGuildMcpAuthToken } from "@/utils/db/guildMcpDb";
+
+/**
+ * Checks if a URL is a Smithery-hosted MCP server (*.run.tools).
+ * These servers require the Smithery Connect transport instead of direct HTTP/SSE.
+ */
+function isSmitheryUrl(url: string): boolean {
+	try {
+		return new URL(url).hostname.endsWith(".run.tools");
+	} catch {
+		return false;
+	}
+}
 
 // ─── Configuration ───────────────────────────────────────────────────
 
@@ -424,16 +439,20 @@ class GuildMcpManager {
 	}
 
 	/**
-	 * Connect an MCP client using StreamableHTTP transport first, falling back
-	 * to SSE transport if the StreamableHTTP connect fails at runtime.
+	 * Connect an MCP client using the appropriate transport strategy:
 	 *
-	 * The fallback is necessary because the StreamableHTTP constructor always
-	 * succeeds — failures only surface during `client.connect()` when the
-	 * server rejects the POST request (e.g., SSE-only servers like Supergateway).
+	 * 1. **Smithery Connect** — For *.run.tools URLs, uses `@smithery/api/mcp`
+	 *    to create a managed transport with the auth token as the Smithery API key.
+	 * 2. **StreamableHTTP** — Modern MCP transport (tried first for non-Smithery URLs).
+	 * 3. **SSE** — Legacy fallback when StreamableHTTP fails at runtime.
+	 *
+	 * The StreamableHTTP → SSE fallback is necessary because the StreamableHTTP
+	 * constructor always succeeds — failures only surface during `client.connect()`
+	 * when the server rejects the POST request (e.g., SSE-only servers like Supergateway).
 	 *
 	 * @param client - MCP client instance (will be connected in place)
 	 * @param url - Remote server URL
-	 * @param authToken - Optional bearer token
+	 * @param authToken - Optional bearer token (or Smithery API key for *.run.tools)
 	 * @param serverLabel - Label for log messages
 	 */
 	private async connectWithFallback(
@@ -442,16 +461,41 @@ class GuildMcpManager {
 		authToken?: string,
 		serverLabel?: string,
 	): Promise<void> {
+		const label = serverLabel ?? url;
+
+		// 1. Try Smithery Connect for *.run.tools URLs
+		if (isSmitheryUrl(url) && authToken) {
+			try {
+				const smitheryClient = new Smithery({ apiKey: authToken });
+				const { transport: smitheryTransport } = await createSmitheryConnection({
+					client: smitheryClient,
+					mcpUrl: url,
+				});
+				await Promise.race([
+					client.connect(smitheryTransport),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error(`Smithery connection to '${label}' timed out`)), CONNECT_TIMEOUT_MS),
+					),
+				]);
+				log.info(`[GuildMcpManager] Connected via Smithery Connect: ${label}`);
+				return;
+			} catch (smitheryError) {
+				log.info(
+					`[GuildMcpManager] Smithery Connect failed for "${label}", falling back to StreamableHTTP: ` +
+					`${smitheryError instanceof Error ? smitheryError.message : String(smitheryError)}`,
+				);
+			}
+		}
+
 		const headers: Record<string, string> = {};
 		if (authToken) {
 			headers.Authorization = `Bearer ${authToken}`;
 		}
 
-		const label = serverLabel ?? url;
 		const parsedUrl = new URL(url);
 		const requestInit = { headers };
 
-		// 1. Try StreamableHTTP first (modern MCP transport)
+		// 2. Try StreamableHTTP (modern MCP transport)
 		try {
 			const streamableTransport = new StreamableHTTPClientTransport(parsedUrl, { requestInit });
 			await Promise.race([
@@ -469,7 +513,7 @@ class GuildMcpManager {
 			);
 		}
 
-		// 2. Fall back to SSE transport
+		// 3. Fall back to SSE transport
 		const sseTransport = new SSEClientTransport(parsedUrl, { requestInit });
 		await Promise.race([
 			client.connect(sseTransport),

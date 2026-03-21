@@ -138,6 +138,50 @@ Important:
 - provider tool conversion is not fully generic across vendors
 - if you add nested tool-schema support or other serializer behavior, update all provider tool adapters consistently
 
+## 5.5 Register the MCP Tool Adapter
+
+If your provider supports tool calling, you **must** register its tool adapter with
+`registerMCPAdapter()` in `src/events/clientReady/02_registerMCPs.ts`.
+
+Example:
+
+```ts
+import { getExampleToolAdapter } from "../../providers/example/exampleToolAdapter";
+
+const exampleAdapter = getExampleToolAdapter();
+registerMCPAdapter(exampleAdapter);
+log.info("Registered Example tool adapter with MCP capabilities");
+```
+
+Why this matters:
+
+- Tool **definitions** are built by `getAvailableToolsWithMCP()`, which queries the
+  `mcpManager` directly. This works for any provider regardless of adapter registration.
+- Tool **execution** goes through `executeTool()` → `isMCPFunction(name, provider)`,
+  which looks up the provider's adapter in `ToolRegistry.mcpAdapters`.
+- If the adapter is not registered, MCP tools (e.g. `fetch`, `web-search`) will appear
+  in the LLM's tool list but fail at execution time with "Tool not found in registry".
+  Built-in tools still work because they resolve through a separate code path.
+
+This is easy to miss because the provider will appear to work for built-in tool calls.
+The failure only surfaces when the LLM calls an MCP-backed tool.
+
+### Guild MCP Tools
+
+In addition to global MCP tools, each guild can register its own remote MCP servers
+via `/config mcp add`. Your tool adapter's `getAllToolsIn*Format()` method **must**
+also inject guild MCP tools by calling `getGuildMcpManager().getGuildMCPTools(serverId)`.
+
+The pattern (used by Google, OpenRouter, and OpenAI-compatible adapters):
+
+1. After adding global MCP tools, check `if (serverId && allowedMCPFunctions)`
+2. Call `guildMcpManager.getGuildMCPTools(serverId)` to get per-guild `CallableTool`s
+3. Filter declarations against `allowedMCPFunctions` (pre-approved by `toolRegistry`)
+4. Convert to your provider's format and append
+
+If this step is missing, guild-registered MCP tools will be discovered and logged
+but never sent to the LLM — the model won't know they exist.
+
 ## 6. Register the Provider Metadata
 
 `ProviderFactory` will auto-discover `{providerName}Provider.ts`, but that is not enough by itself.
@@ -361,6 +405,7 @@ Run `bun run check-locales` only if you changed locale files or command metadata
 - Hardcoding model lists in code instead of using the database-backed inventory
 - Adding new provider checks directly in commands instead of the provider capability layer
 - Treating vendor API capability as the same thing as app-level support
+- Forgetting to register the tool adapter with `registerMCPAdapter()` in `02_registerMCPs.ts` — MCP tools will be sent to the LLM but fail at execution time (see step 5.5)
 
 ## Related Files
 
@@ -372,4 +417,5 @@ Run `bun run check-locales` only if you changed locale files or command metadata
 - `src/utils/provider/providerInfoRegistry.ts`
 - `src/utils/provider/providerCapabilityResolver.ts`
 - `src/providers/utils/providerFeatureExecutors.ts`
+- `src/events/clientReady/02_registerMCPs.ts`
 - `src/db/seed.sql`

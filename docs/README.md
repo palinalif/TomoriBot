@@ -38,6 +38,7 @@ This folder is organized by topic instead of numeric filenames.
 
 - [`integrations/sillytavern-card-support.md`](./integrations/sillytavern-card-support.md)
 - [`integrations/message-components-v2.md`](./integrations/message-components-v2.md)
+- [`integrations/modal-input-components.md`](./integrations/modal-input-components.md)
 - [`integrations/matrix-bridge.md`](./integrations/matrix-bridge.md)
 
 ## Guides

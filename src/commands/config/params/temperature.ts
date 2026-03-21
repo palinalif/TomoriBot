@@ -20,7 +20,8 @@ import { sql } from "@/utils/db/client";
 
 // Define constants at the top (Rule #20)
 const TEMPERATURE_MIN = 0;
-const TEMPERATURE_MAX = 2.0;
+const TEMPERATURE_INPUT_MAX = 2.0;
+const TEMPERATURE_STORED_MAX = 1.99;
 const TEMPERATURE_DEFAULT = 1.0;
 
 // Configure the subcommand
@@ -42,9 +43,17 @@ export const configureSubcommand = (
           ),
         )
         .setMinValue(TEMPERATURE_MIN)
-        .setMaxValue(TEMPERATURE_MAX)
+        .setMaxValue(TEMPERATURE_INPUT_MAX)
         .setRequired(true),
     );
+
+/**
+ * Clamp temperature to DB-safe range.
+ * Some providers (e.g. Google Gemini) reject exact 2.0, so cap at 1.99.
+ */
+function normalizeTemperature(value: number): number {
+  return Math.max(TEMPERATURE_MIN, Math.min(TEMPERATURE_STORED_MAX, value));
+}
 
 /**
  * Sets the temperature parameter for Tomori's LLM
@@ -74,13 +83,14 @@ export async function execute(
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
-    // 2. Get the temperature value from options
-    const temperatureValue = interaction.options.getNumber("value", true);
+    // 2. Get the temperature value from options and normalize for storage
+    const rawValue = interaction.options.getNumber("value", true);
+    const temperatureValue = normalizeTemperature(rawValue);
 
     // 3. Additional validation (Discord already handles min/max, but just in case)
     if (
-      temperatureValue < TEMPERATURE_MIN ||
-      temperatureValue > TEMPERATURE_MAX
+      rawValue < TEMPERATURE_MIN ||
+      rawValue > TEMPERATURE_INPUT_MAX
     ) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.temperature.invalid_value_title",
@@ -88,7 +98,7 @@ export async function execute(
           "commands.config.params.temperature.invalid_value_description",
         descriptionVars: {
           min: TEMPERATURE_MIN.toFixed(1),
-          max: TEMPERATURE_MAX.toFixed(1),
+          max: TEMPERATURE_INPUT_MAX.toFixed(1),
         },
         color: ColorCode.ERROR,
       });

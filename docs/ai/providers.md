@@ -160,10 +160,31 @@ Tools are provider-agnostic at registry level, then adapted per provider by each
 - Google: `googleToolAdapter.ts`
 - OpenRouter: `openrouterToolAdapter.ts`
 - NovelAI: `novelaiToolAdapter.ts`
+- DeepSeek: `deepseekToolAdapter.ts`
 - Custom: `customToolAdapter.ts`
 - Z.ai: `zaiToolAdapter.ts`
 
 All providers rely on centralized tool filtering via `getAvailableToolsWithMCP()`.
+
+### MCP Adapter Registration (Critical)
+
+Every provider that supports tool calling **must** register its tool adapter with
+`registerMCPAdapter()` in `src/events/clientReady/02_registerMCPs.ts`.
+
+This registration is required because tool **definition** and tool **execution** use
+different resolution paths:
+
+- **Definition path**: `getAvailableToolsWithMCP()` queries the `mcpManager` directly
+  to build the tool list sent to the LLM. This works for any provider regardless of
+  adapter registration.
+- **Execution path**: `executeTool()` calls `isMCPFunction(functionName, provider)`,
+  which looks up the provider's adapter in `ToolRegistry.mcpAdapters`. If no adapter
+  is registered for the provider, MCP tool calls silently fall through to the built-in
+  tool check and fail with "Tool not found in registry".
+
+If you add a new provider with tool support and skip this registration, MCP tools
+(e.g. `fetch`, `web-search`) will appear in the LLM's tool list but fail at execution
+time. Built-in tools will still work because they resolve through a separate path.
 
 ## Provider Runtime Capabilities
 

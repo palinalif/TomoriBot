@@ -146,6 +146,9 @@ export interface ToolResult {
   error?: string;
   message?: string;
   imageMetadata?: FunctionResponseImageMetadata;
+  /** When true, the streaming loop should end the LLM's turn immediately after processing
+   *  this tool result. Used by tools that trigger async follow-up work (e.g., boomerang). */
+  endTurn?: boolean;
 }
 
 /**

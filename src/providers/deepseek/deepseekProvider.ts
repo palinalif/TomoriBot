@@ -227,6 +227,21 @@ export class DeepseekProvider
 			endpointUrl: DEEPSEEK_CHAT_COMPLETIONS_URL,
 			seesImages: tomoriState.llm.sees_images,
 			seesVideos: tomoriState.llm.sees_videos,
+			...(tomoriState.config.llm_top_p < 1.0 && {
+				topP: tomoriState.config.llm_top_p,
+			}),
+			...(tomoriState.config.llm_top_k > 0 && {
+				topK: tomoriState.config.llm_top_k,
+			}),
+			...(tomoriState.config.llm_frequency_penalty !== 0 && {
+				frequencyPenalty: tomoriState.config.llm_frequency_penalty,
+			}),
+			...(tomoriState.config.llm_presence_penalty !== 0 && {
+				presencePenalty: tomoriState.config.llm_presence_penalty,
+			}),
+			...(tomoriState.config.llm_min_p > 0 && {
+				minP: tomoriState.config.llm_min_p,
+			}),
 		};
 
 		if (tomoriState.llm.has_tools) {

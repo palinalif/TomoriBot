@@ -174,7 +174,7 @@ export async function execute(
 			return;
 		}
 
-		const name = modalResult.values?.[NAME_INPUT_ID]?.trim();
+		const name = modalResult.values?.[NAME_INPUT_ID]?.trim().replace(/\s+/g, "-");
 		const url = modalResult.values?.[URL_INPUT_ID]?.trim();
 		const authToken = modalResult.values?.[AUTH_TOKEN_INPUT_ID]?.trim() || undefined;
 		const serverTypeRaw = modalResult.values?.[SERVER_TYPE_SELECT_ID]?.trim();

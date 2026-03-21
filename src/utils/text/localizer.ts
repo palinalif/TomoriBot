@@ -205,6 +205,33 @@ export function getSupportedLocales(): string[] {
 }
 
 /**
+ * Get the child keys of a locale path that resolve to objects (i.e., sub-namespaces).
+ * Useful for dynamically discovering all entries under a locale group (e.g., all reward types).
+ * @param locale - The locale code (e.g., 'en-US')
+ * @param path - Dot-notation path to the parent object (e.g., 'commands.reward')
+ * @returns Array of child key names, excluding keys that resolve to strings (like 'description')
+ */
+export function getLocaleSubKeys(locale: string, path: string): string[] {
+  if (!isInitialized || !locales[locale]) return [];
+
+  const keys = path.split(".");
+  let obj: unknown = locales[locale];
+  for (const k of keys) {
+    if (typeof obj !== "object" || obj === null || !Object.hasOwn(obj, k)) {
+      return [];
+    }
+    obj = (obj as Record<string, unknown>)[k];
+  }
+
+  if (typeof obj !== "object" || obj === null) return [];
+
+  // Return only keys whose values are objects (sub-namespaces), not leaf strings
+  return Object.entries(obj as Record<string, unknown>)
+    .filter(([, v]) => typeof v === "object" && v !== null)
+    .map(([k]) => k);
+}
+
+/**
  * Get the default bot name for a specific locale.
  * Uses the localization system to fetch the appropriate bot name based on the server's locale.
  * Falls back to environment variables and hardcoded defaults if locale keys are not found.

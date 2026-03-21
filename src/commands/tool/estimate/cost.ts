@@ -1332,7 +1332,7 @@ async function measureZaiInputTokens(
 
   return {
     provider: "zai",
-    providerLabel: "Zai (Coding)",
+    providerLabel: "Z.ai (Coding)",
     model: providerConfig.model,
     inputTokens: measuredPromptTokens,
     inputPricePerMillion: ZAI_INPUT_PRICE_PER_MILLION,
@@ -1558,7 +1558,8 @@ async function sendNoCostProviderEmbed(
     locale,
     {
       titleKey: "commands.tool.estimate.cost.title",
-      descriptionKey: "commands.tool.estimate.cost.no_cost_provider_description",
+      descriptionKey:
+        "commands.tool.estimate.cost.no_cost_provider_description",
       color: ColorCode.INFO,
     },
     MessageFlags.Ephemeral,

@@ -7,6 +7,9 @@ import { registerMCPAdapter } from "../../tools/toolRegistry";
 import { getGoogleToolAdapter } from "../../providers/google/googleToolAdapter";
 import { getOpenrouterToolAdapter } from "../../providers/openrouter/openrouterToolAdapter";
 import { getNovelaiToolAdapter } from "../../providers/novelai/novelaiToolAdapter";
+import { getDeepseekToolAdapter } from "../../providers/deepseek/deepseekToolAdapter";
+import { getCustomToolAdapter } from "../../providers/custom/customToolAdapter";
+import { getZaiToolAdapter } from "../../providers/zai/zaiToolAdapter";
 
 /**
  * Event handler for initializing MCP servers when the bot is ready
@@ -29,6 +32,18 @@ export default async (): Promise<void> => {
     const novelaiAdapter = getNovelaiToolAdapter();
     registerMCPAdapter(novelaiAdapter);
     log.info("Registered NovelAI tool adapter with MCP capabilities");
+
+    const deepseekAdapter = getDeepseekToolAdapter();
+    registerMCPAdapter(deepseekAdapter);
+    log.info("Registered DeepSeek tool adapter with MCP capabilities");
+
+    const customAdapter = getCustomToolAdapter();
+    registerMCPAdapter(customAdapter);
+    log.info("Registered Custom tool adapter with MCP capabilities");
+
+    const zaiAdapter = getZaiToolAdapter();
+    registerMCPAdapter(zaiAdapter);
+    log.info("Registered Zai tool adapter with MCP capabilities");
 
     // Get the MCP manager singleton instance
     const mcpManager = getMCPManager();

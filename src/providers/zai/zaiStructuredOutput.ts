@@ -100,14 +100,6 @@ function buildZaiStructuredSystemPrompt(
 }
 
 /**
- * Strip the `zai/` prefix from a model codename for API calls.
- * The DB stores `zai/glm-5` but the API expects `glm-5`.
- */
-function stripZaiPrefix(model: string): string {
-	return model.startsWith("zai/") ? model.slice(4) : model;
-}
-
-/**
  * Call Z.ai with JSON Output (`response_format: json_object`).
  * Uses prompt-steered schema injection + Zod validation,
  * similar to the DeepSeek structured output approach.
@@ -121,7 +113,7 @@ export async function callZaiStructuredJSON<T>(
 	responseSchema: Record<string, unknown>,
 	zodSchema: z.ZodType<T>,
 ): Promise<StructuredOutputResult<T>> {
-	const apiModel = stripZaiPrefix(request.model);
+	const apiModel = request.model;
 
 	// Only glm-4.6v supports image inputs
 	const images = request.images ?? [];

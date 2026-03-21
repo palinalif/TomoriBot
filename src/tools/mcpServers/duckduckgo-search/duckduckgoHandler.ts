@@ -599,8 +599,17 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 			"429",
 			"throttled",
 			"rate limited",
+			"failed to fetch search results",
+			"http 202",
 		];
 		const resultText = this.extractResultText(mcpResult).toLowerCase();
+
+		// Treat any MCP-level error (isError: true) as a rate-limit-class failure
+		// so the felo fallback has a chance to recover the search.
+		if (mcpResult.isError) {
+			return true;
+		}
+
 		return errorIndicators.some((indicator) => resultText.includes(indicator));
 	}
 }

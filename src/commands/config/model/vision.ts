@@ -307,11 +307,18 @@ export async function execute(
 		// 13. Invalidate cache so next message gets fresh config
 		invalidateTomoriStateCache(serverId);
 
-		// 14. Success message
+		// 14. Success message (with tool warning if chat model lacks tool support)
+		const descriptionKey = tomoriState.llm.has_tools
+			? "commands.config.model.vision.success_description"
+			: "commands.config.model.vision.success_no_tools_description";
+
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.config.model.vision.success_title",
-			descriptionKey: "commands.config.model.vision.success_description",
-			descriptionVars: { model_name: selectedModel.llm_codename },
+			descriptionKey,
+			descriptionVars: {
+				model_name: selectedModel.llm_codename,
+				chat_model: tomoriState.llm.llm_codename,
+			},
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {

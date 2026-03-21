@@ -411,6 +411,9 @@ export default {
       "429_default_message":
         "DeepSeekでレート制限が発生しています。しばらくしてから再度お試しください。",
 
+      "429_plan_access_default_message":
+        "ご利用中のDeepSeekプランではこのモデルにアクセスできません。`/config model text` で別のモデルに切り替えてください。",
+
       "500_default_message": "DeepSeekで内部サーバーエラーが発生しました。",
 
       "503_default_message": "DeepSeekは現在利用できないか、過負荷状態です。",
@@ -438,6 +441,9 @@ export default {
 
       "429_default_message":
         "Z.aiでレート制限が発生しています。しばらくしてから再度お試しください。",
+
+      "429_plan_access_default_message":
+        "ご利用中のZ.aiプランではこのモデルにアクセスできません。`/config model text` で別のモデルに切り替えてください。",
 
       "500_default_message": "Z.aiで内部サーバーエラーが発生しました。",
 
@@ -1319,7 +1325,7 @@ export default {
         impersonation_title: `なりきり＆ツール`,
         impersonation_description: `- \`/bot impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
 - \`/tools compact\`で会話履歴を要約したりロールプレイで圧縮できます
-- \`/reward headpat\`でインタラクティブなご褒美モーメント`,
+- \`/reward\`コマンド（headpat、hug、kiss、tickle）でインタラクティブなご褒美モーメント`,
         imagegen_title: `画像生成`,
         imagegen_description: `- テキストプロンプトから画像を生成し、参照画像を編集することもできます
 - Text2ImageとImage2Imageをカスタマイズタブルなアスペクト比で対応
@@ -1547,13 +1553,13 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - セットアップ後は利用可能なDeepSeekテキストモデル間で切り替えられます`,
         deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
         // Z.ai (Coding)
-        provider_choice_zai: `Zai (Coding)`,
+        provider_choice_zai: `Z.ai (Coding)`,
         zai_title: `Z.ai (Coding) APIキーの設定`,
         zai_description: `Z.ai (Coding)はGLMモデルファミリーへのアクセスを提供し、チャット、推論、画像生成機能を備えています。
 - ビジョンや推論バリアントを含む4つのチャットモデルをサポート
 - \`glm-image\`によるネイティブ画像生成
 - すべてのチャットモデルでツール呼び出しと構造化出力に対応
-- オプションMCPアドオン：Web Search、Web Reader、Zread（GitHubリポジトリQ&A）を\`/config mcp add\`でZ.ai APIキーを認証トークンとして追加可能`,
+- オプションMCPアドオンは\`/config mcp add\`で利用可能（GLM Codingプランが必要）`,
         zai_getting_key_title: `APIキーの取得：`,
         zai_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
 2. ログインまたはアカウントを作成
@@ -2135,6 +2141,21 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         embed_title: `🫳 ヘッドパット・タイム！`,
         embed_description: `{user}は現在{bot}をなでています。`,
       },
+      hug: {
+        description: `ハグして応答をトリガーします。`,
+        embed_title: `🤗 ハグ・タイム！`,
+        embed_description: `{user}は{bot}をぎゅっと抱きしめています。`,
+      },
+      kiss: {
+        description: `キスして応答をトリガーします。`,
+        embed_title: `💋 キス・タイム！`,
+        embed_description: `{user}は{bot}にキスしました。`,
+      },
+      tickle: {
+        description: `くすぐって応答をトリガーします。`,
+        embed_title: `🤭 くすぐり・タイム！`,
+        embed_description: `{user}は{bot}をくすぐっています。`,
+      },
     },
 
     // サポートコマンド
@@ -2292,15 +2313,23 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           // 成功状態
           success_title: `プロバイダーを切り替えました`,
           success_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。`,
-          success_restored_description: `保存済みの設定で**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。`,
+          success_restored_description: `保存済みの設定で**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。{restored_details}`,
+          // 復元設定サマリーのラベル
+          restored_label: `復元済み`,
+          no_restores_label: `復元データなし`,
+          carried_over_note: `*その他の設定は現在の設定から引き継がれます。*`,
+          skipped_overrides_note: `⚠️ {count}件のオーバーライドをスキップしました — チャンネルまたはペルソナが存在しません。`,
+          config_label_chat_model: `チャットモデル`,
+          config_label_vision_model: `ビジョンモデル`,
+          config_label_image_model: `画像モデル`,
+          config_label_embedding_model: `埋め込みモデル`,
+          config_label_sampler_settings: `サンプラー設定`,
+          config_label_fallback_models: `{count}件のフォールバックモデル`,
+          config_label_channel_overrides: `{count}件のチャンネルオーバーライド`,
+          config_label_persona_overrides: `{count}件のペルソナオーバーライド`,
+          config_label_custom_endpoint: `カスタムエンドポイント`,
           success_novelai_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。⚠️ **絵文字とスタンプの使用は自動的に無効化されました**。NovelAIのコンテキストを安定させるためです。\`/config permissions\`でいつでも再有効化できます。`,
-          success_zai_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。
-
-💡 **Z.ai MCPサーバー** — Z.ai APIキーでボットを強化する無料アドオン：
-- **Web Search** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_search_prime/mcp\`
-- **Web Reader** — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/web_reader/mcp\`
-- **Zread**（GitHubリポジトリQ&A） — \`/config mcp add\` → URL: \`https://api.z.ai/api/mcp/zread/mcp\`
-各サーバーの認証トークンにはZ.ai APIキーを使用してください。`,
+          success_zai_description: `**{provider}**に切り替えました。モデルは\`{model_name}\`になりました。`,
         },
         remove: {
           description: `保存されたプロバイダー設定を削除します。`,
@@ -2564,6 +2593,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           not_needed_description: `現在のチャットモデル（\`{model_name}\`）は既に画像ビジョンをサポートしています。別のビジョンモデルはビジョン非対応のチャットモデルにのみ有用です。`,
           success_title: `ビジョンモデルが更新されました`,
           success_description: `ビジョン非対応のチャットモデルは \`{model_name}\` を使用して \`analyze_image\` ツールで画像を分析します。`,
+          success_no_tools_description: `ビジョンモデルを \`{model_name}\` に設定しましたが、現在のチャットモデル（\`{chat_model}\`）は**ツール呼び出し**に対応していません。ビジョンモデルは \`analyze_image\` ツールが必要です — ツール対応のチャットモデルに切り替えてください。`,
           cleared_title: `ビジョンモデルを削除しました`,
           cleared_description: `ビジョンモデルが削除されました。ビジョン非対応のチャットモデルは画像を分析できなくなります。`,
           clear_option: `なし（ビジョンツールを無効化）`,
@@ -2663,7 +2693,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Temperatureは既に設定済みです`,
           already_set_description: `Temperatureは既に \`{temperature}\` に設定されています。`,
           success_title: `Temperatureが更新されました`,
-          success_description: `LLMのTemperatureが \`{previous_temperature}\` から \`{temperature}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI`,
+          success_description: `LLMのTemperatureが \`{previous_temperature}\` から \`{temperature}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai`,
         },
         "top-p": {
           description: `Top-P（核サンプリング）のしきい値を設定します（デフォルト: 0.95）。`,
@@ -2673,7 +2703,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Top-Pは既に設定済みです`,
           already_set_description: `Top-Pは既に \`{top_p}\` に設定されています。`,
           success_title: `Top-Pが更新されました`,
-          success_description: `Top-Pが \`{previous_top_p}\` から \`{top_p}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI`,
+          success_description: `Top-Pが \`{previous_top_p}\` から \`{top_p}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai`,
         },
         "top-k": {
           description: `Top-K（候補トークン数）の上限を設定します（デフォルト: 0）。`,
@@ -2683,7 +2713,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Top-Kは既に設定済みです`,
           already_set_description: `Top-Kは既に \`{top_k}\` に設定されています。`,
           success_title: `Top-Kが更新されました`,
-          success_description: `Top-Kが \`{previous_top_k}\` から \`{top_k}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI`,
+          success_description: `Top-Kが \`{previous_top_k}\` から \`{top_k}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai`,
         },
         "frequency-penalty": {
           description: `繰り返しトークンへの頻度ペナルティを設定します（デフォルト: 0.0）。`,
@@ -2693,7 +2723,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Frequency Penaltyは既に設定済みです`,
           already_set_description: `Frequency penaltyは既に \`{frequency_penalty}\` に設定されています。`,
           success_title: `Frequency Penaltyが更新されました`,
-          success_description: `Frequency penaltyが \`{previous_frequency_penalty}\` から \`{frequency_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI`,
+          success_description: `Frequency penaltyが \`{previous_frequency_penalty}\` から \`{frequency_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai`,
         },
         "presence-penalty": {
           description: `繰り返しトピックへの存在ペナルティを設定します（デフォルト: 0.0）。`,
@@ -2703,7 +2733,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Presence Penaltyは既に設定済みです`,
           already_set_description: `Presence penaltyは既に \`{presence_penalty}\` に設定されています。`,
           success_title: `Presence Penaltyが更新されました`,
-          success_description: `Presence penaltyが \`{previous_presence_penalty}\` から \`{presence_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI`,
+          success_description: `Presence penaltyが \`{previous_presence_penalty}\` から \`{presence_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai`,
         },
         "min-p": {
           description: `Min-P（最小確率）のしきい値を設定します（デフォルト: 0.0）。`,
@@ -2713,7 +2743,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Min-Pは既に設定済みです`,
           already_set_description: `Min-Pは既に \`{min_p}\` に設定されています。`,
           success_title: `Min-Pが更新されました`,
-          success_description: `Min-Pが \`{previous_min_p}\` から \`{min_p}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI（GoogleはMin-Pに非対応）`,
+          success_description: `Min-Pが \`{previous_min_p}\` から \`{min_p}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai`,
         },
       },
       timezone: {
@@ -2915,7 +2945,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           url_label: `サーバーURL`,
           url_placeholder: `https://mcp.example.com/sse`,
           auth_token_label: `認証トークン（任意）`,
-          auth_token_placeholder: `認証用Bearerトークン（不要な場合は空白）`,
+          auth_token_placeholder: `BearerトークンまたはSmithery APIキー（不要な場合は空白）`,
           server_type_label: `サーバータイプ（任意）`,
           server_type_description: `このサーバーが置き換える機能（対応する内蔵ツールを無効化）`,
           server_type_placeholder: `サーバータイプを選択...`,

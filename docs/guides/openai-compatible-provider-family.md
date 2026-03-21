@@ -162,7 +162,8 @@ Recommended responsibility split:
   - shared speaker-boundary guard if retained
 - `openaiCompatibleToolAdapter.ts`
   - generic OpenAI function schema conversion
-  - MCP integration shared across compatible vendors
+  - global MCP integration shared across compatible vendors
+  - guild MCP tool injection (per-guild remote servers registered via `/config mcp add`)
 
 Concrete providers then stay small:
 
