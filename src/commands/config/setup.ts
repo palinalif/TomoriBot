@@ -6,7 +6,7 @@ import type {
 } from "discord.js";
 import { sql } from "@/utils/db/client";
 import type { SetupConfig, UserRow } from "../../types/db/schema";
-import type { SelectOption } from "../../types/discord/modal";
+import type { SelectOption, RadioGroupOption } from "../../types/discord/modal";
 import { setupConfigSchema } from "../../types/db/schema";
 import { localizer, getDefaultBotName } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
@@ -200,8 +200,8 @@ export async function execute(
       description: preset.description,
     }));
 
-    // Create humanizer degree options for the select menu
-    const humanizerSelectOptions: SelectOption[] = [
+    // Create humanizer degree options for the radio group
+    const humanizerSelectOptions: RadioGroupOption[] = [
       {
         label: localizer(
           locale,
@@ -285,10 +285,10 @@ export async function execute(
             options: presetSelectOptions,
           },
           {
+            kind: "radioGroup" as const,
             customId: "humanizer_degree",
             labelKey: "commands.config.setup.humanizer_label",
             descriptionKey: "commands.config.setup.humanizer_description",
-            placeholder: "commands.config.setup.humanizer_placeholder",
             required: true,
             options: humanizerSelectOptions,
           },

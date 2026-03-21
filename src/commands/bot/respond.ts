@@ -196,32 +196,13 @@ export async function execute(
     });
   }
 
-  // Add "Use Reasoning" Yes/No string select to toggle reasoning mode
-  const reasoningOptions: SelectOption[] = [
-    {
-      label: localizer(locale, "commands.bot.respond.use_reasoning_no"),
-      value: "no",
-      description: localizer(
-        locale,
-        "commands.bot.respond.use_reasoning_no_description",
-      ),
-    },
-    {
-      label: localizer(locale, "commands.bot.respond.use_reasoning_yes"),
-      value: "yes",
-      description: localizer(
-        locale,
-        "commands.bot.respond.use_reasoning_yes_description",
-      ),
-    },
-  ];
+  // Add "Use Reasoning" checkbox — checked = "true", unchecked = "false"
   modalComponents.push({
+    kind: "checkbox" as const,
     customId: "use_reasoning",
     labelKey: "commands.bot.respond.use_reasoning_label",
     descriptionKey: "commands.bot.respond.use_reasoning_description",
-    placeholder: "commands.bot.respond.use_reasoning_placeholder",
-    required: false,
-    options: reasoningOptions,
+    default: false,
   });
 
   modalComponents.push({
@@ -288,7 +269,8 @@ export async function execute(
   const manualPrefill = manualPrefillRaw?.trim() || undefined;
 
   // Determine if reasoning mode was requested
-  const useReasoning = modalResult.values?.use_reasoning === "yes";
+  // Checkbox returns "true" (checked) or "false" (unchecked)
+  const useReasoning = modalResult.values?.use_reasoning === "true";
   let forceReason: boolean | undefined;
   let llmOverrideCodename: string | undefined;
 

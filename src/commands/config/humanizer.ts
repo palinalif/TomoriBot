@@ -19,7 +19,7 @@ import {
   type ErrorContext,
   tomoriConfigSchema,
 } from "../../types/db/schema";
-import type { SelectOption } from "../../types/discord/modal";
+import type { RadioGroupOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
 
 // Define constants at the top (Rule #20)
@@ -36,7 +36,7 @@ const HUMANIZER_SELECT_ID = "humanizer_select";
  * @param locale - The locale to use for localization
  * @returns Array of SelectOption with localized descriptions
  */
-function createHumanizerOptions(locale: string): SelectOption[] {
+function createHumanizerOptions(locale: string): RadioGroupOption[] {
   return [
     {
       label: localizer(locale, "commands.config.humanizer.choice_none"),
@@ -120,10 +120,10 @@ export async function execute(
       modalTitleKey: "commands.config.humanizer.modal_title",
       components: [
         {
+          kind: "radioGroup" as const,
           customId: HUMANIZER_SELECT_ID,
           labelKey: "commands.config.humanizer.select_label",
           descriptionKey: "commands.config.humanizer.select_description",
-          placeholder: "commands.config.humanizer.select_placeholder",
           required: true,
           options: createHumanizerOptions(locale),
         },
@@ -141,11 +141,14 @@ export async function execute(
     // Extract values from the modal
     // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
     const modalSubmitInteraction = modalResult.interaction!;
+
+    // 5a. Defer the modal submit interaction — DB write below exceeds the 3-second window
+    await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });;
     // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
     const selectedValue = modalResult.values![HUMANIZER_SELECT_ID];
     const humanizerValue = Number.parseInt(selectedValue, 10);
 
-    // 5. Validate the parsed value (additional safety check) - let helper functions manage interaction state
+    // 5b. Validate the parsed value (additional safety check)
     if (
       Number.isNaN(humanizerValue) ||
       humanizerValue < HUMANIZER_MIN ||
@@ -154,6 +157,7 @@ export async function execute(
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.operation_failed_title",
         descriptionKey: "commands.config.humanizer.invalid_value_description",
+        descriptionVars: { min: String(HUMANIZER_MIN), max: String(HUMANIZER_MAX) },
         color: ColorCode.ERROR,
       });
       return;

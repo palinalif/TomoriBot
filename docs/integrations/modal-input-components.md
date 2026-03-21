@@ -289,26 +289,150 @@ A Checkbox is a single toggle for simple yes/no questions. Unlike Checkbox Group
 
 ---
 
-## TomoriBot Migration Opportunities
+## Component Selection Standards
 
-Several existing TomoriBot flows currently use workarounds that these new components could simplify:
+Use this decision guide when choosing between modal input types.
 
-### Custom Provider Capabilities (`customProviderModal.ts`)
+### When to Use Each Component
 
-**Current approach**: After the initial modal, 4 separate `StringSelectMenuBuilder` dropdowns are shown in a follow-up message for yes/no capability toggles (tools, images, videos, structured output).
+| Component        | Use When                                                                                          | Avoid When                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Text Input**   | Free-form text entry: names, prompts, tags, API keys, URLs                                       | The input is a choice from a known set of options                                              |
+| **String Select** | Large option sets (11+), dynamic/growing lists, options needing emoji or rich descriptions       | Small fixed set of mutually exclusive options (use Radio Group instead)                        |
+| **Radio Group**  | Small fixed set of mutually exclusive options (2-10), unlikely to grow beyond 10                  | Option list is dynamic or may exceed 10 items (use String Select instead)                     |
+| **Checkbox Group** | Multiple items can be selected from a list (1-10 options), OR a single required yes/no toggle  | Mutually exclusive choice (use Radio Group)                                                   |
+| **Checkbox**     | Single **optional** yes/no or on/off toggle question                                             | The answer is **required** (use Checkbox Group with 1 option instead)                         |
 
-**With new components**: A single modal could contain all 4 toggles using either:
-- **Checkbox Group**: One group with options like "Tool Calling", "Image Vision", "Video Vision", "Structured Output" — user checks all that apply.
-- **Individual Checkboxes**: 4 separate Checkbox components, each wrapped in a Label, for clear per-capability toggling.
+### Boolean Input Pattern
 
-This eliminates the multi-step message-based flow and collapses it into a single modal submission.
+Many TomoriBot modals include yes/no, enable/disable, or true/false string selects. These should be migrated to:
 
-### General Pattern
+- **Optional boolean** → **Checkbox**: Unchecked submits as `false`, checked as `true`. The user can leave it unchecked and still submit.
+- **Required boolean** → **Checkbox Group with 1 option**: Set `required: true` and provide a single option. This forces the user to explicitly check it before submitting — acting as a required confirmation or acknowledgment.
 
-Any command that currently shows a follow-up message with yes/no select menus or boolean choices can potentially be migrated to a modal with Checkboxes. Commands that present mutually exclusive options via string selects could use Radio Groups instead.
+```json
+// Required boolean workaround: Checkbox Group with 1 option
+{
+  "type": 18,
+  "label": "Enable this server?",
+  "component": {
+    "type": 22,
+    "custom_id": "enable_toggle",
+    "required": true,
+    "options": [
+      {"value": "true", "label": "Yes, enable"}
+    ]
+  }
+}
+```
+
+### Decision Flowchart
+
+```
+Is the input free-form text?
+  └─ Yes → Text Input
+  └─ No → Is it a single yes/no question?
+            └─ Yes → Is the answer required?
+                      └─ Yes → Checkbox Group (1 option, required: true)
+                      └─ No  → Checkbox
+            └─ No → Can the user select multiple options?
+                      └─ Yes → Checkbox Group (if ≤10 options)
+                      └─ No → Is the option set small and fixed (≤10)?
+                                └─ Yes → Radio Group
+                                └─ No → String Select (supports 25+ via pagination)
+```
+
+### Key Constraints
+
+- **Radio Group**: 2-10 options. No emoji support. No placeholder text.
+- **Checkbox Group**: 1-10 options. Supports `min_values`/`max_values` for range control. Also serves as the workaround for required single-boolean inputs.
+- **Checkbox**: Cannot be `required`. Use a Checkbox Group with 1 option if required behavior is needed.
+- **String Select**: Up to 25 options natively, 25+ via `promptWithPaginatedModal()`. Supports emoji, descriptions, and placeholder text.
+- **All new components** must be wrapped in a **Label** (type 18), not an Action Row.
+
+---
+
+## TomoriBot Migration Audit
+
+A full survey of all modals in the codebase, categorized by migration eligibility.
+
+### Strong Candidates — Radio Group
+
+These modals use a String Select with a small, fixed, mutually exclusive option set that is unlikely to grow beyond 10:
+
+| Command                   | File                         | Custom ID              | Current Input | Options                                   | Why Radio Group                                     |
+| ------------------------- | ---------------------------- | ---------------------- | ------------- | ----------------------------------------- | --------------------------------------------------- |
+| `/config humanizer`       | `config/humanizer.ts`        | `humanizer_select`     | String Select | 4 (none/light/moderate/heavy)             | Fixed set of 4 mutually exclusive degrees           |
+| `/config setup`           | `config/setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
+| `/personal privacy`       | `personal/privacy.ts`        | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
+| `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
+| `/config mcp add`         | `config/mcp/add.ts`          | `mcp_server_type`      | String Select | 3 (none/web_search/url_fetcher)           | Fixed set of 3 server types; optional field         |
+| `/tool compact`           | `tool/compact.ts`            | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
+
+### Strong Candidates — Checkbox / Checkbox Group (Boolean Selects)
+
+These modals currently use a 2-option String Select (yes/no, true/false, enable/disable) that should become a Checkbox or Checkbox Group depending on whether the answer is required:
+
+| Command                    | File                            | Custom ID              | Current Options          | Required | Migration Target                               |
+| -------------------------- | ------------------------------- | ---------------------- | ------------------------ | -------- | ---------------------------------------------- |
+| `/config mcp toggle`       | `config/mcp/toggle.ts`         | `mcp_enabled_select`   | Enable / Disable         | Yes      | **Checkbox Group** (1 option, required)        |
+| `/config randomtrigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/tool compact`            | `tool/compact.ts`              | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/tool compact`            | `tool/compact.ts`              | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/config provider switch`  | `config/provider/switch.ts`    | `save_current_select`  | Yes / No (default: Yes)  | No       | **Checkbox** (default: true, rarely unchecked) |
+| `/bot respond`             | `bot/respond.ts`               | `use_reasoning`        | Yes / No                 | No       | **Checkbox** (optional toggle)                 |
+| `/persona export`          | `persona/export.ts`            | `export_json_select`   | False / True             | No       | **Checkbox** (optional toggle)                 |
+
+> **Note on `/config provider switch`:** This modal has _two_ migration candidates — the save-current-config toggle becomes a **Checkbox** (default checked, since users almost always want to save). The provider select itself is dynamic (loaded from DB via `loadUniqueProviders()`), so it stays as a String Select.
+
+> **Note on `/tool compact`:** This modal has _three_ migration candidates — `summary_type` becomes a Radio Group, while `refresh_context` and `analyze_images` both become required Checkbox Groups.
+
+### Not Candidates — Keep String Select
+
+These modals have dynamic or large option sets that exceed Radio Group/Checkbox Group limits:
+
+| Command                          | File                             | Reason                                                    |
+| -------------------------------- | -------------------------------- | --------------------------------------------------------- |
+| `/config provider switch`        | `config/provider/switch.ts`      | Provider list is dynamic (DB via `loadUniqueProviders()`) |
+| `/config model text`             | `config/model/text.ts`           | Dynamic model list, often 25+, uses pagination            |
+| `/config model image`            | `config/model/image.ts`          | Dynamic model list, uses pagination                       |
+| `/config model vision`           | `config/model/vision.ts`         | Dynamic model list, uses pagination                       |
+| `/config model embedding`        | `config/model/embedding.ts`      | Dynamic model list, uses pagination                       |
+| `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
+| `/config model remove fallback`  | `config/remove/modelfallback.ts` | Dynamic list of current fallbacks                         |
+| `/config sysprompt preset`       | `config/sysprompt/preset.ts`     | Dynamic preset list from DB                               |
+| `/config apikey set`             | `config/apikey/set.ts`           | Provider select + text input combo; list may grow         |
+| `/teach personaprompt`           | `teach/personaprompt.ts`         | Dynamic persona list, uses pagination                     |
+| `/teach attribute`               | `teach/attribute.ts`             | Dynamic persona list, uses pagination                     |
+| `/teach sampledialogue`          | `teach/sampledialogue.ts`        | Dynamic persona list, uses pagination                     |
+| `/teach memory personal`         | `teach/memory/personal.ts`       | Dynamic memory list                                       |
+| `/teach memory server`           | `teach/memory/server.ts`         | Dynamic memory list                                       |
+| `/novelai tags character`        | `novelai/tags/character.ts`      | Dynamic persona list                                      |
+| `/forget attribute`              | `forget/attribute.ts`            | Dynamic attribute list, uses pagination                   |
+| `/forget reminder`               | `forget/reminder.ts`             | Dynamic reminder list                                     |
+| `/server welcomechannel`         | `server/welcomechannel.ts`       | Dynamic channel list                                      |
+
+### Not Candidates — Keep Text Input
+
+These modals collect free-form text and have no structured option set:
+
+| Command                    | File                          | Reason                                                  |
+| -------------------------- | ----------------------------- | ------------------------------------------------------- |
+| `/config sysprompt change` | `config/sysprompt/change.ts`  | Free-form paragraph text (up to 8000 chars, 4 fields)   |
+| `/config randomtrigger add`| `config/randomtrigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
+| `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
+| `/novelai tags me`         | `novelai/tags/me.ts`          | Free-form tag text                                      |
+| `/novelai tags negative`   | `novelai/tags/negative.ts`    | Free-form tag text                                      |
+| `/novelai tags style`      | `novelai/tags/style.ts`       | Free-form tag text                                      |
+| `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
+| `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
+| `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
+| `/server avatar`           | `server/avatar.ts`            | File upload only                                        |
+| `/tool comment`            | `tool/comment.ts`             | Free-form paragraph text                                |
+| `/data import`             | `data/import.ts`              | File upload only                                        |
 
 ---
 
 ## discord.js Support Status
 
-As of discord.js v14.x, these components may not yet have dedicated builder classes. Until official support lands, raw component payloads can be sent using the Discord API directly or by constructing component objects manually. Check the [discord.js changelog](https://discord.js.org/docs/packages/discord.js/main) for builder availability.
+As of discord.js v14.x, these components may not yet have dedicated builder classes. TomoriBot already uses `promptWithRawModal()` in `interactionHelper.ts` which sends raw component payloads via the Discord REST API — this approach will work for the new component types without waiting for discord.js builder support. The raw modal system already handles Label (type 18) wrapping for string selects and file uploads, so extending it to support Radio Group (type 21), Checkbox Group (type 22), and Checkbox (type 23) should be straightforward.

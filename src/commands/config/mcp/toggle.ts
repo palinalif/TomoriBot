@@ -105,21 +105,7 @@ export async function execute(
 			),
 		}));
 
-		// 3. Build enable/disable select options
-		const stateOptions: SelectOption[] = [
-			{
-				label: localizer(locale, "commands.config.mcp.toggle.enable_option"),
-				value: "true",
-				description: localizer(locale, "commands.config.mcp.toggle.enable_option_description"),
-			},
-			{
-				label: localizer(locale, "commands.config.mcp.toggle.disable_option"),
-				value: "false",
-				description: localizer(locale, "commands.config.mcp.toggle.disable_option_description"),
-			},
-		];
-
-		// 4. Show modal with both string selects (modal is the acknowledgment — no pre-defer)
+		// 4. Show modal with server select + enable checkbox group (modal is the acknowledgment — no pre-defer)
 		const modalResult = await promptWithRawModal(
 			interaction,
 			locale,
@@ -136,12 +122,22 @@ export async function execute(
 						options: serverOptions,
 					},
 					{
+						// Checkbox Group 1 option: checked = enable, unchecked = disable.
+						// min_values: 0 + required: false allows unchecked (disable) submission.
+						// Result comes back in modalResult.multiValues[STATE_SELECT_ID] as string[].
+						kind: "checkboxGroup" as const,
 						customId: STATE_SELECT_ID,
 						labelKey: "commands.config.mcp.toggle.state_label",
 						descriptionKey: "commands.config.mcp.toggle.state_description",
-						placeholder: "commands.config.mcp.toggle.state_placeholder",
-						required: true,
-						options: stateOptions,
+						minValues: 0,
+						required: false,
+						options: [
+							{
+								label: localizer(locale, "commands.config.mcp.toggle.enable_option"),
+								value: "enable",
+								description: localizer(locale, "commands.config.mcp.toggle.enable_option_description"),
+							},
+						],
 					},
 				],
 			},
@@ -160,18 +156,18 @@ export async function execute(
 		const replyInteraction = modalResult.interaction;
 
 		const name = modalResult.values?.[SERVER_SELECT_ID]?.trim();
-		const enabledStr = modalResult.values?.[STATE_SELECT_ID]?.trim();
-		if (!name || !enabledStr) {
+		if (!name) {
 			await replyInfoEmbed(replyInteraction, locale, {
 				titleKey: "commands.config.mcp.toggle.not_found_title",
 				descriptionKey: "commands.config.mcp.toggle.not_found_description",
-				descriptionVars: { name: name || "unknown" },
+				descriptionVars: { name: "unknown" },
 				color: ColorCode.WARN,
 			});
 			return;
 		}
 
-		const enabled = enabledStr === "true";
+		// Checkbox Group: "enable" in multiValues = enabled, absent = disabled
+		const enabled = (modalResult.multiValues?.[STATE_SELECT_ID] ?? []).includes("enable");
 
 		// 5. Update DB
 		const updated = await updateGuildMcpServerEnabled(tomoriState.server_id, name, enabled);

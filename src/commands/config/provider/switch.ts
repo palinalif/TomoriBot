@@ -147,19 +147,7 @@ export async function execute(
 		},
 	);
 
-	// 5. Build "Save current config?" options (default Yes)
-	const saveCurrentOptions: SelectOption[] = [
-		{
-			label: localizer(locale, "commands.config.provider.switch.save_yes_label"),
-			value: "yes",
-			description: undefined,
-		},
-		{
-			label: localizer(locale, "commands.config.provider.switch.save_no_label"),
-			value: "no",
-			description: undefined,
-		},
-	];
+	// (save_current_select migrated to Checkbox in Phase 5 — no options array needed)
 
 	// Track modal submit interaction for error handling in catch block
 	let modalSubmitInteraction:
@@ -191,12 +179,14 @@ export async function execute(
 				maxLength: 200,
 			},
 			{
+				// Checkbox: checked (default) = save current config, unchecked = skip.
+				// "true" (checked) or "false" (unchecked) in modalResult.values[SAVE_CURRENT_SELECT_ID].
+				kind: "checkbox" as const,
 				customId: SAVE_CURRENT_SELECT_ID,
 				labelKey: "commands.config.provider.switch.save_current_label",
 				descriptionKey:
 					"commands.config.provider.switch.save_current_description",
-				required: true,
-				options: saveCurrentOptions,
+				default: true,
 			},
 		];
 
@@ -222,8 +212,9 @@ export async function execute(
 		modalSubmitInteraction = modalResult.interaction;
 		const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
 		const apiKeyInput = modalResult.values?.[API_KEY_INPUT_ID]?.trim() || null;
+		// Checkbox returns "true" (checked) or "false" (unchecked); default is "true" (pre-checked)
 		const saveCurrentChoice =
-			modalResult.values?.[SAVE_CURRENT_SELECT_ID] ?? "yes";
+			modalResult.values?.[SAVE_CURRENT_SELECT_ID] ?? "true";
 
 		if (!modalSubmitInteraction || !selectedProvider) {
 			log.error(
@@ -238,7 +229,7 @@ export async function execute(
 
 		// 8. Save current config if requested (and there's an API key to save)
 		// Also snapshot current channel/persona LLM overrides for later restoration
-		if (saveCurrentChoice === "yes" && !isSameProvider && tomoriState.config.api_key) {
+		if (saveCurrentChoice === "true" && !isSameProvider && tomoriState.config.api_key) {
 			// Load current overrides to include in snapshot
 			const [currentChannelOverrides, currentPersonaOverrides] =
 				await Promise.all([
@@ -924,6 +915,8 @@ export async function execute(
 						count: fallbackCount,
 					}),
 				);
+			} else {
+				noRestoreItems.push(localizer(locale, `${keyBase}.config_label_fallback_models_none`));
 			}
 
 			// Channel Overrides (use actual restore counts if available)
@@ -934,6 +927,8 @@ export async function execute(
 						count: channelRestoredCount,
 					}),
 				);
+			} else {
+				noRestoreItems.push(localizer(locale, `${keyBase}.config_label_channel_overrides_none`));
 			}
 
 			// Persona Overrides (use actual restore counts if available)
@@ -944,23 +939,23 @@ export async function execute(
 						count: personaRestoredCount,
 					}),
 				);
+			} else {
+				noRestoreItems.push(localizer(locale, `${keyBase}.config_label_persona_overrides_none`));
 			}
 
 			// Custom Endpoint (only relevant for custom providers)
-			if (savedConfig.custom_endpoint_url) {
-				restoredItems.push(localizer(locale, `${keyBase}.config_label_custom_endpoint`));
-			}
+			trackConfig(!!savedConfig.custom_endpoint_url, localizer(locale, `${keyBase}.config_label_custom_endpoint`));
 
-			// Build the details string
+			// Build the details string — each section separated by a blank line
 			let restoredDetails = "";
 			if (restoredItems.length > 0) {
 				restoredDetails += `\n\n✅ **${localizer(locale, `${keyBase}.restored_label`)}:** ${restoredItems.join(" · ")}`;
 			}
 			if (noRestoreItems.length > 0) {
-				restoredDetails += `\n➖ **${localizer(locale, `${keyBase}.no_restores_label`)}:** ${noRestoreItems.join(" · ")}`;
+				restoredDetails += `\n\n➖ **${localizer(locale, `${keyBase}.no_restores_label`)}:** ${noRestoreItems.join(" · ")}`;
 			}
 			// Static note: settings not in the snapshot keep their current values
-			restoredDetails += `\n${localizer(locale, `${keyBase}.carried_over_note`)}`;
+			restoredDetails += `\n\n${localizer(locale, `${keyBase}.carried_over_note`)}`;
 
 			// Note skipped overrides (channels/personas that no longer exist)
 			const skippedCount = restoreResult?.skipped ?? 0;

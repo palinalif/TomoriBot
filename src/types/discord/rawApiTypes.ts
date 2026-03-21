@@ -35,9 +35,11 @@ export interface RawDiscordComponent {
   label?: string;
   /** Component description text */
   description?: string;
-  /** Component value (for text inputs) */
-  value?: string;
-  /** Selected values (for select menus and file upload attachment IDs) */
+  /** Component value (string for text inputs and radio groups; boolean for checkboxes) */
+  value?: string | boolean;
+  /** Default checked state (for checkbox components, type 23) */
+  default?: boolean;
+  /** Selected values (for select menus, checkbox groups, and file upload attachment IDs) */
   values?: string[];
   /** Nested component (for type 18 wrappers) */
   component?: RawDiscordComponent;

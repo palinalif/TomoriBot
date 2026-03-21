@@ -465,11 +465,11 @@ export async function execute(
         required: false,
       },
       {
+        kind: "radioGroup" as const,
         customId: ASPECT_RATIO_SELECT_ID,
         labelKey: "commands.generate.image.modal.aspect_ratio_label",
         descriptionKey:
           "commands.generate.image.modal.aspect_ratio_description",
-        placeholder: "commands.generate.image.modal.aspect_ratio_placeholder",
         required: true,
         options: [
           { label: "1:1 (Square)", value: "1:1" },

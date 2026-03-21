@@ -148,7 +148,7 @@ export default {
     generic_error_title: `Generation Error`,
     generic_error_description: `{error_message}`,
     generic_error_footer: `Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support discord\`.`,
-    error_stream_timeout_title: "Connection Timeout, retrying...",
+    error_stream_timeout_title: "Connection Timeout",
 
     // Provider error format template: "{Provider name} Error Code {number}: {message from Google}. {tip from us}"
     provider_error_format:
@@ -2315,9 +2315,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           config_label_image_model: `Image Model`,
           config_label_embedding_model: `Embedding Model`,
           config_label_sampler_settings: `Sampler Settings`,
-          config_label_fallback_models: `{count} Fallback Model(s)`,
-          config_label_channel_overrides: `{count} Channel Override(s)`,
-          config_label_persona_overrides: `{count} Persona Override(s)`,
+          config_label_fallback_models: `Fallback Models ({count})`,
+          config_label_channel_overrides: `Channel Overrides ({count})`,
+          config_label_persona_overrides: `Persona Overrides ({count})`,
+          config_label_fallback_models_none: `Fallback Models`,
+          config_label_channel_overrides_none: `Channel Overrides`,
+          config_label_persona_overrides_none: `Persona Overrides`,
           config_label_custom_endpoint: `Custom Endpoint`,
           success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config permissions\`.`,
           success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,

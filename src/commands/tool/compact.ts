@@ -799,6 +799,8 @@ export async function execute(
 
   const modalComponents: ModalComponent[] = [
     {
+      // Radio Group: mutually exclusive mode selection (exactly one choice)
+      kind: "radioGroup" as const,
       customId: TYPE_FIELD_ID,
       labelKey: "commands.tool.compact.modal.type_label",
       descriptionKey: "commands.tool.compact.modal.type_description",
@@ -821,34 +823,36 @@ export async function execute(
       ],
     },
     {
+      // Checkbox Group with 1 option — checked = yes, unchecked = no.
+      // min_values: 0 + required: false allows unchecked submission (the "no" path).
+      // Result comes back in modalResult.multiValues[REFRESH_FIELD_ID] as string[].
+      kind: "checkboxGroup" as const,
       customId: REFRESH_FIELD_ID,
       labelKey: "commands.tool.compact.modal.refresh_label",
       descriptionKey: "commands.tool.compact.modal.refresh_description",
-      required: true,
+      minValues: 0,
+      required: false,
       options: [
         {
           label: localizer(locale, "general.yes"),
           value: "yes",
-        },
-        {
-          label: localizer(locale, "general.no"),
-          value: "no",
         },
       ],
     },
     {
+      // Checkbox Group with 1 option — checked = yes, unchecked = no.
+      // min_values: 0 + required: false allows unchecked submission (the "no" path).
+      // Result comes back in modalResult.multiValues[ANALYZE_IMAGES_FIELD_ID] as string[].
+      kind: "checkboxGroup" as const,
       customId: ANALYZE_IMAGES_FIELD_ID,
       labelKey: "commands.tool.compact.modal.analyze_images_label",
       descriptionKey: "commands.tool.compact.modal.analyze_images_description",
-      required: true,
+      minValues: 0,
+      required: false,
       options: [
         {
           label: localizer(locale, "general.yes"),
           value: "yes",
-        },
-        {
-          label: localizer(locale, "general.no"),
-          value: "no",
         },
       ],
     },
@@ -886,9 +890,11 @@ export async function execute(
 
   const summaryType = (modalResult.values[TYPE_FIELD_ID] ||
     "conversation") as CompactSummaryMode;
-  const refresh = (modalResult.values[REFRESH_FIELD_ID] || "no") === "yes";
+  // Checkbox Group returns selected values in multiValues; "yes" present = true
+  const refresh =
+    (modalResult.multiValues?.[REFRESH_FIELD_ID] ?? []).includes("yes");
   const analyzeImages =
-    (modalResult.values[ANALYZE_IMAGES_FIELD_ID] || "no") === "yes";
+    (modalResult.multiValues?.[ANALYZE_IMAGES_FIELD_ID] ?? []).includes("yes");
   const additionalInstructions =
     modalResult.values[ADDITIONAL_INST_FIELD_ID]?.trim();
 

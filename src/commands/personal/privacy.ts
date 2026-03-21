@@ -16,7 +16,7 @@ import {
   type ErrorContext,
   PrivacyLevel,
 } from "../../types/db/schema";
-import type { SelectOption } from "../../types/discord/modal";
+import type { RadioGroupOption } from "../../types/discord/modal";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 
 // Modal configuration constants
@@ -28,7 +28,7 @@ const PRIVACY_SELECT_ID = "privacy_select";
  * @param locale - The locale to use for localization
  * @returns Array of SelectOption with localized descriptions
  */
-function createPrivacyOptions(locale: string): SelectOption[] {
+function createPrivacyOptions(locale: string): RadioGroupOption[] {
   return [
     {
       label: localizer(locale, "commands.personal.privacy.choice_minimal"),
@@ -115,10 +115,10 @@ export async function execute(
       modalTitleKey: "commands.personal.privacy.modal_title",
       components: [
         {
+          kind: "radioGroup" as const,
           customId: PRIVACY_SELECT_ID,
           labelKey: "commands.personal.privacy.select_label",
           descriptionKey: "commands.personal.privacy.select_description",
-          placeholder: "commands.personal.privacy.select_placeholder",
           required: true,
           options: createPrivacyOptions(locale),
         },
@@ -168,7 +168,10 @@ export async function execute(
       return;
     }
 
-    // 6. Update privacy level in database
+    // 6. Defer the modal submit interaction before async DB work (3-second Discord limit)
+    await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    // 7. Update privacy level in database
     const updatedUser = await setPrivacyLevel(
       interaction.user.id,
       requestedLevel,
@@ -184,10 +187,10 @@ export async function execute(
       return;
     }
 
-    // 7. Invalidate user cache so next message gets fresh data
+    // 8. Invalidate user cache so next message gets fresh data
     invalidateUserCache(interaction.user.id);
 
-    // 8. Send success confirmation message
+    // 9. Send success confirmation message
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.personal.privacy.success_title",
       descriptionKey: "commands.personal.privacy.success_description",
@@ -202,7 +205,7 @@ export async function execute(
       `User ${interaction.user.id} (${userData.user_nickname}) changed privacy level from ${currentLevel} to ${requestedLevel}`,
     );
   } catch (error) {
-    // 8. Log error with context
+    // 10. Log error with context
     const context: ErrorContext = {
       userId: userData.user_id,
       errorType: "CommandExecutionError",
@@ -218,7 +221,7 @@ export async function execute(
       context,
     );
 
-    // 9. Inform user of unknown error
+    // 11. Inform user of unknown error
     const replyTarget = modalSubmitInteraction ?? interaction;
     await replyInfoEmbed(replyTarget, locale, {
       titleKey: "general.errors.unknown_error_title",

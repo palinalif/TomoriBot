@@ -139,6 +139,26 @@ export const embeddingModelSchema = z.object({
 });
 export type EmbeddingModelRow = z.infer<typeof embeddingModelSchema>;
 
+/**
+ * Normalizes a JSONB array value from the database driver.
+ * Handles the case where Bun SQL returns JSONB columns as strings
+ * instead of parsed objects — parses the string before returning.
+ * @param value - Raw value from the database (may be array, string, or other)
+ * @returns Parsed array, or empty array if parsing fails
+ */
+function normalizeJsonbArray(value: unknown): unknown[] {
+	if (Array.isArray(value)) return value;
+	if (typeof value === "string") {
+		try {
+			const parsed = JSON.parse(value);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch {
+			return [];
+		}
+	}
+	return [];
+}
+
 function normalizeFallbackLlmIds(value: unknown): number[] {
   let source: unknown = value;
   if (typeof source === "string") {
@@ -787,14 +807,14 @@ export const savedProviderConfigSchema = z.object({
 		z.array(z.number().int()).default([]),
 	),
 	channel_llm_overrides: z.preprocess(
-		(value) => (Array.isArray(value) ? value : []),
+		(value) => normalizeJsonbArray(value),
 		z.array(z.object({
 			channel_disc_id: z.string(),
 			llm_id: z.number().int(),
 		})).default([]),
 	),
 	persona_llm_overrides: z.preprocess(
-		(value) => (Array.isArray(value) ? value : []),
+		(value) => normalizeJsonbArray(value),
 		z.array(z.object({
 			tomori_id: z.number().int(),
 			llm_id: z.number().int(),

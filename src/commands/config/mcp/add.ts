@@ -18,7 +18,7 @@ import {
 	promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
+import type { RadioGroupOption } from "@/types/discord/modal";
 import { insertGuildMcpServer, countGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
 
@@ -105,8 +105,8 @@ export async function execute(
 	}
 
 	try {
-		// 2. Build server type select options for tool deduplication
-		const serverTypeOptions: SelectOption[] = [
+		// 2. Build server type radio group options for tool deduplication
+		const serverTypeOptions: RadioGroupOption[] = [
 			{
 				label: localizer(locale, "commands.config.mcp.add.none_option"),
 				value: "none",
@@ -157,10 +157,10 @@ export async function execute(
 						maxLength: 500,
 					},
 					{
+						kind: "radioGroup" as const,
 						customId: SERVER_TYPE_SELECT_ID,
 						labelKey: "commands.config.mcp.add.server_type_label",
 						descriptionKey: "commands.config.mcp.add.server_type_description",
-						placeholder: "commands.config.mcp.add.server_type_placeholder",
 						required: false,
 						options: serverTypeOptions,
 					},

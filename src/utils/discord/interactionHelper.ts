@@ -41,6 +41,9 @@ const modalSelectValues = new Map<string, Record<string, string>>();
 // Storage for file upload attachment IDs keyed by modal component custom ID
 const modalFileUploadValues = new Map<string, Record<string, string[]>>();
 
+// Storage for checkbox group selected values keyed by modal component custom ID
+const modalCheckboxGroupValues = new Map<string, Record<string, string[]>>();
+
 // Storage for resolved attachments from modal file uploads (Discord.js doesn't expose these)
 const modalResolvedAttachments = new Map<
   string,
@@ -90,6 +93,18 @@ function transformModalSubmissionPacket(
             ...(nestedComponent.type === 19 && {
               // FILE_UPLOAD
               values: nestedComponent.values, // Array of attachment IDs
+            }),
+            ...(nestedComponent.type === 21 && {
+              // RADIO_GROUP — value is the selected option string (or null)
+              value: nestedComponent.value,
+            }),
+            ...(nestedComponent.type === 22 && {
+              // CHECKBOX_GROUP — values is an array of selected option strings
+              values: nestedComponent.values,
+            }),
+            ...(nestedComponent.type === 23 && {
+              // CHECKBOX — value is a boolean
+              value: nestedComponent.value,
             }),
             // Include any other properties
             ...Object.fromEntries(
@@ -143,36 +158,49 @@ function setupWebSocketInterception(client: any) {
 
             const interactionId = packet.d.id;
             if (interactionId) {
-              // Store select values before Discord.js strips them
+              // Store component values before Discord.js strips them
               const selectValues: Record<string, string> = {};
               const fileUploadValues: Record<string, string[]> = {};
+              const checkboxGroupValues: Record<string, string[]> = {};
 
               for (const comp of packet.d.data.components) {
-                if (
-                  comp.type === 18 &&
-                  comp.component?.type === 3 &&
-                  comp.component.custom_id &&
-                  comp.component.values?.[0]
-                ) {
-                  selectValues[comp.component.custom_id] =
-                    comp.component.values[0];
+                if (comp.type !== 18 || !comp.component?.custom_id) continue;
+                const inner = comp.component;
+                // Narrowed above: custom_id is guaranteed to be a non-empty string
+                const customId = inner.custom_id as string;
+
+                // 1. String Select (type 3) — store first selected value
+                if (inner.type === 3 && inner.values?.[0]) {
+                  selectValues[customId] = inner.values[0];
                 }
 
-                if (
-                  comp.type === 18 &&
-                  comp.component?.type === 19 &&
-                  comp.component.custom_id &&
-                  Array.isArray(comp.component.values)
-                ) {
-                  fileUploadValues[comp.component.custom_id] =
-                    comp.component.values;
+                // 2. File Upload (type 19) — store all attachment IDs
+                if (inner.type === 19 && Array.isArray(inner.values)) {
+                  fileUploadValues[customId] = inner.values;
+                }
+
+                // 3. Radio Group (type 21) — store selected value string (null → empty string)
+                if (inner.type === 21) {
+                  selectValues[customId] =
+                    typeof inner.value === "string" ? inner.value : "";
+                }
+
+                // 4. Checkbox Group (type 22) — store array of selected values
+                if (inner.type === 22 && Array.isArray(inner.values)) {
+                  checkboxGroupValues[customId] = inner.values;
+                }
+
+                // 5. Checkbox (type 23) — store boolean as "true"/"false" string
+                if (inner.type === 23) {
+                  selectValues[customId] =
+                    inner.value === true ? "true" : "false";
                 }
               }
 
               if (Object.keys(selectValues).length > 0) {
                 modalSelectValues.set(interactionId, selectValues);
                 log.info(
-                  `Stored ${Object.keys(selectValues).length} select values for interaction`,
+                  `Stored ${Object.keys(selectValues).length} select/radio/checkbox values for interaction`,
                 );
               }
 
@@ -180,6 +208,13 @@ function setupWebSocketInterception(client: any) {
                 modalFileUploadValues.set(interactionId, fileUploadValues);
                 log.info(
                   `Stored ${Object.keys(fileUploadValues).length} file upload value set(s) for interaction`,
+                );
+              }
+
+              if (Object.keys(checkboxGroupValues).length > 0) {
+                modalCheckboxGroupValues.set(interactionId, checkboxGroupValues);
+                log.info(
+                  `Stored ${Object.keys(checkboxGroupValues).length} checkbox group value set(s) for interaction`,
                 );
               }
 
@@ -233,11 +268,17 @@ import type {
   ModalOptions,
   ModalResult,
   ModalSelectField,
+  ModalRadioGroupField,
+  ModalCheckboxGroupField,
+  ModalCheckboxField,
 } from "../../types/discord/modal";
 import {
   isModalInputField,
   isModalSelectField,
   isModalFileUploadField,
+  isModalRadioGroupField,
+  isModalCheckboxGroupField,
+  isModalCheckboxField,
 } from "../../types/discord/modal";
 import { createStandardEmbed, createSummaryEmbed } from "./embedHelper";
 
@@ -1720,7 +1761,113 @@ export async function promptWithRawModal(
           MODAL_TITLE_MAX_LENGTH,
         ),
         components: components.map((component) => {
-          if (isModalInputField(component)) {
+          // Check kind-discriminated types first — before any structural guards.
+          // isModalSelectField checks "options" in component, which would also match
+          // RadioGroupField and CheckboxGroupField. isModalInputField's fallback
+          // (no options/minValues/style) would match CheckboxField. Checking `kind`
+          // first avoids both false-positive matches.
+          if (isModalRadioGroupField(component)) {
+            // Radio Group (type 21) wrapped in Label component (type 18)
+            const c = component as ModalRadioGroupField;
+            const rawComponent: RawDiscordComponent = {
+              type: 21, // ComponentType.RadioGroup
+              custom_id: c.customId,
+              options: c.options.map((opt) => ({
+                value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
+                label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
+                description: opt.description
+                  ? safeSelectOptionText(opt.description, SELECT_OPTION_TEXT_MAX_LENGTH)
+                  : undefined,
+                default: opt.default,
+              })),
+              required: c.required !== false,
+            };
+
+            // Wrap in Label component (type 18)
+            const radioLabelComponent: RawDiscordComponent = {
+              type: 18, // ComponentType.Label
+              label: safeSelectOptionText(
+                localizer(locale, c.labelKey),
+                MODAL_LABEL_MAX_LENGTH,
+              ),
+              component: rawComponent,
+            };
+
+            if (c.descriptionKey) {
+              radioLabelComponent.description = safeModalLocalizer(
+                locale,
+                c.descriptionKey,
+              );
+            }
+
+            return radioLabelComponent;
+          } else if (isModalCheckboxGroupField(component)) {
+            // Checkbox Group (type 22) wrapped in Label component (type 18)
+            const cg = component as ModalCheckboxGroupField;
+            const rawComponent: RawDiscordComponent = {
+              type: 22, // ComponentType.CheckboxGroup
+              custom_id: cg.customId,
+              options: cg.options.map((opt) => ({
+                value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
+                label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
+                description: opt.description
+                  ? safeSelectOptionText(opt.description, SELECT_OPTION_TEXT_MAX_LENGTH)
+                  : undefined,
+                default: opt.default,
+              })),
+            };
+
+            if (cg.minValues !== undefined) rawComponent.min_values = cg.minValues;
+            if (cg.maxValues !== undefined) rawComponent.max_values = cg.maxValues;
+            if (cg.required !== undefined) rawComponent.required = cg.required;
+
+            // Wrap in Label component (type 18)
+            const checkboxGroupLabelComponent: RawDiscordComponent = {
+              type: 18, // ComponentType.Label
+              label: safeSelectOptionText(
+                localizer(locale, cg.labelKey),
+                MODAL_LABEL_MAX_LENGTH,
+              ),
+              component: rawComponent,
+            };
+
+            if (cg.descriptionKey) {
+              checkboxGroupLabelComponent.description = safeModalLocalizer(
+                locale,
+                cg.descriptionKey,
+              );
+            }
+
+            return checkboxGroupLabelComponent;
+          } else if (isModalCheckboxField(component)) {
+            // Checkbox (type 23) wrapped in Label component (type 18)
+            const cb = component as ModalCheckboxField;
+            const rawComponent: RawDiscordComponent = {
+              type: 23, // ComponentType.Checkbox
+              custom_id: cb.customId,
+            };
+
+            if (cb.default !== undefined) rawComponent.default = cb.default;
+
+            // Wrap in Label component (type 18)
+            const checkboxLabelComponent: RawDiscordComponent = {
+              type: 18, // ComponentType.Label
+              label: safeSelectOptionText(
+                localizer(locale, cb.labelKey),
+                MODAL_LABEL_MAX_LENGTH,
+              ),
+              component: rawComponent,
+            };
+
+            if (cb.descriptionKey) {
+              checkboxLabelComponent.description = safeModalLocalizer(
+                locale,
+                cb.descriptionKey,
+              );
+            }
+
+            return checkboxLabelComponent;
+          } else if (isModalInputField(component)) {
             // Text Input wrapped in Label component (type 18)
             const rawComponent: RawDiscordComponent = {
               type: 4, // ComponentType.TextInput
@@ -1895,13 +2042,63 @@ export async function promptWithRawModal(
 
       // Extract values using Discord.js methods and stored select values
       const values: Record<string, string> = {};
+      const multiValues: Record<string, string[]> = {};
       const attachments: Record<string, APIAttachment> = {};
       const fileUploadComponentCount = components.filter((component) =>
         isModalFileUploadField(component),
       ).length;
 
+      // Check kind-based guards (radio, checkbox group, checkbox) BEFORE the
+      // catch-all isModalInputField — it matches anything without select-like
+      // properties and would swallow checkbox/radio components otherwise.
       for (const component of components) {
-        if (isModalInputField(component)) {
+        if (isModalRadioGroupField(component)) {
+          try {
+            const c = component as ModalRadioGroupField;
+            // Radio Group value is stored in modalSelectValues as a plain string
+            const storedValues = modalSelectValues.get(submitted.id);
+            const radioValue = storedValues?.[c.customId];
+            if (radioValue !== undefined) {
+              values[c.customId] = radioValue;
+            } else {
+              log.warn(`Could not extract radio group value for ${c.customId}`);
+            }
+          } catch (error) {
+            log.warn(`Failed to get radio group value for component: ${error}`);
+          }
+        } else if (isModalCheckboxGroupField(component)) {
+          try {
+            const cg = component as ModalCheckboxGroupField;
+            // Checkbox Group values are stored in modalCheckboxGroupValues as a string array
+            const storedValues = modalCheckboxGroupValues.get(submitted.id);
+            const checkboxValues = storedValues?.[cg.customId];
+            if (checkboxValues !== undefined) {
+              multiValues[cg.customId] = checkboxValues;
+            } else {
+              // If no values stored, treat as empty selection (user checked nothing)
+              multiValues[cg.customId] = [];
+              log.warn(`No checkbox group values found for ${cg.customId}, defaulting to []`);
+            }
+          } catch (error) {
+            log.warn(`Failed to get checkbox group values for component: ${error}`);
+          }
+        } else if (isModalCheckboxField(component)) {
+          try {
+            const cb = component as ModalCheckboxField;
+            // Checkbox value is stored in modalSelectValues as "true" or "false"
+            const storedValues = modalSelectValues.get(submitted.id);
+            const checkboxValue = storedValues?.[cb.customId];
+            if (checkboxValue !== undefined) {
+              values[cb.customId] = checkboxValue;
+            } else {
+              // If not stored, infer from default (unchecked = "false")
+              values[cb.customId] = cb.default ? "true" : "false";
+              log.warn(`No checkbox value found for ${cb.customId}, using default: ${values[cb.customId]}`);
+            }
+          } catch (error) {
+            log.warn(`Failed to get checkbox value for component: ${error}`);
+          }
+        } else if (isModalInputField(component)) {
           try {
             values[component.customId] = submitted.fields.getTextInputValue(
               component.customId,
@@ -1984,6 +2181,7 @@ export async function promptWithRawModal(
       // Clean up stored values
       modalSelectValues.delete(submitted.id);
       modalFileUploadValues.delete(submitted.id);
+      modalCheckboxGroupValues.delete(submitted.id);
       modalResolvedAttachments.delete(submitted.id);
 
       // Auto-defer reply if requested to prevent 3-second interaction timeout
@@ -1996,7 +2194,13 @@ export async function promptWithRawModal(
         );
       }
 
-      return { outcome: "submit", values, attachments, interaction: submitted };
+      return {
+        outcome: "submit",
+        values,
+        multiValues: Object.keys(multiValues).length > 0 ? multiValues : undefined,
+        attachments,
+        interaction: submitted,
+      };
     } catch (error) {
       // This will only catch actual errors, not artificial timeouts
       // Discord's natural timeout or user cancellation will be handled by command timeout

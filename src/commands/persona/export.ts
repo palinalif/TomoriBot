@@ -108,29 +108,14 @@ export async function execute(
             options: personaSelectOptions,
           },
           {
+            // Checkbox: checked = export JSON (true), unchecked = skip (false).
+            // Value returned in modalResult.values[PERSONA_EXPORT_JSON_SELECT_ID] as "true"/"false".
+            kind: "checkbox" as const,
             customId: PERSONA_EXPORT_JSON_SELECT_ID,
             labelKey: "commands.persona.export.export_json_select_label",
             descriptionKey:
               "commands.persona.export.export_json_select_description",
-            placeholder:
-              "commands.persona.export.export_json_select_placeholder",
-            required: false,
-            options: [
-              {
-                label: localizer(
-                  locale,
-                  "commands.persona.export.export_json_choice_false",
-                ),
-                value: PERSONA_EXPORT_JSON_FALSE,
-              },
-              {
-                label: localizer(
-                  locale,
-                  "commands.persona.export.export_json_choice_true",
-                ),
-                value: PERSONA_EXPORT_JSON_TRUE,
-              },
-            ],
+            default: false,
           },
         ],
       },

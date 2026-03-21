@@ -247,13 +247,15 @@ export async function execute(
           required: true,
           options: personaOptions,
         },
-        // respond_to_self: Yes/No select
+        // respond_to_self: Checkbox Group (checked = yes, unchecked = no)
+        // min_values: 0 + required: false allows unchecked (no) submission.
         {
+          kind: "checkboxGroup" as const,
           customId: RESPOND_TO_SELF_ID,
           labelKey: "commands.config.randomtrigger.add.respond_to_self_label",
-          placeholder:
-            "commands.config.randomtrigger.add.respond_to_self_description",
-          required: true,
+          descriptionKey: "commands.config.randomtrigger.add.respond_to_self_description",
+          minValues: 0,
+          required: false,
           options: [
             {
               label: localizer(
@@ -261,13 +263,6 @@ export async function execute(
                 "commands.config.randomtrigger.add.respond_to_self_yes",
               ),
               value: "yes",
-            },
-            {
-              label: localizer(
-                locale,
-                "commands.config.randomtrigger.add.respond_to_self_no",
-              ),
-              value: "no",
             },
           ],
         },
@@ -305,7 +300,6 @@ export async function execute(
 
     // 9. Parse modal values
     const personaRawValue = values[PERSONA_SELECT_ID] ?? RANDOM_PERSONA_VALUE;
-    const respondToSelfRaw = values[RESPOND_TO_SELF_ID] ?? "no";
     const customPromptRaw = values[PROMPT_INPUT_ID]?.trim() || null;
 
     // Map "random" sentinel → null (DB stores NULL for random selection)
@@ -314,8 +308,8 @@ export async function execute(
         ? null
         : Number.parseInt(personaRawValue, 10);
 
-    // "yes"/"no" string → boolean
-    const respondToSelf = respondToSelfRaw === "yes";
+    // Checkbox Group: "yes" present in multiValues = respond to self enabled
+    const respondToSelf = (modalResult.multiValues?.[RESPOND_TO_SELF_ID] ?? []).includes("yes");
 
     // Resolve display name for success/override embeds
     const personaDisplayName =
