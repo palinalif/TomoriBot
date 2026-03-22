@@ -546,6 +546,27 @@ export default {
       inherit_global: "グローバルクールダウンを継承",
     },
 
+    // SillyTavernプリセット管理
+    stpreset: {
+      description: `SillyTavernプリセットを管理`,
+      node: {
+        description: `プリセットのプロンプトノードを管理`,
+        toggle: {
+          description: `プリセットのプロンプトノードのオン・オフを切り替え`,
+          modal_title: `Marinara's Spaghetti Recipe`,
+          group_label_0: `ノード 1–10`,
+          group_label_1: `ノード 11–20`,
+          group_label_2: `ノード 21–30`,
+          group_label_3: `ノード 31–40`,
+          group_label_4: `ノード 41–50`,
+          group_description: `チェックで有効、チェック解除で無効`,
+          no_changes: `変更なし`,
+          result_title: `ノード切り替え結果`,
+          result_description: `**{enabled}** / **{total}** ノードが有効。\n\n{changes}`,
+        },
+      },
+    },
+
     // 一般的なユーティリティコマンド
     tool: {
       ping: {

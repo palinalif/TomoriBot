@@ -544,6 +544,27 @@ export default {
       inherit_global: "Inherit Global Cooldown",
     },
 
+    // SillyTavern preset management
+    stpreset: {
+      description: `Manage SillyTavern presets`,
+      node: {
+        description: `Manage preset prompt nodes`,
+        toggle: {
+          description: `Toggle preset prompt nodes on or off`,
+          modal_title: `Marinara's Spaghetti Recipe`,
+          group_label_0: `Nodes 1–10`,
+          group_label_1: `Nodes 11–20`,
+          group_label_2: `Nodes 21–30`,
+          group_label_3: `Nodes 31–40`,
+          group_label_4: `Nodes 41–50`,
+          group_description: `Check to enable, uncheck to disable`,
+          no_changes: `No changes made`,
+          result_title: `Node Toggle Results`,
+          result_description: `**{enabled}** / **{total}** nodes enabled.\n\n{changes}`,
+        },
+      },
+    },
+
     // General utility commands
     tool: {
       ping: {
