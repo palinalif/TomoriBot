@@ -389,14 +389,10 @@ export async function execute(
     }
 
     // 10. Build preset payloads for database update/insert
-    const attributesWithDescription = [
-      `{bot}'s Description: ${selectedPreset.tomori_preset_desc}`,
-      ...selectedPreset.preset_attribute_list,
-    ];
-
     const attributeArrayLiteral = toPgTextArrayLiteral(
-      attributesWithDescription,
+      selectedPreset.preset_attribute_list,
     );
+    const presetPersonaPrompt = selectedPreset.tomori_preset_desc || null;
     const inArrayLiteral = toPgTextArrayLiteral(
       selectedPreset.preset_sample_dialogues_in,
     );
@@ -467,10 +463,11 @@ export async function execute(
 			`;
 
       await sql`
-				INSERT INTO persona_configs (tomori_id, trigger_words)
-				VALUES (${targetPersonaId}, ${triggerWordsArrayLiteral}::text[])
+				INSERT INTO persona_configs (tomori_id, trigger_words, persona_prompt)
+				VALUES (${targetPersonaId}, ${triggerWordsArrayLiteral}::text[], ${presetPersonaPrompt})
 				ON CONFLICT (tomori_id) DO UPDATE
-				SET trigger_words = EXCLUDED.trigger_words
+				SET trigger_words = EXCLUDED.trigger_words,
+						persona_prompt = EXCLUDED.persona_prompt
 			`;
 
       await sql`
@@ -588,7 +585,7 @@ export async function execute(
         {
           preset_name: selectedPreset.tomori_preset_name,
           nickname: resolvedPersonaName,
-          attribute_count: attributesWithDescription.length,
+          attribute_count: selectedPreset.preset_attribute_list.length,
           dialogue_count: selectedPreset.preset_sample_dialogues_in.length,
           trigger_word_count: presetTriggerWords.length,
           triggers: triggerSummary,
@@ -827,10 +824,11 @@ export async function execute(
     }
 
     await sql`
-			INSERT INTO persona_configs (tomori_id, trigger_words)
-			VALUES (${newAlterId}, ${alterTriggerWordsArrayLiteral}::text[])
+			INSERT INTO persona_configs (tomori_id, trigger_words, persona_prompt)
+			VALUES (${newAlterId}, ${alterTriggerWordsArrayLiteral}::text[], ${presetPersonaPrompt})
 			ON CONFLICT (tomori_id) DO UPDATE
-			SET trigger_words = EXCLUDED.trigger_words
+			SET trigger_words = EXCLUDED.trigger_words,
+					persona_prompt = EXCLUDED.persona_prompt
 		`;
 
     const descriptionParts = [

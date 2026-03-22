@@ -310,7 +310,7 @@ const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   //"remember_this_fact",
   //"create_task",
 ]);
-const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
+const STREAM_SDK_CALL_TIMEOUT_MS = 90000; // Overall SDK call timeout (90 seconds) — must exceed typical TTFT for slow models
 const DEFAULT_SELF_REPLY_LIMIT = 1;
 const MAX_SELF_REPLY_LIMIT = 10;
 const DEFAULT_TRIGGERED_PERSONA_LIMIT = 1;
@@ -5319,6 +5319,10 @@ export default async function tomoriChat(
                     providerConfig.apiKey = decryptedApiKey;
                   }
 
+                  // 1. Create an AbortController so the SDK timeout can terminate the underlying HTTP request
+                  const sdkAbortController = new AbortController();
+                  streamingContext.abortSignal = sdkAbortController.signal;
+
                   const streamProviderPromise = provider.streamToDiscord(
                     channel,
                     client,
@@ -5339,20 +5343,20 @@ export default async function tomoriChat(
                     personaUsername, // Pass persona username
                     prefixStrippingName, // Pass prefix stripping name for user impersonation
                   );
+
+                  // 2. Race the stream against a timeout that also aborts the underlying HTTP request
+                  let sdkTimeoutId: NodeJS.Timeout | null = null;
                   const timeoutPromise = new Promise<never>(
-                    (
-                      _,
-                      reject, // Promise<never> indicates it only rejects
-                    ) =>
-                      setTimeout(
-                        () =>
-                          reject(
-                            new Error(
-                              "SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
-                            ),
+                    (_, reject) => {
+                      sdkTimeoutId = setTimeout(() => {
+                        sdkAbortController.abort(); // Signal the provider to cancel its HTTP request
+                        reject(
+                          new Error(
+                            "SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
                           ),
-                        STREAM_SDK_CALL_TIMEOUT_MS,
-                      ),
+                        );
+                      }, STREAM_SDK_CALL_TIMEOUT_MS);
+                    },
                   );
 
                   let streamResult: StreamResult;
@@ -5362,7 +5366,12 @@ export default async function tomoriChat(
                       streamProviderPromise,
                       timeoutPromise,
                     ]);
+                    // Stream completed before timeout — clear the pending timer
+                    if (sdkTimeoutId) clearTimeout(sdkTimeoutId);
                   } catch (raceError) {
+                    // Clear timeout if the stream itself threw before the timer fired
+                    if (sdkTimeoutId) clearTimeout(sdkTimeoutId);
+
                     // This catch block will execute if timeoutPromise rejects first,
                     // or if streamProviderPromise itself rejects *before* the timeout.
                     if (
@@ -5379,9 +5388,9 @@ export default async function tomoriChat(
                       );
                       await sendStandardEmbed(channel, locale, {
                         color: ColorCode.ERROR, // Using ERROR as it's a more critical failure
-                        titleKey: "genai.error_stream_timeout_title", // New locale key
+                        titleKey: "genai.error_stream_timeout_title",
                         descriptionKey:
-                          "genai.error_stream_timeout_description", // New locale key
+                          "genai.error_stream_timeout_description",
                       });
                       return { streamResult: null, abort: true };
                     }

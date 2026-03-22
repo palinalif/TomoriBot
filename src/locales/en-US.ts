@@ -195,6 +195,13 @@ export default {
       disclaimer_description: `AI-Generated Responses and Search Results may be inaccurate or incomplete, **please double-check important information**.`,
     },
 
+    // Custom MCP server tool usage messages
+    mcp: {
+      tool_invoke_title: `🔧 Using \`{function}\` from **{server}**...`,
+      tool_invoke_description: `Parameters:`,
+      tool_invoke_no_params: `No parameters.`,
+    },
+
     // YouTube video processing messages
     video: {
       youtube_processing_title: "👁️ Watching YouTube Video...",
@@ -1797,6 +1804,22 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         fetch_error_title: `Unable to Fetch Latest Release`,
         fetch_error_description: `Something went wrong while fetching the latest release information from GitHub. Please try again later or check the [GitHub Releases](https://github.com/Bredrumb/TomoriBot/releases) page directly.`,
       },
+
+      // /help mcp
+      mcp: {
+        description: `Learn how to add and manage MCP tool servers`,
+        title: `MCP Server Setup Guide`,
+        description_text: `MCP (Model Context Protocol) servers extend Tomori's capabilities with external tools. Here's how to get started.`,
+        online_title: `Adding an Online MCP`,
+        online_description: `Any publicly hosted MCP server with an HTTPS endpoint can be added, Smithery.ai is one example source.\n\n**Using Smithery.ai:**\n**1.** Visit [smithery.ai](https://smithery.ai), create an account, and generate an API key from your profile.\n**2.** Browse the catalog and open an MCP you want. Copy the **connection URL** shown on its page (e.g. \`https://youtube.run.tools\`).\n**3.** Run {configMcpAdd}. Paste the connection URL into the **URL** field. In the **Auth Token** field, paste your Smithery API key.\n\n**Using other sources:**\nIf an MCP server requires no authentication, leave the **Auth Token** field blank. Some servers may use a different auth format — check the server's documentation for details.\n\nYour auth token is encrypted at rest and never shown in plain text after saving.`,
+        local_title: `Adding a Local MCP (Self-Hosted Only)`,
+        local_description: `Local MCP servers are **only supported on self-hosted TomoriBot instances**. The public hosted bot requires HTTPS and blocks local/private addresses for security.\n\nIf you are running your own instance, point the URL to your local server (e.g. \`http://localhost:3000/sse\`). No auth token is needed for local servers.`,
+        removing_title: `Removing an MCP Server`,
+        removing_description: `Use {configMcpRemove} to unregister a server at any time. Removing it immediately disconnects the server and frees up a slot for a new one.`,
+        security_title: `Security Warning`,
+        security_description: `**Only add MCP servers you trust.**\n\nA malicious MCP server can:\n- **Prompt-inject** Tomori — sending hidden instructions that override her behavior\n- **Exfiltrate data** that users pass to its tools (messages, file content, etc.)\n- Return **harmful or false results** that Tomori will relay to your server\n\nTreat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
+        footer: `Smithery.ai is a third-party service and is not affiliated with TomoriBot. Always review an MCP's described tools before adding it.`,
+      },
     },
 
     // Legal commands
@@ -2905,6 +2928,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           scope_description: `Whether to remove a channel override or a persona override.`,
           scope_channel: `Channel Override`,
           scope_persona: `Persona Override`,
+          scope_all_channels: `All Channel Overrides`,
+          scope_all_personas: `All Persona Overrides`,
+          scope_everything: `Everything (All Overrides)`,
           channel_modal_title: `Remove Channel Model Override`,
           channel_select_label: `Channel Override to Remove`,
           channel_select_placeholder: `Select a channel...`,
@@ -2919,6 +2945,14 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           persona_none_description: `None of this server's personas have a model override configured.`,
           persona_success_title: `Persona Override Removed`,
           persona_success_description: `The model override for **{persona}** has been removed. It will now use the server default.`,
+          purge_channels_success_title: `All Channel Overrides Removed`,
+          purge_channels_success_description: `Successfully removed **{count}** channel model override(s). All channels will now use the server default.`,
+          purge_personas_success_title: `All Persona Overrides Removed`,
+          purge_personas_success_description: `Successfully removed **{count}** persona model override(s). All personas will now use the server default.`,
+          purge_everything_none_title: `No Overrides`,
+          purge_everything_none_description: `This server has no model overrides configured (neither channel nor persona).`,
+          purge_everything_success_title: `All Overrides Removed`,
+          purge_everything_success_description: `Successfully removed **{total}** model override(s): **{channels}** channel and **{personas}** persona. Everything will now use the server default.`,
         },
         modelfallback: {
           description: `Remove a model from the fallback chain.`,
@@ -2934,7 +2968,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       mcp: {
         description: `Manage remote MCP (Model Context Protocol) tool servers`,
         add: {
-          description: `Register a new remote MCP server for this guild.`,
+          description: `Register a new remote MCP server for this guild. Use /help mcp for a setup guide.`,
           modal_title: `Add MCP Server`,
           name_label: `Server Name`,
           name_placeholder: `my-mcp-server`,

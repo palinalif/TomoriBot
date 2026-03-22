@@ -1136,6 +1136,52 @@ export function replaceMentionHandles(
     return `<@${ids[0]}>`;
   });
 
+  // Handle @(name) and @(name|id) — LLM hallucination using parentheses instead of curly braces
+  processedText = processedText.replace(/@\(([^)]+)\)/g, (match, rawHandle) => {
+    const handle = (rawHandle as string).trim();
+    if (!handle) return match;
+
+    const pipeIndex = handle.lastIndexOf("|");
+    if (pipeIndex > -1) {
+      const idPart = handle.slice(pipeIndex + 1).trim();
+      if (/^\d{17,20}$/.test(idPart) && mentionIdSet?.has(idPart)) {
+        return `<@${idPart}>`;
+      }
+    }
+
+    if (/^\d{17,20}$/.test(handle) && mentionIdSet?.has(handle)) {
+      return `<@${handle}>`;
+    }
+
+    const normalizedHandle = handle.toLowerCase();
+    const ids = mentionMap.get(normalizedHandle);
+    if (!ids || ids.length !== 1) return `(${handle})`;
+    return `<@${ids[0]}>`;
+  });
+
+  // Handle @[name] and @[name|id] — LLM hallucination using square brackets instead of curly braces
+  processedText = processedText.replace(/@\[([^\]]+)\]/g, (match, rawHandle) => {
+    const handle = (rawHandle as string).trim();
+    if (!handle) return match;
+
+    const pipeIndex = handle.lastIndexOf("|");
+    if (pipeIndex > -1) {
+      const idPart = handle.slice(pipeIndex + 1).trim();
+      if (/^\d{17,20}$/.test(idPart) && mentionIdSet?.has(idPart)) {
+        return `<@${idPart}>`;
+      }
+    }
+
+    if (/^\d{17,20}$/.test(handle) && mentionIdSet?.has(handle)) {
+      return `<@${handle}>`;
+    }
+
+    const normalizedHandle = handle.toLowerCase();
+    const ids = mentionMap.get(normalizedHandle);
+    if (!ids || ids.length !== 1) return `[${handle}]`;
+    return `<@${ids[0]}>`;
+  });
+
   // Handle @name|id format without curly braces (LLM sometimes omits braces)
   processedText = processedText.replace(
     /(^|[^\p{L}\p{N}_<])@([\p{L}\p{N}_][\p{L}\p{N}_ -]*)\|(\d{17,20})/giu,

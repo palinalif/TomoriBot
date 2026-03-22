@@ -145,6 +145,9 @@ export interface StreamContext {
   // NAI GLM-4.6 prompt continuation: incomplete trailing fragment from previous stream, appended to the
   // assembled prompt so the model continues mid-sentence rather than starting a new response
   naiContinuationPrefill?: string;
+
+  // External abort signal — allows the SDK call timeout to cancel the underlying HTTP request
+  abortSignal?: AbortSignal;
 }
 
 /**

@@ -43,6 +43,7 @@ import type {
   StreamProvider,
 } from "../../types/stream/interfaces";
 import { extractGifKeyframes } from "../../utils/media/gifProcessor";
+import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
 
 /**
  * Google-specific stream configuration extending the base StreamConfig
@@ -258,23 +259,16 @@ export class GoogleStreamAdapter implements StreamProvider {
 
           for (const imageInfo of item.imageMetadata.imageUrls) {
             try {
-              // Fetch and convert image to base64 (same logic as context images)
-              const imageResponse = await fetch(imageInfo.url);
-              if (!imageResponse.ok) {
-                log.warn(
-                  `Failed to fetch image for function response: ${imageInfo.url} (status: ${imageResponse.status})`,
-                );
-                continue;
-              }
-
-              const imageArrayBuffer = await imageResponse.arrayBuffer();
-              const base64ImageData =
-                Buffer.from(imageArrayBuffer).toString("base64");
+              // Fetch and optimize image for LLM context (downscales oversized images)
+              const optimized = await fetchAndOptimizeImage(
+                imageInfo.url,
+                imageInfo.mimeType || "image/jpeg",
+              );
 
               responseParts.push({
                 inlineData: {
-                  mimeType: imageInfo.mimeType || "image/jpeg",
-                  data: base64ImageData,
+                  mimeType: optimized.mimeType,
+                  data: optimized.data,
                 },
               });
 
@@ -1251,21 +1245,16 @@ export class GoogleStreamAdapter implements StreamProvider {
                   );
                 }
               } else {
-                // Regular image processing (non-GIF)
-                const imageResponse = await fetch(part.uri);
-                if (!imageResponse.ok) {
-                  throw new Error(
-                    `Image fetch failed: ${imageResponse.status}`,
-                  );
-                }
-                const imageArrayBuffer = await imageResponse.arrayBuffer();
-                const base64ImageData =
-                  Buffer.from(imageArrayBuffer).toString("base64");
+                // Regular image processing (non-GIF) — optimize oversized images
+                const optimized = await fetchAndOptimizeImage(
+                  part.uri,
+                  part.mimeType,
+                );
 
                 geminiParts.push({
                   inlineData: {
-                    mimeType: part.mimeType,
-                    data: base64ImageData,
+                    mimeType: optimized.mimeType,
+                    data: optimized.data,
                   },
                 });
               }

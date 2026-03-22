@@ -11,6 +11,7 @@ import type {
 	StructuredOutputResult,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
+import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
 type GoogleStructuredOutputRequest = ProviderStructuredJsonRequest;
 type GenericStructuredOutputRequest = ProviderStructuredJsonRequest;
@@ -32,17 +33,9 @@ export async function callGoogleStructuredJSON<T>(
 		if (request.images) {
 			for (const image of request.images) {
 				try {
-					const response = await fetch(image.url);
-					if (!response.ok) {
-						log.warn(
-							`Failed to fetch image ${image.name} from ${image.url}: ${response.status} ${response.statusText}`,
-						);
-						continue;
-					}
-					const arrayBuffer = await response.arrayBuffer();
-					const base64 = Buffer.from(arrayBuffer).toString("base64");
+					const optimized = await fetchAndOptimizeImage(image.url, "image/png");
 					parts.push({
-						inlineData: { data: base64, mimeType: "image/png" },
+						inlineData: { data: optimized.data, mimeType: optimized.mimeType },
 					});
 				} catch (fetchError) {
 					log.error(`Error fetching image ${image.name}`, fetchError as Error, {
@@ -150,20 +143,11 @@ export async function callGoogleStructuredOutput(
 
 		for (const image of images) {
 			try {
-				const response = await fetch(image.url);
-				if (!response.ok) {
-					log.warn(
-						`Failed to fetch image ${image.name} from ${image.url}: ${response.status} ${response.statusText}`,
-					);
-					continue;
-				}
-
-				const arrayBuffer = await response.arrayBuffer();
-				const base64 = Buffer.from(arrayBuffer).toString("base64");
+				const optimized = await fetchAndOptimizeImage(image.url, "image/png");
 				parts.push({
 					inlineData: {
-						data: base64,
-						mimeType: "image/png",
+						data: optimized.data,
+						mimeType: optimized.mimeType,
 					},
 				});
 			} catch (fetchError) {

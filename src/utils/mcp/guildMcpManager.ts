@@ -27,6 +27,8 @@ import type {
 import type { ToolContext } from "@/types/tool/interfaces";
 import { getCachedEnabledGuildMcpConfigs } from "@/utils/cache/guildMcpConfigCache";
 import { decryptGuildMcpAuthToken } from "@/utils/db/guildMcpDb";
+import { sendStandardEmbed } from "@/utils/discord/embedHelper";
+import { localizer } from "@/utils/text/localizer";
 
 /**
  * Checks if a URL is a Smithery-hosted MCP server (*.run.tools).
@@ -197,7 +199,31 @@ class GuildMcpManager {
 			// 2. Update last-used timestamp (keeps the connection alive)
 			conn.lastUsedAt = Date.now();
 
-			// 3. Execute the function via the CallableTool
+			// 3. Send a user-facing embed to show the MCP tool is being invoked
+			if (context?.channel && context.locale) {
+				try {
+					const formattedArgs = this.formatMcpArgs(args, context.locale);
+					await sendStandardEmbed(
+						context.channel,
+						context.locale,
+						{
+							titleKey: "genai.mcp.tool_invoke_title",
+							titleVars: { server: conn.name, function: functionName },
+							description: formattedArgs,
+						},
+						{
+							webhook: context.webhook,
+							personaUsername: context.personaUsername,
+							personaAvatarUrl: context.personaAvatarUrl,
+						},
+					);
+				} catch (embedError) {
+					// Non-critical — don't block execution if the embed fails
+					log.warn(`[GuildMcpManager] Failed to send MCP tool embed for ${functionName}:`, embedError);
+				}
+			}
+
+			// 4. Execute the function via the CallableTool
 			log.info(`[GuildMcpManager] Executing guild MCP function: ${functionName} (server: ${conn.name})`);
 
 			const callableTool = conn.callableTool as CallableTool;
@@ -208,7 +234,7 @@ class GuildMcpManager {
 				),
 			]);
 
-			// 4. Process the result using default MCP processing
+			// 5. Process the result using default MCP processing
 			if (mcpResult && Array.isArray(mcpResult) && mcpResult.length > 0) {
 				const firstResult = mcpResult[0] as MCPServerResponse;
 				return this.processDefaultResult(functionName, firstResult, conn.name, executionStartTime, context);
@@ -245,6 +271,46 @@ class GuildMcpManager {
 				},
 			};
 		}
+	}
+
+	/**
+	 * Formats MCP tool arguments into a human-readable description for the
+	 * user-facing embed. Renders as a Markdown code block with key-value pairs,
+	 * truncated to stay within Discord embed limits.
+	 *
+	 * @param args - The arguments record passed to the MCP function
+	 * @param locale - The locale for fallback text
+	 * @returns Formatted description string
+	 */
+	private formatMcpArgs(args: Record<string, unknown>, locale: string): string {
+		const entries = Object.entries(args);
+
+		// No parameters case
+		if (entries.length === 0) {
+			return localizer(locale, "genai.mcp.tool_invoke_no_params");
+		}
+
+		// Format each argument as "key: value", truncating long values
+		const MAX_VALUE_LENGTH = 200;
+		const MAX_TOTAL_LENGTH = 900; // Stay under Discord's 1024 field limit with header
+		const lines = entries.map(([key, value]) => {
+			const stringValue = typeof value === "string" ? value : JSON.stringify(value);
+			const truncated =
+				stringValue.length > MAX_VALUE_LENGTH
+					? `${stringValue.substring(0, MAX_VALUE_LENGTH)}...`
+					: stringValue;
+			return `${key}: ${truncated}`;
+		});
+
+		const header = localizer(locale, "genai.mcp.tool_invoke_description");
+		let body = lines.join("\n");
+
+		// Truncate the whole body if it exceeds limit
+		if (body.length > MAX_TOTAL_LENGTH) {
+			body = `${body.substring(0, MAX_TOTAL_LENGTH)}...`;
+		}
+
+		return `${header}\n\`\`\`\n${body}\n\`\`\``;
 	}
 
 	/**

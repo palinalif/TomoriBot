@@ -416,6 +416,9 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
 
         // NAI GLM-4.6 prompt continuation: trailing fragment from previous truncated stream
         naiContinuationPrefill: streamingContext?.naiContinuationPrefill,
+
+        // External abort signal for SDK call timeout cancellation
+        abortSignal: streamingContext?.abortSignal,
       };
 
       // Create the modular streaming components

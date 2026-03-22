@@ -196,6 +196,13 @@ export default {
       disclaimer_description: `AIによる生成応答と検索結果は不正確または不完全な場合があります。**重要な情報は再確認してください**。`,
     },
 
+    // カスタムMCPサーバーツール使用メッセージ
+    mcp: {
+      tool_invoke_title: `🔧 **{server}** の \`{function}\` を使用中...`,
+      tool_invoke_description: `パラメーター:`,
+      tool_invoke_no_params: `パラメーターなし。`,
+    },
+
     // YouTube動画処理メッセージ
     video: {
       youtube_processing_title: "👁️ YouTube動画を視聴中...",
@@ -1807,6 +1814,22 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         fetch_error_title: `最新リリース情報の取得に失敗`,
         fetch_error_description: `GitHubから最新リリース情報を取得できませんでした。しばらくお待ちください。または、[GitHubリリース](https://github.com/Bredrumb/TomoriBot/releases)ページを直接確認してください。`,
       },
+
+      // /help mcp
+      mcp: {
+        description: `MCPツールサーバーの追加と管理方法を学ぶ`,
+        title: `MCPサーバーセットアップガイド`,
+        description_text: `MCP（Model Context Protocol）サーバーは、外部ツールでTomoriの機能を拡張します。始め方を説明します。`,
+        online_title: `オンラインMCPの追加`,
+        online_description: `HTTPSエンドポイントを持つ公開MCPサーバーであれば、どれでも追加できます。Smithery.aiはその一例に過ぎません。\n\n**Smithery.aiを使う場合：**\n**1.** [smithery.ai](https://smithery.ai) にアクセスし、アカウントを作成してプロフィールからAPIキーを生成します。\n**2.** カタログを閲覧し、追加したいMCPを開きます。ページに表示されている**接続URL**をコピーします（例：\`https://youtube.run.tools\`）。\n**3.** {configMcpAdd} を実行し、**URL**フィールドに接続URLを、**認証トークン**フィールドにSmithery APIキーを貼り付けます。\n\n**他のソースを使う場合：**\n認証が不要なMCPサーバーの場合は、**認証トークン**フィールドを空白のままにしてください。サーバーによっては別の認証形式を使用する場合があります。詳細はそのサーバーのドキュメントを確認してください。\n\n認証トークンは保存後に暗号化され、平文で表示されることはありません。`,
+        local_title: `ローカルMCPの追加（自己ホスト限定）`,
+        local_description: `ローカルMCPサーバーは、**自己ホストのTomoriBotインスタンスでのみ対応しています**。公式ホスト版のbotはセキュリティのためHTTPSが必要で、ローカル/プライベートアドレスはブロックされます。\n\n自己ホストの場合は、ローカルサーバーのURLを指定してください（例：\`http://localhost:3000/sse\`）。ローカルサーバーには認証トークンは不要です。`,
+        removing_title: `MCPサーバーの削除`,
+        removing_description: `{configMcpRemove} を使えば、いつでもサーバーの登録を解除できます。削除すると即座に接続が切断され、新しいサーバーのスロットが解放されます。`,
+        security_title: `セキュリティに関する警告`,
+        security_description: `**信頼できるMCPサーバーのみ追加してください。**\n\n悪意のあるMCPサーバーは以下のことが可能です：\n- **プロンプトインジェクション** — Tomoriへ隠し指示を送り、動作を操作する\n- **データ漏洩** — ツールに渡されたデータ（メッセージやファイル内容など）を外部へ送信する\n- **有害または虚偽の結果** を返し、Tomoriがそれをサーバーに中継する\n\nMCPサーバーはブラウザ拡張機能やサードパーティアプリと同様の注意を持って扱ってください。不安な場合は追加しないでください。`,
+        footer: `Smithery.aiはサードパーティのサービスであり、TomoriBotとは無関係です。追加前に必ずMCPの提供ツールを確認してください。`,
+      },
     },
 
     // 法的文書コマンド
@@ -2912,6 +2935,9 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           scope_description: `チャンネル上書きとペルソナ上書きのどちらを削除するかを選択します。`,
           scope_channel: `チャンネル上書き`,
           scope_persona: `ペルソナ上書き`,
+          scope_all_channels: `全チャンネル上書き`,
+          scope_all_personas: `全ペルソナ上書き`,
+          scope_everything: `すべて（全上書き）`,
           channel_modal_title: `チャンネルモデル上書きの削除`,
           channel_select_label: `削除するチャンネル上書き`,
           channel_select_placeholder: `チャンネルを選択...`,
@@ -2926,6 +2952,14 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           persona_none_description: `このサーバーのペルソナにはモデル上書きが設定されていません。`,
           persona_success_title: `ペルソナ上書きを削除しました`,
           persona_success_description: `**{persona}**のモデル上書きが削除されました。サーバーデフォルトが使用されます。`,
+          purge_channels_success_title: `全チャンネル上書きを削除しました`,
+          purge_channels_success_description: `**{count}**件のチャンネルモデル上書きを削除しました。全チャンネルでサーバーデフォルトが使用されます。`,
+          purge_personas_success_title: `全ペルソナ上書きを削除しました`,
+          purge_personas_success_description: `**{count}**件のペルソナモデル上書きを削除しました。全ペルソナでサーバーデフォルトが使用されます。`,
+          purge_everything_none_title: `上書きなし`,
+          purge_everything_none_description: `このサーバーにはモデル上書き（チャンネル・ペルソナとも）が設定されていません。`,
+          purge_everything_success_title: `全上書きを削除しました`,
+          purge_everything_success_description: `**{total}**件のモデル上書きを削除しました：チャンネル**{channels}**件、ペルソナ**{personas}**件。すべてサーバーデフォルトが使用されます。`,
         },
         modelfallback: {
           description: `フォールバックチェーンからモデルを削除します。`,
@@ -2941,7 +2975,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       mcp: {
         description: `リモートMCP（Model Context Protocol）ツールサーバーを管理`,
         add: {
-          description: `このギルドに新しいリモートMCPサーバーを登録します。`,
+          description: `このギルドに新しいリモートMCPサーバーを登録します。/help mcp でセットアップガイドを確認できます。`,
           modal_title: `MCPサーバーを追加`,
           name_label: `サーバー名`,
           name_placeholder: `my-mcp-server`,

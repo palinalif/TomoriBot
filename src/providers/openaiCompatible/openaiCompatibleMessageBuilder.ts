@@ -7,6 +7,7 @@ import {
 	type StructuredContextItem,
 } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
+import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
 const SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
 	ContextItemTag.SYSTEM_HUMANIZER_RULES,
@@ -285,17 +286,12 @@ async function convertImagePartToOpenAIContentPart(
 	}
 
 	try {
-		const imageResponse = await fetch(part.uri);
-		if (!imageResponse.ok) {
-			return null;
-		}
-
-		const imageArrayBuffer = await imageResponse.arrayBuffer();
-		const base64Data = Buffer.from(imageArrayBuffer).toString("base64");
+		// Fetch and optimize oversized images for LLM context
+		const optimized = await fetchAndOptimizeImage(part.uri, part.mimeType);
 		return {
 			type: "image_url",
 			image_url: {
-				url: `data:${part.mimeType};base64,${base64Data}`,
+				url: `data:${optimized.mimeType};base64,${optimized.data}`,
 			},
 		};
 	} catch (error) {

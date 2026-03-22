@@ -100,6 +100,8 @@ export interface StreamingContext {
   suppressTextOutput?: boolean; // Suppress text output to Discord (NAI tool retry mode — keeps model state coherent but hides repeated text)
   /** NAI GLM-4.6: incomplete trailing fragment from previous stream, to append as prompt continuation on retry */
   naiContinuationPrefill?: string;
+  /** AbortSignal to cancel the underlying HTTP request when the SDK call timeout fires */
+  abortSignal?: AbortSignal;
 }
 
 /**

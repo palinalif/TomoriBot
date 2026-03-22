@@ -1,10 +1,185 @@
 /**
  * Image processing utilities for TomoriBot
- * Handles image manipulation tasks like cropping, resizing, and format conversion
+ * Handles image manipulation tasks like cropping, resizing, and format conversion,
+ * as well as optimizing images before sending to LLM providers.
  */
 
 import sharp from "sharp";
 import { log } from "../misc/logger";
+
+// ── LLM context image optimization thresholds ────────────────────────
+// Images exceeding these limits are downscaled before being sent to providers
+// to prevent stream timeouts (especially on slower models like Qwen via OpenRouter).
+
+/** Raw byte-size threshold that triggers dimension inspection (default 2 MB) */
+const IMAGE_CONTEXT_MAX_BYTES = Number.parseInt(
+	process.env.IMAGE_CONTEXT_MAX_BYTES ?? "2097152",
+	10,
+);
+
+/** Maximum pixel dimension on the longest side before downscaling (default 2048 px) */
+const IMAGE_CONTEXT_MAX_DIMENSION = Number.parseInt(
+	process.env.IMAGE_CONTEXT_MAX_DIMENSION ?? "2048",
+	10,
+);
+
+/** JPEG quality used when an image is downscaled (default 85) */
+const IMAGE_CONTEXT_JPEG_QUALITY = Number.parseInt(
+	process.env.IMAGE_CONTEXT_JPEG_QUALITY ?? "85",
+	10,
+);
+
+/** Result of fetching and optionally optimizing an image for LLM context */
+export interface OptimizedImage {
+	/** Raw base64-encoded image data (no data-URI prefix) */
+	data: string;
+	/** MIME type of the resulting image (may change to image/jpeg after optimization) */
+	mimeType: string;
+}
+
+/**
+ * Fetch an image from a URL and conditionally downscale it for LLM context use.
+ *
+ * Uses a three-tier cost check to avoid unnecessary work:
+ * 1. **Buffer byte length** (O(1)) — if under threshold, return as-is.
+ * 2. **Sharp metadata** (header-only read, <1 ms) — check pixel dimensions.
+ * 3. **Sharp resize** (decode + encode) — only runs when the image actually exceeds
+ *    the maximum dimension, converting to JPEG for significantly smaller payloads.
+ *
+ * This prevents multi-MB base64 payloads from causing provider stream timeouts
+ * while adding near-zero overhead for normally-sized images.
+ *
+ * @param url - HTTP(S) URL to fetch the image from
+ * @param sourceMimeType - Original MIME type hint (used as fallback if no optimization needed)
+ * @returns Optimized base64 image data and final MIME type
+ * @throws Error if the fetch itself fails
+ */
+export async function fetchAndOptimizeImage(
+	url: string,
+	sourceMimeType?: string,
+): Promise<OptimizedImage> {
+	// 1. Fetch the raw image bytes
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(
+			`Image fetch failed: ${response.status} ${response.statusText}`,
+		);
+	}
+
+	const arrayBuffer = await response.arrayBuffer();
+	const buffer = Buffer.from(arrayBuffer);
+	const rawSize = buffer.byteLength;
+	const finalMimeType =
+		sourceMimeType ||
+		response.headers.get("content-type") ||
+		"image/jpeg";
+
+	// 2. Fast path — small images pass through unchanged
+	if (rawSize <= IMAGE_CONTEXT_MAX_BYTES) {
+		return { data: buffer.toString("base64"), mimeType: finalMimeType };
+	}
+
+	// 3. Buffer exceeds byte threshold — read dimensions from the image header
+	try {
+		const metadata = await sharp(buffer).metadata();
+		const width = metadata.width ?? 0;
+		const height = metadata.height ?? 0;
+		const longestSide = Math.max(width, height);
+
+		// If dimensions are within limits, the file is just a dense format (e.g. BMP) — pass through
+		if (longestSide <= IMAGE_CONTEXT_MAX_DIMENSION) {
+			log.info(
+				`Image ${width}x${height} (${(rawSize / 1024 / 1024).toFixed(1)} MB) is within dimension limit, passing through`,
+			);
+			return { data: buffer.toString("base64"), mimeType: finalMimeType };
+		}
+
+		// 4. Downscale to max dimension and re-encode as JPEG
+		const optimizedBuffer = await sharp(buffer)
+			.resize({
+				width: IMAGE_CONTEXT_MAX_DIMENSION,
+				height: IMAGE_CONTEXT_MAX_DIMENSION,
+				fit: "inside", // Maintains aspect ratio, fits within the box
+				withoutEnlargement: true,
+			})
+			.jpeg({ quality: IMAGE_CONTEXT_JPEG_QUALITY })
+			.toBuffer();
+
+		const optimizedSize = optimizedBuffer.byteLength;
+		log.info(
+			`Optimized image for LLM context: ${width}x${height} (${(rawSize / 1024 / 1024).toFixed(1)} MB) → ${IMAGE_CONTEXT_MAX_DIMENSION}px max (${(optimizedSize / 1024).toFixed(0)} KB)`,
+		);
+
+		return {
+			data: optimizedBuffer.toString("base64"),
+			mimeType: "image/jpeg",
+		};
+	} catch (sharpError) {
+		// Sharp failed (corrupt image, unsupported format, etc.) — fall back to raw data
+		// so the provider can still attempt to process it
+		log.warn(
+			`Image optimization failed, sending raw (${(rawSize / 1024 / 1024).toFixed(1)} MB): ${sharpError instanceof Error ? sharpError.message : String(sharpError)}`,
+		);
+		return { data: buffer.toString("base64"), mimeType: finalMimeType };
+	}
+}
+
+/**
+ * Optimize an already-fetched image buffer for LLM context use.
+ * Same tiered logic as {@link fetchAndOptimizeImage} but skips the HTTP fetch step.
+ *
+ * @param buffer - Raw image buffer
+ * @param sourceMimeType - Original MIME type of the image
+ * @returns Optimized base64 image data and final MIME type
+ */
+export async function optimizeImageBuffer(
+	buffer: Buffer,
+	sourceMimeType: string,
+): Promise<OptimizedImage> {
+	const rawSize = buffer.byteLength;
+
+	// 1. Fast path — small images pass through unchanged
+	if (rawSize <= IMAGE_CONTEXT_MAX_BYTES) {
+		return { data: buffer.toString("base64"), mimeType: sourceMimeType };
+	}
+
+	// 2. Check dimensions
+	try {
+		const metadata = await sharp(buffer).metadata();
+		const width = metadata.width ?? 0;
+		const height = metadata.height ?? 0;
+		const longestSide = Math.max(width, height);
+
+		if (longestSide <= IMAGE_CONTEXT_MAX_DIMENSION) {
+			return { data: buffer.toString("base64"), mimeType: sourceMimeType };
+		}
+
+		// 3. Downscale
+		const optimizedBuffer = await sharp(buffer)
+			.resize({
+				width: IMAGE_CONTEXT_MAX_DIMENSION,
+				height: IMAGE_CONTEXT_MAX_DIMENSION,
+				fit: "inside",
+				withoutEnlargement: true,
+			})
+			.jpeg({ quality: IMAGE_CONTEXT_JPEG_QUALITY })
+			.toBuffer();
+
+		log.info(
+			`Optimized image buffer: ${width}x${height} (${(rawSize / 1024 / 1024).toFixed(1)} MB) → ${IMAGE_CONTEXT_MAX_DIMENSION}px max (${(optimizedBuffer.byteLength / 1024).toFixed(0)} KB)`,
+		);
+
+		return {
+			data: optimizedBuffer.toString("base64"),
+			mimeType: "image/jpeg",
+		};
+	} catch (sharpError) {
+		log.warn(
+			`Image buffer optimization failed, sending raw (${(rawSize / 1024 / 1024).toFixed(1)} MB): ${sharpError instanceof Error ? sharpError.message : String(sharpError)}`,
+		);
+		return { data: buffer.toString("base64"), mimeType: sourceMimeType };
+	}
+}
 
 const NAI_REFERENCE_CANVASES = [
   { width: 1024, height: 1536 },

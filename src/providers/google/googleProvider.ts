@@ -746,6 +746,9 @@ export class GoogleProvider
 
         // Forced mentions (e.g., reminder recipients)
         forcedMentions: streamingContext?.forcedMentions,
+
+        // External abort signal for SDK call timeout cancellation
+        abortSignal: streamingContext?.abortSignal,
       };
 
       // Create the modular streaming components

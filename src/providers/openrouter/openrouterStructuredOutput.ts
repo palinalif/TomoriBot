@@ -9,6 +9,7 @@ import type {
 	StructuredOutputResult,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
+import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
 type OpenrouterStructuredOutputRequest = ProviderStructuredJsonRequest;
 type GenericStructuredOutputRequest = ProviderStructuredJsonRequest;
@@ -38,21 +39,11 @@ export async function callOpenrouterStructuredJSON<T>(
 		if (request.images) {
 			for (const image of request.images) {
 				try {
-					const response = await fetch(image.url);
-					if (!response.ok) {
-						log.warn(
-							`Failed to fetch image ${image.name} from ${image.url}: ${response.status} ${response.statusText}`,
-						);
-						continue;
-					}
-					const arrayBuffer = await response.arrayBuffer();
-					const base64 = Buffer.from(arrayBuffer).toString("base64");
-					const mimeType = response.headers.get("content-type") || "image/png";
-
+					const optimized = await fetchAndOptimizeImage(image.url);
 					contentParts.push({
 						type: "image_url",
 						image_url: {
-							url: `data:${mimeType};base64,${base64}`,
+							url: `data:${optimized.mimeType};base64,${optimized.data}`,
 						},
 					});
 				} catch (fetchError) {
@@ -215,22 +206,11 @@ export async function callOpenrouterStructuredOutput(
 
 		for (const image of images) {
 			try {
-				const response = await fetch(image.url);
-				if (!response.ok) {
-					log.warn(
-						`Failed to fetch image ${image.name} from ${image.url}: ${response.status} ${response.statusText}`,
-					);
-					continue;
-				}
-
-				const arrayBuffer = await response.arrayBuffer();
-				const base64 = Buffer.from(arrayBuffer).toString("base64");
-				const mimeType = response.headers.get("content-type") || "image/png";
-
+				const optimized = await fetchAndOptimizeImage(image.url);
 				contentParts.push({
 					type: "image_url",
 					image_url: {
-						url: `data:${mimeType};base64,${base64}`,
+						url: `data:${optimized.mimeType};base64,${optimized.data}`,
 					},
 				});
 			} catch (fetchError) {

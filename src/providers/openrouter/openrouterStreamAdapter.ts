@@ -30,6 +30,7 @@ import {
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
 import { buildPersonaSpeakerStopString } from "../utils/stopStrings";
+import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -708,6 +709,20 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       }
 
       controller = new AbortController();
+
+      // Link external abort signal (SDK call timeout) to the internal controller
+      if (context.abortSignal) {
+        if (context.abortSignal.aborted) {
+          controller.abort();
+        } else {
+          context.abortSignal.addEventListener(
+            "abort",
+            () => controller?.abort(),
+            { once: true },
+          );
+        }
+      }
+
       const inactivityTimeoutMs = config.inactivityTimeoutMs ?? 120000;
 
       const attempts: Array<{ label: string; body: Record<string, unknown> }> =
@@ -2542,18 +2557,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                     continue; // Skip adding the GIF as an image
                   }
 
-                  // Regular image processing (non-GIF)
-                  const imageResponse = await fetch(part.uri);
-                  if (!imageResponse.ok) {
-                    log.warn(
-                      `Failed to fetch image: ${part.uri} (status: ${imageResponse.status})`,
-                    );
-                    continue;
-                  }
-
-                  const imageArrayBuffer = await imageResponse.arrayBuffer();
-                  base64ImageData =
-                    Buffer.from(imageArrayBuffer).toString("base64");
+                  // Regular image processing (non-GIF) — optimize oversized images
+                  const optimized = await fetchAndOptimizeImage(
+                    part.uri,
+                    part.mimeType,
+                  );
+                  base64ImageData = optimized.data;
+                  finalMimeType = optimized.mimeType;
 
                   log.success(`Successfully fetched image: ${part.uri}`);
                 }

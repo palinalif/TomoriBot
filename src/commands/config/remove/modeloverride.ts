@@ -1,7 +1,8 @@
 /**
  * /config remove modeloverride
- * Removes an existing channel or persona model override from the server.
- * Presents a paginated modal select of all current overrides for the invoker to choose from.
+ * Removes channel or persona model overrides from the server.
+ * Supports single-item removal via paginated modal select, as well as
+ * bulk purge of all channel overrides, all persona overrides, or everything at once.
  */
 
 import {
@@ -23,11 +24,16 @@ import {
 	getCachedAllPersonas,
 	invalidateTomoriStateCache,
 } from "@/utils/cache/tomoriStateCache";
-import { invalidateChannelLlmCache } from "@/utils/cache/channelLlmCache";
+import {
+	invalidateChannelLlmCache,
+	invalidateAllChannelLlmCacheForServer,
+} from "@/utils/cache/channelLlmCache";
 import { getAllChannelLlmOverridesForServer } from "@/utils/db/dbRead";
 import {
 	deleteChannelLlmOverride,
 	setPersonaLlmOverride,
+	clearAllChannelLlmOverridesForServer,
+	clearAllPersonaLlmOverridesForServer,
 } from "@/utils/db/dbWrite";
 import type { UserRow, ErrorContext, TomoriState, LlmRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
@@ -79,6 +85,27 @@ export const configureSubcommand = (
 						),
 						value: "persona",
 					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.config.remove.modeloverride.scope_all_channels",
+						),
+						value: "all_channels",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.config.remove.modeloverride.scope_all_personas",
+						),
+						value: "all_personas",
+					},
+					{
+						name: localizer(
+							"en-US",
+							"commands.config.remove.modeloverride.scope_everything",
+						),
+						value: "everything",
+					},
 				),
 		);
 
@@ -86,7 +113,7 @@ export const configureSubcommand = (
 
 /**
  * Executes the /config remove modeloverride command.
- * Routes to the channel or persona removal flow based on the scope option.
+ * Routes to the appropriate removal flow based on the scope option.
  *
  * @param _client - Discord client instance
  * @param interaction - Slash command interaction
@@ -110,8 +137,8 @@ export async function execute(
 		return;
 	}
 
-	// NOTE: No deferReply here — promptWithPaginatedModal must be the first
-	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
+	// NOTE: No deferReply here for single-item scopes — promptWithPaginatedModal
+	// must be the first acknowledgment. Bulk scopes defer inside their handlers.
 
 	try {
 		// 2. Load Tomori state to get database server_id
@@ -128,10 +155,23 @@ export async function execute(
 
 		const scope = interaction.options.getString("scope", true);
 
-		if (scope === "channel") {
-			await handleChannelScope(interaction, locale, userData, tomoriState);
-		} else {
-			await handlePersonaScope(interaction, locale, userData, tomoriState);
+		// 3. Route to the appropriate handler based on scope
+		switch (scope) {
+			case "channel":
+				await handleChannelScope(interaction, locale, userData, tomoriState);
+				break;
+			case "persona":
+				await handlePersonaScope(interaction, locale, userData, tomoriState);
+				break;
+			case "all_channels":
+				await handlePurgeAllChannels(interaction, locale, tomoriState);
+				break;
+			case "all_personas":
+				await handlePurgeAllPersonas(interaction, locale, tomoriState);
+				break;
+			case "everything":
+				await handlePurgeEverything(interaction, locale, tomoriState);
+				break;
 		}
 	} catch (error) {
 		const context: ErrorContext = {
@@ -447,5 +487,260 @@ async function handlePersonaScope(
 
 	log.success(
 		`Persona LLM override for ${selectedPersona.tomori_nickname} (id: ${selectedPersona.tomori_id}) cleared on server ${interaction.guild?.id}`,
+	);
+}
+
+// ─── Bulk Purge: All Channels ─────────────────────────────────────────────────
+
+/**
+ * Purges all channel model overrides for the server.
+ * Defers immediately since no modal is needed for bulk operations.
+ *
+ * @param interaction - Slash command interaction
+ * @param locale - User's preferred locale
+ * @param tomoriState - Loaded TomoriState for this server
+ */
+async function handlePurgeAllChannels(
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+	tomoriState: TomoriState,
+): Promise<void> {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+	// 1. Check if there are any channel overrides to purge
+	const overrides = await getAllChannelLlmOverridesForServer(
+		tomoriState.server_id,
+	);
+
+	if (overrides.length === 0) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "commands.config.remove.modeloverride.channel_none_title",
+			descriptionKey:
+				"commands.config.remove.modeloverride.channel_none_description",
+			color: ColorCode.WARN,
+		});
+		return;
+	}
+
+	// 2. Purge all channel overrides from DB
+	const cleared = await clearAllChannelLlmOverridesForServer(
+		tomoriState.server_id,
+	);
+
+	if (!cleared) {
+		const context: ErrorContext = {
+			serverId: tomoriState.server_id,
+			errorType: "DatabaseDeleteError",
+			metadata: { operation: "clearAllChannelLlmOverridesForServer" },
+		};
+		await log.error(
+			"Failed to purge all channel LLM overrides",
+			new Error("clearAllChannelLlmOverridesForServer returned false"),
+			context,
+		);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// 3. Invalidate all channel LLM caches for this server
+	invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
+
+	// 4. Reply success with count
+	await replyInfoEmbed(interaction, locale, {
+		titleKey:
+			"commands.config.remove.modeloverride.purge_channels_success_title",
+		descriptionKey:
+			"commands.config.remove.modeloverride.purge_channels_success_description",
+		descriptionVars: { count: overrides.length.toString() },
+		color: ColorCode.SUCCESS,
+	});
+
+	log.success(
+		`Purged all ${overrides.length} channel LLM override(s) from server ${interaction.guild?.id}`,
+	);
+}
+
+// ─── Bulk Purge: All Personas ─────────────────────────────────────────────────
+
+/**
+ * Purges all persona model overrides for the server.
+ * Defers immediately since no modal is needed for bulk operations.
+ *
+ * @param interaction - Slash command interaction
+ * @param locale - User's preferred locale
+ * @param tomoriState - Loaded TomoriState for this server
+ */
+async function handlePurgeAllPersonas(
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+	tomoriState: TomoriState,
+): Promise<void> {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+	// 1. Check if there are any persona overrides to purge
+	const allPersonas = await getCachedAllPersonas(
+		interaction.guild?.id ?? interaction.user.id,
+	);
+	const personasWithOverride = allPersonas.filter(
+		(p) => p.persona_llm != null,
+	);
+
+	if (personasWithOverride.length === 0) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "commands.config.remove.modeloverride.persona_none_title",
+			descriptionKey:
+				"commands.config.remove.modeloverride.persona_none_description",
+			color: ColorCode.WARN,
+		});
+		return;
+	}
+
+	// 2. Purge all persona overrides from DB
+	const cleared = await clearAllPersonaLlmOverridesForServer(
+		tomoriState.server_id,
+	);
+
+	if (!cleared) {
+		const context: ErrorContext = {
+			serverId: tomoriState.server_id,
+			errorType: "DatabaseDeleteError",
+			metadata: { operation: "clearAllPersonaLlmOverridesForServer" },
+		};
+		await log.error(
+			"Failed to purge all persona LLM overrides",
+			new Error("clearAllPersonaLlmOverridesForServer returned false"),
+			context,
+		);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// 3. Invalidate TomoriState cache so personas reload without overrides
+	invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+
+	// 4. Reply success with count
+	await replyInfoEmbed(interaction, locale, {
+		titleKey:
+			"commands.config.remove.modeloverride.purge_personas_success_title",
+		descriptionKey:
+			"commands.config.remove.modeloverride.purge_personas_success_description",
+		descriptionVars: { count: personasWithOverride.length.toString() },
+		color: ColorCode.SUCCESS,
+	});
+
+	log.success(
+		`Purged all ${personasWithOverride.length} persona LLM override(s) from server ${interaction.guild?.id}`,
+	);
+}
+
+// ─── Bulk Purge: Everything ───────────────────────────────────────────────────
+
+/**
+ * Purges all channel AND persona model overrides for the server.
+ * Defers immediately since no modal is needed for bulk operations.
+ *
+ * @param interaction - Slash command interaction
+ * @param locale - User's preferred locale
+ * @param tomoriState - Loaded TomoriState for this server
+ */
+async function handlePurgeEverything(
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+	tomoriState: TomoriState,
+): Promise<void> {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+	// 1. Check how many overrides exist in each category
+	const [channelOverrides, allPersonas] = await Promise.all([
+		getAllChannelLlmOverridesForServer(tomoriState.server_id),
+		getCachedAllPersonas(interaction.guild?.id ?? interaction.user.id),
+	]);
+	const personasWithOverride = allPersonas.filter(
+		(p) => p.persona_llm != null,
+	);
+
+	const channelCount = channelOverrides.length;
+	const personaCount = personasWithOverride.length;
+
+	// 2. If nothing to purge, inform the user
+	if (channelCount === 0 && personaCount === 0) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey:
+				"commands.config.remove.modeloverride.purge_everything_none_title",
+			descriptionKey:
+				"commands.config.remove.modeloverride.purge_everything_none_description",
+			color: ColorCode.WARN,
+		});
+		return;
+	}
+
+	// 3. Purge both categories — run in parallel since they target different tables
+	const [channelCleared, personaCleared] = await Promise.all([
+		channelCount > 0
+			? clearAllChannelLlmOverridesForServer(tomoriState.server_id)
+			: Promise.resolve(true),
+		personaCount > 0
+			? clearAllPersonaLlmOverridesForServer(tomoriState.server_id)
+			: Promise.resolve(true),
+	]);
+
+	if (!channelCleared || !personaCleared) {
+		const context: ErrorContext = {
+			serverId: tomoriState.server_id,
+			errorType: "DatabaseDeleteError",
+			metadata: {
+				operation: "purgeEverything",
+				channelCleared,
+				personaCleared,
+			},
+		};
+		await log.error(
+			"Failed to purge all model overrides",
+			new Error(
+				`Partial failure: channels=${channelCleared}, personas=${personaCleared}`,
+			),
+			context,
+		);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// 4. Invalidate both caches after successful DB writes
+	if (channelCount > 0) {
+		invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
+	}
+	if (personaCount > 0) {
+		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+	}
+
+	// 5. Reply success with combined count
+	const totalCount = channelCount + personaCount;
+	await replyInfoEmbed(interaction, locale, {
+		titleKey:
+			"commands.config.remove.modeloverride.purge_everything_success_title",
+		descriptionKey:
+			"commands.config.remove.modeloverride.purge_everything_success_description",
+		descriptionVars: {
+			total: totalCount.toString(),
+			channels: channelCount.toString(),
+			personas: personaCount.toString(),
+		},
+		color: ColorCode.SUCCESS,
+	});
+
+	log.success(
+		`Purged all model overrides (${channelCount} channel, ${personaCount} persona) from server ${interaction.guild?.id}`,
 	);
 }

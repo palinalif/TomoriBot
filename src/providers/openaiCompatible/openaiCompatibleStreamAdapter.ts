@@ -176,10 +176,25 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 				`${this.options.adapterName}: Sampling params - temp: ${config.temperature}, top_p: ${openAICompatibleConfig.topP ?? "default"}, top_k: ${openAICompatibleConfig.topK ?? "default"}, freq_penalty: ${openAICompatibleConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openAICompatibleConfig.presencePenalty ?? "default"}, rep_penalty: ${openAICompatibleConfig.repetitionPenalty ?? "default"}, min_p: ${openAICompatibleConfig.minP ?? "default"}`,
 			);
 
+			// Create AbortController and link to external abort signal (SDK call timeout)
+			const controller = new AbortController();
+			if (context.abortSignal) {
+				if (context.abortSignal.aborted) {
+					controller.abort();
+				} else {
+					context.abortSignal.addEventListener(
+						"abort",
+						() => controller.abort(),
+						{ once: true },
+					);
+				}
+			}
+
 			let response = await fetch(apiUrl, {
 				method: "POST",
 				headers,
 				body: JSON.stringify(requestBody),
+				signal: controller.signal,
 			});
 
 			let responseErrorText: string | null = null;
@@ -204,6 +219,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 						method: "POST",
 						headers,
 						body: JSON.stringify(retryBody),
+						signal: controller.signal,
 					});
 
 					responseErrorText = response.ok ? null : await response.text();

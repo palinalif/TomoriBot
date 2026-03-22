@@ -422,6 +422,15 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           return { status: "stopped_by_user" };
         }
 
+        // Check for external abort signal (SDK call timeout fired)
+        if (context.abortSignal?.aborted) {
+          log.warn(
+            `Stream loop breaking due to external abort signal for channel ${context.channel.id}.`,
+          );
+          this.clearInactivityTimer(state);
+          return { status: "error", data: new Error("Stream aborted by SDK call timeout") };
+        }
+
         // Check for timeout
         if (this.isStreamTimedOut(state)) {
           log.warn(

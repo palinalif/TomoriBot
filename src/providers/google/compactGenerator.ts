@@ -10,6 +10,7 @@ import type {
   ProviderCompactSummaryRequest as CompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
+import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 import type { CompactRoleplaySummary } from "@/types/misc/compact";
 export type {
   CompactConversationResult,
@@ -29,20 +30,14 @@ async function buildUserParts(
 
   for (const image of images) {
     try {
-      const response = await fetch(image.url);
-      if (!response.ok) {
-        log.warn(
-          `Compact summary: failed to fetch image ${image.url} (${response.status} ${response.statusText})`,
-        );
-        continue;
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      const optimized = await fetchAndOptimizeImage(
+        image.url,
+        image.mimeType || "image/png",
+      );
       parts.push({
         inlineData: {
-          data: base64,
-          mimeType: image.mimeType || "image/png",
+          data: optimized.data,
+          mimeType: optimized.mimeType,
         },
       });
     } catch (error) {

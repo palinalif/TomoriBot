@@ -397,6 +397,9 @@ export class ZaiProvider
 				personaUsername,
 				prefixStrippingName,
 				forcedMentions: streamingContext?.forcedMentions,
+
+				// External abort signal for SDK call timeout cancellation
+				abortSignal: streamingContext?.abortSignal,
 			};
 
 			const orchestrator = new StreamOrchestrator();
