@@ -599,7 +599,9 @@ export async function execute(
     // When switching specifically to NovelAI, use the dedicated key that also
     // notifies the user that emoji/sticker usage were automatically disabled.
     const successDescriptionKey =
-      currentProvider !== newProvider && newProvider === "novelai"
+      isCustomProvider(newProvider)
+        ? "commands.config.apikey.set.custom_success_with_model_description"
+        : currentProvider !== newProvider && newProvider === "novelai"
         ? "commands.config.apikey.set.novelai_success_with_model_description"
         : currentProvider !== newProvider
           ? "commands.config.apikey.set.success_with_model_description"
@@ -611,9 +613,15 @@ export async function execute(
 
     // Add model name if provider changed
     if (currentProvider !== newProvider) {
-      const defaultModel = await loadDefaultModelForProvider(newProvider);
-      if (defaultModel) {
-        descriptionVars.model_name = defaultModel.llm_codename;
+      if (isCustomProvider(newProvider)) {
+        descriptionVars.model_name =
+          customCapabilitiesResult?.modelName ||
+          localizer(locale, "general.unknown");
+      } else {
+        const defaultModel = await loadDefaultModelForProvider(newProvider);
+        if (defaultModel) {
+          descriptionVars.model_name = defaultModel.llm_codename;
+        }
       }
     }
 

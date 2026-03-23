@@ -856,7 +856,10 @@ export async function execute(
 		const modelNameRow = (
 			await sql`SELECT llm_codename FROM llms WHERE llm_id = ${newLlmId} LIMIT 1`
 		)[0];
-		const modelName = modelNameRow?.llm_codename as string | undefined;
+		const modelName =
+			isCustomProvider(normalizedProvider) && customModelName?.trim()
+				? customModelName.trim()
+				: (modelNameRow?.llm_codename as string | undefined);
 
 		const descriptionVars: Record<string, string> = {
 			provider: getProviderDisplayName(normalizedProvider),

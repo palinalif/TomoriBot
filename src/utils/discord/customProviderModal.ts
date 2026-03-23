@@ -207,7 +207,7 @@ export async function promptCustomCapabilities(
     let seesImages = true;
     let seesVideos = false;
     let supportsStructOutput = false;
-    let customModelName = ""; // Empty string means use default (llm_codename)
+    let customModelName = "";
 
     // Helper function to update the message content with current model name
     const updateMessageContent = () => {
@@ -272,7 +272,7 @@ export async function promptCustomCapabilities(
               ),
             )
             .setStyle(TextInputStyle.Short)
-            .setRequired(false)
+            .setRequired(true)
             .setMaxLength(100);
 
           // Set current value if exists
@@ -320,6 +320,17 @@ export async function promptCustomCapabilities(
             log.warn("Model name modal timed out or errored:", modalError);
           }
         } else if (i.isButton() && i.customId === "confirm_capabilities") {
+          if (!customModelName.trim()) {
+            await i.reply({
+              content: localizer(
+                locale,
+                "commands.config.custom.model_name_required_description",
+              ),
+              ephemeral: true,
+            });
+            return;
+          }
+
           collector.stop("confirmed");
 
           // Acknowledge the button

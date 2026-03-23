@@ -18,6 +18,7 @@ import type { SlashCommandSubcommandBuilder } from "discord.js";
 import { ToolRegistry } from "../toolRegistry";
 import { getBraveApiKeyStatus } from "../../utils/db/dbRead";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
+import { getLlmDisplayName } from "@/utils/provider/modelDisplay";
 
 /**
  * Tool for reviewing TomoriBot's capabilities and available commands
@@ -132,6 +133,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const llm = context.tomoriState.llm;
       const config = context.tomoriState.config;
       const provider = llm.llm_provider.toLowerCase();
+      const displayModelName = getLlmDisplayName(
+        llm,
+        config.custom_model_name,
+      );
       const seesImages = llm.sees_images ?? false;
       const seesVideos = llm.sees_videos ?? false;
       const seesYouTube = llm.sees_youtube ?? false;
@@ -145,8 +150,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       // 2. Build dynamic capabilities markdown with model information
       let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";
-      capabilitiesContent += `The current model powering you is **${llm.llm_codename}** (${llm.llm_provider})`;
-      if (llm.llm_description) {
+      capabilitiesContent += `The current model powering you is **${displayModelName}** (${llm.llm_provider})`;
+      if (llm.llm_description && provider !== "custom") {
         capabilitiesContent += `, which is ${llm.llm_description}`;
       }
       capabilitiesContent += ".\n\n";
@@ -504,7 +509,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         "Different models may support different features (vision, tools, reasoning, etc.).\n";
 
       log.info(
-        `Successfully generated dynamic chat capabilities for model: ${llm.llm_codename}`,
+        `Successfully generated dynamic chat capabilities for model: ${displayModelName}`,
       );
 
       // 12. Return the dynamically generated content
@@ -515,7 +520,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           status: "capabilities_retrieved",
           capability_type: "chat",
           content_length: capabilitiesContent.length,
-          model: llm.llm_codename,
+          model: displayModelName,
           provider: llm.llm_provider,
           summary: capabilitiesContent, // <-- This is what GoogleToolAdapter will use!
         },
@@ -552,6 +557,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const llm = context.tomoriState.llm;
       const config = context.tomoriState.config;
       const serverId = context.tomoriState.server_id;
+      const displayModelName = getLlmDisplayName(
+        llm,
+        config.custom_model_name,
+      );
 
       // 2. Check API key status
       const braveApiKeySet = await getBraveApiKeyStatus(serverId);
@@ -563,9 +572,9 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       // 4. Model Information Section
       settingsContent += "## Active Model\n\n";
-      settingsContent += `**Model**: ${llm.llm_codename}\n`;
+      settingsContent += `**Model**: ${displayModelName}\n`;
       settingsContent += `**Provider**: ${llm.llm_provider}\n`;
-      if (llm.llm_description) {
+      if (llm.llm_description && llm.llm_provider !== "custom") {
         settingsContent += `**Description**: ${llm.llm_description}\n`;
       }
       settingsContent += `**Temperature**: ${config.llm_temperature}\n`;
@@ -932,7 +941,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           status: "settings_retrieved",
           capability_type: "settings",
           content_length: settingsContent.length,
-          model: llm.llm_codename,
+          model: displayModelName,
           provider: llm.llm_provider,
           server_id: serverId,
           summary: settingsContent,

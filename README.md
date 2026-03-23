@@ -11,7 +11,7 @@
 
 <h3 align="center">TomoriBot</h3>
 
-A highly customizable chatbot/waifu for Discord featuring smart agentic AI features such as memory, personas, tool usage, and more!
+A self-hosted and customizable personal AI assistant for Discord with robust memory, multiple personas, tool calling, multimodal support, and OpenAI-compatible/local model support.
 
 <p align="center">
 
@@ -49,7 +49,9 @@ English | [日本語](README_ja.md)
 <!-- ABOUT THE PROJECT -->
 ## About the Project
 
-TomoriBot is a free and open-source hobby project inspired by [SillyTavern](https://github.com/SillyTavern/SillyTavern) and Discord's discontinued Clyde. It was created to bring both practical AI assistants and custom AI companions into Discord, all with configurable settings and behaviors.
+TomoriBot is a free and open-source self-hosted personal AI assistant for Discord, inspired by [SillyTavern](https://github.com/SillyTavern/SillyTavern) and Discord's discontinued Clyde. It was created to bring both practical AI assistants and custom AI companions into Discord, with configurable memory, personas, tool usage, and model routing.
+
+It is designed for people who want a customizable Discord AI bot, AI companion, or agentic chatbot that they can run on their own infrastructure. TomoriBot supports long-term memory, multi-persona behavior, web and MCP tools, image understanding, roleplay-oriented workflows, and multiple providers including Google Gemini, OpenRouter, NovelAI, and self-hosted OpenAI-compatible endpoints such as Ollama, KoboldCPP, vLLM, LocalAI, and ChatMock-backed setups.
 
 You can [invite the public TomoriBot](https://discord.com/oauth2/authorize?client_id=841644102059556915) to your Discord server, or [self-host your own instance](#self-hosting) if you prefer full control over your privacy and API keys. TomoriBot uses encryption that keeps data safe, but self-hosting ensures that all data remain entirely on your device. 
 
@@ -268,6 +270,45 @@ Simply mention the bot in a server or use the configured trigger words to start 
 ```
 
 Or slide into TomoriBot's DMs and say hi!
+
+### Using Codex CLI with TomoriBot
+
+If you want TomoriBot to use your ChatGPT account through a local OpenAI-compatible bridge, you can run [ChatMock](https://github.com/RayBytes/ChatMock) and point TomoriBot's `custom` provider at it.
+
+#### What ChatMock does
+
+- ChatMock runs a local OpenAI-compatible API server
+- TomoriBot can use that local server through the `custom` provider
+
+#### 1. Start ChatMock
+
+Install and start ChatMock by following its instructions on GitHub:
+
+- [ChatMock repository](https://github.com/RayBytes/ChatMock)
+
+After installing, run:
+```sh
+chatmock login
+chatmock serve
+```
+
+By default, ChatMock listens on `http://127.0.0.1:8000/v1`
+
+#### 2. Configure TomoriBot to use ChatMock
+
+In Discord, configure TomoriBot's `custom` provider and use:
+
+- **Endpoint URL**: `http://127.0.0.1:8000/v1`
+- **Model Name**: the exact model string ChatMock should receive, such as `gpt-5.4` or `gpt-5.3-codex`
+
+Do **not** use bare `http://127.0.0.1:8000` because TomoriBot appends `/chat/completions` to the configured base URL
+
+Suggested capability flags for ChatMock:
+
+- **Function Calling / Tools**: Yes
+- **Image Understanding**: Yes
+- **Video Understanding**: No
+- **Structured Output**: Yes
 
 ### Updating TomoriBot
 

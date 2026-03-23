@@ -2329,6 +2329,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           success_title: `APIキーが設定されました`,
           success_description: `{provider}のAPIキーが正常に検証、暗号化、保存されました。`,
           success_with_model_description: `{provider}のAPIキーが正常に検証、暗号化、保存されました。モデルは自動的に\`{model_name}\`（このプロバイダーのデフォルト）に変更されました。`,
+          custom_success_with_model_description: `カスタムのOpenAI互換エンドポイントが正常に保存されました。このエンドポイントへのリクエストでは \`{model_name}\` を使用します。`,
           novelai_success_with_model_description: `NovelAIのAPIキーが正常に検証、暗号化、保存されました。モデルは自動的に\`{model_name}\`に変更されました。⚠️ **絵文字とスタンプの使用は自動的に無効化されました**。NovelAIのコンテキストを安定させるためです。\`/config permissions\`でいつでも再有効化できます。`,
         },
         delete: {
@@ -2371,12 +2372,13 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         endpoint_url_invalid_title: `無効なエンドポイントURL`,
         endpoint_url_invalid_description: `カスタムエンドポイントの有効なHTTPまたはHTTPS URLを入力してください。`,
         // モデル名設定
-        model_name_label: `モデル名（任意）`,
-        model_name_description: `Ollamaの場合は必須（例：「gemma3:latest」）。KoboldCppおよび他の寛容なエンドポイントでは任意。`,
-        model_name_placeholder: `例：gemma3:latest`,
+        model_name_label: `モデル名（必須）`,
+        model_name_description: `必須です。エンドポイントが期待する正確な上流モデル名を入力してください（例：「gpt-5.4」「gpt-5.3-codex」「gemma3:latest」）。`,
+        model_name_placeholder: `例：gpt-5.4 または gemma3:latest`,
+        model_name_required_description: `確認する前に正確なモデル名を設定してください。ChatMockなら \`gpt-5.4\` のような名前、Ollamaなら \`gemma3:latest\` のような正確なモデルタグを入力してください。`,
         // 機能設定モーダル
         modal_capabilities_title: `モデル機能の設定`,
-        capabilities_prompt: `モデルの機能を設定してください。\nモデルがサポートする機能を選択し、**確認**をクリックしてください:`,
+        capabilities_prompt: `エンドポイントが期待する正確なモデル名を設定してから、そのモデルがサポートする機能を選択し、**確認**をクリックしてください:`,
         capability_tools_label: `関数呼び出し（ツール）?`,
         capability_tools_yes: `関数呼び出しをサポート`,
         capability_tools_no: `関数呼び出し非対応`,

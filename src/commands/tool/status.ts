@@ -39,6 +39,7 @@ import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/sch
 import { formatBooleanLocalized } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
+import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
@@ -377,6 +378,7 @@ async function formatChannelLlmOverrides(
   client: Client,
   overrides: { channelDiscId: string; llm: LlmRow }[],
   locale: string,
+  customModelName?: string | null,
 ): Promise<string> {
   if (overrides.length === 0) {
     return localizer(locale, "commands.choices.none");
@@ -391,7 +393,7 @@ async function formatChannelLlmOverrides(
         locale,
       );
       // 2. Format: "N. #channel → model (provider)"
-      return `${index + 1}. ${mention} → \`${entry.llm.llm_codename}\` (${entry.llm.llm_provider})`;
+      return `${index + 1}. ${mention} → ${formatLlmDisplayLabel(entry.llm, customModelName)}`;
     }),
   );
 
@@ -408,6 +410,7 @@ async function formatChannelLlmOverrides(
 function formatPersonaLlmOverrides(
   personas: TomoriState[],
   locale: string,
+  customModelName?: string | null,
 ): string {
   // 1. Filter to personas with an explicit override, narrowing the type so llm is non-optional
   const overrides = personas.filter(
@@ -421,7 +424,7 @@ function formatPersonaLlmOverrides(
   // 2. Format: "N. Persona Name → `model` (provider)"
   return overrides
     .map((p, index) => {
-      return `${index + 1}. **${p.tomori_nickname}** → \`${p.persona_llm.llm_codename}\` (${p.persona_llm.llm_provider})`;
+      return `${index + 1}. **${p.tomori_nickname}** → ${formatLlmDisplayLabel(p.persona_llm, customModelName)}`;
     })
     .join("\n");
 }
@@ -669,7 +672,12 @@ export async function execute(
           formatWhitelistEntries(client, whitelistChannels, locale),
           formatWhitelistRolesEntries(whitelistRoles, locale),
           formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
-          formatChannelLlmOverrides(client, channelLlmOverrides, locale),
+          formatChannelLlmOverrides(
+            client,
+            channelLlmOverrides,
+            locale,
+            config.custom_model_name,
+          ),
         ]);
 
         // 8. Format system prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
@@ -689,7 +697,7 @@ export async function execute(
           fields: [
             {
               nameKey: "commands.tool.status.field_model",
-              value: `\`${llm.llm_codename}\` (${llm.llm_provider})`,
+              value: formatLlmDisplayLabel(llm, config.custom_model_name),
               inline: false,
             },
             {
@@ -980,6 +988,7 @@ export async function execute(
         const personaLlmOverridesValue = formatPersonaLlmOverrides(
           allPersonas,
           locale,
+          config.custom_model_name,
         );
 
         const serverPage6: SummaryEmbedOptions = {
@@ -1207,7 +1216,10 @@ export async function execute(
         // 10. Build persona model override value
         //     Shows the persona-specific LLM if set, otherwise "Server default"
         const personaModelValue = selectedPersona.persona_llm
-          ? `\`${selectedPersona.persona_llm.llm_codename}\` (${selectedPersona.persona_llm.llm_provider})`
+          ? formatLlmDisplayLabel(
+              selectedPersona.persona_llm,
+              selectedPersona.config.custom_model_name,
+            )
           : localizer(
               locale,
               "commands.tool.status.persona_model_server_default",

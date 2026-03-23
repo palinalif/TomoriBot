@@ -2320,6 +2320,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_title: `API Key Set`,
           success_description: `The {provider} API key has been successfully validated, encrypted, and saved.`,
           success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\` (the default for this provider).`,
+          custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. Tomori will use \`{model_name}\` when sending requests to this endpoint.`,
           novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config permissions\`.`,
         },
         delete: {
@@ -2362,12 +2363,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         endpoint_url_invalid_title: `Invalid Endpoint URL`,
         endpoint_url_invalid_description: `Please enter a valid HTTP or HTTPS URL for your custom endpoint.`,
         // Model name configuration
-        model_name_label: `Model Name (Optional)`,
-        model_name_description: `Required for Ollama (e.g., "gemma3:latest"). Optional for KoboldCpp and other lenient endpoints.`,
-        model_name_placeholder: `e.g., gemma3:latest`,
+        model_name_label: `Model Name (Required)`,
+        model_name_description: `Required. Enter the exact upstream model name your endpoint expects (for example, "gpt-5.4", "gpt-5.3-codex", or "gemma3:latest").`,
+        model_name_placeholder: `e.g., gpt-5.4 or gemma3:latest`,
+        model_name_required_description: `Set the exact model name before confirming. For ChatMock use something like \`gpt-5.4\`; for Ollama use the exact installed model tag such as \`gemma3:latest\`.`,
         // Capabilities modal
         modal_capabilities_title: `Configure Model Capabilities`,
-        capabilities_prompt: `Please configure the capabilities for your custom model.\nSelect what your model supports, then click **Confirm**:`,
+        capabilities_prompt: `Set the exact model name your endpoint expects, then configure the capabilities for that model and click **Confirm**:`,
         capability_tools_label: `Function Calling (Tools)?`,
         capability_tools_yes: `Supports Function Calling`,
         capability_tools_no: `No Function Calling`,
