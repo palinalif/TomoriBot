@@ -666,7 +666,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         failed_title: `Summary Failed`,
         failed_description: `I couldn't generate the summary: {error}`,
         provider_unsupported_title: `Provider Not Supported`,
-        provider_unsupported_description: `The current provider ({provider}) is not supported for compact summaries. Please switch to Google or OpenRouter.`,
+        provider_unsupported_description: `The current provider ({provider}) does not support compact summaries. Please switch to a compatible provider.`,
         model_incompatible_title: `Model Incompatible`,
         model_incompatible_description: `The current model ({model_name}) does not support structured output (STRUCT) required for roleplay summaries.`,
         image_vision_required_title: `Image Vision Required`,
@@ -1219,7 +1219,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_additional_inst: `Additional Instructions`,
         // Error messages
         wrong_provider_title: `🔴 Incompatible Provider`,
-        wrong_provider_description: `Preset generation requires Google Gemini or OpenRouter. Your current provider is **{current_provider}**. Please use \`/config apikey set\` to switch providers.`,
+        wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Please use \`/config apikey set\` to switch providers.`,
         no_api_key_title: `🔴 No API Key`,
         no_api_key_description: `No API key configured. Please use \`/config apikey set\` to set up your provider API key.`,
         model_incompatible_title: `Incompatible Model`,

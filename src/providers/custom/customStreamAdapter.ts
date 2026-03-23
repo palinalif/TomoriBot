@@ -7,6 +7,9 @@ export interface CustomStreamConfig extends OpenAICompatibleStreamConfig {
 	endpointUrl: string;
 }
 
+export const CUSTOM_PROVIDER_PLACEHOLDER_API_KEY =
+	"custom-endpoint-configured";
+
 export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
 	constructor() {
 		super({
@@ -14,7 +17,7 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
 			adapterName: "CustomStreamAdapter",
 			localeNamespace: ["genai", "custom"].join("."),
 			errorMessagePrefix: "Custom endpoint error",
-			placeholderApiKey: "custom-endpoint-key",
+			placeholderApiKey: CUSTOM_PROVIDER_PLACEHOLDER_API_KEY,
 			resolveApiUrl: (config) => normalizeCustomApiUrl(config.endpointUrl),
 			shouldRetryWithoutStop: (statusCode, errorText) => {
 				if (statusCode !== 400 && statusCode !== 422) {
@@ -36,7 +39,7 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
 	}
 }
 
-function normalizeCustomApiUrl(endpointUrl?: string): string {
+export function normalizeCustomApiUrl(endpointUrl?: string): string {
 	if (!endpointUrl) {
 		throw new Error("Custom endpoint URL is required");
 	}

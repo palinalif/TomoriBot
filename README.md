@@ -310,6 +310,8 @@ Suggested capability flags for ChatMock:
 - **Video Understanding**: No
 - **Structured Output**: Yes
 
+With **Image Understanding** and **Structured Output** enabled, the ChatMock-backed `custom` provider can also power `/tool compact roleplay`, `/server initialize expressions`, `/teach history`, and `/persona generate`. If you want `/persona generate` to use web search, also enable **Function Calling / Tools**.
+
 ### Updating TomoriBot
 
 Before updating, consider backing up your database (`bun run backup-db`) and reviewing the release notes.

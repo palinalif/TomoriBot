@@ -1,6 +1,6 @@
 import type { LlmRow } from "@/types/db/schema";
 
-export function getLlmDisplayName(
+export function getEffectiveLlmModelName(
 	llm: LlmRow,
 	customModelName?: string | null,
 ): string {
@@ -10,6 +10,13 @@ export function getLlmDisplayName(
 	}
 
 	return llm.llm_codename;
+}
+
+export function getLlmDisplayName(
+	llm: LlmRow,
+	customModelName?: string | null,
+): string {
+	return getEffectiveLlmModelName(llm, customModelName);
 }
 
 export function formatLlmDisplayLabel(

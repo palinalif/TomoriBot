@@ -122,6 +122,10 @@ Rule:
 - optional model override in `tomori_configs.custom_model_name`
 - model capabilities are user-declared and stored in `llms`
 - designed for non-production usage
+- text chat streaming is supported
+- structured output, history extraction, and `/server initialize expressions` work when the configured custom model is marked with the required capabilities
+- conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
+- persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
 
 ## DeepSeek Provider Notes
 
@@ -200,6 +204,7 @@ Current capability layer:
   - `src/providers/google/googleStructuredOutput.ts`
   - `src/providers/openrouter/openrouterStructuredOutput.ts`
   - `src/providers/deepseek/deepseekStructuredOutput.ts`
+  - `src/providers/custom/customStructuredOutput.ts`
 
 Google and OpenRouter currently own runtime execution for:
 
@@ -213,6 +218,14 @@ Google and OpenRouter currently own runtime execution for:
 DeepSeek currently owns runtime execution for:
 
 - structured output execution
+- history extraction (via structured output capability)
+
+Custom currently owns runtime execution for:
+
+- structured output execution
+- preset generation
+- conversation compaction
+- roleplay compaction
 - history extraction (via structured output capability)
 
 Live token counting for `/tool estimate cost` still uses a temporary legacy command path for Google, OpenRouter, and DeepSeek.

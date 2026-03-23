@@ -59,6 +59,7 @@ import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { extractHistoryWindowForProvider } from "@/providers/utils/providerFeatureExecutors";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
+import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 
 /** Maximum document name length */
 const MAX_DOCUMENT_NAME_LENGTH = 64;
@@ -156,6 +157,7 @@ async function extractWindow(
   provider: string,
   model: string,
   apiKey: string,
+  endpointUrl?: string,
 ): Promise<HistoryMemoryEntry[]> {
   const systemPrompt = buildExtractionSystemPrompt();
   const userPrompt = buildExtractionUserPrompt(
@@ -166,6 +168,7 @@ async function extractWindow(
     providerName: provider,
     apiKey,
     model,
+    endpointUrl,
     systemPrompt,
     userPrompt,
     temperature: 0.3,
@@ -185,6 +188,7 @@ async function runExtractionPipeline(params: {
   provider: string;
   model: string;
   apiKey: string;
+  endpointUrl?: string;
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction;
   locale: string;
   serverId: string;
@@ -193,7 +197,15 @@ async function runExtractionPipeline(params: {
   entries: HistoryMemoryEntry[];
   formattedResult: ReturnType<typeof formatMessagesForExtraction>;
 } | null> {
-  const { channel, provider, model, apiKey, replyInteraction, locale } = params;
+  const {
+    channel,
+    provider,
+    model,
+    apiKey,
+    endpointUrl,
+    replyInteraction,
+    locale,
+  } = params;
 
   // 1. Update progress: fetching messages
   await replyInteraction.editReply({
@@ -281,6 +293,7 @@ async function runExtractionPipeline(params: {
       provider,
       model,
       apiKey,
+      endpointUrl,
     );
 
     allEntries.push(...windowEntries);
@@ -670,7 +683,11 @@ export async function execute(
     );
 
     const provider = tomoriState.llm.llm_provider.toLowerCase();
-    const model = tomoriState.llm.llm_codename;
+    const model = getEffectiveLlmModelName(
+      tomoriState.llm,
+      tomoriState.config.custom_model_name,
+    );
+    const endpointUrl = tomoriState.config.custom_endpoint_url ?? undefined;
     const messageFetchLimit = normalizeMessageFetchLimit(
       tomoriState.config.message_fetch_limit,
     );
@@ -771,6 +788,7 @@ export async function execute(
         provider,
         model,
         apiKey: decryptedKey,
+        endpointUrl,
         replyInteraction: personaSelectionInteraction,
         locale,
         serverId: guildId,
@@ -864,6 +882,7 @@ export async function execute(
         provider,
         model,
         apiKey: decryptedKey,
+        endpointUrl,
         replyInteraction: interaction,
         locale,
         serverId: guildId,
@@ -924,6 +943,7 @@ export async function execute(
       provider,
       model,
       apiKey: decryptedKey,
+      endpointUrl,
       replyInteraction: interaction,
       locale,
       serverId: guildId,

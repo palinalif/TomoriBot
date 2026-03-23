@@ -14,11 +14,11 @@ export const customProviderInfo: ProviderInfo = {
 	featureSupport: {
 		nativeImageGeneration: false,
 		embeddings: false,
-		structuredOutput: false,
-		presetGeneration: false,
-		expressionInitialization: false,
+		structuredOutput: true,
+		presetGeneration: true,
+		expressionInitialization: true,
 		liveTokenCounting: false,
-		conversationCompaction: false,
-		historyExtraction: false,
+		conversationCompaction: true,
+		historyExtraction: true,
 	},
 };

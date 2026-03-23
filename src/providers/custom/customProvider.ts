@@ -23,6 +23,16 @@ import type {
   DMChannel,
   AnyThreadChannel,
 } from "discord.js";
+import type { ZodType } from "zod";
+import {
+  generateConversationSummaryCustom,
+  generateRoleplaySummaryCustom,
+} from "@/providers/custom/customCompactGenerator";
+import { generatePresetFromPromptCustom } from "@/providers/custom/customPresetGenerator";
+import { callCustomStructuredJSON } from "@/providers/custom/customStructuredOutput";
+import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchService";
+import { getMCPManager } from "@/utils/mcp/mcpManager";
+import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   CustomStreamAdapter,
@@ -37,10 +47,22 @@ import {
   type ToolStateForContext,
   getAvailableToolsWithMCP,
 } from "../../tools/toolRegistry";
-import type { StreamingContext } from "../../types/tool/interfaces";
+import type { StreamingContext, ToolContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import type {
+  CompactConversationResult,
+  CompactRoleplayResult,
+  PresetGenerationResult,
+  ProviderCompactSummaryRequest,
+  ProviderPresetGenerationRequest,
+  ProviderStructuredJsonRequest,
+  StructuredOutputResult,
+  SupportsConversationCompaction,
+  SupportsPresetGeneration,
+  SupportsStructuredOutput,
+} from "../../types/provider/featureInterfaces";
 import {
   BaseLLMProvider,
   type FunctionCall,
@@ -81,7 +103,14 @@ export interface CustomProviderConfig extends ProviderConfig {
 /**
  * Custom provider implementation for self-hosted OpenAI-compatible endpoints
  */
-export class CustomProvider extends BaseLLMProvider implements LLMProvider {
+export class CustomProvider
+  extends BaseLLMProvider
+  implements
+    LLMProvider,
+    SupportsStructuredOutput,
+    SupportsConversationCompaction,
+    SupportsPresetGeneration
+{
   /**
    * Get provider information and capabilities
    */
@@ -220,6 +249,131 @@ export class CustomProvider extends BaseLLMProvider implements LLMProvider {
    */
   async getDefaultModel(): Promise<string> {
     return DEFAULT_CUSTOM_MODEL;
+  }
+
+  getExpressionInitializationBatchSize(): number {
+    const parsed = Number.parseInt(
+      process.env.CUSTOM_EXPRESSION_BATCH_SIZE || "20",
+      10,
+    );
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+  }
+
+  async callStructuredJSON<T>(
+    request: ProviderStructuredJsonRequest,
+    responseSchema: Record<string, unknown>,
+    zodSchema: ZodType<T>,
+  ): Promise<StructuredOutputResult<T>> {
+    return await callCustomStructuredJSON(request, responseSchema, zodSchema);
+  }
+
+  async generateConversationSummary(
+    request: ProviderCompactSummaryRequest,
+  ): Promise<CompactConversationResult> {
+    return await generateConversationSummaryCustom(request);
+  }
+
+  async generateRoleplaySummary(
+    request: ProviderCompactSummaryRequest,
+  ): Promise<CompactRoleplayResult> {
+    return await generateRoleplaySummaryCustom(request);
+  }
+
+  private async getPresetGenerationTools(
+    request: ProviderPresetGenerationRequest,
+  ): Promise<Array<Record<string, unknown>> | undefined> {
+    if (!request.params.useWebSearch) {
+      return undefined;
+    }
+
+    if (!request.toolContext) {
+      log.warn(
+        "Custom preset generation skipped search tools: no tool context available.",
+      );
+      return undefined;
+    }
+
+    const hasBraveApiKey = await isBraveSearchAvailable(
+      request.tomoriState.server_id,
+    );
+
+    if (!hasBraveApiKey) {
+      const mcpManager = getMCPManager();
+      if (!mcpManager.isReady()) {
+        await mcpManager.initializeMCPServers();
+      }
+    }
+
+    const toolStateForContext: ToolStateForContext = {
+      server_id: request.tomoriState.server_id.toString(),
+      llm: {
+        llm_codename: request.tomoriState.llm.llm_codename,
+        has_tools: request.tomoriState.llm.has_tools,
+        sees_images: request.tomoriState.llm.sees_images,
+        sees_videos: request.tomoriState.llm.sees_videos,
+        sees_youtube: request.tomoriState.llm.sees_youtube,
+        supports_structoutput: request.tomoriState.llm.supports_structoutput,
+      },
+      config: {
+        sticker_usage_enabled: false,
+        web_search_enabled: true,
+        self_teaching_enabled: false,
+        pin_message_enabled: false,
+        imagegen_enabled: false,
+        nai_exclusive_imggen: false,
+      },
+    };
+
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
+      "custom",
+      toolStateForContext,
+    );
+
+    const searchTools = builtInTools.filter(
+      (tool) =>
+        tool.category === "search" ||
+        tool.requiresFeatureFlag === "web_search",
+    );
+
+    const customAdapter = getCustomToolAdapter();
+    return await customAdapter.getAllToolsInOpenAIFormat(
+      searchTools,
+      request.tomoriState.server_id,
+      mcpFunctionNames,
+    );
+  }
+
+  async generatePreset(
+    request: ProviderPresetGenerationRequest,
+  ): Promise<PresetGenerationResult> {
+    const endpointUrl = request.tomoriState.config.custom_endpoint_url;
+    if (!endpointUrl) {
+      return {
+        error:
+          "Custom endpoint URL is not configured. Please configure the custom provider again.",
+        errorType: "MODEL_ERROR",
+      };
+    }
+
+    const tools = await this.getPresetGenerationTools(request);
+    const modelName = getEffectiveLlmModelName(
+      request.tomoriState.llm,
+      request.tomoriState.config.custom_model_name,
+    );
+
+    return await generatePresetFromPromptCustom(
+      request.apiKey,
+      request.params,
+      request.locale,
+      {
+        endpointUrl,
+        model: modelName,
+        temperature: request.tomoriState.config.llm_temperature,
+        tools,
+        toolContext: request.toolContext as ToolContext | undefined,
+        maxToolRounds: request.maxToolRounds,
+      },
+    );
   }
 
   /**

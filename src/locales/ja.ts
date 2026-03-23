@@ -668,7 +668,7 @@ export default {
         failed_title: `要約に失敗しました`,
         failed_description: `要約の生成に失敗しました: {error}`,
         provider_unsupported_title: `未対応のプロバイダー`,
-        provider_unsupported_description: `現在のプロバイダー ({provider}) はコンパクト要約に未対応です。Google か OpenRouter に切り替えてください。`,
+        provider_unsupported_description: `現在のプロバイダー ({provider}) はコンパクト要約に未対応です。対応プロバイダーに切り替えてください。`,
         model_incompatible_title: `モデル非対応`,
         model_incompatible_description: `現在のモデル ({model_name}) はロールプレイ要約に必要な構造化出力 (STRUCT) に対応していません。`,
         image_vision_required_title: `画像認識が必要`,
@@ -1221,7 +1221,7 @@ export default {
         field_additional_inst: `追加の指示`,
         // Error messages
         wrong_provider_title: `🔴 互換性のないプロバイダー`,
-        wrong_provider_description: `ペルソナ生成にはGoogle GeminiまたはOpenRouterが必要です。現在のプロバイダーは **{current_provider}** です。\`/config apikey set\`を使用してプロバイダーを切り替えてください。`,
+        wrong_provider_description: `ペルソナ生成には対応プロバイダーが必要です。現在のプロバイダーは **{current_provider}** です。\`/config apikey set\`を使用してプロバイダーを切り替えてください。`,
         no_api_key_title: `🔴 APIキーがありません`,
         no_api_key_description: `APIキーが設定されていません。\`/config apikey set\`を使用してプロバイダーのAPIキーを設定してください。`,
         model_incompatible_title: `互換性のないモデル`,

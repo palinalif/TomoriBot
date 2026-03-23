@@ -45,6 +45,7 @@ export interface ProviderExpressionInitializationRequest {
 	providerName: string;
 	apiKey: string;
 	model: string;
+	endpointUrl?: string;
 	systemPrompt: string;
 	userPrompt: string;
 	images: Array<{ url: string; name: string }>;
@@ -55,6 +56,7 @@ export interface ProviderHistoryExtractionRequest {
 	providerName: string;
 	apiKey: string;
 	model: string;
+	endpointUrl?: string;
 	systemPrompt: string;
 	userPrompt: string;
 	temperature?: number;
@@ -133,6 +135,7 @@ export async function callExpressionInitializationForProvider(
 		{
 			apiKey: request.apiKey,
 			model: request.model,
+			endpointUrl: request.endpointUrl,
 			systemPrompt: request.systemPrompt,
 			userPrompt: request.userPrompt,
 			images: request.images,
@@ -161,6 +164,7 @@ export async function extractHistoryWindowForProvider(
 	const structuredRequest = {
 		apiKey: request.apiKey,
 		model: request.model,
+		endpointUrl: request.endpointUrl,
 		systemPrompt: request.systemPrompt,
 		userPrompt: request.userPrompt,
 		temperature: request.temperature,

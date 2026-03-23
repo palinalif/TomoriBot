@@ -35,6 +35,7 @@ import {
   providerSupportsFeature,
 } from "@/utils/provider/providerInfoRegistry";
 import { resolveStructuredOutputCapability } from "@/utils/provider/providerCapabilityResolver";
+import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 
 /**
  * Configure the subcommand
@@ -271,6 +272,10 @@ export async function execute(
     // 5. Validate model capabilities
     // Model must support BOTH image vision AND structured output
     const llm = tomoriState.llm;
+    const effectiveModelName = getEffectiveLlmModelName(
+      llm,
+      tomoriState.config.custom_model_name,
+    );
 
     if (!llm.sees_images || !llm.supports_structoutput) {
       // Determine which capability is missing
@@ -289,7 +294,7 @@ export async function execute(
               locale,
               "commands.server.initialize.expressions.model_incompatible_description",
               {
-                model_name: llm.llm_codename,
+                model_name: effectiveModelName,
                 missing_capability: missingCapability,
               },
             ),
@@ -472,7 +477,7 @@ export async function execute(
     log.info(
       `LLM structured output request: ${JSON.stringify(
         {
-          model: llm.llm_codename,
+          model: effectiveModelName,
           temperature,
           systemPrompt,
           userPrompt,
@@ -489,7 +494,8 @@ export async function execute(
     result = await callExpressionInitializationForProvider({
       providerName: provider,
       apiKey: decryptedApiKey,
-      model: llm.llm_codename,
+      model: effectiveModelName,
+      endpointUrl: tomoriState.config.custom_endpoint_url ?? undefined,
       systemPrompt,
       userPrompt,
       images,
@@ -505,7 +511,7 @@ export async function execute(
       log.error("LLM structured output failed", new Error(result.error), {
         errorType: "LLMStructuredOutputError",
         metadata: {
-          model: llm.llm_codename,
+          model: effectiveModelName,
           imageCount: images.length,
         },
       });

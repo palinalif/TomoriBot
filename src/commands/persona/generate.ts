@@ -41,6 +41,7 @@ import type { ModalComponent } from "../../types/discord/modal";
 import type { ToolContext } from "../../types/tool/interfaces";
 import { generatePresetForProvider } from "@/providers/utils/providerFeatureExecutors";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
+import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 
 // Modal constants
 const MODAL_CUSTOM_ID = "preset_generate_modal";
@@ -195,6 +196,10 @@ export async function execute(
 
     // 3. Validate provider and model capabilities
     const providerName = tomoriState.llm.llm_provider.toLowerCase();
+    const effectiveModelName = getEffectiveLlmModelName(
+      tomoriState.llm,
+      tomoriState.config.custom_model_name,
+    );
 
     if (!providerSupportsFeature(providerName, "presetGeneration")) {
       await replyInfoEmbed(interaction, locale, {
@@ -217,7 +222,7 @@ export async function execute(
         descriptionKey:
           "commands.persona.generate.model_incompatible_description",
         descriptionVars: {
-          model_name: tomoriState.llm.llm_codename,
+          model_name: effectiveModelName,
         },
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
@@ -560,7 +565,7 @@ export async function execute(
                   locale,
                   "commands.persona.generate.image_vision_required_description",
                   {
-                    model_name: tomoriState.llm.llm_codename,
+                    model_name: effectiveModelName,
                   },
                 ),
               )
@@ -597,14 +602,14 @@ export async function execute(
               ),
             )
             .setDescription(
-              localizer(
-                locale,
-                "commands.persona.generate.web_search_tools_required_description",
-                {
-                  model_name: tomoriState.llm.llm_codename,
-                },
-              ),
-            )
+                localizer(
+                  locale,
+                  "commands.persona.generate.web_search_tools_required_description",
+                  {
+                    model_name: effectiveModelName,
+                  },
+                ),
+              )
             .setColor(ColorCode.ERROR),
         ],
         files: [getInputAttachment()],

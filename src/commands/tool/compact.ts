@@ -40,6 +40,7 @@ import {
   generateRoleplaySummaryForProvider,
 } from "@/providers/utils/providerFeatureExecutors";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
+import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 
 const MODAL_CUSTOM_ID = "tool_compact_modal";
 const TYPE_FIELD_ID = "summary_type";
@@ -915,6 +916,10 @@ export async function execute(
   }
 
   const providerName = tomoriState.llm.llm_provider.toLowerCase();
+  const effectiveModelName = getEffectiveLlmModelName(
+    tomoriState.llm,
+    tomoriState.config.custom_model_name,
+  );
   const messageFetchLimit = normalizeMessageFetchLimit(
     tomoriState.config.message_fetch_limit,
   );
@@ -953,7 +958,7 @@ export async function execute(
             localizer(
               locale,
               "commands.tool.compact.model_incompatible_description",
-              { model_name: tomoriState.llm.llm_codename },
+              { model_name: effectiveModelName },
             ),
           )
           .setColor(ColorCode.ERROR),
@@ -976,7 +981,7 @@ export async function execute(
             localizer(
               locale,
               "commands.tool.compact.image_vision_required_description",
-              { model_name: tomoriState.llm.llm_codename },
+              { model_name: effectiveModelName },
             ),
           )
           .setColor(ColorCode.ERROR),
@@ -1080,7 +1085,8 @@ export async function execute(
       const result = await generateConversationSummaryForProvider({
         providerName,
         apiKey,
-        model: tomoriState.llm.llm_codename,
+        model: effectiveModelName,
+        endpointUrl: tomoriState.config.custom_endpoint_url ?? undefined,
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,
         images: analyzeImages ? imagePayload : undefined,
@@ -1138,7 +1144,8 @@ export async function execute(
       const result = await generateRoleplaySummaryForProvider({
         providerName,
         apiKey,
-        model: tomoriState.llm.llm_codename,
+        model: effectiveModelName,
+        endpointUrl: tomoriState.config.custom_endpoint_url ?? undefined,
         systemPrompt: prompt.systemPrompt,
         userPrompt: prompt.userPrompt,
         images: analyzeImages ? imagePayload : undefined,

@@ -36,6 +36,7 @@ export type StructuredOutputResult<T> =
 export interface ProviderStructuredJsonRequest {
 	apiKey: string;
 	model: string;
+	endpointUrl?: string;
 	systemPrompt: string;
 	userPrompt: string;
 	images?: ProviderImageInput[];
@@ -83,6 +84,7 @@ export interface ProviderPresetGenerationRequest {
 export interface ProviderCompactSummaryRequest {
 	apiKey: string;
 	model: string;
+	endpointUrl?: string;
 	systemPrompt?: string;
 	userPrompt: string;
 	temperature?: number;
