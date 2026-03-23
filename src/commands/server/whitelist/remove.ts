@@ -13,17 +13,23 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
   replyInfoEmbed,
-  promptWithPaginatedModal,
+  promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
+import type {
+  CheckboxGroupOption,
+  ModalCheckboxGroupField,
+} from "@/types/discord/modal";
 import { CooldownType } from "@/types/db/schema";
 
 /**
  * Modal custom ID for channel whitelist removal
  */
 const MODAL_CUSTOM_ID = "server_whitelist_remove_modal";
-const CHANNEL_SELECT_ID = "channel_select";
+const CHANNEL_CHECKBOX_ID_PREFIX = "channel_checkbox_group";
+const MAX_OPTIONS_PER_GROUP = 10;
+const MAX_GROUPS_PER_MODAL = 5;
+const MAX_CHANNELS_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 
 /**
  * Configure the /server whitelist remove subcommand
@@ -40,7 +46,8 @@ export const configureSubcommand = (
 
 /**
  * Execute the /server whitelist remove command
- * Shows a modal with all whitelisted channels and removes the selected one
+ * Shows a modal with all whitelisted channels as checkboxes (all checked by default)
+ * Unchecked channels will be removed from the whitelist
  */
 export async function execute(
   _client: Client,
@@ -95,55 +102,80 @@ export async function execute(
       return;
     }
 
-    // 5. Create select options from whitelisted channels
-    const channelSelectOptions: SelectOption[] = [];
-
-    for (const entry of whitelistChannels) {
-      try {
-        // Fetch channel from Discord to get channel name
-        const channel = await interaction.guild.channels.fetch(
-          entry.channel_disc_id,
-        );
-
-        // Build description with cooldown info
-        const description = getWhitelistChannelSummary(entry, locale);
-
-        channelSelectOptions.push({
-          label: channel?.name ?? entry.channel_disc_id, // Fallback to ID if channel not found
-          value: entry.channel_disc_id,
-          description: description.substring(0, 100), // Discord limit
-        });
-      } catch (error) {
-        // Channel might have been deleted - use channel ID as fallback
-        log.warn("Failed to fetch channel for whitelist remove", error);
-
-        const description = getWhitelistChannelSummary(entry, locale);
-
-        channelSelectOptions.push({
-          label: `Unknown (${entry.channel_disc_id.substring(0, 10)}...)`,
-          value: entry.channel_disc_id,
-          description: description.substring(0, 100),
-        });
-      }
+    // 5. Discord checkbox groups allow at most 10 options each and 5 groups per modal
+    if (whitelistChannels.length > MAX_CHANNELS_PER_MODAL) {
+      await replyInfoEmbed(interaction, locale, {
+        color: ColorCode.WARN,
+        titleKey: "commands.server.whitelist.remove.too_many_channels_title",
+        descriptionKey:
+          "commands.server.whitelist.remove.too_many_channels_description",
+        descriptionVars: {
+          max_channels: MAX_CHANNELS_PER_MODAL.toString(),
+        },
+      });
+      return;
     }
 
-    // 6. Show the paginated modal with channel selection
-    const modalResult = await promptWithPaginatedModal(interaction, locale, {
+    // 6. Build checkbox groups by chunking whitelisted channels into groups of 10
+    const checkboxGroups: ModalCheckboxGroupField[] = [];
+
+    for (let i = 0; i < whitelistChannels.length; i += MAX_OPTIONS_PER_GROUP) {
+      const chunk = whitelistChannels.slice(i, i + MAX_OPTIONS_PER_GROUP);
+      const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+      const options: CheckboxGroupOption[] = [];
+
+      for (const entry of chunk) {
+        try {
+          const channel = await interaction.guild.channels.fetch(
+            entry.channel_disc_id,
+          );
+          const description = getWhitelistChannelSummary(entry, locale);
+
+          options.push({
+            label: channel?.name ?? entry.channel_disc_id,
+            value: entry.channel_disc_id,
+            description: description.substring(0, 100),
+            default: true,
+          });
+        } catch (error) {
+          log.warn("Failed to fetch channel for whitelist remove", error);
+
+          const description = getWhitelistChannelSummary(entry, locale);
+
+          options.push({
+            label: `Unknown (${entry.channel_disc_id.substring(0, 10)}...)`,
+            value: entry.channel_disc_id,
+            description: description.substring(0, 100),
+            default: true,
+          });
+        }
+      }
+
+      checkboxGroups.push({
+        kind: "checkboxGroup" as const,
+        customId: `${CHANNEL_CHECKBOX_ID_PREFIX}_${groupIndex}`,
+        labelKey:
+          groupIndex === 0
+            ? "commands.server.whitelist.remove.checkbox_label"
+            : "commands.server.whitelist.remove.checkbox_label_continued",
+        descriptionKey:
+          groupIndex === 0
+            ? "commands.server.whitelist.remove.checkbox_description"
+            : undefined,
+        minValues: 0,
+        required: false,
+        options,
+      });
+    }
+
+    // 7. Show the modal with checkbox groups for channel removal
+    const modalResult = await promptWithRawModal(interaction, locale, {
       modalCustomId: MODAL_CUSTOM_ID,
       modalTitleKey: "commands.server.whitelist.remove.modal_title",
-      components: [
-        {
-          customId: CHANNEL_SELECT_ID,
-          labelKey: "commands.server.whitelist.remove.select_label",
-          descriptionKey: "commands.server.whitelist.remove.select_description",
-          placeholder: "commands.server.whitelist.remove.select_placeholder",
-          required: true,
-          options: channelSelectOptions,
-        },
-      ],
+      components: checkboxGroups,
     });
 
-    // 7. Handle modal outcome
+    // 8. Handle modal outcome
     if (modalResult.outcome !== "submit") {
       log.info(
         `Whitelist channel removal modal ${modalResult.outcome} for user ${user.user_id}`,
@@ -151,23 +183,53 @@ export async function execute(
       return;
     }
 
-    // 8. Extract values from the modal
+    // 9. Extract checked channel IDs from all checkbox groups in the modal
     const modalSubmitInteraction = modalResult.interaction;
-    const selectedChannelDiscId = modalResult.values?.[CHANNEL_SELECT_ID];
+    const checkedChannelIds = new Set<string>();
+
+    for (let groupIndex = 0; groupIndex < checkboxGroups.length; groupIndex++) {
+      const groupValues =
+        modalResult.multiValues?.[
+          `${CHANNEL_CHECKBOX_ID_PREFIX}_${groupIndex}`
+        ] ?? [];
+      for (const channelId of groupValues) {
+        checkedChannelIds.add(channelId);
+      }
+    }
 
     // Safety checks
-    if (!modalSubmitInteraction || !selectedChannelDiscId) {
-      log.error("Modal result unexpectedly missing interaction or values");
+    if (!modalSubmitInteraction) {
+      log.error("Modal result unexpectedly missing interaction");
       return;
     }
 
-    // 9. Remove the channel from the whitelist
-    const deleted = await removeChannelWhitelist(
-      tomoriState.server_id,
-      selectedChannelDiscId,
+    // 10. Find channels to remove (those NOT checked in the modal)
+    const channelsToRemove: string[] = [];
+    for (const entry of whitelistChannels) {
+      if (!checkedChannelIds.has(entry.channel_disc_id)) {
+        channelsToRemove.push(entry.channel_disc_id);
+      }
+    }
+
+    // 11. If no channels selected for removal, inform user
+    if (channelsToRemove.length === 0) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, {
+        color: ColorCode.INFO,
+        titleKey: "commands.server.whitelist.remove.no_removals_title",
+        descriptionKey: "commands.server.whitelist.remove.no_removals_description",
+      });
+      return;
+    }
+
+    // 12. Remove all unchecked channels from the whitelist
+    const results = await Promise.all(
+      channelsToRemove.map((channelId) =>
+        removeChannelWhitelist(tomoriState.server_id, channelId),
+      ),
     );
 
-    if (!deleted) {
+    const failedRemovals = results.filter((r) => !r).length;
+    if (failedRemovals > 0) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         color: ColorCode.ERROR,
         titleKey: "general.errors.unknown_error_title",
@@ -176,37 +238,46 @@ export async function execute(
       return;
     }
 
-    // 10. Invalidate whitelist cache for this server
+    // 13. Invalidate whitelist cache for this server
     invalidateWhitelistCache(interaction.guildId);
 
-    // 11. Get channel name for success message
-    let channelName = selectedChannelDiscId;
-    try {
-      const channel = await interaction.guild.channels.fetch(
-        selectedChannelDiscId,
-      );
-      channelName = channel?.name ?? selectedChannelDiscId;
-    } catch {
-      // Channel might be deleted, use ID
+    // 14. Get channel names for success message
+    const removedChannelNames: string[] = [];
+    for (const channelId of channelsToRemove) {
+      try {
+        const channel = await interaction.guild.channels.fetch(channelId);
+        removedChannelNames.push(channel?.name ?? channelId);
+      } catch {
+        // Channel might be deleted, use ID
+        removedChannelNames.push(channelId);
+      }
     }
 
-    // 12. Send success message
+    // 15. Send success message
+    const descriptionVars: Record<string, string> = {};
+    if (channelsToRemove.length === 1) {
+      descriptionVars.channel_name = removedChannelNames[0];
+    } else {
+      descriptionVars.channels = formatRemovedChannelNames(removedChannelNames);
+      descriptionVars.removed_count = channelsToRemove.length.toString();
+    }
+
     await replyInfoEmbed(
       modalSubmitInteraction,
       locale,
       {
         color: ColorCode.SUCCESS,
         titleKey: "commands.server.whitelist.remove.success_title",
-        descriptionKey: "commands.server.whitelist.remove.success_description",
-        descriptionVars: {
-          channel_name: channelName,
-        },
+        descriptionKey: `commands.server.whitelist.remove.success_${
+          channelsToRemove.length === 1 ? "singular" : "plural"
+        }_description`,
+        descriptionVars,
       },
       undefined,
     );
 
     log.info(
-      `Channel ${channelName} (${selectedChannelDiscId}) removed from whitelist in server ${interaction.guildId}`,
+      `Channels ${channelsToRemove.join(", ")} removed from whitelist in server ${interaction.guildId}`,
     );
   } catch (error) {
     log.error(
@@ -277,4 +348,11 @@ function getCooldownTypeKey(cooldownType: CooldownType): string {
     default:
       return "off";
   }
+}
+
+function formatRemovedChannelNames(channelNames: string[]): string {
+  const maxVisibleNames = 10;
+  const visibleNames = channelNames.slice(0, maxVisibleNames);
+  const suffix = channelNames.length > maxVisibleNames ? ", ..." : "";
+  return `${visibleNames.join(", ")}${suffix}`;
 }

@@ -283,10 +283,21 @@ export async function checkMessageTriggerCooldownWithWhitelist(
   const memberRoleDiscIds = member
     ? member.roles.cache.map((role) => role.id)
     : undefined;
+
+  // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+  const channel = member?.guild.channels.cache.get(channelId);
+  const isThread =
+    channel &&
+    "isThread" in channel &&
+    typeof channel.isThread === "function" &&
+    channel.isThread();
+  const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+
   const whitelistStatus = await getCachedWhitelistStatus(
     serverId,
     channelId,
     memberRoleDiscIds,
+    parentChannelId,
   );
 
   // 2. Block if whitelist policy disallows this trigger
@@ -355,10 +366,21 @@ export async function setMessageTriggerCooldownWithWhitelist(
   const memberRoleDiscIds = member
     ? member.roles.cache.map((role) => role.id)
     : undefined;
+
+  // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+  const channel = member?.guild.channels.cache.get(channelId);
+  const isThread =
+    channel &&
+    "isThread" in channel &&
+    typeof channel.isThread === "function" &&
+    channel.isThread();
+  const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+
   const whitelistStatus = await getCachedWhitelistStatus(
     serverId,
     channelId,
     memberRoleDiscIds,
+    parentChannelId,
   );
 
   // 2. Determine which cooldown settings to use

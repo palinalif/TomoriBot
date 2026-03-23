@@ -2070,10 +2070,17 @@ export default async function tomoriChat(
             const memberRoleDiscIds = message.member
               ? message.member.roles.cache.map((role) => role.id)
               : undefined;
+            // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+            const isThread =
+              "isThread" in channel &&
+              typeof channel.isThread === "function" &&
+              channel.isThread();
+            const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
             const whitelistStatus = await getCachedWhitelistStatus(
               guild?.id ?? message.author.id,
               message.channelId,
               memberRoleDiscIds,
+              parentChannelId,
             );
 
             // If whitelist rules block this trigger, silently ignore
@@ -2903,10 +2910,17 @@ export default async function tomoriChat(
         const memberRoleDiscIds = message.member
           ? message.member.roles.cache.map((role) => role.id)
           : undefined;
+        // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+        const isThread =
+          "isThread" in channel &&
+          typeof channel.isThread === "function" &&
+          channel.isThread();
+        const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
         const whitelistStatus = await getCachedWhitelistStatus(
           guild?.id ?? message.author.id,
           message.channelId,
           memberRoleDiscIds,
+          parentChannelId,
         );
 
         // If whitelist rules block this trigger, silently ignore

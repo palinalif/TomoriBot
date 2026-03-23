@@ -30,17 +30,21 @@ import {
 import { extractImagesFromMessage } from "../../utils/image/imageExtractor";
 import { segmentImage } from "../../utils/image/segmentationService";
 import {
-  resolveNaiImageParams,
-  type EffectiveNaiImageParams,
+	resolveNaiImageParams,
+	type EffectiveNaiImageParams,
 } from "@/utils/image/naiImageParams";
 import { normalizeNaiReferenceImage } from "@/utils/image/imageProcessor";
 import { resolveNaiDiffusionModel } from "@/utils/image/naiDiffusionModels";
+import {
+	NAI_CHAR_REF_INFO_EXTRACTED,
+	NAI_CHAR_REF_STRENGTH,
+	NAI_DEFAULT_NEGATIVE_PROMPT,
+	generateNovelAiImage,
+	isNaiV4Model,
+	type NaiGenerationCharacterPayload,
+} from "@/utils/image/naiImageGeneration";
 import { loadCharRefAsBase64 } from "@/utils/storage/charrefStorage";
 
-// Fallback only when the server-scoped nai_negative_tags array is empty.
-const NAI_NEGATIVE_PROMPT =
-  process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
-  "blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page";
 // Disabled by default because the suggest-tags endpoint is currently unstable and
 // can hurt generation reliability; enable again once the API is consistently healthy.
 const NAI_IMAGE_ENABLE_TAG_RESOLUTION =
@@ -53,49 +57,13 @@ const NAI_IMAGE_ENABLE_TAG_RESOLUTION =
 const NAI_INPAINT_STRENGTH = Number.parseFloat(
   process.env.NAI_INPAINT_STRENGTH || "1.0",
 );
-
-function parseCharRefStrength(
-  rawValue: string | undefined,
-  fallback: number,
-): number {
-  const parsedValue = Number.parseFloat(rawValue ?? "");
-  if (!Number.isFinite(parsedValue) || parsedValue < 0 || parsedValue > 1) {
-    return fallback;
-  }
-
-  return parsedValue;
-}
-
-const NAI_CHAR_REF_STRENGTH = parseCharRefStrength(
-  process.env.NAI_CHAR_REF_STRENGTH,
-  0.6,
-);
-const NAI_CHAR_REF_INFO_EXTRACTED = parseCharRefStrength(
-  process.env.NAI_CHAR_REF_INFO_EXTRACTED,
-  1.0,
-);
-const NAI_CHAR_REF_SECONDARY_STRENGTH = parseCharRefStrength(
-  process.env.NAI_CHAR_REF_SECONDARY_STRENGTH,
-  0.0,
-);
-const NAI_CHAR_REF_DESCRIPTION =
-  process.env.NAI_CHAR_REF_DESCRIPTION?.trim() || "character&style";
 const NAI_ENABLE_CHAR_REFERENCES =
   (process.env.NAI_ENABLE_CHAR_REFERENCES || "true").toLowerCase() === "true";
 // Temporarily disabled: inline per-character tags are currently more reliable than
 // profile-driven autofill for `generate_image_nai`.
 const NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL = false;
 const NAI_ENABLE_PROFILE_CHARACTER_REMOVE_TAGS = false;
-
-/** Base URL for NovelAI's image generation API */
 const NAI_IMAGE_BASE_URL = "https://image.novelai.net";
-
-/** Orientation presets mapping to width/height pairs */
-const ORIENTATION_PRESETS: Record<string, { width: number; height: number }> = {
-  portrait: { width: 832, height: 1216 },
-  landscape: { width: 1216, height: 832 },
-  square: { width: 1024, height: 1024 },
-};
 
 /** Pattern to detect Japanese characters for language selection in tag suggestion */
 const JAPANESE_CHAR_PATTERN = /[\u3000-\u9FFF\uF900-\uFAFF]/;
@@ -128,28 +96,6 @@ interface GenerateImageNaiCharacterArg {
   spoken_text?: string;
   x: CharacterXPosition;
   y: CharacterYPosition;
-}
-
-interface NAICharacterCaption {
-  char_caption: string;
-  centers: Array<{ x: number; y: number }>;
-}
-
-interface NAICharacterPrompt {
-  center: { x: number; y: number };
-  enabled: true;
-  prompt: string;
-  uc: string;
-}
-
-interface NAICharacterPayload {
-  useCoords: boolean;
-  charCaptions: NAICharacterCaption[];
-  negativeCharCaptions: NAICharacterCaption[];
-  characterPrompts: NAICharacterPrompt[];
-  referenceImages: string[];
-  referenceStrengths: number[];
-  referenceInfoExtracted: number[];
 }
 
 interface NAIIdentityProfile {
@@ -393,18 +339,13 @@ export class GenerateImageNaiTool extends BaseTool {
    * @param model - Diffusion model codename
    * @returns True if the model requires v4_prompt format
    */
-  private isV4Model(model: string): boolean {
-    // Match models like nai-diffusion-4-5-full, nai-diffusion-4-5-curated, or future nai-diffusion-4-*
-    return /nai-diffusion-4/.test(model);
-  }
-
-  /**
-   * Derive the inpainting model codename from the base model.
-   * NovelAI inpainting models use a `-inpainting` suffix and are NOT stored
-   * in the `image_diffusion_models` table — the codename is derived at runtime.
-   * @param baseCodename - Base model codename (e.g. "nai-diffusion-4-5-curated")
-   * @returns Inpainting model codename (e.g. "nai-diffusion-4-5-curated-inpainting")
-   */
+	/**
+	 * Derive the inpainting model codename from the base model.
+	 * NovelAI inpainting models use a `-inpainting` suffix and are NOT stored
+	 * in the `image_diffusion_models` table — the codename is derived at runtime.
+	 * @param baseCodename - Base model codename (e.g. "nai-diffusion-4-5-curated")
+	 * @returns Inpainting model codename (e.g. "nai-diffusion-4-5-curated-inpainting")
+	 */
   private getInpaintingModelCodename(baseCodename: string): string {
     return `${baseCodename}-inpainting`;
   }
@@ -533,14 +474,14 @@ export class GenerateImageNaiTool extends BaseTool {
   private async buildCharacterPayload(
     characters: GenerateImageNaiCharacterArg[],
     context: ToolContext,
-  ): Promise<NAICharacterPayload> {
+  ): Promise<NaiGenerationCharacterPayload> {
     const allowCharacterReferences =
       NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL &&
       NAI_ENABLE_CHAR_REFERENCES &&
       characters.length === 1;
-    const charCaptions: NAICharacterCaption[] = [];
-    const negativeCharCaptions: NAICharacterCaption[] = [];
-    const characterPrompts: NAICharacterPrompt[] = [];
+    const charCaptions: NaiGenerationCharacterPayload["charCaptions"] = [];
+    const negativeCharCaptions: NaiGenerationCharacterPayload["negativeCharCaptions"] = [];
+    const characterPrompts: NaiGenerationCharacterPayload["characterPrompts"] = [];
     const referenceImages: string[] = [];
     const referenceStrengths: number[] = [];
     const referenceInfoExtracted: number[] = [];
@@ -859,7 +800,7 @@ export class GenerateImageNaiTool extends BaseTool {
     // Inpainting uses action: "infill" and includes image + mask in parameters
     let requestPayload: Record<string, unknown>;
 
-    if (this.isV4Model(model)) {
+    if (isNaiV4Model(model)) {
       requestPayload = {
         action: "infill",
         input: prompt,
@@ -982,279 +923,6 @@ export class GenerateImageNaiTool extends BaseTool {
       throw new Error(
         "NovelAI inpainting response ZIP did not contain a PNG file",
       );
-    }
-
-    const pngData = await zip.files[pngFileName].async("nodebuffer");
-    return Buffer.from(pngData);
-  }
-
-  private async generateImage(
-    apiKey: string,
-    model: string,
-    prompt: string,
-    negativePrompt: string,
-    orientation: string,
-    imageParams: EffectiveNaiImageParams,
-    characterPayload?: NAICharacterPayload,
-  ): Promise<Buffer> {
-    const dimensions =
-      ORIENTATION_PRESETS[orientation] || ORIENTATION_PRESETS.portrait;
-    const seed = Math.floor(Math.random() * 2147483647);
-    const charCaptions = characterPayload?.charCaptions ?? [];
-    const negativeCharCaptions = characterPayload?.negativeCharCaptions ?? [];
-    const characterPrompts = characterPayload?.characterPrompts ?? [];
-    const referenceImages = characterPayload?.referenceImages ?? [];
-    const referenceStrengths = characterPayload?.referenceStrengths ?? [];
-    const referenceInfoExtracted =
-      characterPayload?.referenceInfoExtracted ?? [];
-    const useCoords = characterPayload?.useCoords ?? false;
-
-    // 1. Build request payload — v4 models require a different parameter structure than v3
-    let requestPayload: Record<string, unknown>;
-
-    if (this.isV4Model(model)) {
-      const buildDirectorReferenceDescriptions = (count: number) =>
-        Array.from({ length: count }, () => ({
-          caption: {
-            base_caption: NAI_CHAR_REF_DESCRIPTION,
-            char_captions: [],
-          },
-          legacy_uc: false,
-        }));
-      const buildDirectorReferenceSecondaryStrengths = (count: number) =>
-        Array.from({ length: count }, () => NAI_CHAR_REF_SECONDARY_STRENGTH);
-      const buildV4RequestPayload = (
-        includeReferences: boolean,
-      ): Record<string, unknown> => {
-        const refsForRequest = includeReferences ? referenceImages : [];
-        const directorRefCount = refsForRequest.length;
-        const refStrengthsForRequest = includeReferences
-          ? referenceStrengths
-          : [];
-        const refInfoForRequest = includeReferences
-          ? referenceInfoExtracted
-          : [];
-
-        return {
-          action: "generate",
-          input: prompt,
-          model,
-          parameters: {
-            prompt,
-            negative_prompt: negativePrompt,
-            seed,
-            n_samples: 1,
-            steps: imageParams.steps,
-            height: dimensions.height,
-            width: dimensions.width,
-            scale: imageParams.scale,
-            uncond_scale: 0.0,
-            cfg_rescale: imageParams.cfgRescale,
-            sampler: imageParams.sampler,
-            noise_schedule: imageParams.noiseSchedule,
-            legacy_v3_extend: false,
-            characterPrompts:
-              characterPrompts.length > 0 ? characterPrompts : undefined,
-            use_coords: useCoords,
-            legacy_uc: false,
-            normalize_reference_strength_multiple:
-              directorRefCount > 0 ? true : undefined,
-            director_reference_descriptions:
-              directorRefCount > 0
-                ? buildDirectorReferenceDescriptions(directorRefCount)
-                : undefined,
-            director_reference_information_extracted:
-              refInfoForRequest.length > 0 ? refInfoForRequest : undefined,
-            director_reference_strength_values:
-              refStrengthsForRequest.length > 0
-                ? refStrengthsForRequest
-                : undefined,
-            director_reference_secondary_strength_values:
-              directorRefCount > 0
-                ? buildDirectorReferenceSecondaryStrengths(directorRefCount)
-                : undefined,
-            director_reference_images:
-              refsForRequest.length > 0 ? refsForRequest : undefined,
-            v4_prompt: {
-              caption: {
-                base_caption: prompt,
-                char_captions: charCaptions,
-              },
-              use_coords: useCoords,
-              use_order: true,
-              legacy_uc: false,
-            },
-            v4_negative_prompt: {
-              caption: {
-                base_caption: negativePrompt,
-                char_captions:
-                  negativeCharCaptions.length > 0
-                    ? negativeCharCaptions
-                    : charCaptions.map((charCaption) => ({
-                        char_caption: "",
-                        centers: charCaption.centers,
-                      })),
-              },
-              legacy_uc: false,
-            },
-            controlnet_strength: 1.0,
-            controlnet_model: null,
-            dynamic_thresholding: false,
-            dynamic_thresholding_percentile: 0.999,
-            dynamic_thresholding_mimic_scale: 10.0,
-            sm: false,
-            sm_dyn: false,
-            skip_cfg_above_sigma: null,
-            skip_cfg_below_sigma: 0.0,
-            lora_unet_weights: null,
-            lora_clip_weights: null,
-            deliberate_euler_ancestral_bug: false,
-            prefer_brownian: true,
-            cfg_sched_eligibility: "enable_for_post_summer_samplers",
-            explike_fine_detail: false,
-            minimize_sigma_inf: false,
-            uncond_per_vibe: true,
-            wonky_vibe_correlation: true,
-            version: 1,
-            request_type: "PromptGenerateRequest",
-          },
-        };
-      };
-
-      const attempts: Array<{
-        label: string;
-        includeReferences: boolean;
-      }> = [];
-      const seenAttempts = new Set<string>();
-      const pushAttempt = (label: string, includeReferences: boolean) => {
-        const key = includeReferences.toString();
-        if (seenAttempts.has(key)) {
-          return;
-        }
-
-        seenAttempts.add(key);
-        attempts.push({
-          label,
-          includeReferences,
-        });
-      };
-
-      if (referenceImages.length > 0) {
-        pushAttempt("director_refs", true);
-      }
-      pushAttempt("without_refs", false);
-
-      let lastError: Error | null = null;
-
-      for (const [attemptIndex, attempt] of attempts.entries()) {
-        requestPayload = buildV4RequestPayload(attempt.includeReferences);
-
-        log.info(
-          `[NAI] V4 generate attempt "${attempt.label}" (chars: ${charCaptions.length}, coords: ${useCoords}, refs: ${attempt.includeReferences ? referenceImages.length : 0})`,
-        );
-
-        const response = await fetch(
-          `${NAI_IMAGE_BASE_URL}/ai/generate-image`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(requestPayload),
-          },
-        );
-
-        if (response.ok) {
-          const zipBuffer = Buffer.from(await response.arrayBuffer());
-          const zip = await JSZip.loadAsync(zipBuffer);
-
-          const pngFileName = Object.keys(zip.files).find((name) =>
-            name.toLowerCase().endsWith(".png"),
-          );
-
-          if (!pngFileName) {
-            throw new Error("NovelAI response ZIP did not contain a PNG file");
-          }
-
-          const pngData = await zip.files[pngFileName].async("nodebuffer");
-          return Buffer.from(pngData);
-        }
-
-        const correlationId = response.headers.get("x-correlation-id");
-        const errorText = await response.text().catch(() => "");
-        const snippet = errorText.slice(0, 500);
-        lastError = new Error(
-          `NovelAI image generation failed (${response.status} ${response.statusText})${correlationId ? ` [correlation-id: ${correlationId}]` : ""}: ${snippet}`,
-        );
-
-        const hasFallbackAttempt = attemptIndex < attempts.length - 1;
-        const isReferenceAttempt = attempt.includeReferences;
-        if (hasFallbackAttempt && isReferenceAttempt) {
-          log.warn(
-            `[NAI] V4 generate attempt "${attempt.label}" failed with ${response.status}. Retrying with "${attempts[attemptIndex + 1].label}"`,
-          );
-          continue;
-        }
-
-        throw lastError;
-      }
-
-      throw lastError ?? new Error("NovelAI image generation failed");
-    } else {
-      // V3 models: simpler flat structure with negative_prompt
-      requestPayload = {
-        action: "generate",
-        input: prompt,
-        model,
-        parameters: {
-          width: dimensions.width,
-          height: dimensions.height,
-          steps: imageParams.steps,
-          scale: imageParams.scale,
-          sampler: imageParams.sampler,
-          noise_schedule: imageParams.noiseSchedule,
-          n_samples: 1,
-          seed,
-          negative_prompt: negativePrompt,
-        },
-      };
-    }
-
-    log.info(
-      `[NAI] Generating image with model "${model}" (${dimensions.width}x${dimensions.height}, seed: ${seed})`,
-    );
-
-    // 2. Send generation request
-    const response = await fetch(`${NAI_IMAGE_BASE_URL}/ai/generate-image`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestPayload),
-    });
-
-    if (!response.ok) {
-      const correlationId = response.headers.get("x-correlation-id");
-      const errorText = await response.text().catch(() => "");
-      const snippet = errorText.slice(0, 500);
-      throw new Error(
-        `NovelAI image generation failed (${response.status} ${response.statusText})${correlationId ? ` [correlation-id: ${correlationId}]` : ""}: ${snippet}`,
-      );
-    }
-
-    // 3. Extract PNG from ZIP response
-    const zipBuffer = Buffer.from(await response.arrayBuffer());
-    const zip = await JSZip.loadAsync(zipBuffer);
-
-    // 4. Find the first PNG file in the archive
-    const pngFileName = Object.keys(zip.files).find((name) =>
-      name.toLowerCase().endsWith(".png"),
-    );
-
-    if (!pngFileName) {
-      throw new Error("NovelAI response ZIP did not contain a PNG file");
     }
 
     const pngData = await zip.files[pngFileName].async("nodebuffer");
@@ -1405,7 +1073,7 @@ export class GenerateImageNaiTool extends BaseTool {
         `Using NAI diffusion model: ${baseModelCodename} (source: ${resolvedModel.source}) for ${isInpaintMode ? "inpainting" : "image generation"}`,
       );
 
-      if (characters.length > 0 && !this.isV4Model(baseModelCodename)) {
+      if (characters.length > 0 && !isNaiV4Model(baseModelCodename)) {
         return {
           success: false,
           error: localizer(
@@ -1451,7 +1119,7 @@ export class GenerateImageNaiTool extends BaseTool {
       const effectiveNegativePrompt =
         configuredNegativeTags.length > 0
           ? configuredNegativeTags.join(", ")
-          : NAI_NEGATIVE_PROMPT;
+          : NAI_DEFAULT_NEGATIVE_PROMPT;
 
       if (configuredNegativeTags.length === 0) {
         log.info(
@@ -1554,14 +1222,14 @@ export class GenerateImageNaiTool extends BaseTool {
         `[NAI] Normalized prompt: "${normalizedPrompt.substring(0, 200)}${normalizedPrompt.length > 200 ? "..." : ""}"`,
       );
 
-      let characterPayload: NAICharacterPayload | undefined;
+      let characterPayload: NaiGenerationCharacterPayload | undefined;
       if (!isInpaintMode && characters.length > 0) {
         characterPayload = await this.buildCharacterPayload(
           characters,
           context,
         );
         log.info(
-          `[NAI] Resolved ${characterPayload.charCaptions.length} character(s) with ${characterPayload.referenceImages.length} reference image(s)`,
+          `[NAI] Resolved ${characterPayload.charCaptions?.length ?? 0} character(s) with ${characterPayload.referenceImages?.length ?? 0} reference image(s)`,
         );
         log.info(`[NAI][debug] Full base prompt: ${normalizedPrompt}`);
         log.info(
@@ -1612,7 +1280,7 @@ export class GenerateImageNaiTool extends BaseTool {
           sourceImage.mimeType,
           editTarget,
           googleApiKey,
-          this.isV4Model(baseModelCodename),
+          isNaiV4Model(baseModelCodename),
         );
 
         log.info(
@@ -1679,15 +1347,15 @@ export class GenerateImageNaiTool extends BaseTool {
       } else {
         // ── Standard generation flow ─────────────────────────────────
         // 6. Generate image normally
-        imageBuffer = await this.generateImage(
+        imageBuffer = await generateNovelAiImage({
           apiKey,
-          baseModelCodename,
-          normalizedPrompt,
-          effectiveNegativePrompt,
+          model: baseModelCodename,
+          prompt: normalizedPrompt,
+          negativePrompt: effectiveNegativePrompt,
           orientation,
-          effectiveImageParams,
+          imageParams: effectiveImageParams,
           characterPayload,
-        );
+        });
       }
 
       // 7. Send image to Discord

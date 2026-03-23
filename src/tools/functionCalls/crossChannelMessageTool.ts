@@ -6,7 +6,7 @@
  */
 
 import { PermissionFlagsBits } from "discord.js";
-import type { GuildTextBasedChannel, Message, TextChannel } from "discord.js";
+import type { GuildTextBasedChannel, Message } from "discord.js";
 import { log } from "../../utils/misc/logger";
 import {
   BaseTool,
@@ -114,7 +114,7 @@ export function buildBoomerangContext(
 export class CrossChannelMessageTool extends BaseTool {
   name = "cross_channel_message";
   description =
-    "Send an instant message to a different channel in the same server. Use this when you want to immediately say something, ask a question, or perform a task in another channel — NOT for scheduled or recurring posts (use create_task for those). You will generate a natural conversational message in the target channel. Optionally enable 'boomerang' to report back to the current channel about what you did.";
+    "Send an instant message to a different channel or thread in the same server. Use this when you want to immediately say something, ask a question, or perform a task in another channel or thread — NOT for scheduled or recurring posts (use create_task for those). You will generate a natural conversational message in the target channel or thread. Optionally enable 'boomerang' to report back to the current channel about what you did.";
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {
@@ -123,12 +123,12 @@ export class CrossChannelMessageTool extends BaseTool {
       channel_id: {
         type: "string",
         description:
-          "Discord ID of the target channel to send a message in. At least one of channel_id or channel_name must be provided.",
+          "Discord ID of the target channel or thread to send a message in. At least one of channel_id or channel_name must be provided.",
       },
       channel_name: {
         type: "string",
         description:
-          "Name of the target channel (without #). Used as a fallback if channel_id is not provided, or as an alternative lookup method. At least one of channel_id or channel_name must be provided.",
+          "Name of the target channel (without #). Used as a fallback if channel_id is not provided, or as an alternative lookup method. This matches guild channel names and active thread titles. At least one of channel_id or channel_name must be provided.",
       },
       task: {
         type: "string",
@@ -229,6 +229,10 @@ export class CrossChannelMessageTool extends BaseTool {
     }
 
     let targetChannel: GuildTextBasedChannel | null = null;
+    const activeThreads = await guild.channels.fetchActiveThreads().catch((error) => {
+      log.warn("Cross-channel tool: Failed to fetch active threads", error);
+      return null;
+    });
 
     // Try channel_id first
     if (channelIdArg?.trim()) {
@@ -243,8 +247,15 @@ export class CrossChannelMessageTool extends BaseTool {
           const garbledId = BigInt(trimmedId);
           let closestChannelId: string | null = null;
           let smallestDiff = BigInt(1000);
+          const candidateIds = new Set<string>(guild.channels.cache.keys());
 
-          for (const [chId] of guild.channels.cache) {
+          if (activeThreads) {
+            for (const threadId of activeThreads.threads.keys()) {
+              candidateIds.add(threadId);
+            }
+          }
+
+          for (const chId of candidateIds) {
             const diff =
               garbledId > BigInt(chId)
                 ? garbledId - BigInt(chId)
@@ -274,7 +285,7 @@ export class CrossChannelMessageTool extends BaseTool {
       }
     }
 
-    // Fallback to channel_name lookup via guild cache
+    // Fallback to channel_name or thread title lookup
     if (!targetChannel && channelNameArg?.trim()) {
       const nameLower = channelNameArg.trim().toLowerCase();
       const found = guild.channels.cache.find(
@@ -282,16 +293,23 @@ export class CrossChannelMessageTool extends BaseTool {
       );
       if (found?.isTextBased()) {
         targetChannel = found as GuildTextBasedChannel;
+      } else if (activeThreads) {
+        const matchingThread = activeThreads.threads.find(
+          (thread) => thread.name.toLowerCase() === nameLower,
+        );
+        if (matchingThread?.isTextBased()) {
+          targetChannel = matchingThread as GuildTextBasedChannel;
+        }
       }
     }
 
     if (!targetChannel) {
       return {
         success: false,
-        error: `Could not find a text channel matching ${channelIdArg ? `ID "${channelIdArg}"` : `name "${channelNameArg}"`} in this server.`,
+        error: `Could not find a text channel or thread matching ${channelIdArg ? `ID "${channelIdArg}"` : `name "${channelNameArg}"`} in this server.`,
         data: {
           status: "cross_channel_failed_channel_not_found",
-          reason: "Target channel not found or not a text channel.",
+          reason: "Target channel or thread not found or not a text-based channel.",
         },
       };
     }
@@ -303,10 +321,10 @@ export class CrossChannelMessageTool extends BaseTool {
     ) {
       return {
         success: false,
-        error: "The target channel does not belong to this server.",
+        error: "The target channel or thread does not belong to this server.",
         data: {
           status: "cross_channel_failed_wrong_guild",
-          reason: "Target channel is in a different guild.",
+          reason: "Target channel or thread is in a different guild.",
         },
       };
     }
@@ -316,18 +334,20 @@ export class CrossChannelMessageTool extends BaseTool {
       return {
         success: false,
         error:
-          "Cannot send a cross-channel message to the same channel you are already in. Just speak normally instead.",
+          "Cannot send a cross-channel message to the same channel or thread you are already in. Just speak normally instead.",
         data: {
           status: "cross_channel_failed_same_channel",
-          reason: "Target channel is the same as source channel.",
+          reason: "Target channel or thread is the same as source.",
         },
       };
     }
 
-    // 5. Permission check — bot must have SendMessages + ViewChannel
+    // 5. Permission check — bot must have ViewChannel + (SendMessages or SendMessagesInThreads)
     const botMember = guild.members.cache.get(context.client.user?.id ?? "");
     if (botMember && "permissionsFor" in targetChannel) {
-      const perms = (targetChannel as TextChannel).permissionsFor(botMember);
+      const perms = targetChannel.permissionsFor(botMember);
+
+      // Check ViewChannel permission (required for all text-based channels)
       if (perms && !perms.has(PermissionFlagsBits.ViewChannel)) {
         return {
           success: false,
@@ -338,13 +358,31 @@ export class CrossChannelMessageTool extends BaseTool {
           },
         };
       }
-      if (perms && !perms.has(PermissionFlagsBits.SendMessages)) {
+
+      // Check if target is a thread
+      const isThread =
+        "isThread" in targetChannel &&
+        typeof targetChannel.isThread === "function" &&
+        targetChannel.isThread();
+
+      // Check send permission: SendMessages for channels, SendMessagesInThreads for threads
+      const sendPermission = isThread
+        ? PermissionFlagsBits.SendMessagesInThreads
+        : PermissionFlagsBits.SendMessages;
+
+      if (perms && !perms.has(sendPermission)) {
+        const permissionName = isThread ? "SendMessagesInThreads" : "SendMessages";
+        const targetName = isThread
+          ? `thread "${targetChannel.name}"`
+          : `#${targetChannel.name}`;
         return {
           success: false,
-          error: `I don't have permission to send messages in #${targetChannel.name}.`,
+          error: `I don't have permission to send messages in ${targetName}.`,
           data: {
-            status: "cross_channel_failed_no_send_permission",
-            reason: "Missing SendMessages permission.",
+            status: isThread
+              ? "cross_channel_failed_no_send_in_threads_permission"
+              : "cross_channel_failed_no_send_permission",
+            reason: `Missing ${permissionName} permission.`,
           },
         };
       }

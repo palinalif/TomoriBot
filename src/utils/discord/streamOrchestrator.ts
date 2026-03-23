@@ -1160,10 +1160,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           // If sentence punctuation immediately follows the newline, include it in
           // the same flush so punctuation stays attached to the prior sentence.
           // Intentionally excludes ":" so we don't split :emoji: tokens.
+          // Excludes multi-dot sequences (e.g. "...") — these are ellipsis expressions
+          // that belong to the next segment, not trailing punctuation from the current one.
+          // Carrying them causes streaming race conditions to split "..." into ".." + ".sentence".
           let flushEndIndex = nextCharIndex;
           const punctuationCarry = state.buffer
             .substring(nextCharIndex)
-            .match(/^\s*[.,!?;。！？、，]+/);
+            .match(/^\s*(?!\.{2,})[.,!?;。！？、，]+/);
           if (punctuationCarry) {
             flushEndIndex += punctuationCarry[0].length;
           }
@@ -1221,8 +1224,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     // Discard lone single-character punctuation/symbol fragments that models
     // sometimes hallucinate (e.g. ".", "]", ")"). These look unnatural when
     // sent as standalone Discord messages or line-leading fragments.
+    // Also discard ".." — a degenerate ellipsis fragment produced when streaming
+    // chunks split "..." across chunk boundaries mid-delivery.
     const trimmedGuard = segment.trim();
     if (trimmedGuard.length === 1 && !/\w/u.test(trimmedGuard)) return;
+    if (trimmedGuard === "..") return;
 
     const wasPrefillInjected = state.prefillInjected;
 

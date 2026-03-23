@@ -26,7 +26,7 @@ import {
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const MODAL_CUSTOM_ID = "novelai_imggen_model_modal";
+const MODAL_CUSTOM_ID = "novelai_image_model_modal";
 const MODEL_SELECT_ID = "nai_diffusion_model_id";
 const AUTOMATIC_OPTION_VALUE = "automatic";
 
@@ -36,13 +36,13 @@ export const configureSubcommand = (
 	subcommand
 		.setName("model")
 		.setDescription(
-			localizer("en-US", "commands.novelai.imggen.model.description"),
+			localizer("en-US", "commands.novelai.image.model.description"),
 		);
 
 function appendDefaultSuffix(locale: string, label: string): string {
-	return `${label}${localizer(
+		return `${label}${localizer(
 		locale,
-		"commands.novelai.imggen.params.option_default_suffix",
+		"commands.novelai.image.params.option_default_suffix",
 	)}`;
 }
 
@@ -51,11 +51,11 @@ function createModelOptions(
 	models: Awaited<ReturnType<typeof getNovelAiDiffusionModels>>,
 ): SelectOption[] {
 	const automaticOption: SelectOption = {
-		label: localizer(locale, "commands.novelai.imggen.model.automatic_label"),
+		label: localizer(locale, "commands.novelai.image.model.automatic_label"),
 		value: AUTOMATIC_OPTION_VALUE,
 		description: localizer(
 			locale,
-			"commands.novelai.imggen.model.automatic_description",
+			"commands.novelai.image.model.automatic_description",
 		),
 	};
 
@@ -79,11 +79,11 @@ function createModelOptions(
 function getSourceLabelKey(source: NaiDiffusionModelSource): string {
 	switch (source) {
 		case "override":
-			return "commands.novelai.imggen.model.source_override";
+			return "commands.novelai.image.model.source_override";
 		case "shared":
-			return "commands.novelai.imggen.model.source_shared";
+			return "commands.novelai.image.model.source_shared";
 		case "default":
-			return "commands.novelai.imggen.model.source_default";
+			return "commands.novelai.image.model.source_default";
 	}
 }
 
@@ -138,8 +138,8 @@ export async function execute(
 
 		if (!availableModels.length) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.novelai.imggen.model.no_models_title",
-				descriptionKey: "commands.novelai.imggen.model.no_models_description",
+				titleKey: "commands.novelai.image.model.no_models_title",
+				descriptionKey: "commands.novelai.image.model.no_models_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -147,23 +147,23 @@ export async function execute(
 
 		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.novelai.imggen.model.modal_title",
+			modalTitleKey: "commands.novelai.image.model.modal_title",
 			components: [
 				{
 					customId: MODEL_SELECT_ID,
-					labelKey: "commands.novelai.imggen.model.select_label",
-					descriptionKey: "commands.novelai.imggen.model.select_description",
+					labelKey: "commands.novelai.image.model.select_label",
+					descriptionKey: "commands.novelai.image.model.select_description",
 					placeholder: currentOverrideModel?.provider === "novelai"
 						? localizer(
 								locale,
-								"commands.novelai.imggen.model.select_placeholder_current_override",
+								"commands.novelai.image.model.select_placeholder_current_override",
 								{
 									model: currentOverrideModel.codename,
 								},
 							)
 						: localizer(
 								locale,
-								"commands.novelai.imggen.model.select_placeholder_current_automatic",
+								"commands.novelai.image.model.select_placeholder_current_automatic",
 								{
 									model: currentResolvedModel.codename,
 								},
@@ -185,8 +185,8 @@ export async function execute(
 		const selectedValue = modalResult.values?.[MODEL_SELECT_ID]?.trim();
 		if (!selectedValue) {
 			await replyInfoEmbed(submitInteraction, locale, {
-				titleKey: "commands.novelai.imggen.model.invalid_model_title",
-				descriptionKey: "commands.novelai.imggen.model.invalid_model_description",
+				titleKey: "commands.novelai.image.model.invalid_model_title",
+				descriptionKey: "commands.novelai.image.model.invalid_model_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -202,8 +202,8 @@ export async function execute(
 			(Number.isNaN(nextOverrideModelId) || nextOverrideModelId == null)
 		) {
 			await replyInfoEmbed(submitInteraction, locale, {
-				titleKey: "commands.novelai.imggen.model.invalid_model_title",
-				descriptionKey: "commands.novelai.imggen.model.invalid_model_description",
+				titleKey: "commands.novelai.image.model.invalid_model_title",
+				descriptionKey: "commands.novelai.image.model.invalid_model_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -218,8 +218,8 @@ export async function execute(
 
 		if (nextOverrideModelId != null && !selectedModel) {
 			await replyInfoEmbed(submitInteraction, locale, {
-				titleKey: "commands.novelai.imggen.model.invalid_model_title",
-				descriptionKey: "commands.novelai.imggen.model.invalid_model_description",
+				titleKey: "commands.novelai.image.model.invalid_model_title",
+				descriptionKey: "commands.novelai.image.model.invalid_model_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -230,13 +230,13 @@ export async function execute(
 			(tomoriState.config.nai_diffusion_model_id ?? null)
 		) {
 			await replyInfoEmbed(submitInteraction, locale, {
-				titleKey: "commands.novelai.imggen.model.already_selected_title",
+				titleKey: "commands.novelai.image.model.already_selected_title",
 				descriptionKey:
-					"commands.novelai.imggen.model.already_selected_description",
+					"commands.novelai.image.model.already_selected_description",
 				descriptionVars: {
 					mode:
 						selectedModel?.codename ??
-						localizer(locale, "commands.novelai.imggen.model.automatic_label"),
+						localizer(locale, "commands.novelai.image.model.automatic_label"),
 				},
 				color: ColorCode.WARN,
 			});
@@ -267,22 +267,22 @@ export async function execute(
 		});
 
 		await replyInfoEmbed(submitInteraction, locale, {
-			titleKey: "commands.novelai.imggen.model.success_title",
-			descriptionKey: "commands.novelai.imggen.model.success_description",
+			titleKey: "commands.novelai.image.model.success_title",
+			descriptionKey: "commands.novelai.image.model.success_description",
 			descriptionVars: {
 				mode:
 					selectedModel?.codename ??
-					localizer(locale, "commands.novelai.imggen.model.automatic_label"),
+					localizer(locale, "commands.novelai.image.model.automatic_label"),
 				effective_model: resolvedModel.codename,
 				source: localizer(locale, getSourceLabelKey(resolvedModel.source)),
 			},
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		await log.error("Error in /novelai imggen model command", error, {
+		await log.error("Error in /novelai image model command", error, {
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "novelai imggen model",
+				command: "novelai image model",
 				guildId: interaction.guild.id,
 				serverId: tomoriState.server_id,
 				currentProvider: tomoriState.llm.llm_provider,

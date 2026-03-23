@@ -8,12 +8,14 @@ import { log } from "@/utils/misc/logger";
  * @param serverDiscId - Discord server ID (snowflake) or user ID for DMs
  * @param channelDiscId - Discord channel ID (snowflake)
  * @param memberRoleDiscIds - Optional role IDs for the triggering member
+ * @param parentChannelDiscId - Optional parent channel ID for threads; threads inherit whitelist from parent if not explicitly whitelisted
  * @returns WhitelistCheckResult with whitelist status and settings
  */
 export async function checkChannelWhitelist(
   serverDiscId: string,
   channelDiscId: string,
   memberRoleDiscIds?: string[],
+  parentChannelDiscId?: string,
 ): Promise<WhitelistCheckResult> {
   const fallbackResult: WhitelistCheckResult = {
     hasActiveWhitelist: false,
@@ -47,6 +49,7 @@ export async function checkChannelWhitelist(
     const hasActiveChannelWhitelist = channelWhitelistCount > 0;
 
     // 3. Check if specific channel is whitelisted
+    // For threads: first check the thread itself, then fall back to parent channel
     const [channelRow] = hasActiveChannelWhitelist
       ? await sql<Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>>`
 			SELECT cooldown_type, cooldown_length
@@ -54,23 +57,37 @@ export async function checkChannelWhitelist(
 			WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
 		`
       : [null];
-    const isChannelWhitelisted = Boolean(channelRow);
+
+    // 3a. If channel not whitelisted and this is a thread (parent provided), check parent channel
+    let [parentChannelRow] = [null as { cooldown_type: CooldownType | null; cooldown_length: number | null } | null];
+    if (!channelRow && parentChannelDiscId && hasActiveChannelWhitelist) {
+      [parentChannelRow] = await sql<Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>>`
+				SELECT cooldown_type, cooldown_length
+				FROM channel_whitelist
+				WHERE server_id = ${serverId} AND channel_disc_id = ${parentChannelDiscId}
+			`;
+    }
+
+    const isChannelWhitelisted = Boolean(channelRow || parentChannelRow);
+    const effectiveChannelRow = channelRow || parentChannelRow;
+
     const hasChannelCooldownOverride =
       isChannelWhitelisted &&
-      channelRow?.cooldown_type !== null &&
-      channelRow?.cooldown_length !== null;
+      effectiveChannelRow?.cooldown_type !== null &&
+      effectiveChannelRow?.cooldown_length !== null;
 
     if (
       isChannelWhitelisted &&
       !hasChannelCooldownOverride &&
-      !(channelRow?.cooldown_type === null && channelRow?.cooldown_length === null)
+      !(effectiveChannelRow?.cooldown_type === null && effectiveChannelRow?.cooldown_length === null)
     ) {
       log.warn("Channel whitelist row has partial cooldown override; falling back to global cooldown", {
         metadata: {
           serverDiscId,
           channelDiscId,
-          cooldownType: channelRow?.cooldown_type ?? null,
-          cooldownLength: channelRow?.cooldown_length ?? null,
+          parentChannelDiscId,
+          cooldownType: effectiveChannelRow?.cooldown_type ?? null,
+          cooldownLength: effectiveChannelRow?.cooldown_length ?? null,
         },
       });
     }
@@ -129,10 +146,10 @@ export async function checkChannelWhitelist(
       blockReason,
       hasChannelCooldownOverride,
       channelCooldownType: hasChannelCooldownOverride
-        ? (channelRow?.cooldown_type as CooldownType)
+        ? (effectiveChannelRow?.cooldown_type as CooldownType)
         : undefined,
       channelCooldownLength: hasChannelCooldownOverride
-        ? (channelRow?.cooldown_length as number)
+        ? (effectiveChannelRow?.cooldown_length as number)
         : undefined,
     };
   } catch (error) {

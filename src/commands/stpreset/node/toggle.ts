@@ -165,7 +165,7 @@ export async function execute(
 
 			// 2. Map each node to a checkbox option
 			const options: CheckboxGroupOption[] = chunk.map((node) => ({
-				label: node.name.length > 100 ? node.name.slice(0, 97) + "..." : node.name,
+				label: node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
 				value: node.identifier,
 				default: node.enabled,
 			}));

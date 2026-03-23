@@ -4,7 +4,7 @@ import { log } from "@/utils/misc/logger";
 
 /**
  * Cache for channel whitelist status
- * Key format: "serverDiscId:channelDiscId:roleSignature"
+ * Key format: "serverDiscId:channelDiscId:parentChannelDiscId:roleSignature"
  * TTL: 5 minutes (whitelists change infrequently)
  */
 const whitelistCache = new Map<
@@ -33,12 +33,14 @@ const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
  * @param serverDiscId - Discord server ID (snowflake)
  * @param channelDiscId - Discord channel ID (snowflake)
  * @param memberRoleDiscIds - Optional member role IDs used for role-whitelist checks
+ * @param parentChannelDiscId - Optional parent channel ID for threads
  * @returns Cache key string
  */
 function getCacheKey(
   serverDiscId: string,
   channelDiscId: string,
   memberRoleDiscIds?: string[],
+  parentChannelDiscId?: string,
 ): string {
   let roleSignature = "unknown";
 
@@ -49,7 +51,8 @@ function getCacheKey(
         : "none";
   }
 
-  return `${serverDiscId}:${channelDiscId}:${roleSignature}`;
+  const parentSig = parentChannelDiscId || "none";
+  return `${serverDiscId}:${channelDiscId}:${parentSig}:${roleSignature}`;
 }
 
 /**
@@ -57,17 +60,20 @@ function getCacheKey(
  * @param serverDiscId - Discord server ID (snowflake)
  * @param channelDiscId - Discord channel ID (snowflake)
  * @param memberRoleDiscIds - Optional member role IDs used for role-whitelist checks
+ * @param parentChannelDiscId - Optional parent channel ID for threads; threads inherit whitelist from parent
  * @returns WhitelistCheckResult with whitelist status and settings
  */
 export async function getCachedWhitelistStatus(
   serverDiscId: string,
   channelDiscId: string,
   memberRoleDiscIds?: string[],
+  parentChannelDiscId?: string,
 ): Promise<WhitelistCheckResult> {
   const cacheKey = getCacheKey(
     serverDiscId,
     channelDiscId,
     memberRoleDiscIds,
+    parentChannelDiscId,
   );
   const now = Date.now();
 
@@ -91,6 +97,7 @@ export async function getCachedWhitelistStatus(
     serverDiscId,
     channelDiscId,
     memberRoleDiscIds,
+    parentChannelDiscId,
   );
 
   // Store in cache
@@ -104,7 +111,7 @@ export async function getCachedWhitelistStatus(
 
 /**
  * Invalidate whitelist cache for a server
- * If channelDiscId is provided, only invalidate that specific channel
+ * If channelDiscId is provided, only invalidate that specific channel (and any thread checks referencing it)
  * Otherwise, invalidate ALL channels for the server
  * @param serverDiscId - Discord server ID (snowflake)
  * @param channelDiscId - Optional Discord channel ID (snowflake)

@@ -42,11 +42,12 @@ Used for automatic message-triggered chat flow.
 ### Effective cooldown source
 
 1. Check whitelist cache (`getCachedWhitelistStatus`).
-2. If channel whitelist is active and current channel is not whitelisted -> blocked.
-3. If role whitelist is active and triggering member has no whitelisted role -> blocked.
-4. If channel is whitelisted and has an explicit override, use that channel-specific cooldown type/length.
-5. If channel is whitelisted without an override, inherit global `tomori_configs.cooldown_type/cooldown_length`.
-6. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
+2. If the trigger is in a thread, first check the thread itself, then fall back to its parent channel's whitelist entry.
+3. If channel whitelist is active and current channel (or its parent channel for threads) is not whitelisted -> blocked.
+4. If role whitelist is active and triggering member has no whitelisted role -> blocked.
+5. If channel is whitelisted and has an explicit override, use that channel-specific cooldown type/length.
+6. If channel is whitelisted without an override, inherit global `tomori_configs.cooldown_type/cooldown_length`.
+7. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
 
 ### Cooldown types
 

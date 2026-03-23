@@ -9,9 +9,10 @@ The implementation lives primarily in `src/providers/novelai/novelaiStreamAdapte
 ## Image Generation State
 
  - `generate_image_nai` now resolves its diffusion model from `tomori_configs.nai_diffusion_model_id` first, then from the shared `diffusion_model_id` only when that shared image model already belongs to provider `novelai`, otherwise from the seeded default NovelAI diffusion model.
- - `/novelai imggen model` is the admin-facing command for that dedicated model override.
+ - `/novelai image model` is the admin-facing command for that dedicated model override.
  - `generate_image_nai` now resolves its sampler, steps, scale, noise schedule, and `cfg_rescale` from `tomori_configs` first, falling back to the `NAI_IMAGE_*` / `NAI_CFG_RESCALE` env values when the server override is `NULL`.
- - `/novelai imggen params` is the admin-facing command for those parameter overrides.
+ - `/novelai image params` is the admin-facing command for those parameter overrides.
+ - `/novelai image generate` is the slash-command image generation entrypoint for direct tag-based NAI image creation.
 - `/novelai charreference` now persists persona/user reference images through `src/utils/storage/charrefStorage.ts`.
 - `generate_image_nai` now supports a structured `characters[]` array for V4 models.
 - `generate_image_nai` now uses a simpler active character schema: each `characters[]` item is one visible character instance, and `characters[].tags` must contain that character's full appearance plus their role in the scene. Profile-driven autofill by `id` and `remove_tags` suppression are currently disabled in the active schema/runtime. If known persona/user appearance tags are available in conversation context, the model is expected to copy the relevant tags into `characters[].tags` directly. For erotic scenes, clothing tags can be omitted and the intended nude state can be stated directly in `tags`.
