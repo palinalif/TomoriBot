@@ -350,6 +350,26 @@ Is the input free-form text?
 - **String Select**: Up to 25 options natively, 25+ via `promptWithPaginatedModal()`. Supports emoji, descriptions, and placeholder text.
 - **All new components** must be wrapped in a **Label** (type 18), not an Action Row.
 
+### Bulk Configuration Management Pattern
+
+When a modal is editing an existing list of configured items, prefer Checkbox Groups over a one-at-a-time String Select when the full set fits in a single modal.
+
+- Pre-check every current entry and treat unchecked items as "remove" or "disable".
+- Use `min_values: 0` and `required: false` so users can submit with every item unchecked.
+- Chunk one category across multiple groups of 10 options, or split different entity types into separate groups.
+- Keep the first group descriptive and use "(Continued)" labels for later groups.
+- Respect Discord's modal ceiling: 5 checkbox groups, 10 options each, 50 total entries.
+- If the list exceeds 50, warn clearly and fall back to a different management flow rather than silently truncating.
+
+Implemented examples:
+
+- `/server whitelist remove` manages channels and roles in one modal.
+- `/config remove modeloverride` manages channel and persona overrides together in one modal.
+- `/config mcp remove` manages registered MCP servers in one modal.
+- `/config remove modelfallback` manages the fallback chain in one modal while preserving remaining order.
+- `/config randomtrigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
+- `/server trigger delete` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
+
 ---
 
 ## TomoriBot Migration Audit
@@ -387,6 +407,19 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 
 > **Note on `/tool compact`:** This modal has _three_ migration candidates — `summary_type` becomes a Radio Group, while `refresh_context` and `analyze_images` both become required Checkbox Groups.
 
+### Strong Candidates — Checkbox Group Bulk Management
+
+These commands still remove one dynamic item at a time, but the data shape is a good fit for the unchecked-means-remove pattern:
+
+| Command                    | File                               | Current Input         | Why Checkbox Groups Fit                                                   | Notes                                                                 |
+| -------------------------- | ---------------------------------- | --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `/forget attribute`        | `forget/attribute.ts`              | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
+| `/forget reminder`         | `forget/reminder.ts`               | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
+| `/forget document`         | `forget/document.ts`               | Persona picker + single paginated select | Document cleanup is an obvious multi-select management flow              | Large lists should keep paginated fallback                             |
+| `/forget history`          | `forget/history.ts`                | Persona picker + single paginated select | History entries are frequently pruned in groups                          | Large lists should keep paginated fallback                             |
+| `/forget sampledialogue`   | `forget/sampledialogue.ts`         | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
+| `/persona remove`          | `persona/remove.ts`                | Single paginated select | Alter persona cleanup could be batch-managed                             | Should pair the bulk UI with stronger destructive-action messaging     |
+
 ### Not Candidates — Keep String Select
 
 These modals have dynamic or large option sets that exceed Radio Group/Checkbox Group limits:
@@ -399,7 +432,6 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/config model vision`           | `config/model/vision.ts`         | Dynamic model list, uses pagination                       |
 | `/config model embedding`        | `config/model/embedding.ts`      | Dynamic model list, uses pagination                       |
 | `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
-| `/config model remove fallback`  | `config/remove/modelfallback.ts` | Dynamic list of current fallbacks                         |
 | `/config sysprompt preset`       | `config/sysprompt/preset.ts`     | Dynamic preset list from DB                               |
 | `/config apikey set`             | `config/apikey/set.ts`           | Provider select + text input combo; list may grow         |
 | `/teach personaprompt`           | `teach/personaprompt.ts`         | Dynamic persona list, uses pagination                     |

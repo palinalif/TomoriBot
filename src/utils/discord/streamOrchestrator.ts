@@ -42,7 +42,10 @@ import {
 } from "../text/stringHelper";
 import { filterDuplicateCustomEmojis } from "../text/emojiPenalty";
 
-import type { StreamResult } from "../../types/provider/interfaces";
+import type {
+	StreamResult,
+	StreamStopReason,
+} from "../../types/provider/interfaces";
 import {
   ContextItemTag,
   type StructuredContextItem,
@@ -127,6 +130,42 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     );
   }
 
+	private static getStopReasonFromRequesterId(
+		requesterId?: string,
+	): StreamStopReason {
+		switch (requesterId) {
+			case undefined:
+				return "system_request";
+			case "system":
+				return "system_request";
+			case "speaker_guard":
+				return "speaker_guard";
+			case "send_message_limit":
+				return "send_message_limit";
+			case "flush_limit":
+				return "flush_limit";
+			default:
+				return "user_request";
+		}
+	}
+
+	private static getStopReason(
+		stopRequest:
+			| {
+					requesterId: string;
+					type: "stop" | "follow_up";
+			  }
+			| undefined,
+	): StreamStopReason {
+		if (!stopRequest || stopRequest.type !== "stop") {
+			return "unknown";
+		}
+
+		return StreamOrchestrator.getStopReasonFromRequesterId(
+			stopRequest.requesterId,
+		);
+	}
+
   private static activeStopRequests = new Map<
     string,
     {
@@ -153,8 +192,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     requesterId?: string,
     stopContext?: { originalStopMessage: Message; client: Client },
   ): boolean {
+    const stopReason =
+      StreamOrchestrator.getStopReasonFromRequesterId(requesterId);
     log.info(
-      `Stop request received for channel ${channelId} by user ${requesterId || "system"}`,
+      `Stop request received for channel ${channelId} (reason: ${stopReason}, requester: ${requesterId || "system"})`,
     );
 
     StreamOrchestrator.activeStopRequests.set(channelId, {
@@ -378,6 +419,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           const stopRequest = StreamOrchestrator.activeStopRequests.get(
             context.channel.id,
           );
+					const stopReason = StreamOrchestrator.getStopReason(stopRequest);
 					const shouldSkipBufferFlush =
 						(stopRequest?.requesterId === "flush_limit" ||
 							stopRequest?.requesterId === "speaker_guard") &&
@@ -419,7 +461,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             };
           }
 
-          return { status: "stopped_by_user" };
+          return {
+            status: "stopped_by_user",
+            stopReason,
+          };
         }
 
         // Check for external abort signal (SDK call timeout fired)
@@ -584,7 +629,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						context,
 					);
 					if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-						return { status: "stopped_by_user" };
+						return {
+							status: "stopped_by_user",
+							stopReason: StreamOrchestrator.getStopReason(
+								StreamOrchestrator.activeStopRequests.get(context.channel.id),
+							),
+						};
 					}
 				}
 				if (!context.suppressUserErrors) {
@@ -611,7 +661,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						true,
 					);
 					if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-						return { status: "stopped_by_user" };
+						return {
+							status: "stopped_by_user",
+							stopReason: StreamOrchestrator.getStopReason(
+								StreamOrchestrator.activeStopRequests.get(context.channel.id),
+							),
+						};
 					}
 				}
 				return {

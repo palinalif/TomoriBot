@@ -14,17 +14,22 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import {
 	replyInfoEmbed,
 	promptWithRawModal,
-	safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
+import type {
+	CheckboxGroupOption,
+	ModalCheckboxGroupField,
+} from "@/types/discord/modal";
 import { deleteGuildMcpServer } from "@/utils/db/guildMcpDb";
 import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
 
 // ─── Constants ───────────────────────────────────────────────────────
 
 const MODAL_CUSTOM_ID = "config_mcp_remove_modal";
-const SERVER_SELECT_ID = "mcp_server_select";
+const SERVER_CHECKBOX_ID_PREFIX = "mcp_server_checkbox_group";
+const MAX_OPTIONS_PER_GROUP = 10;
+const MAX_GROUPS_PER_MODAL = 5;
+const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 
 // ─── Subcommand Configuration ────────────────────────────────────────
 
@@ -46,8 +51,8 @@ export const configureSubcommand = (
 
 /**
  * Execute /config mcp remove.
- * Shows a modal with a string select of registered guild MCP servers,
- * then deletes the selected server, disconnects from pool, and invalidates cache.
+ * Shows checkbox groups of registered guild MCP servers. Checked entries stay;
+ * unchecked entries are removed, disconnected, and purged from cache.
  *
  * @param _client - Discord client instance
  * @param interaction - Command interaction
@@ -95,32 +100,34 @@ export async function execute(
 			return;
 		}
 
-		// 2. Build select options from registered servers
-		const serverOptions: SelectOption[] = configs.map((config) => ({
-			label: safeSelectOptionText(config.name),
-			value: config.name,
-			description: safeSelectOptionText(
-				new URL(config.url).hostname,
-			),
-		}));
+		// 2. Discord checkbox groups allow at most 10 options each and 5 groups per modal
+		const serverGroupCount = Math.ceil(configs.length / MAX_OPTIONS_PER_GROUP);
+		if (serverGroupCount > MAX_GROUPS_PER_MODAL) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.mcp.remove.too_many_title",
+				descriptionKey: "commands.config.mcp.remove.too_many_description",
+				descriptionVars: {
+					count: configs.length.toString(),
+					max_entries: MAX_ENTRIES_PER_MODAL.toString(),
+					max_groups: MAX_GROUPS_PER_MODAL.toString(),
+				},
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
 
-		// 3. Show modal with string select (modal is the acknowledgment — no pre-defer)
+		// 3. Build checkbox groups from registered servers
+		const checkboxGroups = buildServerCheckboxGroups(configs);
+
+		// 4. Show modal with checkbox groups (modal is the acknowledgment — no pre-defer)
 		const modalResult = await promptWithRawModal(
 			interaction,
 			locale,
 			{
 				modalCustomId: MODAL_CUSTOM_ID,
 				modalTitleKey: "commands.config.mcp.remove.modal_title",
-				components: [
-					{
-						customId: SERVER_SELECT_ID,
-						labelKey: "commands.config.mcp.remove.select_label",
-						descriptionKey: "commands.config.mcp.remove.select_description",
-						placeholder: "commands.config.mcp.remove.select_placeholder",
-						required: true,
-						options: serverOptions,
-					},
-				],
+				components: checkboxGroups,
 			},
 			MessageFlags.Ephemeral,
 		);
@@ -136,44 +143,97 @@ export async function execute(
 		}
 		const replyInteraction = modalResult.interaction;
 
-		const name = modalResult.values?.[SERVER_SELECT_ID]?.trim();
-		if (!name) {
+		// 5. Collect checked server names across checkbox groups
+		const checkedServerNames = new Set<string>();
+		for (let groupIndex = 0; groupIndex < serverGroupCount; groupIndex++) {
+			const groupValues =
+				modalResult.multiValues?.[
+					`${SERVER_CHECKBOX_ID_PREFIX}_${groupIndex}`
+				] ?? [];
+			for (const serverName of groupValues) {
+				checkedServerNames.add(serverName);
+			}
+		}
+
+		// 6. Resolve unchecked entries as removals
+		const configsToRemove = configs.filter(
+			(config) => !checkedServerNames.has(config.name),
+		);
+		if (configsToRemove.length === 0) {
 			await replyInfoEmbed(replyInteraction, locale, {
-				titleKey: "commands.config.mcp.remove.not_found_title",
-				descriptionKey: "commands.config.mcp.remove.not_found_description",
-				descriptionVars: { name: "unknown" },
-				color: ColorCode.WARN,
+				titleKey: "commands.config.mcp.remove.no_removals_title",
+				descriptionKey: "commands.config.mcp.remove.no_removals_description",
+				color: ColorCode.INFO,
 			});
 			return;
 		}
 
-		// 4. Delete from database
-		const deleted = await deleteGuildMcpServer(tomoriState.server_id, name);
-		if (!deleted) {
+		// 7. Delete unchecked servers from the database
+		const deletionResults = await Promise.all(
+			configsToRemove.map(async (config) => ({
+				config,
+				deleted: await deleteGuildMcpServer(tomoriState.server_id, config.name),
+			})),
+		);
+		const removedConfigs = deletionResults
+			.filter((result) => result.deleted)
+			.map((result) => result.config);
+		const failedConfigs = deletionResults
+			.filter((result) => !result.deleted)
+			.map((result) => result.config);
+
+		// 8. Invalidate cache and disconnect only after successful DB writes
+		if (removedConfigs.length > 0) {
+			invalidateGuildMcpConfigCache(tomoriState.server_id);
+			await Promise.all(
+				removedConfigs.map((config) =>
+					getGuildMcpManager().disconnectGuildServer(
+						tomoriState.server_id,
+						config.name,
+					),
+				),
+			);
+		}
+
+		if (failedConfigs.length > 0) {
+			const context: ErrorContext = {
+				userId: userData.user_id,
+				serverId: tomoriState.server_id,
+				tomoriId: null,
+				errorType: "DatabaseDeleteError",
+				metadata: {
+					command: "config mcp remove",
+					failedNames: failedConfigs.map((config) => config.name),
+				},
+			};
+			await log.error(
+				"Failed to delete one or more MCP servers",
+				new Error("deleteGuildMcpServer returned false for one or more entries"),
+				context,
+			);
 			await replyInfoEmbed(replyInteraction, locale, {
-				titleKey: "commands.config.mcp.remove.not_found_title",
-				descriptionKey: "commands.config.mcp.remove.not_found_description",
-				descriptionVars: { name },
-				color: ColorCode.WARN,
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
-		// 5. Invalidate cache after successful DB write
-		invalidateGuildMcpConfigCache(tomoriState.server_id);
-
-		// 6. Disconnect from connection pool
-		await getGuildMcpManager().disconnectGuildServer(tomoriState.server_id, name);
-
-		// 7. Success
+		// 9. Success
 		await replyInfoEmbed(replyInteraction, locale, {
 			titleKey: "commands.config.mcp.remove.success_title",
 			descriptionKey: "commands.config.mcp.remove.success_description",
-			descriptionVars: { name },
+			descriptionVars: {
+				servers_removed: formatRemovedNames(
+					removedConfigs.map((config) => `\`${config.name}\``),
+				),
+			},
 			color: ColorCode.SUCCESS,
 		});
 
-		log.success(`[MCP Remove] Server "${name}" removed for guild ${serverId}`);
+		log.success(
+			`[MCP Remove] Removed ${removedConfigs.length} server(s) for guild ${serverId}: ${removedConfigs.map((config) => config.name).join(", ")}`,
+		);
 	} catch (error) {
 		const context: ErrorContext = {
 			userId: userData.user_id,
@@ -189,4 +249,54 @@ export async function execute(
 			flags: MessageFlags.Ephemeral,
 		});
 	}
+}
+
+function buildServerCheckboxGroups(
+	configs: { name: string; url: string }[],
+): ModalCheckboxGroupField[] {
+	const checkboxGroups: ModalCheckboxGroupField[] = [];
+
+	for (let i = 0; i < configs.length; i += MAX_OPTIONS_PER_GROUP) {
+		const chunk = configs.slice(i, i + MAX_OPTIONS_PER_GROUP);
+		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+		const options: CheckboxGroupOption[] = chunk.map((config) => ({
+			label: config.name,
+			value: config.name,
+			description: getServerHostLabel(config.url),
+			default: true,
+		}));
+
+		checkboxGroups.push({
+			kind: "checkboxGroup",
+			customId: `${SERVER_CHECKBOX_ID_PREFIX}_${groupIndex}`,
+			labelKey:
+				groupIndex === 0
+					? "commands.config.mcp.remove.checkbox_label"
+					: "commands.config.mcp.remove.checkbox_label_continued",
+			descriptionKey:
+				groupIndex === 0
+					? "commands.config.mcp.remove.checkbox_description"
+					: undefined,
+			minValues: 0,
+			required: false,
+			options,
+		});
+	}
+
+	return checkboxGroups;
+}
+
+function getServerHostLabel(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return url;
+	}
+}
+
+function formatRemovedNames(names: string[]): string {
+	const maxVisibleNames = 10;
+	const visibleNames = names.slice(0, maxVisibleNames);
+	const suffix = names.length > maxVisibleNames ? ", ..." : "";
+	return `${visibleNames.join(", ")}${suffix}`;
 }

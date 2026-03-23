@@ -77,7 +77,7 @@ Operational note:
 - Trigger whitelist:
   - `/server whitelist channel` (leave cooldown options empty to inherit the global cooldown)
   - `/server whitelist role`
-  - `/server whitelist remove`
+  - `/server whitelist remove` (bulk remove whitelisted channels and/or roles)
 
 ## Cleanup
 

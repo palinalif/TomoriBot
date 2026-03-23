@@ -823,7 +823,7 @@ export class OpenrouterProvider
       );
 
       log.info(
-        `OpenrouterProvider: Modular streaming completed with status: ${result.status}`,
+        `OpenrouterProvider: Modular streaming completed with status: ${result.status}${result.status === "stopped_by_user" && result.stopReason ? ` (reason: ${result.stopReason})` : ""}`,
       );
       return result;
     } catch (error) {

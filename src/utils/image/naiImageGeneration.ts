@@ -42,6 +42,7 @@ const ORIENTATION_PRESETS: Record<string, { width: number; height: number }> = {
 };
 
 export type NaiImageOrientation = keyof typeof ORIENTATION_PRESETS;
+export type NaiImageErrorKind = "auth" | "quota" | "rate_limit" | "other";
 
 export interface NaiCharacterCaption {
 	char_caption: string;
@@ -67,6 +68,42 @@ export interface NaiGenerationCharacterPayload {
 
 export function isNaiV4Model(model: string): boolean {
 	return /nai-diffusion-4/.test(model);
+}
+
+export function classifyNaiImageError(error: unknown): NaiImageErrorKind {
+	const errorMessage = error instanceof Error ? error.message : String(error);
+	const normalizedErrorMessage = errorMessage.toLowerCase();
+
+	if (
+		/\b402\b/.test(errorMessage) ||
+		normalizedErrorMessage.includes("payment required") ||
+		normalizedErrorMessage.includes("anlas") ||
+		normalizedErrorMessage.includes("credit") ||
+		normalizedErrorMessage.includes("credits") ||
+		normalizedErrorMessage.includes("generation quota")
+	) {
+		return "quota";
+	}
+
+	if (
+		/\b401\b/.test(errorMessage) ||
+		/\b403\b/.test(errorMessage) ||
+		normalizedErrorMessage.includes("unauthorized") ||
+		normalizedErrorMessage.includes("forbidden") ||
+		normalizedErrorMessage.includes("invalid api key")
+	) {
+		return "auth";
+	}
+
+	if (
+		/\b429\b/.test(errorMessage) ||
+		normalizedErrorMessage.includes("rate limit") ||
+		normalizedErrorMessage.includes("too many requests")
+	) {
+		return "rate_limit";
+	}
+
+	return "other";
 }
 
 async function extractPngFromZipResponse(response: Response): Promise<Buffer> {

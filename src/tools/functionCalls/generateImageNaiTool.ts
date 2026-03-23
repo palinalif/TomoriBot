@@ -39,6 +39,7 @@ import {
 	NAI_CHAR_REF_INFO_EXTRACTED,
 	NAI_CHAR_REF_STRENGTH,
 	NAI_DEFAULT_NEGATIVE_PROMPT,
+	classifyNaiImageError,
 	generateNovelAiImage,
 	isNaiV4Model,
 	type NaiGenerationCharacterPayload,
@@ -1399,19 +1400,24 @@ export class GenerateImageNaiTool extends BaseTool {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+      const errorKind = classifyNaiImageError(error);
 
       log.error(
         `NAI ${isInpaintMode ? "inpainting" : "image generation"} failed:`,
         error as Error,
       );
 
-      // Check for auth/billing errors
-      if (
-        errorMessage.includes("401") ||
-        errorMessage.includes("403") ||
-        errorMessage.includes("Unauthorized") ||
-        errorMessage.includes("payment")
-      ) {
+      if (errorKind === "quota") {
+        return {
+          success: false,
+          error: localizer(
+            context.locale,
+            "tools.generate_image_nai.provider_quota_exceeded",
+          ),
+        };
+      }
+
+      if (errorKind === "auth") {
         return {
           success: false,
           error:
@@ -1419,8 +1425,7 @@ export class GenerateImageNaiTool extends BaseTool {
         };
       }
 
-      // Check for rate limiting
-      if (errorMessage.includes("429") || errorMessage.includes("rate limit")) {
+      if (errorKind === "rate_limit") {
         return {
           success: false,
           error:
@@ -1442,8 +1447,8 @@ export class GenerateImageNaiTool extends BaseTool {
       // Generic error fallback
       return {
         success: false,
-        error: `Failed to ${isInpaintMode ? "inpaint" : "generate"} NAI image: ${errorMessage}`,
-      };
-    }
+          error: `Failed to ${isInpaintMode ? "inpaint" : "generate"} NAI image: ${errorMessage}`,
+        };
+      }
   }
 }

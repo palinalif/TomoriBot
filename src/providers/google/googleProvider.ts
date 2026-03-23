@@ -766,7 +766,7 @@ export class GoogleProvider
       );
 
       log.info(
-        `GoogleProvider: Modular streaming completed with status: ${result.status}`,
+        `GoogleProvider: Modular streaming completed with status: ${result.status}${result.status === "stopped_by_user" && result.stopReason ? ` (reason: ${result.stopReason})` : ""}`,
       );
       return result;
     } catch (error) {

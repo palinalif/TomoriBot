@@ -156,6 +156,25 @@ Rules:
 - pre-modal data loading must stay within the initial 3-second window
 - if modal submit processing is async, pass `MessageFlags.Ephemeral` as `promptWithRawModal` arg 4
 
+### Pattern 3A: Bulk Management Modal (Checkbox Groups)
+
+Use when the user is managing an existing set of configured entries and batch keep/remove is better UX than a one-at-a-time select.
+
+Examples:
+
+- `/server whitelist remove`
+- `/config remove modeloverride` (channels + personas together)
+
+Rules:
+
+- use `promptWithRawModal(...)` with checkbox groups and `MessageFlags.Ephemeral` auto-defer on submit
+- pre-check every existing entry; unchecked means "remove" or "disable"
+- set `minValues: 0` and `required: false` so users can uncheck everything
+- chunk long lists into groups of 10 options; Discord allows at most 5 groups per modal (50 total options)
+- if you are managing multiple entity types in one modal, keep them in separate checkbox groups by type
+- if the total set exceeds 50 options, show an explicit overflow warning or route the user to a different bulk action
+- after submit, diff original entries against submitted checked values, then invalidate caches only after successful DB writes
+
 ### Pattern 4: Pagination Helpers (No Pre-Defer)
 
 Use when calling `replyPaginatedChoices(...)` or `promptWithPaginatedModal(...)`.

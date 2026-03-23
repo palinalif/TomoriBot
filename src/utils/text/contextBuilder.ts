@@ -62,6 +62,10 @@ import { formatMemoryWithId } from "../memory/memoryId";
  * @remarks This cache is cleared after each text processing run to avoid stale data.
  */
 const mentionCache = new Map<string, string>();
+const DISCORD_CHANNEL_LINK_TEST_PATTERN =
+	/https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/\d{17,19}(?:\/\d{17,19})?/i;
+const DISCORD_CHANNEL_LINK_REPLACE_PATTERN =
+	/https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/(\d{17,19})(?:\/(\d{17,19}))?/gi;
 
 // Environment variables for short-term memory configuration
 const MIN_MESSAGES_FOR_SUMMARY = Number.parseInt(
@@ -124,12 +128,31 @@ type SimplifiedMessageForContext = {
  * @returns True if text needs conversion, false otherwise
  */
 function needsConversion(text: string): boolean {
-  // Check for Discord mentions: <@userid>, <#channelid>, <@&roleid>
-  // Check for template variables: {bot}, {user}, {char}, {{user}}, {{char}}, {{bot}}
-  return (
-    /<[@#][!&]?\d{17,19}>/.test(text) ||
-    /(?:\{\{(?:bot|char|user)\}\}|\{(?:bot|char|user)\})/i.test(text)
-  );
+	// Check for Discord mentions: <@userid>, <#channelid>, <@&roleid>
+	// Check for Discord channel/thread links: https://discord.com/channels/<guild>/<channel>
+	// Check for template variables: {bot}, {user}, {char}, {{user}}, {{char}}, {{bot}}
+	return (
+		/<[@#][!&]?\d{17,19}>/.test(text) ||
+		DISCORD_CHANNEL_LINK_TEST_PATTERN.test(text) ||
+		/(?:\{\{(?:bot|char|user)\}\}|\{(?:bot|char|user)\})/i.test(text)
+	);
+}
+
+function normalizeDiscordChannelLinks(text: string): string {
+	return text.replace(
+		DISCORD_CHANNEL_LINK_REPLACE_PATTERN,
+		(_match, channelId: string, messageId?: string) =>
+			messageId
+				? `<#${channelId}> (message ID: ${messageId})`
+				: `<#${channelId}>`,
+	);
+}
+
+function formatDiscordChannelReference(
+	channelId: string | undefined,
+	fallbackText: string,
+): string {
+	return channelId ? `<#${channelId}>` : fallbackText;
 }
 
 /**
@@ -154,13 +177,15 @@ export async function convertMentions(
   personalMemoriesEnabled?: boolean, // Added personalMemoriesEnabled parameter
   snapshot?: import("../../types/misc/context").RequestSnapshot, // Added snapshot parameter
 ): Promise<string> {
-  // Early return: if text doesn't contain mentions or placeholders, skip processing
-  if (!needsConversion(text)) {
-    return text;
-  }
+	const normalizedText = normalizeDiscordChannelLinks(text);
 
-  // Clear the cache before processing new text
-  mentionCache.clear();
+	// Early return: if text doesn't contain mentions, Discord channel links, or placeholders, skip processing
+	if (!needsConversion(text)) {
+		return normalizedText;
+	}
+
+	// Clear the cache before processing new text
+	mentionCache.clear();
 
   // 1. Determine Tomori's nickname for {bot} replacement.
   //    If not passed, load it (using snapshot if available, otherwise DB query).
@@ -175,8 +200,8 @@ export async function convertMentions(
 
   // 2. First handle Discord mentions
   const mentionPattern = /<[@#][!&]?(\d{17,19})>/g;
-  const matches = Array.from(text.matchAll(mentionPattern));
-  let result = text;
+  const matches = Array.from(normalizedText.matchAll(mentionPattern));
+  let result = normalizedText;
 
   // 3. Process Discord mentions
   if (matches.length > 0) {
@@ -652,9 +677,12 @@ async function buildShortTermMemoryContext(
 				// Determine channel reference (privacy-safe)
 				let channelReference: string;
 				if (memory.serverId === currentServerId) {
-					channelReference = memory.channelName
-						? `#${memory.channelName}`
-						: "another channel in this server";
+					channelReference = formatDiscordChannelReference(
+						memory.channelId,
+						memory.channelName
+							? `#${memory.channelName}`
+							: "another channel in this server",
+					);
 				} else {
 					channelReference = "a channel in another server";
 				}
@@ -1924,7 +1952,7 @@ export async function buildContext({
     const timeOfDayPhrase = getTimeOfDayPhrase(timezoneOffset);
     const conversationContext = isDMChannel
       ? "Conversation context: Direct Message."
-      : `Conversation context: #${channelName}.`;
+      : `Conversation context: ${formatDiscordChannelReference(channelId, `#${channelName}`)}.`;
     const timeContext = `Current time: ${currentTime} (${timezoneLabel}), ${timeOfDayPhrase}.`;
 
     usersInConversationText += `${conversationContext}\n${timeContext}\n]`; // Close [System: ...] block

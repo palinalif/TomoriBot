@@ -43,6 +43,14 @@ export interface ApiKeyValidationResult {
   error?: ProviderError; // Detailed error info if validation failed
 }
 
+export type StreamStopReason =
+  | "user_request"
+  | "system_request"
+  | "speaker_guard"
+  | "send_message_limit"
+  | "flush_limit"
+  | "unknown";
+
 /**
  * Generic stream response result
  */
@@ -57,6 +65,7 @@ export interface StreamResult {
     | "follow_up_interrupt";
   data?: unknown | Error; // Function call data or error details
   accumulatedText?: string; // Text sent to Discord (for short-term memory storage)
+  stopReason?: StreamStopReason; // Specific stop source for debugging/logging
   /** NAI GLM-4.6: incomplete trailing sentence dropped by sentenceTrailingBuffer, available for prompt continuation on retry */
   naiContinuationPrefill?: string;
 }

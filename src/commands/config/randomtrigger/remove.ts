@@ -1,279 +1,425 @@
 /**
  * /config randomtrigger remove
- * Removes an existing random trigger from the server.
- * Presents a paginated select of all current triggers for the invoker to choose from.
+ * Removes existing random triggers from the server.
+ * Uses checkbox-group bulk removal when the full set fits in one modal,
+ * and falls back to paginated single-removal when the list exceeds modal limits.
  */
 
 import {
-  EmbedBuilder,
-  MessageFlags,
-  type ChatInputCommandInteraction,
-  type Client,
-  type SlashCommandSubcommandBuilder,
+	MessageFlags,
+	type ChatInputCommandInteraction,
+	type Client,
+	type ModalSubmitInteraction,
+	type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
+	replyInfoEmbed,
+	promptWithPaginatedModal,
+	promptWithRawModal,
+	safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
 import {
-  getCachedTomoriState,
-  getCachedAllPersonas,
+	getCachedTomoriState,
+	getCachedAllPersonas,
 } from "@/utils/cache/tomoriStateCache";
 import { getServerRandomTriggers } from "@/utils/db/dbRead";
 import { deleteRandomTrigger } from "@/utils/db/dbWrite";
-import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+import type {
+	UserRow,
+	ErrorContext,
+	RandomTriggerRow,
+} from "@/types/db/schema";
+import type {
+	CheckboxGroupOption,
+	ModalCheckboxGroupField,
+	SelectOption,
+} from "@/types/discord/modal";
 
 const MODAL_CUSTOM_ID = "config_randomtrigger_remove_modal";
 const TRIGGER_SELECT_ID = "trigger_select";
+const TRIGGER_CHECKBOX_ID_PREFIX = "random_trigger_checkbox_group";
+const MAX_OPTIONS_PER_GROUP = 10;
+const MAX_GROUPS_PER_MODAL = 5;
+const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 
-// ─── Subcommand Configuration ─────────────────────────────────────────────────
+type RandomTriggerSummary = {
+	trigger: RandomTriggerRow & { trigger_id: number };
+	label: string;
+	description: string;
+	summary: string;
+};
 
-/**
- * Configures the 'remove' subcommand for /config randomtrigger.
- * No slash options — selection is done via modal.
- */
 export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
+	subcommand: SlashCommandSubcommandBuilder,
 ) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.config.randomtrigger.remove.description"),
-    );
+	subcommand
+		.setName("remove")
+		.setDescription(
+			localizer("en-US", "commands.config.randomtrigger.remove.description"),
+		);
 
-// ─── Execute ──────────────────────────────────────────────────────────────────
-
-/**
- * Executes the /config randomtrigger remove command.
- * Flow:
- *   1. Load all random triggers for this server
- *   2. If none exist, reply with info embed
- *   3. Build a select showing channel + persona + timer/chance info
- *   4. Show modal with the trigger selector
- *   5. Delete the selected trigger and confirm
- *
- * @param _client - Discord client instance
- * @param interaction - Slash command interaction
- * @param userData - Invoking user's data
- * @param locale - User's preferred locale
- */
 export async function execute(
-  _client: Client,
-  interaction: ChatInputCommandInteraction,
-  userData: UserRow,
-  locale: string,
+	_client: Client,
+	interaction: ChatInputCommandInteraction,
+	userData: UserRow,
+	locale: string,
 ): Promise<void> {
-  // 1. Ensure command is run in a guild
-  if (!interaction.guild) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.guild_only_title",
-      descriptionKey: "general.errors.guild_only_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
+	if (!interaction.guild) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.guild_only_title",
+			descriptionKey: "general.errors.guild_only_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
 
-  // NOTE: No deferReply here — promptWithPaginatedModal must be the first
-  // acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
+	try {
+		const tomoriState = await getCachedTomoriState(interaction.guild.id);
+		if (!tomoriState) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
 
-  try {
-    // 2. Load Tomori state to get database server_id
-    const tomoriState = await getCachedTomoriState(interaction.guild.id);
-    if (!tomoriState) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.tomori_not_setup_title",
-        descriptionKey: "general.errors.tomori_not_setup_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+		const triggers = await getServerRandomTriggers(tomoriState.server_id);
+		if (triggers.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.randomtrigger.remove.none_title",
+				descriptionKey: "commands.config.randomtrigger.remove.none_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
 
-    // 3. Fetch all triggers for this server
-    const triggers = await getServerRandomTriggers(tomoriState.server_id);
+		const randomLabel = localizer(
+			locale,
+			"commands.config.randomtrigger.add.persona_random_label",
+		);
+		const allPersonas = await getCachedAllPersonas(interaction.guild.id);
+		const personaNameById = new Map<number, string>();
+		for (const persona of allPersonas) {
+			if (persona.tomori_id != null) {
+				personaNameById.set(persona.tomori_id, persona.tomori_nickname);
+			}
+		}
 
-    if (triggers.length === 0) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.randomtrigger.remove.none_title",
-        descriptionKey: "commands.config.randomtrigger.remove.none_description",
-        color: ColorCode.WARN,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+		const triggerSummaries = buildTriggerSummaries(
+			interaction,
+			triggers,
+			personaNameById,
+			randomLabel,
+		);
 
-    // 4. Fetch channel/persona names from Discord for readable labels
-    // Labels: "#channel-name | PersonaName | Xh / Y%"
-    const randomLabel = localizer(
-      locale,
-      "commands.config.randomtrigger.add.persona_random_label",
-    );
-    const allPersonas = await getCachedAllPersonas(interaction.guild.id);
-    const personaNameById = new Map<number, string>();
-    for (const persona of allPersonas) {
-      if (persona.tomori_id !== null && persona.tomori_id !== undefined) {
-        personaNameById.set(persona.tomori_id, persona.tomori_nickname);
-      }
-    }
+		if (triggerSummaries.length > MAX_ENTRIES_PER_MODAL) {
+			await handlePaginatedRemovalFallback(
+				interaction,
+				locale,
+				tomoriState.server_id,
+				triggerSummaries,
+			);
+			return;
+		}
 
-    const triggerOptions: SelectOption[] = triggers.map((trigger, index) => {
-      // Attempt to resolve channel name from the guild cache
-      const guildChannel = interaction.guild?.channels.cache.get(
-        trigger.channel_disc_id,
-      );
-      const channelName = guildChannel
-        ? `#${guildChannel.name}`
-        : `<#${trigger.channel_disc_id}>`;
+		const triggerGroupCount = Math.ceil(
+			triggerSummaries.length / MAX_OPTIONS_PER_GROUP,
+		);
+		const checkboxGroups = buildTriggerCheckboxGroups(triggerSummaries);
 
-      // Persona name: NULL tomori_id = "Random"
-      const personaName =
-        trigger.tomori_id === null || trigger.tomori_id === undefined
-          ? randomLabel
-          : (personaNameById.get(trigger.tomori_id) ??
-            `ID:${trigger.tomori_id}`);
-      const offsetSegment =
-        trigger.random_offset_range !== null &&
-        trigger.random_offset_range !== undefined &&
-        trigger.random_offset_range > 0
-          ? ` +/-${trigger.random_offset_range}h`
-          : "";
+		const modalResult = await promptWithRawModal(
+			interaction,
+			locale,
+			{
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.config.randomtrigger.remove.modal_title",
+				components: checkboxGroups,
+			},
+			MessageFlags.Ephemeral,
+		);
 
-      const label = safeSelectOptionText(
-        `${channelName} | ${personaName} | ${trigger.timer_hours}h${offsetSegment} / ${trigger.chance_percent}%`,
-      );
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Randomtrigger remove modal ${modalResult.outcome} for user ${interaction.user.id}`,
+			);
+			return;
+		}
 
-      return {
-        // Use array index as select value to avoid truncation of large IDs
-        value: index.toString(),
-        label,
-      };
-    });
+		if (!modalResult.interaction) {
+			log.error("Random trigger removal modal unexpectedly missing interaction");
+			return;
+		}
+		const modalInteraction = modalResult.interaction;
 
-    // 5. Show modal with trigger selection
-    // (This is the first interaction acknowledgement — no deferReply before this)
-    const modalResult = await promptWithPaginatedModal(interaction, locale, {
-      modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.config.randomtrigger.remove.modal_title",
-      components: [
-        {
-          customId: TRIGGER_SELECT_ID,
-          labelKey: "commands.config.randomtrigger.remove.select_label",
-          placeholder:
-            "commands.config.randomtrigger.remove.select_placeholder",
-          required: true,
-          options: triggerOptions,
-        },
-      ],
-    });
+		const checkedTriggerIds = new Set<number>();
+		for (let groupIndex = 0; groupIndex < triggerGroupCount; groupIndex++) {
+			const groupValues =
+				modalResult.multiValues?.[
+					`${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`
+				] ?? [];
+			for (const triggerId of groupValues) {
+				checkedTriggerIds.add(Number.parseInt(triggerId, 10));
+			}
+		}
 
-    // 6. Handle modal cancellation or timeout
-    if (modalResult.outcome !== "submit") {
-      log.info(
-        `Randomtrigger remove modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
-      return;
-    }
+		const triggersToRemove = triggerSummaries.filter(
+			(summary) => !checkedTriggerIds.has(summary.trigger.trigger_id),
+		);
+		if (triggersToRemove.length === 0) {
+			await replyInfoEmbed(modalInteraction, locale, {
+				titleKey: "commands.config.randomtrigger.remove.no_removals_title",
+				descriptionKey:
+					"commands.config.randomtrigger.remove.no_removals_description",
+				color: ColorCode.INFO,
+			});
+			return;
+		}
 
-    // biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-    const modalInteraction = modalResult.interaction!;
-    // biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-    const values = modalResult.values!;
+		await removeRandomTriggers(
+			tomoriState.server_id,
+			triggersToRemove,
+			modalInteraction,
+			locale,
+		);
+	} catch (error) {
+		const context: ErrorContext = {
+			userId: userData.user_id,
+			errorType: "CommandExecutionError",
+			metadata: { command: "config randomtrigger remove" },
+		};
+		await log.error(
+			"Error in /config randomtrigger remove",
+			error as Error,
+			context,
+		);
 
-    // Defer the modal submit interaction
-    if (!modalInteraction.deferred && !modalInteraction.replied) {
-      await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-    }
+		if (!interaction.replied && !interaction.deferred) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+		} else {
+			await interaction.followUp({
+				content: localizer(locale, "general.errors.unknown_error_description"),
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+	}
+}
 
-    // 7. Parse selected trigger index and resolve to actual trigger row
-    const selectedIndexRaw = values[TRIGGER_SELECT_ID] ?? "0";
-    const selectedIndex = Number.parseInt(selectedIndexRaw, 10);
-    const selectedTrigger = triggers[selectedIndex];
+async function handlePaginatedRemovalFallback(
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+	serverId: number,
+	triggerSummaries: RandomTriggerSummary[],
+): Promise<void> {
+	const triggerOptions: SelectOption[] = triggerSummaries.map(
+		(summary, index) => ({
+			value: index.toString(),
+			label: safeSelectOptionText(summary.summary),
+		}),
+	);
 
-    if (!selectedTrigger?.trigger_id) {
-      await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "general.errors.unknown_error_title",
-        descriptionKey: "general.errors.unknown_error_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
+	const modalResult = await promptWithPaginatedModal(interaction, locale, {
+		modalCustomId: MODAL_CUSTOM_ID,
+		modalTitleKey: "commands.config.randomtrigger.remove.modal_title",
+		components: [
+			{
+				customId: TRIGGER_SELECT_ID,
+				labelKey: "commands.config.randomtrigger.remove.select_label",
+				descriptionKey: "commands.config.randomtrigger.remove.select_description",
+				placeholder: "commands.config.randomtrigger.remove.select_placeholder",
+				required: true,
+				options: triggerOptions,
+			},
+		],
+	});
 
-    // 8. Delete the selected trigger
-    const deleted = await deleteRandomTrigger(selectedTrigger.trigger_id);
+	if (modalResult.outcome !== "submit") {
+		log.info(
+			`Randomtrigger remove fallback modal ${modalResult.outcome} for user ${interaction.user.id}`,
+		);
+		return;
+	}
 
-    if (!deleted) {
-      const context: ErrorContext = {
-        serverId: tomoriState.server_id,
-        errorType: "DatabaseDeleteError",
-        metadata: {
-          operation: "deleteRandomTrigger",
-          triggerId: selectedTrigger.trigger_id,
-        },
-      };
-      await log.error(
-        "Failed to delete random trigger",
-        new Error("deleteRandomTrigger returned false"),
-        context,
-      );
-      await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "general.errors.update_failed_title",
-        descriptionKey: "general.errors.update_failed_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
+	const modalInteraction = modalResult.interaction;
+	const selectedIndexRaw = modalResult.values?.[TRIGGER_SELECT_ID];
+	if (!modalInteraction || !selectedIndexRaw) {
+		log.error("Random trigger fallback modal unexpectedly missing interaction or values");
+		return;
+	}
 
-    // 9. Reply with success
-    await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.config.randomtrigger.remove.success_title",
-      descriptionKey:
-        "commands.config.randomtrigger.remove.success_description",
-      descriptionVars: {
-        channel: `<#${selectedTrigger.channel_disc_id}>`,
-      },
-      color: ColorCode.SUCCESS,
-    });
+	if (!modalInteraction.deferred && !modalInteraction.replied) {
+		await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+	}
 
-    log.success(
-      `Random trigger ${selectedTrigger.trigger_id} deleted from server ${interaction.guild.id}`,
-    );
-  } catch (error) {
-    const context: ErrorContext = {
-      userId: userData.user_id,
-      errorType: "CommandExecutionError",
-      metadata: { command: "config randomtrigger remove" },
-    };
-    await log.error(
-      "Error in /config randomtrigger remove",
-      error as Error,
-      context,
-    );
+	const selectedSummary =
+		triggerSummaries[Number.parseInt(selectedIndexRaw, 10)];
+	if (!selectedSummary) {
+		await replyInfoEmbed(modalInteraction, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
 
-    if (!interaction.replied && !interaction.deferred) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.unknown_error_title",
-        descriptionKey: "general.errors.unknown_error_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-    } else {
-      await interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
-            .setColor(ColorCode.ERROR),
-        ],
-      });
-    }
-  }
+	await removeRandomTriggers(
+		serverId,
+		[selectedSummary],
+		modalInteraction,
+		locale,
+	);
+}
+
+async function removeRandomTriggers(
+	serverId: number,
+	triggerSummaries: RandomTriggerSummary[],
+	replyInteraction: ModalSubmitInteraction,
+	locale: string,
+): Promise<void> {
+	const deletionResults = await Promise.all(
+		triggerSummaries.map(async (summary) => ({
+			summary,
+			deleted: await deleteRandomTrigger(summary.trigger.trigger_id),
+		})),
+	);
+	const removedSummaries = deletionResults
+		.filter((result) => result.deleted)
+		.map((result) => result.summary);
+	const failedSummaries = deletionResults
+		.filter((result) => !result.deleted)
+		.map((result) => result.summary);
+
+	if (failedSummaries.length > 0) {
+		const context: ErrorContext = {
+			serverId,
+			errorType: "DatabaseDeleteError",
+			metadata: {
+				operation: "deleteRandomTrigger",
+				failedTriggerIds: failedSummaries.map((summary) => summary.trigger.trigger_id),
+			},
+		};
+		await log.error(
+			"Failed to delete one or more random triggers",
+			new Error("deleteRandomTrigger returned false for one or more entries"),
+			context,
+		);
+		await replyInfoEmbed(replyInteraction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	await replyInfoEmbed(replyInteraction, locale, {
+		titleKey: "commands.config.randomtrigger.remove.success_title",
+		descriptionKey: "commands.config.randomtrigger.remove.success_description",
+		descriptionVars: {
+			triggers_removed: formatRemovedSummaries(
+				removedSummaries.map((summary) => summary.summary),
+			),
+		},
+		color: ColorCode.SUCCESS,
+	});
+
+	log.success(
+		`Removed ${removedSummaries.length} random trigger(s) from server ${serverId}: ${removedSummaries.map((summary) => summary.trigger.trigger_id).join(", ")}`,
+	);
+}
+
+function buildTriggerSummaries(
+	interaction: ChatInputCommandInteraction,
+	triggers: RandomTriggerRow[],
+	personaNameById: Map<number, string>,
+	randomLabel: string,
+): RandomTriggerSummary[] {
+	return triggers
+		.filter(
+			(trigger): trigger is RandomTriggerRow & { trigger_id: number } =>
+				trigger.trigger_id != null,
+		)
+		.map((trigger) => {
+		const guildChannel = interaction.guild?.channels.cache.get(
+			trigger.channel_disc_id,
+		);
+		const channelLabel = guildChannel
+			? `#${guildChannel.name}`
+			: `Unknown (${trigger.channel_disc_id.slice(0, 10)}...)`;
+		const personaName =
+			trigger.tomori_id == null
+				? randomLabel
+				: (personaNameById.get(trigger.tomori_id) ??
+					`ID:${trigger.tomori_id}`);
+		const timingLabel = formatTimingLabel(trigger);
+		return {
+			trigger,
+			label: `${channelLabel} | ${personaName}`,
+			description: timingLabel,
+			summary: `${channelLabel} | ${personaName} | ${timingLabel}`,
+		};
+		});
+}
+
+function buildTriggerCheckboxGroups(
+	triggerSummaries: RandomTriggerSummary[],
+): ModalCheckboxGroupField[] {
+	const checkboxGroups: ModalCheckboxGroupField[] = [];
+
+	for (
+		let i = 0;
+		i < triggerSummaries.length;
+		i += MAX_OPTIONS_PER_GROUP
+	) {
+		const chunk = triggerSummaries.slice(i, i + MAX_OPTIONS_PER_GROUP);
+		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+		const options: CheckboxGroupOption[] = chunk.map((summary) => ({
+			value: summary.trigger.trigger_id.toString(),
+			label: summary.label,
+			description: summary.description,
+			default: true,
+		}));
+
+		checkboxGroups.push({
+			kind: "checkboxGroup",
+			customId: `${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`,
+			labelKey:
+				groupIndex === 0
+					? "commands.config.randomtrigger.remove.checkbox_label"
+					: "commands.config.randomtrigger.remove.checkbox_label_continued",
+			descriptionKey:
+				groupIndex === 0
+					? "commands.config.randomtrigger.remove.checkbox_description"
+					: undefined,
+			minValues: 0,
+			required: false,
+			options,
+		});
+	}
+
+	return checkboxGroups;
+}
+
+function formatTimingLabel(trigger: RandomTriggerRow): string {
+	const offsetSegment =
+		trigger.random_offset_range != null && trigger.random_offset_range > 0
+			? ` +/-${trigger.random_offset_range}h`
+			: "";
+	return `${trigger.timer_hours}h${offsetSegment} / ${trigger.chance_percent}%`;
+}
+
+function formatRemovedSummaries(summaries: string[]): string {
+	const maxVisible = 10;
+	const visibleSummaries = summaries.slice(0, maxVisible);
+	const suffix = summaries.length > maxVisible ? "\n..." : "";
+	return visibleSummaries.join("\n") + suffix;
 }

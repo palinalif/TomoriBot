@@ -1,7 +1,7 @@
 /**
  * /config remove modelfallback
- * Removes a single model from the server's fallback chain.
- * Presents a select of all configured fallbacks and drops the chosen one.
+ * Removes one or more models from the server's fallback chain.
+ * Presents checkbox groups of all configured fallbacks and drops the unchecked ones.
  */
 
 import {
@@ -15,22 +15,21 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithPaginatedModal,
-	safeSelectOptionText,
+	promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
 import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "@/utils/cache/tomoriStateCache";
 import { setFallbackLlms } from "@/utils/db/dbWrite";
-import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
+import type { UserRow, ErrorContext, LlmRow } from "@/types/db/schema";
+import type { CheckboxGroupOption } from "@/types/discord/modal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
 // awaitModalSubmit listeners from a previous run resolving on the same submission.
-const FALLBACK_SELECT_ID = "fallback_select";
+const FALLBACK_CHECKBOX_ID = "fallback_checkbox_group";
 const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
 	(process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
 );
@@ -56,8 +55,8 @@ export const configureSubcommand = (
  * Flow:
  *   1. Load TomoriState and read the current fallback_llms chain
  *   2. If empty, reply with "none configured"
- *   3. Show a select with each fallback slot (index → codename label)
- *   4. Remove the chosen entry and write the remaining list back
+ *   3. Show checkbox groups with each fallback slot pre-checked
+ *   4. Remove unchecked entries and write the remaining list back in order
  *
  * @param _client - Discord client instance
  * @param interaction - Slash command interaction
@@ -85,7 +84,7 @@ export async function execute(
 		return;
 	}
 
-	// NOTE: No deferReply here — promptWithPaginatedModal must be the first
+	// NOTE: No deferReply here — promptWithRawModal must be the first
 	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
 
 	try {
@@ -120,75 +119,72 @@ export async function execute(
 			return;
 		}
 
-		// 4. Build select options: "N. `codename` (provider)"
-		//    Value is the array index to avoid any ID truncation issues
-		const fallbackOptions: SelectOption[] = currentFallbacks.map(
-			(llm, index) => ({
-				value: index.toString(),
-				label: safeSelectOptionText(
-					`${index + 1}. ${llm.llm_codename} (${llm.llm_provider})`,
-				),
-			}),
+		// 4. Show modal — first interaction acknowledgment
+		const modalResult = await promptWithRawModal(
+			interaction,
+			locale,
+			{
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.config.remove.modelfallback.modal_title",
+				components: [
+					{
+						kind: "checkboxGroup",
+						customId: FALLBACK_CHECKBOX_ID,
+						labelKey:
+							"commands.config.remove.modelfallback.checkbox_label",
+						descriptionKey:
+							"commands.config.remove.modelfallback.checkbox_description",
+						minValues: 0,
+						required: false,
+						options: buildFallbackOptions(currentFallbacks),
+					},
+				],
+			},
+			MessageFlags.Ephemeral,
 		);
-
-		// 5. Show modal — first interaction acknowledgment
-		const modalResult = await promptWithPaginatedModal(interaction, locale, {
-			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.config.remove.modelfallback.modal_title",
-			components: [
-				{
-					customId: FALLBACK_SELECT_ID,
-					labelKey: "commands.config.remove.modelfallback.select_label",
-					placeholder:
-						"commands.config.remove.modelfallback.select_placeholder",
-					required: true,
-					options: fallbackOptions,
-				},
-			],
-		});
 
 		if (modalResult.outcome !== "submit") return;
 
-		// biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-		const modalInteraction = modalResult.interaction!;
-		// biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-		const values = modalResult.values!;
+		if (!modalResult.interaction) {
+			log.error("Fallback removal modal unexpectedly missing interaction");
+			return;
+		}
+		const modalInteraction = modalResult.interaction;
 
-		// 6. Defer the modal submit reply
-		if (!modalInteraction.deferred && !modalInteraction.replied) {
-			await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+		// 5. Resolve checked and unchecked fallback entries
+		const checkedIndices = new Set<number>();
+		for (const index of modalResult.multiValues?.[FALLBACK_CHECKBOX_ID] ?? []) {
+			checkedIndices.add(Number.parseInt(index, 10));
 		}
 
-		// 7. Resolve selected fallback from index
-		const selectedIndex = Number.parseInt(
-			values[FALLBACK_SELECT_ID] ?? "0",
-			10,
+		const remainingFallbacks = currentFallbacks.filter((_, index) =>
+			checkedIndices.has(index),
 		);
-		const removedLlm = currentFallbacks[selectedIndex];
+		const removedFallbacks = currentFallbacks.filter(
+			(_, index) => !checkedIndices.has(index),
+		);
 		if (FALLBACK_DEBUG_ENABLED) {
 			log.info(
-				`[FallbackDebug][/config remove modelfallback] server_disc_id=${serverDiscId} selected_index=${selectedIndex} selected_value=${values[FALLBACK_SELECT_ID] ?? ""}`,
+				`[FallbackDebug][/config remove modelfallback] server_disc_id=${serverDiscId} checked_indices=[${Array.from(checkedIndices).join(", ")}] removed=[${removedFallbacks.map((llm) => llm.llm_codename).join(", ")}]`,
 			);
 		}
 
-		if (!removedLlm) {
+		if (removedFallbacks.length === 0) {
 			await replyInfoEmbed(modalInteraction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
+				titleKey: "commands.config.remove.modelfallback.no_removals_title",
+				descriptionKey:
+					"commands.config.remove.modelfallback.no_removals_description",
+				color: ColorCode.INFO,
 			});
 			return;
 		}
 
-		// 8. Build the new chain without the removed entry, preserving order
-		const remainingFallbacks = currentFallbacks.filter(
-			(_, i) => i !== selectedIndex,
-		);
+		// 6. Build the new chain without the unchecked entries, preserving order
 		const remainingIds = remainingFallbacks
 			.map((llm) => llm.llm_id)
 			.filter((id): id is number => id !== undefined);
 
-		// 9. Write the updated chain to the database
+		// 7. Write the updated chain to the database
 		const writeOk = await setFallbackLlms(tomoriState.server_id, remainingIds);
 		if (FALLBACK_DEBUG_ENABLED) {
 			log.info(
@@ -201,7 +197,7 @@ export async function execute(
 				errorType: "DatabaseUpdateError",
 				metadata: {
 					operation: "setFallbackLlms",
-					removedCodename: removedLlm.llm_codename,
+					removedCodenames: removedFallbacks.map((llm) => llm.llm_codename),
 					remainingIds,
 				},
 			};
@@ -218,22 +214,24 @@ export async function execute(
 			return;
 		}
 
-		// 10. Invalidate cache so next generation uses the updated fallback chain
+		// 8. Invalidate cache so next generation uses the updated fallback chain
 		invalidateTomoriStateCache(serverDiscId);
 
-		// 11. Reply success
+		// 9. Reply success
 		await replyInfoEmbed(modalInteraction, locale, {
 			titleKey: "commands.config.remove.modelfallback.success_title",
 			descriptionKey: "commands.config.remove.modelfallback.success_description",
 			descriptionVars: {
-				model: removedLlm.llm_codename,
+				models_removed: formatRemovedNames(
+					removedFallbacks.map((llm) => `\`${llm.llm_codename}\``),
+				),
 				remaining_count: remainingIds.length,
 			},
 			color: ColorCode.SUCCESS,
 		});
 
 		log.success(
-			`Fallback model ${removedLlm.llm_codename} removed from server ${serverDiscId}. ` +
+			`Removed ${removedFallbacks.length} fallback model(s) from server ${serverDiscId}. ` +
 				`${remainingIds.length} fallback(s) remaining.`,
 		);
 	} catch (error) {
@@ -270,4 +268,20 @@ export async function execute(
 			});
 		}
 	}
+}
+
+function buildFallbackOptions(currentFallbacks: LlmRow[]): CheckboxGroupOption[] {
+	return currentFallbacks.map((llm, index) => ({
+		value: index.toString(),
+		label: `${index + 1}. ${llm.llm_codename}`,
+		description: llm.llm_provider,
+		default: true,
+	}));
+}
+
+function formatRemovedNames(names: string[]): string {
+	const maxVisibleNames = 10;
+	const visibleNames = names.slice(0, maxVisibleNames);
+	const suffix = names.length > maxVisibleNames ? ", ..." : "";
+	return `${visibleNames.join(", ")}${suffix}`;
 }

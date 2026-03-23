@@ -5867,9 +5867,10 @@ export default async function tomoriChat(
                 }
 
                 case "stopped_by_user": {
-                  // Handle user-requested stop (natural stop triggers)
+                  // Handle any graceful stop, including user stops and internal guards.
+                  const stopReason = streamResult.stopReason ?? "unknown";
                   log.info(
-                    `Streaming was stopped by user request for channel ${channel.id}.`,
+                    `Streaming stopped for channel ${channel.id}. Reason: ${stopReason}.`,
                   );
                   finalStreamCompleted = true;
 

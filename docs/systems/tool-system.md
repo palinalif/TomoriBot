@@ -41,6 +41,7 @@ Current `cross_channel_message` runtime notes:
 - also supports thread targets by exact `channel_id`
 - fallback `channel_name` lookup checks both guild channel names and active thread titles
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
+- Discord channel/thread links in prompt context are normalized into the same readable `#name` + ID form used for channel mentions, so pasted links are easier for the model to reuse as `channel_id` targets
 
 Current `generate_image_nai` runtime notes:
 

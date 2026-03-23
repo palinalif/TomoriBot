@@ -1,12 +1,11 @@
 /**
  * /config remove modeloverride
- * Removes channel or persona model overrides from the server.
- * Supports single-item removal via paginated modal select, as well as
- * bulk purge of all channel overrides, all persona overrides, or everything at once.
+ * Removes channel and persona model overrides from the server.
+ * Presents one combined bulk-management modal with all current overrides
+ * pre-checked. Unchecked entries are removed on submit.
  */
 
 import {
-	EmbedBuilder,
 	MessageFlags,
 	type ChatInputCommandInteraction,
 	type Client,
@@ -16,39 +15,41 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithPaginatedModal,
-	safeSelectOptionText,
+	promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
 import {
 	getCachedTomoriState,
 	getCachedAllPersonas,
 	invalidateTomoriStateCache,
 } from "@/utils/cache/tomoriStateCache";
-import {
-	invalidateChannelLlmCache,
-	invalidateAllChannelLlmCacheForServer,
-} from "@/utils/cache/channelLlmCache";
+import { invalidateChannelLlmCache } from "@/utils/cache/channelLlmCache";
 import { getAllChannelLlmOverridesForServer } from "@/utils/db/dbRead";
 import {
 	deleteChannelLlmOverride,
 	setPersonaLlmOverride,
-	clearAllChannelLlmOverridesForServer,
-	clearAllPersonaLlmOverridesForServer,
 } from "@/utils/db/dbWrite";
 import type { UserRow, ErrorContext, TomoriState, LlmRow } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
+import type {
+	CheckboxGroupOption,
+	ModalCheckboxGroupField,
+} from "@/types/discord/modal";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+const CHANNEL_CHECKBOX_ID_PREFIX = "channel_override_checkbox_group";
+const PERSONA_CHECKBOX_ID_PREFIX = "persona_override_checkbox_group";
+const MAX_OPTIONS_PER_GROUP = 10;
+const MAX_GROUPS_PER_MODAL = 5;
+const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 
-const CHANNEL_MODAL_CUSTOM_ID = "config_remove_modeloverride_channel_modal";
-const PERSONA_MODAL_CUSTOM_ID = "config_remove_modeloverride_persona_modal";
-const OVERRIDE_SELECT_ID = "override_select";
+type ChannelOverrideEntry = {
+	channelDiscId: string;
+	llm: LlmRow;
+};
 
-// ─── Subcommand Configuration ─────────────────────────────────────────────────
+type PersonaOverrideEntry = TomoriState & {
+	persona_llm: LlmRow;
+	tomori_id: number;
+};
 
-/**
- * Configures the 'modeloverride' subcommand for /config remove.
- */
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
@@ -59,74 +60,16 @@ export const configureSubcommand = (
 				"en-US",
 				"commands.config.remove.modeloverride.description",
 			),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("scope")
-				.setDescription(
-					localizer(
-						"en-US",
-						"commands.config.remove.modeloverride.scope_description",
-					),
-				)
-				.setRequired(true)
-				.addChoices(
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.remove.modeloverride.scope_channel",
-						),
-						value: "channel",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.remove.modeloverride.scope_persona",
-						),
-						value: "persona",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.remove.modeloverride.scope_all_channels",
-						),
-						value: "all_channels",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.remove.modeloverride.scope_all_personas",
-						),
-						value: "all_personas",
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.remove.modeloverride.scope_everything",
-						),
-						value: "everything",
-					},
-				),
 		);
 
-// ─── Execute ──────────────────────────────────────────────────────────────────
-
-/**
- * Executes the /config remove modeloverride command.
- * Routes to the appropriate removal flow based on the scope option.
- *
- * @param _client - Discord client instance
- * @param interaction - Slash command interaction
- * @param userData - Invoking user's data
- * @param locale - User's preferred locale
- */
 export async function execute(
 	_client: Client,
 	interaction: ChatInputCommandInteraction,
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
+	const modalCustomId = `config_remove_modeloverride_modal_${interaction.id}`;
+
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
@@ -137,11 +80,7 @@ export async function execute(
 		return;
 	}
 
-	// NOTE: No deferReply here for single-item scopes — promptWithPaginatedModal
-	// must be the first acknowledgment. Bulk scopes defer inside their handlers.
-
 	try {
-		// 2. Load Tomori state to get database server_id
 		const tomoriState = await getCachedTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
@@ -153,26 +92,199 @@ export async function execute(
 			return;
 		}
 
-		const scope = interaction.options.getString("scope", true);
+		const [channelOverrides, allPersonas] = await Promise.all([
+			getAllChannelLlmOverridesForServer(tomoriState.server_id),
+			getCachedAllPersonas(interaction.guild.id),
+		]);
+		const personasWithOverride = allPersonas.filter(
+			(persona): persona is PersonaOverrideEntry =>
+				persona.persona_llm != null && persona.tomori_id != null,
+		);
 
-		// 3. Route to the appropriate handler based on scope
-		switch (scope) {
-			case "channel":
-				await handleChannelScope(interaction, locale, userData, tomoriState);
-				break;
-			case "persona":
-				await handlePersonaScope(interaction, locale, userData, tomoriState);
-				break;
-			case "all_channels":
-				await handlePurgeAllChannels(interaction, locale, tomoriState);
-				break;
-			case "all_personas":
-				await handlePurgeAllPersonas(interaction, locale, tomoriState);
-				break;
-			case "everything":
-				await handlePurgeEverything(interaction, locale, tomoriState);
-				break;
+		if (
+			channelOverrides.length === 0 &&
+			personasWithOverride.length === 0
+		) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.remove.modeloverride.none_title",
+				descriptionKey: "commands.config.remove.modeloverride.none_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
 		}
+
+		const checkboxGroups = [
+			...buildChannelOverrideCheckboxGroups(interaction, channelOverrides),
+			...buildPersonaOverrideCheckboxGroups(personasWithOverride),
+		];
+		if (checkboxGroups.length > MAX_GROUPS_PER_MODAL) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.remove.modeloverride.too_many_title",
+				descriptionKey:
+					"commands.config.remove.modeloverride.too_many_description",
+				descriptionVars: {
+					channel_count: channelOverrides.length.toString(),
+					persona_count: personasWithOverride.length.toString(),
+					total_count: (
+						channelOverrides.length + personasWithOverride.length
+					).toString(),
+					max_entries: MAX_ENTRIES_PER_MODAL.toString(),
+					max_groups: MAX_GROUPS_PER_MODAL.toString(),
+				},
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		const modalResult = await promptWithRawModal(
+			interaction,
+			locale,
+			{
+				modalCustomId,
+				modalTitleKey: "commands.config.remove.modeloverride.modal_title",
+				components: checkboxGroups,
+			},
+			MessageFlags.Ephemeral,
+		);
+
+		if (modalResult.outcome !== "submit") return;
+
+		if (!modalResult.interaction) {
+			log.error("Model override removal modal unexpectedly missing interaction");
+			return;
+		}
+		const modalInteraction = modalResult.interaction;
+
+		const checkedChannelIds = collectCheckedStringValues(
+			modalResult.multiValues,
+			CHANNEL_CHECKBOX_ID_PREFIX,
+			Math.ceil(channelOverrides.length / MAX_OPTIONS_PER_GROUP),
+		);
+		const checkedPersonaIds = collectCheckedNumberValues(
+			modalResult.multiValues,
+			PERSONA_CHECKBOX_ID_PREFIX,
+			Math.ceil(personasWithOverride.length / MAX_OPTIONS_PER_GROUP),
+		);
+
+		const channelOverridesToRemove = channelOverrides.filter(
+			(entry) => !checkedChannelIds.has(entry.channelDiscId),
+		);
+		const personasToClear = personasWithOverride.filter(
+			(persona) => !checkedPersonaIds.has(persona.tomori_id),
+		);
+
+		if (
+			channelOverridesToRemove.length === 0 &&
+			personasToClear.length === 0
+		) {
+			await replyInfoEmbed(modalInteraction, locale, {
+				titleKey: "commands.config.remove.modeloverride.no_removals_title",
+				descriptionKey:
+					"commands.config.remove.modeloverride.no_removals_description",
+				color: ColorCode.INFO,
+			});
+			return;
+		}
+
+		const [channelDeletionResults, personaClearResults] = await Promise.all([
+			Promise.all(
+				channelOverridesToRemove.map(async (entry) => ({
+					entry,
+					deleted: await deleteChannelLlmOverride(
+						tomoriState.server_id,
+						entry.channelDiscId,
+					),
+				})),
+			),
+			Promise.all(
+				personasToClear.map(async (persona) => ({
+					persona,
+					cleared: await setPersonaLlmOverride(persona.tomori_id, null),
+				})),
+			),
+		]);
+
+		const removedChannelOverrides = channelDeletionResults
+			.filter((result) => result.deleted)
+			.map((result) => result.entry);
+		const failedChannelOverrides = channelDeletionResults
+			.filter((result) => !result.deleted)
+			.map((result) => result.entry);
+		const clearedPersonaOverrides = personaClearResults
+			.filter((result) => result.cleared)
+			.map((result) => result.persona);
+		const failedPersonaOverrides = personaClearResults
+			.filter((result) => !result.cleared)
+			.map((result) => result.persona);
+
+		for (const entry of removedChannelOverrides) {
+			invalidateChannelLlmCache(tomoriState.server_id, entry.channelDiscId);
+		}
+		if (clearedPersonaOverrides.length > 0) {
+			invalidateTomoriStateCache(interaction.guild.id);
+		}
+
+		if (
+			failedChannelOverrides.length > 0 ||
+			failedPersonaOverrides.length > 0
+		) {
+			const context: ErrorContext = {
+				serverId: tomoriState.server_id,
+				errorType: "DatabaseDeleteError",
+				metadata: {
+					command: "config remove modeloverride",
+					failedChannelDiscIds: failedChannelOverrides.map(
+						(entry) => entry.channelDiscId,
+					),
+					failedTomoriIds: failedPersonaOverrides.map(
+						(persona) => persona.tomori_id,
+					),
+				},
+			};
+			await log.error(
+				"Failed to clear one or more model overrides",
+				new Error("One or more model override deletes returned false"),
+				context,
+			);
+			await replyInfoEmbed(modalInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		const removedSections: string[] = [];
+		if (removedChannelOverrides.length > 0) {
+			const channelMentions = removedChannelOverrides.map(
+				(entry) =>
+					interaction.guild?.channels.cache.get(entry.channelDiscId)?.toString() ??
+					`<#${entry.channelDiscId}>`,
+			);
+			removedSections.push(
+				`**${localizer(locale, "commands.config.remove.modeloverride.channel_checkbox_label")}**\n${formatRemovedNames(channelMentions)}`,
+			);
+		}
+		if (clearedPersonaOverrides.length > 0) {
+			removedSections.push(
+				`**${localizer(locale, "commands.config.remove.modeloverride.persona_checkbox_label")}**\n${formatRemovedNames(clearedPersonaOverrides.map((persona) => `**${persona.tomori_nickname}**`))}`,
+			);
+		}
+
+		await replyInfoEmbed(modalInteraction, locale, {
+			titleKey: "commands.config.remove.modeloverride.success_title",
+			descriptionKey: "commands.config.remove.modeloverride.success_description",
+			descriptionVars: {
+				removed_overrides: removedSections.join("\n\n"),
+			},
+			color: ColorCode.SUCCESS,
+		});
+
+		log.success(
+			`Removed ${removedChannelOverrides.length} channel and ${clearedPersonaOverrides.length} persona model override(s) from server ${interaction.guild.id}`,
+		);
 	} catch (error) {
 		const context: ErrorContext = {
 			userId: userData.user_id,
@@ -193,554 +305,131 @@ export async function execute(
 				flags: MessageFlags.Ephemeral,
 			});
 		} else {
-			await interaction.editReply({
-				embeds: [
-					new EmbedBuilder()
-						.setTitle(
-							localizer(locale, "general.errors.unknown_error_title"),
-						)
-						.setDescription(
-							localizer(
-								locale,
-								"general.errors.unknown_error_description",
-							),
-						)
-						.setColor(ColorCode.ERROR),
-				],
+			await interaction.followUp({
+				content: localizer(locale, "general.errors.unknown_error_description"),
+				flags: MessageFlags.Ephemeral,
 			});
 		}
 	}
 }
 
-// ─── Channel Scope ────────────────────────────────────────────────────────────
-
-/**
- * Handles removal of a single channel model override.
- * Presents a select of all existing channel overrides, then deletes the chosen one.
- *
- * @param interaction - Slash command interaction
- * @param locale - User's preferred locale
- * @param userData - Invoking user's data
- * @param tomoriState - Loaded TomoriState for this server
- */
-async function handleChannelScope(
+function buildChannelOverrideCheckboxGroups(
 	interaction: ChatInputCommandInteraction,
-	locale: string,
-	_userData: UserRow,
-	tomoriState: TomoriState,
-): Promise<void> {
-	// 1. Load all channel overrides for this server
-	const overrides = await getAllChannelLlmOverridesForServer(
-		tomoriState.server_id,
-	);
+	overrides: ChannelOverrideEntry[],
+): ModalCheckboxGroupField[] {
+	const checkboxGroups: ModalCheckboxGroupField[] = [];
 
-	if (overrides.length === 0) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.remove.modeloverride.channel_none_title",
+	for (let i = 0; i < overrides.length; i += MAX_OPTIONS_PER_GROUP) {
+		const chunk = overrides.slice(i, i + MAX_OPTIONS_PER_GROUP);
+		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+		const options: CheckboxGroupOption[] = chunk.map((entry) => {
+			const channel = interaction.guild?.channels.cache.get(entry.channelDiscId);
+			return {
+				label: channel?.isTextBased()
+					? `#${channel.name}`
+					: channel?.name ?? `Unknown (${entry.channelDiscId.substring(0, 10)}...)`,
+				value: entry.channelDiscId,
+				description: formatLlmSummary(entry.llm),
+				default: true,
+			};
+		});
+
+		checkboxGroups.push({
+			kind: "checkboxGroup",
+			customId: `${CHANNEL_CHECKBOX_ID_PREFIX}_${groupIndex}`,
+			labelKey:
+				groupIndex === 0
+					? "commands.config.remove.modeloverride.channel_checkbox_label"
+					: "commands.config.remove.modeloverride.channel_checkbox_label_continued",
 			descriptionKey:
-				"commands.config.remove.modeloverride.channel_none_description",
-			color: ColorCode.WARN,
-			flags: MessageFlags.Ephemeral,
+				groupIndex === 0
+					? "commands.config.remove.modeloverride.channel_checkbox_description"
+					: undefined,
+			minValues: 0,
+			required: false,
+			options,
 		});
-		return;
 	}
 
-	// 2. Build select options: label shows "#channel → model (provider)"
-	//    Value is the array index so channel_disc_id length doesn't risk truncation
-	const overrideOptions: SelectOption[] = overrides.map((entry, index) => {
-		const guildChannel = interaction.guild?.channels.cache.get(
-			entry.channelDiscId,
-		);
-		const channelName = guildChannel
-			? `#${guildChannel.name}`
-			: `<#${entry.channelDiscId}>`;
-		const label = safeSelectOptionText(
-			`${channelName} → ${entry.llm.llm_codename} (${entry.llm.llm_provider})`,
-		);
-		return { value: index.toString(), label };
-	});
-
-	// 3. Show modal — this is the first interaction acknowledgment
-	const modalResult = await promptWithPaginatedModal(interaction, locale, {
-		modalCustomId: CHANNEL_MODAL_CUSTOM_ID,
-		modalTitleKey:
-			"commands.config.remove.modeloverride.channel_modal_title",
-		components: [
-			{
-				customId: OVERRIDE_SELECT_ID,
-				labelKey:
-					"commands.config.remove.modeloverride.channel_select_label",
-				placeholder:
-					"commands.config.remove.modeloverride.channel_select_placeholder",
-				required: true,
-				options: overrideOptions,
-			},
-		],
-	});
-
-	if (modalResult.outcome !== "submit") return;
-
-	// biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-	const modalInteraction = modalResult.interaction!;
-	// biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-	const values = modalResult.values!;
-
-	// 4. Defer the modal submit reply
-	if (!modalInteraction.deferred && !modalInteraction.replied) {
-		await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-	}
-
-	// 5. Resolve selected entry from index
-	const selectedIndex = Number.parseInt(
-		values[OVERRIDE_SELECT_ID] ?? "0",
-		10,
-	);
-	const selectedEntry = overrides[selectedIndex];
-
-	if (!selectedEntry) {
-		await replyInfoEmbed(modalInteraction, locale, {
-			titleKey: "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 6. Delete from DB
-	const deleted = await deleteChannelLlmOverride(
-		tomoriState.server_id,
-		selectedEntry.channelDiscId,
-	);
-
-	if (!deleted) {
-		const context: ErrorContext = {
-			serverId: tomoriState.server_id,
-			errorType: "DatabaseDeleteError",
-			metadata: {
-				operation: "deleteChannelLlmOverride",
-				channelDiscId: selectedEntry.channelDiscId,
-			},
-		};
-		await log.error(
-			"Failed to delete channel LLM override",
-			new Error("deleteChannelLlmOverride returned false"),
-			context,
-		);
-		await replyInfoEmbed(modalInteraction, locale, {
-			titleKey: "general.errors.update_failed_title",
-			descriptionKey: "general.errors.update_failed_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 7. Invalidate channel LLM cache so next message uses the server default
-	invalidateChannelLlmCache(tomoriState.server_id, selectedEntry.channelDiscId);
-
-	// 8. Reply success
-	const channelMention =
-		interaction.guild?.channels.cache.get(selectedEntry.channelDiscId)
-			?.toString() ?? `<#${selectedEntry.channelDiscId}>`;
-
-	await replyInfoEmbed(modalInteraction, locale, {
-		titleKey: "commands.config.remove.modeloverride.channel_success_title",
-		descriptionKey:
-			"commands.config.remove.modeloverride.channel_success_description",
-		descriptionVars: { channel: channelMention },
-		color: ColorCode.SUCCESS,
-	});
-
-	log.success(
-		`Channel LLM override for ${selectedEntry.channelDiscId} removed from server ${interaction.guild?.id}`,
-	);
+	return checkboxGroups;
 }
 
-// ─── Persona Scope ────────────────────────────────────────────────────────────
+function buildPersonaOverrideCheckboxGroups(
+	personasWithOverride: PersonaOverrideEntry[],
+): ModalCheckboxGroupField[] {
+	const checkboxGroups: ModalCheckboxGroupField[] = [];
 
-/**
- * Handles removal of a single persona model override.
- * Only shows personas that currently have an override set.
- * Clears the override by setting persona_llm to null.
- *
- * @param interaction - Slash command interaction
- * @param locale - User's preferred locale
- * @param userData - Invoking user's data
- * @param tomoriState - Loaded TomoriState for this server
- */
-async function handlePersonaScope(
-	interaction: ChatInputCommandInteraction,
-	locale: string,
-	_userData: UserRow,
-	tomoriState: TomoriState,
-): Promise<void> {
-	// 1. Load all personas, then filter to those with an active override
-	const allPersonas = await getCachedAllPersonas(
-		interaction.guild?.id ?? interaction.user.id,
-	);
-	const personasWithOverride = allPersonas.filter(
-		(p): p is TomoriState & { persona_llm: LlmRow } => p.persona_llm != null,
-	);
+	for (
+		let i = 0;
+		i < personasWithOverride.length;
+		i += MAX_OPTIONS_PER_GROUP
+	) {
+		const chunk = personasWithOverride.slice(i, i + MAX_OPTIONS_PER_GROUP);
+		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+		const options: CheckboxGroupOption[] = chunk.map((persona) => ({
+			label: persona.tomori_nickname,
+			value: persona.tomori_id.toString(),
+			description: formatLlmSummary(persona.persona_llm),
+			default: true,
+		}));
 
-	if (personasWithOverride.length === 0) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.remove.modeloverride.persona_none_title",
+		checkboxGroups.push({
+			kind: "checkboxGroup",
+			customId: `${PERSONA_CHECKBOX_ID_PREFIX}_${groupIndex}`,
+			labelKey:
+				groupIndex === 0
+					? "commands.config.remove.modeloverride.persona_checkbox_label"
+					: "commands.config.remove.modeloverride.persona_checkbox_label_continued",
 			descriptionKey:
-				"commands.config.remove.modeloverride.persona_none_description",
-			color: ColorCode.WARN,
-			flags: MessageFlags.Ephemeral,
+				groupIndex === 0
+					? "commands.config.remove.modeloverride.persona_checkbox_description"
+					: undefined,
+			minValues: 0,
+			required: false,
+			options,
 		});
-		return;
 	}
 
-	// 2. Build select options: label shows "PersonaName (model)"
-	const personaOptions: SelectOption[] = personasWithOverride.map(
-		(p, index) => ({
-			value: index.toString(),
-			label: safeSelectOptionText(
-				`${p.tomori_nickname} (${p.persona_llm.llm_codename})`,
-			),
-		}),
-	);
-
-	// 3. Show modal — first interaction acknowledgment
-	const modalResult = await promptWithPaginatedModal(interaction, locale, {
-		modalCustomId: PERSONA_MODAL_CUSTOM_ID,
-		modalTitleKey:
-			"commands.config.remove.modeloverride.persona_modal_title",
-		components: [
-			{
-				customId: OVERRIDE_SELECT_ID,
-				labelKey:
-					"commands.config.remove.modeloverride.persona_select_label",
-				placeholder:
-					"commands.config.remove.modeloverride.persona_select_placeholder",
-				required: true,
-				options: personaOptions,
-			},
-		],
-	});
-
-	if (modalResult.outcome !== "submit") return;
-
-	// biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-	const modalInteraction = modalResult.interaction!;
-	// biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees interaction and values exist
-	const values = modalResult.values!;
-
-	// 4. Defer the modal submit reply
-	if (!modalInteraction.deferred && !modalInteraction.replied) {
-		await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-	}
-
-	// 5. Resolve selected persona from index
-	const selectedIndex = Number.parseInt(
-		values[OVERRIDE_SELECT_ID] ?? "0",
-		10,
-	);
-	const selectedPersona = personasWithOverride[selectedIndex];
-
-	if (!selectedPersona?.tomori_id) {
-		await replyInfoEmbed(modalInteraction, locale, {
-			titleKey: "general.errors.unknown_error_title",
-			descriptionKey: "general.errors.unknown_error_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 6. Clear the override by writing null
-	const cleared = await setPersonaLlmOverride(selectedPersona.tomori_id, null);
-
-	if (!cleared) {
-		const context: ErrorContext = {
-			serverId: tomoriState.server_id,
-			errorType: "DatabaseDeleteError",
-			metadata: {
-				operation: "setPersonaLlmOverride(null)",
-				tomoriId: selectedPersona.tomori_id,
-			},
-		};
-		await log.error(
-			"Failed to clear persona LLM override",
-			new Error("setPersonaLlmOverride(null) returned false"),
-			context,
-		);
-		await replyInfoEmbed(modalInteraction, locale, {
-			titleKey: "general.errors.update_failed_title",
-			descriptionKey: "general.errors.update_failed_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 7. Invalidate TomoriState cache so next persona load picks up the cleared override
-	invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-
-	// 8. Reply success
-	await replyInfoEmbed(modalInteraction, locale, {
-		titleKey: "commands.config.remove.modeloverride.persona_success_title",
-		descriptionKey:
-			"commands.config.remove.modeloverride.persona_success_description",
-		descriptionVars: { persona: selectedPersona.tomori_nickname },
-		color: ColorCode.SUCCESS,
-	});
-
-	log.success(
-		`Persona LLM override for ${selectedPersona.tomori_nickname} (id: ${selectedPersona.tomori_id}) cleared on server ${interaction.guild?.id}`,
-	);
+	return checkboxGroups;
 }
 
-// ─── Bulk Purge: All Channels ─────────────────────────────────────────────────
-
-/**
- * Purges all channel model overrides for the server.
- * Defers immediately since no modal is needed for bulk operations.
- *
- * @param interaction - Slash command interaction
- * @param locale - User's preferred locale
- * @param tomoriState - Loaded TomoriState for this server
- */
-async function handlePurgeAllChannels(
-	interaction: ChatInputCommandInteraction,
-	locale: string,
-	tomoriState: TomoriState,
-): Promise<void> {
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-	// 1. Check if there are any channel overrides to purge
-	const overrides = await getAllChannelLlmOverridesForServer(
-		tomoriState.server_id,
-	);
-
-	if (overrides.length === 0) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.remove.modeloverride.channel_none_title",
-			descriptionKey:
-				"commands.config.remove.modeloverride.channel_none_description",
-			color: ColorCode.WARN,
-		});
-		return;
+function collectCheckedStringValues(
+	multiValues: Record<string, string[]> | undefined,
+	customIdPrefix: string,
+	groupCount: number,
+): Set<string> {
+	const checkedValues = new Set<string>();
+	for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+		const groupValues = multiValues?.[`${customIdPrefix}_${groupIndex}`] ?? [];
+		for (const value of groupValues) {
+			checkedValues.add(value);
+		}
 	}
-
-	// 2. Purge all channel overrides from DB
-	const cleared = await clearAllChannelLlmOverridesForServer(
-		tomoriState.server_id,
-	);
-
-	if (!cleared) {
-		const context: ErrorContext = {
-			serverId: tomoriState.server_id,
-			errorType: "DatabaseDeleteError",
-			metadata: { operation: "clearAllChannelLlmOverridesForServer" },
-		};
-		await log.error(
-			"Failed to purge all channel LLM overrides",
-			new Error("clearAllChannelLlmOverridesForServer returned false"),
-			context,
-		);
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.update_failed_title",
-			descriptionKey: "general.errors.update_failed_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 3. Invalidate all channel LLM caches for this server
-	invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
-
-	// 4. Reply success with count
-	await replyInfoEmbed(interaction, locale, {
-		titleKey:
-			"commands.config.remove.modeloverride.purge_channels_success_title",
-		descriptionKey:
-			"commands.config.remove.modeloverride.purge_channels_success_description",
-		descriptionVars: { count: overrides.length.toString() },
-		color: ColorCode.SUCCESS,
-	});
-
-	log.success(
-		`Purged all ${overrides.length} channel LLM override(s) from server ${interaction.guild?.id}`,
-	);
+	return checkedValues;
 }
 
-// ─── Bulk Purge: All Personas ─────────────────────────────────────────────────
-
-/**
- * Purges all persona model overrides for the server.
- * Defers immediately since no modal is needed for bulk operations.
- *
- * @param interaction - Slash command interaction
- * @param locale - User's preferred locale
- * @param tomoriState - Loaded TomoriState for this server
- */
-async function handlePurgeAllPersonas(
-	interaction: ChatInputCommandInteraction,
-	locale: string,
-	tomoriState: TomoriState,
-): Promise<void> {
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-	// 1. Check if there are any persona overrides to purge
-	const allPersonas = await getCachedAllPersonas(
-		interaction.guild?.id ?? interaction.user.id,
-	);
-	const personasWithOverride = allPersonas.filter(
-		(p) => p.persona_llm != null,
-	);
-
-	if (personasWithOverride.length === 0) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.remove.modeloverride.persona_none_title",
-			descriptionKey:
-				"commands.config.remove.modeloverride.persona_none_description",
-			color: ColorCode.WARN,
-		});
-		return;
+function collectCheckedNumberValues(
+	multiValues: Record<string, string[]> | undefined,
+	customIdPrefix: string,
+	groupCount: number,
+): Set<number> {
+	const checkedValues = new Set<number>();
+	for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+		const groupValues = multiValues?.[`${customIdPrefix}_${groupIndex}`] ?? [];
+		for (const value of groupValues) {
+			checkedValues.add(Number.parseInt(value, 10));
+		}
 	}
-
-	// 2. Purge all persona overrides from DB
-	const cleared = await clearAllPersonaLlmOverridesForServer(
-		tomoriState.server_id,
-	);
-
-	if (!cleared) {
-		const context: ErrorContext = {
-			serverId: tomoriState.server_id,
-			errorType: "DatabaseDeleteError",
-			metadata: { operation: "clearAllPersonaLlmOverridesForServer" },
-		};
-		await log.error(
-			"Failed to purge all persona LLM overrides",
-			new Error("clearAllPersonaLlmOverridesForServer returned false"),
-			context,
-		);
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.update_failed_title",
-			descriptionKey: "general.errors.update_failed_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 3. Invalidate TomoriState cache so personas reload without overrides
-	invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-
-	// 4. Reply success with count
-	await replyInfoEmbed(interaction, locale, {
-		titleKey:
-			"commands.config.remove.modeloverride.purge_personas_success_title",
-		descriptionKey:
-			"commands.config.remove.modeloverride.purge_personas_success_description",
-		descriptionVars: { count: personasWithOverride.length.toString() },
-		color: ColorCode.SUCCESS,
-	});
-
-	log.success(
-		`Purged all ${personasWithOverride.length} persona LLM override(s) from server ${interaction.guild?.id}`,
-	);
+	return checkedValues;
 }
 
-// ─── Bulk Purge: Everything ───────────────────────────────────────────────────
+function formatLlmSummary(llm: LlmRow): string {
+	return `${llm.llm_codename} (${llm.llm_provider})`;
+}
 
-/**
- * Purges all channel AND persona model overrides for the server.
- * Defers immediately since no modal is needed for bulk operations.
- *
- * @param interaction - Slash command interaction
- * @param locale - User's preferred locale
- * @param tomoriState - Loaded TomoriState for this server
- */
-async function handlePurgeEverything(
-	interaction: ChatInputCommandInteraction,
-	locale: string,
-	tomoriState: TomoriState,
-): Promise<void> {
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-	// 1. Check how many overrides exist in each category
-	const [channelOverrides, allPersonas] = await Promise.all([
-		getAllChannelLlmOverridesForServer(tomoriState.server_id),
-		getCachedAllPersonas(interaction.guild?.id ?? interaction.user.id),
-	]);
-	const personasWithOverride = allPersonas.filter(
-		(p) => p.persona_llm != null,
-	);
-
-	const channelCount = channelOverrides.length;
-	const personaCount = personasWithOverride.length;
-
-	// 2. If nothing to purge, inform the user
-	if (channelCount === 0 && personaCount === 0) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey:
-				"commands.config.remove.modeloverride.purge_everything_none_title",
-			descriptionKey:
-				"commands.config.remove.modeloverride.purge_everything_none_description",
-			color: ColorCode.WARN,
-		});
-		return;
-	}
-
-	// 3. Purge both categories — run in parallel since they target different tables
-	const [channelCleared, personaCleared] = await Promise.all([
-		channelCount > 0
-			? clearAllChannelLlmOverridesForServer(tomoriState.server_id)
-			: Promise.resolve(true),
-		personaCount > 0
-			? clearAllPersonaLlmOverridesForServer(tomoriState.server_id)
-			: Promise.resolve(true),
-	]);
-
-	if (!channelCleared || !personaCleared) {
-		const context: ErrorContext = {
-			serverId: tomoriState.server_id,
-			errorType: "DatabaseDeleteError",
-			metadata: {
-				operation: "purgeEverything",
-				channelCleared,
-				personaCleared,
-			},
-		};
-		await log.error(
-			"Failed to purge all model overrides",
-			new Error(
-				`Partial failure: channels=${channelCleared}, personas=${personaCleared}`,
-			),
-			context,
-		);
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.update_failed_title",
-			descriptionKey: "general.errors.update_failed_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 4. Invalidate both caches after successful DB writes
-	if (channelCount > 0) {
-		invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
-	}
-	if (personaCount > 0) {
-		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-	}
-
-	// 5. Reply success with combined count
-	const totalCount = channelCount + personaCount;
-	await replyInfoEmbed(interaction, locale, {
-		titleKey:
-			"commands.config.remove.modeloverride.purge_everything_success_title",
-		descriptionKey:
-			"commands.config.remove.modeloverride.purge_everything_success_description",
-		descriptionVars: {
-			total: totalCount.toString(),
-			channels: channelCount.toString(),
-			personas: personaCount.toString(),
-		},
-		color: ColorCode.SUCCESS,
-	});
-
-	log.success(
-		`Purged all model overrides (${channelCount} channel, ${personaCount} persona) from server ${interaction.guild?.id}`,
-	);
+function formatRemovedNames(names: string[]): string {
+	const maxVisibleNames = 10;
+	const visibleNames = names.slice(0, maxVisibleNames);
+	const suffix = names.length > maxVisibleNames ? ", ..." : "";
+	return `${visibleNames.join(", ")}${suffix}`;
 }
