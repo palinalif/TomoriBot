@@ -36,6 +36,7 @@ import {
 } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
+import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { getCachedPresetAvatar } from "../../utils/image/avatarHelper";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
 import {
@@ -634,9 +635,13 @@ export async function execute(
       const presetAvatarBuffer = await getPresetAvatarBuffer(selectedPreset);
       let avatarAttachment: AttachmentBuilder | null = null;
       if (presetAvatarBuffer) {
-        const sanitizedNickname = resolvedPersonaName
-          .replace(/[^a-zA-Z0-9-_]/g, "_")
-          .slice(0, 50);
+        const sanitizedNickname = sanitizeAttachmentFilenamePart(
+          resolvedPersonaName,
+          {
+            fallback: "persona",
+            maxLength: 50,
+          },
+        );
         const timestamp = Date.now();
         const avatarFilename = `persona-default-${sanitizedNickname}-${timestamp}.png`;
         avatarAttachment = new AttachmentBuilder(presetAvatarBuffer, {
@@ -864,9 +869,13 @@ export async function execute(
     const presetAvatarBuffer = await getPresetAvatarBuffer(selectedPreset);
     let avatarAttachment: AttachmentBuilder | null = null;
     if (presetAvatarBuffer) {
-      const sanitizedNickname = resolvedAlterName
-        .replace(/[^a-zA-Z0-9-_]/g, "_")
-        .slice(0, 50);
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(
+        resolvedAlterName,
+        {
+          fallback: "persona",
+          maxLength: 50,
+        },
+      );
       const timestamp = Date.now();
       const avatarFilename = `persona-default-alter-${sanitizedNickname}-${timestamp}.png`;
       avatarAttachment = new AttachmentBuilder(presetAvatarBuffer, {

@@ -549,11 +549,31 @@ export default {
     // SillyTavernプリセット管理
     stpreset: {
       description: `SillyTavernプリセットを管理`,
+      upload: {
+        description: `SillyTavernプリセットJSONファイルをアップロード`,
+        file_description: `アップロードするSillyTavernプリセットの.jsonファイル`,
+        invalid_file_title: `無効なファイル`,
+        invalid_format: `\`.json\`ファイルのみ対応しています。SillyTavernプリセットのJSONファイルをアップロードしてください。`,
+        file_too_large_title: `ファイルが大きすぎます`,
+        file_too_large_description: `プリセットファイルは{max_size} MB以下にしてください。`,
+        download_failed: `添付ファイルのダウンロードに失敗しました。もう一度お試しください。`,
+        invalid_json: `ファイルを有効なJSONとして解析できませんでした。`,
+        not_a_preset: `これはSillyTavernプリセットではないようです — \`prompts\`配列が見つかりません。`,
+        no_nodes: `このプリセットに使用可能なプロンプトノードが見つかりませんでした。`,
+        duplicate_name: `"{name}"という名前のプリセットはこのサーバーに既に存在します。先に削除するか、ファイル名を変更してください。`,
+        success_title: `プリセットをアップロードしました`,
+        success_description: `**{name}**をインポートしました。\n\n• **{total}** 合計ノード\n• **{markers}** 構造マーカー\n• **{toggleable}** 切り替え可能ノード（**{enabled}** 有効）\n\n\`/stpreset node toggle\`でアクティブなノードを調整できます。`,
+      },
       node: {
         description: `プリセットのプロンプトノードを管理`,
         toggle: {
           description: `プリセットのプロンプトノードのオン・オフを切り替え`,
-          modal_title: `Marinara's Spaghetti Recipe`,
+          no_preset_title: `プリセットが見つかりません`,
+          no_preset_description: `このサーバーにアクティブなSillyTavernプリセットがありません。まず\`/stpreset upload\`でアップロードしてください。`,
+          no_nodes_title: `切り替え可能なノードがありません`,
+          no_nodes_description: `このプリセットには切り替え可能なプロンプトノードがありません。`,
+          select_page_title: `ページを選択`,
+          select_page_description: `**{preset_name}**には**{total_nodes}**個の切り替え可能なノードが**{total_pages}**ページにわたってあります。\nページを選択してノードを表示・切り替え:`,
           group_label_0: `ノード 1–10`,
           group_label_1: `ノード 11–20`,
           group_label_2: `ノード 21–30`,

@@ -833,3 +833,40 @@ export type SavedProviderConfigUpsert = Omit<
 	SavedProviderConfigRow,
 	"saved_config_id" | "saved_at" | "updated_at"
 >;
+
+/**
+ * SillyTavern Preset — imported preset metadata + raw JSON blob.
+ * Stored in st_presets table; scoped per server_id.
+ * Multiple presets may exist per server; only one is active at a time.
+ */
+export const stPresetSchema = z.object({
+	preset_id: z.number().optional(),
+	server_id: z.number(),
+	preset_name: z.string(),
+	raw_json: z.unknown(),
+	is_active: z.boolean().default(false),
+	created_at: z.date().optional(),
+	updated_at: z.date().optional(),
+});
+export type StPresetRow = z.infer<typeof stPresetSchema>;
+
+/**
+ * SillyTavern Preset Node — individual toggleable prompt node parsed
+ * from a preset's prompts array. Stored in st_preset_nodes table.
+ * Nodes are ordered by node_order (matching the preset's prompt_order).
+ */
+export const stPresetNodeSchema = z.object({
+	node_id: z.number().optional(),
+	preset_id: z.number(),
+	identifier: z.string(),
+	name: z.string(),
+	role: z.string().default("system"),
+	content: z.string().default(""),
+	is_marker: z.boolean().default(false),
+	is_enabled: z.boolean().default(true),
+	node_order: z.number(),
+	injection_position: z.number().default(0),
+	injection_depth: z.number().default(4),
+	injection_order: z.number().default(100),
+});
+export type StPresetNodeRow = z.infer<typeof stPresetNodeSchema>;

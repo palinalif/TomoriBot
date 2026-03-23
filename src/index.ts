@@ -203,6 +203,7 @@ async function initializeDatabase(
 ): Promise<void> {
   const schemaPath = path.join(import.meta.dir, "db", "schema.sql");
   const ragSchemaPath = path.join(import.meta.dir, "db", "schema_rag.sql");
+  const stPresetSchemaPath = path.join(import.meta.dir, "db", "schema_stpreset.sql");
   const seedPath = path.join(import.meta.dir, "db", "seed.sql");
   const ragEnabled =
     process.env.RUN_ENV === "production" ||
@@ -222,6 +223,10 @@ async function initializeDatabase(
           "Skipping RAG schema init (set ACTIVATE_LOCAL_RAG=true to enable in non-production).",
         );
       }
+
+      // Initialize ST preset schema (always-on — lightweight tables)
+      await sql.file(stPresetSchemaPath);
+      log.success("PostgreSQL ST preset schema verified");
 
       // Initialize seed data
       await sql.file(seedPath);

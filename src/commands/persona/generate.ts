@@ -35,6 +35,7 @@ import {
   presetExportDataSchema,
   PRESET_EXPORT_VERSION,
 } from "../../types/preset/presetExport";
+import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import type { PresetExport } from "../../types/preset/presetExport";
 import type { ModalComponent } from "../../types/discord/modal";
 import type { ToolContext } from "../../types/tool/interfaces";
@@ -841,7 +842,10 @@ export async function execute(
     }
 
     // 18. Create attachment
-    const filename = `${characterName.replace(/[^a-zA-Z0-9]/g, "_")}_preset.png`;
+    const filename = `${sanitizeAttachmentFilenamePart(characterName, {
+      fallback: "persona",
+      maxLength: 50,
+    })}_preset.png`;
     const attachment = new AttachmentBuilder(finalPngBuffer, {
       name: filename,
     });

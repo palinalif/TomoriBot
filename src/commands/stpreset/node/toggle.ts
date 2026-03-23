@@ -1,17 +1,29 @@
 import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
 	MessageFlags,
+	type ButtonInteraction,
 	type ChatInputCommandInteraction,
 	type Client,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
+import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
 	replyInfoEmbed,
 	promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
-import type { UserRow } from "@/types/db/schema";
-import type { CheckboxGroupOption } from "@/types/discord/modal";
+import { createStandardEmbed } from "@/utils/discord/embedHelper";
+import type { UserRow, ErrorContext, StPresetNodeRow } from "@/types/db/schema";
+import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
+import {
+	loadActivePreset,
+	loadPresetsForServer,
+	loadToggleableNodes,
+	updateNodeEnabledStates,
+} from "@/utils/db/stPresetDb";
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -23,97 +35,110 @@ const MAX_OPTIONS_PER_GROUP = 10;
 /** Maximum checkbox groups per modal (Discord limit: 5 action rows) */
 const MAX_GROUPS_PER_MODAL = 5;
 
-// ─── Hardcoded Marinara Preset Nodes ─────────────────────────────────
+/** Maximum toggleable nodes per modal page (5 groups × 10 options) */
+const NODES_PER_PAGE = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
+
+/** Timeout for page-selection button interaction (5 minutes) */
+const PAGE_SELECT_TIMEOUT_MS = 300_000;
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+/** Maximum characters for a checkbox option description (Discord limit) */
+const DESCRIPTION_MAX_LENGTH = 100;
 
 /**
- * Represents a single toggleable prompt node from a SillyTavern preset.
- * Filtered from the preset's `prompts` array — excludes comment-only
- * nodes (content is purely `{{// ... }}{{trim}}`) and marker nodes.
+ * Strip SillyTavern macros from node content to produce a human-readable
+ * description preview. Removes comment blocks, {{trim}}, {{setvar::...}},
+ * and {{getvar::...}} wrappers — but for setvar nodes, extracts the value
+ * portion (e.g., `{{setvar::tense::past tense}}` → `past tense`).
+ *
+ * @param content - Raw node content with ST macros
+ * @returns Cleaned text truncated to DESCRIPTION_MAX_LENGTH, or undefined if empty
  */
-interface PresetNode {
-	/** Display name from the preset */
-	name: string;
-	/** Unique identifier (UUID or well-known like "main") */
-	identifier: string;
-	/** Whether the node is enabled by default in the preset's prompt_order */
-	enabled: boolean;
+function buildNodeDescription(content: string): string | undefined {
+	let cleaned = content
+		// 1. Strip comment blocks: {{// ... }}
+		.replace(/\{\{\/\/[^}]*\}\}/g, "")
+		// 2. Strip {{trim}} macros
+		.replace(/\{\{trim\}\}/g, "")
+		// 3. Extract value from setvar: {{setvar::key::value}} → value
+		.replace(/\{\{setvar::[^:}]+::([^}]*)\}\}/g, "$1")
+		// 4. Resolve getvar to placeholder: {{getvar::key}} → [key]
+		.replace(/\{\{getvar::([^}]*)\}\}/g, "[$1]")
+		// 5. Simplify remaining template vars: {{user}} → user, {{char}} → char
+		.replace(/\{\{(\w+)\}\}/g, "$1")
+		// 6. Collapse whitespace
+		.replace(/\s+/g, " ")
+		.trim();
+
+	if (cleaned.length === 0) return undefined;
+
+	// 7. Truncate to Discord's limit
+	if (cleaned.length > DESCRIPTION_MAX_LENGTH) {
+		cleaned = `${cleaned.slice(0, DESCRIPTION_MAX_LENGTH - 3)}...`;
+	}
+
+	return cleaned;
 }
 
 /**
- * Marinara's Spaghetti Recipe v10.0 — toggleable nodes in prompt_order
- * sequence (character_id: 100001). Comment-only and marker nodes are
- * excluded. Order matches the preset's `prompt_order` array for the
- * user-prompt list, which defines the actual rendering order.
+ * Build checkbox groups for a page of nodes.
+ * Chunks the given nodes into groups of MAX_OPTIONS_PER_GROUP (10) and
+ * creates up to MAX_GROUPS_PER_MODAL (5) checkbox group components.
+ *
+ * @param pageNodes - The nodes for this page (max 50)
+ * @returns Array of checkbox group modal components
  */
-const MARINARA_NODES: PresetNode[] = [
-	// ── Core Prompt Wrappers ──
-	{ name: "|┎ <setting>", identifier: "2d052896-514b-46da-9d1b-2ca05dca2d66", enabled: true },
-	{ name: "| Instructions", identifier: "8d39cd61-4a47-4e45-bf51-4dc70ae05b5a", enabled: true },
-	{ name: "|┖ </setting>", identifier: "95c1f757-ee53-4656-bc16-90cb51b2328b", enabled: true },
-	{ name: "|┎ <characters>", identifier: "83945990-3802-47ac-a0a1-86669ff32073", enabled: true },
-	{ name: "|┖ </characters>", identifier: "4053badc-3ae3-4f4e-8667-2a4b14d6a734", enabled: true },
-	{ name: "|┎ <protagonist>", identifier: "1a5ccb5f-ddf7-4647-a8d4-791626baf0de", enabled: true },
-	{ name: "|┖ </protagonist>", identifier: "05f596ff-ceef-4751-b90c-8d27bc296ba3", enabled: true },
-	{ name: "|┎ <scenario>", identifier: "cf57d752-9196-41bb-876a-03059c57b357", enabled: true },
-	{ name: "|┖ </scenario>", identifier: "93f9bb16-0510-466e-890f-1f50832acc9b", enabled: true },
-	{ name: "|┎ <past_events>", identifier: "596bc331-9500-4a13-9e20-7c41cf758641", enabled: true },
+function buildCheckboxGroups(
+	pageNodes: StPresetNodeRow[],
+): ModalCheckboxGroupField[] {
+	const groups: ModalCheckboxGroupField[] = [];
 
-	// ── Structural & Content Nodes ──
-	{ name: "|┖ </past_events>", identifier: "70bc3b69-e21c-4021-b6a6-bdfdec26b0a2", enabled: true },
-	{ name: "|| Summary", identifier: "3f1d7de3-a9a1-4f66-aae0-3b1f6f913aad", enabled: true },
-	{ name: "┌ <lore>", identifier: "64072fc1-9284-444c-8348-10b8478b99dd", enabled: true },
-	{ name: "└ </lore>", identifier: "1cc6303c-28ee-455f-a966-ab84a8b7b7c6", enabled: true },
-	{ name: "┌ <role>", identifier: "58cec410-bd0b-4a5e-872e-b16f01461201", enabled: true },
-	{ name: "| Role", identifier: "509bbfe7-b6d4-4b4c-947e-ae46ee0e0e28", enabled: true },
-	{ name: "└ </role>", identifier: "35cdd532-dfc3-4739-b404-1864b7f82269", enabled: true },
-	{ name: "┌ <instructions>", identifier: "ebbc94e5-f5ca-425e-9210-be40f64c0098", enabled: true },
-	{ name: "└ </instructions>", identifier: "738693f4-31e5-44bb-88ed-dcd4d8e20665", enabled: true },
-	{ name: "⌜ <example_message>", identifier: "542f8e7f-0316-4505-b14a-d772a04f17a7", enabled: true },
+	for (let i = 0; i < pageNodes.length; i += MAX_OPTIONS_PER_GROUP) {
+		const chunk = pageNodes.slice(i, i + MAX_OPTIONS_PER_GROUP);
+		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
 
-	// ── Examples, Chat, & Task ──
-	{ name: "⌞ </example_message>", identifier: "7bee04e9-e076-49a6-bc9d-78a2e04c21e5", enabled: true },
-	{ name: "⌜ <chat_history>", identifier: "aec5b0c8-c792-4245-ab95-22e947cf24d4", enabled: true },
-	{ name: "⌞ </chat_history>", identifier: "857fd06f-2425-4406-8412-6a5c280a5249", enabled: true },
-	{ name: "⌜ <last_message>", identifier: "8e8d7718-4377-49d5-b3c2-70899bfa8f14", enabled: true },
-	{ name: "⌞ </last_message>", identifier: "d7288abb-29f5-42a5-8042-7c250cbd1c25", enabled: true },
-	{ name: "⌈ <task>", identifier: "24d89740-031a-45c5-aff7-3292afde3f95", enabled: true },
-	{ name: "| Task", identifier: "c3c7a9bf-6914-4f2b-ba2d-c45c677bdca6", enabled: true },
-	{ name: "⌊ </task>", identifier: "c0a95f7e-fb59-48f2-867b-95de8a96a536", enabled: true },
-	{ name: "⌈ <output_format>", identifier: "95cf522b-90b3-42c7-aef5-6b6df8bc2861", enabled: true },
-	{ name: "| Output Format", identifier: "be1189ec-f48e-43a1-a263-73501ca4e950", enabled: true },
+		const options: CheckboxGroupOption[] = chunk.map((node) => ({
+			label: node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
+			value: node.identifier,
+			description: buildNodeDescription(node.content),
+			default: node.is_enabled,
+		}));
 
-	// ── Output & Final Instructions ──
-	{ name: "⌊ </output_format>", identifier: "593fc752-b757-47da-b9a4-467c323456cb", enabled: true },
-	{ name: "⌈ <final_instructions>", identifier: "b6cdff24-2977-4904-abe0-225f5760c63c", enabled: true },
-	{ name: "| Final Instructions", identifier: "3b610e25-2bce-443b-b4e6-2069c22adf73", enabled: true },
-	{ name: "⌊ </final_instructions>", identifier: "dd13f4ad-e323-4b9f-a941-370427fc4bf0", enabled: true },
+		groups.push({
+			kind: "checkboxGroup" as const,
+			customId: `stpreset_nodes_${groupIndex}`,
+			labelKey: `commands.stpreset.node.toggle.group_label_${groupIndex}`,
+			descriptionKey: "commands.stpreset.node.toggle.group_description",
+			minValues: 0,
+			required: false,
+			options,
+		});
+	}
 
-	// ── Type Toggles (enable one) ──
-	{ name: "➊ Game Master", identifier: "2501509e-7e23-4ac0-93f7-450d86053c98", enabled: false },
-	{ name: "➋ Roleplayer", identifier: "dca7d9fa-5d8f-43a7-9295-f1aa592dac2f", enabled: true },
-	{ name: "➌ Writer", identifier: "f1e126e2-6cb2-4193-9222-0993f8488650", enabled: false },
+	return groups;
+}
 
-	// ── Narration Toggles (enable one) ──
-	{ name: "➀ Third-Person", identifier: "b98ed009-b160-4199-bb57-9261941965c9", enabled: true },
-	{ name: "➁ Second-Person", identifier: "23d7c37b-a525-4edf-821d-fb9b158b9c16", enabled: false },
-	{ name: "➂ First-Person", identifier: "32e4b192-e95c-4deb-a2bb-05732e62e754", enabled: false },
-
-	// ── POV Toggles (enable one) ──
-	{ name: "➀ Omniscient", identifier: "15fd34bc-fd07-4910-a5ba-eee71ebe32b0", enabled: true },
-	{ name: "➁ Character's", identifier: "2f59bdbc-c4a1-4a2e-8f01-8ec9e008d8b9", enabled: false },
-	{ name: "➂ User's", identifier: "f6521305-e264-4fdd-a55a-b5a4152d27ac", enabled: false },
-
-	// ── Tense Toggles (enable one) ──
-	{ name: "➀ Past", identifier: "93c662c6-1f32-48cc-8ab9-ea14dabc649f", enabled: true },
-	{ name: "➁ Present", identifier: "4464647d-dd98-43af-a65b-c170074e3b54", enabled: false },
-	{ name: "➂ Future", identifier: "46d4c6ad-b2de-454c-b3cd-070cd1b05f18", enabled: false },
-
-	// ── Length Toggles (enable one) ──
-	{ name: "➀ Flexible", identifier: "cd6f2f1e-c948-45a8-ae71-c71902d84c59", enabled: true },
-	{ name: "➁ One Sentence", identifier: "cb442cc1-5b17-4365-9ec5-9348002c040a", enabled: false },
-	{ name: "➂ Short", identifier: "6aa5f3fe-8d2c-49ff-b3bf-766ab2e93ea9", enabled: false },
-	{ name: "➃ Moderate", identifier: "ef13726b-5d7b-447a-95c2-9dc12e680ef6", enabled: false },
-];
+/**
+ * Collect selected node identifiers from modal submission checkbox groups.
+ *
+ * @param multiValues - The multiValues map from the modal result
+ * @param groupCount - Number of checkbox groups in this modal
+ * @returns Set of selected node identifiers
+ */
+function collectSelectedIds(
+	multiValues: Record<string, string[]> | undefined,
+	groupCount: number,
+): Set<string> {
+	const selectedIds = new Set<string>();
+	for (let g = 0; g < groupCount; g++) {
+		const groupValues = multiValues?.[`stpreset_nodes_${g}`] ?? [];
+		for (const id of groupValues) {
+			selectedIds.add(id);
+		}
+	}
+	return selectedIds;
+}
 
 // ─── Subcommand Configuration ────────────────────────────────────────
 
@@ -135,59 +160,152 @@ export const configureSubcommand = (
 
 /**
  * Execute /stpreset node toggle.
- * Shows a modal with up to 5 checkbox groups (10 options each) representing
- * the toggleable prompt nodes from the loaded SillyTavern preset. Nodes are
- * rendered top-to-bottom in preset order. Currently hardcoded to Marinara's
- * Spaghetti Recipe v10.0 for prototyping.
+ * Loads the active (or first available) ST preset for this server from the
+ * database, then shows a modal with checkbox groups representing the
+ * toggleable prompt nodes. Nodes render top-to-bottom in the preset's
+ * prompt_order sequence.
+ *
+ * If the preset has more than 50 toggleable nodes (exceeding a single
+ * modal's capacity), a page-selection embed with numbered buttons is shown
+ * first, allowing the user to pick which page of nodes to view/toggle.
+ *
+ * On submit, changed enabled states are persisted back to the database.
  *
  * @param _client - Discord client instance
  * @param interaction - Command interaction
- * @param _userData - User data from database
+ * @param userData - User data from database
  * @param locale - User's preferred locale
  */
 export async function execute(
 	_client: Client,
 	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
+	userData: UserRow,
 	locale: string,
 ): Promise<void> {
+	// 1. Verify server setup
+	const serverId = interaction.guild?.id ?? interaction.user.id;
+	const tomoriState = await getCachedTomoriState(serverId);
+	if (!tomoriState) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.tomori_not_setup_title",
+			descriptionKey: "general.errors.tomori_not_setup_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
 	try {
-		// 1. Build checkbox groups by chunking nodes into groups of 10
-		const totalNodes = MARINARA_NODES.slice(
-			0,
-			MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL,
-		);
-		const checkboxGroups = [];
-
-		for (let i = 0; i < totalNodes.length; i += MAX_OPTIONS_PER_GROUP) {
-			const chunk = totalNodes.slice(i, i + MAX_OPTIONS_PER_GROUP);
-			const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
-
-			// 2. Map each node to a checkbox option
-			const options: CheckboxGroupOption[] = chunk.map((node) => ({
-				label: node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
-				value: node.identifier,
-				default: node.enabled,
-			}));
-
-			checkboxGroups.push({
-				kind: "checkboxGroup" as const,
-				customId: `stpreset_nodes_${groupIndex}`,
-				labelKey: `commands.stpreset.node.toggle.group_label_${groupIndex}`,
-				descriptionKey: "commands.stpreset.node.toggle.group_description",
-				minValues: 0,
-				required: false,
-				options,
-			});
+		// 2. Find the active preset, or fall back to the first available preset
+		let preset = await loadActivePreset(tomoriState.server_id);
+		if (!preset) {
+			const allPresets = await loadPresetsForServer(tomoriState.server_id);
+			preset = allPresets[0] ?? null;
 		}
 
-		// 3. Show modal (modal is the acknowledgment — no pre-defer)
+		if (!preset || !preset.preset_id) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.stpreset.node.toggle.no_preset_title",
+				descriptionKey: "commands.stpreset.node.toggle.no_preset_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 3. Load toggleable nodes from DB (non-marker, ordered by node_order)
+		const dbNodes = await loadToggleableNodes(preset.preset_id);
+		if (dbNodes.length === 0) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.stpreset.node.toggle.no_nodes_title",
+				descriptionKey: "commands.stpreset.node.toggle.no_nodes_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 4. Determine if pagination is needed
+		const totalPages = Math.ceil(dbNodes.length / NODES_PER_PAGE);
+		let pageNodes: StPresetNodeRow[];
+		let modalInteractionSource: ChatInputCommandInteraction | ButtonInteraction = interaction;
+
+		if (totalPages > 1) {
+			// 4a. Multi-page: show page-selection embed with numbered buttons
+			const pageSelectEmbed = createStandardEmbed(locale, {
+				titleKey: "commands.stpreset.node.toggle.select_page_title",
+				descriptionKey: "commands.stpreset.node.toggle.select_page_description",
+				descriptionVars: {
+					preset_name: preset.preset_name,
+					total_nodes: dbNodes.length.toString(),
+					total_pages: totalPages.toString(),
+				},
+				color: ColorCode.INFO,
+			});
+
+			// Build numbered page buttons (up to 9 pages)
+			const maxButtons = Math.min(totalPages, 9);
+			const pageButtons: ButtonBuilder[] = [];
+
+			for (let i = 1; i <= maxButtons; i++) {
+				const startNode = (i - 1) * NODES_PER_PAGE + 1;
+				const endNode = Math.min(i * NODES_PER_PAGE, dbNodes.length);
+				pageButtons.push(
+					new ButtonBuilder()
+						.setCustomId(`stpreset_page_${i}`)
+						.setLabel(`${startNode}–${endNode}`)
+						.setStyle(ButtonStyle.Primary),
+				);
+			}
+
+			const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				...pageButtons,
+			);
+
+			// Send page selection message
+			const pageSelectMessage = await interaction.reply({
+				embeds: [pageSelectEmbed],
+				components: [actionRow],
+				flags: MessageFlags.Ephemeral,
+			});
+
+			// Wait for page button click
+			let pageButtonInteraction: ButtonInteraction;
+			try {
+				pageButtonInteraction = (await pageSelectMessage.awaitMessageComponent({
+					filter: (i) =>
+						i.user.id === interaction.user.id &&
+						i.customId.startsWith("stpreset_page_"),
+					time: PAGE_SELECT_TIMEOUT_MS,
+				})) as ButtonInteraction;
+			} catch {
+				log.info("[ST Preset Node Toggle] Page selection timed out");
+				return;
+			}
+
+			// Extract selected page and slice nodes
+			const selectedPage = Number.parseInt(
+				pageButtonInteraction.customId.replace("stpreset_page_", ""),
+				10,
+			);
+			const startIndex = (selectedPage - 1) * NODES_PER_PAGE;
+			pageNodes = dbNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
+			modalInteractionSource = pageButtonInteraction;
+		} else {
+			// 4b. Single page: use all nodes directly
+			pageNodes = dbNodes;
+		}
+
+		// 5. Build checkbox groups for the selected page
+		const checkboxGroups = buildCheckboxGroups(pageNodes);
+
+		// 6. Show modal — use the preset name as the title (passthrough via localizer)
 		const modalResult = await promptWithRawModal(
-			interaction,
+			modalInteractionSource,
 			locale,
 			{
 				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.stpreset.node.toggle.modal_title",
+				modalTitleKey: preset.preset_name,
 				components: checkboxGroups,
 			},
 			MessageFlags.Ephemeral,
@@ -203,26 +321,29 @@ export async function execute(
 			return;
 		}
 
-		// 4. Collect selected node identifiers from all checkbox groups
-		const selectedIds = new Set<string>();
-		for (let g = 0; g < checkboxGroups.length; g++) {
-			const groupValues = modalResult.multiValues?.[`stpreset_nodes_${g}`] ?? [];
-			for (const id of groupValues) {
-				selectedIds.add(id);
-			}
-		}
+		// 7. Collect selected node identifiers from all checkbox groups
+		const selectedIds = collectSelectedIds(modalResult.multiValues, checkboxGroups.length);
 
-		// 5. Build a summary of what changed vs. preset defaults
+		// 8. Build the enabled state map and detect changes
+		const enabledMap = new Map<string, boolean>();
 		const toggled: string[] = [];
-		for (const node of totalNodes) {
+
+		for (const node of pageNodes) {
 			const isNowEnabled = selectedIds.has(node.identifier);
-			if (isNowEnabled !== node.enabled) {
+			enabledMap.set(node.identifier, isNowEnabled);
+
+			if (isNowEnabled !== node.is_enabled) {
 				const state = isNowEnabled ? "ON" : "OFF";
 				toggled.push(`${state} ${node.name}`);
 			}
 		}
 
-		// 6. Reply with summary (placeholder — no DB persistence yet)
+		// 9. Persist changed states to DB
+		if (toggled.length > 0) {
+			await updateNodeEnabledStates(preset.preset_id, enabledMap);
+		}
+
+		// 10. Reply with summary
 		const summary = toggled.length > 0
 			? toggled.join("\n")
 			: localizer(locale, "commands.stpreset.node.toggle.no_changes");
@@ -231,7 +352,7 @@ export async function execute(
 			titleKey: "commands.stpreset.node.toggle.result_title",
 			descriptionKey: "commands.stpreset.node.toggle.result_description",
 			descriptionVars: {
-				total: totalNodes.length.toString(),
+				total: pageNodes.length.toString(),
 				enabled: selectedIds.size.toString(),
 				changes: summary,
 			},
@@ -240,16 +361,17 @@ export async function execute(
 		});
 
 		log.info(
-			`[ST Preset Node Toggle] ${selectedIds.size}/${totalNodes.length} nodes enabled, ${toggled.length} changed`,
+			`[ST Preset Node Toggle] ${selectedIds.size}/${pageNodes.length} nodes enabled, ${toggled.length} changed for preset "${preset.preset_name}"`,
 		);
 	} catch (error) {
-		await log.error("Error executing /stpreset node toggle", error as Error, {
-			userId: _userData.user_id,
+		const context: ErrorContext = {
+			userId: userData.user_id,
 			serverId: null,
 			tomoriId: null,
 			errorType: "CommandExecutionError",
 			metadata: { command: "stpreset node toggle" },
-		});
+		};
+		await log.error("Error executing /stpreset node toggle", error as Error, context);
 
 		await interaction.followUp({
 			content: localizer(locale, "general.errors.unknown_error_description"),

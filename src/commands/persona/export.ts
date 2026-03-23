@@ -23,6 +23,7 @@ import { getServerAvatar } from "../../utils/image/avatarHelper";
 import { embedMetadataInPNG } from "../../utils/image/pngMetadata";
 import type { SelectOption } from "../../types/discord/modal";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { convertToPNG } from "@/utils/image/imageProcessor";
 
@@ -177,9 +178,10 @@ export async function execute(
     const presetData = exportResult.data;
     if (exportJson) {
       const nickname = presetData.data.tomori_nickname;
-      const sanitizedNickname = nickname
-        .replace(/[^a-zA-Z0-9-_]/g, "_")
-        .slice(0, 50);
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(nickname, {
+        fallback: "persona",
+        maxLength: 50,
+      });
       const timestamp = Date.now();
       const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.json`;
 
@@ -338,9 +340,10 @@ export async function execute(
 
     // 6. Create filename with nickname and timestamp
     const nickname = presetData.data.tomori_nickname;
-    const sanitizedNickname = nickname
-      .replace(/[^a-zA-Z0-9-_]/g, "_")
-      .slice(0, 50);
+    const sanitizedNickname = sanitizeAttachmentFilenamePart(nickname, {
+      fallback: "persona",
+      maxLength: 50,
+    });
     const timestamp = Date.now();
     const filename = `tomori-preset-${sanitizedNickname}-${timestamp}.png`;
 

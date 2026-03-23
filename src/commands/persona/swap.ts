@@ -23,6 +23,7 @@ import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { downloadImage } from "../../utils/image/avatarHelper";
 import { sql } from "../../utils/db/client";
 import { updatePersonaWebhooksAvatar } from "../../utils/discord/webhookManager";
+import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import {
   uploadPersonaAvatarToS3,
   deletePersonaAvatarFromS3,
@@ -408,9 +409,13 @@ export async function execute(
 
     let formerMainAvatarAttachment: AttachmentBuilder | null = null;
     if (formerMainAvatarBuffer) {
-      const sanitizedNickname = mainPersona.tomori_nickname
-        .replace(/[^a-zA-Z0-9-_]/g, "_")
-        .slice(0, 50);
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(
+        mainPersona.tomori_nickname,
+        {
+          fallback: "persona",
+          maxLength: 50,
+        },
+      );
       const timestamp = Date.now();
       const avatarFilename = `persona-swap-${sanitizedNickname}-${timestamp}.png`;
       formerMainAvatarAttachment = new AttachmentBuilder(

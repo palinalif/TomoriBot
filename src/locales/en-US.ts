@@ -547,11 +547,31 @@ export default {
     // SillyTavern preset management
     stpreset: {
       description: `Manage SillyTavern presets`,
+      upload: {
+        description: `Upload a SillyTavern preset JSON file`,
+        file_description: `The SillyTavern preset .json file to upload`,
+        invalid_file_title: `Invalid File`,
+        invalid_format: `Only \`.json\` files are accepted. Please upload a SillyTavern preset JSON file.`,
+        file_too_large_title: `File Too Large`,
+        file_too_large_description: `The preset file must be under {max_size} MB.`,
+        download_failed: `Failed to download the attachment. Please try again.`,
+        invalid_json: `The file could not be parsed as valid JSON.`,
+        not_a_preset: `This doesn't look like a SillyTavern preset — no \`prompts\` array found.`,
+        no_nodes: `No usable prompt nodes were found in this preset.`,
+        duplicate_name: `A preset named "{name}" already exists for this server. Remove it first or rename the file.`,
+        success_title: `Preset Uploaded`,
+        success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n\nUse \`/stpreset node toggle\` to adjust which nodes are active.`,
+      },
       node: {
         description: `Manage preset prompt nodes`,
         toggle: {
           description: `Toggle preset prompt nodes on or off`,
-          modal_title: `Marinara's Spaghetti Recipe`,
+          no_preset_title: `No Preset Found`,
+          no_preset_description: `No active SillyTavern preset found for this server. Upload one with \`/stpreset upload\` first.`,
+          no_nodes_title: `No Toggleable Nodes`,
+          no_nodes_description: `This preset has no toggleable prompt nodes.`,
+          select_page_title: `Select Page`,
+          select_page_description: `**{preset_name}** has **{total_nodes}** toggleable nodes across **{total_pages}** pages.\nSelect a page to view and toggle nodes:`,
           group_label_0: `Nodes 1–10`,
           group_label_1: `Nodes 11–20`,
           group_label_2: `Nodes 21–30`,

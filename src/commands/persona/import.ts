@@ -38,6 +38,7 @@ import {
   updatePersonaWebhooksAvatar,
   getOrCreatePersonaWebhook,
 } from "../../utils/discord/webhookManager";
+import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
 /**
@@ -833,9 +834,13 @@ export async function execute(
       );
       successEmbed.setFooter({ text: footerParts.join(" • ") });
 
-      const sanitizedNickname = itemsImported.nickname
-        .replace(/[^a-zA-Z0-9-_]/g, "_")
-        .slice(0, 50);
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(
+        itemsImported.nickname,
+        {
+          fallback: "persona",
+          maxLength: 50,
+        },
+      );
       const timestamp = Date.now();
       const avatarFilename = `persona-import-${sanitizedNickname}-${timestamp}.png`;
 
@@ -1144,9 +1149,13 @@ export async function execute(
 					persona_prompt = EXCLUDED.persona_prompt
 			`;
 
-      const sanitizedNickname = presetData.tomori_nickname
-        .replace(/[^a-zA-Z0-9-_]/g, "_")
-        .slice(0, 50);
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(
+        presetData.tomori_nickname,
+        {
+          fallback: "persona",
+          maxLength: 50,
+        },
+      );
       const timestamp = Date.now();
       const avatarFilename = `persona-import-alter-${sanitizedNickname}-${timestamp}.png`;
 
