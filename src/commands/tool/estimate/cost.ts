@@ -1616,6 +1616,26 @@ async function sendNoCostProviderEmbed(
   );
 }
 
+async function sendLiveEstimateUnavailableEmbed(
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+  providerName: string,
+): Promise<void> {
+  await replyInfoEmbed(
+    interaction,
+    locale,
+    {
+      titleKey: "commands.tool.estimate.cost.title",
+      descriptionKey: "commands.tool.estimate.cost.unavailable_description",
+      descriptionVars: {
+        provider: getProviderDisplayName(providerName),
+      },
+      color: ColorCode.INFO,
+    },
+    MessageFlags.Ephemeral,
+  );
+}
+
 /**
  * Configure the /tool estimate cost subcommand
  * Shows users estimated API costs for paid providers
@@ -1669,7 +1689,11 @@ export async function execute(
 
     const provider = resolveProvider(tomoriState.llm.llm_provider);
     if (!provider) {
-      await sendLegacyEstimateEmbed(interaction, locale, true);
+      await sendLiveEstimateUnavailableEmbed(
+        interaction,
+        locale,
+        tomoriState.llm.llm_provider,
+      );
       return;
     }
 
@@ -1686,12 +1710,20 @@ export async function execute(
         decryptError as Error,
         errorContext,
       );
-      await sendLegacyEstimateEmbed(interaction, locale, true);
+      await sendLiveEstimateUnavailableEmbed(
+        interaction,
+        locale,
+        tomoriState.llm.llm_provider,
+      );
       return;
     }
 
     if (!decryptedApiKey.trim()) {
-      await sendLegacyEstimateEmbed(interaction, locale, true);
+      await sendLiveEstimateUnavailableEmbed(
+        interaction,
+        locale,
+        tomoriState.llm.llm_provider,
+      );
       return;
     }
 
@@ -1709,7 +1741,11 @@ export async function execute(
         contextError as Error,
         errorContext,
       );
-      await sendLegacyEstimateEmbed(interaction, locale, true);
+      await sendLiveEstimateUnavailableEmbed(
+        interaction,
+        locale,
+        tomoriState.llm.llm_provider,
+      );
       return;
     }
 
@@ -1742,7 +1778,7 @@ export async function execute(
       await sendLiveEstimateEmbed(interaction, locale, measurement);
     } catch (countError) {
       await log.error(
-        "/tool estimate cost live provider token counting failed; falling back to rough estimate",
+        "/tool estimate cost live provider token counting failed; reporting live-count unavailability",
         countError as Error,
         {
           ...errorContext,
@@ -1753,7 +1789,11 @@ export async function execute(
           },
         },
       );
-      await sendLegacyEstimateEmbed(interaction, locale, true);
+      await sendLiveEstimateUnavailableEmbed(
+        interaction,
+        locale,
+        tomoriState.llm.llm_provider,
+      );
     }
   } catch (error) {
     await log.error(

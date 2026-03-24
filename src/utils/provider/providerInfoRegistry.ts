@@ -9,12 +9,14 @@ import { zaiProviderInfo } from "@/providers/zai/providerInfo";
 import { zaicodingProviderInfo } from "@/providers/zaicoding/providerInfo";
 import { googleProviderInfo } from "@/providers/google/providerInfo";
 import { novelaiProviderInfo } from "@/providers/novelai/providerInfo";
+import { nvidiaProviderInfo } from "@/providers/nvidia/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
 
 const providerInfos: readonly ProviderInfo[] = [
 	googleProviderInfo,
 	openrouterProviderInfo,
 	novelaiProviderInfo,
+	nvidiaProviderInfo,
 	customProviderInfo,
 	deepseekProviderInfo,
 	zaiProviderInfo,
@@ -41,6 +43,7 @@ export type ProviderFeatureImplementation =
 	| "novelai"
 	| "custom"
 	| "deepseek"
+	| "nvidia"
 	| "zai";
 
 const providerFeatureImplementations: Partial<
@@ -54,6 +57,7 @@ const providerFeatureImplementations: Partial<
 		openrouter: "openrouter",
 		zai: "zai",
 		zaicoding: "zai",
+		nvidia: "nvidia",
 	},
 	liveTokenCounting: {
 		google: "google",

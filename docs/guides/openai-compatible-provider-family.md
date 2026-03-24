@@ -64,7 +64,7 @@ First target consumers:
 1. `custom`
 2. `deepseek`
 3. `zai`
-4. optional `nvidia`
+4. `nvidia`
 
 Deferred or separate work:
 
@@ -292,11 +292,18 @@ Possible second pass:
 
 ### NVIDIA NIM
 
-Recommended initial scope:
+Current shipped scope:
 
-- curated chat models only
+- curated text/chat models only
+- tool calling on seeded tool-capable rows only
+- vision on seeded vision-capable rows only
+- structured output and history extraction on the validated NVIDIA subset only
+- provider-owned embeddings via `nv-embed-v1`
+- provider-owned native image generation via NVIDIA's Stability endpoint
 
-Treat embeddings and image generation as optional follow-up work, because NIM is a model catalog rather than one uniform capability surface.
+Important reminder:
+
+- keep treating NVIDIA as a curated catalog, not a blanket claim that every NIM model behaves uniformly
 
 ### Vertex AI
 
@@ -402,10 +409,11 @@ When adding the next vendor in this family, verify these areas explicitly instea
 - same pattern as `deepseek`
 - enable only the features confirmed by seeded models and runtime wiring
 
-### Phase 5: Evaluate `nvidia`
+### Phase 5: Add `nvidia`
 
-- start with a small supported model set
-- avoid pretending the entire NIM catalog behaves uniformly
+- keep the supported model set small and curated
+- wire provider-owned embeddings and native image generation only when the exact NVIDIA endpoint contract is implemented
+- keep live token counting out of scope unless NVIDIA exposes a validated prompt-token measurement path
 
 ### Phase 6: Optional Embedding Decoupling
 
@@ -459,7 +467,7 @@ If you want the fastest route to shipping new vendors, do this:
 2. Migrate `custom` first.
 3. Add `deepseek`.
 4. Add `zai`.
-5. Reassess whether `nvidia` belongs in the same family or needs a narrower implementation.
+5. Add `nvidia` with a curated model inventory and provider-owned embedding/image helpers.
 
 Do **not** block that work on Vertex AI or Codex CLI.
 
@@ -469,7 +477,7 @@ If you want another agent to implement this in one pass, give it this bounded sc
 
 1. Implement Phase 1 and Phase 2.
 2. Implement only the DeepSeek MVP described in Phase 3.
-3. Do not start Z.ai, NVIDIA NIM, Vertex AI, or Codex CLI.
+3. Do not start Z.ai, Vertex AI, or Codex CLI.
 4. Preserve current `custom` behavior.
 5. Run `bun run check` and `bun run lint`.
 
@@ -483,7 +491,7 @@ Constraints:
 - keep OpenRouter untouched unless a tiny shared extraction is unavoidable
 - seed DeepSeek text models conservatively
 - do not implement DeepSeek embeddings or native image generation
-- do not start Z.ai, NVIDIA NIM, Vertex AI, or Codex CLI
+- do not start Z.ai, Vertex AI, or Codex CLI
 
 Validation:
 - bun run check

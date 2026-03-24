@@ -9,6 +9,7 @@ import { getOpenrouterToolAdapter } from "../../providers/openrouter/openrouterT
 import { getNovelaiToolAdapter } from "../../providers/novelai/novelaiToolAdapter";
 import { getDeepseekToolAdapter } from "../../providers/deepseek/deepseekToolAdapter";
 import { getCustomToolAdapter } from "../../providers/custom/customToolAdapter";
+import { getNvidiaToolAdapter } from "../../providers/nvidia/nvidiaToolAdapter";
 import { getZaiToolAdapter } from "../../providers/zai/zaiToolAdapter";
 import { getZaicodingToolAdapter } from "../../providers/zaicoding/zaicodingToolAdapter";
 
@@ -41,6 +42,10 @@ export default async (): Promise<void> => {
     const customAdapter = getCustomToolAdapter();
     registerMCPAdapter(customAdapter);
     log.info("Registered Custom tool adapter with MCP capabilities");
+
+    const nvidiaAdapter = getNvidiaToolAdapter();
+    registerMCPAdapter(nvidiaAdapter);
+    log.info("Registered NVIDIA tool adapter with MCP capabilities");
 
     const zaiAdapter = getZaiToolAdapter();
     registerMCPAdapter(zaiAdapter);

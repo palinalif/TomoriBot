@@ -437,6 +437,36 @@ export default {
         "DeepSeekとの通信中に予期しないエラーが発生しました。",
     },
 
+    nvidia: {
+      connection_refused:
+        "NVIDIA APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
+
+      "401_default_message":
+        "NVIDIAのAPIキーが無効か、このモデルへのアクセス権がありません。",
+
+      "402_default_message":
+        "このリクエストを実行するためのNVIDIAクレジットが不足しています。",
+
+      "403_default_message":
+        "NVIDIAによってこのリクエストが拒否されました。アカウント状態とモデル権限を確認してください。",
+
+      "404_default_message":
+        "要求されたNVIDIAモデルまたはAPIルートが見つかりませんでした。",
+
+      "408_default_message":
+        "NVIDIAからの応答前にリクエストがタイムアウトしました。",
+
+      "429_default_message":
+        "NVIDIAでレート制限が発生しています。しばらくしてから再度お試しください。",
+
+      "500_default_message": "NVIDIAで内部サーバーエラーが発生しました。",
+
+      "503_default_message": "NVIDIAは現在利用できないか、過負荷状態です。",
+
+      unknown_default_message:
+        "NVIDIAとの通信中に予期しないエラーが発生しました。",
+    },
+
     // Z.aiプロバイダー固有のエラーメッセージ
     zai: {
       connection_refused:
@@ -619,8 +649,9 @@ export default {
           current_output_typical_title: `推定出力: 標準`,
           current_output_long_title: `推定出力: 長め`,
           current_output_band_value: `**出力推定:** {outputTokens} トークン\n**合計推定:** {totalTokens} トークン\n**費用:** 1トリガーあたり約 {costPerMessage}（100トリガーあたり約 {costPer100}）`,
-          current_footer: `対応プロバイダー（Google/OpenRouter）では入力トークンはプロバイダー計測値です。出力トークンは推定値です。`,
+          current_footer: `入力トークンは、ライブ計測に対応したプロバイダーでのみプロバイダー計測値になります。出力トークンは推定値です。`,
           no_cost_provider_description: `現在のプロバイダーには費用がありません`,
+          unavailable_description: `現在のプロバイダー（**{provider}**）ではライブ費用見積もりを利用できません。`,
           fallback_notice_title: `ライブ計測を利用できません`,
           fallback_notice_value: `現在の設定ではライブのプロバイダートークン計測を利用できなかったため、この表示はおおまかな代替推定です。`,
           minimum_scenario_title: `最小シナリオ（軽量使用）`,
@@ -1391,7 +1422,7 @@ export default {
 - Text2ImageとImage2Imageをカスタマイズタブルなアスペクト比で対応
 - \`/generate image\`を使うか、画像を生成してほしいと頼むだけで動作します
 - 参照画像としてメッセージの添付ファイル、ステッカー、絵文字、ユーザーアバターを使えます
-- GoogleとOpenRouterプロバイダーで利用可能（\`/config model image\`で設定）`,
+- Google、OpenRouter、Z.ai、Z.ai (Coding)、NVIDIA NIMプロバイダーで利用可能（\`/config model image\`で設定）`,
         footer: `すべての機能がすべてのAIプロバイダーで利用できるわけではありません。推奨：Google Gemini。私に直接何ができるか聞いてみることもできます！`,
       },
 
@@ -1407,7 +1438,7 @@ export default {
         current_output_typical_title: `推定出力: 標準`,
         current_output_long_title: `推定出力: 長め`,
         current_output_band_value: `**出力推定:** {outputTokens} トークン\n**合計推定:** {totalTokens} トークン\n**費用:** 1トリガーあたり約 {costPerMessage}（100トリガーあたり約 {costPer100}）`,
-        current_footer: `対応プロバイダー（Google/OpenRouter）では入力トークンはプロバイダー計測値です。出力トークンは推定値です。`,
+        current_footer: `入力トークンは、ライブ計測に対応したプロバイダーでのみプロバイダー計測値になります。出力トークンは推定値です。`,
         fallback_notice_title: `ライブ計測を利用できません`,
         fallback_notice_value: `現在の設定ではライブのプロバイダートークン計測を利用できなかったため、この表示はおおまかな代替推定です。`,
         minimum_scenario_title: `最小シナリオ（軽量使用）`,
@@ -1564,6 +1595,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
         provider_choice_deepseek: `DeepSeek`,
+        provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
         // Brave Search
@@ -1612,6 +1644,23 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`deepseek-reasoner\` はシンキング／推論モデルで、応答が遅くなる場合があります
 - セットアップ後は利用可能なDeepSeekテキストモデル間で切り替えられます`,
         deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        // NVIDIA NIM
+        nvidia_title: `NVIDIA NIM APIキーの設定`,
+        nvidia_description: `NVIDIA NIMは、NVIDIAのAPIカタログを通じてホスト型のチャット、埋め込み、画像生成を提供します。
+- チャットと埋め込みは、NVIDIAのホスト型 \`integrate.api.nvidia.com\` を使用します
+- ネイティブ画像生成は、NVIDIAホストの \`ai.api.nvidia.com\` Stabilityエンドポイントを使用します
+- 構造化出力と履歴抽出は、対応するNVIDIAテキストモデルでのみ利用できます`,
+        nvidia_getting_key_title: `APIキーの取得：`,
+        nvidia_getting_key_description: `1. [NVIDIA Build](https://build.nvidia.com/)にアクセス
+2. NVIDIA開発者アカウントでログイン、または新規作成
+3. [API Keysページ](https://build.nvidia.com/settings/api-keys)でAPIキーを作成または管理
+4. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
+        nvidia_model_notes_title: `モデルに関するメモ：`,
+        nvidia_model_notes_description: `- \`deepseek-ai/deepseek-v3.2\` はデフォルトの汎用チャットモデルです
+- \`qwen/qwen3.5-397b-a17b\` はTomoriBotの厳選NVIDIAセット内で最も高性能なマルチモーダルモデルです
+- \`nv-embed-v1\` はデフォルトの埋め込みモデルです
+- \`stabilityai/stable-diffusion-3-medium\` はデフォルトのNVIDIA画像モデルです`,
+        nvidia_footer: `このプロバイダーを設定したら、{configModel}、{configModelEmbedding}、{configModelImage}でテキスト・埋め込み・画像モデルを変更できます`,
         // Z.ai
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
@@ -4143,6 +4192,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         // プロバイダー固有の警告
         zai_no_img2img_warning:
           "Z.aiは画像から画像への生成に対応していません。参照画像は無視されましたが、テキストプロンプトから画像は生成されます。",
+        nvidia_no_img2img_warning:
+          "NVIDIA NIMは画像から画像への生成に対応していません。参照画像は無視されましたが、テキストプロンプトから画像は生成されます。",
 
         // エラー
         disabled_title: "🔴 画像生成が無効です",
@@ -4150,7 +4201,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           "このサーバーでは画像生成が無効になっています。`/config permissions` で有効にできます（管理権限が必要）。",
         wrong_provider_title: "🔴 サポートされていないプロバイダー",
         wrong_provider_description:
-          "画像生成にはGoogle GeminiまたはOpenRouterが必要です。現在のプロバイダーは**{current_provider}**です。",
+          "画像生成にはネイティブ画像生成に対応したプロバイダーが必要です。現在のプロバイダーは**{current_provider}**です。",
         no_api_key_title: "🔴 APIキーがありません",
         no_api_key_description:
           "APIキーが設定されていません。`/config apikey set`を使用してください。",

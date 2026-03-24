@@ -54,6 +54,13 @@ export const configureSubcommand = (
           {
             name: localizer(
               "en-US",
+              "commands.help.apikey.provider_choice_nvidia",
+            ),
+            value: "nvidia",
+          },
+          {
+            name: localizer(
+              "en-US",
               "commands.help.apikey.provider_choice_novelai",
             ),
             value: "novelai",
@@ -118,6 +125,16 @@ export async function execute(
       "config",
       "model",
       "text",
+    );
+    const configModelEmbeddingMention = commandRegistry.getCommandMention(
+      "config",
+      "model",
+      "embedding",
+    );
+    const configModelImageMention = commandRegistry.getCommandMention(
+      "config",
+      "model",
+      "image",
     );
     const supportServerMention = commandRegistry.getCommandMention(
       "support",
@@ -214,6 +231,42 @@ export async function execute(
           footerKey: "commands.help.apikey.deepseek_footer",
           footerVars: {
             configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "nvidia":
+        embedOptions = {
+          titleKey: "commands.help.apikey.nvidia_title",
+          descriptionKey: "commands.help.apikey.nvidia_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.apikey.nvidia_getting_key_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.nvidia_getting_key_description",
+                {
+                  configSetup: configSetupMention,
+                  configApikeySet: configApikeySetMention,
+                },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.apikey.nvidia_model_notes_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.nvidia_model_notes_description",
+              ),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.apikey.nvidia_footer",
+          footerVars: {
+            configModel: configModelMention,
+            configModelEmbedding: configModelEmbeddingMention,
+            configModelImage: configModelImageMention,
           },
         };
         break;

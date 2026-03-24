@@ -436,6 +436,36 @@ export default {
         "An unexpected error occurred while communicating with DeepSeek.",
     },
 
+    nvidia: {
+      connection_refused:
+        "Could not connect to the NVIDIA API endpoint. Please try again later.",
+
+      "401_default_message":
+        "Your NVIDIA API key is invalid or does not have access to this model.",
+
+      "402_default_message":
+        "Your NVIDIA account does not have sufficient credits for this request.",
+
+      "403_default_message":
+        "NVIDIA denied this request. Please verify your account and model access.",
+
+      "404_default_message":
+        "The requested NVIDIA model or API route could not be found.",
+
+      "408_default_message":
+        "The NVIDIA request timed out before the provider responded.",
+
+      "429_default_message":
+        "NVIDIA is rate limiting this request. Please wait a moment and try again.",
+
+      "500_default_message": "NVIDIA returned an internal server error.",
+
+      "503_default_message": "NVIDIA is currently unavailable or overloaded.",
+
+      unknown_default_message:
+        "An unexpected error occurred while communicating with NVIDIA.",
+    },
+
     // Z.ai provider error messages
     zai: {
       connection_refused:
@@ -617,8 +647,9 @@ export default {
           current_output_typical_title: `Estimated Output: Typical`,
           current_output_long_title: `Estimated Output: Long`,
           current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
-          current_footer: `Input token counts are provider-measured for supported providers (Google/OpenRouter). Output token counts are estimated only.`,
+          current_footer: `Input token counts are provider-measured only for providers with live counting support. Output token counts are estimated only.`,
           no_cost_provider_description: `Current provider does not have costs`,
+          unavailable_description: `Live cost estimation is not available for the current provider (**{provider}**).`,
           fallback_notice_title: `Live Counting Unavailable`,
           fallback_notice_value: `Live provider token counting could not be used for your current setup, so this view is a rough fallback estimate.`,
           minimum_scenario_title: `Minimum Scenario (Light Usage)`,
@@ -1390,7 +1421,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Supports Text2Image and Image2Image with customizable aspect ratios
 - Use \`/generate image\` or just ask me to generate an image
 - Reference images can come from message attachments, stickers, emojis, or user avatars
-- Available on Google and OpenRouter providers (configure with \`/config model image\`)`,
+- Available on Google, OpenRouter, Z.ai, Z.ai (Coding), and NVIDIA NIM providers (configure with \`/config model image\`)`,
         footer: `Not all features are available for all AI providers. Recommended: Google Gemini. You can also just ask me what I can do!`,
       },
 
@@ -1406,7 +1437,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         current_output_typical_title: `Estimated Output: Typical`,
         current_output_long_title: `Estimated Output: Long`,
         current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
-        current_footer: `Input token counts are provider-measured for supported providers (Google/OpenRouter). Output token counts are estimated only.`,
+        current_footer: `Input token counts are provider-measured only for providers with live counting support. Output token counts are estimated only.`,
         fallback_notice_title: `Live Counting Unavailable`,
         fallback_notice_value: `Live provider token counting could not be used for your current setup, so this view is a rough fallback estimate.`,
         minimum_scenario_title: `Minimum Scenario (Light Usage)`,
@@ -1563,6 +1594,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
         provider_choice_deepseek: `DeepSeek`,
+        provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
         // Brave Search
@@ -1611,6 +1643,23 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`deepseek-reasoner\` is the thinking/reasoning model and may respond more slowly
 - You can switch between available DeepSeek text models after setup`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        // NVIDIA NIM
+        nvidia_title: `Setting Up NVIDIA NIM API Key`,
+        nvidia_description: `NVIDIA NIM provides hosted chat, embeddings, and image generation through NVIDIA's API catalog.
+- Chat and embeddings use NVIDIA's hosted \`integrate.api.nvidia.com\` surface
+- Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint
+- Structured output and history extraction are available only on supported NVIDIA text models`,
+        nvidia_getting_key_title: `Getting Your API Key:`,
+        nvidia_getting_key_description: `1. Visit [NVIDIA Build](https://build.nvidia.com/)
+2. Sign in or create an NVIDIA developer account
+3. Create or manage your API keys from the [API Keys page](https://build.nvidia.com/settings/api-keys)
+4. Copy this API key into {configSetup} or {configApikeySet}`,
+        nvidia_model_notes_title: `Model Notes:`,
+        nvidia_model_notes_description: `- \`deepseek-ai/deepseek-v3.2\` is the default general chat model
+- \`qwen/qwen3.5-397b-a17b\` is the highest-capability multimodal model in TomoriBot's curated NVIDIA set
+- \`nv-embed-v1\` is the default embedding model
+- \`stabilityai/stable-diffusion-3-medium\` is the default NVIDIA image model`,
+        nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
         // Z.ai
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
@@ -4137,6 +4186,8 @@ You can change this anytime using \`/personal privacy\`.`,
         // Provider-specific warnings
         zai_no_img2img_warning:
           "Z.ai does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.",
+        nvidia_no_img2img_warning:
+          "NVIDIA NIM does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.",
 
         // Errors
         disabled_title: "🔴 Image Generation Disabled",
@@ -4144,7 +4195,7 @@ You can change this anytime using \`/personal privacy\`.`,
           "Image generation is disabled on this server. A server member with `Manage Server` permissions can enable it using `/config permissions`.",
         wrong_provider_title: "🔴 Unsupported Provider",
         wrong_provider_description:
-          "Image generation requires Google Gemini or OpenRouter. Your current provider is **{current_provider}**.",
+          "Image generation requires a provider with native image generation support. Your current provider is **{current_provider}**.",
         no_api_key_title: "🔴 No API Key",
         no_api_key_description:
           "No API key configured. Please use `/config apikey set`.",

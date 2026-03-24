@@ -28,6 +28,7 @@ Provider folders under `src/providers/`:
 - `novelai` (`NovelaiProvider`)
 - `custom` (`CustomProvider`)
 - `deepseek` (`DeepseekProvider`)
+- `nvidia` (`NvidiaProvider`)
 - `zai` (`ZaiProvider`)
 - `zaicoding` (`ZaicodingProvider`)
 
@@ -52,10 +53,11 @@ Static provider metadata is defined in each provider folder:
 - `src/providers/novelai/providerInfo.ts`
 - `src/providers/custom/providerInfo.ts`
 - `src/providers/deepseek/providerInfo.ts`
+- `src/providers/nvidia/providerInfo.ts`
 - `src/providers/zai/providerInfo.ts`
 - `src/providers/zaicoding/providerInfo.ts`
 
-OpenAI-compatible family internals shared by `custom`, `deepseek`, `zai`, and `zaicoding` live in:
+OpenAI-compatible family internals shared by `custom`, `deepseek`, `nvidia`, `zai`, and `zaicoding` live in:
 
 - `src/providers/openaiCompatible/`
 
@@ -169,6 +171,18 @@ Rule:
 - Uses the same streaming, tool-calling, and structured-output pipeline as the general `zai` provider
 - Intended for dedicated coding-endpoint access such as GLM Coding Plan workflows
 
+## NVIDIA NIM Provider Notes
+
+`nvidia` uses the shared OpenAI-compatible family layer for chat/tool/vision on `https://integrate.api.nvidia.com/v1`.
+
+- **Chat models**: curated NVIDIA-hosted catalog rows only, seeded in `llms`
+- **Embeddings**: `nv-embed-v1` via NVIDIA's embeddings endpoint
+- **Image generation**: `stabilityai/stable-diffusion-3-medium` via NVIDIA's dedicated Stability endpoint
+- Tool calling, vision, and structured output are gated conservatively by seeded per-model flags
+- Structured output and history extraction are enabled only for the validated subset of NVIDIA text models
+- Native image generation is text-to-image only right now; reference images are ignored with a warning
+- `/tool estimate cost` does not support NVIDIA live token counting
+
 ## Tool Integration Across Providers
 
 Tools are provider-agnostic at registry level, then adapted per provider by each provider tool adapter.
@@ -178,6 +192,7 @@ Tools are provider-agnostic at registry level, then adapted per provider by each
 - NovelAI: `novelaiToolAdapter.ts`
 - DeepSeek: `deepseekToolAdapter.ts`
 - Custom: `customToolAdapter.ts`
+- NVIDIA NIM: `nvidiaToolAdapter.ts`
 - Z.ai: `zaiToolAdapter.ts`
 - Z.ai (Coding): `zaicodingToolAdapter.ts`
 
@@ -233,6 +248,13 @@ DeepSeek currently owns runtime execution for:
 - structured output execution
 - history extraction (via structured output capability)
 
+NVIDIA currently owns runtime execution for:
+
+- embeddings
+- structured output execution
+- history extraction (via structured output capability)
+- native image generation
+
 Custom currently owns runtime execution for:
 
 - structured output execution
@@ -241,7 +263,7 @@ Custom currently owns runtime execution for:
 - roleplay compaction
 - history extraction (via structured output capability)
 
-Live token counting for `/tool estimate cost` still uses a temporary legacy command path for Google, OpenRouter, and DeepSeek.
+Live token counting for `/tool estimate cost` still uses a temporary legacy command path for Google, OpenRouter, DeepSeek, and the Z.ai family. NVIDIA intentionally does not implement live token counting.
 
 Rule:
 
@@ -329,6 +351,9 @@ Why this matters:
 - `/config apikey set provider:openrouter key:...`
 - `/config apikey set provider:novelai key:...`
 - `/config apikey set provider:deepseek key:...`
+- `/config apikey set provider:nvidia key:...`
+- `/config apikey set provider:zai key:...`
+- `/config apikey set provider:zaicoding key:...`
 
 Provider choice/model selection commands:
 

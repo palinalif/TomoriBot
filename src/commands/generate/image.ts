@@ -667,6 +667,28 @@ export async function execute(
       });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
+    } else if (imageGenerationImplementation === "nvidia") {
+      // Use NVIDIA native image generation API
+      if (referenceImages.length > 0) {
+        await interaction.followUp({
+          content: localizer(
+            locale,
+            "commands.generate.image.nvidia_no_img2img_warning",
+          ),
+        });
+      }
+      const { generateNvidiaNativeImage } = await import(
+        "@/providers/nvidia/nvidiaImageGeneration"
+      );
+      const result = await generateNvidiaNativeImage({
+        apiKey,
+        model: modelCodename,
+        prompt,
+        aspectRatio,
+        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+      });
+      generatedImageData = result.imageData;
+      generatedImageMimeType = result.mimeType;
     } else {
       throw new Error(
         `Image generation is not implemented for provider ${tomoriState.llm.llm_provider}`,

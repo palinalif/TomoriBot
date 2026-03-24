@@ -1,7 +1,7 @@
 /**
  * Image Generation Tool
- * Allows TomoriBot to generate images using Google's Gemini Imagen API
- * Supports both text-to-image and image-to-image generation
+ * Allows TomoriBot to generate images using the active provider's native image API
+ * Supports text-to-image, and image-to-image only when the active provider supports it
  */
 
 import { AttachmentBuilder } from "discord.js";
@@ -31,12 +31,12 @@ import {
 } from "@/providers/zai/zaiShared";
 
 /**
- * Tool for generating images using Gemini Imagen API
+ * Tool for generating images using the active provider's native image API
  */
 export class GenerateImageTool extends BaseTool {
   name = "generate_image";
   description =
-    "Generate an AI image using Google's Gemini Imagen. Provide a detailed text prompt describing what image you want to create. If you provide a message_id or user_id reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
+    "Generate an AI image using the active provider's native image model. Provide a detailed text prompt describing what image you want to create. If you provide a message_id or user_id reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
@@ -736,6 +736,8 @@ export class GenerateImageTool extends BaseTool {
       );
 
       let generatedImageData: string | null = null;
+      let referenceImagesUsed = referenceImages.length > 0;
+      let referenceImagesIgnoredReason = "";
       const imageGenerationImplementation = resolveProviderFeatureImplementation(
         context.provider,
         "nativeImageGeneration",
@@ -798,6 +800,11 @@ export class GenerateImageTool extends BaseTool {
         }
       } else if (imageGenerationImplementation === "zai") {
         // Use Z.ai native image generation API
+        if (referenceImages.length > 0) {
+          referenceImagesUsed = false;
+          referenceImagesIgnoredReason =
+            " Reference images were ignored because the active provider's image endpoint is text-to-image only.";
+        }
         const { generateZaiNativeImage } = await import(
           "@/providers/zai/zaiImageGeneration"
         );
@@ -810,6 +817,24 @@ export class GenerateImageTool extends BaseTool {
             context.provider === "zaicoding"
               ? ZAI_CODING_IMAGES_GENERATIONS_URL
               : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+        });
+        generatedImageData = result.imageData;
+      } else if (imageGenerationImplementation === "nvidia") {
+        // Use NVIDIA native image generation API
+        if (referenceImages.length > 0) {
+          referenceImagesUsed = false;
+          referenceImagesIgnoredReason =
+            " Reference images were ignored because the active provider's image endpoint is text-to-image only.";
+        }
+        const { generateNvidiaNativeImage } = await import(
+          "@/providers/nvidia/nvidiaImageGeneration"
+        );
+        const result = await generateNvidiaNativeImage({
+          apiKey,
+          model: modelCodename,
+          prompt,
+          aspectRatio,
+          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         });
         generatedImageData = result.imageData;
       } else {
@@ -849,8 +874,11 @@ export class GenerateImageTool extends BaseTool {
 
       // Build success message with remaining quota info (if quota is enabled)
       let successMessage = `Successfully generated and sent image to Discord (message ID: ${sentMessage.id}). The image has been created based on your prompt${
-        referenceImages.length > 0 ? " and the reference image(s)" : ""
+        referenceImagesUsed ? " and the reference image(s)" : ""
       }.`;
+      if (referenceImagesIgnoredReason) {
+        successMessage += referenceImagesIgnoredReason;
+      }
 
       if (quotaCheck.userRemaining !== undefined) {
         const remainingText = localizer(

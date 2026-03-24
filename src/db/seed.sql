@@ -74,6 +74,13 @@ VALUES
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
   ('deepseek', 'deepseek-chat', false, true, false, false, false, true, false, false, false, false, true, 'Default DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekのデフォルトチャットモデル'),
   ('deepseek', 'deepseek-reasoner', true, false, true, false, false, true, false, false, false, false, true, 'Reasoning-focused DeepSeek model with thinking mode, seeded tool use, and JSON structured output', 'シンキングモード、シード済みツール利用、JSON構造化出力に対応した、推論特化のDeepSeekモデル'),
+  -- NVIDIA NIM Models (curated hosted NVIDIA catalog)
+  ('nvidia', 'deepseek-ai/deepseek-v3.2', false, true, false, false, true, true, false, false, false, false, true, 'Default NVIDIA NIM chat model with tool support and structured output', 'ツール利用と構造化出力に対応した、NVIDIA NIMのデフォルトチャットモデル'),
+  ('nvidia', 'qwen/qwen3.5-397b-a17b', true, false, false, false, true, true, true, false, false, false, true, 'Most capable multimodal NVIDIA NIM model in TomoriBot''s curated set', 'TomoriBotの厳選NVIDIA NIMセット内で最も高性能なマルチモーダルモデル'),
+  ('nvidia', 'moonshotai/kimi-k2-instruct', false, false, false, false, false, false, false, false, false, false, false, 'General-purpose NVIDIA NIM text model without tool or structured-output support', 'ツール利用や構造化出力に対応しない、NVIDIA NIMの汎用テキストモデル'),
+  ('nvidia', 'z.ai/glm-4.7', false, false, false, false, true, true, false, false, false, false, true, 'Tool-capable NVIDIA NIM GLM model with structured output support', 'ツール利用と構造化出力に対応した、NVIDIA NIMのGLMモデル'),
+  ('nvidia', 'stepfun-ai/step-3.5-flash', false, false, false, false, true, true, false, false, false, false, false, 'Fast NVIDIA NIM chat model with tool support only', 'ツール利用のみに対応した高速NVIDIA NIMチャットモデル'),
+  ('nvidia', 'google/gemma-3-27b-it', false, false, false, false, true, false, true, false, false, false, false, 'Vision-capable NVIDIA NIM Gemma model for image understanding', '画像理解に対応した、NVIDIA NIMのGemmaビジョンモデル'),
   -- Z.ai (Coding) Models (plain codenames preserved for backward compatibility)
   ('zaicoding', 'glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),
   ('zaicoding', 'glm-4.7', true, true, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model with thinking mode, tool use, and structured output', 'シンキングモード、ツール利用、構造化出力に対応した推論対応GLMモデル'),
@@ -245,6 +252,10 @@ VALUES
   ('zai', 'zai/glm-image', true, false, false, false,
    'Z.ai native image generation model with HD quality output',
    'HD品質の出力に対応したZ.aiネイティブ画像生成モデル'),
+  -- NVIDIA NIM Image Generation Models
+  ('nvidia', 'stabilityai/stable-diffusion-3-medium', true, false, false, false,
+   'NVIDIA-hosted Stable Diffusion 3 Medium image generation model',
+   'NVIDIAホストのStable Diffusion 3 Medium画像生成モデル'),
   -- NovelAI Diffusion Models
   ('novelai', 'nai-diffusion-3-furry', false, false, false, true,
    'NovelAI furry-specialized diffusion model',
@@ -338,7 +349,10 @@ VALUES
    '非推奨の埋め込みモデル（選択不可）'),
   ('openrouter', 'openai/text-embedding-3-small', 'text-embedding-3-small', false, true,
    'Deprecated embedding model (not selectable)',
-   '非推奨の埋め込みモデル（選択不可）')
+   '非推奨の埋め込みモデル（選択不可）'),
+  ('nvidia', 'nv-embed-v1', 'nv-embed-v1', true, false,
+   'Default NVIDIA NIM embedding model for retrieval and document indexing',
+   '検索と文書インデックス向けのNVIDIA NIMデフォルト埋め込みモデル')
 ON CONFLICT (codename) DO UPDATE SET
   model_family = EXCLUDED.model_family,
   model_description = EXCLUDED.model_description,
