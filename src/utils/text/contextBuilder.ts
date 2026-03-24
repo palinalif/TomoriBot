@@ -955,6 +955,7 @@ export async function buildContext({
   isUserImpersonation = false,
   impersonatedUserId,
   impersonatedUserNickname,
+  impersonatedUserPrompt,
   matrixUsers,
   syntheticUsers,
   includeTimestamps = false,
@@ -986,6 +987,7 @@ export async function buildContext({
   isUserImpersonation?: boolean; // Added February 2026 - Flag for user impersonation mode
   impersonatedUserId?: string; // Added February 2026 - User ID being impersonated
   impersonatedUserNickname?: string; // Added February 2026 - Database nickname for impersonated user (optional)
+  impersonatedUserPrompt?: string | null; // Added March 2026 - User-owned prompt for impersonation replies
   /** Matrix bridge users: Matrix user ID (e.g. "@bred:localhost") → stripped display name.
    *  These cannot be looked up in the Discord guild, so they get lightweight entries
    *  with a plain-text mention handle instead of a Discord <@userId> ping. */
@@ -1076,6 +1078,24 @@ export async function buildContext({
       client,
       guildId,
       "User",
+      botName,
+      tomoriConfig.personal_memories_enabled,
+      snapshot,
+    );
+    contextItems.push({
+      role: "system",
+      parts: [{ type: "text", text: promptText }],
+      metadataTag: ContextItemTag.SYSTEM_HUMANIZER_RULES,
+    });
+  }
+
+  // 1.6. User-owned impersonation prompt
+  if (isUserImpersonation && impersonatedUserPrompt?.trim()) {
+    const promptText = await convertMentions(
+      impersonatedUserPrompt.trim(),
+      client,
+      guildId,
+      impersonatedIdentityName || "User",
       botName,
       tomoriConfig.personal_memories_enabled,
       snapshot,

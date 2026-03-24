@@ -14,6 +14,7 @@ import {
   safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
+import { invalidateUserCache } from "../../utils/cache/userCache";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type { SelectOption } from "../../types/discord/modal";
@@ -327,7 +328,8 @@ export async function execute(
 				UPDATE users
 				SET
 					user_nickname = ${interaction.user.username},
-					language_pref = 'en-US'
+					language_pref = 'en-US',
+					impersonation_prompt = NULL
 				WHERE user_disc_id = ${interaction.user.id}
 				RETURNING user_id
 			`;
@@ -339,6 +341,8 @@ export async function execute(
         });
         return;
       }
+
+      invalidateUserCache(interaction.user.id);
 
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.data.delete.success_personal_settings_title",

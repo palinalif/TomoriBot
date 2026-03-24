@@ -26,6 +26,7 @@ const ALLOWED_USER_FIELDS = new Set<keyof UserRow>([
   "privacy_level",
   "nai_char_tags",
   "nai_char_ref_url",
+  "impersonation_prompt",
   "shortterm_cache_crossserver_opt_in",
   // Exclude: user_id (primary key), created_at, updated_at (auto-managed)
 ]);

@@ -751,6 +751,8 @@ SELECT add_column_if_not_exists('users', 'shortterm_cache_crossserver_opt_in', '
 SELECT add_column_if_not_exists('users', 'nai_char_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
 -- User-specific NovelAI character reference image (March 2026)
 SELECT add_column_if_not_exists('users', 'nai_char_ref_url', 'TEXT');
+-- User-specific prompt used during /bot impersonate user-mode replies (March 2026)
+SELECT add_column_if_not_exists('users', 'impersonation_prompt', 'TEXT');
 
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;

@@ -83,11 +83,13 @@ VALUES
   ('nvidia', 'google/gemma-3-27b-it', false, false, false, false, true, false, true, false, false, false, false, 'Vision-capable NVIDIA NIM Gemma model for image understanding', '画像理解に対応した、NVIDIA NIMのGemmaビジョンモデル'),
   -- Z.ai (Coding) Models (plain codenames preserved for backward compatibility)
   ('zaicoding', 'glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),
+  ('zaicoding', 'glm-4.6v-flash', false, false, false, false, true, true, true, false, false, false, true, 'Fast and free vision-capable GLM model routed through the Z.ai Coding endpoint', 'Z.ai Codingエンドポイント経由で利用する高速かつ無料のビジョン対応GLMモデル'),
   ('zaicoding', 'glm-4.7', true, true, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model with thinking mode, tool use, and structured output', 'シンキングモード、ツール利用、構造化出力に対応した推論対応GLMモデル'),
   ('zaicoding', 'glm-4.7-flash', false, false, false, false, true, true, false, false, false, false, true, 'Fast GLM model routed through the Z.ai Coding endpoint', 'Z.ai Codingエンドポイント経由で利用する高速GLMモデル'),
   ('zaicoding', 'glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model with advanced reasoning, tool use, and structured output', '高度な推論、ツール利用、構造化出力に対応した最も高性能なGLMモデル'),
   -- Z.ai General API Models (prefixed codenames allow coexistence with coding rows)
   ('zai', 'zai/glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用するビジョン対応GLMモデル'),
+  ('zai', 'zai/glm-4.6v-flash', false, false, false, false, true, true, true, false, false, false, true, 'Fast and free vision-capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する高速かつ無料のビジョン対応GLMモデル'),
   ('zai', 'zai/glm-4.7', true, true, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する推論対応GLMモデル'),
   ('zai', 'zai/glm-4.7-flash', false, false, false, false, true, true, false, false, false, false, true, 'Fast and free GLM model from the general Z.ai API', '通常のZ.ai APIで利用する高速で無料のGLMモデル'),
   ('zai', 'zai/glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する最も高性能なGLMモデル'),
@@ -140,21 +142,39 @@ BEGIN
           )
           OR EXISTS (
               SELECT 1
-              FROM jsonb_array_elements_text(COALESCE(spc.fallback_llm_ids, '[]'::JSONB)) AS fallback(llm_id_text)
+              FROM jsonb_array_elements_text(
+                  CASE
+                      WHEN jsonb_typeof(COALESCE(spc.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                          THEN COALESCE(spc.fallback_llm_ids, '[]'::JSONB)
+                      ELSE '[]'::JSONB
+                  END
+              ) AS fallback(llm_id_text)
               JOIN llms l
                 ON l.llm_id = fallback.llm_id_text::INTEGER
               WHERE l.llm_provider = 'zaicoding'
           )
           OR EXISTS (
               SELECT 1
-              FROM jsonb_array_elements(COALESCE(spc.channel_llm_overrides, '[]'::JSONB)) AS override(entry)
+              FROM jsonb_array_elements(
+                  CASE
+                      WHEN jsonb_typeof(COALESCE(spc.channel_llm_overrides, '[]'::JSONB)) = 'array'
+                          THEN COALESCE(spc.channel_llm_overrides, '[]'::JSONB)
+                      ELSE '[]'::JSONB
+                  END
+              ) AS override(entry)
               JOIN llms l
                 ON l.llm_id = (override.entry ->> 'llm_id')::INTEGER
               WHERE l.llm_provider = 'zaicoding'
           )
           OR EXISTS (
               SELECT 1
-              FROM jsonb_array_elements(COALESCE(spc.persona_llm_overrides, '[]'::JSONB)) AS override(entry)
+              FROM jsonb_array_elements(
+                  CASE
+                      WHEN jsonb_typeof(COALESCE(spc.persona_llm_overrides, '[]'::JSONB)) = 'array'
+                          THEN COALESCE(spc.persona_llm_overrides, '[]'::JSONB)
+                      ELSE '[]'::JSONB
+                  END
+              ) AS override(entry)
               JOIN llms l
                 ON l.llm_id = (override.entry ->> 'llm_id')::INTEGER
               WHERE l.llm_provider = 'zaicoding'

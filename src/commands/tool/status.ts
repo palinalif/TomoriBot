@@ -514,6 +514,17 @@ export async function execute(
 
         // 3. Get the user's active reminder count
         const reminderCount = await getUserReminderCount(interaction.user.id);
+        const rawImpersonationPrompt = userData.impersonation_prompt?.trim() ?? null;
+        const impersonationPromptValue = rawImpersonationPrompt
+          ? `\`\`\`\n${
+              rawImpersonationPrompt.length > MAX_PROMPT_PREVIEW
+                ? `${rawImpersonationPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
+                : rawImpersonationPrompt
+            }\n\`\`\``
+          : localizer(
+              locale,
+              "commands.tool.status.field_impersonation_prompt_not_set",
+            );
 
         // 4. Build the single personal status page
         const personalPage: SummaryEmbedOptions = {
@@ -540,6 +551,11 @@ export async function execute(
                 userData.privacy_level ?? PrivacyLevel.MINIMAL,
               ),
               inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_impersonation_prompt",
+              value: impersonationPromptValue,
+              inline: false,
             },
             {
               nameKey: "commands.tool.status.field_reminders_count",

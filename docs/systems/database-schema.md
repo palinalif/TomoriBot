@@ -102,6 +102,10 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `users.nai_char_tags` stores per-user NovelAI character tags keyed by Discord snowflake (`users.user_disc_id`).
 - `users.nai_char_ref_url` stores the persisted user reference image URL/path keyed by Discord snowflake.
 
+### User personalization
+
+- `users.impersonation_prompt` stores the global user-owned prompt used during `/bot impersonate` user impersonation replies.
+
 ### Memory split
 
 - `server_memories`: shared server-level memory

@@ -851,6 +851,8 @@ export default {
         field_user_nickname: `ユーザーニックネーム`,
         field_language_pref: `言語設定`,
         field_privacy: `プライバシーモード`,
+        field_impersonation_prompt: `なりすましプロンプト`,
+        field_impersonation_prompt_not_set: `*(未設定)*`,
         field_reminders_count: `アクティブなリマインダー`,
         field_personal_memories: `個人の記憶`,
         field_server_memories: `サーバーの記憶`,
@@ -1415,6 +1417,7 @@ export default {
 - \`/forget document\`でドキュメントを削除できます`,
         impersonation_title: `なりきり＆ツール`,
         impersonation_description: `- \`/bot impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
+- \`/personal impersonate prompt\`でユーザーなりすまし用の再利用プロンプトを設定できます
 - \`/tools compact\`で会話履歴を要約したりロールプレイで圧縮できます
 - \`/reward\`コマンド（headpat、hug、kiss、tickle）でインタラクティブなご褒美モーメント`,
         imagegen_title: `画像生成`,
@@ -2885,7 +2888,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Temperatureは既に設定済みです`,
           already_set_description: `Temperatureは既に \`{temperature}\` に設定されています。`,
           success_title: `Temperatureが更新されました`,
-          success_description: `LLMのTemperatureが \`{previous_temperature}\` から \`{temperature}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai`,
+          success_description: `LLMのTemperatureが \`{previous_temperature}\` から \`{temperature}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai、Custom、NVIDIA NIM`,
         },
         "top-p": {
           description: `Top-P（核サンプリング）のしきい値を設定します（デフォルト: 0.95）。`,
@@ -2895,7 +2898,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Top-Pは既に設定済みです`,
           already_set_description: `Top-Pは既に \`{top_p}\` に設定されています。`,
           success_title: `Top-Pが更新されました`,
-          success_description: `Top-Pが \`{previous_top_p}\` から \`{top_p}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai`,
+          success_description: `Top-Pが \`{previous_top_p}\` から \`{top_p}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai、NVIDIA NIM`,
         },
         "top-k": {
           description: `Top-K（候補トークン数）の上限を設定します（デフォルト: 0）。`,
@@ -2905,7 +2908,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Top-Kは既に設定済みです`,
           already_set_description: `Top-Kは既に \`{top_k}\` に設定されています。`,
           success_title: `Top-Kが更新されました`,
-          success_description: `Top-Kが \`{previous_top_k}\` から \`{top_k}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai`,
+          success_description: `Top-Kが \`{previous_top_k}\` から \`{top_k}\` に変更されました。\n**対応プロバイダー:** Google、OpenRouter、NovelAI、DeepSeek、Z.ai、NVIDIA NIM`,
         },
         "frequency-penalty": {
           description: `繰り返しトークンへの頻度ペナルティを設定します（デフォルト: 0.0）。`,
@@ -2915,7 +2918,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Frequency Penaltyは既に設定済みです`,
           already_set_description: `Frequency penaltyは既に \`{frequency_penalty}\` に設定されています。`,
           success_title: `Frequency Penaltyが更新されました`,
-          success_description: `Frequency penaltyが \`{previous_frequency_penalty}\` から \`{frequency_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai`,
+          success_description: `Frequency penaltyが \`{previous_frequency_penalty}\` から \`{frequency_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai、NVIDIA NIM`,
         },
         "presence-penalty": {
           description: `繰り返しトピックへの存在ペナルティを設定します（デフォルト: 0.0）。`,
@@ -2925,7 +2928,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Presence Penaltyは既に設定済みです`,
           already_set_description: `Presence penaltyは既に \`{presence_penalty}\` に設定されています。`,
           success_title: `Presence Penaltyが更新されました`,
-          success_description: `Presence penaltyが \`{previous_presence_penalty}\` から \`{presence_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai`,
+          success_description: `Presence penaltyが \`{previous_presence_penalty}\` から \`{presence_penalty}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai、NVIDIA NIM`,
         },
         "min-p": {
           description: `Min-P（最小確率）のしきい値を設定します（デフォルト: 0.0）。`,
@@ -2935,7 +2938,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           already_set_title: `Min-Pは既に設定済みです`,
           already_set_description: `Min-Pは既に \`{min_p}\` に設定されています。`,
           success_title: `Min-Pが更新されました`,
-          success_description: `Min-Pが \`{previous_min_p}\` から \`{min_p}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai`,
+          success_description: `Min-Pが \`{previous_min_p}\` から \`{min_p}\` に変更されました。\n**対応プロバイダー:** OpenRouter、NovelAI、DeepSeek、Z.ai、NVIDIA NIM`,
         },
       },
       timezone: {
@@ -3745,6 +3748,25 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         success_but_disabled_description: `わかりました、あなたのことを '{new_nickname}' と呼ぶことを覚えておきます（以前は '{old_nickname}' でした）。
 
 **警告:** 現在、このサーバーではパーソナライズが無効になっているため、このニックネームはここでは使用しません。パーソナライズが有効になっている他のサーバーでは使用します。`,
+      },
+
+      impersonate: {
+        description: `ユーザーなりすまし設定を管理します。`,
+        prompt: {
+          description: `ユーザーなりすまし返信用の再利用プロンプトを設定します。`,
+          modal_title: `ユーザーなりすましプロンプト`,
+          prompt_label: `ペルソナプロンプト`,
+          prompt_description: `あなたのなりすましが呼び出されたときに使われます。空欄で送信するとクリアされます。`,
+          prompt_placeholder: `砕けた口調で、短めに、全部小文字多め、友達には少しだけ煽り気味で...`,
+          success_title: `なりすましプロンプトを更新しました`,
+          success_description: `今後はどこでも、ユーザーなりすまし返信でこのプロンプトが使われます。`,
+          cleared_title: `なりすましプロンプトをクリアしました`,
+          cleared_description: `ユーザーなりすましプロンプトを削除しました。`,
+          already_set_title: `変更はありません`,
+          already_set_description: `ユーザーなりすましプロンプトは既にその内容に設定されています。`,
+          already_cleared_title: `プロンプト未設定`,
+          already_cleared_description: `現在、ユーザーなりすましプロンプトは設定されていません。`,
+        },
       },
 
       stm: {

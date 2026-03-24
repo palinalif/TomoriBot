@@ -849,6 +849,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_user_nickname: `User Nickname`,
         field_language_pref: `Language Preference`,
         field_privacy: `Privacy Mode`,
+        field_impersonation_prompt: `Impersonation Prompt`,
+        field_impersonation_prompt_not_set: `*(Not set)*`,
         field_reminders_count: `Active Reminders`,
         field_personal_memories: `Personal Memories`,
         field_server_memories: `Server Memories`,
@@ -1414,6 +1416,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Remove documents with \`/forget document\``,
         impersonation_title: `Impersonation & Tools`,
         impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
+- Set a reusable user-impersonation persona prompt with \`/personal impersonate prompt\`
 - \`/tools compact\` can summarize or roleplay-compress conversation history
 - \`/bot respond\` to trigger prefilled or guided messages from the bot`,
         imagegen_title: `Image Generation`,
@@ -2878,7 +2881,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Temperature Already Set`,
           already_set_description: `The temperature is already set to \`{temperature}\`.`,
           success_title: `Temperature Updated`,
-          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai`,
+          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai, Custom, NVIDIA NIM`,
         },
         "top-p": {
           description: `Set top-P nucleus sampling threshold (default: 0.95).`,
@@ -2888,7 +2891,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Top-P Already Set`,
           already_set_description: `Top-P is already set to \`{top_p}\`.`,
           success_title: `Top-P Updated`,
-          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai`,
+          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
         },
         "top-k": {
           description: `Set top-K candidate token limit (default: 0).`,
@@ -2898,7 +2901,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Top-K Already Set`,
           already_set_description: `Top-K is already set to \`{top_k}\`.`,
           success_title: `Top-K Updated`,
-          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai`,
+          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
         },
         "frequency-penalty": {
           description: `Set frequency penalty for repeated tokens (default: 0.0).`,
@@ -2908,7 +2911,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Frequency Penalty Already Set`,
           already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
           success_title: `Frequency Penalty Updated`,
-          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai`,
+          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
         },
         "presence-penalty": {
           description: `Set presence penalty for repeated topics (default: 0.0).`,
@@ -2918,7 +2921,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Presence Penalty Already Set`,
           already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
           success_title: `Presence Penalty Updated`,
-          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai`,
+          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
         },
         "min-p": {
           description: `Set min-P minimum probability threshold (default: 0.0).`,
@@ -2928,7 +2931,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Min-P Already Set`,
           already_set_description: `Min-P is already set to \`{min_p}\`.`,
           success_title: `Min-P Updated`,
-          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai`,
+          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
         },
       },
       timezone: {
@@ -3739,6 +3742,25 @@ You can change this anytime using \`/personal privacy\`.`,
         success_but_disabled_description: `I'll remember to call you '{new_nickname}'! (previously '{old_nickname}').
 
 **Warning:** Personalization is currently disabled on this server, so I won't use this nickname here. I'll still use it on other servers where personalization is enabled.`, // Natural line break
+      },
+
+      impersonate: {
+        description: `Manage user impersonation settings.`,
+        prompt: {
+          description: `Set a reusable prompt for user impersonation replies.`,
+          modal_title: `User Impersonation Prompt`,
+          prompt_label: `Persona Prompt`,
+          prompt_description: `Used whenever your user impersonation is invoked. Leave blank to clear it.`,
+          prompt_placeholder: `Write casually, keep it short, use lots of lowercase, tease friends a little...`,
+          success_title: `Impersonation Prompt Updated`,
+          success_description: `Your user impersonation prompt will now be used for future user impersonation replies everywhere.`,
+          cleared_title: `Impersonation Prompt Cleared`,
+          cleared_description: `Your user impersonation prompt has been cleared.`,
+          already_set_title: `No Changes Made`,
+          already_set_description: `Your user impersonation prompt is already set to that value.`,
+          already_cleared_title: `No Prompt Set`,
+          already_cleared_description: `You don't currently have a user impersonation prompt set.`,
+        },
       },
 
       stm: {

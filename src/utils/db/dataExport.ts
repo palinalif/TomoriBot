@@ -73,7 +73,7 @@ function sanitizeMemories(
 }
 
 /**
- * Exports personal user data (nickname, language preference, memories)
+ * Exports personal user data (nickname, language preference, impersonation prompt, memories)
  * @param userDiscId - Discord user ID to export data for
  * @param personaLineageId - Persona lineage namespace to export memories from
  * @param includeLegacyFallback - Include legacy lineage `0` memories during soak
@@ -87,7 +87,7 @@ export async function exportPersonalData(
   try {
     // 1. Query user data from database (includes NovelAI character fields)
     const rows = await sql`
-			SELECT user_id, user_nickname, language_pref, nai_char_tags, nai_char_ref_url
+			SELECT user_id, user_nickname, language_pref, impersonation_prompt, nai_char_tags, nai_char_ref_url
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
@@ -141,6 +141,7 @@ export async function exportPersonalData(
       data: {
         user_nickname: userData.user_nickname,
         language_pref: userData.language_pref,
+        impersonation_prompt: userData.impersonation_prompt ?? null,
         personal_memories: sanitizedMemories,
       },
     };
@@ -498,7 +499,7 @@ export async function exportGlobalPersonalMemories(
 }
 
 /**
- * Exports personal settings only (nickname, language, NovelAI character data).
+ * Exports personal settings only (nickname, language, impersonation prompt, NovelAI character data).
  * @param userDiscId - Discord user ID to export data for
  */
 export async function exportPersonalSettings(
@@ -507,7 +508,7 @@ export async function exportPersonalSettings(
   try {
     // 1. Query user settings including NovelAI character fields
     const rows = await sql`
-			SELECT user_nickname, language_pref, nai_char_tags, nai_char_ref_url
+			SELECT user_nickname, language_pref, impersonation_prompt, nai_char_tags, nai_char_ref_url
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
@@ -530,6 +531,7 @@ export async function exportPersonalSettings(
       data: {
         user_nickname: userData.user_nickname,
         language_pref: userData.language_pref,
+        impersonation_prompt: userData.impersonation_prompt ?? null,
         nai_char_tags: userData.nai_char_tags ?? [],
         nai_char_ref_url: userData.nai_char_ref_url ?? null,
       },

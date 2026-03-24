@@ -33,6 +33,7 @@ export function getPersonalExportDataSchema() {
   return z.object({
     user_nickname: z.string().min(1).max(100),
     language_pref: z.string().min(2).max(10),
+    impersonation_prompt: z.string().nullable().optional(),
     personal_memories: z.array(z.string()).max(limits.maxPersonalMemories),
   });
 }
@@ -48,6 +49,7 @@ export type PersonalExportData = z.infer<
 export const personalSettingsExportDataSchema = z.object({
   user_nickname: z.string().min(1).max(100),
   language_pref: z.string().min(2).max(10),
+  impersonation_prompt: z.string().nullable().optional(),
   nai_char_tags: z.array(z.string()).default([]),
   nai_char_ref_url: z.string().nullable().optional(),
 });

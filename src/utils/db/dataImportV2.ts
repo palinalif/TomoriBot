@@ -19,6 +19,7 @@ import {
 } from "../../types/db/dataExport";
 import { validateMemoryContent } from "./memoryLimits";
 import { validateTomoriConfigFields } from "./sqlSecurity";
+import { invalidateUserCache } from "../cache/userCache";
 
 export type ImportFileType =
   | "personal_memories"
@@ -199,6 +200,7 @@ export async function importPersonalSettings(
       .map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`)
       .join(",")}}`;
     const naiCharRefUrl = importData.nai_char_ref_url ?? null;
+    const impersonationPrompt = importData.impersonation_prompt ?? null;
 
     // 2. Upsert user row with settings and NovelAI character fields
     const updateResult = await sql`
@@ -206,12 +208,14 @@ export async function importPersonalSettings(
 				user_disc_id,
 				user_nickname,
 				language_pref,
+				impersonation_prompt,
 				nai_char_tags,
 				nai_char_ref_url
 			) VALUES (
 				${userDiscId},
 				${importData.user_nickname},
 				${importData.language_pref},
+				${impersonationPrompt},
 				${naiCharTagsArrayLiteral}::text[],
 				${naiCharRefUrl}
 			)
@@ -219,6 +223,7 @@ export async function importPersonalSettings(
 			SET
 				user_nickname = EXCLUDED.user_nickname,
 				language_pref = EXCLUDED.language_pref,
+				impersonation_prompt = EXCLUDED.impersonation_prompt,
 				nai_char_tags = EXCLUDED.nai_char_tags,
 				nai_char_ref_url = EXCLUDED.nai_char_ref_url
 			RETURNING user_id
@@ -231,8 +236,11 @@ export async function importPersonalSettings(
       };
     }
 
-    // 3. Count imported fields (base 2 + optional NAI fields)
+    invalidateUserCache(userDiscId);
+
+    // 3. Count imported fields (base 2 + optional impersonation/NAI fields)
     let fieldsCount = 2;
+    if (impersonationPrompt) fieldsCount++;
     if (naiCharTags.length > 0) fieldsCount++;
     if (naiCharRefUrl) fieldsCount++;
 
@@ -520,6 +528,7 @@ export async function importPersonalData(
   const settingsResult = await importPersonalSettings(userDiscId, {
     user_nickname: importData.user_nickname,
     language_pref: importData.language_pref,
+    impersonation_prompt: importData.impersonation_prompt ?? null,
     nai_char_tags: [],
     nai_char_ref_url: null,
   });

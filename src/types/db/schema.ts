@@ -37,6 +37,7 @@ export const userSchema = z.object({
 	personal_memories: z.array(z.string()).default([]),
 	nai_char_tags: z.array(z.string()).default([]), // Added March 2026 - User-specific NovelAI character tags
 	nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - User-specific NovelAI character reference image
+	impersonation_prompt: z.string().nullable().optional(), // Added March 2026 - Global user-owned prompt for user impersonation replies
 	shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
   created_at: z.date().optional(),
   updated_at: z.date().optional(),

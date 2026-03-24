@@ -134,6 +134,7 @@ Overflow fallback:
 
 ### User impersonation
 - sends through a temporary webhook created with the impersonated user's display name/avatar
+- if the impersonated user has set `/personal impersonate prompt`, that prompt is injected as a user-owned persona prompt before the final imitation directive
 - if webhook creation, webhook sending, or stream completion fails, the impersonation attempt fails closed
 - TomoriBot does not fall back to a normal bot-authored channel message for user impersonation replies or timeout/error notices
 

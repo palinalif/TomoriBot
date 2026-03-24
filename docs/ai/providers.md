@@ -151,12 +151,12 @@ Rule:
 
 `zai` uses the shared OpenAI-compatible family layer for the GLM model family via `https://api.z.ai/api/paas/v4`.
 
-- **Chat models**: `zai/glm-5` (default, reasoning), `zai/glm-4.7` (reasoning), `zai/glm-4.7-flash` (free), `zai/glm-4.6v` (vision)
+- **Chat models**: `zai/glm-5` (default, reasoning), `zai/glm-4.7` (reasoning), `zai/glm-4.7-flash` (free), `zai/glm-4.6v` (vision), `zai/glm-4.6v-flash` (free vision)
 - **Image generation**: `zai/glm-image` via dedicated images/generations endpoint; aspect ratio mapped to pixel sizes
 - Reasoning models (`glm-5`, `glm-4.7`) emit `reasoning_content` — thinking is enabled with `budget_tokens: 8192` and temperature/sampling params are deleted
 - Tool streaming uses `tool_stream: true` flag when tools are present
 - JSON structured output uses `response_format: { type: "json_object" }` with prompt-steered schema injection and Zod validation (same pattern as DeepSeek)
-- Vision structured output only supported on `glm-4.6v`
+- Vision structured output supported on `glm-4.6v` and `glm-4.6v-flash`
 - Output prefill uses `prefix: true` on the last assistant message (single endpoint, no beta URL)
 - Model codenames stored with `zai/` prefix in DB (e.g., `zai/glm-5`), stripped to `glm-5` for API calls
 - No img2img support — reference images are ignored with a user warning
@@ -166,7 +166,7 @@ Rule:
 
 `zaicoding` uses the shared OpenAI-compatible family layer for the GLM family via `https://api.z.ai/api/coding/paas/v4`.
 
-- **Chat models**: `glm-5`, `glm-4.7`, `glm-4.7-flash`, `glm-4.6v`
+- **Chat models**: `glm-5`, `glm-4.7`, `glm-4.7-flash`, `glm-4.6v`, `glm-4.6v-flash`
 - **Image generation**: `glm-image` via the coding-endpoint image generation route
 - Uses the same streaming, tool-calling, and structured-output pipeline as the general `zai` provider
 - Intended for dedicated coding-endpoint access such as GLM Coding Plan workflows

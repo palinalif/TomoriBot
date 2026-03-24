@@ -4,7 +4,7 @@ export const zaicodingProviderInfo: ProviderInfo = {
 	name: "zaicoding",
 	displayName: "Z.ai (Coding)",
 	aliases: ["zai-coding"],
-	supportedModels: ["glm-4.6v", "glm-4.7", "glm-4.7-flash", "glm-5"],
+	supportedModels: ["glm-4.6v", "glm-4.6v-flash", "glm-4.7", "glm-4.7-flash", "glm-5"],
 	requiresApiKey: true,
 	supportsStreaming: true,
 	supportsFunctionCalling: true,

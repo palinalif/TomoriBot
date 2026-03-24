@@ -6,6 +6,7 @@ export const zaiProviderInfo: ProviderInfo = {
   aliases: [],
   supportedModels: [
     "zai/glm-4.6v",
+    "zai/glm-4.6v-flash",
     "zai/glm-4.7",
     "zai/glm-4.7-flash",
     "zai/glm-5",

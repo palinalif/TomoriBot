@@ -3504,12 +3504,14 @@ export default async function tomoriChat(
         { displayName: string; type: "persona" | "webhook" }
       >();
       let impersonatedUserDbNickname: string | undefined;
+      let impersonatedUserPrompt: string | undefined;
       let impersonatedIdentityName: string | undefined;
       let impersonatedIdentityAvatarUrl: string | undefined;
 
       if (isUserImpersonation && impersonatedUserId) {
         const impersonatedUserRow = await getCachedUserRow(impersonatedUserId);
         impersonatedUserDbNickname = impersonatedUserRow?.user_nickname;
+        impersonatedUserPrompt = impersonatedUserRow?.impersonation_prompt ?? undefined;
         const impersonatedIdentity = await resolveImpersonatedIdentity(
           client,
           guild,
@@ -4761,6 +4763,7 @@ export default async function tomoriChat(
               impersonatedUserId, // Pass impersonated user ID (February 2026)
               impersonatedUserNickname:
                 impersonatedIdentityName ?? impersonatedUserDbNickname, // Pass resolved identity name for context (February 2026)
+              impersonatedUserPrompt,
               // Pass API-resolved capability flags so the context builder matches the stream adapter
               seesImages: effectiveContextSeesImages,
               seesVideos: effectiveContextSeesVideos,
