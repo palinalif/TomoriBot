@@ -20,6 +20,21 @@ export function formatTextArrayLiteral(items: string[]): string {
 }
 
 /**
+ * Formats stored tag arrays back into the comma-separated modal format.
+ */
+export function formatNaiTagsForModalValue(
+	tags: string[] | null | undefined,
+): string | undefined {
+	const modalValue =
+		tags
+			?.map((tag) => tag.trim())
+			.filter((tag) => tag.length > 0)
+			.join(", ") ?? "";
+
+	return modalValue.length > 0 ? modalValue : undefined;
+}
+
+/**
  * Splits a comma-separated tag input, trims whitespace, and preserves first-seen order
  * while removing duplicates.
  */

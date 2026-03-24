@@ -6,6 +6,7 @@
 
 import { AttachmentBuilder } from "discord.js";
 import { log } from "../../../utils/misc/logger";
+import { sendWebhookMessageWithIdentity } from "../../../utils/discord/webhookManager";
 import type {
   MCPServerBehaviorHandler,
   MCPExecutionContext,
@@ -159,12 +160,21 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
                 : undefined;
             const sentMessage =
               context.webhook && context.personaUsername
-                ? await context.webhook.send({
-                    files: attachments,
-                    username: context.personaUsername,
-                    avatarURL: context.personaAvatarUrl,
-                    ...(threadId ? { threadId } : {}),
-                  })
+                ? await sendWebhookMessageWithIdentity(
+                    context.webhook,
+                    {
+                      files: attachments,
+                      ...(threadId ? { threadId } : {}),
+                    },
+                    {
+                      username: context.personaUsername,
+                      avatarUrl: context.personaAvatarUrl,
+                      avatarDataUri:
+                        context.personaAvatarUrl?.startsWith("data:image/")
+                          ? context.personaAvatarUrl
+                          : undefined,
+                    },
+                  )
                 : await context.channel.send({
                     files: attachments,
                     // content: `Found ${imageCount} image${imageCount !== 1 ? "s" : ""}:`,

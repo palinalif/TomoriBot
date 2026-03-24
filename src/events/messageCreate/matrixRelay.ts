@@ -29,6 +29,7 @@ import {
 } from "@/utils/matrix";
 import { log } from "@/utils/misc/logger";
 import type { TomoriState } from "@/types/db/schema";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 
 // ─── Embed relay helpers ────────────────────────────────────────────────────
 
@@ -374,8 +375,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
       );
     }
 
-    // webhook_avatar_url holds the S3 CDN URL used for Discord persona avatars
-    avatarUrl = persona?.webhook_avatar_url ?? null;
+    avatarUrl = resolvePersonaAvatarPublicUrl(persona?.webhook_avatar_url) ?? null;
   }
 
   // Fall back to username if no matching persona is found

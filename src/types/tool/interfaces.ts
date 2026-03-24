@@ -84,6 +84,7 @@ export interface StreamingContext {
   disableProfilePictureProcessing?: boolean; // Flag to temporarily disable profile picture processing during enhanced context restart
   disableGifProcessing?: boolean; // Flag to temporarily disable GIF processing during enhanced context restart
   disableShortTermMemoryUpdate?: boolean; // Flag to prevent update_short_term_memory from being called more than once per turn
+  explicitLongTermMemoryIntent?: boolean; // Flag to suppress STM tool nudges when the current user message explicitly asks for persistent memory
   disableTimestampContext?: boolean; // Flag to prevent refresh_message_timestamps from being called more than once per turn
   forceReason?: boolean; // Flag to indicate reasoning mode for enhanced AI responses
   isManuallyTriggered?: boolean; // Flag to indicate this stream was triggered by a manual command
@@ -136,7 +137,7 @@ export interface ToolContext {
   // Optional persona webhook context (for alter persona embeds/tools)
   webhook?: Webhook;
   personaUsername?: string;
-  personaAvatarUrl?: string;
+  personaAvatarUrl?: string; // URL or data URI for the active persona/user identity
 }
 
 /**

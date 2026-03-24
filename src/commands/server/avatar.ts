@@ -4,7 +4,6 @@ import type {
   SlashCommandSubcommandBuilder,
   Attachment,
   ModalSubmitInteraction,
-  BaseGuildTextChannel,
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
@@ -24,18 +23,14 @@ import {
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
 import { convertToPNG } from "../../utils/image/imageProcessor";
-import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 import {
-  deletePersonaWebhooks,
-  getOrCreatePersonaWebhook,
-  updatePersonaWebhooksAvatar,
-} from "../../utils/discord/webhookManager";
+  deletePersonaAvatarFromS3,
+  uploadPersonaAvatarToS3,
+} from "../../utils/storage/avatarStorage";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 
 const PERSONA_SELECT_MODAL_ID = "server_avatar_persona_modal";
 const PERSONA_SELECT_ID = "persona_select";
-const IS_PRODUCTION = process.env.RUN_ENV === "production";
-
 /**
  * Configure the avatar subcommand
  * @param subcommand - SlashCommandSubcommandBuilder instance
@@ -137,29 +132,6 @@ async function attachmentToBase64DataUri(attachment: Attachment): Promise<{
     dataUri,
     buffer: downloadResult.buffer,
   };
-}
-
-/**
- * Resolves webhook target channel for thread-safe persona webhook operations.
- * - In threads: use parent channel
- * - In regular text channels: use current channel
- */
-function resolveWebhookTargetChannel(
-  interaction: ChatInputCommandInteraction,
-): BaseGuildTextChannel | null {
-  const channel = interaction.channel;
-  if (!channel) {
-    return null;
-  }
-
-  if (channel.isThread()) {
-    const parent = channel.parent;
-    return parent && "fetchWebhooks" in parent
-      ? (parent as BaseGuildTextChannel)
-      : null;
-  }
-
-  return "fetchWebhooks" in channel ? (channel as BaseGuildTextChannel) : null;
 }
 
 /**
@@ -414,20 +386,15 @@ export async function execute(
           });
         }
       } else {
+        if (selectedPersona.webhook_avatar_url) {
+          await deletePersonaAvatarFromS3(selectedPersona.webhook_avatar_url);
+        }
+
         await sql`
 					UPDATE tomoris
 					SET webhook_avatar_url = NULL
 					WHERE tomori_id = ${selectedPersona.tomori_id}
 				`;
-
-        // Non-production alter personas use dedicated persona webhooks with stored avatar state.
-        // Delete them so future sends recreate with default bot avatar.
-        if (!IS_PRODUCTION) {
-          await deletePersonaWebhooks(
-            interaction.guild,
-            selectedPersona.tomori_id,
-          );
-        }
 
         invalidateTomoriStateCache(interaction.guild.id);
 
@@ -518,8 +485,6 @@ export async function execute(
       // - production: upload avatar to S3 and store URL
       // - non-production: update/create persona webhooks and store permanent webhook avatar URL
       let persistedAvatarUrl: string | null = null;
-      let dbUpdatedByWebhookSync = false;
-
       // biome-ignore lint/style/noNonNullAssertion: Download result is checked in success condition
       const downloadedBuffer = downloadResult.buffer!;
       let pngBuffer: Buffer;
@@ -535,9 +500,6 @@ export async function execute(
         return;
       }
 
-      const alterAvatarDataUri = `data:image/png;base64,${pngBuffer.toString("base64")}`;
-
-      // Attempt production S3 storage first; no-op outside production.
       persistedAvatarUrl = await uploadPersonaAvatarToS3({
         personaId: selectedPersona.tomori_id,
         serverDiscId: interaction.guild.id,
@@ -545,39 +507,7 @@ export async function execute(
         buffer: pngBuffer,
       });
 
-      if (!IS_PRODUCTION) {
-        const updatedCount = await updatePersonaWebhooksAvatar(
-          interaction.guild,
-          selectedPersona.tomori_id,
-          alterAvatarDataUri,
-        );
-        dbUpdatedByWebhookSync = updatedCount > 0;
-
-        if (updatedCount === 0) {
-          const webhookTargetChannel = resolveWebhookTargetChannel(interaction);
-          if (webhookTargetChannel) {
-            const { webhook } = await getOrCreatePersonaWebhook(
-              webhookTargetChannel,
-              selectedPersona,
-            );
-            if (webhook) {
-              await webhook.edit({
-                avatar: alterAvatarDataUri,
-                reason: "TomoriBot alter avatar updated",
-              });
-              const webhookAvatarUrl = webhook.avatarURL({
-                extension: "png",
-                size: 256,
-              });
-              if (webhookAvatarUrl) {
-                persistedAvatarUrl = webhookAvatarUrl;
-              }
-            }
-          }
-        }
-      }
-
-      if (!persistedAvatarUrl && !dbUpdatedByWebhookSync) {
+      if (!persistedAvatarUrl) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.server.avatar.api_error_title",
           descriptionKey: "commands.server.avatar.api_error_description",
@@ -587,6 +517,13 @@ export async function execute(
       }
 
       if (persistedAvatarUrl) {
+        if (
+          selectedPersona.webhook_avatar_url &&
+          selectedPersona.webhook_avatar_url !== persistedAvatarUrl
+        ) {
+          await deletePersonaAvatarFromS3(selectedPersona.webhook_avatar_url);
+        }
+
         await sql`
 					UPDATE tomoris
 					SET webhook_avatar_url = ${persistedAvatarUrl}

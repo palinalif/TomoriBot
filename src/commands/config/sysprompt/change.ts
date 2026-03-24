@@ -27,6 +27,21 @@ import {
 import { log, ColorCode } from "@/utils/misc/logger";
 
 const MODAL_CUSTOM_ID = "config_prompt_change_modal";
+const PROMPT_PART_MAX_LENGTH = 2000;
+const PROMPT_PART_COUNT = 4;
+
+function splitPromptIntoModalParts(
+  prompt: string | null | undefined,
+): string[] {
+  const promptValue = prompt ?? "";
+
+  return Array.from({ length: PROMPT_PART_COUNT }, (_, index) =>
+    promptValue.slice(
+      index * PROMPT_PART_MAX_LENGTH,
+      (index + 1) * PROMPT_PART_MAX_LENGTH,
+    ),
+  );
+}
 
 /**
  * Configure the slash command subcommand metadata
@@ -83,6 +98,10 @@ export async function execute(
   let modalSubmitInteraction: ModalSubmitInteraction | undefined;
 
   try {
+    const existingPromptParts = splitPromptIntoModalParts(
+      tomoriState.config.system_prompt,
+    );
+
     // 4. Show modal with 4 text fields (first required, others optional)
     const modalResult = await promptWithRawModal(
       interaction,
@@ -97,7 +116,8 @@ export async function execute(
             labelKey: "commands.config.prompt.change.part1_label",
             placeholder: "commands.config.prompt.change.part1_placeholder",
             required: true,
-            maxLength: 2000,
+            maxLength: PROMPT_PART_MAX_LENGTH,
+            value: existingPromptParts[0] || undefined,
           },
           {
             customId: "prompt_part2",
@@ -105,7 +125,8 @@ export async function execute(
             labelKey: "commands.config.prompt.change.part2_label",
             placeholder: "commands.config.prompt.change.part2_placeholder",
             required: false,
-            maxLength: 2000,
+            maxLength: PROMPT_PART_MAX_LENGTH,
+            value: existingPromptParts[1] || undefined,
           },
           {
             customId: "prompt_part3",
@@ -113,7 +134,8 @@ export async function execute(
             labelKey: "commands.config.prompt.change.part3_label",
             placeholder: "commands.config.prompt.change.part3_placeholder",
             required: false,
-            maxLength: 2000,
+            maxLength: PROMPT_PART_MAX_LENGTH,
+            value: existingPromptParts[2] || undefined,
           },
           {
             customId: "prompt_part4",
@@ -121,7 +143,8 @@ export async function execute(
             labelKey: "commands.config.prompt.change.part4_label",
             placeholder: "commands.config.prompt.change.part4_placeholder",
             required: false,
-            maxLength: 2000,
+            maxLength: PROMPT_PART_MAX_LENGTH,
+            value: existingPromptParts[3] || undefined,
           },
         ],
       },

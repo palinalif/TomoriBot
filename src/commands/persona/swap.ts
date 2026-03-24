@@ -21,12 +21,13 @@ import type { UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { downloadImage } from "../../utils/image/avatarHelper";
+import { convertToPNG } from "../../utils/image/imageProcessor";
 import { sql } from "../../utils/db/client";
-import { updatePersonaWebhooksAvatar } from "../../utils/discord/webhookManager";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import {
-  uploadPersonaAvatarToS3,
   deletePersonaAvatarFromS3,
+  loadStoredPersonaAvatarBuffer,
+  uploadPersonaAvatarToS3,
 } from "../../utils/storage/avatarStorage";
 
 type DiscordApiErrorPayload = {
@@ -304,18 +305,9 @@ export async function execute(
 
     if (avatarUrl) {
       try {
-        // Download the alter's avatar
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
-        const avatarResponse = await fetch(avatarUrl, {
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-
-        if (avatarResponse.ok) {
-          const avatarArrayBuffer = await avatarResponse.arrayBuffer();
-          const avatarBuffer = Buffer.from(avatarArrayBuffer);
+        const storedAvatarBuffer = await loadStoredPersonaAvatarBuffer(avatarUrl);
+        if (storedAvatarBuffer) {
+          const avatarBuffer = await convertToPNG(storedAvatarBuffer);
           selectedAlterAvatarBuffer = avatarBuffer;
 
           // Set as guild avatar using Discord API (same as /server avatar)
@@ -348,7 +340,7 @@ export async function execute(
         } else {
           avatarSwapFailed = true;
           log.warn(
-            `Failed to download alter avatar for swap (non-fatal): ${avatarResponse.status} ${avatarResponse.statusText}`,
+            `Failed to load alter avatar for swap (non-fatal): ${avatarUrl}`,
           );
         }
       } catch (avatarError) {
@@ -523,25 +515,6 @@ export async function execute(
       previousMainAvatarUrl !== newFormerMainAvatarUrl
     ) {
       await deletePersonaAvatarFromS3(previousMainAvatarUrl);
-    }
-
-    // 15. Refresh persona webhooks in non-production to keep avatars in sync
-    if (interaction.guild) {
-      if (selectedAlterAvatarBuffer && selectedAlter.tomori_id) {
-        await updatePersonaWebhooksAvatar(
-          interaction.guild,
-          selectedAlter.tomori_id,
-          selectedAlterAvatarBuffer,
-        );
-      }
-
-      if (formerMainAvatarBuffer && mainPersona.tomori_id) {
-        await updatePersonaWebhooksAvatar(
-          interaction.guild,
-          mainPersona.tomori_id,
-          formerMainAvatarBuffer,
-        );
-      }
     }
 
     log.success(

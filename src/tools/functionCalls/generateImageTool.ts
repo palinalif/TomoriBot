@@ -6,12 +6,14 @@
 
 import { AttachmentBuilder } from "discord.js";
 import { GoogleGenAI } from "@google/genai";
-import { log } from "../../utils/misc/logger";
+import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
+import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
-  BaseTool,
-  type ToolContext,
+	BaseTool,
+	type ToolContext,
   type ToolResult,
   type ToolParameterSchema,
 } from "../../types/tool/interfaces";
@@ -136,12 +138,20 @@ export class GenerateImageTool extends BaseTool {
 
     if (context.webhook && context.personaUsername) {
       try {
-        return await context.webhook.send({
-          files: [attachment],
-          username: context.personaUsername,
-          avatarURL: context.personaAvatarUrl,
-          ...(threadId ? { threadId } : {}),
-        });
+        return await sendWebhookMessageWithIdentity(
+          context.webhook,
+          {
+            files: [attachment],
+            ...(threadId ? { threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
+              ? context.personaAvatarUrl
+              : undefined,
+          },
+        );
       } catch (error) {
         log.warn(
           "Failed to send generated image via webhook, falling back to bot message",
@@ -626,14 +636,15 @@ export class GenerateImageTool extends BaseTool {
     }
 
     // Extract arguments
-    const prompt = args.prompt as string;
-    const messageId = args.message_id as string | undefined;
-    const userId = args.user_id as string | undefined;
-    const aspectRatio = (args.aspect_ratio as string) || "1:1";
+		const prompt = args.prompt as string;
+		const messageId = args.message_id as string | undefined;
+		const userId = args.user_id as string | undefined;
+		const aspectRatio = (args.aspect_ratio as string) || "1:1";
+		const usesReferences = !!(messageId || userId);
 
-    try {
-      // Get the diffusion model codename from database
-      const diffusionModelId = context.tomoriState.config.diffusion_model_id;
+		try {
+			// Get the diffusion model codename from database
+			const diffusionModelId = context.tomoriState.config.diffusion_model_id;
 
       if (!diffusionModelId) {
         return {
@@ -661,15 +672,34 @@ export class GenerateImageTool extends BaseTool {
 
       const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
 
-      if (!apiKey) {
-        return {
-          success: false,
-          error: "Failed to decrypt API key",
-        };
-      }
+			if (!apiKey) {
+				return {
+					success: false,
+					error: "Failed to decrypt API key",
+				};
+			}
 
-      // Collect reference images from message attachments and/or profile picture
-      const referenceImages: Array<{ mimeType: string; data: string }> = [];
+			await sendToolProgressNotice(
+				context.channel,
+				context.locale,
+				{
+					titleKey: "genai.image.generating_title",
+					descriptionKey: usesReferences
+						? "genai.image.generating_with_references_description"
+						: "genai.image.generating_description",
+					footerKey: "genai.image.generating_footer",
+					color: ColorCode.INFO,
+				},
+				{
+					webhook: context.webhook,
+					personaUsername: context.personaUsername,
+					personaAvatarUrl: context.personaAvatarUrl,
+				},
+				"GenerateImageTool",
+			);
+
+			// Collect reference images from message attachments and/or profile picture
+			const referenceImages: Array<{ mimeType: string; data: string }> = [];
 
       if (messageId) {
         log.info(

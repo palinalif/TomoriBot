@@ -42,6 +42,8 @@ import {
 import type { HumanizerDegree } from "@/types/db/schema";
 
 // Define constants at the top (Rule #20)
+const SETUP_API_KEY_MAX_LENGTH = 500;
+const SETUP_TIMEZONE_MAX_LENGTH = 6;
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -275,6 +277,7 @@ export async function execute(
             placeholder: "commands.config.setup.api_key_placeholder",
             style: TextInputStyle.Short,
             required: true,
+            maxLength: SETUP_API_KEY_MAX_LENGTH,
           },
           {
             customId: "preset_name",
@@ -299,6 +302,7 @@ export async function execute(
             style: TextInputStyle.Short,
             placeholder: "commands.config.setup.timezone_placeholder",
             required: false, // Optional - defaults to 0 (UTC) if not provided
+            maxLength: SETUP_TIMEZONE_MAX_LENGTH,
           },
         ],
       },

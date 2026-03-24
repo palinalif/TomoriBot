@@ -28,6 +28,7 @@ import {
   getCachedBlacklistStatus,
 } from "@/utils/cache/userCache";
 import { resolvePersonaAvatarURL } from "@/utils/discord/webhookManager";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import type { ModalComponent } from "@/types/discord/modal";
 import { escapeRegExp } from "@/utils/text/stringHelper";
 import type {
@@ -286,11 +287,9 @@ async function buildPersonaAvatarMap(
     let avatarUrl: string | undefined;
     if (guild) {
       avatarUrl = resolvePersonaAvatarURL(persona, guild);
-    } else if (
-      persona.webhook_avatar_url &&
-      isValidHttpUrl(persona.webhook_avatar_url)
-    ) {
-      avatarUrl = persona.webhook_avatar_url;
+    } else if (persona.webhook_avatar_url) {
+      avatarUrl =
+        resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? undefined;
     }
 
     if (!avatarUrl) continue;

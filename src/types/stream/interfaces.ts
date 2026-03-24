@@ -127,7 +127,7 @@ export interface StreamContext {
 
   // Multi-persona webhook support
   webhook?: import("discord.js").Webhook; // Webhook for alter persona responses
-  personaAvatarUrl?: string; // Avatar URL for current persona
+  personaAvatarUrl?: string; // Avatar URL or data URI for current persona
   personaUsername?: string; // Username override for current persona (shown in Discord UI)
   prefixStrippingName?: string; // Name used for prefix stripping (may differ from personaUsername for user impersonation)
 

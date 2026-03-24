@@ -24,8 +24,8 @@ import { embedMetadataInPNG } from "../../utils/image/pngMetadata";
 import type { SelectOption } from "../../types/discord/modal";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
-import { safeDownload } from "@/utils/security/safeDownload";
 import { convertToPNG } from "@/utils/image/imageProcessor";
+import { loadStoredPersonaAvatarBuffer } from "@/utils/storage/avatarStorage";
 
 const PERSONA_EXPORT_MODAL_ID = "persona_export_persona_modal";
 const PERSONA_EXPORT_SELECT_ID = "persona_select";
@@ -253,18 +253,12 @@ export async function execute(
     try {
       let selectedAvatarBuffer: Buffer | null = null;
       if (selectedPersona.is_alter && selectedPersona.webhook_avatar_url) {
-        const alterAvatarDownload = await safeDownload(
+        const storedAvatarBuffer = await loadStoredPersonaAvatarBuffer(
           selectedPersona.webhook_avatar_url,
-          {
-            maxSizeMB: 8,
-            timeoutMs: 15000,
-          },
         );
-        if (alterAvatarDownload.success && alterAvatarDownload.buffer) {
+        if (storedAvatarBuffer) {
           try {
-            selectedAvatarBuffer = await convertToPNG(
-              alterAvatarDownload.buffer,
-            );
+            selectedAvatarBuffer = await convertToPNG(storedAvatarBuffer);
           } catch (error) {
             log.warn(
               `Failed to convert alter avatar to PNG for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
@@ -274,12 +268,6 @@ export async function execute(
         } else {
           log.warn(
             `Failed to download alter avatar for tomori ${selectedPersona.tomori_id}; falling back to server avatar`,
-            {
-              metadata: {
-                error: alterAvatarDownload.error,
-                details: alterAvatarDownload.details,
-              },
-            },
           );
         }
       }

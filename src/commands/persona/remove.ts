@@ -21,7 +21,6 @@ import type { UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
-import { deletePersonaWebhooks } from "../../utils/discord/webhookManager";
 import { deletePersonaAvatarFromS3 } from "../../utils/storage/avatarStorage";
 
 // Constants for modal configuration
@@ -187,24 +186,6 @@ export async function execute(
 			DELETE FROM tomoris
 			WHERE tomori_id = ${personaId}
 		`;
-
-    // 8.5. Delete persona webhooks (non-production uses per-persona webhooks)
-    try {
-      const deletedCount = await deletePersonaWebhooks(
-        interaction.guild,
-        personaId,
-      );
-      if (deletedCount > 0) {
-        log.info(
-          `Deleted ${deletedCount} persona webhook(s) for ${personaToRemove.tomori_nickname}`,
-        );
-      }
-    } catch (error) {
-      log.warn(
-        `Failed to delete persona webhooks for ${personaToRemove.tomori_nickname}`,
-        error,
-      );
-    }
 
     if (personaToRemove.webhook_avatar_url) {
       await deletePersonaAvatarFromS3(personaToRemove.webhook_avatar_url);

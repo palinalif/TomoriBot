@@ -4,10 +4,10 @@
  * This prevents automatic processing and enables targeted avatar analysis
  */
 
-import { log } from "../../utils/misc/logger";
+import { log, ColorCode } from "../../utils/misc/logger";
 import type { EnhancedImageContent } from "@/types/tool/enhancedContextTypes";
 import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
-// import { sendStandardEmbed } from "../../utils/discord/embedHelper";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
   BaseTool,
   type ToolContext,
@@ -175,6 +175,23 @@ export class PeekProfilePictureTool extends BaseTool {
           },
         };
       }
+
+      await sendToolProgressNotice(
+        context.channel,
+        context.locale,
+        {
+          titleKey: "genai.avatar.inspecting_title",
+          descriptionKey: "genai.avatar.inspecting_description",
+          footerKey: "genai.avatar.inspecting_footer",
+          color: ColorCode.INFO,
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+        "PeekProfilePictureTool",
+      );
 
       // Resolve ID as either Discord user or webhook and get avatar URL
       const avatarData = await resolveAvatarByDiscordId(userId, context, {

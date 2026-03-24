@@ -4,9 +4,10 @@
  * This is disabled in production to prevent memory exhaustion (100-130 MB per GIF)
  */
 
-import { log } from "@/utils/misc/logger";
+import { log, ColorCode } from "@/utils/misc/logger";
 import { GUARDS_ENABLED, MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { extractGifKeyframes } from "@/utils/media/gifProcessor";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
   BaseTool,
   type ToolContext,
@@ -243,6 +244,23 @@ export class ProcessGifTool extends BaseTool {
       }
 
       // 6. Process GIF using extractGifKeyframes() utility
+      await sendToolProgressNotice(
+        context.channel,
+        context.locale,
+        {
+          titleKey: "genai.gif.processing_title",
+          descriptionKey: "genai.gif.processing_description",
+          footerKey: "genai.gif.processing_footer",
+          color: ColorCode.INFO,
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+        "ProcessGifTool",
+      );
+
       log.info(
         `ProcessGifTool: Processing GIF from ${gifAttachment.url} (${(gifAttachment.size / 1024).toFixed(2)} KB)`,
       );

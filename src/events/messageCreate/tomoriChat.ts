@@ -51,8 +51,8 @@ import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   getOrCreateWebhook,
-  getOrCreatePersonaWebhook,
-  resolvePersonaAvatarURL,
+  resolvePersonaWebhookIdentity,
+  sendWebhookMessageWithIdentity,
   type WebhookCreateErrorReason,
 } from "../../utils/discord/webhookManager";
 import { ColorCode, log } from "../../utils/misc/logger";
@@ -87,6 +87,7 @@ import {
   escapeRegExp,
   normalizeCustomEmojisForLlm,
 } from "../../utils/text/stringHelper";
+import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import {
@@ -152,6 +153,7 @@ import {
   hasThoughtLogContent,
   mergeThoughtLogPayload,
   sendThoughtLogEmbed,
+  type ThoughtLogOwner,
 } from "@/utils/discord/thoughtLog";
 
 // Base trigger words that will always work (with or without spaces for English)
@@ -194,6 +196,39 @@ function parseIntegerEnvFlag(
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return defaultValue;
   return Math.max(minimum, parsed);
+}
+
+function thoughtLogOwnersMatch(
+  existing: ThoughtLogOwner | undefined,
+  incoming: ThoughtLogOwner,
+): boolean {
+  if (!existing) {
+    return true;
+  }
+
+  if (existing.type !== incoming.type) {
+    return false;
+  }
+
+  switch (existing.type) {
+    case "default":
+      return true;
+    case "persona":
+      return (
+        incoming.type === "persona" &&
+        existing.persona.tomori_id === incoming.persona.tomori_id
+      );
+    case "user_impersonation":
+      return (
+        incoming.type === "user_impersonation" &&
+        existing.username === incoming.username &&
+        (existing.avatarUrl ?? null) === (incoming.avatarUrl ?? null)
+      );
+    default: {
+      const exhaustiveCheck: never = existing;
+      return exhaustiveCheck;
+    }
+  }
 }
 
 function dropOldestHistoryExchangePairs(
@@ -283,7 +318,6 @@ function dropOldestHistoryExchangePairs(
   };
 }
 
-const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const WEBHOOK_ERROR_COOLDOWN_MS = 10 * 60 * 1000;
 const webhookErrorCooldowns = new Map<string, number>();
 const REACTION_CONTEXT_ENABLED = parseBooleanEnvFlag(
@@ -757,6 +791,13 @@ function buildCombinedTailDirectiveMessage(
     parts: [{ type: "text", text: `[System: ${normalized.join("\n\n")}]` }],
     metadataTag: ContextItemTag.DIALOGUE_HISTORY,
   };
+}
+
+function buildTailDirectiveMessage(
+  directive: string | null | undefined,
+): StructuredContextItem | null {
+  if (!directive) return null;
+  return buildCombinedTailDirectiveMessage([directive]);
 }
 
 /**
@@ -1800,12 +1841,17 @@ export default async function tomoriChat(
     );
   }
 
+  const explicitLongTermMemoryIntent = hasExplicitLongTermMemoryIntent(
+    message.content,
+  );
+
   // Initialize streaming context for context-aware tool availability
   const streamingContext: StreamingContext = {
     disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
     disableProfilePictureProcessing: false, // Will be set to true during enhanced context restart
     disableGifProcessing: false, // Will be set to true during enhanced context restart
     disableShortTermMemoryUpdate: false, // Will be set to true after first successful STM update to prevent duplicate calls
+    explicitLongTermMemoryIntent,
     disableTimestampContext: false, // Will be set to true after context_restart_with_timestamps to prevent repeat restarts
     forceReason, // Pass reasoning flag for enhanced AI responses
     isManuallyTriggered, // Pass command flag to indicate manual triggering
@@ -3353,7 +3399,6 @@ export default async function tomoriChat(
       let channelWebhook: Webhook | null = null;
       let webhookErrorReason: WebhookCreateErrorReason | undefined;
       let webhookErrorNotified = false;
-      const usePersonaWebhooks = !IS_PRODUCTION;
       // Support both text channels and threads
       const supportsWebhooks =
         channel.type === ChannelType.GuildText ||
@@ -3371,12 +3416,7 @@ export default async function tomoriChat(
         "fetchWebhooks" in webhookTargetChannel &&
         "createWebhook" in webhookTargetChannel;
 
-      if (
-        hasAlters &&
-        supportsWebhooks &&
-        !usePersonaWebhooks &&
-        hasWebhookMethods
-      ) {
+      if (hasAlters && supportsWebhooks && hasWebhookMethods) {
         const webhookResult = await getOrCreateWebhook(
           webhookTargetChannel as BaseGuildTextChannel,
         );
@@ -4415,6 +4455,7 @@ export default async function tomoriChat(
         personaLineageId?: number | null;
       }> = [];
       let turnThoughtLog: ThoughtLogPayload | undefined;
+      let turnThoughtLogOwner: ThoughtLogOwner | undefined;
       const matrixTypingRoomId = isMatrixRelayMessage
         ? await getLinkedMatrixRoom(channel.id)
         : null;
@@ -4708,17 +4749,13 @@ export default async function tomoriChat(
           // replacing image attachments with text placeholders before the provider ever sees them.
           let effectiveContextSeesImages: boolean | undefined;
           let effectiveContextSeesVideos: boolean | undefined;
+          const activeLlm = tomoriState?.llm;
           if (
-            // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
-            tomoriState!.llm.llm_provider === "openrouter" &&
-            // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
-            tomoriState!.llm.llm_codename !== "account-setting" &&
+            activeLlm?.llm_provider === "openrouter" &&
+            activeLlm.llm_codename !== "account-setting" &&
             isOpenRouterCapabilityCacheReady()
           ) {
-            // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
-            const apiCaps = getOpenRouterCapabilities(
-              tomoriState!.llm.llm_codename,
-            );
+            const apiCaps = getOpenRouterCapabilities(activeLlm.llm_codename);
             if (apiCaps) {
               effectiveContextSeesImages = apiCaps.seesImages;
               effectiveContextSeesVideos = apiCaps.seesVideos;
@@ -4764,6 +4801,7 @@ export default async function tomoriChat(
               impersonatedUserNickname:
                 impersonatedIdentityName ?? impersonatedUserDbNickname, // Pass resolved identity name for context (February 2026)
               impersonatedUserPrompt,
+              explicitLongTermMemoryIntent,
               // Pass API-resolved capability flags so the context builder matches the stream adapter
               seesImages: effectiveContextSeesImages,
               seesVideos: effectiveContextSeesVideos,
@@ -4995,19 +5033,25 @@ export default async function tomoriChat(
               log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
             }
 
-            if (queuedReplyDirective) {
-              tailDirectives.push(queuedReplyDirective);
-            }
-
-            // Ensure uncensor directive is always last in the tail block
-            if (uncensorDirective) {
-              tailDirectives.push(uncensorDirective);
-            }
-
             const combinedTailMessage =
               buildCombinedTailDirectiveMessage(tailDirectives);
             if (combinedTailMessage) {
               contextSegments.push(combinedTailMessage);
+            }
+
+            // Keep queued reply guidance isolated so it does not collapse into
+            // unrelated tail notes like emoji penalties or STM reminders.
+            const queuedReplyTailMessage =
+              buildTailDirectiveMessage(queuedReplyDirective);
+            if (queuedReplyTailMessage) {
+              contextSegments.push(queuedReplyTailMessage);
+            }
+
+            // Keep uncensor isolated and last so it retains the strongest recency signal.
+            const uncensorTailMessage =
+              buildTailDirectiveMessage(uncensorDirective);
+            if (uncensorTailMessage) {
+              contextSegments.push(uncensorTailMessage);
             }
 
             // Inject assistant prefill as the final context item (for manual commands)
@@ -5249,14 +5293,13 @@ export default async function tomoriChat(
           // Only use webhook for alter personas (not main) in guild channels (not DMs)
           let personaWebhook = channelWebhook;
           if (
-            usePersonaWebhooks &&
+            !personaWebhook &&
             supportsWebhooks &&
             currentPersona.is_alter &&
             hasWebhookMethods
           ) {
-            const webhookResult = await getOrCreatePersonaWebhook(
+            const webhookResult = await getOrCreateWebhook(
               webhookTargetChannel as BaseGuildTextChannel,
-              currentPersona,
             );
             personaWebhook = webhookResult.webhook;
             if (
@@ -5305,14 +5348,17 @@ export default async function tomoriChat(
             }
           }
 
-          const personaAvatarUrl = isUserImpersonation
-            ? undefined // Webhook already has user's avatar
-            : personaWebhook &&
-                guild &&
-                currentPersona.is_alter &&
-                !usePersonaWebhooks
-              ? resolvePersonaAvatarURL(currentPersona, guild)
+          const resolvedPersonaIdentity =
+            !isUserImpersonation &&
+            personaWebhook &&
+            guild &&
+            currentPersona.is_alter
+              ? await resolvePersonaWebhookIdentity(currentPersona, guild)
               : undefined;
+          const personaAvatarUrl = isUserImpersonation
+            ? undefined
+            : resolvedPersonaIdentity?.avatarDataUri ??
+              resolvedPersonaIdentity?.avatarUrl;
 
           // For user impersonation: separate webhook display name from prefix stripping name
           let personaUsername: string | undefined;
@@ -5326,12 +5372,28 @@ export default async function tomoriChat(
             prefixStrippingName = personaUsername || impersonatedUserDbNickname;
           } else if (personaWebhook && currentPersona.is_alter) {
             // For alter personas, use persona nickname for both
-            personaUsername = currentPersona.tomori_nickname;
+            personaUsername =
+              resolvedPersonaIdentity?.username ?? currentPersona.tomori_nickname;
             prefixStrippingName = undefined; // Will fall back to personaUsername
           } else {
             personaUsername = undefined;
             prefixStrippingName = undefined;
           }
+
+          const currentThoughtLogOwner: ThoughtLogOwner = isUserImpersonation
+            ? {
+                type: "user_impersonation",
+                username: impersonatedIdentityName || "User",
+                avatarUrl: impersonatedIdentityAvatarUrl ?? undefined,
+              }
+            : currentPersona.is_alter
+              ? {
+                  type: "persona",
+                  persona: currentPersona,
+                }
+              : {
+                  type: "default",
+                };
 
           const outputPrefill = trimmedPrefill
             ? `${currentPersona?.tomori_nickname ?? tomoriState?.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori"}: ${trimmedPrefill}`
@@ -6515,6 +6577,7 @@ export default async function tomoriChat(
                         preloadedStickers: loadedStickers, // Pass pre-loaded sticker data to avoid redundant DB query
                         isUserImpersonation, // Pass user impersonation flag (February 2026)
                         impersonatedUserId, // Pass impersonated user ID (February 2026)
+                        explicitLongTermMemoryIntent,
                         // Reuse the same API-resolved capability flags as the initial context build
                         seesImages: effectiveContextSeesImages,
                         seesVideos: effectiveContextSeesVideos,
@@ -6761,19 +6824,22 @@ export default async function tomoriChat(
                         );
                       }
 
-                      if (queuedReplyDirective) {
-                        tailDirectives.push(queuedReplyDirective);
-                      }
-
-                      // Ensure uncensor directive is always last in the tail block
-                      if (uncensorDirective) {
-                        tailDirectives.push(uncensorDirective);
-                      }
-
                       const combinedTailMessage =
                         buildCombinedTailDirectiveMessage(tailDirectives);
                       if (combinedTailMessage) {
                         contextSegments.push(combinedTailMessage);
+                      }
+
+                      const queuedReplyTailMessage =
+                        buildTailDirectiveMessage(queuedReplyDirective);
+                      if (queuedReplyTailMessage) {
+                        contextSegments.push(queuedReplyTailMessage);
+                      }
+
+                      const uncensorTailMessage =
+                        buildTailDirectiveMessage(uncensorDirective);
+                      if (uncensorTailMessage) {
+                        contextSegments.push(uncensorTailMessage);
                       }
                       // Continue to next iteration WITHOUT adding to function interaction history
                       // This will restart the streaming with enhanced context
@@ -7230,12 +7296,20 @@ export default async function tomoriChat(
                   ? channel.id
                   : undefined;
               try {
-                await personaWebhook.send({
-                  content: stickerUrl,
-                  username: personaUsername,
-                  avatarURL: personaAvatarUrl,
-                  ...(threadId ? { threadId } : {}),
-                });
+                await sendWebhookMessageWithIdentity(
+                  personaWebhook,
+                  {
+                    content: stickerUrl,
+                    ...(threadId ? { threadId } : {}),
+                  },
+                  {
+                    username: personaUsername,
+                    avatarUrl: personaAvatarUrl,
+                    avatarDataUri: personaAvatarUrl?.startsWith("data:image/")
+                      ? personaAvatarUrl
+                      : undefined,
+                  },
+                );
                 stickerSent = true;
                 log.info(
                   `Sent sticker URL for '${selectedStickerToSend.name}' via webhook.`,
@@ -7285,6 +7359,11 @@ export default async function tomoriChat(
               turnThoughtLog,
               personaThoughtLog,
             );
+            if (thoughtLogOwnersMatch(turnThoughtLogOwner, currentThoughtLogOwner)) {
+              turnThoughtLogOwner = currentThoughtLogOwner;
+            } else {
+              turnThoughtLogOwner = { type: "default" };
+            }
           }
 
           // Capture persona response text for short-term memory storage
@@ -7394,6 +7473,7 @@ export default async function tomoriChat(
           sourceChannel: channel,
           thoughtLogChannelId: tomoriState.config.thought_log_channel_disc_id,
           thoughtLog: finalThoughtLog,
+          owner: turnThoughtLogOwner,
         });
       }
 

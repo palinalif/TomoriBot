@@ -57,6 +57,7 @@ import {
 import { getCachedAllPersonas } from "../cache/tomoriStateCache";
 import { getCachedUserRow } from "../cache/userCache";
 import { formatMemoryWithId } from "../memory/memoryId";
+import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -614,6 +615,7 @@ async function buildShortTermMemoryContext(
   personalMemoriesEnabled: boolean,
   client: Client,
   isUserImpersonation: boolean,
+  explicitLongTermMemoryIntent = false,
 ): Promise<{
   memoryItems: StructuredContextItem[];
   createPromptText?: string;
@@ -752,7 +754,9 @@ async function buildShortTermMemoryContext(
     // budget (~2800 tokens) makes the update_short_term_memory tool impractical. The
     // summary data itself is still included as context when available.
     if (tomoriState?.llm?.has_tools) {
-      const isStmToolAvailable = tomoriState.llm.llm_provider !== "novelai";
+      const isStmToolAvailable =
+        tomoriState.llm.llm_provider !== "novelai" &&
+        !explicitLongTermMemoryIntent;
 
 			const sameChannelMemory =
 				currentServerId === "DM"
@@ -962,6 +966,7 @@ export async function buildContext({
   seesImages: seesImagesOverride,
   seesVideos: seesVideosOverride,
   hasVisionTool = false,
+  explicitLongTermMemoryIntent: explicitLongTermMemoryIntentOverride,
 }: {
   guildId: string;
   serverName: string;
@@ -1018,6 +1023,7 @@ export async function buildContext({
    * "use analyze_image tool to view this image".
    */
   hasVisionTool?: boolean;
+  explicitLongTermMemoryIntent?: boolean;
 }): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
@@ -1041,6 +1047,13 @@ export async function buildContext({
     unicodeSpacesEnabled: tomoriConfig.uncensor_unicode_space_enabled,
     sanitizeEnabled: tomoriConfig.uncensor_sanitize_enabled,
   };
+  const explicitLongTermMemoryIntent =
+    explicitLongTermMemoryIntentOverride ??
+    hasExplicitLongTermMemoryIntent(
+      simplifiedMessageHistory
+        .filter((message) => message.authorType === "user")
+        .at(-1)?.content,
+    );
 
   // 1. System prompt + Humanizer rules (comes FIRST for prompt optimization)
   // Skip system prompt for user impersonation (bot-specific personality should not leak)
@@ -2028,6 +2041,7 @@ export async function buildContext({
           tomoriConfig.personal_memories_enabled,
           client,
           isUserImpersonation,
+          explicitLongTermMemoryIntent,
         );
       // Push memory items now (goes in middle of context)
       // Includes: other-channel memories + same-channel summary (if exists)

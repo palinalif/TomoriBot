@@ -33,6 +33,7 @@ import type {
   GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
@@ -1011,7 +1012,8 @@ function buildPersonaPageComponents(
         type: ComponentType.Thumbnail,
         media: {
           url: persona.is_alter
-            ? persona.webhook_avatar_url || fallbackAvatarUrl
+            ? resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ||
+              fallbackAvatarUrl
             : fallbackAvatarUrl,
         },
       },

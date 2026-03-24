@@ -13,8 +13,10 @@
 
 import { AttachmentBuilder } from "discord.js";
 import JSZip from "jszip";
-import { log } from "../../utils/misc/logger";
+import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
   BaseTool,
   type ToolContext,
@@ -236,12 +238,20 @@ export class GenerateImageNaiTool extends BaseTool {
 
     if (context.webhook && context.personaUsername) {
       try {
-        return await context.webhook.send({
-          files: [attachment],
-          username: context.personaUsername,
-          avatarURL: context.personaAvatarUrl,
-          ...(threadId ? { threadId } : {}),
-        });
+        return await sendWebhookMessageWithIdentity(
+          context.webhook,
+          {
+            files: [attachment],
+            ...(threadId ? { threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
+              ? context.personaAvatarUrl
+              : undefined,
+          },
+        );
       } catch (error) {
         log.warn(
           "Failed to send NAI generated image via webhook, falling back to bot message",
@@ -1107,6 +1117,30 @@ export class GenerateImageNaiTool extends BaseTool {
             "No NovelAI API key available. Set one with /optionalkey novelai set, or switch to the NovelAI provider.",
         };
       }
+
+      await sendToolProgressNotice(
+        context.channel,
+        context.locale,
+        {
+          titleKey: isInpaintMode
+            ? "genai.image.editing_title"
+            : "genai.image.generating_title",
+          descriptionKey: isInpaintMode
+            ? "genai.image.editing_description"
+            : "genai.image.generating_description",
+          descriptionVars: isInpaintMode
+            ? { edit_target: editTarget as string }
+            : undefined,
+          footerKey: "genai.image.generating_footer",
+          color: ColorCode.INFO,
+        },
+        {
+          webhook: context.webhook,
+          personaUsername: context.personaUsername,
+          personaAvatarUrl: context.personaAvatarUrl,
+        },
+        "GenerateImageNaiTool",
+      );
 
       // 4. Build base scene tag list — server style tags are trusted and should
       //    bypass suggest-tags normalization. Character tags are handled separately

@@ -225,6 +225,44 @@ export default {
       reading_description: "Reading the contents of `{filename}`",
     },
 
+    image: {
+      generating_title: "🖼️ Generating Image...",
+      generating_description: "Creating an image from the current prompt",
+      generating_with_references_description:
+        "Creating an image from the current prompt and reference image(s)",
+      editing_title: "🖌️ Editing Image...",
+      editing_description:
+        "Editing the referenced image by targeting `{edit_target}`",
+      generating_footer: "This may take a moment depending on provider load",
+    },
+
+    vision: {
+      analyzing_title: "🖼️ Analyzing Image...",
+      analyzing_description:
+        "Looking at the images from the referenced message",
+      analyzing_footer: "This may take a moment depending on image count",
+    },
+
+    avatar: {
+      inspecting_title: "👤 Checking Profile Picture...",
+      inspecting_description:
+        "Loading and analyzing the requested profile picture",
+      inspecting_footer: "This may take a moment depending on image size",
+    },
+
+    gif: {
+      processing_title: "🎞️ Processing GIF...",
+      processing_description:
+        "Extracting keyframes from the requested GIF for closer analysis",
+      processing_footer: "Large GIFs can take a bit longer",
+    },
+
+    fetch: {
+      reading_title: "🌐 Reading Webpage...",
+      reading_description: "Fetching and reading: {url}",
+      reading_footer: "This may take a moment depending on the page size",
+    },
+
     // New: Stream specific error messages
     stream: {
       response_stopped_title: "Response Interrupted",

@@ -22,9 +22,9 @@ import tomoriChat, {
 import { createStandardEmbed } from "../utils/discord/embedHelper";
 import { getCachedAllPersonas } from "../utils/cache/tomoriStateCache";
 import {
-  getOrCreatePersonaWebhook,
   getOrCreateWebhook,
-  resolvePersonaAvatarURL,
+  resolvePersonaWebhookIdentity,
+  sendWebhookMessageWithIdentity,
 } from "../utils/discord/webhookManager";
 import { ensureDiscordUserMention } from "../utils/discord/mentionHelper";
 import { isBridgeUserId } from "../utils/bridge";
@@ -361,31 +361,29 @@ export class ReminderTimer {
       const webhookChannel =
         isThread && channel.parent ? channel.parent : channel;
 
-      const usePersonaWebhooks = process.env.RUN_ENV !== "production";
-      const webhookResult = usePersonaWebhooks
-        ? await getOrCreatePersonaWebhook(
-            webhookChannel as TextChannel,
-            persona,
-          )
-        : await getOrCreateWebhook(webhookChannel as TextChannel);
+      const webhookResult = await getOrCreateWebhook(
+        webhookChannel as TextChannel,
+      );
       const webhook = webhookResult.webhook;
       if (!webhook) return false;
 
-      const avatarURL = !usePersonaWebhooks
-        ? resolvePersonaAvatarURL(persona, channel.guild)
-        : undefined;
-
-      await webhook.send({
-        content,
-        username: persona.tomori_nickname,
-        avatarURL,
-        allowedMentions: {
-          users: [reminder.user_discord_id],
-          roles: [],
-          parse: [],
+      const identity = await resolvePersonaWebhookIdentity(
+        persona,
+        channel.guild,
+      );
+      await sendWebhookMessageWithIdentity(
+        webhook,
+        {
+          content,
+          allowedMentions: {
+            users: [reminder.user_discord_id],
+            roles: [],
+            parse: [],
+          },
+          ...(isThread ? { threadId: channel.id } : {}),
         },
-        ...(isThread ? { threadId: channel.id } : {}),
-      });
+        identity,
+      );
       return true;
     } catch (error) {
       log.warn(

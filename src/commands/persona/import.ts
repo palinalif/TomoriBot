@@ -7,7 +7,6 @@ import type {
   ChatInputCommandInteraction,
   Client,
   SlashCommandSubcommandBuilder,
-  BaseGuildTextChannel,
 } from "discord.js";
 import { MessageFlags, EmbedBuilder, AttachmentBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
@@ -34,10 +33,6 @@ import { validatePNGBuffer } from "../../utils/image/avatarHelper";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
 import { sql } from "../../utils/db/client";
-import {
-  updatePersonaWebhooksAvatar,
-  getOrCreatePersonaWebhook,
-} from "../../utils/discord/webhookManager";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
@@ -1216,22 +1211,18 @@ export async function execute(
         return;
       }
 
-      const channelMessage = await interaction.channel.send({
+      await interaction.channel.send({
         embeds: [alterSuccessEmbed],
         files: [alterAvatarAttachment],
       });
 
-      // 11j. Extract avatar URL from the sent message
-      // The image URL is accessible from the sent message's embed
-      const sentEmbed = channelMessage.embeds[0];
-      const embedAvatarUrl = sentEmbed?.image?.url ?? null;
       const s3AvatarUrl = await uploadPersonaAvatarToS3({
         personaId: newTomoriId,
         serverDiscId: serverDiscId,
         label: "alter import",
         buffer: pngBuffer,
       });
-      const avatarUrl = s3AvatarUrl ?? embedAvatarUrl;
+      const avatarUrl = s3AvatarUrl;
 
       // 11k. Store avatar URL in webhook_avatar_url column
       if (avatarUrl) {
@@ -1240,68 +1231,14 @@ export async function execute(
 					SET webhook_avatar_url = ${avatarUrl}
 					WHERE tomori_id = ${newTomoriId}
 				`;
-        if (interaction.guild) {
-          await updatePersonaWebhooksAvatar(
-            interaction.guild,
-            newTomoriId,
-            pngBuffer,
-          );
-        }
       } else {
         log.warn(
-          `Failed to extract avatar URL from embed for alter persona ${newTomoriId}`,
+          `Failed to persist imported avatar for alter persona ${newTomoriId}`,
         );
       }
 
       // 11l. Invalidate cache
       invalidateTomoriStateCache(serverDiscId);
-
-      // 11m. Proactively create webhook in import channel to prevent Edge Case 1
-      // This triggers immediate URL upgrade from temporary attachment URL to permanent webhook CDN URL
-      // Non-production only (production uses S3 URLs which never expire)
-      const IS_PRODUCTION = process.env.RUN_ENV === "production";
-      if (
-        !IS_PRODUCTION &&
-        interaction.channel &&
-        "fetchWebhooks" in interaction.channel &&
-        interaction.guild
-      ) {
-        try {
-          // Reload personas to get the newly created alter with fresh data
-          const allPersonas = await loadAllPersonasForServer(
-            interaction.guild.id,
-          );
-          const newPersona = allPersonas.find(
-            (p) => p.tomori_id === newTomoriId,
-          );
-
-          if (newPersona) {
-            const { webhook, errorReason } = await getOrCreatePersonaWebhook(
-              interaction.channel as BaseGuildTextChannel,
-              newPersona,
-            );
-
-            if (webhook) {
-              log.success(
-                `[Persona Import] Proactively created webhook in import channel for persona ${newTomoriId} to upgrade avatar URL immediately`,
-              );
-            } else {
-              log.warn(
-                `[Persona Import] Failed to create proactive webhook for persona ${newTomoriId}: ${errorReason ?? "unknown"}. Avatar URL will upgrade on first use.`,
-              );
-            }
-          } else {
-            log.warn(
-              `[Persona Import] Could not find newly created persona ${newTomoriId} for proactive webhook creation`,
-            );
-          }
-        } catch (error) {
-          log.warn(
-            `[Persona Import] Failed to create proactive webhook for persona ${newTomoriId}, avatar URL will upgrade on first use`,
-            error,
-          );
-        }
-      }
 
       // Send ephemeral confirmation to user
       await interaction.editReply({

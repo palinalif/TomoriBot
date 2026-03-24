@@ -33,6 +33,7 @@ import {
 } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
 import {
   buildPersonaSpeakerStopString,
   mergeStopStrings,
@@ -697,23 +698,6 @@ export class GoogleStreamAdapter implements StreamProvider {
     return names;
   }
 
-  private isLikelySpeakerLabel(rawLabel: string): boolean {
-    const label = rawLabel.trim();
-    if (!label) return false;
-    if (label.length > 48) return false;
-    if (label.startsWith("[") || label.startsWith("<")) return false;
-    if (label.includes("://")) return false;
-    if (!/[\p{L}]/u.test(label)) return false;
-
-    const normalized = label.toLowerCase();
-    if (this.knownSpeakerNamesLower.has(normalized)) {
-      return true;
-    }
-
-    // Fallback heuristic for unseen generated names.
-    return /^\p{Lu}/u.test(label);
-  }
-
   private applySpeakerBoundaryFallbackGuard(chunk: GoogleStreamChunk): {
     chunk: GoogleStreamChunk;
     stopTriggered: boolean;
@@ -739,7 +723,12 @@ export class GoogleStreamAdapter implements StreamProvider {
       if (!match) break;
 
       const rawLabel = match[1].trim();
-      if (!this.isLikelySpeakerLabel(rawLabel)) {
+      if (
+        !isRegisteredOrReservedSpeakerLabel(
+          rawLabel,
+          this.knownSpeakerNamesLower,
+        )
+      ) {
         continue;
       }
 

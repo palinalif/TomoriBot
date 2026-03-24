@@ -7,6 +7,7 @@
 import { log } from "../../../utils/misc/logger";
 import type { ToolContext, ToolResult } from "../../../types/tool/interfaces";
 import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
+import { sendWebhookMessageWithIdentity } from "../../../utils/discord/webhookManager";
 import { ColorCode } from "../../../utils/misc/logger";
 import sharp from "sharp";
 import {
@@ -662,12 +663,21 @@ export async function brave_image_search(
               : undefined;
           const sentMessage =
             context.webhook && context.personaUsername
-              ? await context.webhook.send({
-                  files: attachments,
-                  username: context.personaUsername,
-                  avatarURL: context.personaAvatarUrl,
-                  ...(threadId ? { threadId } : {}),
-                })
+              ? await sendWebhookMessageWithIdentity(
+                  context.webhook,
+                  {
+                    files: attachments,
+                    ...(threadId ? { threadId } : {}),
+                  },
+                  {
+                    username: context.personaUsername,
+                    avatarUrl: context.personaAvatarUrl,
+                    avatarDataUri:
+                      context.personaAvatarUrl?.startsWith("data:image/")
+                        ? context.personaAvatarUrl
+                        : undefined,
+                  },
+                )
               : await context.channel.send({
                   files: attachments,
                 });

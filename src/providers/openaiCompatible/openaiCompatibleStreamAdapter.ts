@@ -27,6 +27,7 @@ import type {
 import type { StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
+import { isRegisteredOrReservedSpeakerLabel } from "@/utils/text/stringHelper";
 import { buildPersonaSpeakerStopString } from "@/providers/utils/stopStrings";
 
 export class OpenAICompatibleStreamAdapter implements StreamProvider {
@@ -726,22 +727,6 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 		};
 	}
 
-	private isLikelySpeakerLabel(rawLabel: string): boolean {
-		const label = rawLabel.trim();
-		if (!label) return false;
-		if (label.length > 48) return false;
-		if (label.startsWith("[") || label.startsWith("<")) return false;
-		if (label.includes("://")) return false;
-		if (!/[\p{L}]/u.test(label)) return false;
-
-		const normalized = label.toLowerCase();
-		if (this.knownSpeakerNamesLower.has(normalized)) {
-			return true;
-		}
-
-		return /^\p{Lu}/u.test(label);
-	}
-
 	private deduplicateChunkTextAgainstRecentStream(
 		chunk: OpenAICompatibleStreamChunk,
 	): OpenAICompatibleStreamChunk {
@@ -860,7 +845,12 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 			}
 
 			const rawLabel = match[1].trim();
-			if (!this.isLikelySpeakerLabel(rawLabel)) {
+			if (
+				!isRegisteredOrReservedSpeakerLabel(
+					rawLabel,
+					this.knownSpeakerNamesLower,
+				)
+			) {
 				continue;
 			}
 

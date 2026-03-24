@@ -4,7 +4,7 @@
  * Extracted from googleToolAdapter.ts for universal use across all providers
  */
 
-import { log } from "../misc/logger";
+import { log, ColorCode } from "../misc/logger";
 import { getMCPManager } from "./mcpManager";
 import type {
   MCPExecutionContext,
@@ -21,6 +21,7 @@ import type { ToolContext } from "../../types/tool/interfaces";
 import { getBraveSearchHandler } from "../../tools/mcpServers/brave-search/braveSearchHandler";
 import { getFetchHandler } from "../../tools/mcpServers/fetch/fetchHandler";
 import { getDuckDuckGoHandler } from "../../tools/mcpServers/duckduckgo-search/duckduckgoHandler";
+import { sendToolProgressNotice } from "../discord/toolProgressNotice";
 import { FETCH_LIMITS, memoryGuard } from "../security/rateLimiter";
 
 /**
@@ -360,6 +361,32 @@ export class MCPExecutor {
 
       // Apply business rules for parameters before sending to MCP server
       mcpContext.modifiedArgs = this.applyBusinessRules(functionName, args);
+
+      if (
+        functionName === "fetch" &&
+        context?.channel &&
+        context.locale
+      ) {
+        await sendToolProgressNotice(
+          context.channel,
+          context.locale,
+          {
+            titleKey: "genai.fetch.reading_title",
+            descriptionKey: "genai.fetch.reading_description",
+            descriptionVars: {
+              url: String(mcpContext.modifiedArgs.url || "the requested page"),
+            },
+            footerKey: "genai.fetch.reading_footer",
+            color: ColorCode.INFO,
+          },
+          {
+            webhook: context.webhook,
+            personaUsername: context.personaUsername,
+            personaAvatarUrl: context.personaAvatarUrl,
+          },
+          "MCPExecutor",
+        );
+      }
 
       // Find and execute the MCP function
       const mcpTools = mcpManager.getMCPTools();

@@ -28,9 +28,9 @@ import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { STREAMING_LIMITS } from "../security/rateLimiter";
 import {
-  getOrCreatePersonaWebhook,
   getOrCreateWebhook,
   invalidateWebhookCache,
+  sendWebhookMessageWithIdentity,
 } from "./webhookManager";
 import {
 	chunkMessage,
@@ -1917,13 +1917,21 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         );
 
         // Webhooks cannot reply to messages, so always send as new message
-        sentMessage = await context.webhook.send({
-          content,
-          username: context.personaUsername,
-          avatarURL: context.personaAvatarUrl, // Can be undefined - Discord handles this
-          allowedMentions: { parse: ["users", "roles"], repliedUser: false },
-          ...(threadId ? { threadId } : {}),
-        });
+        sentMessage = await sendWebhookMessageWithIdentity(
+          context.webhook,
+          {
+            content,
+            allowedMentions: { parse: ["users", "roles"], repliedUser: false },
+            ...(threadId ? { threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
+              ? context.personaAvatarUrl
+              : undefined,
+          },
+        );
 
         // Mark as replied since webhook messages can't reply to the original
         state.hasRepliedToOriginalMessage = true;
@@ -1968,27 +1976,33 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         if (webhookTargetChannel) {
           try {
             invalidateWebhookCache(webhookTargetChannel.id);
-            const usePersonaWebhooks = process.env.RUN_ENV !== "production";
-            const recreatedWebhookResult = usePersonaWebhooks
-              ? await getOrCreatePersonaWebhook(
-                  webhookTargetChannel,
-                  context.tomoriState,
-                )
-              : await getOrCreateWebhook(webhookTargetChannel);
+            const recreatedWebhookResult =
+              await getOrCreateWebhook(webhookTargetChannel);
             const recreatedWebhook = recreatedWebhookResult.webhook;
 
             if (recreatedWebhook) {
               const recoveredThreadId = resolveWebhookThreadId(context.channel);
-              const recoveredMessage = await recreatedWebhook.send({
-                content,
-                username: context.personaUsername,
-                avatarURL: context.personaAvatarUrl,
-                allowedMentions: {
-                  parse: ["users", "roles"],
-                  repliedUser: false,
+              const recoveredMessage = await sendWebhookMessageWithIdentity(
+                recreatedWebhook,
+                {
+                  content,
+                  allowedMentions: {
+                    parse: ["users", "roles"],
+                    repliedUser: false,
+                  },
+                  ...(recoveredThreadId
+                    ? { threadId: recoveredThreadId }
+                    : {}),
                 },
-                ...(recoveredThreadId ? { threadId: recoveredThreadId } : {}),
-              });
+                {
+                  username: context.personaUsername,
+                  avatarUrl: context.personaAvatarUrl,
+                  avatarDataUri:
+                    context.personaAvatarUrl?.startsWith("data:image/")
+                      ? context.personaAvatarUrl
+                      : undefined,
+                },
+              );
 
               context.webhook = recreatedWebhook;
               state.hasRepliedToOriginalMessage = true;

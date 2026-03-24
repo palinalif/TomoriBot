@@ -23,9 +23,8 @@ import {
 import { loadAllPersonasForServer, loadTomoriState } from "@/utils/db/dbRead";
 import {
   getOrCreateWebhook,
-  getOrCreatePersonaWebhook,
-  resolvePersonaAvatarURL,
-  sendAsPersona,
+  resolvePersonaWebhookIdentity,
+  sendWebhookMessageWithIdentity,
 } from "@/utils/discord/webhookManager";
 import type { SelectOption } from "@/types/discord/modal";
 import type { UserRow } from "@/types/db/schema";
@@ -325,10 +324,7 @@ async function handlePersonaImpersonation(
       });
     } else {
       // Alter persona: Send via webhook with embeds
-      const usePersonaWebhooks = process.env.RUN_ENV !== "production";
-      const { webhook, errorReason } = usePersonaWebhooks
-        ? await getOrCreatePersonaWebhook(channel, selectedPersona)
-        : await getOrCreateWebhook(channel);
+      const { webhook, errorReason } = await getOrCreateWebhook(channel);
       if (!webhook) {
         await replyInfoEmbed(modalResult.interaction, locale, {
           titleKey: "commands.bot.impersonate.webhook_error_title",
@@ -339,14 +335,18 @@ async function handlePersonaImpersonation(
         return;
       }
 
-      const avatarURL = usePersonaWebhooks
-        ? undefined
-        : resolvePersonaAvatarURL(selectedPersona, interaction.guild);
-
-      await sendAsPersona(webhook, selectedPersona, messageContent, {
-        embeds,
-        avatarURL,
-      });
+      const identity = await resolvePersonaWebhookIdentity(
+        selectedPersona,
+        interaction.guild,
+      );
+      await sendWebhookMessageWithIdentity(
+        webhook,
+        {
+          content: messageContent,
+          embeds,
+        },
+        identity,
+      );
     }
 
     // 8. Send success confirmation to user

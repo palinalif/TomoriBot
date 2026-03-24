@@ -103,6 +103,13 @@ On successful streamed turns, `StreamOrchestrator` returns the merged reasoning 
 
 Normal message triggers are disabled inside the configured thought-log channel so provider reasoning echoes cannot recursively trigger new chats there. Slash commands still work because they do not use `messageCreate`.
 
+Thought-log sender identity is explicit:
+- main persona turns post as the normal bot sender
+- alter persona turns post through the shared webhook using the alter nickname/avatar
+- user-impersonation turns post through the shared webhook using the impersonated user's display name/avatar
+
+The merged thought log is still one logical turn. In normal multi-persona auto-trigger flows, only one persona owns a given invocation because additional personas are re-queued into separate follow-up jobs.
+
 ## Buffering and Flush Boundaries
 
 Primary flush triggers:
@@ -130,6 +137,7 @@ Overflow fallback:
 ### Alter persona
 - sends via webhook with persona username/avatar
 - attempts webhook recovery on invalid webhook errors
+- in non-production, avatar identity comes from either a public URL built from local storage or a webhook-avatar mutation fallback guarded by a per-target-channel lock
 - falls back to regular bot message if webhook path fails
 
 ### User impersonation
@@ -169,6 +177,7 @@ When model emits `function_call`:
 Provider adapter safeguards:
 - Google/OpenRouter/Custom adapters split mixed chunks (`text` + tool-call signal) into two raw chunks so text is processed first, then `function_call`.
 - Speaker-boundary holdback tails are force-flushed before non-text chunks (tool call/error/finish) to prevent truncated text when a stream exits early on tool execution.
+- Adapter-level speaker fallback only stops on registered speaker labels already present in context, plus reserved `Assistant:` labels. It intentionally ignores arbitrary capitalized headings such as `Budget Breakdown:`.
 
 Stream-level safeguard:
 - Right before Discord send, `StreamOrchestrator` truncates any flushed segment at the first line that starts with a registered non-active speaker label (`Name:`) or reserved `Assistant:` label, then stops the stream. This applies to every provider, including providers that already have adapter-level speaker guards.

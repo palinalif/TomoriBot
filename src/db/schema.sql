@@ -120,7 +120,7 @@ EXECUTE FUNCTION update_timestamp();
 -- Add multi-persona support columns (January 2026)
 -- is_alter: Distinguishes main persona (false) from alter personas (true)
 SELECT add_column_if_not_exists('tomoris', 'is_alter', 'BOOLEAN', 'false');
--- webhook_avatar_url: Stores Discord CDN URL for alter persona avatars from import embed
+-- webhook_avatar_url: Stores alter avatar reference (production URL; non-production URL or local avatar path)
 SELECT add_column_if_not_exists('tomoris', 'webhook_avatar_url', 'TEXT');
 -- alter_triggers: Trigger words for alter personas (main personas use tomori_configs.trigger_words)
 SELECT add_column_if_not_exists('tomoris', 'alter_triggers', 'TEXT[]', 'ARRAY[]::TEXT[]');

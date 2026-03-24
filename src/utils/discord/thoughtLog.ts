@@ -1,10 +1,20 @@
-import { EmbedBuilder, type Client } from "discord.js";
+import {
+	EmbedBuilder,
+	type BaseGuildTextChannel,
+	type Client,
+} from "discord.js";
 import type { ThoughtLogPayload } from "@/types/provider/interfaces";
 import { getLlmDisplayName } from "@/utils/provider/modelDisplay";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import type { StreamContext } from "@/types/stream/interfaces";
 import type { TomoriState } from "@/types/db/schema";
+import {
+	getOrCreateWebhook,
+	resolvePersonaWebhookIdentity,
+	sendWebhookMessagesWithIdentity,
+	type ResolvedWebhookIdentity,
+} from "@/utils/discord/webhookManager";
 
 const EMBED_DESCRIPTION_LIMIT = 4096;
 
@@ -183,6 +193,41 @@ interface SendThoughtLogEmbedArgs {
 	sourceChannel: StreamContext["channel"];
 	thoughtLogChannelId: string;
 	thoughtLog: ThoughtLogPayload;
+	owner?: ThoughtLogOwner;
+}
+
+export type ThoughtLogOwner =
+	| { type: "default" }
+	| { type: "persona"; persona: TomoriState }
+	| {
+			type: "user_impersonation";
+			username: string;
+			avatarUrl?: string | null;
+	  };
+
+async function resolveThoughtLogOwnerIdentity(
+	owner: ThoughtLogOwner | undefined,
+	thoughtLogChannel: BaseGuildTextChannel,
+): Promise<ResolvedWebhookIdentity | null> {
+	if (!owner || owner.type === "default") {
+		return null;
+	}
+
+	if (owner.type === "user_impersonation") {
+		return {
+			username: owner.username,
+			avatarUrl: owner.avatarUrl ?? undefined,
+		};
+	}
+
+	if (!owner.persona.is_alter) {
+		return null;
+	}
+
+	return await resolvePersonaWebhookIdentity(
+		owner.persona,
+		thoughtLogChannel.guild,
+	);
 }
 
 export async function sendThoughtLogEmbed({
@@ -192,6 +237,7 @@ export async function sendThoughtLogEmbed({
 	sourceChannel,
 	thoughtLogChannelId,
 	thoughtLog,
+	owner,
 }: SendThoughtLogEmbedArgs): Promise<void> {
 	if (!hasThoughtLogContent(thoughtLog)) {
 		return;
@@ -223,11 +269,41 @@ export async function sendThoughtLogEmbed({
 	});
 
 	try {
-		for (const embed of embeds) {
-			await thoughtLogChannel.send({
-				embeds: [embed],
-				allowedMentions: { parse: [] },
-			});
+		const payloads = embeds.map((embed) => ({
+			embeds: [embed],
+			allowedMentions: { parse: [] as [] },
+		}));
+		const shouldUseWebhook =
+			owner &&
+			owner.type !== "default" &&
+			"fetchWebhooks" in thoughtLogChannel &&
+			"createWebhook" in thoughtLogChannel;
+
+		if (shouldUseWebhook) {
+			const webhookResult = await getOrCreateWebhook(
+				thoughtLogChannel as BaseGuildTextChannel,
+			);
+			const identity = await resolveThoughtLogOwnerIdentity(
+				owner,
+				thoughtLogChannel as BaseGuildTextChannel,
+			);
+
+			if (webhookResult.webhook && identity?.username) {
+				await sendWebhookMessagesWithIdentity(
+					webhookResult.webhook,
+					payloads,
+					identity,
+					thoughtLogChannel.id,
+				);
+			} else {
+				for (const payload of payloads) {
+					await thoughtLogChannel.send(payload);
+				}
+			}
+		} else {
+			for (const payload of payloads) {
+				await thoughtLogChannel.send(payload);
+			}
 		}
 		log.info(
 			`Posted ${embeds.length} thought log embed(s) to channel ${thoughtLogChannelId}`,

@@ -21,7 +21,9 @@ Each persona is a row in `tomoris`.
 Key columns:
 - `is_alter`: `false` for main, `true` for alters.
 - `alter_triggers`: trigger words for alters (main uses `tomori_configs.trigger_words`).
-- `webhook_avatar_url`: stored CDN URL for alter avatars (from import embed).
+- `webhook_avatar_url`: stored alter avatar reference.
+  - Production: stable public URL (S3 / CloudFront).
+  - Non-production: stable local path under `data/avatars/...`, or a legacy HTTP URL until lazy migration runs.
 
 ### `tomori_configs`
 
@@ -259,63 +261,65 @@ Webhook usage differs by environment:
 
 ### Non-production (Local Development)
 
-- Uses **per-persona webhooks** (`TomoriBot Persona {id}`).
-- Webhook avatar is **baked into the webhook** (data URI converted from download).
-- **Avatar storage**: Database stores Discord CDN URLs
-- **Robustness**: Enhanced with auto-recovery features (see below)
+- Uses the same **shared channel webhook** (`TomoriBot Multi-Persona`) as production.
+- Alters send messages through that webhook with:
+  - `username` = persona nickname
+  - `avatarURL` = public URL built from `AVATAR_PUBLIC_BASE_URL` when configured
+  - otherwise TomoriBot mutates the shared webhook avatar from the local file immediately before sending
+- **Avatar storage**: Alter avatars are stored locally under `data/avatars/servers/{guildId}/personas/{personaId}/...`
+- **Legacy persona webhooks** (`TomoriBot Persona {id}`) are no longer part of steady-state sending. They remain recovery sources for lazy migration and may be cleaned up manually later.
 
 #### **Avatar URL Lifecycle (Local)**
 
-1. **Import:** `webhook_avatar_url` = Discord CDN attachment URL (temporary, ~24h expiration)
-2. **Proactive webhook creation:** Import command creates webhook in import channel immediately
-3. **URL upgrade:** Webhook creation downloads temporary URL, bakes avatar, stores permanent webhook CDN URL
-4. **Future webhooks:** Download permanent webhook CDN URL, bake into new webhooks
+1. **Import/default/server avatar update:** avatar is normalized to PNG and stored locally.
+2. **DB write:** `webhook_avatar_url` is updated to the local stored path.
+3. **Optional URL mode:** if `AVATAR_PUBLIC_BASE_URL` is configured, TomoriBot builds a public URL by stripping the `data/avatars/` prefix and appending the remainder to that base URL.
+4. **Fallback mode:** if no public base URL is configured, TomoriBot loads the local file and mutates the shared webhook avatar for the send.
 
-**Result:** After first use, `webhook_avatar_url` becomes a permanent Discord webhook CDN URL that never expires.
+**Result:** Local installs no longer depend on per-persona webhooks just to persist avatar media.
+
+#### **Lazy Migration for Existing Local Installs**
+
+If an older local install still has an HTTP(S) avatar reference in `webhook_avatar_url`:
+
+1. TomoriBot tries to download that avatar on first alter send.
+2. The avatar is normalized to PNG, stored locally, and the DB is updated to the new local path.
+3. If the HTTP(S) download fails, TomoriBot scans surviving legacy `TomoriBot Persona {id}` webhooks in the guild, recovers one avatar, stores it locally, and updates the DB.
+
+Legacy persona webhooks are intentionally left in place by this migration. They are recovery sources, not part of the normal send path.
 
 #### **Robustness Features (Local)**
 
-##### **1. Proactive Webhook Creation**
-
-**What:** During `/persona import`, a webhook is created immediately in the import command's channel.
-
-**Why:** Triggers instant URL upgrade from temporary attachment URL to permanent webhook CDN URL, eliminating the 24-hour expiration window.
-
-**Behavior:**
-- Runs only in non-production (`RUN_ENV !== "production"`)
-- Non-blocking (import succeeds even if webhook creation fails)
-- Logs success/failure for debugging
-
-**Code location:** `src/commands/persona/import.ts` (step 11m)
-
-##### **2. Auto-Recovery from Deleted Webhooks**
+##### **1. Auto-Recovery from Legacy Persona Webhooks**
 
 **What:** When webhook avatar download fails (404), automatically scans guild for surviving webhooks with the same persona.
 
-**Why:** If the last webhook is deleted, new channels can't download the avatar. Auto-recovery finds any remaining webhook and uses its avatar.
+**Why:** Existing local installs may still only have webhook-backed avatar media. Recovery finds a surviving legacy webhook and migrates that avatar into local storage.
 
 **Behavior:**
-- Triggered on download failure during webhook creation
+- Triggered on download failure during lazy migration
 - Scans all text channels in guild for webhooks matching `TomoriBot Persona {id}`
 - Downloads avatar from first surviving webhook found
-- Updates database with recovered URL
+- Stores avatar locally
+- Updates database with the new local path
 - Returns recovered avatar for immediate use
 
-**Fallback:** If no surviving webhooks found, webhook created without avatar (uses bot's default)
+**Fallback:** If no surviving webhooks found, the send falls back to the owner name without a custom avatar (or to the original HTTP URL if it is still usable).
 
 **Code location:** `src/utils/discord/webhookManager.ts` (`attemptWebhookAvatarRecovery`)
 
 #### **Edge Cases (Local)**
 
 **✅ Solved:**
-1. **No webhook within 24h** → Proactive creation upgrades URL immediately
-2. **Last webhook deleted** → Auto-recovery scans for survivors and restores
+1. **Webhook slot pressure** → local alters no longer create per-persona send webhooks
+2. **Legacy URL expired** → lazy migration recovers from a surviving legacy webhook
+3. **No public avatar host configured** → shared webhook avatar mutation fallback still preserves alter identity
 
 **⚠️ Rare (Terminal):**
-- **All webhooks deleted** → No recovery source, manual re-import required
-- **User manually deletes all webhooks** → Very rare, requires deliberate action
+- **All legacy recovery sources gone and stored file missing** → manual re-import required
+- **Operator configures `AVATAR_PUBLIC_BASE_URL` but does not actually serve `data/avatars/`** → avatar URLs will be broken until the host is fixed
 
-**Mitigation:** Keep at least one webhook per persona in any channel to enable auto-recovery.
+**Mitigation:** Existing legacy webhooks are left untouched so old installs retain a recovery source. New installs do not need them for normal operation.
 
 ### Supported channels
 
@@ -341,6 +345,8 @@ Tools can send embeds via `sendStandardEmbed`. The tool execution context includ
 
 - If a webhook is available, embeds are sent through that webhook with persona name/avatar.
 - Otherwise, embeds are sent as normal bot messages.
+
+The same shared webhook identity path is used for streamed chunks, tool embeds, generated images, sticker URL sends, reminder fallback pings, and manual alter impersonation.
 
 ### Persona IDs in context
 
@@ -385,12 +391,13 @@ Behavior:
 - `type: main` replaces main persona.
 - `type: alter` creates a new alter persona:
   - Unique triggers enforced (no overlaps).
-  - Avatar URL stored in `webhook_avatar_url`.
+  - Avatar reference stored in `webhook_avatar_url` (production URL or non-production local path).
 
 ### `/persona remove`
 
 - Removes a selected alter persona.
-- Deletes persona-specific webhooks in non-production.
+- Deletes the stored avatar file/reference when present.
+- Does **not** automatically delete legacy persona webhooks.
 
 ### `/persona swap`
 
@@ -398,6 +405,7 @@ Behavior:
 - Transfers triggers between `alter_triggers` and `tomori_configs.trigger_words`.
 - Updates guild avatar and nickname.
 - Stores the previous main avatar in `webhook_avatar_url`.
+- Local alter avatars are loaded from the stored file path when present.
 
 ## Caching and Invalidation
 
@@ -411,18 +419,15 @@ Invalidate cache after:
 
 ### Webhook cache
 
-Two in-memory caches:
-- `webhookCache` (channel webhook, production)
-- `personaWebhookCache` (per-persona webhook, non-production)
+In-memory caches:
+- `webhookCache` (shared channel webhook)
+- `personaWebhookCache` (legacy per-persona webhook cache; retained for recovery / compatibility helpers)
 
 **Cache behavior:**
 - No TTL (persist until bot restart or manual invalidation)
 - Token validation on cache hit (recreates if webhook was deleted)
 - Auto-invalidation on webhook errors (codes 10015, 50027)
-
-**Integration with auto-recovery:**
-- When cache invalidation detects deleted webhook, next creation attempt triggers auto-recovery
-- Recovered webhook URL automatically updates cache after successful recovery
+- Avatar mutation sends also use a per-target-channel mutation lock so concurrent sends cannot cross-contaminate webhook avatars.
 
 ## Limitations and Edge Cases
 
@@ -441,10 +446,10 @@ Two in-memory caches:
 
 ### Webhooks (Local Development)
 
-- **Avatar expiration (mitigated)**: Proactive webhook creation prevents 24h URL expiration.
-- **Webhook deletion (mitigated)**: Auto-recovery scans guild for surviving webhooks.
-- **Terminal case**: If ALL webhooks deleted, avatar unrecoverable (requires manual re-import).
-- **Webhook limit**: Discord allows max 15 webhooks per channel (local mode can hit this with many personas).
+- **Legacy URL expiration (mitigated)**: lazy migration copies old HTTP(S) avatar references into local storage on first use.
+- **Legacy webhook deletion (mitigated)**: auto-recovery scans guild for surviving legacy persona webhooks during migration.
+- **Terminal case**: if all legacy recovery sources are gone and no local file exists, avatar is unrecoverable without re-import.
+- **Webhook limit**: steady-state local mode now uses one shared webhook per channel, so normal alter traffic no longer burns one webhook slot per persona.
 
 ## Troubleshooting
 
@@ -471,12 +476,12 @@ Two in-memory caches:
    - Check logs for webhook errors
 
 2. **Local development avatar issues:**
-   - If imported recently, check if proactive webhook was created:
-     - Log: `Proactively created webhook in import channel for persona X`
-   - If avatar missing after webhook deletion:
-     - Auto-recovery should trigger on next use
-     - Log: `Attempting avatar recovery for persona X`
-   - If all webhooks deleted, re-import persona
+   - Check whether `webhook_avatar_url` now points to a local `data/avatars/...` path
+   - If legacy HTTP(S) value is still present, next use should trigger lazy migration
+   - If migration fails:
+     - Look for log: `Attempting legacy webhook recovery for persona X`
+     - Confirm at least one legacy `TomoriBot Persona {id}` webhook still exists somewhere in the guild
+   - If no recovery source exists, re-import the persona avatar
 
 3. **DM limitations:**
    - Webhooks not supported in DMs
@@ -515,7 +520,7 @@ Two in-memory caches:
 
 ### Webhook Robustness (Local Development)
 
-11. **Proactive creation:** Import alter → check logs for "Proactively created webhook" → verify `webhook_avatar_url` is webhook CDN URL (not attachment).
-12. **Auto-recovery:** Delete webhook in Channel A → use alter in Channel B → auto-recovery finds webhook in Channel C (if exists) → avatar restored.
-13. **Graceful degradation:** Delete all webhooks → use alter → webhook created without avatar (bot's default) → still functional.
-14. **URL upgrade:** Import alter → wait 25 hours → use alter in new channel → webhook still has avatar (permanent URL).
+11. **Local storage:** Import alter or set alter avatar → verify `webhook_avatar_url` stores a `data/avatars/...` path in non-production.
+12. **Lazy migration:** Existing local persona with HTTP(S) `webhook_avatar_url` → first alter send migrates to a local path.
+13. **Recovery path:** Break the legacy HTTP(S) URL but keep one legacy `TomoriBot Persona {id}` webhook → next send recovers avatar and stores a local path.
+14. **Shared webhook identity:** Use the same alter in multiple channels/threads → messages still show the correct persona sender without creating new persona webhooks.

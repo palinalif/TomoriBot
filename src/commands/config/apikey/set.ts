@@ -597,17 +597,16 @@ export async function execute(
       provider: getProviderDisplayName(selectedProvider),
     };
 
-    // Add model name if provider changed
-    if (currentProvider !== newProvider) {
-      if (isCustomProvider(newProvider)) {
-        descriptionVars.model_name =
-          customCapabilitiesResult?.modelName ||
-          localizer(locale, "general.unknown");
-      } else {
-        const defaultModel = await loadDefaultModelForProvider(newProvider);
-        if (defaultModel) {
-          descriptionVars.model_name = defaultModel.llm_codename;
-        }
+    // Custom endpoint success copy always references {model_name}, even when the
+    // provider stays on "custom" and the user is only reconfiguring the endpoint.
+    if (isCustomProvider(newProvider)) {
+      descriptionVars.model_name =
+        customCapabilitiesResult?.modelName ||
+        localizer(locale, "general.unknown");
+    } else if (currentProvider !== newProvider) {
+      const defaultModel = await loadDefaultModelForProvider(newProvider);
+      if (defaultModel) {
+        descriptionVars.model_name = defaultModel.llm_codename;
       }
     }
 

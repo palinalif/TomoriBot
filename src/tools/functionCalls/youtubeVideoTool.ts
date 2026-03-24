@@ -6,7 +6,7 @@
 
 import { log, ColorCode } from "../../utils/misc/logger";
 import type { EnhancedVideoContent } from "@/types/tool/enhancedContextTypes";
-import { sendStandardEmbed } from "../../utils/discord/embedHelper";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
   BaseTool,
   type ToolContext,
@@ -153,30 +153,23 @@ export class YouTubeVideoTool extends BaseTool {
 
     log.info(`Processing YouTube video: ${youtubeUrl} - Reason: ${reason}`);
 
-    // Send notification embed to user about YouTube processing
-    try {
-      await sendStandardEmbed(
-        context.channel,
-        context.locale,
-        {
-          titleKey: "genai.video.youtube_processing_title",
-          descriptionKey: "genai.video.youtube_processing_description",
-          descriptionVars: { video_url: youtubeUrl },
-          footerKey: "genai.video.youtube_processing_footer",
-          color: ColorCode.INFO,
-        },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
-      );
-    } catch (embedError) {
-      // Log but don't fail the tool execution if embed fails
-      log.warn(
-        `Failed to send YouTube processing notification embed: ${embedError instanceof Error ? embedError.message : String(embedError)}`,
-      );
-    }
+    await sendToolProgressNotice(
+      context.channel,
+      context.locale,
+      {
+        titleKey: "genai.video.youtube_processing_title",
+        descriptionKey: "genai.video.youtube_processing_description",
+        descriptionVars: { video_url: youtubeUrl },
+        footerKey: "genai.video.youtube_processing_footer",
+        color: ColorCode.INFO,
+      },
+      {
+        webhook: context.webhook,
+        personaUsername: context.personaUsername,
+        personaAvatarUrl: context.personaAvatarUrl,
+      },
+      "YouTubeVideoTool",
+    );
 
     try {
       // Validate YouTube URL using existing patterns

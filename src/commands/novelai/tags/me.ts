@@ -16,6 +16,7 @@ import { localizer } from "@/utils/text/localizer";
 import type { UserRow } from "@/types/db/schema";
 import {
 	formatTextArrayLiteral,
+	formatNaiTagsForModalValue,
 	MAX_TAG_LENGTH,
 	MAX_TAGS,
 	parseAndValidateNaiTags,
@@ -41,6 +42,7 @@ export async function execute(
 	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
 
 	try {
+		const currentTagsValue = formatNaiTagsForModalValue(userData.nai_char_tags);
 		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.novelai.tags.me.modal_title",
@@ -53,6 +55,7 @@ export async function execute(
 					style: TextInputStyle.Paragraph,
 					required: false,
 					maxLength: TAGS_MODAL_MAX_LENGTH,
+					value: currentTagsValue,
 				},
 			],
 		});

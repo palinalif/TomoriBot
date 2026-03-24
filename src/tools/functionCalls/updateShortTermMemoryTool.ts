@@ -68,6 +68,13 @@ export class UpdateShortTermMemoryTool extends BaseTool {
   isAvailableForContext(provider: string, context?: ToolContext): boolean {
     if (!this.isAvailableFor(provider)) return false;
 
+    if (context?.streamContext?.explicitLongTermMemoryIntent) {
+      log.info(
+        "UpdateShortTermMemoryTool: Disabled for this turn — explicit long-term memory intent detected",
+      );
+      return false;
+    }
+
     if (context?.streamContext?.disableShortTermMemoryUpdate) {
       log.info(
         "UpdateShortTermMemoryTool: Disabled for this turn — STM already updated once",
@@ -85,6 +92,17 @@ export class UpdateShortTermMemoryTool extends BaseTool {
     args: Record<string, unknown>,
     context: ToolContext,
   ): Promise<ToolResult> {
+    if (context.streamContext?.explicitLongTermMemoryIntent) {
+      log.info(
+        "[updateShortTermMemoryTool] Execution blocked — explicit long-term memory intent detected",
+      );
+      return {
+        success: false,
+        message:
+          "Short-term memory updates are disabled when the user explicitly asks for persistent memory.",
+      };
+    }
+
     // Defense-in-depth guard: block execution if STM was already updated this turn
     if (context.streamContext?.disableShortTermMemoryUpdate) {
       log.info(

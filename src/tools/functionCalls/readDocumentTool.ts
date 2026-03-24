@@ -10,7 +10,7 @@ import {
 	isExtractableDocument,
 	extractTextFromUrl,
 } from "@/utils/documents/textExtractor";
-import { sendStandardEmbed } from "@/utils/discord/embedHelper";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
 	BaseTool,
 	type ToolContext,
@@ -180,28 +180,22 @@ export class ReadDocumentTool extends BaseTool {
 			}
 
 			// 5. Send "Reading document..." embed indicator
-			try {
-				await sendStandardEmbed(
-					context.channel,
-					context.locale,
-					{
-						titleKey: "genai.document.reading_title",
-						descriptionKey: "genai.document.reading_description",
-						descriptionVars: { filename: docAttachment.name },
-						color: ColorCode.INFO,
-					},
-					{
-						webhook: context.webhook,
-						personaUsername: context.personaUsername,
-						personaAvatarUrl: context.personaAvatarUrl,
-					},
-				);
-			} catch (embedError) {
-				// Log but don't fail the tool execution if embed fails
-				log.warn(
-					`ReadDocumentTool: Failed to send processing notification embed: ${embedError instanceof Error ? embedError.message : String(embedError)}`,
-				);
-			}
+			await sendToolProgressNotice(
+				context.channel,
+				context.locale,
+				{
+					titleKey: "genai.document.reading_title",
+					descriptionKey: "genai.document.reading_description",
+					descriptionVars: { filename: docAttachment.name },
+					color: ColorCode.INFO,
+				},
+				{
+					webhook: context.webhook,
+					personaUsername: context.personaUsername,
+					personaAvatarUrl: context.personaAvatarUrl,
+				},
+				"ReadDocumentTool",
+			);
 
 			// 6. Download and extract text
 			const result = await extractTextFromUrl(

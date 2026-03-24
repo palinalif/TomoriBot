@@ -57,6 +57,11 @@ Current `generate_image_nai` runtime notes:
 - context building now includes saved NAI appearance tags inline on the relevant user/persona conversation entries instead of a separate `# Image Profiles` knowledge block, so image identity guidance stays attached to the same entity description the model is already reading
 - provider tool adapters now preserve nested array/object tool schemas recursively, so structured tool params such as `characters[]` survive provider conversion
 
+Current `update_short_term_memory` runtime notes:
+
+- the tool is hidden for a turn when the triggering user message explicitly asks the bot to remember something for future use
+- this suppression currently uses a shared English/Japanese phrase detector so direct long-term-memory requests do not compete with STM summary nudges in the same turn
+
 ## REST API Tools
 
 - Brave REST tool classes in `src/tools/restAPIs/brave/braveTools.ts`:

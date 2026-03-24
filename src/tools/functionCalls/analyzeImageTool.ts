@@ -13,7 +13,8 @@ import type {
 	ToolParameterSchema,
 } from "@/types/tool/interfaces";
 import { decryptApiKey } from "@/utils/security/crypto";
-import { log } from "@/utils/misc/logger";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
 	toZaiApiModelName,
 	ZAI_CODING_CHAT_COMPLETIONS_URL,
@@ -139,6 +140,23 @@ export class AnalyzeImageTool extends BaseTool {
 		}
 
 		try {
+			await sendToolProgressNotice(
+				context.channel,
+				context.locale,
+				{
+					titleKey: "genai.vision.analyzing_title",
+					descriptionKey: "genai.vision.analyzing_description",
+					footerKey: "genai.vision.analyzing_footer",
+					color: ColorCode.INFO,
+				},
+				{
+					webhook: context.webhook,
+					personaUsername: context.personaUsername,
+					personaAvatarUrl: context.personaAvatarUrl,
+				},
+				"AnalyzeImageTool",
+			);
+
 			// 4. Extract images from the Discord message
 			const images = await this.extractImagesFromMessage(
 				messageId,

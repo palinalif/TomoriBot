@@ -1417,6 +1417,28 @@ export function cleanLLMOutput(
 
 const RESERVED_INVALID_SPEAKER_LABELS_LOWER = new Set(["assistant"]);
 
+export function isRegisteredOrReservedSpeakerLabel(
+	rawLabel: string,
+	registeredSpeakerNamesLower?: ReadonlySet<string>,
+): boolean {
+	const label = rawLabel.trim();
+	if (!label) {
+		return false;
+	}
+	if (label.length > 64) {
+		return false;
+	}
+	if (label.startsWith("[") || label.startsWith("<")) {
+		return false;
+	}
+
+	const normalizedLabel = label.toLowerCase();
+	return (
+		(registeredSpeakerNamesLower?.has(normalizedLabel) ?? false) ||
+		RESERVED_INVALID_SPEAKER_LABELS_LOWER.has(normalizedLabel)
+	);
+}
+
 export function truncateBeforeRegisteredSpeakerLine(
 	text: string,
 	registeredSpeakerNamesLower?: ReadonlySet<string>,
@@ -1446,13 +1468,12 @@ export function truncateBeforeRegisteredSpeakerLine(
 			continue;
 		}
 
-		const normalizedLabel = rawLabel.toLowerCase();
-		const isRegisteredSpeaker =
-			registeredSpeakerNamesLower?.has(normalizedLabel) ?? false;
-		const isReservedInvalidSpeakerLabel =
-			RESERVED_INVALID_SPEAKER_LABELS_LOWER.has(normalizedLabel);
-
-		if (!isRegisteredSpeaker && !isReservedInvalidSpeakerLabel) {
+		if (
+			!isRegisteredOrReservedSpeakerLabel(
+				rawLabel,
+				registeredSpeakerNamesLower,
+			)
+		) {
 			continue;
 		}
 

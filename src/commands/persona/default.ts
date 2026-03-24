@@ -2,7 +2,6 @@ import {
   AttachmentBuilder,
   EmbedBuilder,
   MessageFlags,
-  type BaseGuildTextChannel,
   type ChatInputCommandInteraction,
   type Client,
   type SlashCommandSubcommandBuilder,
@@ -39,10 +38,6 @@ import { sql } from "@/utils/db/client";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { getCachedPresetAvatar } from "../../utils/image/avatarHelper";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
-import {
-  getOrCreatePersonaWebhook,
-  updatePersonaWebhooksAvatar,
-} from "../../utils/discord/webhookManager";
 import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -138,14 +133,6 @@ function resolveAvailablePersonaName(
   }
 
   return null;
-}
-
-function isTemporaryDiscordAttachmentUrl(url: string): boolean {
-  const normalized = url.trim().toLowerCase();
-  return (
-    normalized.includes("cdn.discordapp.com/attachments/") ||
-    normalized.includes("media.discordapp.net/attachments/")
-  );
 }
 
 function resolvePresetLineageId(preset: TomoriPresetRow): number | null {
@@ -903,7 +890,7 @@ export async function execute(
       return;
     }
 
-    const channelMessage = await successChannel.send({
+    await successChannel.send({
       embeds: [successEmbed],
       files: avatarAttachment ? [avatarAttachment] : [],
     });
@@ -911,15 +898,13 @@ export async function execute(
     // Mirror /persona import alter avatar persistence flow so webhook avatars remain stable.
     let storedAvatarUrl: string | null = null;
     if (presetAvatarBuffer) {
-      const sentEmbed = channelMessage.embeds[0];
-      const embedAvatarUrl = sentEmbed?.image?.url ?? null;
       const s3AvatarUrl = await uploadPersonaAvatarToS3({
         personaId: newAlterId,
         serverDiscId,
         label: "default alter preset",
         buffer: presetAvatarBuffer,
       });
-      storedAvatarUrl = s3AvatarUrl ?? embedAvatarUrl;
+      storedAvatarUrl = s3AvatarUrl;
 
       if (storedAvatarUrl) {
         await sql`
@@ -929,114 +914,13 @@ export async function execute(
 				`;
       } else {
         log.warn(
-          `Failed to extract avatar URL from success embed for alter persona ${newAlterId}`,
-        );
-      }
-
-      // Keep existing webhooks in sync even when URL extraction fails.
-      if (interaction.guild) {
-        await updatePersonaWebhooksAvatar(
-          interaction.guild,
-          newAlterId,
-          presetAvatarBuffer,
+          `Failed to persist preset avatar for alter persona ${newAlterId}`,
         );
       }
     }
 
     // Match /persona import cache invalidation timing: after avatar URL persistence.
     invalidateTomoriStateCache(serverDiscId);
-
-    // Proactively create webhook in the current channel (non-production) to upgrade
-    // attachment-backed avatar URLs immediately, matching /persona import behavior.
-    const IS_PRODUCTION = process.env.RUN_ENV === "production";
-    if (
-      !IS_PRODUCTION &&
-      presetAvatarBuffer &&
-      successChannel &&
-      "fetchWebhooks" in successChannel &&
-      interaction.guild
-    ) {
-      try {
-        const refreshedPersonas = await loadAllPersonasForServer(serverDiscId);
-        const newPersona = refreshedPersonas.find(
-          (p) => p.tomori_id === newAlterId,
-        );
-
-        if (newPersona) {
-          const { webhook, errorReason } = await getOrCreatePersonaWebhook(
-            successChannel as BaseGuildTextChannel,
-            newPersona,
-          );
-
-          if (webhook) {
-            log.success(
-              `[Persona Default] Proactively created webhook in current channel for persona ${newAlterId} to upgrade avatar URL immediately`,
-            );
-            const webhookAvatarUrl = webhook.avatarURL({
-              extension: "png",
-              size: 256,
-            });
-            if (
-              webhookAvatarUrl &&
-              (!storedAvatarUrl ||
-                isTemporaryDiscordAttachmentUrl(storedAvatarUrl))
-            ) {
-              await sql`
-								UPDATE tomoris
-								SET webhook_avatar_url = ${webhookAvatarUrl}
-								WHERE tomori_id = ${newAlterId}
-							`;
-              storedAvatarUrl = webhookAvatarUrl;
-              invalidateTomoriStateCache(serverDiscId);
-              log.success(
-                `[Persona Default] Upgraded avatar URL to permanent webhook URL for persona ${newAlterId}`,
-              );
-            }
-          } else {
-            log.warn(
-              `[Persona Default] Failed to create proactive webhook for persona ${newAlterId}: ${errorReason ?? "unknown"}. Avatar URL will upgrade on first use.`,
-            );
-          }
-        } else {
-          log.warn(
-            `[Persona Default] Could not find newly created persona ${newAlterId} for proactive webhook creation`,
-          );
-        }
-      } catch (error) {
-        log.warn(
-          `[Persona Default] Failed to create proactive webhook for persona ${newAlterId}, avatar URL will upgrade on first use`,
-          error,
-        );
-      }
-    }
-
-    // If avatar URL is still missing or temporary attachment URL, make one more upgrade attempt.
-    if (!IS_PRODUCTION && interaction.guild && presetAvatarBuffer) {
-      const currentAvatarRows = await sql<
-        Array<{ webhook_avatar_url: string | null }>
-      >`
-				SELECT webhook_avatar_url
-				FROM tomoris
-				WHERE tomori_id = ${newAlterId}
-				LIMIT 1
-			`;
-      const currentAvatarUrl = currentAvatarRows[0]?.webhook_avatar_url ?? null;
-      const needsUpgrade =
-        !currentAvatarUrl || isTemporaryDiscordAttachmentUrl(currentAvatarUrl);
-
-      if (needsUpgrade) {
-        const updatedCount = await updatePersonaWebhooksAvatar(
-          interaction.guild,
-          newAlterId,
-          presetAvatarBuffer,
-        );
-        if (updatedCount === 0) {
-          log.warn(
-            `[Persona Default] Avatar URL for persona ${newAlterId} remains ${currentAvatarUrl ? "temporary" : "missing"} after upgrade attempt`,
-          );
-        }
-      }
-    }
 
     log.success(
       `Applied preset "${selectedPreset.tomori_preset_name}" to alter persona "${resolvedAlterName}" with ${uniqueAlterTriggers.length} unique triggers for server ${tomoriState.server_id} by user ${userData.user_disc_id}`,

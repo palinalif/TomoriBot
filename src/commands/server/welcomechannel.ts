@@ -103,6 +103,8 @@ export async function execute(
 			return;
 		}
 
+		const currentWelcomePrompt = tomoriState.config.welcome_prompt ?? undefined;
+
 		if (action === "remove") {
 			await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -205,6 +207,7 @@ export async function execute(
 					style: TextInputStyle.Paragraph,
 					required: true,
 					maxLength: MAX_ADDITIONAL_PROMPT_LENGTH,
+					value: currentWelcomePrompt,
 				},
 			],
 		});

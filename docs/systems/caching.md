@@ -51,6 +51,7 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
   - server-shared: `shortterm:server:{serverId}:{channelId}` (persona-scoped variant includes `:{tomoriId}`)
 - Stores per-channel conversation snippets and optional summaries
 - Guild behavior: the latest STM for a persona in a channel is shared across that server's other channels; user-scoped STM is retained for cross-server opt-in behavior
+- When the triggering user message explicitly asks Tomori to remember something for future use, STM tool nudges are suppressed for that turn so long-term memory tools take priority; raw short-term conversation capture still continues after the reply
 - TTL env vars:
   - `SHORT_TERM_MEMORY_TTL_HOURS`
   - `SHORT_TERM_MEMORY_SUMMARY_TTL_HOURS`

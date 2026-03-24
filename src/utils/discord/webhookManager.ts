@@ -13,6 +13,12 @@ import { PERSONA_LIMITS } from "../security/rateLimiter";
 import { convertToPNG } from "../image/imageProcessor";
 import { sql } from "../db/client";
 import { invalidateTomoriStateCache } from "../cache/tomoriStateCache";
+import {
+  isLocalPersonaAvatarPath,
+  loadStoredPersonaAvatarDataUri,
+  resolvePersonaAvatarPublicUrl,
+  uploadPersonaAvatarToS3,
+} from "@/utils/storage/avatarStorage";
 
 /**
  * In-memory webhook cache: channelId -> Webhook
@@ -23,7 +29,7 @@ const webhookCache = new Map<string, Webhook>();
 
 /**
  * In-memory persona webhook cache: channelId:personaId -> Webhook
- * Used for non-production per-persona webhook avatars.
+ * Retained for legacy persona-webhook compatibility and recovery helpers.
  */
 const personaWebhookCache = new Map<string, Webhook>();
 
@@ -45,7 +51,17 @@ export type WebhookCreateResult = {
   errorReason?: WebhookCreateErrorReason;
 };
 
+export type ResolvedWebhookIdentity = {
+  username?: string;
+  avatarUrl?: string;
+  avatarDataUri?: string;
+};
+
+type WebhookSendPayload = Exclude<Parameters<Webhook["send"]>[0], string>;
+
 const MAX_AVATAR_SIZE_BYTES = PERSONA_LIMITS.MAX_AVATAR_SIZE_MB * 1024 * 1024;
+const webhookMutationLocks = new Map<string, Promise<void>>();
+const webhookAvatarStateCache = new Map<string, string>();
 
 function toWebhookAvatarData(avatar?: Buffer | string | null): string | null {
   if (!avatar) {
@@ -122,6 +138,106 @@ function sanitizeAvatarUrl(url?: string | null): string | undefined {
   return trimmedUrl;
 }
 
+function isInvalidWebhookError(error: unknown): boolean {
+  const code = (error as { code?: number | string })?.code;
+  return (
+    code === 10015 ||
+    code === "10015" ||
+    code === 50027 ||
+    code === "50027"
+  );
+}
+
+async function withWebhookMutationLock<T>(
+  lockKey: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = webhookMutationLocks.get(lockKey);
+  const waitForPrevious = previous?.catch(() => undefined) ?? Promise.resolve();
+
+  let releaseLock!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  const chained = waitForPrevious.then(() => current);
+  webhookMutationLocks.set(lockKey, chained);
+
+  await waitForPrevious;
+
+  try {
+    return await operation();
+  } finally {
+    releaseLock();
+    if (webhookMutationLocks.get(lockKey) === chained) {
+      webhookMutationLocks.delete(lockKey);
+    }
+  }
+}
+
+async function normalizeAvatarToPng(
+  buffer: Buffer,
+  logLabel: string,
+): Promise<Buffer | null> {
+  if (buffer.length > MAX_AVATAR_SIZE_BYTES) {
+    log.warn(
+      `[Webhook Manager] ${logLabel} exceeds max size (${buffer.length} bytes)`,
+    );
+    return null;
+  }
+
+  try {
+    return await convertToPNG(buffer);
+  } catch (error) {
+    log.warn(
+      `[Webhook Manager] Failed to convert ${logLabel} to PNG`,
+      error,
+    );
+    return null;
+  }
+}
+
+async function persistPersonaAvatarReference(
+  guildId: string,
+  personaId: number,
+  avatarReference: string,
+): Promise<void> {
+  await sql`
+		UPDATE tomoris
+		SET webhook_avatar_url = ${avatarReference}
+		WHERE tomori_id = ${personaId}
+	`;
+  invalidateTomoriStateCache(guildId);
+}
+
+async function storeMigratedPersonaAvatar(
+  guildId: string,
+  personaId: number,
+  buffer: Buffer,
+  label: string,
+): Promise<string | null> {
+  const storedReference = await uploadPersonaAvatarToS3({
+    personaId,
+    serverDiscId: guildId,
+    label,
+    buffer,
+  });
+
+  if (!storedReference) {
+    return null;
+  }
+
+  try {
+    await persistPersonaAvatarReference(guildId, personaId, storedReference);
+  } catch (error) {
+    log.warn(
+      `[Webhook Manager] Failed to persist migrated avatar reference for persona ${personaId}`,
+      error,
+    );
+  }
+
+  return storedReference;
+}
+
 /**
  * Attempts to recover persona avatar by scanning guild for surviving webhooks.
  * Used when the stored webhook_avatar_url fails to download (Edge Case 2: last webhook deleted).
@@ -133,7 +249,7 @@ function sanitizeAvatarUrl(url?: string | null): string | undefined {
 async function attemptWebhookAvatarRecovery(
   guild: Guild,
   personaId: number,
-): Promise<{ dataUri: string; url: string } | null> {
+): Promise<{ buffer: Buffer; url: string } | null> {
   const personaWebhookName = getPersonaWebhookName(personaId);
 
   log.info(
@@ -179,50 +295,19 @@ async function attemptWebhookAvatarRecovery(
           continue;
         }
 
-        let buffer = downloadResult.buffer;
-        if (buffer.length > MAX_AVATAR_SIZE_BYTES) {
-          log.warn(
-            `[Webhook Manager] Surviving webhook avatar exceeds max size, continuing scan`,
-          );
+        const buffer = await normalizeAvatarToPng(
+          downloadResult.buffer,
+          `surviving webhook avatar for persona ${personaId}`,
+        );
+        if (!buffer) {
           continue;
         }
 
-        // Convert to PNG
-        try {
-          buffer = await convertToPNG(buffer);
-        } catch (error) {
-          log.warn(
-            `[Webhook Manager] Failed to convert surviving webhook avatar to PNG, continuing scan`,
-            error,
-          );
-          continue;
-        }
-
-        // Success! Update database with recovered URL
-        try {
-          await sql`
-						UPDATE tomoris
-						SET webhook_avatar_url = ${avatarUrl}
-						WHERE tomori_id = ${personaId}
-					`;
-
-          // Invalidate cache so updated URL is used immediately
-          invalidateTomoriStateCache(guild.id);
-
-          log.success(
-            `[Webhook Manager] Successfully recovered avatar from surviving webhook in channel ${channel.id}`,
-          );
-        } catch (dbError) {
-          log.warn(
-            `[Webhook Manager] Failed to update database with recovered URL, but will use avatar anyway`,
-            dbError,
-          );
-        }
-
-        // Return recovered avatar as data URI
-        const base64 = buffer.toString("base64");
+        log.success(
+          `[Webhook Manager] Successfully recovered avatar buffer from surviving webhook in channel ${channel.id}`,
+        );
         return {
-          dataUri: `data:image/png;base64,${base64}`,
+          buffer,
           url: avatarUrl,
         };
       }
@@ -240,76 +325,143 @@ async function attemptWebhookAvatarRecovery(
   return null;
 }
 
+async function resolveNonProductionPersonaAvatarReference(
+  persona: TomoriState,
+  guild?: Guild,
+): Promise<string | null> {
+  const avatarReference = persona.webhook_avatar_url?.trim();
+  if (!avatarReference) {
+    return null;
+  }
+
+  if (
+    IS_PRODUCTION ||
+    !persona.is_alter ||
+    !guild ||
+    !persona.tomori_id ||
+    isLocalPersonaAvatarPath(avatarReference)
+  ) {
+    return avatarReference;
+  }
+
+  let normalizedBuffer: Buffer | null = null;
+  const downloadResult = await safeDownload(avatarReference, {
+    maxSizeMB: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB,
+  });
+
+  if (downloadResult.success && downloadResult.buffer) {
+    normalizedBuffer = await normalizeAvatarToPng(
+      downloadResult.buffer,
+      `legacy avatar for persona ${persona.tomori_id}`,
+    );
+  } else {
+    log.warn(
+      `[Webhook Manager] Failed to download legacy avatar for persona ${persona.tomori_id}: ${downloadResult.error ?? "unknown error"}`,
+    );
+  }
+
+  if (!normalizedBuffer) {
+    log.info(
+      `[Webhook Manager] Attempting legacy webhook recovery for persona ${persona.tomori_id}`,
+    );
+    const recoveredAvatar = await attemptWebhookAvatarRecovery(
+      guild,
+      persona.tomori_id,
+    );
+    if (recoveredAvatar) {
+      normalizedBuffer = recoveredAvatar.buffer;
+    }
+  }
+
+  if (!normalizedBuffer) {
+    return avatarReference;
+  }
+
+  const storedReference = await storeMigratedPersonaAvatar(
+    guild.id,
+    persona.tomori_id,
+    normalizedBuffer,
+    "legacy avatar migration",
+  );
+
+  return storedReference ?? avatarReference;
+}
+
+async function resolvePersonaAvatarIdentity(
+  persona: TomoriState,
+  guild?: Guild,
+): Promise<ResolvedWebhookIdentity> {
+  const identity: ResolvedWebhookIdentity = {
+    username: persona.tomori_nickname,
+  };
+
+  if (!persona.webhook_avatar_url) {
+    return identity;
+  }
+
+  const avatarReference =
+    !IS_PRODUCTION && persona.is_alter
+      ? await resolveNonProductionPersonaAvatarReference(persona, guild)
+      : persona.webhook_avatar_url;
+
+  if (!avatarReference) {
+    return identity;
+  }
+
+  const publicAvatarUrl = resolvePersonaAvatarPublicUrl(avatarReference);
+  if (publicAvatarUrl) {
+    identity.avatarUrl = publicAvatarUrl;
+    return identity;
+  }
+
+  if (isLocalPersonaAvatarPath(avatarReference)) {
+    const avatarDataUri = await loadStoredPersonaAvatarDataUri(avatarReference);
+    if (avatarDataUri) {
+      identity.avatarDataUri = avatarDataUri;
+    }
+    return identity;
+  }
+
+  const sanitizedAvatarUrl = sanitizeAvatarUrl(avatarReference);
+  if (sanitizedAvatarUrl) {
+    identity.avatarUrl = sanitizedAvatarUrl;
+  }
+
+  return identity;
+}
+
 async function resolvePersonaWebhookAvatar(
   persona: TomoriState,
   guild?: Guild,
 ): Promise<string | undefined> {
-  if (!persona.webhook_avatar_url) {
+  const identity = await resolvePersonaAvatarIdentity(persona, guild);
+  if (identity.avatarDataUri) {
+    return identity.avatarDataUri;
+  }
+
+  if (!identity.avatarUrl) {
     return undefined;
   }
 
-  if (!isValidHttpUrl(persona.webhook_avatar_url)) {
-    log.warn(
-      `[Webhook Manager] Invalid avatar URL for persona ${persona.tomori_nickname}`,
-    );
-    return undefined;
-  }
-
-  const downloadResult = await safeDownload(persona.webhook_avatar_url, {
+  const downloadResult = await safeDownload(identity.avatarUrl, {
     maxSizeMB: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB,
   });
-
   if (!downloadResult.success || !downloadResult.buffer) {
     log.warn(
       `[Webhook Manager] Failed to download avatar for persona ${persona.tomori_nickname}: ${downloadResult.error ?? "unknown error"}`,
     );
-
-    // 🆕 AUTO-RECOVERY: Attempt to recover from surviving webhooks (non-production only)
-    if (!IS_PRODUCTION && guild && persona.tomori_id) {
-      log.info(
-        `[Webhook Manager] Attempting auto-recovery for persona ${persona.tomori_id}`,
-      );
-
-      const recoveredAvatar = await attemptWebhookAvatarRecovery(
-        guild,
-        persona.tomori_id,
-      );
-
-      if (recoveredAvatar) {
-        log.success(
-          `[Webhook Manager] Auto-recovery successful for persona ${persona.tomori_id}`,
-        );
-        return recoveredAvatar.dataUri;
-      }
-
-      log.warn(
-        `[Webhook Manager] Auto-recovery failed for persona ${persona.tomori_id}, webhook will be created without avatar`,
-      );
-    }
-
     return undefined;
   }
 
-  let buffer = downloadResult.buffer;
-  if (buffer.length > MAX_AVATAR_SIZE_BYTES) {
-    log.warn(
-      `[Webhook Manager] Persona avatar exceeds max size (${buffer.length} bytes)`,
-    );
+  const normalizedBuffer = await normalizeAvatarToPng(
+    downloadResult.buffer,
+    `avatar for persona ${persona.tomori_nickname}`,
+  );
+  if (!normalizedBuffer) {
     return undefined;
   }
 
-  try {
-    buffer = await convertToPNG(buffer);
-  } catch (error) {
-    log.warn(
-      `[Webhook Manager] Failed to convert persona avatar to PNG for ${persona.tomori_nickname}`,
-      error,
-    );
-    return undefined;
-  }
-
-  const base64 = buffer.toString("base64");
-  return `data:image/png;base64,${base64}`;
+  return `data:image/png;base64,${normalizedBuffer.toString("base64")}`;
 }
 
 /**
@@ -413,9 +565,88 @@ export async function getOrCreateWebhook(
   }
 }
 
+function buildWebhookSendPayload(
+  payload: WebhookSendPayload,
+  identity?: ResolvedWebhookIdentity,
+): WebhookSendPayload {
+  const avatarUrl = sanitizeAvatarUrl(identity?.avatarUrl);
+
+  return {
+    ...payload,
+    ...(identity?.username ? { username: identity.username } : {}),
+    ...(avatarUrl ? { avatarURL: avatarUrl } : {}),
+  } as WebhookSendPayload;
+}
+
+async function sendWebhookMessagesInternal(
+  webhook: Webhook,
+  payloads: WebhookSendPayload[],
+  identity?: ResolvedWebhookIdentity,
+): Promise<Message[]> {
+  if (identity?.avatarDataUri) {
+    const cachedAvatar = webhookAvatarStateCache.get(webhook.id);
+    if (cachedAvatar !== identity.avatarDataUri) {
+      await webhook.edit({
+        avatar: identity.avatarDataUri,
+        reason: "TomoriBot persona identity update",
+      });
+      webhookAvatarStateCache.set(webhook.id, identity.avatarDataUri);
+    }
+  }
+
+  const messages: Message[] = [];
+  for (const payload of payloads) {
+    const finalPayload = buildWebhookSendPayload(payload, identity);
+    if (identity?.avatarDataUri && "avatarURL" in finalPayload) {
+      delete finalPayload.avatarURL;
+    }
+    messages.push(await webhook.send(finalPayload));
+  }
+
+  return messages;
+}
+
+export async function sendWebhookMessagesWithIdentity(
+  webhook: Webhook,
+  payloads: WebhookSendPayload[],
+  identity?: ResolvedWebhookIdentity,
+  lockKey?: string,
+): Promise<Message[]> {
+  try {
+    if (identity?.avatarDataUri) {
+      return await withWebhookMutationLock(
+        lockKey ?? webhook.channelId ?? webhook.id,
+        () => sendWebhookMessagesInternal(webhook, payloads, identity),
+      );
+    }
+
+    return await sendWebhookMessagesInternal(webhook, payloads, identity);
+  } catch (error) {
+    if (isInvalidWebhookError(error) && webhook.channelId) {
+      invalidateWebhookCache(webhook.channelId);
+    }
+    throw error;
+  }
+}
+
+export async function sendWebhookMessageWithIdentity(
+  webhook: Webhook,
+  payload: WebhookSendPayload,
+  identity?: ResolvedWebhookIdentity,
+  lockKey?: string,
+): Promise<Message> {
+  const [message] = await sendWebhookMessagesWithIdentity(
+    webhook,
+    [payload],
+    identity,
+    lockKey,
+  );
+  return message;
+}
+
 /**
  * Gets or creates a webhook for a specific persona in a channel.
- * Used in non-production to avoid external avatar hosting.
+ * Legacy compatibility helper used for recovery-oriented persona webhook flows.
  */
 export async function getOrCreatePersonaWebhook(
   channel: TextChannel | BaseGuildTextChannel,
@@ -539,7 +770,7 @@ export async function getOrCreatePersonaWebhook(
 
 /**
  * Updates existing persona webhooks across a guild to use the latest avatar.
- * Only used in non-production environments.
+ * Legacy maintenance helper for surviving persona webhooks in non-production.
  *
  * @param guild - Guild to scan for webhooks
  * @param personaId - Persona ID to update webhooks for
@@ -631,6 +862,22 @@ export async function updatePersonaWebhooksAvatar(
   return updatedCount;
 }
 
+export async function resolvePersonaWebhookIdentity(
+  persona: TomoriState,
+  guild: Guild,
+): Promise<ResolvedWebhookIdentity> {
+  const identity = await resolvePersonaAvatarIdentity(persona, guild);
+
+  if (!persona.is_alter && !identity.avatarUrl && !identity.avatarDataUri) {
+    const fallbackAvatarUrl = resolvePersonaAvatarURL(persona, guild);
+    if (fallbackAvatarUrl) {
+      identity.avatarUrl = fallbackAvatarUrl;
+    }
+  }
+
+  return identity;
+}
+
 /**
  * Sends a message via webhook with persona-specific avatar and username.
  * Used for multi-persona responses to show different avatars per persona.
@@ -653,38 +900,42 @@ export async function sendAsPersona(
   options?: {
     replyToMessageId?: string;
     avatarURL?: string;
+    guild?: Guild;
     files?: MessageCreateOptions["files"];
     embeds?: MessageCreateOptions["embeds"];
     components?: MessageCreateOptions["components"];
   },
 ): Promise<Message | null> {
   try {
-    // Resolve avatar URL based on persona type
-    const avatarURL =
-      sanitizeAvatarUrl(options?.avatarURL) ||
-      sanitizeAvatarUrl(persona.webhook_avatar_url);
+    const resolvedIdentity = options?.guild
+      ? await resolvePersonaWebhookIdentity(persona, options.guild)
+      : { username: persona.tomori_nickname };
+    const avatarURL = sanitizeAvatarUrl(options?.avatarURL);
+    const identity: ResolvedWebhookIdentity = {
+      ...resolvedIdentity,
+      ...(avatarURL ? { avatarUrl: avatarURL } : {}),
+    };
 
-    // Fallback: If no avatar URL, webhook will use bot's global avatar automatically
-
-    // Send message via webhook
-    const message = await webhook.send({
-      content,
-      username: persona.tomori_nickname,
-      avatarURL,
-      allowedMentions: {
-        parse: ["users", "roles"],
-        repliedUser: true,
-      },
-      ...(options?.replyToMessageId && {
-        reply: {
-          messageReference: options.replyToMessageId,
-          failIfNotExists: false,
+    const message = await sendWebhookMessageWithIdentity(
+      webhook,
+      {
+        content,
+        allowedMentions: {
+          parse: ["users", "roles"],
+          repliedUser: true,
         },
-      }),
-      ...(options?.files && { files: options.files }),
-      ...(options?.embeds && { embeds: options.embeds }),
-      ...(options?.components && { components: options.components }),
-    });
+        ...(options?.replyToMessageId && {
+          reply: {
+            messageReference: options.replyToMessageId,
+            failIfNotExists: false,
+          },
+        }),
+        ...(options?.files && { files: options.files }),
+        ...(options?.embeds && { embeds: options.embeds }),
+        ...(options?.components && { components: options.components }),
+      },
+      identity,
+    );
 
     log.info(
       `[Webhook Manager] Sent message as persona ${persona.tomori_nickname} (${persona.is_alter ? "alter" : "main"})`,
@@ -730,37 +981,13 @@ export function resolvePersonaAvatarURL(
   persona: TomoriState,
   guild: Guild,
 ): string | undefined {
-  // Helper function to validate avatar URL
-  const validateAvatarURL = (url: string): string | undefined => {
-    try {
-      const parsedURL = new URL(url);
-      // Only allow http and https protocols for security
-      if (parsedURL.protocol !== "http:" && parsedURL.protocol !== "https:") {
-        log.warn(
-          `[Webhook Manager] Invalid avatar URL protocol for persona ${persona.tomori_nickname}: ${parsedURL.protocol}`,
-          {
-            metadata: {
-              personaId: persona.tomori_id,
-              protocol: parsedURL.protocol,
-            },
-          },
-        );
-        return undefined;
-      }
-      return url;
-    } catch (error) {
-      log.warn(
-        `[Webhook Manager] Invalid avatar URL for persona ${persona.tomori_nickname}`,
-        {
-          metadata: {
-            personaId: persona.tomori_id,
-            url,
-            error,
-          },
-        },
-      );
+  const validateAvatarURL = (avatarReference: string): string | undefined => {
+    const resolvedUrl = resolvePersonaAvatarPublicUrl(avatarReference);
+    if (!resolvedUrl) {
       return undefined;
     }
+
+    return sanitizeAvatarUrl(resolvedUrl);
   };
 
   // 1. Alter personas: Use webhook_avatar_url from database
@@ -799,9 +1026,13 @@ export function resolvePersonaAvatarURL(
  */
 export function invalidateWebhookCache(channelId: string): void {
   const hadCache = webhookCache.has(channelId);
+  const cachedWebhook = webhookCache.get(channelId);
   webhookCache.delete(channelId);
   const personaCacheRemoved =
     invalidatePersonaWebhookCacheForChannel(channelId);
+  if (cachedWebhook) {
+    webhookAvatarStateCache.delete(cachedWebhook.id);
+  }
 
   if (hadCache || personaCacheRemoved > 0) {
     log.info(`[Webhook Manager] Invalidated cache for channel ${channelId}`);
@@ -848,6 +1079,7 @@ export function clearWebhookCache(): void {
   webhookCache.clear();
   const personaSize = personaWebhookCache.size;
   personaWebhookCache.clear();
+  webhookAvatarStateCache.clear();
 
   log.info(
     `[Webhook Manager] Cleared entire webhook cache (${previousSize + personaSize} entries)`,
@@ -869,7 +1101,7 @@ export function getWebhookCacheStats(): {
 
 /**
  * Deletes persona-specific webhooks across all channels in a guild.
- * Used when removing an alter persona in non-production mode.
+ * Legacy cleanup helper. Normal avatar/storage flows no longer depend on these webhooks.
  *
  * @param guild - Guild to scan for webhooks
  * @param personaId - Persona ID to delete webhooks for

@@ -226,6 +226,47 @@ export default {
       reading_description: "`{filename}` の内容を読み取っています",
     },
 
+    image: {
+      generating_title: "🖼️ 画像を生成中...",
+      generating_description: "現在のプロンプトから画像を作成しています",
+      generating_with_references_description:
+        "現在のプロンプトと参照画像を使って画像を作成しています",
+      editing_title: "🖌️ 画像を編集中...",
+      editing_description:
+        "参照画像の `{edit_target}` を対象に編集しています",
+      generating_footer:
+        "プロバイダーの混雑状況によって少し時間がかかる場合があります",
+    },
+
+    vision: {
+      analyzing_title: "🖼️ 画像を解析中...",
+      analyzing_description:
+        "参照されたメッセージの画像を確認しています",
+      analyzing_footer:
+        "画像の数によって少し時間がかかる場合があります",
+    },
+
+    avatar: {
+      inspecting_title: "👤 プロフィール画像を確認中...",
+      inspecting_description:
+        "指定されたプロフィール画像を読み込み、解析しています",
+      inspecting_footer:
+        "画像サイズによって少し時間がかかる場合があります",
+    },
+
+    gif: {
+      processing_title: "🎞️ GIFを処理中...",
+      processing_description:
+        "詳細に確認するため、指定されたGIFからキーフレームを抽出しています",
+      processing_footer: "大きいGIFは少し時間がかかる場合があります",
+    },
+
+    fetch: {
+      reading_title: "🌐 Webページを読み取り中...",
+      reading_description: "{url} を取得して内容を読み取っています",
+      reading_footer: "ページサイズによって少し時間がかかる場合があります",
+    },
+
     // 新規: ストリーム固有のエラーメッセージ
     stream: {
       response_stopped_title: "応答が中断されました",

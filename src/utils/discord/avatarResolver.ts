@@ -2,6 +2,7 @@ import type { ToolContext } from "@/types/tool/interfaces";
 import type { Webhook } from "discord.js";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { log } from "@/utils/misc/logger";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 
 export type ResolvedAvatarData = {
   sourceType: "user" | "webhook" | "persona";
@@ -287,7 +288,7 @@ async function resolvePersonaAvatar(
   let avatarUrl: string | null = null;
 
   if (persona.is_alter) {
-    avatarUrl = persona.webhook_avatar_url ?? null;
+    avatarUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? null;
   } else {
     const guild = context.client.guilds.cache.get(guildId);
     avatarUrl =
@@ -296,7 +297,7 @@ async function resolvePersonaAvatar(
         extension: "png",
         forceStatic: options.forceStatic,
       }) ??
-      persona.webhook_avatar_url ??
+      resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ??
       null;
   }
 
