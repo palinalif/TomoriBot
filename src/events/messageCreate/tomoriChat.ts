@@ -30,8 +30,8 @@ import type {
 } from "../../types/provider/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import {
-	getCachedAllPersonas,
-	getLastDbError,
+  getCachedAllPersonas,
+  getLastDbError,
 } from "../../utils/cache/tomoriStateCache";
 import {
   getCachedUserRow,
@@ -78,7 +78,11 @@ import {
   recordKeyError,
   type SelectedKeyResult,
 } from "@/utils/security/keyRotation";
-import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/text/localizer";
+import {
+  localizer,
+  getSupportedLocales,
+  getLocaleSubKeys,
+} from "../../utils/text/localizer";
 import {
   escapeRegExp,
   normalizeCustomEmojisForLlm,
@@ -318,7 +322,7 @@ const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   //"remember_this_fact",
   //"create_task",
 ]);
-const STREAM_SDK_CALL_TIMEOUT_MS = 90000; // Overall SDK call timeout (90 seconds) — must exceed typical TTFT for slow models
+const STREAM_SDK_CALL_TIMEOUT_MS = 120000; // Overall SDK call timeout (120 seconds) — must exceed typical TTFT for slow models
 const DEFAULT_SELF_REPLY_LIMIT = 1;
 const MAX_SELF_REPLY_LIMIT = 10;
 const DEFAULT_TRIGGERED_PERSONA_LIMIT = 1;
@@ -437,7 +441,7 @@ function buildQueuedReplyDirective(
     QUEUED_REPLY_DIRECTIVE_MAX_CONTENT_LENGTH,
   );
   const attachmentSummary = buildQueuedReplyAttachmentSummary(message);
-  const normalizedPreview = contentPreview.replaceAll("\"", "'");
+  const normalizedPreview = contentPreview.replaceAll('"', "'");
 
   let directive = `Create a reply to ${normalizedTargetName}'s message from earlier (ID: ${message.id})`;
   if (attachmentSummary) {
@@ -450,7 +454,9 @@ function buildQueuedReplyDirective(
   return `${directive}.`;
 }
 
-function checkSelfDebugDiagnosticEmbedTitle(embedTitle: string | null): boolean {
+function checkSelfDebugDiagnosticEmbedTitle(
+  embedTitle: string | null,
+): boolean {
   if (!embedTitle) return false;
 
   for (const supportedLocale of getSupportedLocales()) {
@@ -476,7 +482,9 @@ function shouldIncludeSelfDebugEmbed(embed: Embed): boolean {
   );
 }
 
-function formatTomoriSelfDebugEmbedAsSystemMessage(embed: Embed): string | null {
+function formatTomoriSelfDebugEmbedAsSystemMessage(
+  embed: Embed,
+): string | null {
   if (!shouldIncludeSelfDebugEmbed(embed)) {
     return null;
   }
@@ -1730,7 +1738,11 @@ export default async function tomoriChat(
     return;
   }
 
-  if (!isManuallyTriggered && isLikelySelfMessage && message.reference?.messageId) {
+  if (
+    !isManuallyTriggered &&
+    isLikelySelfMessage &&
+    message.reference?.messageId
+  ) {
     let referencedMessage = message.channel.messages.cache.get(
       message.reference.messageId,
     );
@@ -1803,7 +1815,8 @@ export default async function tomoriChat(
 
   // biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
   const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author!.id;
-  const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
+  const triggererUsername =
+    manualTriggerInvoker?.username ?? message.author.username;
   const queuedReplyDirective =
     isFromQueue && !isStopResponse
       ? buildQueuedReplyDirective(
@@ -2014,7 +2027,11 @@ export default async function tomoriChat(
       log.warn(
         `Channel ${channelLockId} lock is stale (locked since ${new Date(lockEntry.lockedAt).toISOString()} for message ${lockEntry.currentMessageId}). Forcibly releasing. Previous queue length: ${lockEntry.messageQueue.length}`,
       );
-      stopDiscordTypingKeepalive(channelLockId, lockEntry, "stale_lock_release");
+      stopDiscordTypingKeepalive(
+        channelLockId,
+        lockEntry,
+        "stale_lock_release",
+      );
       lockEntry.isLocked = false; // Release stale lock
       lockEntry.userDiscId = undefined; // Clear user tracking
       lockEntry.currentIsPersonaJob = false;
@@ -2144,7 +2161,8 @@ export default async function tomoriChat(
               "isThread" in channel &&
               typeof channel.isThread === "function" &&
               channel.isThread();
-            const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+            const parentChannelId =
+              isThread && "parent" in channel ? channel.parent?.id : undefined;
             const whitelistStatus = await getCachedWhitelistStatus(
               guild?.id ?? message.author.id,
               message.channelId,
@@ -2330,7 +2348,8 @@ export default async function tomoriChat(
           (message.guild?.preferredLocale.startsWith("ja") ? "ja" : "en-US");
         const registrationDisplayName = resolvePreferredDiscordDisplayName({
           memberDisplayName:
-            manualTriggerInvoker?.member?.displayName ?? message.member?.displayName,
+            manualTriggerInvoker?.member?.displayName ??
+            message.member?.displayName,
           user: manualTriggerInvoker
             ? { username: triggererUsername }
             : message.author,
@@ -2556,9 +2575,14 @@ export default async function tomoriChat(
           );
           // Reward embed titles — dynamically discovered from locale sub-keys
           // so new reward commands are automatically recognized without updating this list
-          const rewardNames = getLocaleSubKeys(supportedLocale, "commands.reward");
+          const rewardNames = getLocaleSubKeys(
+            supportedLocale,
+            "commands.reward",
+          );
           const rewardTitles = rewardNames
-            .map((name) => localizer(supportedLocale, `commands.reward.${name}.embed_title`))
+            .map((name) =>
+              localizer(supportedLocale, `commands.reward.${name}.embed_title`),
+            )
             .filter((title) => !title.includes(".")); // Filter out unresolved keys
           const compactSummaryTitle = localizer(
             supportedLocale,
@@ -2956,7 +2980,8 @@ export default async function tomoriChat(
             );
             if (updatedTomoriRow) {
               tomoriState.autoch_counter = updatedTomoriRow.autoch_counter;
-              tomoriState.autoch_next_target = updatedTomoriRow.autoch_next_target;
+              tomoriState.autoch_next_target =
+                updatedTomoriRow.autoch_next_target;
               log.info(
                 `Auto-message counter updated for server ${serverDiscId}. New value: ${tomoriState.autoch_counter}/${tomoriState.autoch_next_target}`,
               );
@@ -3014,7 +3039,8 @@ export default async function tomoriChat(
           "isThread" in channel &&
           typeof channel.isThread === "function" &&
           channel.isThread();
-        const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+        const parentChannelId =
+          isThread && "parent" in channel ? channel.parent?.id : undefined;
         const whitelistStatus = await getCachedWhitelistStatus(
           guild?.id ?? message.author.id,
           message.channelId,
@@ -3112,11 +3138,11 @@ export default async function tomoriChat(
         // Check if always-reply mode applies to this message:
         // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
         const isAlwaysReplyActive =
-          ((!!config?.always_reply_enabled &&
+          (!!config?.always_reply_enabled &&
             !isSelfMessage &&
             !message.author.bot &&
             !(message.channel instanceof DMChannel)) ||
-            isScopedAlwaysReplyActive);
+          isScopedAlwaysReplyActive;
 
         // Determine matching personas using the helper function
         personasToRespond = determineMatchingPersonas(
@@ -4270,7 +4296,11 @@ export default async function tomoriChat(
           (prevMessage.content ||
             prevMessage.imageAttachments.length > 0 ||
             prevMessage.videoAttachments.length > 0);
-        if (isSameEffectiveAuthor && messageContentForLlm && prevMessageHasContent) {
+        if (
+          isSameEffectiveAuthor &&
+          messageContentForLlm &&
+          prevMessageHasContent
+        ) {
           // Append this message's content to the previous message with a newline
           prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
           if (imageAttachments.length > 0) {
@@ -4684,7 +4714,9 @@ export default async function tomoriChat(
             isOpenRouterCapabilityCacheReady()
           ) {
             // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
-            const apiCaps = getOpenRouterCapabilities(tomoriState!.llm.llm_codename);
+            const apiCaps = getOpenRouterCapabilities(
+              tomoriState!.llm.llm_codename,
+            );
             if (apiCaps) {
               effectiveContextSeesImages = apiCaps.seesImages;
               effectiveContextSeesVideos = apiCaps.seesVideos;
@@ -5484,18 +5516,16 @@ export default async function tomoriChat(
 
                   // 2. Race the stream against a timeout that also aborts the underlying HTTP request
                   let sdkTimeoutId: NodeJS.Timeout | null = null;
-                  const timeoutPromise = new Promise<never>(
-                    (_, reject) => {
-                      sdkTimeoutId = setTimeout(() => {
-                        sdkAbortController.abort(); // Signal the provider to cancel its HTTP request
-                        reject(
-                          new Error(
-                            "SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
-                          ),
-                        );
-                      }, STREAM_SDK_CALL_TIMEOUT_MS);
-                    },
-                  );
+                  const timeoutPromise = new Promise<never>((_, reject) => {
+                    sdkTimeoutId = setTimeout(() => {
+                      sdkAbortController.abort(); // Signal the provider to cancel its HTTP request
+                      reject(
+                        new Error(
+                          "SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
+                        ),
+                      );
+                    }, STREAM_SDK_CALL_TIMEOUT_MS);
+                  });
 
                   let streamResult: StreamResult;
                   try {
@@ -5721,8 +5751,9 @@ export default async function tomoriChat(
                       const cachedKayraLimit =
                         getCachedContextTokens(serverDiscId);
                       if (cachedKayraLimit !== undefined) {
-                        (providerConfig as NovelaiStreamConfig).kayraContextLimit =
-                          cachedKayraLimit;
+                        (
+                          providerConfig as NovelaiStreamConfig
+                        ).kayraContextLimit = cachedKayraLimit;
                       }
                     }
 
@@ -6486,7 +6517,10 @@ export default async function tomoriChat(
                         seesVideos: effectiveContextSeesVideos,
                         hasVisionTool:
                           !!tomoriState?.vision_llm &&
-                          !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+                          !(
+                            effectiveContextSeesImages ??
+                            tomoriState?.llm.sees_images
+                          ),
                       });
                       contextSegments = appendInjectedContextItems(
                         contextBuild.contextItems,
@@ -7279,7 +7313,6 @@ export default async function tomoriChat(
           log.success(
             `Completed response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}"`,
           );
-
         } catch (personaError) {
           // Handle errors for this specific persona and continue with remaining personas
           log.error(
@@ -7435,21 +7468,21 @@ export default async function tomoriChat(
             ];
 
             if (uniqueTomoriIds.length > 0) {
-					// Multi-persona or single-persona: store user-scoped STM and, in guilds, server-shared STM
-					for (const tomoriId of uniqueTomoriIds) {
+              // Multi-persona or single-persona: store user-scoped STM and, in guilds, server-shared STM
+              for (const tomoriId of uniqueTomoriIds) {
                 // Look up the lineage ID for this persona from the responses
                 const matchingResponse = personaResponses.find(
                   (r) => r.tomoriId === tomoriId,
                 );
                 const personaLineageId =
                   matchingResponse?.personaLineageId ?? null;
-						const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}:${tomoriId}`;
-						const serverCacheKey = isDMChannel
-							? "n/a"
-							: `shortterm:server:${serverDiscId}:${channel.id}:${tomoriId}`;
-						log.info(
-							`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
-						);
+                const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}:${tomoriId}`;
+                const serverCacheKey = isDMChannel
+                  ? "n/a"
+                  : `shortterm:server:${serverDiscId}:${channel.id}:${tomoriId}`;
+                log.info(
+                  `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
+                );
 
                 storeShortTermMemory(
                   userDiscId,
@@ -7462,19 +7495,19 @@ export default async function tomoriChat(
                   personaLineageId,
                 );
 
-						log.info(
-							`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
-						);
-					}
-				} else {
-					// Fallback: no persona responses captured (e.g., all failed), store without tomoriId
-					const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}`;
-					const serverCacheKey = isDMChannel
-						? "n/a"
-						: `shortterm:server:${serverDiscId}:${channel.id}`;
-					log.info(
-						`[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}`,
-					);
+                log.info(
+                  `[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
+                );
+              }
+            } else {
+              // Fallback: no persona responses captured (e.g., all failed), store without tomoriId
+              const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}`;
+              const serverCacheKey = isDMChannel
+                ? "n/a"
+                : `shortterm:server:${serverDiscId}:${channel.id}`;
+              log.info(
+                `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}`,
+              );
 
               storeShortTermMemory(
                 userDiscId,
@@ -7485,10 +7518,10 @@ export default async function tomoriChat(
                 channelName,
               );
 
-					log.info(
-						`[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
-					);
-				}
+              log.info(
+                `[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
+              );
+            }
           }
         }
       } catch (storageError) {
@@ -7587,7 +7620,9 @@ export default async function tomoriChat(
       if (isUserImpersonation) {
         throw error instanceof Error
           ? error
-          : new Error("User impersonation failed before a reply could be sent.");
+          : new Error(
+              "User impersonation failed before a reply could be sent.",
+            );
       }
       // Use default locale as userRow might not be available
       await sendStandardEmbed(channel, "en-US", {
@@ -7747,7 +7782,8 @@ function isAutochatConfiguredChannel(
   channelId: string,
 ): boolean {
   return (
-    config.autoch_disc_ids.length > 0 && config.autoch_disc_ids.includes(channelId)
+    config.autoch_disc_ids.length > 0 &&
+    config.autoch_disc_ids.includes(channelId)
   );
 }
 
@@ -8099,12 +8135,12 @@ export function shouldBotReply(
   // Auto-chat range 0-0 reuses this path, but only for configured auto-chat channels.
   // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
   const isAlwaysReplyHit =
-    ((config.always_reply_enabled &&
+    (config.always_reply_enabled &&
       !isSelfMessage &&
       !message.author.bot &&
       !isMatrixRelayMessage &&
       !(message.channel instanceof DMChannel)) ||
-      isScopedAlwaysReplyHit);
+    isScopedAlwaysReplyHit;
 
   // 7. Determine if bot should reply:
   // Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the shared auto-chat range hit.

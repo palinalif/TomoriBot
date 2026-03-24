@@ -333,8 +333,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
 
     for (const thought of thoughts) {
-      const content = thought.content?.trim();
-      if (!content) {
+      const content = thought.content;
+      if (typeof content !== "string" || content.length === 0) {
         continue;
       }
 

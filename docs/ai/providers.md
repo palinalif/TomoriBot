@@ -123,6 +123,7 @@ Rule:
 - endpoint URL stored in `tomori_configs.custom_endpoint_url`
 - optional model override in `tomori_configs.custom_model_name`
 - model capabilities are user-declared and stored in `llms`
+- the server-scoped custom `llms` row is preserved across normal provider switches so saved custom configs can be restored later; explicit saved-config removal still cleans it up
 - designed for non-production usage
 - text chat streaming is supported
 - structured output, history extraction, and `/server initialize expressions` work when the configured custom model is marked with the required capabilities

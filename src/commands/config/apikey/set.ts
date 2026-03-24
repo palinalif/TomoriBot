@@ -42,7 +42,6 @@ import {
   isCustomProvider,
   validateEndpointUrl,
   promptCustomCapabilities,
-  deleteCustomLLMEntry,
   CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
   type CustomCapabilitiesResult,
 } from "../../../utils/discord/customProviderModal";
@@ -356,10 +355,6 @@ export async function execute(
     let newDiffusionModelId = tomoriState.config.diffusion_model_id; // Default to current diffusion model
     let newEmbeddingModelId = tomoriState.config.embedding_model_id; // Default to current embedding model
 
-    // Track if we need to clean up custom LLM entry (AFTER updating llm_id reference)
-    const shouldCleanupCustomLLM =
-      isCustomProvider(currentProvider) && !isCustomProvider(newProvider);
-
     if (currentProvider !== newProvider) {
       // Note: rotation keys are NOT purged on provider change — they are already
       // scoped by the `provider` column and filtered at runtime in selectApiKey().
@@ -586,16 +581,7 @@ export async function execute(
       }
     }
 
-    // 14.5. Clean up old custom LLM entry if switching away from custom provider
-    // IMPORTANT: This must happen AFTER updating llm_id to avoid foreign key constraint violation
-    if (shouldCleanupCustomLLM) {
-      log.info(
-        `Switching away from custom provider - cleaning up old custom LLM entry`,
-      );
-      await deleteCustomLLMEntry(serverId);
-    }
-
-    // 15. Success message (include model info if provider changed)
+    // 14.5. Success message (include model info if provider changed)
     // When switching specifically to NovelAI, use the dedicated key that also
     // notifies the user that emoji/sticker usage were automatically disabled.
     const successDescriptionKey =

@@ -49,7 +49,6 @@ import {
 	isCustomProvider,
 	validateEndpointUrl,
 	promptCustomCapabilities,
-	deleteCustomLLMEntry,
 	CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
 	type CustomCapabilitiesResult,
 } from "@/utils/discord/customProviderModal";
@@ -338,15 +337,8 @@ export async function execute(
 
 			encrypted = savedConfig.api_key;
 			version = savedConfig.key_version;
-			newLlmId = savedConfig.llm_id ?? newLlmId;
-			newDiffusionModelId = savedConfig.diffusion_model_id;
-			newEmbeddingModelId = savedConfig.embedding_model_id;
-			newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
-			newVisionLlmId = savedConfig.vision_llm_id ?? null;
-			newNaiPresetName = savedConfig.nai_preset_name;
 			customEndpointUrl = savedConfig.custom_endpoint_url;
 			customModelName = savedConfig.custom_model_name;
-			newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
 			// Restore sampler settings from snapshot
 			newTemperature = savedConfig.llm_temperature ?? null;
 			newTopP = savedConfig.llm_top_p ?? null;
@@ -354,6 +346,70 @@ export async function execute(
 			newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
 			newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
 			newMinP = savedConfig.llm_min_p ?? null;
+
+			if (isCustomProvider(normalizedProvider)) {
+				if (!customEndpointUrl || !validateEndpointUrl(customEndpointUrl)) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "commands.config.custom.endpoint_url_invalid_title",
+						descriptionKey:
+							"commands.config.custom.endpoint_url_invalid_description",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				// Saved custom configs can lose llm_id because the historical cleanup path
+				// deleted the server-scoped custom llm row and the FK nulls this snapshot.
+				// Rebuild the custom llm entry on demand so the active provider truly becomes custom.
+				if (savedConfig.llm_id) {
+					newLlmId = savedConfig.llm_id;
+				} else {
+					log.warn(
+						`Saved custom provider config for server ${tomoriState.server_id} is missing llm_id; prompting capabilities to rebuild custom model entry`,
+					);
+
+					customCapabilitiesResult = await promptCustomCapabilities(
+						modalSubmitInteraction,
+						locale,
+						serverId,
+					);
+
+					if (
+						!customCapabilitiesResult.success ||
+						!customCapabilitiesResult.llmId
+					) {
+						await replyInfoEmbed(modalSubmitInteraction, locale, {
+							titleKey: "general.errors.operation_failed_title",
+							description:
+								customCapabilitiesResult.error ||
+								localizer(
+									locale,
+									"commands.config.custom.capabilities_timeout",
+								),
+							color: ColorCode.ERROR,
+						});
+						return;
+					}
+
+					newLlmId = customCapabilitiesResult.llmId;
+					customModelName = customCapabilitiesResult.modelName || customModelName;
+				}
+
+				newDiffusionModelId = null;
+				newEmbeddingModelId = null;
+				newNaiDiffusionModelId = null;
+				newVisionLlmId = null;
+				newNaiPresetName = null;
+				newFallbackLlmIds = [];
+			} else {
+				newLlmId = savedConfig.llm_id ?? newLlmId;
+				newDiffusionModelId = savedConfig.diffusion_model_id;
+				newEmbeddingModelId = savedConfig.embedding_model_id;
+				newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
+				newVisionLlmId = savedConfig.vision_llm_id ?? null;
+				newNaiPresetName = savedConfig.nai_preset_name;
+				newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
+			}
 		} else if (isCustomProvider(normalizedProvider)) {
 			// Custom provider flow: apiKeyInput contains the endpoint URL
 			if (!hasApiKeyInput && !savedConfig) {
@@ -423,6 +479,10 @@ export async function execute(
 			}
 			newDiffusionModelId = null;
 			newEmbeddingModelId = null;
+			newNaiDiffusionModelId = null;
+			newVisionLlmId = null;
+			newNaiPresetName = null;
+			newFallbackLlmIds = [];
 		} else {
 			// Regular provider flow
 			if (!hasApiKeyInput && !savedConfig) {
@@ -684,11 +744,7 @@ export async function execute(
 			}
 		}
 
-		// 11. Track if we need to clean up custom LLM entry (AFTER updating llm_id reference)
-		const shouldCleanupCustomLLM =
-			isCustomProvider(currentProvider) && !isCustomProvider(normalizedProvider);
-
-		// 12. Apply config to database
+		// 11. Apply config to database
 		const [updatedRow] = await sql`
 			UPDATE tomori_configs
 			SET api_key = ${encrypted},
@@ -843,15 +899,7 @@ export async function execute(
 			invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
 		}
 
-		// 14.3. Clean up old custom LLM entry if switching away from custom provider
-		if (shouldCleanupCustomLLM) {
-			log.info(
-				`Switching away from custom provider — cleaning up old custom LLM entry`,
-			);
-			await deleteCustomLLMEntry(serverId);
-		}
-
-		// 15. Success message — always look up the active model by ID to handle
+		// 14.3. Success message — always look up the active model by ID to handle
 		// all cases correctly (same provider key update, restored config, fresh switch)
 		const modelNameRow = (
 			await sql`SELECT llm_codename FROM llms WHERE llm_id = ${newLlmId} LIMIT 1`

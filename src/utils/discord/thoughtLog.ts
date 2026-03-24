@@ -7,24 +7,125 @@ import type { StreamContext } from "@/types/stream/interfaces";
 import type { TomoriState } from "@/types/db/schema";
 
 const EMBED_DESCRIPTION_LIMIT = 4096;
-const EMBED_FIELD_LIMIT = 1024;
-const ELLIPSIS = "...";
 
 function normalizeThoughtLogText(value?: string): string | undefined {
 	const trimmed = value?.trim();
 	return trimmed ? trimmed : undefined;
 }
 
-function truncateForEmbed(value: string, maxLength: number): string {
+function takeEmbedChunk(
+	value: string,
+	maxLength: number,
+): {
+	chunk: string;
+	remaining: string;
+} {
 	if (value.length <= maxLength) {
-		return value;
+		return {
+			chunk: value.trim(),
+			remaining: "",
+		};
 	}
 
-	if (maxLength <= ELLIPSIS.length) {
-		return value.slice(0, maxLength);
+	let splitIndex = Math.max(
+		value.lastIndexOf("\n", maxLength),
+		value.lastIndexOf(" ", maxLength),
+	);
+	if (splitIndex <= 0) {
+		splitIndex = maxLength;
+	} else {
+		splitIndex += 1;
 	}
 
-	return `${value.slice(0, maxLength - ELLIPSIS.length)}${ELLIPSIS}`;
+	return {
+		chunk: value.slice(0, splitIndex).trim(),
+		remaining: value.slice(splitIndex).trim(),
+	};
+}
+
+function buildThoughtLogEmbeds(args: {
+	locale: string;
+	tomoriState: TomoriState;
+	sourceChannel: StreamContext["channel"];
+	thoughtLog: ThoughtLogPayload;
+}): EmbedBuilder[] {
+	const { locale, tomoriState, sourceChannel, thoughtLog } = args;
+	const embeds: EmbedBuilder[] = [];
+	const replyLine = thoughtLog.firstReplyUrl
+		? `\n[${localizer(locale, "genai.thought_log.reply_link_label")}](${thoughtLog.firstReplyUrl})`
+		: "";
+	const description = localizer(locale, "genai.thought_log.description", {
+		source_channel: sourceChannel.toString(),
+		reply_line: replyLine,
+	}).slice(0, EMBED_DESCRIPTION_LIMIT);
+	const footerText = localizer(locale, "genai.thought_log.footer", {
+		provider: tomoriState.llm.llm_provider,
+		model: getLlmDisplayName(
+			tomoriState.llm,
+			tomoriState.config.custom_model_name,
+		),
+	});
+
+	const sections = [
+		{
+			label: localizer(locale, "genai.thought_log.summary_field"),
+			content: normalizeThoughtLogText(thoughtLog.summary),
+		},
+		{
+			label: localizer(locale, "genai.thought_log.raw_field"),
+			content: normalizeThoughtLogText(thoughtLog.raw),
+		},
+	].filter(
+		(section): section is { label: string; content: string } =>
+			typeof section.content === "string" && section.content.length > 0,
+	);
+
+	if (sections.length === 0) {
+		embeds.push(
+			new EmbedBuilder()
+				.setColor(ColorCode.INFO)
+				.setTitle(localizer(locale, "genai.thought_log.title"))
+				.setDescription(description)
+				.setTimestamp()
+				.setFooter({ text: footerText }),
+		);
+		return embeds;
+	}
+
+	let metadataAttached = false;
+	for (const section of sections) {
+		let remaining = section.content;
+
+		while (remaining.length > 0) {
+			const sectionHeader = `**${section.label}**\n`;
+			const prefix =
+				!metadataAttached && embeds.length === 0
+					? `${description}\n\n${sectionHeader}`
+					: sectionHeader;
+			const availableLength = Math.max(
+				1,
+				EMBED_DESCRIPTION_LIMIT - prefix.length,
+			);
+			const { chunk, remaining: nextRemaining } = takeEmbedChunk(
+				remaining,
+				availableLength,
+			);
+
+			embeds.push(
+				new EmbedBuilder()
+					.setColor(ColorCode.INFO)
+					.setTitle(localizer(locale, "genai.thought_log.title"))
+					.setDescription(`${prefix}${chunk}`)
+					.setTimestamp()
+					.setFooter({ text: footerText }),
+			);
+
+			remaining = nextRemaining;
+			metadataAttached = true;
+		}
+	}
+
+	return embeds;
 }
 
 function appendThoughtSection(
@@ -114,54 +215,23 @@ export async function sendThoughtLogEmbed({
 		return;
 	}
 
-	const replyLine = thoughtLog.firstReplyUrl
-		? `\n[${localizer(locale, "genai.thought_log.reply_link_label")}](${thoughtLog.firstReplyUrl})`
-		: "";
-	const description = truncateForEmbed(
-		localizer(locale, "genai.thought_log.description", {
-			source_channel: sourceChannel.toString(),
-			reply_line: replyLine,
-		}),
-		EMBED_DESCRIPTION_LIMIT,
-	);
-
-	const embed = new EmbedBuilder()
-		.setColor(ColorCode.INFO)
-		.setTitle(localizer(locale, "genai.thought_log.title"))
-		.setDescription(description)
-		.setTimestamp();
-
-	const summary = normalizeThoughtLogText(thoughtLog.summary);
-	if (summary) {
-		embed.addFields({
-			name: localizer(locale, "genai.thought_log.summary_field"),
-			value: truncateForEmbed(summary, EMBED_FIELD_LIMIT),
-		});
-	}
-
-	const raw = normalizeThoughtLogText(thoughtLog.raw);
-	if (raw) {
-		embed.addFields({
-			name: localizer(locale, "genai.thought_log.raw_field"),
-			value: truncateForEmbed(raw, EMBED_FIELD_LIMIT),
-		});
-	}
-
-	embed.setFooter({
-		text: localizer(locale, "genai.thought_log.footer", {
-			provider: tomoriState.llm.llm_provider,
-			model: getLlmDisplayName(
-				tomoriState.llm,
-				tomoriState.config.custom_model_name,
-			),
-		}),
+	const embeds = buildThoughtLogEmbeds({
+		locale,
+		tomoriState,
+		sourceChannel,
+		thoughtLog,
 	});
 
 	try {
-		await thoughtLogChannel.send({
-			embeds: [embed],
-			allowedMentions: { parse: [] },
-		});
+		for (const embed of embeds) {
+			await thoughtLogChannel.send({
+				embeds: [embed],
+				allowedMentions: { parse: [] },
+			});
+		}
+		log.info(
+			`Posted ${embeds.length} thought log embed(s) to channel ${thoughtLogChannelId}`,
+		);
 	} catch (error) {
 		log.warn(
 			`Failed to send thought log embed to channel ${thoughtLogChannelId}`,

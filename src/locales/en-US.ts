@@ -3372,7 +3372,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       thoughtlogs: {
         description: `Set or clear the server's thought-log channel.`,
-        channel_description: `The text channel where reasoning summaries should be posted. Choose the same channel again to disable it.`,
+					channel_description: `Text channel for reasoning summaries. Pick the same channel again to disable it.`,
         invalid_channel_title: `Invalid Channel`,
         invalid_channel_description: `Please choose a server text channel.`,
         set_title: `Thought Logs Enabled`,
