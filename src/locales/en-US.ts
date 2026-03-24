@@ -1922,7 +1922,7 @@ Image Generation:
 - {configModelImage} - Choose which image generation model to use (supports Text2Image and Image2Image)
 
 System Prompt:
-- {configPromptChange} - Add a custom system instruction (up to 8000 characters)
+- {configPromptChange} - Add a custom system instruction (up to 16000 characters)
 - {configPromptPreset} - Choose from preset system prompts
 - {configPromptClear} - Reset to the default system prompt
 

@@ -1935,7 +1935,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - {configModelImage} - 画像生成モデルを選択（Text2ImageとImage2Image対応）
 
 **システムプロンプト：**
-- {configPromptChange} - カスタムシステム指示を追加（最大8000文字）
+- {configPromptChange} - カスタムシステム指示を追加（最大16000文字）
 - {configPromptPreset} - プリセットシステムプロンプトを選択
 - {configPromptClear} - デフォルトシステムプロンプトにリセット
 

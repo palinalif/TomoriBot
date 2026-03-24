@@ -1,7 +1,7 @@
 /**
  * Command: /config sysprompt change
- * Allows users to set a custom system prompt up to 8000 characters
- * using a 4-part modal (2000 chars each, first part required)
+ * Allows users to set a custom system prompt up to 16000 characters
+ * using a 4-part modal (4000 chars each, first part required)
  */
 
 import type {
@@ -27,7 +27,7 @@ import {
 import { log, ColorCode } from "@/utils/misc/logger";
 
 const MODAL_CUSTOM_ID = "config_prompt_change_modal";
-const PROMPT_PART_MAX_LENGTH = 2000;
+const PROMPT_PART_MAX_LENGTH = 4000;
 const PROMPT_PART_COUNT = 4;
 
 function splitPromptIntoModalParts(

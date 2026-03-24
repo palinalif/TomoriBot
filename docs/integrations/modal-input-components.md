@@ -450,7 +450,7 @@ These modals collect free-form text and have no structured option set:
 
 | Command                    | File                          | Reason                                                  |
 | -------------------------- | ----------------------------- | ------------------------------------------------------- |
-| `/config sysprompt change` | `config/sysprompt/change.ts`  | Free-form paragraph text (up to 8000 chars, 4 fields)   |
+| `/config sysprompt change` | `config/sysprompt/change.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
 | `/config randomtrigger add`| `config/randomtrigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
 | `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
 | `/novelai tags me`         | `novelai/tags/me.ts`          | Free-form tag text                                      |
