@@ -20,6 +20,7 @@ import {
 	buildForcedMentionsForUser,
 	ensureDiscordUserMention,
 } from "@/utils/discord/mentionHelper";
+import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName";
 import { downloadImage } from "@/utils/image/avatarHelper";
 import { log } from "@/utils/misc/logger";
 
@@ -29,8 +30,10 @@ async function buildWelcomeContextItem(params: {
 	includeAvatarContext: boolean;
 }): Promise<StructuredContextItem> {
 	const { member, additionalPrompt, includeAvatarContext } = params;
-	const displayName =
-		member.displayName || member.user.globalName || member.user.username;
+	const displayName = resolvePreferredDiscordDisplayName({
+		memberDisplayName: member.displayName,
+		user: member.user,
+	});
 	const sentences = [
 		`${displayName} just joined the server ${member.guild.name}, greet them by mentioning them by <@${member.id}> (Mention ID: ${member.id})!`,
 	];
@@ -220,7 +223,10 @@ const handler = async (_client: Client, member: GuildMember): Promise<void> => {
 
 		const userData = await registerUser(
 			member.id,
-			member.user.username,
+			resolvePreferredDiscordDisplayName({
+				memberDisplayName: member.displayName,
+				user: member.user,
+			}),
 			userLanguage,
 		);
 

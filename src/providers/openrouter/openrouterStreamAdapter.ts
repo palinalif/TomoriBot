@@ -17,6 +17,7 @@
 import type {
   FunctionCall,
   FunctionResponseImageMetadata,
+  ThoughtLogEntry,
 } from "../../types/provider/interfaces";
 import {
   ContextItemTag,
@@ -1677,6 +1678,17 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
     const finishReason = choice.finishReason ?? choice.finish_reason ?? null;
     const deltaToolCalls = choice.delta?.toolCalls ?? choice.delta?.tool_calls;
+    const thoughts: ThoughtLogEntry[] = [];
+
+    if (
+      typeof choice.delta?.reasoning === "string" &&
+      choice.delta.reasoning.length > 0
+    ) {
+      thoughts.push({
+        kind: "raw",
+        content: choice.delta.reasoning,
+      });
+    }
 
     // Log full chunk when we have tool calls to debug thought_signature location
     if (deltaToolCalls || finishReason === "tool_calls") {
@@ -1811,6 +1823,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         // Return done to avoid infinite retry
         return {
           type: "done",
+          thoughts: thoughts.length > 0 ? thoughts : undefined,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         };
       }
@@ -1874,6 +1887,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       return {
         type: "function_call",
         functionCall,
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -1887,11 +1901,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         return {
           type: "text",
           content: choice.delta.content,
+          thoughts: thoughts.length > 0 ? thoughts : undefined,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         };
       }
       return {
         type: "done",
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -1917,6 +1933,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         return {
           type: "text",
           content: choice.delta.content,
+          thoughts: thoughts.length > 0 ? thoughts : undefined,
           metadata: lengthMetadata,
         };
       }
@@ -1925,6 +1942,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // End the stream cleanly and let upstream empty-response handling decide retry.
       return {
         type: "done",
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: {
           ...lengthMetadata,
           emptyTerminalChunk: true,
@@ -2002,6 +2020,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       return {
         type: "text",
         content: "",
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -2016,6 +2035,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       return {
         type: "text",
         content: "",
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -2025,6 +2045,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       return {
         type: "text",
         content: choice.delta.content,
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -2033,6 +2054,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     return {
       type: "text",
       content: "",
+      thoughts: thoughts.length > 0 ? thoughts : undefined,
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
   }

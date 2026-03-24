@@ -176,6 +176,14 @@ export default {
     // Generic no response warning (for unknown status or unhandled cases)
     no_response_title: `No Response`,
     no_response_description: `I didn't respond - this may be due to an empty response or timeout from the AI.`,
+    thought_log: {
+      title: `Thought Log`,
+      description: `Source: {source_channel}{reply_line}`,
+      reply_link_label: `Jump to reply`,
+      summary_field: `Thought Summary`,
+      raw_field: `Raw Thoughts`,
+      footer: `Provider: {provider} | Model: {model}`,
+    },
 
     // Text quota errors
     text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
@@ -746,6 +754,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_autoch_threshold: `Auto-Chat Mode`,
         field_autoch_channels: `Auto-Chat Channels`,
         field_rp_channels: `RP Channels`,
+        field_thought_logs_channel: `Thought Logs Channel`,
         field_trigger_words: `Trigger Words`,
         field_whitelist_channels: `Channel Whitelist`,
         field_whitelist_roles: `Role Whitelist`,
@@ -3360,6 +3369,18 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         removed_description: `I will no longer send automated welcome greetings for new members.`,
         not_configured_title: `Welcome Channel Not Configured`,
         not_configured_description: `This server does not currently have a welcome channel configured.`,
+      },
+      thoughtlogs: {
+        description: `Set or clear the server's thought-log channel.`,
+        channel_description: `The text channel where reasoning summaries should be posted. Choose the same channel again to disable it.`,
+        invalid_channel_title: `Invalid Channel`,
+        invalid_channel_description: `Please choose a server text channel.`,
+        set_title: `Thought Logs Enabled`,
+        set_description: `Thought logs will now be posted in {channel}.`,
+        updated_title: `Thought Logs Updated`,
+        updated_description: `Thought logs will now be posted in {channel}.`,
+        cleared_title: `Thought Logs Disabled`,
+        cleared_description: `Thought logs will no longer be posted.`,
       },
       whitelist: {
         description: `Manage trigger whitelist (channels + roles; channels can inherit or override the global cooldown)`,

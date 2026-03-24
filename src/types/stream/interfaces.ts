@@ -22,6 +22,7 @@ import type {
   FunctionResponseImageMetadata,
   ProviderConfig,
   StreamResult,
+  ThoughtLogEntry,
 } from "../provider/interfaces";
 import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
@@ -35,6 +36,7 @@ export interface ProcessedChunk {
   content?: string;
   functionCall?: FunctionCall;
   error?: ProviderError;
+  thoughts?: ThoughtLogEntry[];
   metadata?: Record<string, unknown>;
 }
 

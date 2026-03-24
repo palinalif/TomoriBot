@@ -177,6 +177,14 @@ export default {
     // 一般的な応答なし警告（不明なステータスまたは未処理のケース用）
     no_response_title: `応答なし`,
     no_response_description: `応答がありませんでした - これはAIからの空の応答またはタイムアウトが原因である可能性があります。`,
+    thought_log: {
+      title: `思考ログ`,
+      description: `元チャンネル: {source_channel}{reply_line}`,
+      reply_link_label: `返信へ移動`,
+      summary_field: `思考サマリー`,
+      raw_field: `生の思考`,
+      footer: `プロバイダー: {provider} | モデル: {model}`,
+    },
 
     // テキストクォータエラー
     text_quota_exceeded_title: `🔴 テキストクォータを超過しました`,
@@ -748,6 +756,7 @@ export default {
         field_autoch_threshold: `自動チャットモード`,
         field_autoch_channels: `自動チャットチャンネル`,
         field_rp_channels: `RPチャンネル`,
+        field_thought_logs_channel: `思考ログチャンネル`,
         field_trigger_words: `トリガーワード`,
         field_whitelist_channels: `チャネルホワイトリスト`,
         field_whitelist_roles: `ロールホワイトリスト`,
@@ -3367,6 +3376,18 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         removed_description: `新規メンバー向けの自動歓迎メッセージは送信しなくなります。`,
         not_configured_title: `歓迎チャンネルは未設定です`,
         not_configured_description: `このサーバーには現在歓迎チャンネルが設定されていません。`,
+      },
+      thoughtlogs: {
+        description: `このサーバーの思考ログチャンネルを設定または解除します。`,
+        channel_description: `推論サマリーを投稿するテキストチャンネルです。同じチャンネルをもう一度選ぶと無効化されます。`,
+        invalid_channel_title: `無効なチャンネル`,
+        invalid_channel_description: `サーバーのテキストチャンネルを選択してください。`,
+        set_title: `思考ログを有効化しました`,
+        set_description: `今後、思考ログは {channel} に投稿されます。`,
+        updated_title: `思考ログを更新しました`,
+        updated_description: `今後、思考ログは {channel} に投稿されます。`,
+        cleared_title: `思考ログを無効化しました`,
+        cleared_description: `今後、思考ログは投稿されません。`,
       },
       whitelist: {
         description: `トリガーホワイトリストを管理（チャンネル＋ロール、チャンネル設定はグローバルクールダウンを上書き）`,

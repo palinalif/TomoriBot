@@ -138,6 +138,24 @@ Important:
 - provider tool conversion is not fully generic across vendors
 - if you add nested tool-schema support or other serializer behavior, update all provider tool adapters consistently
 
+### Reasoning output contract
+
+If your provider exposes human-displayable reasoning, emit it through the normalized streaming contract instead of leaking it into visible reply text.
+
+- Put displayable reasoning on `ProcessedChunk.thoughts`
+- use `kind: "summary"` for concise provider-supplied summaries
+- use `kind: "raw"` for raw but human-readable reasoning text
+- if the provider hides reasoning inside tags such as `<think>...</think>`, strip it from visible output and surface the inner text as `raw` thoughts
+
+Keep replay-only continuity fields internal:
+
+- Gemini `thoughtSignature`
+- OpenRouter `reasoning_details`
+- DeepSeek continuation `reasoning_content`
+- any vendor-specific hidden token block that is needed only for tool-call continuation
+
+Those fields may still need to be preserved in provider-specific tool replay payloads, but they must not be exposed through thought-log output or normal Discord message flushing.
+
 ## 5.5 Register the MCP Tool Adapter
 
 If your provider supports tool calling, you **must** register its tool adapter with

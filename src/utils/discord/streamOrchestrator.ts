@@ -45,6 +45,8 @@ import { filterDuplicateCustomEmojis } from "../text/emojiPenalty";
 import type {
 	StreamResult,
 	StreamStopReason,
+	ThoughtLogEntry,
+	ThoughtLogPayload,
 } from "../../types/provider/interfaces";
 import {
   ContextItemTag,
@@ -107,6 +109,10 @@ function resolveWebhookThreadId(
     channel.isThread()
     ? channel.id
     : undefined;
+}
+
+function isUserImpersonationStreamContext(context: StreamContext): boolean {
+  return Boolean(context.personaUsername && !context.tomoriState.is_alter);
 }
 
 /**
@@ -317,6 +323,45 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       }
     }
   }
+
+  private appendChunkThoughts(
+    state: StreamState,
+    thoughts?: ThoughtLogEntry[],
+  ): void {
+    if (!thoughts || thoughts.length === 0) {
+      return;
+    }
+
+    for (const thought of thoughts) {
+      const content = thought.content?.trim();
+      if (!content) {
+        continue;
+      }
+
+      if (thought.kind === "summary") {
+        state.thoughtSummarySegments.push(content);
+        continue;
+      }
+
+      state.thoughtRawSegments.push(content);
+    }
+  }
+
+  private buildThoughtLogPayload(state: StreamState): ThoughtLogPayload | undefined {
+    const summary = state.thoughtSummarySegments.join("").trim();
+    const raw = state.thoughtRawSegments.join("").trim();
+
+    if (!summary && !raw && !state.firstReplyUrl) {
+      return undefined;
+    }
+
+    return {
+      summary: summary || undefined,
+      raw: raw || undefined,
+      firstReplyUrl: state.firstReplyUrl,
+    };
+  }
+
   /**
    * Stream an LLM response to Discord using a provider-specific adapter
    * This replaces the massive streamGeminiToDiscord function with modular architecture
@@ -374,11 +419,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     try {
       // Initialize timeout management
       this.setupInactivityTimer(state, config, context);
-
-      // Start initial typing indicator
-      await context.channel
-        .sendTyping()
-        .catch((e) => log.warn("Stream: Initial sendTyping failed", e));
 
       // Prepare optional prefill before streaming (hybrid prefix)
       await this.sendOutputPrefillIfNeeded(context, textConfig, state);
@@ -490,6 +530,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
         // Convert raw chunk to normalized format
         const processedChunk = provider.processChunk(rawChunk);
+        this.appendChunkThoughts(state, processedChunk.thoughts);
         if (processedChunk.type === "done" && processedChunk.metadata) {
           terminalDoneMetadata = processedChunk.metadata;
         }
@@ -518,19 +559,21 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
       // Check if stream timed out
       if (this.isStreamTimedOut(state)) {
-        // Send user-facing embed to notify about the timeout
-        await sendStandardEmbed(context.channel, context.locale, {
-          titleKey: "genai.stream.inactivity_timeout_title",
-          descriptionKey: "genai.stream.inactivity_timeout_description",
-          color: ColorCode.WARN,
-        }).catch((embedError) => {
-          log.warn(
-            "Failed to send inactivity timeout embed",
-            embedError instanceof Error
-              ? embedError
-              : new Error(String(embedError)),
-          );
-        });
+        if (!isUserImpersonationStreamContext(context)) {
+          // Send user-facing embed to notify about the timeout
+          await sendStandardEmbed(context.channel, context.locale, {
+            titleKey: "genai.stream.inactivity_timeout_title",
+            descriptionKey: "genai.stream.inactivity_timeout_description",
+            color: ColorCode.WARN,
+          }).catch((embedError) => {
+            log.warn(
+              "Failed to send inactivity timeout embed",
+              embedError instanceof Error
+                ? embedError
+                : new Error(String(embedError)),
+            );
+          });
+        }
 
         return {
           status: "timeout",
@@ -560,6 +603,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         status: "completed",
         messageSentCount: state.messageSentCount,
         accumulatedText: state.accumulatedText, // Return accumulated text for short-term memory
+        thoughtLog: this.buildThoughtLogPayload(state),
         data: terminalDoneMetadata,
       };
     } catch (error) {
@@ -586,7 +630,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       );
 
       // Send error to Discord unless suppressed for key-rotation retries
-      if (!context.suppressUserErrors) {
+      if (
+        !context.suppressUserErrors &&
+        !isUserImpersonationStreamContext(context)
+      ) {
         await this.handleStreamError(lastError, context);
       } else {
         log.warn(
@@ -637,7 +684,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						};
 					}
 				}
-				if (!context.suppressUserErrors) {
+				if (
+					!context.suppressUserErrors &&
+					!isUserImpersonationStreamContext(context)
+				) {
 					await this.handleProviderError(chunk.error, _provider, context);
           } else {
             log.warn(
@@ -673,6 +723,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 					status: "function_call",
             data: chunk.functionCall,
             accumulatedText: state.accumulatedText,
+            thoughtLog: this.buildThoughtLogPayload(state),
           };
         }
         break;
@@ -867,6 +918,14 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
 
     return combined.slice(-StreamOrchestrator.STREAM_CHUNK_DEDUP_TAIL_CHARS);
+  }
+
+  private shouldDelayTrailingPeriodFlush(
+    buffer: string,
+    periodMatch: RegExpExecArray,
+  ): boolean {
+    const periodEndIndex = periodMatch.index + periodMatch[0].length;
+    return periodMatch[0] === "." && periodEndIndex === buffer.length;
   }
 
   private findRegularOverflowFlushIndex(
@@ -1137,7 +1196,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       if (config.humanizerDegree === HumanizerDegree.HEAVY) {
         const sentenceRegex = createSentenceSplitRegex();
         const periodMatch = sentenceRegex.exec(state.buffer);
-        if (periodMatch) {
+        if (
+          periodMatch &&
+          !this.shouldDelayTrailingPeriodFlush(state.buffer, periodMatch)
+        ) {
           periodEndIndex = periodMatch.index + periodMatch[0].length;
         }
       }
@@ -1286,10 +1348,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     if (trimmedGuard === "..") return;
 
     const wasPrefillInjected = state.prefillInjected;
-
-    await context.channel
-      .sendTyping()
-      .catch((e) => log.warn("Stream Seg: sendTyping failed", e));
 
     const leadingWhitespaceMatch = segment.match(/^\s+/);
     const leadingWhitespace = leadingWhitespaceMatch?.[0] ?? "";
@@ -1708,12 +1766,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
       const chunkToSend = chunks[i];
 
-      await context.channel
-        .sendTyping()
-        .catch((e) =>
-          log.warn("Stream Send: sendTyping failed (typing mode)", e),
-        );
-
       // Calculate typing time
       let typingTime = Math.min(
         chunkToSend.length * typingConfig.baseSpeedMsPerChar,
@@ -1791,6 +1843,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     context: StreamContext,
     state: StreamState,
   ): Promise<void> {
+    const strictUserImpersonation = isUserImpersonationStreamContext(context);
+
     // Check for stop request first (highest priority - prevents duplicate embeds)
     if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
       log.info(
@@ -1806,6 +1860,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       log.info(
         `Send message limit reached: ${state.messageSentCount} messages sent (server limit: ${sendMessageLimit})`,
       );
+      if (strictUserImpersonation) {
+        throw new Error(
+          "User impersonation stopped because the server message limit was reached before a reply could be sent.",
+        );
+      }
       StreamOrchestrator.requestStop(context.channel.id, "send_message_limit");
       return;
     }
@@ -1815,6 +1874,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       log.warn(
         `Flush limit exceeded: ${state.messageSentCount} messages sent (limit: ${STREAMING_LIMITS.MAX_FLUSH_COUNT})`,
       );
+
+      if (strictUserImpersonation) {
+        throw new Error(
+          "User impersonation stopped because the response exceeded the streaming message limit.",
+        );
+      }
 
       // Send warning embed to user
       await sendStandardEmbed(context.channel, context.locale, {
@@ -1837,6 +1902,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
     try {
       const threadId = resolveWebhookThreadId(context.channel);
+      if (strictUserImpersonation && !context.webhook) {
+        throw new Error(
+          "User impersonation requires a temporary webhook, but none is available.",
+        );
+      }
+
+      let sentMessage: Message | null = null;
       // 1. Use webhook for alter personas (if webhook and persona info provided)
       // Only require webhook and username - avatarUrl is optional
       if (context.webhook && context.personaUsername) {
@@ -1845,7 +1917,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         );
 
         // Webhooks cannot reply to messages, so always send as new message
-        await context.webhook.send({
+        sentMessage = await context.webhook.send({
           content,
           username: context.personaUsername,
           avatarURL: context.personaAvatarUrl, // Can be undefined - Discord handles this
@@ -1860,16 +1932,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       else {
         // Check if we need to reply or send normally
         if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
-          await context.replyToMessage.reply({
+          sentMessage = await context.replyToMessage.reply({
             content,
             allowedMentions: { repliedUser: false },
           });
           state.hasRepliedToOriginalMessage = true;
         } else {
-          await context.channel.send({ content });
+          sentMessage = await context.channel.send({ content });
         }
       }
 
+      if (!state.firstReplyUrl && sentMessage?.url) {
+        state.firstReplyUrl = sentMessage.url;
+      }
       state.messageSentCount++;
       state.accumulatedText += content; // Track all sent text for short-term memory
       log.info(
@@ -1904,7 +1979,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
             if (recreatedWebhook) {
               const recoveredThreadId = resolveWebhookThreadId(context.channel);
-              await recreatedWebhook.send({
+              const recoveredMessage = await recreatedWebhook.send({
                 content,
                 username: context.personaUsername,
                 avatarURL: context.personaAvatarUrl,
@@ -1917,6 +1992,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
               context.webhook = recreatedWebhook;
               state.hasRepliedToOriginalMessage = true;
+              if (!state.firstReplyUrl && recoveredMessage?.url) {
+                state.firstReplyUrl = recoveredMessage.url;
+              }
               state.messageSentCount++;
               state.accumulatedText += content;
               log.info(
@@ -1935,6 +2013,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
       // If webhook send fails, try fallback to regular bot message (only on first message)
       if (
+        !strictUserImpersonation &&
         context.webhook &&
         context.personaUsername &&
         !state.hasRepliedToOriginalMessage
@@ -1946,16 +2025,20 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
         try {
           // Try fallback to regular message
+          let fallbackMessage: Message | null = null;
           if (context.replyToMessage) {
-            await context.replyToMessage.reply({
+            fallbackMessage = await context.replyToMessage.reply({
               content,
               allowedMentions: { repliedUser: false },
             });
           } else {
-            await context.channel.send({ content });
+            fallbackMessage = await context.channel.send({ content });
           }
 
           state.hasRepliedToOriginalMessage = true;
+          if (!state.firstReplyUrl && fallbackMessage?.url) {
+            state.firstReplyUrl = fallbackMessage.url;
+          }
           state.messageSentCount++;
           state.accumulatedText += content; // Track fallback sent text too
 
@@ -1979,6 +2062,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             },
           );
         }
+      }
+
+      if (strictUserImpersonation) {
+        log.warn(
+          "Stream Send: User impersonation webhook send failed; not falling back to a regular bot message",
+          discordError as Error,
+        );
       }
 
       // Original error logging and re-throw
@@ -2024,13 +2114,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
     if (isThinkingPause) {
       pauseTime = Math.max(pauseTime * 1.5, typingConfig.minVisibleDurationMs);
-      setTimeout(() => {
-        context.channel
-          .sendTyping()
-          .catch((e) =>
-            log.warn("Stream Sim: sendTyping during pause failed", e),
-          );
-      }, pauseTime / 3);
     }
 
     log.info(

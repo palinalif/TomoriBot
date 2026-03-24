@@ -16,6 +16,7 @@ import {
   type StructuredContextItem, // New: The main output type
 } from "../../types/misc/context";
 import { registerUser } from "../db/dbWrite";
+import { resolvePreferredDiscordDisplayName } from "../discord/displayName";
 import { log } from "../misc/logger";
 import {
   replaceTemplateVariables,
@@ -1602,9 +1603,13 @@ export async function buildContext({
         if (guild && member) {
           const serverLocale = guild.preferredLocale;
           const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en-US";
+          const registrationDisplayName = resolvePreferredDiscordDisplayName({
+            memberDisplayName: member.displayName,
+            user: member.user,
+          });
           userRow = await registerUser(
             userIdToProcess,
-            member.user.username,
+            registrationDisplayName,
             userLanguage,
           );
         }

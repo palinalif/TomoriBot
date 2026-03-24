@@ -102,6 +102,8 @@ export interface OpenAICompatibleStreamAdapterOptions {
 	placeholderApiKey?: string;
 	enableSpeakerGuard?: boolean;
 	preserveReasoningContent?: boolean;
+	stripThinkBlocksFromContent?: boolean;
+	captureThinkBlocksAsThoughts?: boolean;
 	resolveApiUrl: (config: OpenAICompatibleStreamConfig) => string;
 	mutateRequestBody?: (
 		args: OpenAICompatibleRequestMutationArgs,

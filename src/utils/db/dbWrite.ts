@@ -24,6 +24,7 @@ import {
   validateTomoriFields,
   validateUserFields,
 } from "./sqlSecurity";
+import { invalidateUserCache } from "../cache/userCache";
 import { getBaseTriggerWords } from "../text/localizer";
 import { DEFAULT_SYSTEM_PROMPT } from "../text/contextBuilder";
 import type { Guild } from "discord.js";
@@ -45,8 +46,8 @@ const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
 );
 
 /**
- * Registers or updates a user in the database, ensuring they have a record for presence tracking and personalization.
- * Uses an UPSERT pattern following Rule #15.
+ * Registers a user in the database if missing and returns the current row.
+ * Existing nicknames and preferences are preserved on re-registration.
  *
  * @param userDiscId - Discord user ID of the user to register
  * @param displayName - User's display name or nickname
@@ -59,25 +60,34 @@ export async function registerUser(
   language = "en",
 ): Promise<UserRow | null> {
   try {
-    log.info(`Registering/updating user ${userDiscId} (${displayName})`);
+    log.info(`Ensuring user ${userDiscId} exists (${displayName})`);
 
-    // Apply UPSERT pattern with RETURNING (Rule #15)
     // registration_locale is only set on INSERT (static field for analytics)
+    // Preserve existing nickname/preferences when the user already exists.
     const [userData] = await sql`
-            INSERT INTO users (
-                user_disc_id,
-                user_nickname,
-                language_pref,
-                registration_locale
-            ) VALUES (
-                ${userDiscId},
-                ${displayName},
-                ${language},
-                ${language}
+            WITH inserted_user AS (
+                INSERT INTO users (
+                    user_disc_id,
+                    user_nickname,
+                    language_pref,
+                    registration_locale
+                ) VALUES (
+                    ${userDiscId},
+                    ${displayName},
+                    ${language},
+                    ${language}
+                )
+                ON CONFLICT (user_disc_id) DO NOTHING
+                RETURNING *
             )
-            ON CONFLICT (user_disc_id) DO UPDATE
-            SET user_nickname = EXCLUDED.user_nickname
-            RETURNING *
+            SELECT *
+            FROM inserted_user
+            UNION ALL
+            SELECT *
+            FROM users
+            WHERE user_disc_id = ${userDiscId}
+              AND NOT EXISTS (SELECT 1 FROM inserted_user)
+            LIMIT 1
         `;
 
     // Validate with Zod schema (Rules #3, #6)
@@ -91,6 +101,7 @@ export async function registerUser(
       return null;
     }
 
+    invalidateUserCache(userDiscId);
     return validatedUser.data;
   } catch (error) {
     log.error(`Error registering user ${userDiscId}:`, error);

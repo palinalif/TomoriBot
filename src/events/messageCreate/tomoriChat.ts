@@ -22,6 +22,7 @@ import type {
   RequestSnapshot,
 } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
+import type { StandardEmbedOptions } from "../../types/discord/embed";
 // Provider-specific types moved to individual providers
 import type {
   FunctionCall,
@@ -45,6 +46,7 @@ import {
   createStandardEmbed,
   sendStandardEmbed,
 } from "../../utils/discord/embedHelper";
+import { resolvePreferredDiscordDisplayName } from "../../utils/discord/displayName";
 import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
@@ -107,6 +109,7 @@ import { getProviderForTomori } from "../../utils/provider/providerFactory";
 import type {
   LLMProvider,
   StreamResult,
+  ThoughtLogPayload,
 } from "../../types/provider/interfaces";
 import { ToolRegistry } from "../../tools/toolRegistry";
 import { keyManager } from "@/utils/security/keyManager";
@@ -141,6 +144,11 @@ import {
 } from "@/utils/quota/textQuotaManager";
 import type { ForcedMention } from "@/types/discord/mentions";
 import { buildForcedMentionsForUser } from "@/utils/discord/mentionHelper";
+import {
+  hasThoughtLogContent,
+  mergeThoughtLogPayload,
+  sendThoughtLogEmbed,
+} from "@/utils/discord/thoughtLog";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -1154,6 +1162,11 @@ function appendInjectedContextItems(
 // New: Constants for the semaphore/locking mechanism
 const CHANNEL_LOCK_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes for a lock to be considered stale
 const TEXT_QUOTA_TRIGGER_TTL_MS = 10 * 60 * 1000; // Keep trigger consumption state for 10 minutes
+const DISCORD_TYPING_KEEPALIVE_INTERVAL_MS = parseIntegerEnvFlag(
+  process.env.DISCORD_TYPING_KEEPALIVE_INTERVAL_MS,
+  8000,
+  1000,
+);
 
 /** Maximum consecutive follow-up interrupts before messages are queued normally (prevents infinite restart loops) */
 const MAX_FOLLOW_UP_INTERRUPTS = Number.parseInt(
@@ -1185,6 +1198,7 @@ interface ChannelLockEntry {
   serverDiscId: string; // Server/DM channel Discord ID for rate limiting
   userDiscId?: string; // Discord ID of user whose message is currently being processed
   currentIsPersonaJob?: boolean; // Skip user rate limits for internal persona jobs
+  typingKeepaliveTimer: NodeJS.Timeout | null;
   followUpCount: number; // Consecutive follow-up interrupts for rate limiting
   messageQueue: Array<{
     message: Message;
@@ -1210,6 +1224,59 @@ interface ChannelLockEntry {
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
 const textQuotaTriggerStates = new Map<string, TextQuotaTriggerState>();
+
+async function refreshDiscordTypingIndicator(
+  channel: Message["channel"],
+  reason: string,
+): Promise<void> {
+  if (!("sendTyping" in channel) || typeof channel.sendTyping !== "function") {
+    return;
+  }
+
+  await channel.sendTyping().catch((error: unknown) => {
+    log.warn(
+      `Discord typing refresh failed for channel ${channel.id} (${reason})`,
+      error,
+    );
+  });
+}
+
+function stopDiscordTypingKeepalive(
+  channelId: string,
+  lockEntry: ChannelLockEntry,
+  reason: string,
+): void {
+  if (!lockEntry.typingKeepaliveTimer) {
+    return;
+  }
+
+  clearInterval(lockEntry.typingKeepaliveTimer);
+  lockEntry.typingKeepaliveTimer = null;
+  log.info(
+    `Discord typing keepalive stopped for channel ${channelId} (${reason}).`,
+  );
+}
+
+async function startDiscordTypingKeepalive(
+  channel: Message["channel"],
+  lockEntry: ChannelLockEntry,
+  messageId: string,
+): Promise<void> {
+  stopDiscordTypingKeepalive(channel.id, lockEntry, "restart");
+  await refreshDiscordTypingIndicator(channel, "lock_scope_start");
+  lockEntry.typingKeepaliveTimer = setInterval(() => {
+    if (!lockEntry.isLocked || lockEntry.currentMessageId !== messageId) {
+      stopDiscordTypingKeepalive(channel.id, lockEntry, "lock_scope_end");
+      return;
+    }
+
+    void refreshDiscordTypingIndicator(channel, "lock_scope_keepalive");
+  }, DISCORD_TYPING_KEEPALIVE_INTERVAL_MS);
+
+  log.info(
+    `Discord typing keepalive started for channel ${channel.id} (message ${messageId}, interval ${DISCORD_TYPING_KEEPALIVE_INTERVAL_MS}ms).`,
+  );
+}
 
 function cleanupTextQuotaTriggerStates(): void {
   const now = Date.now();
@@ -1932,6 +1999,7 @@ export default async function tomoriChat(
         serverDiscId: serverDiscId, // Track server for rate limiting
         userDiscId: undefined, // Set when lock is acquired
         currentIsPersonaJob: false,
+        typingKeepaliveTimer: null,
         followUpCount: 0,
         messageQueue: [],
       };
@@ -1946,6 +2014,7 @@ export default async function tomoriChat(
       log.warn(
         `Channel ${channelLockId} lock is stale (locked since ${new Date(lockEntry.lockedAt).toISOString()} for message ${lockEntry.currentMessageId}). Forcibly releasing. Previous queue length: ${lockEntry.messageQueue.length}`,
       );
+      stopDiscordTypingKeepalive(channelLockId, lockEntry, "stale_lock_release");
       lockEntry.isLocked = false; // Release stale lock
       lockEntry.userDiscId = undefined; // Clear user tracking
       lockEntry.currentIsPersonaJob = false;
@@ -2259,15 +2328,34 @@ export default async function tomoriChat(
         const registrationLocale =
           manualTriggerInvoker?.locale ??
           (message.guild?.preferredLocale.startsWith("ja") ? "ja" : "en-US");
+        const registrationDisplayName = resolvePreferredDiscordDisplayName({
+          memberDisplayName:
+            manualTriggerInvoker?.member?.displayName ?? message.member?.displayName,
+          user: manualTriggerInvoker
+            ? { username: triggererUsername }
+            : message.author,
+          fallback: triggererUsername,
+        });
         userRow = await registerUser(
           userDiscId,
-          triggererUsername,
+          registrationDisplayName,
           registrationLocale,
         );
       }
 
       locale =
         userRow?.language_pref ?? manualTriggerInvoker?.locale ?? "en-US"; // Set locale based on user pref
+
+      const sendChannelEmbedOrFailImpersonation = async (
+        options: StandardEmbedOptions,
+        errorMessage: string,
+        cause?: unknown,
+      ): Promise<void> => {
+        if (isUserImpersonation) {
+          throw cause instanceof Error ? cause : new Error(errorMessage);
+        }
+        await sendStandardEmbed(channel, locale, options);
+      };
 
       // Determine triggererName based on blacklist and personalization settings
       const isUserBlacklisted = await getCachedBlacklistStatus(
@@ -2837,6 +2925,17 @@ export default async function tomoriChat(
 
       // 5. Auto-Counter Update (only needs to happen if Tomori is set up)
       const config = tomoriState.config;
+      if (
+        !isDMChannel &&
+        config.thought_log_channel_disc_id &&
+        config.thought_log_channel_disc_id === channel.id
+      ) {
+        log.info(
+          `Skipping normal chat trigger in configured thought-log channel ${channel.id}.`,
+        );
+        return;
+      }
+
       const { minThreshold, maxThreshold } = getAutochatRange(config);
       const isAutoCounterChannelActive = isAutochatCounterChannelActive(
         config,
@@ -3269,7 +3368,11 @@ export default async function tomoriChat(
       }
 
       // 9. Prepare Data for buildContext
-      await channel.sendTyping();
+      if (!skipLock && lockEntry) {
+        await startDiscordTypingKeepalive(channel, lockEntry, message.id);
+      } else {
+        await refreshDiscordTypingIndicator(channel, "pre_context_build");
+      }
 
       /**
        * Fetch recent message history for context building.
@@ -4279,6 +4382,7 @@ export default async function tomoriChat(
         tomoriId?: number;
         personaLineageId?: number | null;
       }> = [];
+      let turnThoughtLog: ThoughtLogPayload | undefined;
       const matrixTypingRoomId = isMatrixRelayMessage
         ? await getLinkedMatrixRoom(channel.id)
         : null;
@@ -4325,7 +4429,7 @@ export default async function tomoriChat(
 
         // Send typing indicator for each persona response
         if (personaIndex > 0) {
-          await channel.sendTyping();
+          await refreshDiscordTypingIndicator(channel, "persona_transition");
         }
         const matrixTypingTargetRoomId = matrixTypingRoomId;
         const matrixTypingPersonaName =
@@ -4339,6 +4443,7 @@ export default async function tomoriChat(
             true,
           );
         }
+        let temporaryUserImpersonationWebhook: Webhook | null = null;
 
         try {
           // Persona-specific response generation starts here
@@ -4897,12 +5002,16 @@ export default async function tomoriChat(
                 userCountInContext: userList.length,
               },
             });
-            await sendStandardEmbed(channel, locale, {
-              color: ColorCode.ERROR,
-              titleKey: "general.errors.context_error_title",
-              descriptionKey: "general.errors.context_error_description",
-              footerKey: "genai.generic_error_footer",
-            });
+            await sendChannelEmbedOrFailImpersonation(
+              {
+                color: ColorCode.ERROR,
+                titleKey: "general.errors.context_error_title",
+                descriptionKey: "general.errors.context_error_description",
+                footerKey: "genai.generic_error_footer",
+              },
+              "User impersonation failed while building the response context.",
+              error,
+            );
             return;
           }
           // API Key Selection with Rotation Support
@@ -5016,11 +5125,14 @@ export default async function tomoriChat(
               serverId: tomoriState?.server_id,
               errorType: "ApiKeyError",
             });
-            await sendStandardEmbed(channel, locale, {
-              color: ColorCode.ERROR,
-              titleKey: "general.errors.api_key_error_title",
-              descriptionKey: "general.errors.api_key_error_description",
-            });
+            await sendChannelEmbedOrFailImpersonation(
+              {
+                color: ColorCode.ERROR,
+                titleKey: "general.errors.api_key_error_title",
+                descriptionKey: "general.errors.api_key_error_description",
+              },
+              "User impersonation could not start because the API key is unavailable.",
+            );
             return;
           }
 
@@ -5043,15 +5155,19 @@ export default async function tomoriChat(
                 },
               },
             );
-            await sendStandardEmbed(channel, locale, {
-              color: ColorCode.ERROR,
-              titleKey: "general.errors.provider_not_supported_title",
-              descriptionKey:
-                "general.errors.provider_not_supported_description",
-              descriptionVars: {
-                provider: tomoriState?.llm.llm_provider || "unknown",
+            await sendChannelEmbedOrFailImpersonation(
+              {
+                color: ColorCode.ERROR,
+                titleKey: "general.errors.provider_not_supported_title",
+                descriptionKey:
+                  "general.errors.provider_not_supported_description",
+                descriptionVars: {
+                  provider: tomoriState?.llm.llm_provider || "unknown",
+                },
               },
-            });
+              "User impersonation could not start because the configured provider is unavailable.",
+              error,
+            );
             return;
           }
 
@@ -5133,6 +5249,7 @@ export default async function tomoriChat(
               });
 
               cacheUserImpersonationWebhook(tempWebhook.id, impersonatedUserId);
+              temporaryUserImpersonationWebhook = tempWebhook;
               personaWebhook = tempWebhook;
               log.info(
                 `Created temporary webhook for user impersonation: ${impersonatedIdentityName || "User"}`,
@@ -5145,6 +5262,11 @@ export default async function tomoriChat(
                   impersonatedUserId,
                 },
               );
+              throw error instanceof Error
+                ? error
+                : new Error(
+                    "Failed to create temporary webhook for user impersonation.",
+                  );
             }
           }
 
@@ -5213,6 +5335,8 @@ export default async function tomoriChat(
           let finalAccumulatedText = ""; // Track accumulated text from successful stream
           const accumulatedStreamedModelParts: Array<Record<string, unknown>> =
             [];
+          let personaThoughtLog: ThoughtLogPayload | undefined;
+          let personaStreamCompletedSuccessfully = false;
           let naiConsecutiveToolFailures = 0; // Tracks consecutive tool failures for NAI GLM retry logic (Case 2)
 
           for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
@@ -5400,6 +5524,11 @@ export default async function tomoriChat(
                           errorType: "SDKTimeoutError",
                         },
                       );
+                      if (isUserImpersonation) {
+                        throw new Error(
+                          "User impersonation timed out before a reply could be sent.",
+                        );
+                      }
                       await sendStandardEmbed(channel, locale, {
                         color: ColorCode.ERROR, // Using ERROR as it's a more critical failure
                         titleKey: "genai.error_stream_timeout_title",
@@ -5471,12 +5600,15 @@ export default async function tomoriChat(
                           errorType: "ApiKeyError",
                         },
                       );
-                      await sendStandardEmbed(channel, locale, {
-                        color: ColorCode.ERROR,
-                        titleKey: "general.errors.api_key_error_title",
-                        descriptionKey:
-                          "general.errors.api_key_error_description",
-                      });
+                      await sendChannelEmbedOrFailImpersonation(
+                        {
+                          color: ColorCode.ERROR,
+                          titleKey: "general.errors.api_key_error_title",
+                          descriptionKey:
+                            "general.errors.api_key_error_description",
+                        },
+                        "User impersonation could not continue because the API key became unavailable during retry.",
+                      );
                       return { streamResult: null, abort: true };
                     }
 
@@ -5670,11 +5802,21 @@ export default async function tomoriChat(
               let streamResult: StreamResult | null = null;
               const fallbackRunResult = await runWithFallbackModels();
               if (fallbackRunResult.abort) {
+                if (isUserImpersonation) {
+                  throw new Error(
+                    "User impersonation ended before a reply could be sent.",
+                  );
+                }
                 finalStreamCompleted = true;
                 break;
               }
               streamResult = fallbackRunResult.streamResult;
               if (!streamResult) {
+                if (isUserImpersonation) {
+                  throw new Error(
+                    "User impersonation ended without returning a stream result.",
+                  );
+                }
                 finalStreamCompleted = true;
                 break;
               }
@@ -5683,6 +5825,11 @@ export default async function tomoriChat(
               switch (streamResult.status) {
                 case "completed": {
                   log.success("Streaming to Discord completed successfully.");
+                  personaThoughtLog = mergeThoughtLogPayload(
+                    personaThoughtLog,
+                    streamResult.thoughtLog,
+                  );
+                  personaStreamCompletedSuccessfully = true;
                   // Record success for rotation key if one was used
                   if (selectedKeyResult?.rotationKeyId) {
                     await recordKeySuccess(selectedKeyResult.rotationKeyId);
@@ -5744,6 +5891,14 @@ export default async function tomoriChat(
                     message?: string;
                     code?: string;
                   };
+                  if (isUserImpersonation) {
+                    throw new Error(
+                      finalErrorData?.message ||
+                        (streamResult.data instanceof Error
+                          ? streamResult.data.message
+                          : "User impersonation failed before a reply could be sent."),
+                    );
+                  }
                   if (
                     finalErrorData?.type === "timeout" &&
                     streamingContext.suppressUserErrors
@@ -5831,6 +5986,12 @@ export default async function tomoriChat(
                       `Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} retries. Showing error embed.`,
                     );
 
+                    if (isUserImpersonation) {
+                      throw new Error(
+                        "User impersonation returned an empty response.",
+                      );
+                    }
+
                     await sendStandardEmbed(channel, locale, {
                       titleKey: "genai.empty_response_title",
                       descriptionKey: "genai.empty_response_description",
@@ -5854,6 +6015,11 @@ export default async function tomoriChat(
                     `Streaming to Discord timed out due to inactivity for channel ${channel.id}.`,
                     streamResult.data,
                   );
+                  if (isUserImpersonation) {
+                    throw new Error(
+                      "User impersonation timed out before a reply could be sent.",
+                    );
+                  }
                   await sendStandardEmbed(channel, locale, {
                     color: ColorCode.WARN,
                     titleKey: "genai.error_stream_timeout_title",
@@ -5933,6 +6099,11 @@ export default async function tomoriChat(
                 }
 
                 case "function_call": {
+                  personaThoughtLog = mergeThoughtLogPayload(
+                    personaThoughtLog,
+                    streamResult.thoughtLog,
+                  );
+
                   if (!streamResult.data) {
                     // Function call without data - log error and break
                     log.error(
@@ -6873,6 +7044,11 @@ export default async function tomoriChat(
                     log.warn(
                       "Max function call iterations reached in streaming mode. LLM did not provide a final text stream.",
                     );
+                    if (isUserImpersonation) {
+                      throw new Error(
+                        "User impersonation could not complete because the model never returned final text.",
+                      );
+                    }
                     // Send a fallback message if no stream occurred.
                     // If some text was streamed before this, this might be redundant.
                     // For now, assume streamGeminiToDiscord handles its own errors if it starts streaming.
@@ -6902,6 +7078,12 @@ export default async function tomoriChat(
                     ),
                   );
 
+                  if (isUserImpersonation) {
+                    throw new Error(
+                      `User impersonation failed with unhandled stream status: ${String(streamResult.status)}`,
+                    );
+                  }
+
                   // Show user-facing error for unknown status
                   await sendStandardEmbed(channel, locale, {
                     titleKey: "genai.no_response_title",
@@ -6923,6 +7105,7 @@ export default async function tomoriChat(
               // If a fallback model was used successfully, send a blue info embed so
               // the user knows which model actually responded and what failed before it.
               if (
+                !isUserImpersonation &&
                 fallbackRunResult.fallbackUsed &&
                 fallbackRunResult.successModel
               ) {
@@ -6956,6 +7139,13 @@ export default async function tomoriChat(
                   metadata: { channelId: channel.id, iteration: i + 1 },
                 },
               );
+              if (isUserImpersonation) {
+                throw streamingError instanceof Error
+                  ? streamingError
+                  : new Error(
+                      "User impersonation failed during the streaming invocation.",
+                    );
+              }
               await sendStandardEmbed(channel, locale, {
                 color: ColorCode.ERROR,
                 titleKey: "genai.generic_error_title",
@@ -7053,6 +7243,13 @@ export default async function tomoriChat(
             // Potentially send a message indicating an issue if no error was already sent.
           }
 
+          if (personaStreamCompletedSuccessfully && personaThoughtLog) {
+            turnThoughtLog = mergeThoughtLogPayload(
+              turnThoughtLog,
+              personaThoughtLog,
+            );
+          }
+
           // Capture persona response text for short-term memory storage
           log.info(
             `[SHORT_TERM_MEMORY] Debug - finalStreamCompleted=${finalStreamCompleted}, accumulatedTextLength=${finalAccumulatedText.length}`,
@@ -7083,20 +7280,6 @@ export default async function tomoriChat(
             `Completed response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}"`,
           );
 
-          // Clean up temporary webhook for user impersonation
-          if (isUserImpersonation && personaWebhook) {
-            try {
-              await personaWebhook.delete("User impersonation complete");
-              log.info(
-                `Deleted temporary user impersonation webhook for user ${impersonatedUserId}`,
-              );
-            } catch (error) {
-              log.warn(
-                "Failed to delete temporary user impersonation webhook",
-                error,
-              );
-            }
-          }
         } catch (personaError) {
           // Handle errors for this specific persona and continue with remaining personas
           log.error(
@@ -7115,6 +7298,12 @@ export default async function tomoriChat(
             },
           );
 
+          if (isUserImpersonation) {
+            throw personaError instanceof Error
+              ? personaError
+              : new Error("User impersonation failed before a reply was sent.");
+          }
+
           // Always send error embed for failed persona
           await sendStandardEmbed(channel, locale, {
             color: ColorCode.ERROR,
@@ -7129,6 +7318,22 @@ export default async function tomoriChat(
             log.warn("Failed to send persona error embed", embedError),
           );
         } finally {
+          if (temporaryUserImpersonationWebhook) {
+            try {
+              await temporaryUserImpersonationWebhook.delete(
+                "User impersonation complete",
+              );
+              log.info(
+                `Deleted temporary user impersonation webhook for user ${impersonatedUserId}`,
+              );
+            } catch (error) {
+              log.warn(
+                "Failed to delete temporary user impersonation webhook",
+                error,
+              );
+            }
+          }
+
           if (matrixTypingTargetRoomId) {
             await sendMatrixTypingIndicator(
               matrixTypingTargetRoomId,
@@ -7138,6 +7343,23 @@ export default async function tomoriChat(
           }
         }
       } // END OF MULTI-PERSONA RESPONSE LOOP
+
+      const finalThoughtLog = turnThoughtLog;
+      if (
+        !isDMChannel &&
+        tomoriState.config.thought_log_channel_disc_id &&
+        finalThoughtLog &&
+        hasThoughtLogContent(finalThoughtLog)
+      ) {
+        await sendThoughtLogEmbed({
+          client,
+          locale,
+          tomoriState,
+          sourceChannel: channel,
+          thoughtLogChannelId: tomoriState.config.thought_log_channel_disc_id,
+          thoughtLog: finalThoughtLog,
+        });
+      }
 
       // 8.9. Consume exactly one text quota slot for this trigger after first successful output
       if (
@@ -7362,6 +7584,11 @@ export default async function tomoriChat(
     } catch (error) {
       // 14. Global error handler for entire function
       log.error("Unhandled error in tomoriChat handler:", error);
+      if (isUserImpersonation) {
+        throw error instanceof Error
+          ? error
+          : new Error("User impersonation failed before a reply could be sent.");
+      }
       // Use default locale as userRow might not be available
       await sendStandardEmbed(channel, "en-US", {
         color: ColorCode.ERROR,
@@ -7380,6 +7607,7 @@ export default async function tomoriChat(
       lockEntry.currentMessageId = undefined;
       lockEntry.userDiscId = undefined; // Clear user tracking for rate limiting
       lockEntry.currentIsPersonaJob = false;
+      stopDiscordTypingKeepalive(channelLockId, lockEntry, "lock_released");
       log.info(
         `Channel ${channelLockId} lock released for message ${message.id}.`,
       );

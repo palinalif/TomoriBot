@@ -14,6 +14,7 @@ import {
   type CommandExecutionMap,
   type CommandCooldownMap,
 } from "../../utils/discord/commandLoader";
+import { resolvePreferredDiscordDisplayName } from "../../utils/discord/displayName";
 
 // Define constants at the top (Rule #20)
 const DEFAULT_COOLDOWN = Number.parseInt(
@@ -257,11 +258,23 @@ const handler = async (
       } else {
         // Get locale to use for new user (works for both guilds and DMs)
         const userLanguage = interaction.locale;
+        const memberDisplayName =
+          interaction.member && typeof interaction.member === "object"
+            ? "displayName" in interaction.member
+              ? interaction.member.displayName
+              : "nick" in interaction.member &&
+                  typeof interaction.member.nick === "string"
+                ? interaction.member.nick
+                : null
+            : null;
 
         // Use the registerUser helper (Rule #17) - works for both guild and DM contexts
         const registeredUser = await registerUser(
           interaction.user.id,
-          interaction.user.username,
+          resolvePreferredDiscordDisplayName({
+            memberDisplayName,
+            user: interaction.user,
+          }),
           userLanguage,
         );
 

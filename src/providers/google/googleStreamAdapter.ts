@@ -23,7 +23,10 @@ import {
   type Part,
   type ThinkingConfig,
 } from "@google/genai";
-import type { FunctionCall } from "../../types/provider/interfaces";
+import type {
+  FunctionCall,
+  ThoughtLogEntry,
+} from "../../types/provider/interfaces";
 import {
   ContextItemTag,
   type StructuredContextItem,
@@ -798,6 +801,7 @@ export class GoogleStreamAdapter implements StreamProvider {
    */
   processChunk(chunk: RawStreamChunk): ProcessedChunk {
     const googleChunk = chunk.data as GoogleStreamChunk;
+    const thoughts: ThoughtLogEntry[] = [];
 
     // Handle errors first
     if ("error" in googleChunk && googleChunk.error) {
@@ -856,6 +860,10 @@ export class GoogleStreamAdapter implements StreamProvider {
     }
     if (googleChunk.thoughtSummary) {
       metadata.thoughtSummary = googleChunk.thoughtSummary;
+      thoughts.push({
+        kind: "summary",
+        content: googleChunk.thoughtSummary,
+      });
       log.info("GoogleStreamAdapter: Received thought summary");
     }
 
@@ -869,6 +877,7 @@ export class GoogleStreamAdapter implements StreamProvider {
       return {
         type: "function_call",
         functionCall,
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -887,6 +896,7 @@ export class GoogleStreamAdapter implements StreamProvider {
       return {
         type: "text",
         content: textContent,
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -895,6 +905,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     if (candidate?.finishReason === FinishReason.STOP) {
       return {
         type: "done",
+        thoughts: thoughts.length > 0 ? thoughts : undefined,
         metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     }
@@ -903,6 +914,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     return {
       type: "text",
       content: "",
+      thoughts: thoughts.length > 0 ? thoughts : undefined,
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
   }

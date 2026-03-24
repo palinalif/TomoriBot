@@ -570,8 +570,14 @@ async function handleUserImpersonation(
             avatarURL: impersonatedAvatarUrl,
           });
         } else {
-          // Fallback to bot message when webhook creation fails.
-          await channel.send({ embeds: [noticeEmbed] });
+          log.warn(
+            "Skipping user impersonation notice embed because no webhook was available",
+            {
+              channelId: interaction.channel.id,
+              guildId: interaction.guild.id,
+              impersonatedUserId,
+            },
+          );
         }
       } catch (noticeError) {
         log.warn("Failed to send user impersonation notice embed", {
@@ -661,22 +667,26 @@ async function handleUserImpersonation(
 
     // Check if interaction is still valid before replying
     if (interaction.deferred || interaction.replied) {
+      const isTimeoutError =
+        error instanceof Error && /timed?\s*out|timeout/i.test(error.message);
+      const description = isTimeoutError
+        ? localizer(locale, "genai.error_stream_timeout_description")
+        : localizer(locale, "genai.generic_error_description", {
+            error_message:
+              error instanceof Error ? error.message : "Unknown error",
+          });
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle(
-              localizer(locale, "commands.bot.impersonate.webhook_error_title"),
-            )
-            .setDescription(
               localizer(
                 locale,
-                "commands.bot.impersonate.webhook_error_description",
-                {
-                  error:
-                    error instanceof Error ? error.message : "Unknown error",
-                },
+                isTimeoutError
+                  ? "genai.error_stream_timeout_title"
+                  : "genai.generic_error_title",
               ),
             )
+            .setDescription(description)
             .setColor(ColorCode.ERROR),
         ],
       });

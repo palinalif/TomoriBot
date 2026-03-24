@@ -202,6 +202,7 @@ const DISCORD_CUSTOM_EMOJI_NAME_REGEX = /^<a?:([^:>]+):[^>]+>$/;
 const DEFAULT_EMOJI_RUN_PREFIX_LENGTH = 3;
 const MIN_EMOJI_RUN_PREFIX_LENGTH = 1;
 const MAX_EMOJI_RUN_PREFIX_LENGTH = 32;
+const HEAVY_HUMANIZER_ELLIPSIS_PLACEHOLDER = "__TOMORI_ELLIPSIS__";
 
 function loadEmojiRunPrefixLength(): number {
   const raw = process.env.EMOJI_RUN_PREFIX_LENGTH;
@@ -731,12 +732,10 @@ export function chunkMessage(
             const { protectedText: protectedParagraph, markdownLinks } =
               detectAndProtectMarkdownLinks(paragraph);
 
-            //chunkedMessages.push(paragraph);
-            // Compensate for ... period deletion by adding one more period
-            // Replace exactly three periods with four periods when they aren't part of a longer sequence
+            // Protect ellipses so sentence splitting does not distort them.
             const processedParagraph = protectedParagraph.replace(
               /\.{3}(?!\.)(?!\d)/g,
-              "....",
+              HEAVY_HUMANIZER_ELLIPSIS_PLACEHOLDER,
             );
 
             // Remove all commas from the text
@@ -780,6 +779,11 @@ export function chunkMessage(
               }
 
               if (!processedSentence) continue;
+
+              processedSentence = processedSentence.replaceAll(
+                HEAVY_HUMANIZER_ELLIPSIS_PLACEHOLDER,
+                "...",
+              );
 
               // Restore markdown links after sentence processing
               processedSentence = restoreMarkdownLinksFromPlaceholders(

@@ -214,6 +214,7 @@ export const tomoriConfigSchema = z.object({
   autoch_disc_ids: z.array(z.string()).default([]),
 	rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
 	welcome_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for member join welcomes
+	thought_log_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for reasoning/thought log embeds
 	welcome_prompt: z.string().nullable().optional(), // Added March 2026 - Additional prompt appended to join welcomes
 	welcome_persona_id: z.number().int().nullable().optional(), // Added March 2026 - NULL means random persona selection for welcomes
 	autoch_threshold: z.number().default(0),

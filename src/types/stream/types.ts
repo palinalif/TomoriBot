@@ -51,6 +51,9 @@ export interface StreamState {
   prefillMatched: number; // Number of prefill chars matched/stripped so far
   prefillInjected: boolean; // Whether the prefill has been injected into output
   prefillMatchFailed: boolean; // Whether prefill matching failed (no stripping)
+  thoughtSummarySegments: string[];
+  thoughtRawSegments: string[];
+  firstReplyUrl?: string;
 }
 
 /**
@@ -214,6 +217,9 @@ export function createDefaultStreamState(): StreamState {
     prefillMatched: 0,
     prefillInjected: false,
     prefillMatchFailed: false,
+    thoughtSummarySegments: [],
+    thoughtRawSegments: [],
+    firstReplyUrl: undefined,
   };
 }
 

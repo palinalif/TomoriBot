@@ -521,6 +521,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'A
 -- Add welcome channel configuration (March 2026)
 -- One configured channel/prompt/persona per server for join greetings
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_channel_disc_id', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'thought_log_channel_disc_id', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_prompt', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_persona_id', 'INTEGER', 'NULL');
 

@@ -79,6 +79,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
 	"nai_preset_name",
 	"rp_channel_ids",
 	"welcome_channel_disc_id",
+	"thought_log_channel_disc_id",
 	"welcome_prompt",
 	"welcome_persona_id",
 	"self_reply_limit",

@@ -662,6 +662,7 @@ export async function execute(
         const [
           autoChannelsValue,
           rpChannelsValue,
+          thoughtLogChannelValue,
           whitelistValue,
           whitelistRolesValue,
           randomTriggersValue,
@@ -669,6 +670,13 @@ export async function execute(
         ] = await Promise.all([
           formatChannelList(client, config.autoch_disc_ids, locale),
           formatChannelList(client, config.rp_channel_ids, locale),
+          formatChannelList(
+            client,
+            config.thought_log_channel_disc_id
+              ? [config.thought_log_channel_disc_id]
+              : [],
+            locale,
+          ),
           formatWhitelistEntries(client, whitelistChannels, locale),
           formatWhitelistRolesEntries(whitelistRoles, locale),
           formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
@@ -810,6 +818,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_rp_channels",
               value: rpChannelsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_thought_logs_channel",
+              value: thoughtLogChannelValue,
               inline: false,
             },
             {

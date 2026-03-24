@@ -31,15 +31,18 @@ Important: TomoriBot now sends **discrete messages**, not "edit the same message
 ### 1) Provider entry
 
 `tomoriChat` calls provider `streamToDiscord(...)`.  
+Before heavy response work starts, `tomoriChat` also starts a lock-scoped Discord typing keepalive.  
 Provider builds `StreamConfig` and delegates to `StreamOrchestrator.streamToDiscord(...)`.
 
 ### 2) Stream initialization
+
+`tomoriChat`:
+- refreshes Discord typing for the active channel lock until the lock is released
 
 `StreamOrchestrator`:
 - creates stream state/metrics
 - builds `TextProcessingConfig`
 - builds typing config from `humanizerDegree`
-- sends initial typing indicator
 - prepares optional output prefill
 
 ### 3) Per-chunk loop
@@ -83,6 +86,23 @@ When stream ends:
 - metrics finalization
 - accumulated output returned for short-term memory storage
 
+## Reasoning / Thought Logging
+
+Providers may emit displayable reasoning separately from visible reply text.
+
+- Stream adapters attach reasoning to normalized chunks via `ProcessedChunk.thoughts`
+- reasoning is classified as either `summary` or `raw`
+- `StreamOrchestrator` accumulates those thought segments separately from the visible reply buffer
+- thought text is not appended to `currentTurnModelParts`
+- thought text is not flushed to Discord as part of the normal reply
+- thought text is not stored in short-term memory
+
+On successful streamed turns, `StreamOrchestrator` returns the merged reasoning payload in `StreamResult.thoughtLog`, along with the first visible reply URL when one exists.
+
+`tomoriChat` merges thought logs across successful tool-call iterations and posts one final embed to the configured `tomori_configs.thought_log_channel_disc_id` channel after the full turn completes. If the configured channel is missing, inaccessible, or deleted, the main reply still succeeds and the thought-log post is skipped with a warning.
+
+Normal message triggers are disabled inside the configured thought-log channel so provider reasoning echoes cannot recursively trigger new chats there. Slash commands still work because they do not use `messageCreate`.
+
 ## Buffering and Flush Boundaries
 
 Primary flush triggers:
@@ -111,6 +131,11 @@ Overflow fallback:
 - sends via webhook with persona username/avatar
 - attempts webhook recovery on invalid webhook errors
 - falls back to regular bot message if webhook path fails
+
+### User impersonation
+- sends through a temporary webhook created with the impersonated user's display name/avatar
+- if webhook creation, webhook sending, or stream completion fails, the impersonation attempt fails closed
+- TomoriBot does not fall back to a normal bot-authored channel message for user impersonation replies or timeout/error notices
 
 ### Flood protection
 - `STREAMING_LIMITS.MAX_FLUSH_COUNT` caps messages per stream session in production
@@ -179,6 +204,7 @@ Loop control and max iterations are managed by `tomoriChat` (function-call safet
 | `FLUSH_BUFFER_SIZE_CODE_BLOCK` | `src/types/stream/types.ts` | Code-block overflow threshold |
 | `INACTIVITY_TIMEOUT_MS` | `src/types/stream/types.ts` | Stream inactivity timeout |
 | `MAX_FLUSH_COUNT` | `src/utils/security/rateLimiter.ts` | Max messages sent per stream session |
+| `DISCORD_TYPING_KEEPALIVE_INTERVAL_MS` | `.env` | Channel-lock typing refresh cadence while work is still active |
 | `humanizer_degree` | `tomori_configs` | Controls pacing and degree-dependent flush/humanization |
 
 ## Debugging Checklist

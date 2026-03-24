@@ -15,7 +15,7 @@ import type {
 	OpenAICompatibleStreamConfig,
 	OpenAICompatibleToolCallDelta,
 } from "@/providers/openaiCompatible/openaiCompatibleTypes";
-import type { FunctionCall } from "@/types/provider/interfaces";
+import type { FunctionCall, ThoughtLogEntry } from "@/types/provider/interfaces";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -41,6 +41,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 	private speakerGuardPendingTail = "";
 	private streamedTextTail = "";
 	private accumulatedReasoningContent = "";
+	private insideThinkBlock = false;
+	private pendingThinkBlockThoughtText = "";
 	private speakerGuardEnabled = false;
 	private activePersonaNameLower = "";
 	private knownSpeakerNamesLower = new Set<string>();
@@ -59,6 +61,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 		this.toolCallAccumulator.clear();
 		this.streamedTextTail = "";
 		this.accumulatedReasoningContent = "";
+		this.insideThinkBlock = false;
+		this.pendingThinkBlockThoughtText = "";
 
 		const apiUrl = this.options.resolveApiUrl(openAICompatibleConfig);
 		if (!apiUrl) {
@@ -235,7 +239,9 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 			}
 
 			for await (const chunk of streamOpenAICompatibleSseChunks(response)) {
-				const chunksToEmit = this.splitChunkWithTextAndToolSignals(chunk);
+				const sanitizedChunk = this.stripThinkBlocksFromChunkContent(chunk);
+				const chunksToEmit =
+					this.splitChunkWithTextAndToolSignals(sanitizedChunk);
 
 				for (const chunkToEmit of chunksToEmit) {
 					const deduplicatedChunk =
@@ -342,7 +348,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 		const openAIChunk = chunk.data as OpenAICompatibleStreamChunk;
 
 		if ("error" in openAIChunk && openAIChunk.error) {
-			return {
+			return this.attachPendingThoughts({
 				type: "error",
 				error: {
 					type: "api_error",
@@ -356,18 +362,19 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 					retryable: false,
 					originalError: openAIChunk.error,
 				},
-			};
+			});
 		}
 
 		const choice = openAIChunk.choices?.[0];
 		if (!choice) {
-			return {
+			return this.attachPendingThoughts({
 				type: "text",
 				content: "",
-			};
+			});
 		}
 
 		const metadata: Record<string, unknown> = {};
+		const thoughts: ThoughtLogEntry[] = [];
 		if (openAIChunk.usage) {
 			metadata.usage = openAIChunk.usage;
 			log.info(
@@ -376,13 +383,16 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 		}
 
 		const reasoningContent = choice.delta?.reasoning_content;
-		if (
-			this.options.preserveReasoningContent &&
-			typeof reasoningContent === "string" &&
-			reasoningContent.length > 0
-		) {
-			this.accumulatedReasoningContent += reasoningContent;
+		if (typeof reasoningContent === "string" && reasoningContent.length > 0) {
+			thoughts.push({
+				kind: "raw",
+				content: reasoningContent,
+			});
+			if (this.options.preserveReasoningContent) {
+				this.accumulatedReasoningContent += reasoningContent;
+			}
 		}
+		thoughts.push(...this.consumePendingThinkBlockThoughts());
 
 		if (choice.finish_reason === "tool_calls") {
 			if (choice.delta?.tool_calls && choice.delta.tool_calls.length > 0) {
@@ -394,10 +404,11 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 				log.warn(
 					`${this.options.adapterName}: finish_reason was 'tool_calls' but no tool call was accumulated`,
 				);
-				return {
+				return this.attachPendingThoughts({
 					type: "done",
+					thoughts,
 					metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-				};
+				});
 			}
 
 			let parsedArgs: Record<string, unknown> = {};
@@ -429,57 +440,64 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 
 			this.toolCallAccumulator.clear();
 			this.accumulatedReasoningContent = "";
-			return {
+			return this.attachPendingThoughts({
 				type: "function_call",
 				functionCall,
+				thoughts,
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-			};
+			});
 		}
 
 		if (choice.finish_reason === "stop") {
 			if (choice.delta?.content) {
-				return {
+				return this.attachPendingThoughts({
 					type: "text",
 					content: choice.delta.content,
+					thoughts,
 					metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-				};
+				});
 			}
-			return {
+			return this.attachPendingThoughts({
 				type: "done",
+				thoughts,
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-			};
+			});
 		}
 
 		if (choice.finish_reason === "length") {
 			log.warn(`${this.options.adapterName}: Response truncated due to max_tokens`);
-			return {
+			return this.attachPendingThoughts({
 				type: "done",
+				thoughts,
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-			};
+			});
 		}
 
 		if (choice.delta?.tool_calls && choice.delta.tool_calls.length > 0) {
 			this.accumulateToolCalls(choice.delta.tool_calls);
-			return {
+			return this.attachPendingThoughts({
 				type: "text",
 				content: "",
+				thoughts,
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-			};
+			});
 		}
 
 		if (choice.delta?.content) {
-			return {
+			return this.attachPendingThoughts({
 				type: "text",
 				content: choice.delta.content,
+				thoughts,
 				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-			};
+			});
 		}
 
-		return {
+		return this.attachPendingThoughts({
 			type: "text",
 			content: "",
+			thoughts,
 			metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-		};
+		});
 	}
 
 	extractFunctionCall(chunk: RawStreamChunk): FunctionCall | null {
@@ -582,6 +600,130 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 		}
 
 		return names;
+	}
+
+	private stripThinkBlocksFromChunkContent(
+		chunk: OpenAICompatibleStreamChunk,
+	): OpenAICompatibleStreamChunk {
+		if (!this.options.stripThinkBlocksFromContent) {
+			return chunk;
+		}
+
+		const firstChoice = chunk.choices?.[0];
+		const content = firstChoice?.delta?.content;
+		if (
+			!firstChoice?.delta ||
+			typeof content !== "string" ||
+			content.length === 0
+		) {
+			return chunk;
+		}
+
+		const strippedContent = this.stripThinkBlocks(content);
+		if (strippedContent === content) {
+			return chunk;
+		}
+
+		return {
+			...chunk,
+			choices: [
+				{
+					...firstChoice,
+					delta: {
+						...firstChoice.delta,
+						content: strippedContent,
+					},
+				},
+				...(chunk.choices?.slice(1) ?? []),
+			],
+		};
+	}
+
+	private stripThinkBlocks(text: string): string {
+		if (!text) {
+			return "";
+		}
+
+		let output = "";
+		let cursor = 0;
+
+		while (cursor < text.length) {
+			if (!this.insideThinkBlock) {
+				const startIdx = text.indexOf("<think>", cursor);
+				const endIdx = text.indexOf("</think>", cursor);
+
+				if (startIdx === -1 && endIdx === -1) {
+					output += text.slice(cursor);
+					break;
+				}
+
+				if (endIdx !== -1 && (startIdx === -1 || endIdx < startIdx)) {
+					output += text.slice(cursor, endIdx);
+					cursor = endIdx + "</think>".length;
+					continue;
+				}
+
+				if (startIdx !== -1) {
+					output += text.slice(cursor, startIdx);
+					this.insideThinkBlock = true;
+					cursor = startIdx + "<think>".length;
+				}
+			} else {
+				const endIdx = text.indexOf("</think>", cursor);
+				if (endIdx === -1) {
+					this.captureThinkBlockThoughtText(text.slice(cursor));
+					cursor = text.length;
+					break;
+				}
+
+				this.captureThinkBlockThoughtText(text.slice(cursor, endIdx));
+				this.insideThinkBlock = false;
+				cursor = endIdx + "</think>".length;
+			}
+		}
+
+		return output;
+	}
+
+	private captureThinkBlockThoughtText(text: string): void {
+		if (!this.options.captureThinkBlocksAsThoughts || !text) {
+			return;
+		}
+
+		this.pendingThinkBlockThoughtText += text;
+	}
+
+	private consumePendingThinkBlockThoughts(): ThoughtLogEntry[] {
+		if (!this.pendingThinkBlockThoughtText) {
+			return [];
+		}
+
+		const thoughtText = this.pendingThinkBlockThoughtText;
+		this.pendingThinkBlockThoughtText = "";
+		return [
+			{
+				kind: "raw",
+				content: thoughtText,
+			},
+		];
+	}
+
+	private attachPendingThoughts(chunk: ProcessedChunk): ProcessedChunk {
+		const pendingThoughts = this.consumePendingThinkBlockThoughts();
+		const chunkThoughts = chunk.thoughts ?? [];
+		const thoughts =
+			chunkThoughts.length > 0 || pendingThoughts.length > 0
+				? [...chunkThoughts, ...pendingThoughts]
+				: undefined;
+
+		if (!thoughts) {
+			return chunk;
+		}
+
+		return {
+			...chunk,
+			thoughts,
+		};
 	}
 
 	private isLikelySpeakerLabel(rawLabel: string): boolean {

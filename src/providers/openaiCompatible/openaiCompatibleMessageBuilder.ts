@@ -61,6 +61,7 @@ export async function buildOpenAICompatibleMessages(
 
 		const role = item.role === "user" ? "user" : "assistant";
 		const contentParts: Array<Record<string, unknown>> = [];
+		const pendingAssistantImageParts: Array<Record<string, unknown>> = [];
 
 		for (const part of item.parts) {
 			if (part.type === "text") {
@@ -77,8 +78,48 @@ export async function buildOpenAICompatibleMessages(
 
 			const imagePart = await convertImagePartToOpenAIContentPart(part);
 			if (imagePart) {
-				contentParts.push(imagePart);
+				if (role === "assistant" && imagePart.type === "image_url") {
+					pendingAssistantImageParts.push(imagePart);
+				} else {
+					contentParts.push(imagePart);
+				}
 			}
+		}
+
+		if (role === "assistant") {
+			const assistantText = contentParts
+				.filter(
+					(part): part is { type: "text"; text: string } =>
+						part.type === "text" && typeof part.text === "string",
+				)
+				.map((part) => part.text)
+				.join("\n");
+
+			if (assistantText) {
+				messages.push({
+					role,
+					content: assistantText,
+				});
+			}
+
+			if (pendingAssistantImageParts.length > 0) {
+				messages.push({
+					role: "user",
+					content: [
+						{
+							type: "text",
+							text: `[System: The previous assistant message included ${pendingAssistantImageParts.length === 1 ? "the following image" : "the following images"}.]`,
+						},
+						...pendingAssistantImageParts,
+					],
+				});
+			}
+
+			if (!assistantText && pendingAssistantImageParts.length === 0) {
+				continue;
+			}
+
+			continue;
 		}
 
 		if (contentParts.length === 0) {

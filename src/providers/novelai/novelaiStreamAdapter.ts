@@ -17,7 +17,10 @@
  * - Uses `stop_sequences` to prevent multi-speaker generation
  */
 
-import type { FunctionCall } from "@/types/provider/interfaces";
+import type {
+  FunctionCall,
+  ThoughtLogEntry,
+} from "@/types/provider/interfaces";
 import {
   ContextItemTag,
   type StructuredContextItem,
@@ -220,6 +223,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
   private toolPreludeBuffer = "";
   private toolCallBuffer = "";
   private insideThinkBlock = false;
+  private pendingThinkBlockThoughtText = "";
   private textScanBuffer = "";
 
   /**
@@ -325,6 +329,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     this.pendingContinuationPrefill = undefined;
     this.kayraHoldBuffer = "";
     this.kayraSpeakerBoundaryStopPending = false;
+    this.pendingThinkBlockThoughtText = "";
     this.toolDefinitions = this.normalizeToolDefinitions(config.tools ?? []);
     this.toolsEnabled = this.toolDefinitions.length > 0;
     this.resetToolParsingState();
@@ -608,6 +613,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
     const novelaiChunk = chunk.data as NovelAIStreamChunk & {
       error?: ProviderError;
     };
+    const withThoughts = (result: ProcessedChunk): ProcessedChunk =>
+      this.attachPendingThoughts(result);
 
     // Handle errors first
     if (novelaiChunk.error) {
@@ -616,21 +623,21 @@ export class NovelaiStreamAdapter implements StreamProvider {
         typeof novelaiChunk.error === "object" &&
         "type" in novelaiChunk.error
       ) {
-        return {
+        return withThoughts({
           type: "error",
           error: novelaiChunk.error as ProviderError,
-        };
+        });
       }
 
       // Otherwise convert string error
-      return {
+      return withThoughts({
         type: "error",
         error: {
           type: "api_error",
           message: novelaiChunk.error as unknown as string,
           retryable: false,
         },
-      };
+      });
     }
 
     // Check for completion
@@ -655,10 +662,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
             this.generationBuffer = "";
             this.sentenceTrailingBuffer = "";
             this.resetToolParsingState();
-            return {
+            return withThoughts({
               type: "function_call",
               functionCall: parsedCall,
-            };
+            });
           }
         }
         log.warn(
@@ -694,10 +701,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
               this.generationBuffer = "";
               this.sentenceTrailingBuffer = "";
               this.resetToolParsingState();
-              return {
+              return withThoughts({
                 type: "function_call",
                 functionCall: parsedCall,
-              };
+              });
             }
           }
         }
@@ -748,21 +755,21 @@ export class NovelaiStreamAdapter implements StreamProvider {
       // The stream's own termination signals "done" to the orchestrator.
       const flushContent = kayraFinalFlush || finalFlush;
       if (flushContent) {
-        return {
+        return withThoughts({
           type: "text",
           content: flushContent,
-        };
+        });
       }
 
-      return {
+      return withThoughts({
         type: "done",
-      };
+      });
     }
 
     // Check for text content
     if (novelaiChunk.token) {
       if (this.toolsEnabled) {
-        return this.processTokenWithToolParsing(novelaiChunk.token);
+        return withThoughts(this.processTokenWithToolParsing(novelaiChunk.token));
       }
 
       // GLM 4.6: Strip any <think>...</think> blocks before visible text processing.
@@ -770,19 +777,19 @@ export class NovelaiStreamAdapter implements StreamProvider {
       if (this.isGlmModel) {
         const stripped = this.stripThinkBlocks(novelaiChunk.token);
         if (!stripped) {
-          return { type: "text", content: "" };
+          return withThoughts({ type: "text", content: "" });
         }
-        return this.processVisibleText(stripped);
+        return withThoughts(this.processVisibleText(stripped));
       }
 
-      return this.processVisibleText(novelaiChunk.token);
+      return withThoughts(this.processVisibleText(novelaiChunk.token));
     }
 
     // Default: empty chunk
-    return {
+    return withThoughts({
       type: "text",
       content: "",
-    };
+    });
   }
 
   /**
@@ -1897,10 +1904,12 @@ export class NovelaiStreamAdapter implements StreamProvider {
       } else {
         const endIdx = text.indexOf("</think>", cursor);
         if (endIdx === -1) {
+          this.captureThinkBlockThoughtText(text.slice(cursor));
           cursor = text.length;
           break;
         }
 
+        this.captureThinkBlockThoughtText(text.slice(cursor, endIdx));
         this.insideThinkBlock = false;
         cursor = endIdx + "</think>".length;
       }
@@ -1915,6 +1924,47 @@ export class NovelaiStreamAdapter implements StreamProvider {
     this.toolCallBuffer = "";
     this.textScanBuffer = "";
     this.insideThinkBlock = false;
+  }
+
+  private captureThinkBlockThoughtText(text: string): void {
+    if (!text) {
+      return;
+    }
+
+    this.pendingThinkBlockThoughtText += text;
+  }
+
+  private consumePendingThinkBlockThoughts(): ThoughtLogEntry[] {
+    if (!this.pendingThinkBlockThoughtText) {
+      return [];
+    }
+
+    const content = this.pendingThinkBlockThoughtText;
+    this.pendingThinkBlockThoughtText = "";
+    return [
+      {
+        kind: "raw",
+        content,
+      },
+    ];
+  }
+
+  private attachPendingThoughts(chunk: ProcessedChunk): ProcessedChunk {
+    const pendingThoughts = this.consumePendingThinkBlockThoughts();
+    const chunkThoughts = chunk.thoughts ?? [];
+    const thoughts =
+      chunkThoughts.length > 0 || pendingThoughts.length > 0
+        ? [...chunkThoughts, ...pendingThoughts]
+        : undefined;
+
+    if (!thoughts) {
+      return chunk;
+    }
+
+    return {
+      ...chunk,
+      thoughts,
+    };
   }
 
   private normalizeToolDefinitions(
