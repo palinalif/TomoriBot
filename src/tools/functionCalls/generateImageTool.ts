@@ -25,6 +25,10 @@ import {
   providerSupportsFeature,
   resolveProviderFeatureImplementation,
 } from "@/utils/provider/providerInfoRegistry";
+import {
+  ZAI_CODING_IMAGES_GENERATIONS_URL,
+  ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+} from "@/providers/zai/zaiShared";
 
 /**
  * Tool for generating images using Gemini Imagen API
@@ -802,6 +806,10 @@ export class GenerateImageTool extends BaseTool {
           model: modelCodename,
           prompt,
           aspectRatio,
+          endpointUrl:
+            context.provider === "zaicoding"
+              ? ZAI_CODING_IMAGES_GENERATIONS_URL
+              : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
         });
         generatedImageData = result.imageData;
       } else {

@@ -74,11 +74,16 @@ VALUES
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
   ('deepseek', 'deepseek-chat', false, true, false, false, false, true, false, false, false, false, true, 'Default DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekのデフォルトチャットモデル'),
   ('deepseek', 'deepseek-reasoner', true, false, true, false, false, true, false, false, false, false, true, 'Reasoning-focused DeepSeek model with thinking mode, seeded tool use, and JSON structured output', 'シンキングモード、シード済みツール利用、JSON構造化出力に対応した、推論特化のDeepSeekモデル'),
-  -- Z.ai (Coding) Models (GLM family with reasoning, vision, and tool support)
-  ('zai', 'glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),
-  ('zai', 'glm-4.7', true, true, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model with thinking mode, tool use, and structured output', 'シンキングモード、ツール利用、構造化出力に対応した推論対応GLMモデル'),
-  ('zai', 'glm-4.7-flash', false, false, false, false, true, true, false, false, false, false, true, 'Fast and free GLM model with tool use and structured output', 'ツール利用と構造化出力に対応した高速で無料のGLMモデル'),
-  ('zai', 'glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model with advanced reasoning, tool use, and structured output', '高度な推論、ツール利用、構造化出力に対応した最も高性能なGLMモデル'),
+  -- Z.ai (Coding) Models (plain codenames preserved for backward compatibility)
+  ('zaicoding', 'glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),
+  ('zaicoding', 'glm-4.7', true, true, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model with thinking mode, tool use, and structured output', 'シンキングモード、ツール利用、構造化出力に対応した推論対応GLMモデル'),
+  ('zaicoding', 'glm-4.7-flash', false, false, false, false, true, true, false, false, false, false, true, 'Fast GLM model routed through the Z.ai Coding endpoint', 'Z.ai Codingエンドポイント経由で利用する高速GLMモデル'),
+  ('zaicoding', 'glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model with advanced reasoning, tool use, and structured output', '高度な推論、ツール利用、構造化出力に対応した最も高性能なGLMモデル'),
+  -- Z.ai General API Models (prefixed codenames allow coexistence with coding rows)
+  ('zai', 'zai/glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用するビジョン対応GLMモデル'),
+  ('zai', 'zai/glm-4.7', true, true, true, false, false, true, false, false, false, false, true, 'Reasoning-capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する推論対応GLMモデル'),
+  ('zai', 'zai/glm-4.7-flash', false, false, false, false, true, true, false, false, false, false, true, 'Fast and free GLM model from the general Z.ai API', '通常のZ.ai APIで利用する高速で無料のGLMモデル'),
+  ('zai', 'zai/glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する最も高性能なGLMモデル'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint
   ('custom', 'custom/bootstrap', false, false, false, false, true, false, false, false, false, true, false, 'Self-hosted OpenAI-compatible endpoint (Ollama, KoboldCPP, vLLM, LocalAI)', 'セルフホスト型OpenAI互換エンドポイント（Ollama、KoboldCPP、vLLM、LocalAI）')
@@ -98,6 +103,60 @@ ON CONFLICT (llm_codename) DO UPDATE SET
   supports_structoutput = EXCLUDED.supports_structoutput,
   llm_provider = EXCLUDED.llm_provider,
   updated_at = CURRENT_TIMESTAMP;
+
+-- Migrate previously-saved legacy Z.ai Coding snapshots to the renamed coding provider.
+-- This must only touch old plain-GLM snapshots. New general Z.ai snapshots use
+-- prefixed `zai/...` model rows and should remain mapped to `zai`.
+DO $$
+BEGIN
+    UPDATE saved_provider_configs spc
+    SET provider = 'zaicoding'
+    WHERE spc.provider = 'zai'
+      AND (
+          EXISTS (
+              SELECT 1
+              FROM llms l
+              WHERE l.llm_id = spc.llm_id
+                AND l.llm_provider = 'zaicoding'
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM llms l
+              WHERE l.llm_id = spc.vision_llm_id
+                AND l.llm_provider = 'zaicoding'
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM image_diffusion_models dm
+              WHERE dm.diffusion_model_id = spc.diffusion_model_id
+                AND dm.provider = 'zaicoding'
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(COALESCE(spc.fallback_llm_ids, '[]'::JSONB)) AS fallback(llm_id_text)
+              JOIN llms l
+                ON l.llm_id = fallback.llm_id_text::INTEGER
+              WHERE l.llm_provider = 'zaicoding'
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE(spc.channel_llm_overrides, '[]'::JSONB)) AS override(entry)
+              JOIN llms l
+                ON l.llm_id = (override.entry ->> 'llm_id')::INTEGER
+              WHERE l.llm_provider = 'zaicoding'
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE(spc.persona_llm_overrides, '[]'::JSONB)) AS override(entry)
+              JOIN llms l
+                ON l.llm_id = (override.entry ->> 'llm_id')::INTEGER
+              WHERE l.llm_provider = 'zaicoding'
+          )
+      );
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'saved_provider_configs not found, skipping provider migration';
+END $$;
 
 -- Ensure all required columns exist in image_diffusion_models table
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_default', 'BOOLEAN', 'false');
@@ -179,7 +238,11 @@ VALUES
    'Latest in-house image generation model developed by ByteDance. Cheap and high performance',
    'ByteDanceが開発した最新の自社製画像生成モデル。低コストかつ高性能'),
   -- Z.ai (Coding) Image Generation Models
-  ('zai', 'glm-image', true, false, false, false,
+  ('zaicoding', 'glm-image', true, false, false, false,
+   'Z.ai Coding image generation model with HD quality output',
+   'HD品質の出力に対応したZ.ai Coding画像生成モデル'),
+  -- Z.ai General API Image Generation Models
+  ('zai', 'zai/glm-image', true, false, false, false,
    'Z.ai native image generation model with HD quality output',
    'HD品質の出力に対応したZ.aiネイティブ画像生成モデル'),
   -- NovelAI Diffusion Models

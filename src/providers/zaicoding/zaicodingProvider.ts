@@ -8,12 +8,12 @@ import type {
 	Message,
 } from "discord.js";
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
-import { zaiProviderInfo } from "@/providers/zai/providerInfo";
+import { zaicodingProviderInfo } from "@/providers/zaicoding/providerInfo";
 import {
-	ZaiStreamAdapter,
-	type ZaiStreamConfig,
-} from "@/providers/zai/zaiStreamAdapter";
-import { getZaiToolAdapter } from "@/providers/zai/zaiToolAdapter";
+	ZaicodingStreamAdapter,
+	type ZaicodingStreamConfig,
+} from "@/providers/zaicoding/zaicodingStreamAdapter";
+import { getZaicodingToolAdapter } from "@/providers/zaicoding/zaicodingToolAdapter";
 import {
 	createOpenAICompatibleHttpError,
 	normalizeOpenAICompatibleProviderError,
@@ -21,8 +21,8 @@ import {
 import { callZaiStructuredJSON } from "@/providers/zai/zaiStructuredOutput";
 import { generateZaiNativeImage } from "@/providers/zai/zaiImageGeneration";
 import {
-	toZaiApiModelName,
-	ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+	ZAI_CODING_CHAT_COMPLETIONS_URL,
+	ZAI_CODING_IMAGES_GENERATIONS_URL,
 } from "@/providers/zai/zaiShared";
 import type { TomoriState } from "@/types/db/schema";
 import type { StructuredContextItem } from "@/types/misc/context";
@@ -57,42 +57,37 @@ import {
 } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
 
-const DEFAULT_ZAI_MODEL = "zai/glm-4.7";
+const DEFAULT_ZAI_CODING_MODEL = "glm-4.7";
 
-export interface ZaiProviderConfig extends ProviderConfig {
+export interface ZaicodingProviderConfig extends ProviderConfig {
 	endpointUrl: string;
 	seesImages?: boolean;
 	seesVideos?: boolean;
 }
 
 /**
- * Z.ai LLM Provider.
+ * Z.ai (Coding) LLM Provider.
  * Provides chat, reasoning, structured output, and native image generation
- * via the Z.ai general API (OpenAI-compatible family).
+ * via the Z.ai Coding API.
  */
-export class ZaiProvider
+export class ZaicodingProvider
 	extends BaseLLMProvider
 	implements LLMProvider, SupportsStructuredOutput, SupportsNativeImageGeneration
 {
 	getInfo(): ProviderInfo {
-		return zaiProviderInfo;
+		return zaicodingProviderInfo;
 	}
 
-	/**
-	 * Validate a Z.ai API key by sending a minimal request.
-	 * @param apiKey - The API key to validate
-	 * @returns Validation result indicating success or failure with error details
-	 */
 	async validateApiKey(apiKey: string): Promise<ApiKeyValidationResult> {
 		try {
-			const response = await fetch(ZAI_GENERAL_CHAT_COMPLETIONS_URL, {
+			const response = await fetch(ZAI_CODING_CHAT_COMPLETIONS_URL, {
 				method: "POST",
 				headers: {
 					Authorization: `Bearer ${apiKey}`,
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({
-					model: "glm-4.7-flash",
+					model: "glm-4.7",
 					messages: [{ role: "user", content: "ping" }],
 					max_tokens: 1,
 					stream: false,
@@ -109,7 +104,7 @@ export class ZaiProvider
 
 			return { valid: true };
 		} catch (error) {
-			log.error("Z.ai API key validation failed", error as Error);
+			log.error("Z.ai Coding API key validation failed", error as Error);
 			return {
 				valid: false,
 				error: normalizeOpenAICompatibleProviderError(error, {
@@ -119,60 +114,42 @@ export class ZaiProvider
 		}
 	}
 
-	/**
-	 * Format a provider error into a user-friendly localized description.
-	 * @param error - The provider error object
-	 * @param locale - Locale for the error message
-	 * @returns Localized error description or null
-	 */
 	formatErrorDescription(error: ProviderError, locale: string): string | null {
-		const adapter = new ZaiStreamAdapter();
+		const adapter = new ZaicodingStreamAdapter();
 		return adapter.createErrorDescription(error, locale);
 	}
 
-	/**
-	 * Call Z.ai with structured JSON output.
-	 * @param request - Structured JSON request parameters
-	 * @param responseSchema - JSON Schema for expected response
-	 * @param zodSchema - Zod schema for runtime validation
-	 * @returns Parsed and validated structured output
-	 */
 	async callStructuredJSON<T>(
 		request: ProviderStructuredJsonRequest,
 		responseSchema: Record<string, unknown>,
 		zodSchema: ZodType<T>,
 	): Promise<StructuredOutputResult<T>> {
 		return await callZaiStructuredJSON(
-			request,
+			{
+				...request,
+				endpointUrl: request.endpointUrl || ZAI_CODING_CHAT_COMPLETIONS_URL,
+			},
 			responseSchema,
 			zodSchema,
 		);
 	}
 
-	/**
-	 * Generate an image using Z.ai's native image generation API.
-	 * @param request - Image generation request with prompt and aspect ratio
-	 * @returns Generated image data as base64 with MIME type
-	 */
 	async generateNativeImage(
 		request: ProviderNativeImageGenerationRequest,
 	): Promise<ProviderNativeImageGenerationResult> {
-		return await generateZaiNativeImage(request);
+		return await generateZaiNativeImage({
+			...request,
+			endpointUrl: request.endpointUrl || ZAI_CODING_IMAGES_GENERATIONS_URL,
+		});
 	}
 
-	/**
-	 * Get available tools formatted for Z.ai's OpenAI-compatible tool calling.
-	 * @param tomoriState - Current server state
-	 * @param streamingContext - Optional streaming context for filtering
-	 * @returns Array of tool definitions in OpenAI format
-	 */
 	async getTools(
 		tomoriState: TomoriState,
 		streamingContext?: StreamingContext,
 	): Promise<Array<Record<string, unknown>>> {
 		if (!tomoriState.llm.has_tools) {
 			log.info(
-				"Z.ai provider: Model does not support tools (seeded capability)",
+				"Z.ai Coding provider: Model does not support tools (seeded capability)",
 			);
 			return [];
 		}
@@ -202,13 +179,13 @@ export class ZaiProvider
 				builtInTools: availableBuiltInTools,
 				mcpFunctionNames,
 				totalCount,
-			} = await getAvailableToolsWithMCP("zai", toolStateForContext);
+			} = await getAvailableToolsWithMCP("zaicoding", toolStateForContext);
 
 			let finalBuiltInTools = availableBuiltInTools;
 			if (streamingContext) {
 				const minimalContext = {
 					streamContext: streamingContext,
-					provider: "zai" as const,
+					provider: "zaicoding" as const,
 					channel: {} as BaseGuildTextChannel,
 					client: {} as Client,
 					tomoriState,
@@ -219,18 +196,18 @@ export class ZaiProvider
 					const isContextAvailable =
 						"isAvailableForContext" in tool &&
 						typeof tool.isAvailableForContext === "function"
-							? tool.isAvailableForContext("zai", minimalContext)
+							? tool.isAvailableForContext("zaicoding", minimalContext)
 							: true;
 
 					return isContextAvailable;
 				});
 
 				log.info(
-					`Applied Z.ai streaming context filtering: ${availableBuiltInTools.length} -> ${finalBuiltInTools.length} built-in tools`,
+					`Applied Z.ai Coding streaming context filtering: ${availableBuiltInTools.length} -> ${finalBuiltInTools.length} built-in tools`,
 				);
 			}
 
-			const adapter = getZaiToolAdapter();
+			const adapter = getZaicodingToolAdapter();
 			const allToolsConfig =
 				await adapter.getAllToolsInOpenAICompatibleFormat(
 					finalBuiltInTools,
@@ -239,13 +216,13 @@ export class ZaiProvider
 				);
 
 			log.info(
-				`Z.ai provider tools loaded: ${finalBuiltInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools`,
+				`Z.ai Coding provider tools loaded: ${finalBuiltInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools`,
 			);
 
 			return allToolsConfig;
 		} catch (error) {
 			log.error(
-				`Failed to get tools for Z.ai provider: ${tomoriState.llm.llm_codename}`,
+				`Failed to get tools for Z.ai Coding provider: ${tomoriState.llm.llm_codename}`,
 				error as Error,
 			);
 			return [];
@@ -253,25 +230,19 @@ export class ZaiProvider
 	}
 
 	async getDefaultModel(): Promise<string> {
-		return DEFAULT_ZAI_MODEL;
+		return DEFAULT_ZAI_CODING_MODEL;
 	}
 
-	/**
-	 * Create a provider config from TomoriState.
-	 * @param tomoriState - Current server state
-	 * @param apiKey - Decrypted API key
-	 * @returns Provider config ready for streaming
-	 */
 	async createConfig(
 		tomoriState: TomoriState,
 		apiKey: string,
-	): Promise<ZaiProviderConfig> {
-		const config: ZaiProviderConfig = {
-			model: toZaiApiModelName(tomoriState.llm.llm_codename),
+	): Promise<ZaicodingProviderConfig> {
+		const config: ZaicodingProviderConfig = {
+			model: tomoriState.llm.llm_codename,
 			apiKey,
 			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 4096,
-			endpointUrl: ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+			endpointUrl: ZAI_CODING_CHAT_COMPLETIONS_URL,
 			seesImages: tomoriState.llm.sees_images,
 			seesVideos: tomoriState.llm.sees_videos,
 			...(tomoriState.config.llm_top_p < 1.0 && {
@@ -298,26 +269,6 @@ export class ZaiProvider
 		return config;
 	}
 
-	/**
-	 * Stream a Z.ai response to Discord using the OpenAI-compatible stream pipeline.
-	 * @param channel - Discord channel to stream to
-	 * @param client - Discord client instance
-	 * @param tomoriState - Current server state
-	 * @param config - Provider config from createConfig
-	 * @param contextItems - Structured context items for the conversation
-	 * @param currentTurnModelParts - Current turn model parts
-	 * @param emojiStrings - Optional emoji strings for the response
-	 * @param functionInteractionHistory - Optional function call history
-	 * @param initialInteraction - Optional initial command interaction
-	 * @param replyToMessage - Optional message to reply to
-	 * @param streamingContext - Optional streaming context
-	 * @param userLocale - User locale for error messages
-	 * @param webhook - Optional webhook for persona identity
-	 * @param personaAvatarUrl - Optional persona avatar URL
-	 * @param personaUsername - Optional persona username
-	 * @param prefixStrippingName - Optional prefix stripping name
-	 * @returns Stream result with status and data
-	 */
 	async streamToDiscord(
 		channel:
 			| BaseGuildTextChannel
@@ -346,12 +297,12 @@ export class ZaiProvider
 		prefixStrippingName?: string,
 	): Promise<StreamResult> {
 		log.info(
-			`ZaiProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`,
+			`ZaicodingProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`,
 		);
 
 		try {
-			const zaiConfig = config as ZaiProviderConfig;
-			const streamConfig: ZaiStreamConfig = {
+			const zaiConfig = config as ZaicodingProviderConfig;
+			const streamConfig: ZaicodingStreamConfig = {
 				...zaiConfig,
 				maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
 				flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
@@ -370,12 +321,14 @@ export class ZaiProvider
 				isManuallyTriggered: streamingContext?.isManuallyTriggered,
 			};
 
-			// Z.ai uses a single endpoint — no beta URL needed for prefill
 			if (streamingContext && tomoriState.llm.has_tools) {
 				log.info(
-					"ZaiProvider: Reloading tools with streaming context for context-aware availability",
+					"ZaicodingProvider: Reloading tools with streaming context for context-aware availability",
 				);
-				streamConfig.tools = await this.getTools(tomoriState, streamingContext);
+				streamConfig.tools = await this.getTools(
+					tomoriState,
+					streamingContext,
+				);
 			}
 
 			const streamContext: StreamContext = {
@@ -388,7 +341,7 @@ export class ZaiProvider
 				currentTurnModelParts,
 				emojiStrings,
 				functionInteractionHistory,
-				provider: "zai",
+				provider: "zaicoding",
 				locale: userLocale ?? "en-US",
 				suppressUserErrors: streamingContext?.suppressUserErrors,
 				rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
@@ -399,13 +352,11 @@ export class ZaiProvider
 				personaUsername,
 				prefixStrippingName,
 				forcedMentions: streamingContext?.forcedMentions,
-
-				// External abort signal for SDK call timeout cancellation
 				abortSignal: streamingContext?.abortSignal,
 			};
 
 			const orchestrator = new StreamOrchestrator();
-			const adapter = new ZaiStreamAdapter();
+			const adapter = new ZaicodingStreamAdapter();
 			const result = await orchestrator.streamToDiscord(
 				adapter,
 				streamConfig,
@@ -413,12 +364,12 @@ export class ZaiProvider
 			);
 
 			log.info(
-				`ZaiProvider: Streaming completed with status: ${result.status}`,
+				`ZaicodingProvider: Streaming completed with status: ${result.status}`,
 			);
 			return result;
 		} catch (error) {
 			log.error(
-				`ZaiProvider streaming error for server ${tomoriState.server_id}, model ${config.model}, channel ${channel.id}`,
+				`ZaicodingProvider streaming error for server ${tomoriState.server_id}, model ${config.model}, channel ${channel.id}`,
 				error as Error,
 			);
 

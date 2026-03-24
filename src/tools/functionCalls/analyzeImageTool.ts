@@ -14,6 +14,11 @@ import type {
 } from "@/types/tool/interfaces";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { log } from "@/utils/misc/logger";
+import {
+	toZaiApiModelName,
+	ZAI_CODING_CHAT_COMPLETIONS_URL,
+	ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+} from "@/providers/zai/zaiShared";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -21,7 +26,8 @@ import { log } from "@/utils/misc/logger";
  */
 const PROVIDER_CHAT_COMPLETIONS_URLS: Record<string, string> = {
 	openrouter: "https://openrouter.ai/api/v1/chat/completions",
-	zai: "https://api.z.ai/api/coding/paas/v4/chat/completions",
+	zai: ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+	zaicoding: ZAI_CODING_CHAT_COMPLETIONS_URL,
 	deepseek: "https://api.deepseek.com/chat/completions",
 };
 
@@ -155,7 +161,10 @@ export class AnalyzeImageTool extends BaseTool {
 
 			// 6. Resolve API model name and provider from the vision LLM row
 			const provider = visionLlm.llm_provider.toLowerCase();
-			const apiModelName = visionLlm.llm_codename;
+			const apiModelName =
+				provider === "zai" || provider === "zaicoding"
+					? toZaiApiModelName(visionLlm.llm_codename)
+					: visionLlm.llm_codename;
 
 			// 7. Route to the appropriate API based on provider family
 			let analysisResult: string;
@@ -168,7 +177,7 @@ export class AnalyzeImageTool extends BaseTool {
 					prompt,
 				);
 			} else {
-				// OpenAI-compatible providers (openrouter, zai, deepseek, custom)
+				// OpenAI-compatible providers (openrouter, zai, zaicoding, deepseek, custom)
 				const endpointUrl = this.getEndpointUrl(provider, context);
 				analysisResult = await this.callOpenAICompatibleVision(
 					apiKey,

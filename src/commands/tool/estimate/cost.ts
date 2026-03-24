@@ -49,15 +49,13 @@ import {
   DeepseekProvider,
   type DeepseekProviderConfig,
 } from "@/providers/deepseek/deepseekProvider";
-import {
-  ZaiProvider,
-  type ZaiProviderConfig,
-} from "@/providers/zai/zaiProvider";
 import { buildOpenAICompatibleMessages } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
 import {
+  getProviderDisplayName,
   normalizeProviderName,
   resolveProviderFeatureImplementation,
 } from "@/utils/provider/providerInfoRegistry";
+import { ProviderFactory } from "@/utils/provider/providerFactory";
 
 /**
  * Token estimation constants
@@ -126,13 +124,23 @@ const DEEPSEEK_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
   0.42,
   0,
 );
-const ZAI_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+const ZAI_GENERAL_INPUT_PRICE_PER_MILLION = parseFloatEnv(
   process.env.HELP_COST_ZAI_INPUT_PRICE_PER_MILLION,
+  0.6,
+  0,
+);
+const ZAI_GENERAL_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ZAI_OUTPUT_PRICE_PER_MILLION,
+  2.2,
+  0,
+);
+const ZAICODING_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ZAICODING_INPUT_PRICE_PER_MILLION,
   1.0,
   0,
 );
-const ZAI_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
-  process.env.HELP_COST_ZAI_OUTPUT_PRICE_PER_MILLION,
+const ZAICODING_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ZAICODING_OUTPUT_PRICE_PER_MILLION,
   3.0,
   0,
 );
@@ -155,7 +163,21 @@ const YOUTUBE_URL_PATTERNS = [
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
 ];
 
-type LiveProvider = "google" | "openrouter" | "deepseek" | "zai";
+type LiveProvider =
+  | "google"
+  | "openrouter"
+  | "deepseek"
+  | "zai"
+  | "zaicoding";
+
+interface ZaiFamilyProviderConfig {
+  model: string;
+  apiKey: string;
+  temperature: number;
+  endpointUrl: string;
+  seesImages?: boolean;
+  tools?: Array<Record<string, unknown>>;
+}
 
 /**
  * Scenario definitions for cost estimation
@@ -647,16 +669,37 @@ function formatPricePerMillion(value: number): string {
 }
 
 function resolveProvider(providerName: string): LiveProvider | null {
+  const normalizedProvider = normalizeProviderName(providerName);
   const implementation = resolveProviderFeatureImplementation(
-    providerName,
+    normalizedProvider,
     "liveTokenCounting",
   );
-  return implementation === "google" ||
-    implementation === "openrouter" ||
-    implementation === "deepseek" ||
+  if (
+    normalizedProvider === "google" &&
+    implementation === "google"
+  ) {
+    return "google";
+  }
+  if (
+    normalizedProvider === "openrouter" &&
+    implementation === "openrouter"
+  ) {
+    return "openrouter";
+  }
+  if (
+    normalizedProvider === "deepseek" &&
+    implementation === "deepseek"
+  ) {
+    return "deepseek";
+  }
+  if (
+    (normalizedProvider === "zai" ||
+      normalizedProvider === "zaicoding") &&
     implementation === "zai"
-    ? implementation
-    : null;
+  ) {
+    return normalizedProvider;
+  }
+  return null;
 }
 
 function providerHasNoUsageCosts(providerName: string): boolean {
@@ -1274,15 +1317,16 @@ const ZAI_REASONING_MODELS = ["glm-5", "glm-4.7"];
  * @returns Live cost measurement with Z.ai pricing
  */
 async function measureZaiInputTokens(
+  providerName: "zai" | "zaicoding",
   tomoriState: TomoriState,
   apiKey: string,
   contextItems: StructuredContextItem[],
 ): Promise<LiveCostMeasurement> {
-  const provider = new ZaiProvider();
+  const provider = await ProviderFactory.getProviderByName(providerName);
   const providerConfig = (await provider.createConfig(
     tomoriState,
     apiKey,
-  )) as ZaiProviderConfig;
+  )) as ZaiFamilyProviderConfig;
   const messages = await buildOpenAICompatibleMessages({
     adapterName: "ToolEstimateCostZai",
     contextItems,
@@ -1331,12 +1375,18 @@ async function measureZaiInputTokens(
   }
 
   return {
-    provider: "zai",
-    providerLabel: "Z.ai (Coding)",
+    provider: providerName,
+    providerLabel: getProviderDisplayName(providerName),
     model: providerConfig.model,
     inputTokens: measuredPromptTokens,
-    inputPricePerMillion: ZAI_INPUT_PRICE_PER_MILLION,
-    outputPricePerMillion: ZAI_OUTPUT_PRICE_PER_MILLION,
+    inputPricePerMillion:
+      providerName === "zaicoding"
+        ? ZAICODING_INPUT_PRICE_PER_MILLION
+        : ZAI_GENERAL_INPUT_PRICE_PER_MILLION,
+    outputPricePerMillion:
+      providerName === "zaicoding"
+        ? ZAICODING_OUTPUT_PRICE_PER_MILLION
+        : ZAI_GENERAL_OUTPUT_PRICE_PER_MILLION,
   };
 }
 
@@ -1684,6 +1734,7 @@ export async function execute(
                   contextItems,
                 )
               : await measureZaiInputTokens(
+                  provider,
                   tomoriState,
                   decryptedApiKey,
                   contextItems,

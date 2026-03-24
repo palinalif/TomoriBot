@@ -979,7 +979,8 @@ export async function execute(
 				"commands.config.provider.switch.success_novelai_description";
 		} else if (
 			!isSameProvider &&
-			normalizedProvider === "zai" &&
+			(normalizedProvider === "zai" ||
+				normalizedProvider === "zaicoding") &&
 			!isRestoringFromSaved
 		) {
 			successDescriptionKey =

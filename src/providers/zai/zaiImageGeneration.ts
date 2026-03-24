@@ -3,9 +3,10 @@ import type {
 	ProviderNativeImageGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-
-const ZAI_IMAGES_GENERATIONS_URL =
-	"https://api.z.ai/api/coding/paas/v4/images/generations";
+import {
+	toZaiApiModelName,
+	ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+} from "@/providers/zai/zaiShared";
 
 /**
  * Aspect ratio to pixel size mapping for Z.ai image generation.
@@ -36,7 +37,7 @@ const DEFAULT_SIZE = "1280x1280";
 export async function generateZaiNativeImage(
 	request: ProviderNativeImageGenerationRequest,
 ): Promise<ProviderNativeImageGenerationResult> {
-	const apiModel = request.model;
+	const apiModel = toZaiApiModelName(request.model);
 	const size = ASPECT_RATIO_TO_SIZE[request.aspectRatio] ?? DEFAULT_SIZE;
 
 	// Log warning if reference images were provided — Z.ai doesn't support img2img
@@ -51,19 +52,22 @@ export async function generateZaiNativeImage(
 	}
 
 	// 1. Send generation request to Z.ai
-	const response = await fetch(ZAI_IMAGES_GENERATIONS_URL, {
-		method: "POST",
-		headers: {
-			Authorization: `Bearer ${request.apiKey}`,
-			"Content-Type": "application/json",
+	const response = await fetch(
+		request.endpointUrl || ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${request.apiKey}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				model: apiModel,
+				prompt: request.prompt,
+				size,
+				quality: "hd",
+			}),
 		},
-		body: JSON.stringify({
-			model: apiModel,
-			prompt: request.prompt,
-			size,
-			quality: "hd",
-		}),
-	});
+	);
 
 	if (!response.ok) {
 		const errorBody = await response.text();

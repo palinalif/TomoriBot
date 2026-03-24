@@ -34,6 +34,10 @@ import {
   providerSupportsFeature,
   resolveProviderFeatureImplementation,
 } from "@/utils/provider/providerInfoRegistry";
+import {
+  ZAI_CODING_IMAGES_GENERATIONS_URL,
+  ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+} from "@/providers/zai/zaiShared";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
@@ -656,6 +660,10 @@ export async function execute(
         model: modelCodename,
         prompt,
         aspectRatio,
+        endpointUrl:
+          provider === "zaicoding"
+            ? ZAI_CODING_IMAGES_GENERATIONS_URL
+            : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
       });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;

@@ -4,15 +4,12 @@ import type {
 	StructuredOutputResult,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-
-const ZAI_CHAT_COMPLETIONS_URL =
-	"https://api.z.ai/api/coding/paas/v4/chat/completions";
-
-/** Models that support extended thinking — temperature must be omitted */
-const ZAI_REASONING_MODELS = ["glm-5", "glm-4.7"];
-
-/** Only glm-4.6v supports image inputs in structured output calls */
-const ZAI_VISION_MODEL = "glm-4.6v";
+import {
+	toZaiApiModelName,
+	ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+	ZAI_REASONING_MODELS,
+	ZAI_VISION_MODEL,
+} from "@/providers/zai/zaiShared";
 
 /**
  * Build an example JSON object from a JSON Schema definition.
@@ -113,7 +110,7 @@ export async function callZaiStructuredJSON<T>(
 	responseSchema: Record<string, unknown>,
 	zodSchema: z.ZodType<T>,
 ): Promise<StructuredOutputResult<T>> {
-	const apiModel = request.model;
+	const apiModel = toZaiApiModelName(request.model);
 
 	// Only glm-4.6v supports image inputs
 	const images = request.images ?? [];
@@ -166,14 +163,17 @@ export async function callZaiStructuredJSON<T>(
 		}
 
 		// 3. Send the request
-		const response = await fetch(ZAI_CHAT_COMPLETIONS_URL, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${request.apiKey}`,
-				"Content-Type": "application/json",
+		const response = await fetch(
+			request.endpointUrl || ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+			{
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${request.apiKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify(body),
 			},
-			body: JSON.stringify(body),
-		});
+		);
 
 		if (!response.ok) {
 			const errorBody = await response.text();

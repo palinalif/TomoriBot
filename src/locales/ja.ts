@@ -429,7 +429,7 @@ export default {
         "DeepSeekとの通信中に予期しないエラーが発生しました。",
     },
 
-    // Z.ai（Coding）プロバイダー固有のエラーメッセージ
+    // Z.aiプロバイダー固有のエラーメッセージ
     zai: {
       connection_refused:
         "Z.ai APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
@@ -448,6 +448,9 @@ export default {
 
       "429_default_message":
         "Z.aiでレート制限が発生しています。しばらくしてから再度お試しください。",
+
+      "429_balance_default_message":
+        "このリクエストを実行するためのZ.ai残高またはクレジットが不足しています。",
 
       "429_plan_access_default_message":
         "ご利用中のZ.aiプランではこのモデルにアクセスできません。`/config model text` で別のモデルに切り替えてください。",
@@ -1600,14 +1603,15 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`deepseek-reasoner\` はシンキング／推論モデルで、応答が遅くなる場合があります
 - セットアップ後は利用可能なDeepSeekテキストモデル間で切り替えられます`,
         deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
-        // Z.ai (Coding)
-        provider_choice_zai: `Z.ai (Coding)`,
-        zai_title: `Z.ai (Coding) APIキーの設定`,
-        zai_description: `Z.ai (Coding)はGLMモデルファミリーへのアクセスを提供し、チャット、推論、画像生成機能を備えています。
+        // Z.ai
+        provider_choice_zai: `Z.ai`,
+        provider_choice_zaicoding: `Z.ai (Coding)`,
+        zai_title: `Z.ai APIキーの設定`,
+        zai_description: `Z.aiはGLMモデルファミリーへのアクセスを提供し、チャット、推論、画像生成機能を備えています。
 - ビジョンや推論バリアントを含む4つのチャットモデルをサポート
 - \`glm-image\`によるネイティブ画像生成
 - すべてのチャットモデルでツール呼び出しと構造化出力に対応
-- オプションMCPアドオンは\`/config mcp add\`で利用可能（GLM Codingプランが必要）`,
+- 追加の画像/動画ワークフロー向けに\`/config mcp add\`で任意のMCPアドオンを利用可能`,
         zai_getting_key_title: `APIキーの取得：`,
         zai_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
 2. ログインまたはアカウントを作成
@@ -1621,6 +1625,24 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`glm-4.6v\` は画像を見ることができるビジョン対応モデルです
 - \`glm-image\` はテキストプロンプトから画像を生成します`,
         zai_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        zaicoding_title: `Z.ai (Coding) APIキーの設定`,
+        zaicoding_description: `Z.ai (Coding)はGLM Coding Planやコーディング系ワークフロー向けの専用Codingエンドポイントを使用します。
+- 通常のAPIエンドポイントではなく専用のCodingエンドポイントを使用します
+- 一般的なAPI利用ではなく、対応するコーディング用途向けです
+- TomoriBotではこのエンドポイント上でチャット、推論、ツール利用、画像生成を扱います
+- 通常のZ.ai APIを使いたい場合は\`Z.ai\`を選んでください`,
+        zaicoding_getting_key_title: `APIキーの取得：`,
+        zaicoding_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
+2. ログインまたはアカウントを作成
+3. ダッシュボードでAPIキーに移動
+4. 新しいAPIキーを作成
+5. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
+        zaicoding_model_notes_title: `モデルに関するメモ：`,
+        zaicoding_model_notes_description: `- デフォルトエンドポイント: \`https://api.z.ai/api/coding/paas/v4\`
+- \`glm-4.7\` はCodingエンドポイントで最も安全なデフォルトです
+- \`glm-5\` と \`glm-4.7-flash\` の利用可否はZ.ai側のCodingアクセスに依存します
+- 標準課金の通常APIや幅広い一般用途が必要な場合は\`Z.ai\`に切り替えてください`,
+        zaicoding_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
         // NovelAI
         novelai_title: `NovelAI APIキーの設定`,
         novelai_description: `NovelAIはクリエイティブなストーリーテリングとロールプレイに焦点を当てたサブスクリプションベースのサービスです。

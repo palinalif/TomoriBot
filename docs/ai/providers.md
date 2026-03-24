@@ -29,6 +29,7 @@ Provider folders under `src/providers/`:
 - `custom` (`CustomProvider`)
 - `deepseek` (`DeepseekProvider`)
 - `zai` (`ZaiProvider`)
+- `zaicoding` (`ZaicodingProvider`)
 
 ## Provider Factory
 
@@ -52,8 +53,9 @@ Static provider metadata is defined in each provider folder:
 - `src/providers/custom/providerInfo.ts`
 - `src/providers/deepseek/providerInfo.ts`
 - `src/providers/zai/providerInfo.ts`
+- `src/providers/zaicoding/providerInfo.ts`
 
-OpenAI-compatible family internals shared by `custom`, `deepseek`, and `zai` live in:
+OpenAI-compatible family internals shared by `custom`, `deepseek`, `zai`, and `zaicoding` live in:
 
 - `src/providers/openaiCompatible/`
 
@@ -142,12 +144,12 @@ Rule:
 - no embedding rows are seeded
 - provider-level feature flags remain disabled for native image generation, embeddings, preset generation, expression initialization, and compaction
 
-## Z.ai (Coding) Provider Notes
+## Z.ai Provider Notes
 
-`zai` uses the shared OpenAI-compatible family layer for the GLM model family via `https://api.z.ai/api/coding/paas/v4`.
+`zai` uses the shared OpenAI-compatible family layer for the GLM model family via `https://api.z.ai/api/paas/v4`.
 
-- **Chat models**: `glm-5` (default, reasoning), `glm-4.7` (reasoning), `glm-4.7-flash` (free), `glm-4.6v` (vision)
-- **Image generation**: `glm-image` via dedicated images/generations endpoint; aspect ratio mapped to pixel sizes
+- **Chat models**: `zai/glm-5` (default, reasoning), `zai/glm-4.7` (reasoning), `zai/glm-4.7-flash` (free), `zai/glm-4.6v` (vision)
+- **Image generation**: `zai/glm-image` via dedicated images/generations endpoint; aspect ratio mapped to pixel sizes
 - Reasoning models (`glm-5`, `glm-4.7`) emit `reasoning_content` — thinking is enabled with `budget_tokens: 8192` and temperature/sampling params are deleted
 - Tool streaming uses `tool_stream: true` flag when tools are present
 - JSON structured output uses `response_format: { type: "json_object" }` with prompt-steered schema injection and Zod validation (same pattern as DeepSeek)
@@ -156,6 +158,15 @@ Rule:
 - Model codenames stored with `zai/` prefix in DB (e.g., `zai/glm-5`), stripped to `glm-5` for API calls
 - No img2img support — reference images are ignored with a user warning
 - MCP vision: users can add `@z_ai/mcp-server` via `/config mcp add` for image/video analysis on non-vision models
+
+## Z.ai (Coding) Provider Notes
+
+`zaicoding` uses the shared OpenAI-compatible family layer for the GLM family via `https://api.z.ai/api/coding/paas/v4`.
+
+- **Chat models**: `glm-5`, `glm-4.7`, `glm-4.7-flash`, `glm-4.6v`
+- **Image generation**: `glm-image` via the coding-endpoint image generation route
+- Uses the same streaming, tool-calling, and structured-output pipeline as the general `zai` provider
+- Intended for dedicated coding-endpoint access such as GLM Coding Plan workflows
 
 ## Tool Integration Across Providers
 
@@ -167,6 +178,7 @@ Tools are provider-agnostic at registry level, then adapted per provider by each
 - DeepSeek: `deepseekToolAdapter.ts`
 - Custom: `customToolAdapter.ts`
 - Z.ai: `zaiToolAdapter.ts`
+- Z.ai (Coding): `zaicodingToolAdapter.ts`
 
 All providers rely on centralized tool filtering via `getAvailableToolsWithMCP()`.
 

@@ -428,7 +428,7 @@ export default {
         "An unexpected error occurred while communicating with DeepSeek.",
     },
 
-    // Z.ai (Coding) provider error messages
+    // Z.ai provider error messages
     zai: {
       connection_refused:
         "Could not connect to the Z.ai API endpoint. Please try again later.",
@@ -447,6 +447,9 @@ export default {
 
       "429_default_message":
         "Z.ai is rate limiting this request. Please wait a moment and try again.",
+
+      "429_balance_default_message":
+        "Your Z.ai account does not have enough balance or credits for this request.",
 
       "429_plan_access_default_message":
         "Your Z.ai subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
@@ -1599,14 +1602,15 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`deepseek-reasoner\` is the thinking/reasoning model and may respond more slowly
 - You can switch between available DeepSeek text models after setup`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // Z.ai (Coding)
-        provider_choice_zai: `Z.ai (Coding)`,
-        zai_title: `Setting Up Z.ai (Coding) API Key`,
-        zai_description: `Z.ai (Coding) provides access to the GLM model family with chat, reasoning, and image generation capabilities.
+        // Z.ai
+        provider_choice_zai: `Z.ai`,
+        provider_choice_zaicoding: `Z.ai (Coding)`,
+        zai_title: `Setting Up Z.ai API Key`,
+        zai_description: `Z.ai provides access to the GLM model family with chat, reasoning, and image generation capabilities.
 - Supports 4 chat models including vision and reasoning variants
 - Native image generation via \`glm-image\`
 - Tool calling and structured output on all chat models
-- Optional MCP add-ons available via \`/config mcp add\` (requires GLM Coding Plan)`,
+- Optional MCP add-ons available via \`/config mcp add\` for extra image/video workflows`,
         zai_getting_key_title: `Getting Your API Key:`,
         zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
 2. Sign in or create an account
@@ -1620,6 +1624,24 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`glm-4.6v\` is the vision-capable model that can see images
 - \`glm-image\` generates images from text prompts`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        zaicoding_title: `Setting Up Z.ai (Coding) API Key`,
+        zaicoding_description: `Z.ai (Coding) uses Z.ai's dedicated Coding endpoint for GLM Coding Plan and coding-tool workflows.
+- Uses the dedicated coding endpoint instead of the general API endpoint
+- Intended for supported coding scenarios rather than general API usage
+- TomoriBot keeps chat, reasoning, tool calling, and image generation on this endpoint
+- If you want the normal Z.ai API, choose \`Z.ai\` instead`,
+        zaicoding_getting_key_title: `Getting Your API Key:`,
+        zaicoding_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
+2. Sign in or create an account
+3. Navigate to API Keys in your dashboard
+4. Create a new API key
+5. Copy this API key into {configSetup} or {configApikeySet}`,
+        zaicoding_model_notes_title: `Model Notes:`,
+        zaicoding_model_notes_description: `- Default endpoint: \`https://api.z.ai/api/coding/paas/v4\`
+- \`glm-4.7\` is the safest default for coding-endpoint access
+- Availability of \`glm-5\` and \`glm-4.7-flash\` depends on your Z.ai coding access
+- If you need standard API billing and broader general usage, switch to \`Z.ai\``,
+        zaicoding_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // NovelAI
         novelai_title: `Setting Up NovelAI API Key`,
         novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.

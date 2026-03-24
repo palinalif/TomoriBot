@@ -10,6 +10,7 @@ import { getNovelaiToolAdapter } from "../../providers/novelai/novelaiToolAdapte
 import { getDeepseekToolAdapter } from "../../providers/deepseek/deepseekToolAdapter";
 import { getCustomToolAdapter } from "../../providers/custom/customToolAdapter";
 import { getZaiToolAdapter } from "../../providers/zai/zaiToolAdapter";
+import { getZaicodingToolAdapter } from "../../providers/zaicoding/zaicodingToolAdapter";
 
 /**
  * Event handler for initializing MCP servers when the bot is ready
@@ -44,6 +45,10 @@ export default async (): Promise<void> => {
     const zaiAdapter = getZaiToolAdapter();
     registerMCPAdapter(zaiAdapter);
     log.info("Registered Zai tool adapter with MCP capabilities");
+
+    const zaicodingAdapter = getZaicodingToolAdapter();
+    registerMCPAdapter(zaicodingAdapter);
+    log.info("Registered Z.ai Coding tool adapter with MCP capabilities");
 
     // Get the MCP manager singleton instance
     const mcpManager = getMCPManager();

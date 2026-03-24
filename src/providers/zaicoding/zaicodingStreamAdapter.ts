@@ -2,19 +2,19 @@ import { OpenAICompatibleStreamAdapter } from "@/providers/openaiCompatible/open
 import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/openaiCompatibleTypes";
 import { ZAI_REASONING_MODELS } from "@/providers/zai/zaiShared";
 
-export interface ZaiStreamConfig extends OpenAICompatibleStreamConfig {
+export interface ZaicodingStreamConfig extends OpenAICompatibleStreamConfig {
 	endpointUrl: string;
 }
 
 /**
- * Stream adapter for the Z.ai API.
+ * Stream adapter for the Z.ai Coding API.
  * Handles reasoning content preservation, tool_stream flag, and output prefill.
  */
-export class ZaiStreamAdapter extends OpenAICompatibleStreamAdapter {
+export class ZaicodingStreamAdapter extends OpenAICompatibleStreamAdapter {
 	constructor() {
 		super({
-			providerName: "zai",
-			adapterName: "ZaiStreamAdapter",
+			providerName: "zaicoding",
+			adapterName: "ZaicodingStreamAdapter",
 			localeNamespace: ["genai", "zai"].join("."),
 			errorMessagePrefix: "Z.ai API error",
 			preserveReasoningContent: true,
@@ -25,7 +25,6 @@ export class ZaiStreamAdapter extends OpenAICompatibleStreamAdapter {
 				return config.endpointUrl;
 			},
 			mutateRequestBody: ({ requestBody, config, context }) => {
-				// 1. Enable thinking mode for reasoning models or when forced
 				const isReasoningModel = ZAI_REASONING_MODELS.includes(config.model);
 				const thinkingEnabled = isReasoningModel || config.forceReason === true;
 				if (thinkingEnabled) {
@@ -36,7 +35,6 @@ export class ZaiStreamAdapter extends OpenAICompatibleStreamAdapter {
 					delete requestBody.frequency_penalty;
 				}
 
-				// 2. Enable tool streaming when tools are present
 				if (
 					Array.isArray(requestBody.tools) &&
 					requestBody.tools.length > 0
@@ -44,7 +42,6 @@ export class ZaiStreamAdapter extends OpenAICompatibleStreamAdapter {
 					requestBody.tool_stream = true;
 				}
 
-				// 3. Handle output prefill (assistant prefix completion)
 				const outputPrefill = context.outputPrefill?.trim();
 				if (!outputPrefill) {
 					return;

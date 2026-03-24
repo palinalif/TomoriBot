@@ -2,9 +2,14 @@ import type { ProviderInfo } from "@/types/provider/interfaces";
 
 export const zaiProviderInfo: ProviderInfo = {
   name: "zai",
-  displayName: "Z.ai (Coding)",
+  displayName: "Z.ai",
   aliases: [],
-  supportedModels: ["glm-4.6v", "glm-4.7", "glm-4.7-flash", "glm-5"],
+  supportedModels: [
+    "zai/glm-4.6v",
+    "zai/glm-4.7",
+    "zai/glm-4.7-flash",
+    "zai/glm-5",
+  ],
   requiresApiKey: true,
   supportsStreaming: true,
   supportsFunctionCalling: true,

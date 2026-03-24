@@ -72,6 +72,13 @@ export const configureSubcommand = (
             ),
             value: "zai",
           },
+          {
+            name: localizer(
+              "en-US",
+              "commands.help.apikey.provider_choice_zaicoding",
+            ),
+            value: "zaicoding",
+          },
         ),
     );
 
@@ -318,6 +325,40 @@ export async function execute(
             },
           ],
           footerKey: "commands.help.apikey.zai_footer",
+          footerVars: {
+            configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "zaicoding":
+        embedOptions = {
+          titleKey: "commands.help.apikey.zaicoding_title",
+          descriptionKey: "commands.help.apikey.zaicoding_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.apikey.zaicoding_getting_key_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.zaicoding_getting_key_description",
+                {
+                  configSetup: configSetupMention,
+                  configApikeySet: configApikeySetMention,
+                },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.apikey.zaicoding_model_notes_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.zaicoding_model_notes_description",
+              ),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.apikey.zaicoding_footer",
           footerVars: {
             configModel: configModelMention,
           },

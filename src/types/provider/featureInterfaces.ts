@@ -125,6 +125,7 @@ export interface ProviderNativeImageGenerationRequest {
 	model: string;
 	prompt: string;
 	aspectRatio: string;
+	endpointUrl?: string;
 	referenceImages?: ProviderNativeImageReference[];
 }
 

@@ -45,14 +45,24 @@ export function normalizeOpenAICompatibleProviderError(
 			if (status === 401 || status === 403 || status === 400 || status === 404) {
 				errorType = "api_error";
 			} else if (status === 429) {
-				// Some providers (e.g. Z.ai) use 429 for plan/access denial, not just rate limiting.
-				// Detect these by checking the error message for subscription/plan keywords.
+				// Some providers (e.g. Z.ai) use 429 for billing/plan/access denial, not just rate limiting.
+				// Detect these by checking the error message for subscription or balance keywords.
 				const lowerMessage = errorMessage.toLowerCase();
+				const isBalanceDenial =
+					lowerMessage.includes("insufficient balance") ||
+					lowerMessage.includes("insufficient credits") ||
+					lowerMessage.includes("not enough credits") ||
+					lowerMessage.includes("no resource package") ||
+					lowerMessage.includes("please recharge");
 				const isPlanAccessDenial =
 					lowerMessage.includes("subscription plan") ||
 					lowerMessage.includes("does not yet include access") ||
 					lowerMessage.includes("plan does not include");
-				if (isPlanAccessDenial) {
+				if (isBalanceDenial) {
+					errorType = "api_error";
+					errorCode = "429_balance";
+					retryable = false;
+				} else if (isPlanAccessDenial) {
 					errorType = "api_error";
 					errorCode = "429_plan_access";
 					retryable = false;

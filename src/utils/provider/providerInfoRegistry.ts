@@ -6,6 +6,7 @@ import type {
 import { customProviderInfo } from "@/providers/custom/providerInfo";
 import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
 import { zaiProviderInfo } from "@/providers/zai/providerInfo";
+import { zaicodingProviderInfo } from "@/providers/zaicoding/providerInfo";
 import { googleProviderInfo } from "@/providers/google/providerInfo";
 import { novelaiProviderInfo } from "@/providers/novelai/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
@@ -17,6 +18,7 @@ const providerInfos: readonly ProviderInfo[] = [
 	customProviderInfo,
 	deepseekProviderInfo,
 	zaiProviderInfo,
+	zaicodingProviderInfo,
 ] as const;
 
 const providerInfoByCanonicalName = new Map<string, ProviderInfo>(
@@ -51,12 +53,14 @@ const providerFeatureImplementations: Partial<
 		google: "google",
 		openrouter: "openrouter",
 		zai: "zai",
+		zaicoding: "zai",
 	},
 	liveTokenCounting: {
 		google: "google",
 		openrouter: "openrouter",
 		deepseek: "deepseek",
 		zai: "zai",
+		zaicoding: "zai",
 	},
 };
 
