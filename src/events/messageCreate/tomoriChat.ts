@@ -2076,11 +2076,10 @@ export default async function tomoriChat(
     naiContinuationPrefill, // NAI GLM-4.6: carry trailing fragment into prompt for mid-sentence continuation
   };
 
-  // biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
   const userDiscId =
     manualTriggerInvoker?.userDiscId ??
     (isSttRelay ? getCachedWebhookRelayUserId(message.webhookId) : null) ??
-    message.author!.id;
+    message.author.id;
   const triggererUsername =
     manualTriggerInvoker?.username ?? message.author.username;
   const queuedReplyDirective =
@@ -2746,7 +2745,7 @@ export default async function tomoriChat(
       );
       const serverPersonalizationDisabled =
         tomoriState?.config.personal_memories_enabled === false;
-      const triggererDisplayName = isMatrixRelayMessage
+      const triggererDisplayName = isMatrixRelay
         ? stripBridgePrefix(message.author.username) || message.author.username
         : triggererUsername;
 
@@ -2826,7 +2825,7 @@ export default async function tomoriChat(
         (message.author.bot || message.webhookId) &&
         !isSelfMessage &&
         !isManuallyTriggered &&
-        !isMatrixRelayMessage
+        !isMatrixRelay
       ) {
         return;
       }
@@ -4773,7 +4772,7 @@ export default async function tomoriChat(
       }> = [];
       let turnThoughtLog: ThoughtLogPayload | undefined;
       let turnThoughtLogOwner: ThoughtLogOwner | undefined;
-      const matrixTypingRoomId = isMatrixRelayMessage
+      const matrixTypingRoomId = isMatrixRelay
         ? await getLinkedMatrixRoom(channel.id)
         : null;
 

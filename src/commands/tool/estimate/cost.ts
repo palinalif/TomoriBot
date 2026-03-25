@@ -331,6 +331,7 @@ function estimateToolSchemaTokens(): number {
   try {
     const stateForContext = {
       server_id: "0",
+      activePersonaHasElevenlabsVoice: false,
       llm: {
         llm_codename: "schema-estimate",
         has_tools: true,

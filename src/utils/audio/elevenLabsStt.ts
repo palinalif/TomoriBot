@@ -47,7 +47,7 @@ export async function transcribeWithElevenLabs(
 		const formData = new FormData();
 		formData.append(
 			"file",
-			new Blob([request.audioBuffer], {
+			new Blob([new Uint8Array(request.audioBuffer)], {
 				type: request.mimeType ?? "application/octet-stream",
 			}),
 			request.filename,

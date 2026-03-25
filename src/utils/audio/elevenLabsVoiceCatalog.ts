@@ -88,18 +88,18 @@ export async function fetchElevenLabsVoiceCatalog(
 					return [];
 				}
 
+				const voiceRecord = voice as Record<string, unknown>;
 				const voiceId =
-					typeof (voice as Record<string, unknown>).voice_id === "string"
-						? (voice as Record<string, unknown>).voice_id
+					typeof voiceRecord.voice_id === "string"
+						? voiceRecord.voice_id
 						: null;
 				if (!voiceId) {
 					return [];
 				}
-
-				const labelsSource = (voice as Record<string, unknown>).labels;
+				const labelsSource = voiceRecord.labels;
 				const labels: Record<string, string> = {};
 				if (labelsSource && typeof labelsSource === "object") {
-					for (const [key, value] of Object.entries(labelsSource)) {
+					for (const [key, value] of Object.entries(labelsSource as Record<string, unknown>)) {
 						if (typeof value === "string") {
 							labels[key] = value;
 						}
@@ -107,21 +107,21 @@ export async function fetchElevenLabsVoiceCatalog(
 				}
 
 				const name =
-					typeof (voice as Record<string, unknown>).name === "string"
-						? (voice as Record<string, unknown>).name.trim()
+					typeof voiceRecord.name === "string"
+						? voiceRecord.name.trim()
 						: "";
 
 				const category =
-					typeof (voice as Record<string, unknown>).category === "string"
-						? (voice as Record<string, unknown>).category
+					typeof voiceRecord.category === "string"
+						? voiceRecord.category
 						: null;
 				const description =
-					typeof (voice as Record<string, unknown>).description === "string"
-						? (voice as Record<string, unknown>).description
+					typeof voiceRecord.description === "string"
+						? voiceRecord.description
 						: null;
 				const previewUrl =
-					typeof (voice as Record<string, unknown>).preview_url === "string"
-						? (voice as Record<string, unknown>).preview_url
+					typeof voiceRecord.preview_url === "string"
+						? voiceRecord.preview_url
 						: null;
 
 				return [
