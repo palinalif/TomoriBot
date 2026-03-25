@@ -157,6 +157,9 @@ export class ZaicodingProvider
 		try {
 			const toolStateForContext: ToolStateForContext = {
 				server_id: tomoriState.server_id.toString(),
+				activePersonaHasElevenlabsVoice: Boolean(
+					tomoriState.elevenlabs_voice_id?.trim(),
+				),
 				llm: {
 					llm_codename: tomoriState.llm.llm_codename,
 					has_tools: tomoriState.llm.has_tools,

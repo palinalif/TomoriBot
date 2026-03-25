@@ -167,6 +167,9 @@ export class CustomProvider
       // Get built-in tools from the registry
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
+        activePersonaHasElevenlabsVoice: Boolean(
+          tomoriState.elevenlabs_voice_id?.trim(),
+        ),
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,
@@ -306,6 +309,9 @@ export class CustomProvider
 
     const toolStateForContext: ToolStateForContext = {
       server_id: request.tomoriState.server_id.toString(),
+      activePersonaHasElevenlabsVoice: Boolean(
+        request.tomoriState.elevenlabs_voice_id?.trim(),
+      ),
       llm: {
         llm_codename: request.tomoriState.llm.llm_codename,
         has_tools: request.tomoriState.llm.has_tools,

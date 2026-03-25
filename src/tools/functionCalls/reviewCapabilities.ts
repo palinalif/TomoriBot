@@ -734,6 +734,9 @@ export class ReviewCapabilitiesTool extends BaseTool {
           context.provider,
           {
             server_id: serverId.toString(),
+            activePersonaHasElevenlabsVoice: Boolean(
+              context.tomoriState.elevenlabs_voice_id?.trim(),
+            ),
             llm: {
               llm_codename: llm.llm_codename,
               has_tools: llm.has_tools,

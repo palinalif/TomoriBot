@@ -41,6 +41,8 @@ const ALLOWED_TOMORI_FIELDS = new Set<keyof TomoriRow>([
   "autoch_next_target",
   "nai_tags",
   "nai_char_ref_url",
+  "elevenlabs_voice_id",
+  "elevenlabs_voice_name",
   "nai_attg_author",
   "nai_attg_title",
   "nai_attg_tags",

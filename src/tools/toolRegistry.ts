@@ -23,6 +23,7 @@ import { getGuildMcpManager } from "../utils/mcp/guildMcpManager";
 import { getCachedEnabledGuildMcpConfigs } from "../utils/cache/guildMcpConfigCache";
 import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchService";
 import { hasOptApiKey } from "../utils/security/crypto";
+import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 
 /**
  * Minimal state interface for context building operations
@@ -30,6 +31,7 @@ import { hasOptApiKey } from "../utils/security/crypto";
  */
 export interface ToolStateForContext {
   server_id: string;
+  activePersonaHasElevenlabsVoice: boolean;
   llm: ToolAvailabilityLlmState;
   config: {
     sticker_usage_enabled: boolean;
@@ -400,6 +402,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         : undefined;
       if (serverIdNumber) {
         const hasNovelAiOptKey = await hasOptApiKey(serverIdNumber, "novelai");
+        const hasElevenLabsOptKey = await hasOptApiKey(
+          serverIdNumber,
+          ELEVENLABS_SERVICE_NAME,
+        );
 
         // 1. If provider is not NovelAI AND no NovelAI opt key exists, remove generate_image_nai
         if (provider !== "novelai" && !hasNovelAiOptKey) {
@@ -464,6 +470,25 @@ class ToolRegistryImpl implements ToolRegistryInterface {
               },
             });
           });
+        }
+
+        if (
+          !hasElevenLabsOptKey ||
+          !stateForContext.activePersonaHasElevenlabsVoice
+        ) {
+          const beforeCount = builtInTools.length;
+          builtInTools = builtInTools.filter(
+            (tool) => tool.name !== "generate_voice_message",
+          );
+          if (builtInTools.length < beforeCount) {
+            log.info(
+              `Excluded generate_voice_message (${
+                !hasElevenLabsOptKey
+                  ? "no ElevenLabs opt key"
+                  : "active persona has no ElevenLabs voice"
+              })`,
+            );
+          }
         }
       }
 

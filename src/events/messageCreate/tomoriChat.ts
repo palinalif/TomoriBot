@@ -155,6 +155,10 @@ import {
   sendThoughtLogEmbed,
   type ThoughtLogOwner,
 } from "@/utils/discord/thoughtLog";
+import {
+  buildTranscriptRelayContent,
+  transcribeMessageAudioAttachment,
+} from "@/utils/audio/audioAttachmentTranscription";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -373,10 +377,18 @@ const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 
 const SELF_REPLY_SUPPRESSION_TTL_MS = 5000;
 const selfReplySuppressionUntil = new Map<string, number>();
 const USER_IMPERSONATION_WEBHOOK_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const userImpersonationWebhookCache = new Map<
-  string,
-  { userId: string; cachedAt: number }
->();
+type CachedWebhookRelayKind = "user_impersonation" | "stt_transcript";
+type CachedWebhookRelay = {
+  userId: string;
+  kind: CachedWebhookRelayKind;
+  cachedAt: number;
+};
+const webhookRelayCache = new Map<string, CachedWebhookRelay>();
+const AUDIO_TRANSCRIPTION_HANDLED_KEY = "__tomoriAudioTranscriptionHandled";
+
+type MessageWithInternalFlags = Message & {
+  [AUDIO_TRANSCRIPTION_HANDLED_KEY]?: boolean;
+};
 
 export function suppressNextSelfReply(
   channelId: string,
@@ -573,38 +585,134 @@ function formatTomoriSelfDebugEmbedAsSystemMessage(
   return `[System: ${lines.join("\n")}]`;
 }
 
-function cacheUserImpersonationWebhook(
+function cacheWebhookRelay(
   webhookId: string,
   userId: string,
+  kind: CachedWebhookRelayKind,
 ): void {
   if (!webhookId || !userId) {
     return;
   }
 
-  userImpersonationWebhookCache.set(webhookId, {
+  webhookRelayCache.set(webhookId, {
     userId,
+    kind,
     cachedAt: Date.now(),
   });
 }
 
-function getCachedImpersonatedUserIdForWebhook(
+function cacheUserImpersonationWebhook(
+  webhookId: string,
+  userId: string,
+): void {
+  cacheWebhookRelay(webhookId, userId, "user_impersonation");
+}
+
+function cacheSttTranscriptWebhook(
+  webhookId: string,
+  userId: string,
+): void {
+  cacheWebhookRelay(webhookId, userId, "stt_transcript");
+}
+
+function getCachedWebhookRelay(
   webhookId: string | null | undefined,
-): string | null {
+): CachedWebhookRelay | null {
   if (!webhookId) {
     return null;
   }
 
-  const cached = userImpersonationWebhookCache.get(webhookId);
+  const cached = webhookRelayCache.get(webhookId);
   if (!cached) {
     return null;
   }
 
   if (Date.now() - cached.cachedAt > USER_IMPERSONATION_WEBHOOK_CACHE_TTL_MS) {
-    userImpersonationWebhookCache.delete(webhookId);
+    webhookRelayCache.delete(webhookId);
     return null;
   }
 
-  return cached.userId;
+  return cached;
+}
+
+function getCachedWebhookRelayUserId(
+  webhookId: string | null | undefined,
+): string | null {
+  return getCachedWebhookRelay(webhookId)?.userId ?? null;
+}
+
+function getCachedImpersonatedUserIdForWebhook(
+  webhookId: string | null | undefined,
+): string | null {
+  const cachedRelay = getCachedWebhookRelay(webhookId);
+  if (!cachedRelay || cachedRelay.kind !== "user_impersonation") {
+    return null;
+  }
+
+  return cachedRelay.userId;
+}
+
+function isCachedSttTranscriptWebhookId(
+  webhookId: string | null | undefined,
+): boolean {
+  return getCachedWebhookRelay(webhookId)?.kind === "stt_transcript";
+}
+
+function markAudioTranscriptionHandled(message: Message): void {
+  (message as MessageWithInternalFlags)[AUDIO_TRANSCRIPTION_HANDLED_KEY] = true;
+}
+
+function hasHandledAudioTranscription(message: Message): boolean {
+  return (
+    (message as MessageWithInternalFlags)[AUDIO_TRANSCRIPTION_HANDLED_KEY] ===
+    true
+  );
+}
+
+function applyEffectiveMessageContent(
+  message: Message,
+  content: string,
+): void {
+  try {
+    Object.defineProperty(message, "content", {
+      value: content,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    // Ignore content override failures and continue with the original payload.
+  }
+
+  try {
+    Object.defineProperty(message, "cleanContent", {
+      value: content,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    // Ignore cleanContent override failures and continue with the original payload.
+  }
+}
+
+function isMatrixRelayMessage(message: Pick<Message, "webhookId" | "author">): boolean {
+  return (
+    Boolean(message.webhookId) &&
+    isMatrixBridgeWebhookUsername(message.author.username)
+  );
+}
+
+function isSttTranscriptRelayMessage(
+  message: Pick<Message, "webhookId">,
+): boolean {
+  return isCachedSttTranscriptWebhookId(message.webhookId);
+}
+
+function isRealUserLikeMessage(message: Message): boolean {
+  return (
+    (!message.author.bot && !message.webhookId) ||
+    isMatrixRelayMessage(message) ||
+    isSttTranscriptRelayMessage(message)
+  );
 }
 
 function normalizeIdentityName(value?: string | null): string {
@@ -721,12 +829,121 @@ async function resolveImpersonatedIdentity(
   };
 }
 
+function resolveTranscriptRelayTargetChannel(
+  channel: Message["channel"],
+): BaseGuildTextChannel | null {
+  const isThread =
+    "isThread" in channel &&
+    typeof channel.isThread === "function" &&
+    channel.isThread();
+
+  if (isThread) {
+    return channel.parent && "fetchWebhooks" in channel.parent
+      ? (channel.parent as BaseGuildTextChannel)
+      : null;
+  }
+
+  return "fetchWebhooks" in channel && "createWebhook" in channel
+    ? (channel as BaseGuildTextChannel)
+    : null;
+}
+
+function resolveTranscriptRelayThreadId(
+  channel: Message["channel"],
+): string | undefined {
+  return "isThread" in channel &&
+    typeof channel.isThread === "function" &&
+    channel.isThread()
+    ? channel.id
+    : undefined;
+}
+
+async function relayTranscriptAsWebhookMessage(
+  message: Message,
+  relayContent: string,
+  userDiscId: string,
+): Promise<boolean> {
+  const targetChannel = resolveTranscriptRelayTargetChannel(message.channel);
+  if (!targetChannel) {
+    return false;
+  }
+
+  let relayWebhook: Webhook | null = null;
+
+  try {
+    relayWebhook = await targetChannel.createWebhook({
+      name: "TomoriBot Transcript Relay",
+      reason: "TomoriBot audio transcript relay",
+    });
+
+    const relayDisplayName = resolvePreferredDiscordDisplayName({
+      memberDisplayName: message.member?.displayName,
+      user: message.author,
+      fallback: message.author.username,
+    });
+    const relayAvatarUrl =
+      message.member?.displayAvatarURL({
+        size: 1024,
+        extension: "png",
+        forceStatic: true,
+      }) ||
+      message.author.displayAvatarURL({
+        size: 1024,
+        extension: "png",
+        forceStatic: true,
+      }) ||
+      undefined;
+    const threadId = resolveTranscriptRelayThreadId(message.channel);
+
+    const sentMessage = await sendWebhookMessageWithIdentity(
+      relayWebhook,
+      {
+        content: relayContent,
+        allowedMentions: {
+          parse: ["users", "roles"],
+          repliedUser: false,
+        },
+        ...(threadId ? { threadId } : {}),
+      },
+      {
+        username: relayDisplayName,
+        avatarUrl: relayAvatarUrl,
+      },
+    );
+
+    cacheSttTranscriptWebhook(sentMessage.webhookId ?? relayWebhook.id, userDiscId);
+    return true;
+  } catch (error) {
+    log.warn(
+      `Failed to relay transcript webhook for message ${message.id}`,
+      error,
+    );
+    return false;
+  } finally {
+    if (relayWebhook) {
+      try {
+        await relayWebhook.delete("Audio transcript relay complete");
+      } catch (deleteError) {
+        log.warn(
+          `Failed to delete temporary transcript relay webhook for message ${message.id}`,
+          deleteError,
+        );
+      }
+    }
+  }
+}
+
 function resolveReferencedWebhookTarget(
   referenceMessage: Message,
   personaByNickname: Map<string, TomoriState>,
   guild: Guild | null | undefined,
 ): { replyPersona: TomoriState | null; impersonatedUserId: string | null } {
   if (!referenceMessage.webhookId) {
+    return { replyPersona: null, impersonatedUserId: null };
+  }
+
+  const cachedRelay = getCachedWebhookRelay(referenceMessage.webhookId);
+  if (cachedRelay?.kind === "stt_transcript") {
     return { replyPersona: null, impersonatedUserId: null };
   }
 
@@ -743,13 +960,10 @@ function resolveReferencedWebhookTarget(
   }
 
   // 2. Fall back to impersonation cache for user impersonation webhooks
-  const cachedImpersonatedUserId = getCachedImpersonatedUserIdForWebhook(
-    referenceMessage.webhookId,
-  );
-  if (cachedImpersonatedUserId) {
+  if (cachedRelay?.kind === "user_impersonation") {
     return {
       replyPersona: null,
-      impersonatedUserId: cachedImpersonatedUserId,
+      impersonatedUserId: cachedRelay.userId,
     };
   }
 
@@ -1754,10 +1968,10 @@ export default async function tomoriChat(
   // Matrix relay messages arrive via a channel webhook but represent real user messages.
   // They must not be treated as self-messages or persona jobs — exempt them from all
   // webhook/bot guards so TomoriBot responds to them like regular user messages.
-  const isMatrixRelayMessage =
-    isWebhookMessage && isMatrixBridgeWebhookUsername(message.author.username);
+  const isMatrixRelay = isMatrixRelayMessage(message);
+  const isSttRelay = isSttTranscriptRelayMessage(message);
   const isLikelySelfMessage =
-    !isMatrixRelayMessage && (isFromClientUser || isWebhookMessage);
+    !isMatrixRelay && !isSttRelay && (isFromClientUser || isWebhookMessage);
 
   const isSeedPlaceholderMessage =
     isFromClientUser &&
@@ -1811,7 +2025,7 @@ export default async function tomoriChat(
     }
   }
 
-  if (!isBotAuthor && !isWebhookMessage) {
+  if (isRealUserLikeMessage(message)) {
     updateSelfReplyChainState(channel.id, false);
   }
 
@@ -1863,7 +2077,10 @@ export default async function tomoriChat(
   };
 
   // biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
-  const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author!.id;
+  const userDiscId =
+    manualTriggerInvoker?.userDiscId ??
+    (isSttRelay ? getCachedWebhookRelayUserId(message.webhookId) : null) ??
+    message.author!.id;
   const triggererUsername =
     manualTriggerInvoker?.username ?? message.author.username;
   const queuedReplyDirective =
@@ -1873,7 +2090,7 @@ export default async function tomoriChat(
           manualTriggerInvoker?.member?.displayName ?? triggererUsername,
         )
       : null;
-  const matrixRelayUserId = isMatrixRelayMessage
+  const matrixRelayUserId = isMatrixRelay
     ? extractBridgeUserId(message.author.username)
     : undefined;
   const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
@@ -2043,6 +2260,68 @@ export default async function tomoriChat(
           metadata: { serverDiscId: serverDiscId, channelId: channel.id },
         },
       );
+    }
+  }
+
+  if (
+    !hasHandledAudioTranscription(message) &&
+    earlyTomoriState &&
+    !isWebhookMessage &&
+    !isBotAuthor
+  ) {
+    const transcriptionResult = await transcribeMessageAudioAttachment(
+      message,
+      earlyTomoriState.server_id,
+    );
+
+    if (transcriptionResult.hasAudio) {
+      markAudioTranscriptionHandled(message);
+
+      if (transcriptionResult.transcriptText) {
+        const relayContent = buildTranscriptRelayContent(
+          message.content,
+          transcriptionResult.transcriptText,
+        );
+
+        if (relayContent.length > 0) {
+          const relayed = await relayTranscriptAsWebhookMessage(
+            message,
+            relayContent,
+            userDiscId,
+          );
+
+          if (relayed) {
+            log.info(
+              `Relayed audio transcript for message ${message.id} as temporary webhook transcript`,
+            );
+            return;
+          }
+
+          applyEffectiveMessageContent(message, relayContent);
+          log.info(
+            `Applied in-process transcript fallback for message ${message.id} (no relay webhook available)`,
+          );
+        }
+      } else {
+        log.warn(
+          `Audio transcription failed for message ${message.id}: ${transcriptionResult.failureReason ?? "unknown"}${transcriptionResult.failureDetails ? ` (${transcriptionResult.failureDetails})` : ""}`,
+        );
+
+        if (message.content.trim().length === 0) {
+          await sendStandardEmbed(channel, locale, {
+            color: ColorCode.WARN,
+            titleKey:
+              transcriptionResult.failureReason === "missing_api_key"
+                ? "general.errors.voice_transcription_unavailable_title"
+                : "general.errors.voice_transcription_failed_title",
+            descriptionKey:
+              transcriptionResult.failureReason === "missing_api_key"
+                ? "general.errors.voice_transcription_unavailable_description"
+                : "general.errors.voice_transcription_failed_description",
+          });
+          return;
+        }
+      }
     }
   }
 

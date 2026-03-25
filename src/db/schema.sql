@@ -130,6 +130,10 @@ SELECT add_column_if_not_exists('tomoris', 'persona_lineage_id', 'BIGINT');
 SELECT add_column_if_not_exists('tomoris', 'nai_tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
 -- nai_char_ref_url: Stored reference image URL/path for NovelAI character consistency
 SELECT add_column_if_not_exists('tomoris', 'nai_char_ref_url', 'TEXT');
+-- elevenlabs_voice_id: Selected ElevenLabs voice for this persona (server-local)
+SELECT add_column_if_not_exists('tomoris', 'elevenlabs_voice_id', 'TEXT');
+-- elevenlabs_voice_name: Cached friendly name for the selected ElevenLabs voice
+SELECT add_column_if_not_exists('tomoris', 'elevenlabs_voice_name', 'TEXT');
 
 -- Create lineage sequence (start high so reserved low IDs stay available)
 CREATE SEQUENCE IF NOT EXISTS persona_lineage_id_seq

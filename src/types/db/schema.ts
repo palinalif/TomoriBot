@@ -83,6 +83,8 @@ export const tomoriSchema = z.object({
 	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
 	nai_tags: z.array(z.string()).default([]), // Imageboard-style persona appearance tags for NovelAI character profile resolution
 	nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - Persona-specific NovelAI character reference image
+	elevenlabs_voice_id: z.string().nullable().optional(), // Added March 2026 - Server-local ElevenLabs voice selection
+	elevenlabs_voice_name: z.string().nullable().optional(), // Added March 2026 - Cached ElevenLabs voice display name
 	nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
   nai_attg_title: z.string().nullable().optional(), // Added March 2026 - ATTG: Story title
   nai_attg_tags: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre/style tags
