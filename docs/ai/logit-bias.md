@@ -98,7 +98,15 @@ Tokenization support and request-parameter support are separate concerns.
 - Tokenization decides whether Tomori can turn raw text into token IDs for a model family.
 - Provider gating decides whether the runtime request actually sends `logit_bias`.
 
-Today, Tomori only sends `logit_bias` on OpenRouter models whose `supported_parameters` include `logit_bias`.
+Tomori sends `logit_bias` on the following providers when active entries exist:
+
+- **OpenRouter** — gated on the model's `supported_parameters` capability flag
+- **DeepSeek** — sent unconditionally when entries are present
+- **Z.ai** — sent unconditionally when entries are present
+- **Z.ai Coding** — sent unconditionally when entries are present
+- **NVIDIA NIM** — sent unconditionally when entries are present
+
+Custom, NovelAI, and Google providers do not currently send `logit_bias`.
 
 ## Storage
 

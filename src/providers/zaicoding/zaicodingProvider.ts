@@ -56,6 +56,7 @@ import {
 	getAvailableToolsWithMCP,
 } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
+import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 
 const DEFAULT_ZAI_CODING_MODEL = "glm-4.7";
 
@@ -264,6 +265,15 @@ export class ZaicodingProvider
 				minP: tomoriState.config.llm_min_p,
 			}),
 		};
+
+		// Attach runtime logit_bias map if the server has any active entries for this model
+		const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(
+			tomoriState.config.llm_logit_biases ?? [],
+			tomoriState.llm,
+		);
+		if (Object.keys(runtimeLogitBias).length > 0) {
+			config.logitBias = runtimeLogitBias;
+		}
 
 		if (tomoriState.llm.has_tools) {
 			config.tools = await this.getTools(tomoriState);

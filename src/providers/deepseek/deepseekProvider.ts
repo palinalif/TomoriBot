@@ -52,6 +52,7 @@ import {
 	getAvailableToolsWithMCP,
 } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
+import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
@@ -246,6 +247,15 @@ export class DeepseekProvider
 				minP: tomoriState.config.llm_min_p,
 			}),
 		};
+
+		// Attach runtime logit_bias map if the server has any active entries for this model
+		const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(
+			tomoriState.config.llm_logit_biases ?? [],
+			tomoriState.llm,
+		);
+		if (Object.keys(runtimeLogitBias).length > 0) {
+			config.logitBias = runtimeLogitBias;
+		}
 
 		if (tomoriState.llm.has_tools) {
 			config.tools = await this.getTools(tomoriState);

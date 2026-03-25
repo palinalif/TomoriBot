@@ -2825,7 +2825,8 @@ export default async function tomoriChat(
         (message.author.bot || message.webhookId) &&
         !isSelfMessage &&
         !isManuallyTriggered &&
-        !isMatrixRelay
+        !isMatrixRelay &&
+        !isSttRelay
       ) {
         return;
       }
