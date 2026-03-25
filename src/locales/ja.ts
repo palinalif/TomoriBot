@@ -179,8 +179,7 @@ export default {
     no_response_description: `応答がありませんでした - これはAIからの空の応答またはタイムアウトが原因である可能性があります。`,
     thought_log: {
       title: `思考ログ`,
-      description: `元チャンネル: {source_channel}{reply_line}`,
-      reply_link_label: `返信へ移動`,
+      description: `元チャンネル: {source_line}`,
       summary_field: `思考サマリー`,
       raw_field: `生の思考`,
       footer: `プロバイダー: {provider} | モデル: {model}`,

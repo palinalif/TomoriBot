@@ -178,8 +178,7 @@ export default {
     no_response_description: `I didn't respond - this may be due to an empty response or timeout from the AI.`,
     thought_log: {
       title: `Thought Log`,
-      description: `Source: {source_channel}{reply_line}`,
-      reply_link_label: `Jump to reply`,
+      description: `Source: {source_line}`,
       summary_field: `Thought Summary`,
       raw_field: `Raw Thoughts`,
       footer: `Provider: {provider} | Model: {model}`,

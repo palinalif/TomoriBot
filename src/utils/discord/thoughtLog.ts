@@ -61,12 +61,11 @@ function buildThoughtLogEmbeds(args: {
 }): EmbedBuilder[] {
 	const { locale, tomoriState, sourceChannel, thoughtLog } = args;
 	const embeds: EmbedBuilder[] = [];
-	const replyLine = thoughtLog.firstReplyUrl
-		? `\n[${localizer(locale, "genai.thought_log.reply_link_label")}](${thoughtLog.firstReplyUrl})`
-		: "";
+	const sourceLine = thoughtLog.firstReplyUrl
+		? `[${sourceChannel.toString()}](${thoughtLog.firstReplyUrl})`
+		: sourceChannel.toString();
 	const description = localizer(locale, "genai.thought_log.description", {
-		source_channel: sourceChannel.toString(),
-		reply_line: replyLine,
+		source_line: sourceLine,
 	}).slice(0, EMBED_DESCRIPTION_LIMIT);
 	const footerText = localizer(locale, "genai.thought_log.footer", {
 		provider: tomoriState.llm.llm_provider,
