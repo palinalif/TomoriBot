@@ -8,6 +8,7 @@ import {
 import {
   loadUniqueProviders,
   loadDefaultModelForProvider,
+  loadLlmById,
 } from "../../../utils/db/dbRead";
 import {
   clearAllChannelLlmOverridesForServer,
@@ -45,6 +46,7 @@ import {
   CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
   type CustomCapabilitiesResult,
 } from "../../../utils/discord/customProviderModal";
+import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_apikeyset_modal";
@@ -492,6 +494,15 @@ export async function execute(
 
     // 12. Update the config in the database (includes llm_id, diffusion_model_id, embedding_model_id, custom_endpoint_url, and custom_model_name if provider changed)
     const customModelName = customCapabilitiesResult?.modelName || null;
+    const targetLlm =
+      newLlmId === tomoriState.config.llm_id
+        ? tomoriState.llm
+        : await loadLlmById(newLlmId);
+    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(
+      tomoriState.config.llm_logit_biases ?? [],
+      targetLlm,
+    );
+    const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
 			SET api_key = ${encrypted},
@@ -499,6 +510,7 @@ export async function execute(
 			    llm_id = ${newLlmId},
 			    diffusion_model_id = ${newDiffusionModelId},
 			    embedding_model_id = ${newEmbeddingModelId},
+			    llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb,
 			    custom_endpoint_url = ${customEndpointUrl},
 			    custom_model_name = ${customModelName}
 			WHERE server_id = ${tomoriState.server_id}

@@ -1177,6 +1177,47 @@ export async function loadAvailableModelsForProvider(
 }
 
 /**
+ * Loads a single LLM row by ID with cache-first lookup.
+ * @param llmId - Database llm_id
+ * @returns Validated LlmRow, or null if not found/invalid
+ */
+export async function loadLlmById(llmId: number): Promise<LlmRow | null> {
+  if (!Number.isInteger(llmId) || llmId <= 0) {
+    log.error(`Invalid llm_id: ${llmId}`);
+    return null;
+  }
+
+  const cached = getCachedLLM(llmId);
+  if (cached) {
+    return cached as LlmRow;
+  }
+
+  try {
+    const llmRows = await sql`
+			SELECT * FROM llms
+			WHERE llm_id = ${llmId}
+			LIMIT 1
+		`;
+
+    if (!llmRows.length) {
+      log.warn(`No LLM found for llm_id ${llmId}`);
+      return null;
+    }
+
+    const parsed = llmSchema.safeParse(llmRows[0]);
+    if (!parsed.success) {
+      log.error(`Failed to validate model data for llm_id ${llmId}:`, parsed.error.flatten());
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading LLM for llm_id ${llmId}:`, error);
+    return null;
+  }
+}
+
+/**
  * Loads the default model for a specific LLM provider, with fallback logic.
  * 1. Tries to find the model marked as is_default=true
  * 2. Falls back to the first available model for the provider

@@ -103,6 +103,13 @@ export interface StreamingContext {
   naiContinuationPrefill?: string;
   /** AbortSignal to cancel the underlying HTTP request when the SDK call timeout fires */
   abortSignal?: AbortSignal;
+  /**
+   * Tool names that should return `endTurn: true` on success.
+   * Used by hidden agent turns (e.g., the hidden image agent) to terminate the streaming
+   * loop cleanly after their target tool completes, without hardcoding a specific "mode".
+   * Any tool whose name appears in this list will end the turn immediately on success.
+   */
+  endTurnAfterTools?: string[];
 }
 
 /**

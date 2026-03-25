@@ -94,6 +94,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.nai_diffusion_model_id` stores the dedicated NovelAI image-model override for `generate_image_nai`; `NULL` means follow `diffusion_model_id` only when that shared model is already a NovelAI diffusion model, otherwise use the seeded default NovelAI model.
 - `tomori_configs.nai_sampler`, `nai_steps`, `nai_scale`, `nai_noise_schedule`, and `nai_cfg_rescale` store optional server overrides for NovelAI image generation params; `NULL` means use the env fallback.
 - `tomori_configs.vision_llm_id` stores the dedicated vision model for non-vision chat models; `NULL` means no vision tool is available. When set, the `analyze_image` tool is exposed so non-vision models can delegate image analysis to this model.
+- `tomori_configs.llm_logit_biases` stores server-wide logit-bias entries as raw text/token-ID input plus tokenizer-specific cached resolutions. Raw text stays canonical so entries can be refreshed when `llm_id` changes.
 
 ### NovelAI profile tags
 
@@ -135,6 +136,11 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 - `opt_api_keys.api_key` + `opt_api_keys.key_version`
 - `api_key_rotation.api_key` + `api_key_rotation.key_version`
 - `saved_provider_configs.api_key` + `saved_provider_configs.key_version`
+
+### Logit bias snapshot storage
+
+- `saved_provider_configs.llm_logit_biases` mirrors `tomori_configs.llm_logit_biases` so provider snapshots can restore both the original text entries and any cached tokenizer-family resolutions.
+- This keeps `/config provider switch` and `/config apikey set` compatible with text-first logit-bias UX across model changes.
 
 ## Migration Style
 

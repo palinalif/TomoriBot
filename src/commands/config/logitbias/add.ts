@@ -25,6 +25,7 @@ import {
 	parseLogitBiasInputTerms,
 	parseLogitBiasValue,
 } from "@/types/provider/logitBias";
+import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
@@ -145,9 +146,14 @@ export async function execute(
 			return;
 		}
 
+		const resolvedEntries = resolveLogitBiasEntriesForLlm(
+			buildLogitBiasEntries(terms, biasValue),
+			tomoriState.llm,
+		);
+
 		const merged = mergeLogitBiasEntries(
 			tomoriState.config.llm_logit_biases ?? [],
-			buildLogitBiasEntries(terms, biasValue),
+			resolvedEntries.entries,
 		);
 
 		if (merged.addedCount === 0 && merged.updatedCount === 0) {
@@ -209,6 +215,7 @@ export async function execute(
 				total_count: merged.entries.length.toString(),
 				runtime_ready_count: countRuntimeReadyLogitBiasEntries(
 					merged.entries,
+					resolvedEntries.tokenizerKey,
 				).toString(),
 			},
 			color: ColorCode.SUCCESS,

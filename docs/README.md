@@ -24,6 +24,7 @@ This folder is organized by topic instead of numeric filenames.
 ## AI
 
 - [`ai/providers.md`](./ai/providers.md)
+- [`ai/logit-bias.md`](./ai/logit-bias.md)
 - [`ai/streaming.md`](./ai/streaming.md)
 - [`ai/expression-handling.md`](./ai/expression-handling.md)
 - [`ai/text-flushing-and-chunking.md`](./ai/text-flushing-and-chunking.md)

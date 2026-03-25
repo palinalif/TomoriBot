@@ -105,7 +105,10 @@ Rule:
 - cache module: `src/utils/cache/openrouterCapabilityCache.ts`
 - OpenRouter provider can override stale DB capability flags with API capabilities at runtime.
 - `supported_parameters` from the OpenRouter cache is also used to gate optional request params such as `logit_bias`.
-- Tomori stores `/config logitbias` entries server-wide, but runtime application currently only uses explicit numeric token IDs. Plain text entries are preserved for import/export compatibility and future tokenizer support.
+- `/config logitbias` now stores raw text as the source of truth and caches tokenizer-specific token IDs per model family.
+- Model changes refresh those cached tokenizations instead of forcing users to re-enter the same words.
+- Runtime still only sends `logit_bias` when the active OpenRouter model reports support for it.
+- See `docs/ai/logit-bias.md` for the storage format, refresh triggers, and tokenizer-family design.
 
 ### Gemini and NovelAI token limits
 

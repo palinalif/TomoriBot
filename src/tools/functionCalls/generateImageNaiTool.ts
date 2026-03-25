@@ -62,8 +62,10 @@ const NAI_INPAINT_STRENGTH = Number.parseFloat(
 );
 const NAI_ENABLE_CHAR_REFERENCES =
   (process.env.NAI_ENABLE_CHAR_REFERENCES || "true").toLowerCase() === "true";
-// Temporarily disabled: inline per-character tags are currently more reliable than
-// profile-driven autofill for `generate_image_nai`.
+// Intentionally disabled: profile-driven autofill can conflict with inline tags the
+// LLM picks from context.  The LLM reads appearance tags from context and writes them
+// directly into `tags` — no DB merge needed.  Re-enable only after conflict resolution
+// strategy is designed and validated.
 const NAI_ENABLE_PROFILE_CHARACTER_AUTOFILL = false;
 const NAI_ENABLE_PROFILE_CHARACTER_REMOVE_TAGS = false;
 const NAI_IMAGE_BASE_URL = "https://image.novelai.net";
@@ -1118,29 +1120,31 @@ export class GenerateImageNaiTool extends BaseTool {
         };
       }
 
-      await sendToolProgressNotice(
-        context.channel,
-        context.locale,
-        {
-          titleKey: isInpaintMode
-            ? "genai.image.editing_title"
-            : "genai.image.generating_title",
-          descriptionKey: isInpaintMode
-            ? "genai.image.editing_description"
-            : "genai.image.generating_description",
-          descriptionVars: isInpaintMode
-            ? { edit_target: editTarget as string }
-            : undefined,
-          footerKey: "genai.image.generating_footer",
-          color: ColorCode.INFO,
-        },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
-        "GenerateImageNaiTool",
-      );
+      if (!context.suppressProgressNotices) {
+        await sendToolProgressNotice(
+          context.channel,
+          context.locale,
+          {
+            titleKey: isInpaintMode
+              ? "genai.image.editing_title"
+              : "genai.image.generating_title",
+            descriptionKey: isInpaintMode
+              ? "genai.image.editing_description"
+              : "genai.image.generating_description",
+            descriptionVars: isInpaintMode
+              ? { edit_target: editTarget as string }
+              : undefined,
+            footerKey: "genai.image.generating_footer",
+            color: ColorCode.INFO,
+          },
+          {
+            webhook: context.webhook,
+            personaUsername: context.personaUsername,
+            personaAvatarUrl: context.personaAvatarUrl,
+          },
+          "GenerateImageNaiTool",
+        );
+      }
 
       // 4. Build base scene tag list — server style tags are trusted and should
       //    bypass suggest-tags normalization. Character tags are handled separately
@@ -1430,6 +1434,8 @@ export class GenerateImageNaiTool extends BaseTool {
         success: true,
         message: successMessage,
         // imageMetadata intentionally omitted — Discord CDN URLs are protected
+        // End the LLM turn immediately when this tool is the target of a hidden agent turn
+        endTurn: context.streamContext?.endTurnAfterTools?.includes(this.name) ?? false,
       };
     } catch (error) {
       const errorMessage =

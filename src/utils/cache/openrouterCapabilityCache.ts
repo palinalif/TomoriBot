@@ -75,6 +75,7 @@ export interface ModelPricing {
  */
 const capabilityCache = new Map<string, ModelCapabilities>();
 const supportedParametersCache = new Map<string, Set<string>>();
+const tokenizerCache = new Map<string, string>();
 
 /**
  * In-memory cache for OpenRouter model token limits
@@ -215,6 +216,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
     // 1. Clear existing caches
     capabilityCache.clear();
     supportedParametersCache.clear();
+    tokenizerCache.clear();
     tokenLimitsCache.clear();
     pricingCache.clear();
     cacheReady = false;
@@ -270,6 +272,12 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
         model.id,
         new Set(model.supported_parameters ?? []),
       );
+      if (typeof model.architecture?.tokenizer === "string") {
+        const tokenizer = model.architecture.tokenizer.trim();
+        if (tokenizer.length > 0) {
+          tokenizerCache.set(model.id, tokenizer);
+        }
+      }
       tokenLimitsCache.set(model.id, tokenLimits);
       if (
         promptPricePerMillion !== undefined &&
@@ -312,6 +320,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
     // Ensure caches are in a clean state even on error
     capabilityCache.clear();
     supportedParametersCache.clear();
+    tokenizerCache.clear();
     tokenLimitsCache.clear();
     pricingCache.clear();
     cacheReady = false;
@@ -356,6 +365,22 @@ export function getOpenRouterSupportedParameters(
   }
 
   return supportedParametersCache.get(modelCodename);
+}
+
+/**
+ * Gets the tokenizer metadata reported by OpenRouter for a specific model.
+ *
+ * @param modelCodename - Model codename (e.g., "openai/gpt-4o-mini")
+ * @returns Raw tokenizer label from OpenRouter, or undefined if not cached
+ */
+export function getOpenRouterTokenizer(
+  modelCodename: string,
+): string | undefined {
+  if (!cacheReady) {
+    return undefined;
+  }
+
+  return tokenizerCache.get(modelCodename);
 }
 
 /**

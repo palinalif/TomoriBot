@@ -925,6 +925,8 @@ export class GenerateImageTool extends BaseTool {
         success: true,
         message: successMessage,
         // imageMetadata intentionally omitted to avoid 403 errors when OpenRouter tries to fetch Discord CDN URLs
+        // End the LLM turn immediately when this tool is the target of a hidden agent turn
+        endTurn: context.streamContext?.endTurnAfterTools?.includes(this.name) ?? false,
       };
     } catch (error) {
       // Handle specific Google API errors

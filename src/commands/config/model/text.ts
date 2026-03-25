@@ -45,6 +45,7 @@ import {
   promptCustomCapabilities,
   DEFAULT_CUSTOM_MODEL_NAME,
 } from "../../../utils/discord/customProviderModal";
+import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_model_text_modal";
@@ -706,6 +707,11 @@ export async function execute(
     // Clear custom_model_name when switching to a non-custom provider.
     // Also clear fallback_llm_ids when the provider changes — fallback models are
     // provider-scoped and become invalid after a provider switch.
+    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(
+      tomoriState.config.llm_logit_biases ?? [],
+      selectedModel,
+    );
+    const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
     const clearFallbacks =
       tomoriState.llm.llm_provider !== selectedModel.llm_provider;
     const queryResult = clearFallbacks
@@ -713,14 +719,16 @@ export async function execute(
             UPDATE tomori_configs
             SET llm_id = ${selectedModel.llm_id},
                 custom_model_name = NULL,
-                fallback_llm_ids = '[]'::JSONB
+                fallback_llm_ids = '[]'::JSONB,
+                llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb
             WHERE server_id = ${tomoriState.server_id}
             RETURNING *
         `
       : await sql`
             UPDATE tomori_configs
             SET llm_id = ${selectedModel.llm_id},
-                custom_model_name = NULL
+                custom_model_name = NULL,
+                llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb
             WHERE server_id = ${tomoriState.server_id}
             RETURNING *
         `;

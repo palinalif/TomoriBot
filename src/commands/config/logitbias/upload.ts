@@ -24,7 +24,9 @@ import {
 	countRuntimeReadyLogitBiasEntries,
 	logitBiasEntrySchema,
 	mergeLogitBiasEntries,
+	parseNumericTokenId,
 } from "@/types/provider/logitBias";
+import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
@@ -200,12 +202,18 @@ export async function execute(
 				id: entry.id ?? randomUUID(),
 				text: entry.text,
 				value: entry.value,
+				kind: parseNumericTokenId(entry.text) ? "token_id" : "text",
+				tokenizations: [],
 			}),
+		);
+		const resolvedEntries = resolveLogitBiasEntriesForLlm(
+			normalizedUploadEntries,
+			tomoriState.llm,
 		);
 
 		const merged = mergeLogitBiasEntries(
 			tomoriState.config.llm_logit_biases ?? [],
-			normalizedUploadEntries,
+			resolvedEntries.entries,
 		);
 
 		if (merged.addedCount === 0 && merged.updatedCount === 0) {
@@ -266,6 +274,7 @@ export async function execute(
 				total_count: merged.entries.length.toString(),
 				runtime_ready_count: countRuntimeReadyLogitBiasEntries(
 					merged.entries,
+					resolvedEntries.tokenizerKey,
 				).toString(),
 			},
 			color: ColorCode.SUCCESS,

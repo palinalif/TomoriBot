@@ -98,7 +98,7 @@ export const DEFAULT_SYSTEM_PROMPT =
  * Simplified message structure received from tomoriChat.ts.
  * This is an internal representation before converting to StructuredContextItem.
  */
-type SimplifiedMessageForContext = {
+export type SimplifiedMessageForContext = {
   id: string; // Discord message ID
   authorId: string;
   authorName: string;

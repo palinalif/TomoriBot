@@ -75,7 +75,6 @@ import {
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
-import { buildRuntimeLogitBiasMap } from "@/types/provider/logitBias";
 import {
   loadDefaultModelForProvider,
   loadAvailableModelsForProvider,
@@ -83,6 +82,7 @@ import {
 import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 import { openrouterProviderInfo } from "./providerInfo";
+import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 
 /**
  * Gets the default OpenRouter model with a robust fallback chain:
@@ -683,8 +683,9 @@ export class OpenrouterProvider
         minP: tomoriState.config.llm_min_p,
       }),
     };
-    const runtimeLogitBias = buildRuntimeLogitBiasMap(
+    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(
       tomoriState.config.llm_logit_biases ?? [],
+      tomoriState.llm,
     );
     if (Object.keys(runtimeLogitBias).length > 0) {
       config.logitBias = runtimeLogitBias;
