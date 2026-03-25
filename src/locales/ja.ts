@@ -2309,6 +2309,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
             backend_current_description: `{provider} の通常の画像生成フローとプロンプト形式を使います`,
             backend_novelai_label: `NovelAI`,
             backend_novelai_description: `シーンを NovelAI 向けタグに変換し、NovelAI の画像ツールで生成します`,
+            persona_label: `送信ペルソナ`,
+            persona_description: `生成された画像を投稿するペルソナを選んでください`,
           },
         },
       },

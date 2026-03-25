@@ -2,9 +2,11 @@ import {
 	MessageFlags,
 	PermissionFlagsBits,
 	TextInputStyle,
+	type BaseGuildTextChannel,
 	type ChatInputCommandInteraction,
 	type Client,
 	type SlashCommandSubcommandBuilder,
+	type TextChannel,
 } from "discord.js";
 import {
 	checkMessageTriggerCooldownWithWhitelist,
@@ -16,6 +18,11 @@ import {
 	replyInfoEmbed,
 } from "@/utils/discord/interactionHelper";
 import { loadTomoriState } from "@/utils/db/dbRead";
+import { sql } from "@/utils/db/client";
+import {
+	getOrCreateWebhook,
+	resolvePersonaWebhookIdentity,
+} from "@/utils/discord/webhookManager";
 import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { checkImageQuota } from "@/utils/quota/imageQuotaManager";
 import { hasOptApiKey } from "@/utils/security/crypto";
@@ -35,6 +42,7 @@ const MODAL_CUSTOM_ID = "bot_generate_image_modal";
 const PROMPT_INPUT_ID = "bot_generate_image_prompt";
 const SETTING_INPUT_ID = "bot_generate_image_setting";
 const BACKEND_INPUT_ID = "bot_generate_image_backend";
+const PERSONA_INPUT_ID = "bot_generate_image_persona";
 
 // ─── Preset / backend types ───────────────────────────────────────────────────
 
@@ -87,6 +95,14 @@ interface SceneImageBackendAvailability {
 	novelAi: boolean;
 	showBackendSelector: boolean;
 	defaultBackend: SceneImageBackend | null;
+}
+
+/** Lightweight persona row used only for building the modal selector and resolving webhook identity. */
+interface PersonaSummary {
+	tomori_id: number;
+	tomori_nickname: string;
+	webhook_avatar_url: string | null;
+	is_alter: boolean;
 }
 
 type ImageQuotaCheckResult = Awaited<ReturnType<typeof checkImageQuota>>;
@@ -177,6 +193,41 @@ function getBackendOptions(locale: string, providerName: string) {
 			),
 		},
 	];
+}
+
+// ─── Persona helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Fetches the minimal persona rows needed for the modal sender selector.
+ * Returns main persona first (is_alter=false), then alters ordered by recency.
+ * @param serverId - Numeric DB server ID from tomoriState
+ */
+async function loadServerPersonaSummaries(
+	serverId: number,
+): Promise<PersonaSummary[]> {
+	return await sql<PersonaSummary[]>`
+		SELECT tomori_id, tomori_nickname, webhook_avatar_url, is_alter
+		FROM tomoris
+		WHERE server_id = ${serverId}
+		ORDER BY is_alter ASC, updated_at DESC NULLS LAST, tomori_id DESC
+	`;
+}
+
+/**
+ * Builds string-select options from persona summaries for the modal.
+ * The active persona (matching activeTomoriId) is marked as default.
+ * @param personas - List of persona summaries from loadServerPersonaSummaries
+ * @param activeTomoriId - The currently active persona's tomori_id
+ */
+function getPersonaSelectOptions(
+	personas: PersonaSummary[],
+	activeTomoriId: number,
+) {
+	return personas.map((p) => ({
+		label: p.tomori_nickname,
+		value: p.tomori_id.toString(),
+		default: p.tomori_id === activeTomoriId,
+	}));
 }
 
 // ─── Backend availability ─────────────────────────────────────────────────────
@@ -351,6 +402,9 @@ export async function execute(
 		return;
 	}
 
+	// 4a. Load all persona summaries for the sender selector.
+	const personaSummaries = await loadServerPersonaSummaries(tomoriState.server_id);
+
 	// 5. Cooldown check.
 	const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
 	const cooldownLength = tomoriState.config.cooldown_length ?? 5;
@@ -501,6 +555,13 @@ export async function execute(
 							},
 						]
 					: []),
+			{
+				customId: PERSONA_INPUT_ID,
+				labelKey: "commands.bot.generate.image.modal.persona_label",
+				descriptionKey: "commands.bot.generate.image.modal.persona_description",
+				required: true,
+				options: getPersonaSelectOptions(personaSummaries, tomoriState.tomori_id ?? -1),
+			},
 			],
 		},
 		MessageFlags.Ephemeral,
@@ -547,11 +608,56 @@ export async function execute(
 
 		const extraDirection = modalResult.values?.[PROMPT_INPUT_ID]?.trim();
 
+		// 13. Resolve the selected sender persona and its webhook identity.
+		const selectedPersonaIdStr = modalResult.values?.[PERSONA_INPUT_ID];
+		const selectedPersonaId = selectedPersonaIdStr
+			? Number.parseInt(selectedPersonaIdStr, 10)
+			: tomoriState.tomori_id;
+		const selectedPersona =
+			personaSummaries.find((p) => p.tomori_id === selectedPersonaId) ??
+			personaSummaries[0];
+
+		let senderWebhook: import("discord.js").Webhook | undefined;
+		let senderPersonaUsername: string | undefined;
+		let senderPersonaAvatarUrl: string | undefined;
+
+		if (selectedPersona) {
+			senderPersonaUsername = selectedPersona.tomori_nickname;
+
+			// Attempt to get or create the channel webhook for persona-identity posting.
+			// Threads and channels without ManageWebhooks permission fall back to a direct bot message.
+			const webhookChannel =
+				interaction.guild.channels.cache.get(interaction.channel.id) ??
+				interaction.channel;
+
+			if ("fetchWebhooks" in webhookChannel) {
+				try {
+					const webhookResult = await getOrCreateWebhook(
+						webhookChannel as TextChannel | BaseGuildTextChannel,
+					);
+					if (webhookResult.webhook) {
+						senderWebhook = webhookResult.webhook;
+						// Resolve avatar URL using the same identity path as normal persona messages.
+						const identity = await resolvePersonaWebhookIdentity(
+							selectedPersona as unknown as TomoriState,
+							interaction.guild,
+						);
+						senderPersonaAvatarUrl = identity.avatarUrl ?? identity.avatarDataUri;
+					}
+				} catch (webhookError) {
+					log.warn(
+						"[/bot generate image] Failed to resolve persona webhook; image will post as bot",
+						webhookError as Error,
+					);
+				}
+			}
+		}
+
 		log.info(
-			`[/bot generate image] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}`,
+			`[/bot generate image] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.tomori_nickname ?? "active"}`,
 		);
 
-		// 13. Invoke the hidden image agent turn.
+		// 14. Invoke the hidden image agent turn.
 		//     This replaces the old structured-output planner: the model now sees the
 		//     full conversation context (persona prompt, users, memories, RAG docs, etc.)
 		//     and is directed via a tail directive to call the appropriate image tool.
@@ -568,6 +674,9 @@ export async function execute(
 			aspectRatio: settingPreset.aspectRatio,
 			naiOrientation: settingPreset.novelAiOrientation,
 			extraDirection,
+			webhook: senderWebhook,
+			personaUsername: senderPersonaUsername,
+			personaAvatarUrl: senderPersonaAvatarUrl,
 		});
 
 		if (!agentResult.success) {

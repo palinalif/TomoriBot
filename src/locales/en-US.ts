@@ -2296,6 +2296,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
             backend_current_description: `Use {provider}'s normal image-generation flow and prompt style`,
             backend_novelai_label: `NovelAI`,
             backend_novelai_description: `Convert the scene into NovelAI-style tags and use the NovelAI image tool`,
+            persona_label: `Sender Persona`,
+            persona_description: `Choose which persona posts the generated image`,
           },
         },
       },

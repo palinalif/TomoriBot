@@ -14,7 +14,7 @@
  * - No webhook / persona avatar — the image is posted directly by the tool.
  */
 
-import type { Client, Guild } from "discord.js";
+import type { Client, Guild, Webhook } from "discord.js";
 import { log } from "@/utils/misc/logger";
 import { buildContext } from "@/utils/text/contextBuilder";
 import type { SimplifiedMessageForContext } from "@/utils/text/contextBuilder";
@@ -108,6 +108,12 @@ export interface HiddenImageTurnParams {
 	naiOrientation: "portrait" | "landscape" | "square";
 	/** Optional extra direction from the user (free text from the modal). */
 	extraDirection?: string;
+	/** Webhook to use for posting the generated image (persona identity). */
+	webhook?: Webhook;
+	/** Display name for the persona posting the image. */
+	personaUsername?: string;
+	/** Avatar URL or data URI for the persona posting the image. */
+	personaAvatarUrl?: string;
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
@@ -139,6 +145,9 @@ export async function runHiddenImageTurn(
 		aspectRatio,
 		naiOrientation,
 		extraDirection,
+		webhook,
+		personaUsername,
+		personaAvatarUrl,
 	} = params;
 
 	// 1. Verify the active model supports function calling — required for tool-based generation.
@@ -353,6 +362,11 @@ export async function runHiddenImageTurn(
 		provider: provider.getInfo().name,
 		streamContext: streamingContext,
 		suppressProgressNotices: true, // Keep the hidden turn quiet
+		// Persona identity for webhook-based image posting (set by /bot generate image).
+		// When absent, the image tool falls back to a direct bot message.
+		webhook,
+		personaUsername,
+		personaAvatarUrl,
 	};
 
 	log.info(
