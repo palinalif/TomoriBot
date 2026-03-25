@@ -282,10 +282,14 @@ export async function runHiddenImageTurn(
 	// 5. Append the image agent directive as the final user message.
 	//    This replaces the old structured-output planner — the model itself plans
 	//    the image prompt using the full scene context it now sees above.
-	const dirLines: string[] = [
+	// Build the tool call instruction dynamically based on the selected backend.
+	const toolInstruction =
 		backend === "current_provider"
-			? `Call generate_image immediately to generate an image of the current scene.`
-			: `Call generate_image_nai immediately to generate an image of the current scene using danbooru-style tags.`,
+			? `You MUST call the generate_image tool immediately. Use the conversation context above to construct a detailed prompt describing the scene.`
+			: `You MUST call the generate_image_nai tool immediately. Use the conversation context above to construct danbooru-style tags describing the scene.`;
+
+	const dirLines: string[] = [
+		toolInstruction,
 		`Framing: ${presetLabel} — ${presetInstruction}`,
 		backend === "current_provider"
 			? `Aspect ratio: ${aspectRatio}`
@@ -294,11 +298,12 @@ export async function runHiddenImageTurn(
 	if (extraDirection?.trim()) {
 		dirLines.push(`Extra direction from user: ${extraDirection.trim()}`);
 	}
-	dirLines.push("Do not write any visible text. Call the tool now.");
+	// Use a clearer instruction that allows text alongside the tool call
+	dirLines.push("IMPORTANT: You MUST call the image tool (generate_image or generate_image_nai) immediately. Do not ask for clarification or ask if the user wants you to proceed. Just call the tool now with the scene information from above.");
 
 	const agentDirective: StructuredContextItem = {
 		role: "user",
-		parts: [{ type: "text", text: `[Image Agent: ${dirLines.join(" ")}]` }],
+		parts: [{ type: "text", text: `[System: ${dirLines.join(" ")}]` }],
 		metadataTag: ContextItemTag.DIALOGUE_HISTORY,
 	};
 	contextItems = [...contextItems, agentDirective];

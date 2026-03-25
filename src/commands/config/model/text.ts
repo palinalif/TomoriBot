@@ -799,8 +799,8 @@ export async function execute(
         // Cache already invalidated above; applyNaiPreset only writes to DB
       } else {
         log.warn(
-          `Default NAI preset "${defaultPresetEntry.name}" not found in DB — ` +
-            "was seed.sql run? Skipping auto-apply.",
+          `Default NAI preset "${defaultPresetEntry.name}" not found in DB. ` +
+            "Was seed.sql run? Skipping auto-apply.",
         );
       }
     }
