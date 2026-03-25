@@ -61,7 +61,18 @@ The current local resolver supports OpenAI BPE families via `gpt-tokenizer`:
 - `p50k_edit`
 - `r50k_base`
 
-OpenRouter tokenizer metadata is read from the startup capability cache when available. Tomori also falls back to model-codename heuristics for OpenAI-family model names.
+It also supports local tokenizer-family assets under `tokenizers/` for:
+
+- `deepseek_v3_r1`
+- `qwen3_5`
+- `mistral_small3`
+- `glm_zai`
+- `stepfun_step35`
+- `kimi_k2`
+- `gemma3`
+- `nemotron3`
+
+OpenRouter tokenizer metadata is read from the startup capability cache when available. Tomori also falls back to model-codename heuristics for both OpenAI BPE families and these local tokenizer families.
 
 ## Text Variant Expansion
 

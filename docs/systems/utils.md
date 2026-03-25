@@ -79,7 +79,8 @@ This is a current map of shared utility modules under `src/utils/`.
 
 - `mcpManager.ts`: MCP lifecycle
 - `mcpExecutor.ts`: MCP execution abstraction
-- `mcpConfigLoader.ts`: MCP config loading
+- `mcpConfig.ts`: MCP config loading
+- `mcpUrlSecurity.ts`: guild MCP URL parsing, DNS/IP validation, and SSRF hardening
 
 ### `utils/matrix`
 

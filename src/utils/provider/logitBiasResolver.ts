@@ -6,6 +6,11 @@ import { encode as encodeP50kEdit } from "gpt-tokenizer/encoding/p50k_edit";
 import { encode as encodeR50kBase } from "gpt-tokenizer/encoding/r50k_base";
 import type { LlmRow } from "@/types/db/schema";
 import {
+	getLocalLogitBiasTokenizerEncoder,
+	isLocalLogitBiasTokenizerFamily,
+	resolveLocalLogitBiasTokenizerFamily,
+} from "@/utils/provider/localTokenizerRegistry";
+import {
 	buildRuntimeLogitBiasMap,
 	countRuntimeReadyLogitBiasEntries,
 	type LogitBiasEntry,
@@ -23,6 +28,7 @@ type OpenAiBpeEncoding =
 	| "r50k_base";
 
 type OpenAiEncodingFn = (text: string) => number[];
+type LogitBiasTextEncoder = (text: string) => number[];
 
 const OPENAI_BPE_ENCODERS: Record<OpenAiBpeEncoding, OpenAiEncodingFn> = {
 	cl100k_base: encodeCl100kBase,
@@ -54,7 +60,16 @@ export function resolveLogitBiasEntriesForLlm(
 		};
 	}
 
-	const encoder = OPENAI_BPE_ENCODERS[tokenizerKey];
+	const encoder = getLogitBiasTextEncoderForKey(tokenizerKey);
+	if (!encoder) {
+		return {
+			entries,
+			tokenizerKey,
+			resolvedEntryCount: 0,
+			runtimeReadyCount: countRuntimeReadyLogitBiasEntries(entries, tokenizerKey),
+		};
+	}
+
 	let resolvedEntryCount = 0;
 	const resolvedEntries = entries.map((entry) => {
 		if (entry.kind === "token_id") {
@@ -115,7 +130,7 @@ export function buildRuntimeLogitBiasMapForLlm(
 
 export function getLogitBiasTokenizerKeyForLlm(
 	llm: LlmRow | null | undefined,
-): OpenAiBpeEncoding | null {
+): string | null {
 	if (!llm) return null;
 
 	const modelCodename = llm.llm_codename;
@@ -124,7 +139,7 @@ export function getLogitBiasTokenizerKeyForLlm(
 			? getOpenRouterTokenizer(modelCodename)
 			: undefined;
 
-	return resolveOpenAiBpeEncoding(openRouterTokenizer, modelCodename);
+	return resolveLogitBiasTokenizerKey(openRouterTokenizer, modelCodename);
 }
 
 function resolveOpenAiBpeEncoding(
@@ -201,6 +216,31 @@ function resolveOpenAiBpeEncoding(
 		normalizedModelCodename === "ada"
 	) {
 		return "r50k_base";
+	}
+
+	return null;
+}
+
+function resolveLogitBiasTokenizerKey(
+	rawTokenizer: string | null | undefined,
+	modelCodename: string,
+): string | null {
+	return (
+		resolveOpenAiBpeEncoding(rawTokenizer, modelCodename) ??
+		resolveLocalLogitBiasTokenizerFamily(rawTokenizer, modelCodename)
+	);
+}
+
+function getLogitBiasTextEncoderForKey(
+	tokenizerKey: string,
+): LogitBiasTextEncoder | null {
+	const openAiEncoder = OPENAI_BPE_ENCODERS[tokenizerKey as OpenAiBpeEncoding];
+	if (openAiEncoder) {
+		return openAiEncoder;
+	}
+
+	if (isLocalLogitBiasTokenizerFamily(tokenizerKey)) {
+		return getLocalLogitBiasTokenizerEncoder(tokenizerKey);
 	}
 
 	return null;

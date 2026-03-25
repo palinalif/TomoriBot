@@ -28,6 +28,7 @@ import type { ToolContext } from "@/types/tool/interfaces";
 import { getCachedEnabledGuildMcpConfigs } from "@/utils/cache/guildMcpConfigCache";
 import { decryptGuildMcpAuthToken } from "@/utils/db/guildMcpDb";
 import { sendStandardEmbed } from "@/utils/discord/embedHelper";
+import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import { localizer } from "@/utils/text/localizer";
 
 /**
@@ -528,6 +529,13 @@ class GuildMcpManager {
 		serverLabel?: string,
 	): Promise<void> {
 		const label = serverLabel ?? url;
+		const urlValidation = await validateRemoteMcpUrl(url);
+		if (!urlValidation.valid) {
+			throw new Error(
+				urlValidation.details ??
+					`Guild MCP URL failed runtime validation for '${label}'.`,
+			);
+		}
 
 		// 1. Try Smithery Connect for *.run.tools URLs
 		if (isSmitheryUrl(url) && authToken) {
@@ -559,7 +567,10 @@ class GuildMcpManager {
 		}
 
 		const parsedUrl = new URL(url);
-		const requestInit = { headers };
+		const requestInit = {
+			headers,
+			redirect: "error" as const,
+		};
 
 		// 2. Try StreamableHTTP (modern MCP transport)
 		try {

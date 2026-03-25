@@ -21,6 +21,10 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { RadioGroupOption } from "@/types/discord/modal";
 import { insertGuildMcpServer, countGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
+import {
+	type McpUrlValidationResult,
+	validateRemoteMcpUrl,
+} from "@/utils/mcp/mcpUrlSecurity";
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -35,18 +39,6 @@ const MAX_SERVERS_PER_GUILD = Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 5
 
 /** Name format: alphanumeric + hyphens, 1-32 chars */
 const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,31}$/;
-
-/**
- * Private IPv4 ranges to block for SSRF protection.
- * Localhost is allowed when RUN_ENV !== "production".
- */
-const PRIVATE_IP_PATTERNS = [
-	/^10\./,
-	/^172\.(1[6-9]|2\d|3[01])\./,
-	/^192\.168\./,
-	/^169\.254\./, // Link-local
-	/^0\./, // "This" network
-];
 
 // ─── Subcommand Configuration ────────────────────────────────────────
 
@@ -207,11 +199,13 @@ export async function execute(
 		}
 
 		// 5. Validate URL format + security
-		const urlValidation = validateMcpUrl(url);
+		const urlValidation = await validateRemoteMcpUrl(url);
 		if (!urlValidation.valid) {
+			const validationMessage = getUrlValidationMessage(locale, urlValidation);
 			await replyInfoEmbed(replyInteraction, locale, {
 				titleKey: "commands.config.mcp.add.invalid_url_title",
-				description: urlValidation.reason,
+				descriptionKey: validationMessage.descriptionKey,
+				descriptionVars: validationMessage.descriptionVars,
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -315,56 +309,51 @@ export async function execute(
 	}
 }
 
-// ─── URL Validation Helper ───────────────────────────────────────────
-
-/**
- * Validate a remote MCP server URL for security.
- * Production requires HTTPS. Dev allows http://localhost and http://127.0.0.1.
- * Private IP ranges are blocked in production (SSRF mitigation).
- *
- * @param url - URL string to validate
- * @returns Validation result
- */
-function validateMcpUrl(url: string): { valid: boolean; reason: string } {
-	const isProduction = process.env.RUN_ENV === "production";
-
-	let parsed: URL;
-	try {
-		parsed = new URL(url);
-	} catch {
-		return { valid: false, reason: "Invalid URL format." };
+function getUrlValidationMessage(
+	_locale: string,
+	validation: McpUrlValidationResult,
+): {
+	descriptionKey: string;
+	descriptionVars?: Record<string, string>;
+} {
+	switch (validation.failureCode) {
+		case "INVALID_FORMAT":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_invalid_format_description",
+			};
+		case "INVALID_PROTOCOL":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_protocol_description",
+			};
+		case "REMOTE_HTTP_FORBIDDEN":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_http_localhost_only_description",
+			};
+		case "PRODUCTION_HTTPS_REQUIRED":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_https_required_description",
+			};
+		case "PRODUCTION_LOCALHOST_FORBIDDEN":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_localhost_blocked_description",
+			};
+		case "DNS_RESOLUTION_FAILED":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_dns_failed_description",
+				descriptionVars: {
+					hostname: validation.hostname ?? "unknown",
+				},
+			};
+		case "PRODUCTION_BLOCKED_ADDRESS":
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_private_address_description",
+				descriptionVars: {
+					address: validation.blockedAddress ?? "unknown",
+				},
+			};
+		default:
+			return {
+				descriptionKey: "commands.config.mcp.add.invalid_url_invalid_format_description",
+			};
 	}
-
-	// Must be HTTP or HTTPS
-	if (!["http:", "https:"].includes(parsed.protocol)) {
-		return { valid: false, reason: "URL must use HTTP or HTTPS protocol." };
-	}
-
-	const hostname = parsed.hostname.toLowerCase();
-	const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-
-	if (isProduction) {
-		// Production: HTTPS required
-		if (parsed.protocol !== "https:") {
-			return { valid: false, reason: "Production requires HTTPS. Use a publicly-hosted MCP server with TLS." };
-		}
-
-		// Block private IPs in production
-		if (isLocalhost) {
-			return { valid: false, reason: "Localhost is not allowed in production." };
-		}
-
-		for (const pattern of PRIVATE_IP_PATTERNS) {
-			if (pattern.test(hostname)) {
-				return { valid: false, reason: "Private IP addresses are not allowed in production." };
-			}
-		}
-	} else {
-		// Dev: allow HTTP for localhost only
-		if (parsed.protocol === "http:" && !isLocalhost) {
-			return { valid: false, reason: "HTTP is only allowed for localhost in development. Use HTTPS for remote servers." };
-		}
-	}
-
-	return { valid: true, reason: "" };
 }

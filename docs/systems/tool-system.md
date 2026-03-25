@@ -80,6 +80,9 @@ Current MCP behavior notes:
 
 - Google and OpenRouter MCP-capable adapters are registered at startup.
 - NovelAI MCP adapter is intentionally disabled due prompt budget constraints.
+- Guild-registered remote MCP servers added via `/config mcp add` are validated before save and again before each connection attempt.
+- In production, guild MCP servers must use HTTPS and resolve only to publicly routable IP addresses.
+- Direct HTTP/SSE transports for guild MCP servers disable redirects so a validated URL cannot bounce to a different internal target later.
 
 ## Current MCP Servers
 

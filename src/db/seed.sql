@@ -20,7 +20,7 @@ VALUES
   ('google', 'gemini-2.0-flash', false, false, false, true, true, true, true, true, true, false, true, NULL, NULL),
   ('google', 'gemini-2.5-flash-lite', false, false, false, false, true, true, true, true, true, false, true, 'Lightweight version optimized for speed and efficiency', '速度と効率を最適化した軽量版モデル'),
   ('google', 'gemini-2.5-flash-preview-05-20', false, false, false, true, true, true, true, true, true, false, true, NULL, NULL),
-  ('google', 'gemini-2.5-flash-preview-09-2025', false, false, false, false, true, true, true, true, true, false, true, 'Experimental model for general-purpose applications', '実験的な汎用アプリケーション向けモデル'),
+  ('google', 'gemini-2.5-flash-preview-09-2025', false, false, false, true, true, true, true, true, true, false, true, 'Experimental model for general-purpose applications (deprecated, use gemini-2.5-flash)', '実験的な汎用アプリケーション向けモデル（非推奨、gemini-2.5-flashを使用）'),
   ('google', 'gemini-2.5-flash', false, true, false, false, true, true, true, true, true, false, true, 'Balanced model for general-purpose applications', '汎用アプリケーション向けのバランス型モデル'),
   ('google', 'gemini-2.5-pro', true, false, true, false, true, true, true, true, true, false, true, 'Most capable model for complex reasoning and analysis', '複雑な推論と分析に最も優れたモデル'),
   ('google', 'gemini-3-flash-preview', false, false, false, false, true, true, true, true, true, false, true, 'Latest preview model with enhanced performance and capabilities', '強化されたパフォーマンスと機能を備えた最新のプレビューモデル'),
