@@ -75,6 +75,7 @@ import {
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
+import { buildRuntimeLogitBiasMap } from "@/types/provider/logitBias";
 import {
   loadDefaultModelForProvider,
   loadAvailableModelsForProvider,
@@ -682,6 +683,12 @@ export class OpenrouterProvider
         minP: tomoriState.config.llm_min_p,
       }),
     };
+    const runtimeLogitBias = buildRuntimeLogitBiasMap(
+      tomoriState.config.llm_logit_biases ?? [],
+    );
+    if (Object.keys(runtimeLogitBias).length > 0) {
+      config.logitBias = runtimeLogitBias;
+    }
 
     // Only add tools field if the model supports them (use effective value)
     if (effectiveHasTools) config.tools = await this.getTools(tomoriState);

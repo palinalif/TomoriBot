@@ -679,24 +679,26 @@ export class GenerateImageTool extends BaseTool {
 				};
 			}
 
-			await sendToolProgressNotice(
-				context.channel,
-				context.locale,
-				{
-					titleKey: "genai.image.generating_title",
-					descriptionKey: usesReferences
-						? "genai.image.generating_with_references_description"
-						: "genai.image.generating_description",
-					footerKey: "genai.image.generating_footer",
-					color: ColorCode.INFO,
-				},
-				{
-					webhook: context.webhook,
-					personaUsername: context.personaUsername,
-					personaAvatarUrl: context.personaAvatarUrl,
-				},
-				"GenerateImageTool",
-			);
+			if (!context.suppressProgressNotices) {
+				await sendToolProgressNotice(
+					context.channel,
+					context.locale,
+					{
+						titleKey: "genai.image.generating_title",
+						descriptionKey: usesReferences
+							? "genai.image.generating_with_references_description"
+							: "genai.image.generating_description",
+						footerKey: "genai.image.generating_footer",
+						color: ColorCode.INFO,
+					},
+					{
+						webhook: context.webhook,
+						personaUsername: context.personaUsername,
+						personaAvatarUrl: context.personaAvatarUrl,
+					},
+					"GenerateImageTool",
+				);
+			}
 
 			// Collect reference images from message attachments and/or profile picture
 			const referenceImages: Array<{ mimeType: string; data: string }> = [];

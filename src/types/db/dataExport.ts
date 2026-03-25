@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
+import { logitBiasEntrySchema } from "@/types/provider/logitBias";
 
 /**
  * Version identifier for export/import format
@@ -99,6 +100,7 @@ export const serverConfigExportSchema = z.object({
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0),
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0),
   llm_min_p: z.number().min(0.0).max(1.0).default(0.0),
+  llm_logit_biases: z.array(logitBiasEntrySchema).default([]),
   humanizer_degree: z.number().int().min(0).max(3),
   timezone_offset: z.number().int().min(-12).max(14),
   message_fetch_limit: z.number().int().min(20).max(100).default(80),

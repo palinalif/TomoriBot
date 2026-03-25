@@ -58,6 +58,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
   "llm_frequency_penalty",
   "llm_presence_penalty",
   "llm_min_p",
+  "llm_logit_biases",
   "api_key",
   "key_version",
   "trigger_words",

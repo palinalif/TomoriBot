@@ -56,6 +56,7 @@ export interface OpenrouterStreamConfig extends StreamConfig {
   presencePenalty?: number; // Penalize repeated topics (-2.0 to 2.0)
   repetitionPenalty?: number; // Penalize token repetition (0.0-2.0)
   minP?: number; // Minimum probability threshold (0.0=disabled)
+  logitBias?: Record<string, number>; // OpenAI-style token-ID bias map
 }
 
 /**
@@ -164,6 +165,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     "frequency_penalty",
     "presence_penalty",
     "repetition_penalty",
+    "logit_bias",
     "temperature",
     "max_tokens",
     "stop",
@@ -661,6 +663,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           skippedUnsupportedParams.push("min_p");
         }
       }
+      if (openrouterConfig.logitBias !== undefined) {
+        if (this.isOpenRouterParamSupported(supportedParameters, "logit_bias")) {
+          requestBody.logit_bias = openrouterConfig.logitBias;
+        } else {
+          skippedUnsupportedParams.push("logit_bias");
+        }
+      }
 
       if (personaSpeakerStop) {
         stopParamSupported = this.isOpenRouterParamSupported(
@@ -697,7 +706,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         "temperature" in requestBody ? String(config.temperature) : "omitted";
 
       log.info(
-        `Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${openrouterConfig.topP ?? "default"}, top_k: ${openrouterConfig.topK ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}, min_p: ${openrouterConfig.minP ?? "default"}`,
+        `Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${openrouterConfig.topP ?? "default"}, top_k: ${openrouterConfig.topK ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}, min_p: ${openrouterConfig.minP ?? "default"}, logit_bias: ${Object.keys(openrouterConfig.logitBias ?? {}).length}`,
       );
 
       // Build headers

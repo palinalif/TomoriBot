@@ -4,6 +4,10 @@ import {
 	DEFAULT_NAI_NEGATIVE_TAGS,
 	DEFAULT_NAI_STYLE_TAGS,
 } from "@/utils/image/naiTagDefaults";
+import {
+	logitBiasEntrySchema,
+	normalizeLogitBiasEntries,
+} from "@/types/provider/logitBias";
 
 export enum HumanizerDegree {
   NONE = 0,
@@ -209,6 +213,10 @@ export const tomoriConfigSchema = z.object({
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
   llm_min_p: z.number().min(0.0).max(1.0).default(0.0), // Added February 2026 - Min-P sampling (0.0=disabled)
+	llm_logit_biases: z.preprocess(
+		(value) => normalizeLogitBiasEntries(value),
+		z.array(logitBiasEntrySchema).default([]),
+	), // Added March 2026 - Stored OpenAI-style logit bias entries (text or explicit token IDs)
   api_key: z.instanceof(Buffer).nullable(),
   key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
   trigger_words: z.array(z.string()).default([]),
@@ -802,6 +810,10 @@ export const savedProviderConfigSchema = z.object({
 	llm_frequency_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
 	llm_presence_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
 	llm_min_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+	llm_logit_biases: z.preprocess(
+		(value) => normalizeLogitBiasEntries(value),
+		z.array(logitBiasEntrySchema).default([]),
+	), // Added March 2026 - Logit bias snapshot
 	custom_endpoint_url: z.string().nullable(),
 	custom_model_name: z.string().nullable(),
 	fallback_llm_ids: z.preprocess(

@@ -104,6 +104,8 @@ Rule:
 - Startup cache fetch from `https://openrouter.ai/api/v1/models`
 - cache module: `src/utils/cache/openrouterCapabilityCache.ts`
 - OpenRouter provider can override stale DB capability flags with API capabilities at runtime.
+- `supported_parameters` from the OpenRouter cache is also used to gate optional request params such as `logit_bias`.
+- Tomori stores `/config logitbias` entries server-wide, but runtime application currently only uses explicit numeric token IDs. Plain text entries are preserved for import/export compatibility and future tokenizer support.
 
 ### Gemini and NovelAI token limits
 
@@ -131,6 +133,7 @@ Rule:
 - structured output, history extraction, and `/server initialize expressions` work when the configured custom model is marked with the required capabilities
 - conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
 - persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
+- `/config logitbias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
 
 ## DeepSeek Provider Notes
 

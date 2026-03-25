@@ -94,6 +94,7 @@ export interface ProviderConfig {
   temperature: number;
   maxOutputTokens?: number;
   tools?: Array<Record<string, unknown>>;
+  logitBias?: Record<string, number>;
 }
 
 /**

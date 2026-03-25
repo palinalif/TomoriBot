@@ -79,6 +79,7 @@ export interface OpenAICompatibleStreamConfig extends StreamConfig {
 	presencePenalty?: number;
 	repetitionPenalty?: number;
 	minP?: number;
+	logitBias?: Record<string, number>;
 }
 
 export interface OpenAICompatibleRequestMutationArgs {

@@ -152,6 +152,9 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 			if (openAICompatibleConfig.minP !== undefined) {
 				requestBody.min_p = openAICompatibleConfig.minP;
 			}
+			if (openAICompatibleConfig.logitBias !== undefined) {
+				requestBody.logit_bias = openAICompatibleConfig.logitBias;
+			}
 
 			await this.options.mutateRequestBody?.({
 				requestBody,
@@ -178,7 +181,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 			});
 
 			log.info(
-				`${this.options.adapterName}: Sampling params - temp: ${config.temperature}, top_p: ${openAICompatibleConfig.topP ?? "default"}, top_k: ${openAICompatibleConfig.topK ?? "default"}, freq_penalty: ${openAICompatibleConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openAICompatibleConfig.presencePenalty ?? "default"}, rep_penalty: ${openAICompatibleConfig.repetitionPenalty ?? "default"}, min_p: ${openAICompatibleConfig.minP ?? "default"}`,
+				`${this.options.adapterName}: Sampling params - temp: ${config.temperature}, top_p: ${openAICompatibleConfig.topP ?? "default"}, top_k: ${openAICompatibleConfig.topK ?? "default"}, freq_penalty: ${openAICompatibleConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openAICompatibleConfig.presencePenalty ?? "default"}, rep_penalty: ${openAICompatibleConfig.repetitionPenalty ?? "default"}, min_p: ${openAICompatibleConfig.minP ?? "default"}, logit_bias: ${Object.keys(openAICompatibleConfig.logitBias ?? {}).length}`,
 			);
 
 			// Create AbortController and link to external abort signal (SDK call timeout)

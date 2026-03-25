@@ -536,6 +536,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'llm_frequency_penalty', 'REAL
 SELECT add_column_if_not_exists('tomori_configs', 'llm_presence_penalty', 'REAL', '0.0');
 -- llm_min_p: Minimum probability threshold sampling (0.0=neutral/disabled, 1.0=most restricted)
 SELECT add_column_if_not_exists('tomori_configs', 'llm_min_p', 'REAL', '0.0');
+-- llm_logit_biases: Stored OpenAI-style logit bias entries [{id, text, value}, ...]
+SELECT add_column_if_not_exists('tomori_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
 
 -- Migration: Update llm_temperature range from [1.0, 2.0] to [0.0, 2.0] and default from 1.2 to 1.0 (March 2026)
 DO $$
@@ -1828,6 +1830,7 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- Ordered fallback model IDs
   channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{channel_disc_id, llm_id}, ...]
   persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{tomori_id, llm_id}, ...]
+  llm_logit_biases JSONB DEFAULT '[]'::JSONB, -- Snapshot: [{id, text, value}, ...]
   saved_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(server_id, provider),
@@ -1855,6 +1858,7 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'llm_top_k', 'INTEGER'
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_frequency_penalty', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_presence_penalty', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
 
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;

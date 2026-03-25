@@ -258,6 +258,7 @@ export async function execute(
 				llm_frequency_penalty: tomoriState.config.llm_frequency_penalty,
 				llm_presence_penalty: tomoriState.config.llm_presence_penalty,
 				llm_min_p: tomoriState.config.llm_min_p,
+				llm_logit_biases: tomoriState.config.llm_logit_biases ?? [],
 				channel_llm_overrides: currentChannelOverrides
 					.filter((o): o is typeof o & { llm: { llm_id: number } } =>
 						o.llm.llm_id != null,
@@ -313,6 +314,7 @@ export async function execute(
 		let newFrequencyPenalty: number | null = null;
 		let newPresencePenalty: number | null = null;
 		let newMinP: number | null = null;
+		let newLogitBiasesJson: string | null = null;
 
 		if (isRestoringFromSaved) {
 			// Restoring from saved config — use saved values
@@ -346,6 +348,7 @@ export async function execute(
 			newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
 			newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
 			newMinP = savedConfig.llm_min_p ?? null;
+			newLogitBiasesJson = JSON.stringify(savedConfig.llm_logit_biases ?? []);
 
 			if (isCustomProvider(normalizedProvider)) {
 				if (!customEndpointUrl || !validateEndpointUrl(customEndpointUrl)) {
@@ -652,6 +655,7 @@ export async function execute(
 				newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
 				newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
 				newMinP = savedConfig.llm_min_p ?? null;
+				newLogitBiasesJson = JSON.stringify(savedConfig.llm_logit_biases ?? []);
 			} else {
 				// Fresh provider switch — load default models
 				const defaultModel =
@@ -763,7 +767,8 @@ export async function execute(
 			    llm_top_k = COALESCE(${newTopK}, llm_top_k),
 			    llm_frequency_penalty = COALESCE(${newFrequencyPenalty}, llm_frequency_penalty),
 			    llm_presence_penalty = COALESCE(${newPresencePenalty}, llm_presence_penalty),
-			    llm_min_p = COALESCE(${newMinP}, llm_min_p)
+			    llm_min_p = COALESCE(${newMinP}, llm_min_p),
+			    llm_logit_biases = COALESCE(${newLogitBiasesJson}::jsonb, llm_logit_biases)
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *
 		`;

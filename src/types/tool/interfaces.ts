@@ -138,6 +138,7 @@ export interface ToolContext {
   webhook?: Webhook;
   personaUsername?: string;
   personaAvatarUrl?: string; // URL or data URI for the active persona/user identity
+  suppressProgressNotices?: boolean; // Skip public "working..." embeds for fire-and-forget flows
 }
 
 /**

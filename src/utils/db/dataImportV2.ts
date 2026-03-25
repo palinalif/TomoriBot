@@ -291,6 +291,7 @@ export async function importServerConfig(
       ? `{${config.nai_style_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}` : null;
     const naiNegativeTagsLiteral = config.nai_negative_tags
       ? `{${config.nai_negative_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}` : null;
+    const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
 			UPDATE tomori_configs
@@ -301,6 +302,7 @@ export async function importServerConfig(
 				llm_frequency_penalty = ${config.llm_frequency_penalty},
 				llm_presence_penalty = ${config.llm_presence_penalty},
 				llm_min_p = ${config.llm_min_p},
+				llm_logit_biases = ${logitBiasesJson}::jsonb,
 				humanizer_degree = ${config.humanizer_degree},
 				timezone_offset = ${config.timezone_offset},
 				message_fetch_limit = ${config.message_fetch_limit},
@@ -339,6 +341,7 @@ export async function importServerConfig(
 						llm_frequency_penalty = ${config.llm_frequency_penalty},
 						llm_presence_penalty = ${config.llm_presence_penalty},
 						llm_min_p = ${config.llm_min_p},
+						llm_logit_biases = ${logitBiasesJson}::jsonb,
 						humanizer_degree = ${config.humanizer_degree},
 						timezone_offset = ${config.timezone_offset},
 						message_fetch_limit = ${config.message_fetch_limit},
