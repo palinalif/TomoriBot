@@ -46,14 +46,6 @@ const BOT_GENERATE_IMAGE_AGENT_MAX_ITERATIONS = parseEnvInt(
 	10,
 );
 
-/** Overall timeout for each SDK streaming call (ms). */
-const BOT_GENERATE_IMAGE_STREAM_TIMEOUT_MS = parseEnvInt(
-	"BOT_GENERATE_IMAGE_STREAM_TIMEOUT_MS",
-	120_000,
-	10_000,
-	600_000,
-);
-
 /** Discord message types that carry no conversational content and should be skipped. */
 const SKIPPED_MESSAGE_TYPES = new Set<number>([
 	1,   // RecipientAdd
@@ -114,6 +106,17 @@ export interface HiddenImageTurnParams {
 	personaUsername?: string;
 	/** Avatar URL or data URI for the persona posting the image. */
 	personaAvatarUrl?: string;
+	/**
+	 * When the user picks a sender persona that differs from the active persona,
+	 * these fields override the buildContext() persona identity so the model is
+	 * prompted as that persona rather than the active one.
+	 */
+	contextPersonaOverride?: {
+		tomoriNickname: string;
+		personaPrompt: string | null;
+		tomoriAttributes: string[];
+		personaLineageId: number;
+	};
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
@@ -148,6 +151,7 @@ export async function runHiddenImageTurn(
 		webhook,
 		personaUsername,
 		personaAvatarUrl,
+		contextPersonaOverride,
 	} = params;
 
 	// 1. Verify the active model supports function calling — required for tool-based generation.
@@ -192,23 +196,9 @@ export async function runHiddenImageTurn(
 			msg.member?.displayName ?? msg.author.id,
 		);
 
-		// 1. Collect image attachments.
-		const imageAttachments: SimplifiedMessageForContext["imageAttachments"] = [];
-		for (const attachment of msg.attachments.values()) {
-			const contentType = attachment.contentType ?? "";
-			const name = attachment.name ?? "";
-			const isImage =
-				contentType.startsWith("image/") ||
-				/\.(png|jpe?g|webp|gif|bmp)$/i.test(name);
-			if (isImage) {
-				imageAttachments.push({
-					url: attachment.url,
-					proxyUrl: attachment.proxyURL,
-					mimeType: contentType || null,
-					filename: name,
-				});
-			}
-		}
+		// Skip image attachments — the hidden agent only needs text context to plan the
+		// image prompt. Including images would cause the provider to base64-encode and
+		// upload them all inline, producing a multi-MB payload that overwhelms the model.
 
 		simplifiedMessages.push({
 			id: msg.id,
@@ -218,7 +208,7 @@ export async function runHiddenImageTurn(
 			personaName: isBotMessage ? tomoriState.tomori_nickname : null,
 			content: msg.cleanContent || msg.content || null,
 			createdAt: msg.createdTimestamp,
-			imageAttachments,
+			imageAttachments: [], // Skip — see comment above
 			videoAttachments: [], // Skip video processing for the hidden agent
 		});
 
@@ -250,6 +240,15 @@ export async function runHiddenImageTurn(
 	// 4. Build full bot context using the standard context pipeline.
 	let contextItems: StructuredContextItem[];
 	try {
+		// Use the selected sender persona's identity if an override is provided;
+		// otherwise fall back to the active tomoriState values.
+		const persona = contextPersonaOverride ?? {
+			tomoriNickname: tomoriState.tomori_nickname,
+			personaPrompt: tomoriState.persona_prompt ?? null,
+			tomoriAttributes: tomoriState.attribute_list,
+			personaLineageId: tomoriState.persona_lineage_id,
+		};
+
 		const contextBuild = await buildContext({
 			guildId: guild.id,
 			serverName: guild.name,
@@ -261,11 +260,11 @@ export async function runHiddenImageTurn(
 			channelId: channel.id,
 			client,
 			triggererName,
-			tomoriNickname: tomoriState.tomori_nickname,
-			tomoriAttributes: tomoriState.attribute_list,
+			tomoriNickname: persona.tomoriNickname,
+			tomoriAttributes: persona.tomoriAttributes,
 			tomoriConfig: tomoriState.config,
-			personaPrompt: tomoriState.persona_prompt ?? null,
-			personaLineageId: tomoriState.persona_lineage_id,
+			personaPrompt: persona.personaPrompt,
+			personaLineageId: persona.personaLineageId,
 			isDMChannel: false,
 		});
 		contextItems = contextBuild.contextItems;
@@ -315,7 +314,9 @@ export async function runHiddenImageTurn(
 		disableShortTermMemoryUpdate: true, // Do not pollute STM from a hidden agent turn
 		suppressTextOutput: true,           // No visible text — only the image
 		isManuallyTriggered: true,
-		endTurnAfterTools: [targetToolName], // Stop the loop the moment the image tool succeeds
+		// End the turn as soon as either image tool succeeds — both are listed so the
+		// loop terminates cleanly even if the model calls the non-preferred backend.
+		endTurnAfterTools: ["generate_image", "generate_image_nai"],
 	};
 
 	// 7. Get provider and create config.
@@ -376,47 +377,26 @@ export async function runHiddenImageTurn(
 	for (let i = 0; i < BOT_GENERATE_IMAGE_AGENT_MAX_ITERATIONS; i++) {
 		log.info(`[Hidden Image Agent] Iteration ${i + 1}/${BOT_GENERATE_IMAGE_AGENT_MAX_ITERATIONS}`);
 
-		// 8a. Stream one LLM turn (with timeout guard).
-		const sdkAbortController = new AbortController();
-		streamingContext.abortSignal = sdkAbortController.signal;
-
-		let timeoutId: NodeJS.Timeout | null = null;
-		const timeoutPromise = new Promise<never>((_, reject) => {
-			timeoutId = setTimeout(() => {
-				sdkAbortController.abort();
-				reject(new Error("HIDDEN_AGENT_TIMEOUT"));
-			}, BOT_GENERATE_IMAGE_STREAM_TIMEOUT_MS);
-		});
-
+		// 8a. Stream one LLM turn.
+		// No per-stream timeout — normal chat (tomoriChat.ts) also has none.
+		// Protection against infinite loops comes from BOT_GENERATE_IMAGE_AGENT_MAX_ITERATIONS.
 		let streamResult: Awaited<ReturnType<typeof provider.streamToDiscord>>;
 		try {
-			streamResult = await Promise.race([
-				provider.streamToDiscord(
-					channel,
-					client,
-					tomoriState,
-					providerConfig,
-					contextItems,
-					[], // currentTurnModelParts — empty for first iteration, accumulate on retries
-					undefined, // emojiStrings
-					functionInteractionHistory.length > 0 ? functionInteractionHistory : undefined,
-					undefined, // initialInteraction
-					undefined, // replyToMessage
-					streamingContext,
-					locale,
-				),
-				timeoutPromise,
-			]);
-			if (timeoutId) clearTimeout(timeoutId);
+			streamResult = await provider.streamToDiscord(
+				channel,
+				client,
+				tomoriState,
+				providerConfig,
+				contextItems,
+				[], // currentTurnModelParts — empty for first iteration, accumulate on retries
+				undefined, // emojiStrings
+				functionInteractionHistory.length > 0 ? functionInteractionHistory : undefined,
+				undefined, // initialInteraction
+				undefined, // replyToMessage
+				streamingContext,
+				locale,
+			);
 		} catch (error) {
-			if (timeoutId) clearTimeout(timeoutId);
-			if (error instanceof Error && error.message === "HIDDEN_AGENT_TIMEOUT") {
-				log.error(`[Hidden Image Agent] Stream timed out on iteration ${i + 1}`, undefined, {
-					errorType: "HiddenImageAgentTimeout",
-					metadata: { channelId: channel.id, iteration: i + 1 },
-				});
-				return { success: false, error: "Image generation timed out." };
-			}
 			const msg = error instanceof Error ? error.message : String(error);
 			log.error(`[Hidden Image Agent] Stream error on iteration ${i + 1}: ${msg}`, error as Error, {
 				errorType: "HiddenImageAgentStreamError",

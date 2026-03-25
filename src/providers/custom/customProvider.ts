@@ -529,6 +529,7 @@ export class CustomProvider
         provider: "custom",
         locale: userLocale ?? "en-US",
         suppressUserErrors: streamingContext?.suppressUserErrors,
+        suppressTextOutput: streamingContext?.suppressTextOutput,
         rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
         outputPrefill: streamingContext?.outputPrefill,
         outputPrefillState: streamingContext?.outputPrefillState,

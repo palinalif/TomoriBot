@@ -211,7 +211,7 @@ export default {
 
     // YouTube video processing messages
     video: {
-      youtube_processing_title: "👁️ Watching YouTube Video...",
+      youtube_processing_title: "👁️  Watching YouTube Video...",
       youtube_processing_description:
         "I'm currently watching the YouTube video: {video_url}",
       youtube_processing_footer:
@@ -225,39 +225,39 @@ export default {
     },
 
     image: {
-      generating_title: "🖼️ Generating Image...",
+      generating_title: "🖼️  Generating Image...",
       generating_description: "Creating an image from the current prompt",
       generating_with_references_description:
         "Creating an image from the current prompt and reference image(s)",
-      editing_title: "🖌️ Editing Image...",
+      editing_title: "🖌️  Editing Image...",
       editing_description:
         "Editing the referenced image by targeting `{edit_target}`",
       generating_footer: "This may take a moment depending on provider load",
     },
 
     vision: {
-      analyzing_title: "🖼️ Analyzing Image...",
+      analyzing_title: "🖼️  Analyzing Image...",
       analyzing_description:
-        "Looking at the images from the referenced message",
+        "Current model is non-vision; using configured vision model to analyze images",
       analyzing_footer: "This may take a moment depending on image count",
     },
 
     avatar: {
-      inspecting_title: "👤 Checking Profile Picture...",
+      inspecting_title: "👤  Checking Profile Picture...",
       inspecting_description:
         "Loading and analyzing the requested profile picture",
       inspecting_footer: "This may take a moment depending on image size",
     },
 
     gif: {
-      processing_title: "🎞️ Processing GIF...",
+      processing_title: "🎞️  Processing GIF...",
       processing_description:
         "Extracting keyframes from the requested GIF for closer analysis",
       processing_footer: "Large GIFs can take a bit longer",
     },
 
     fetch: {
-      reading_title: "🌐 Reading Webpage...",
+      reading_title: "🌐  Reading Webpage...",
       reading_description: "Fetching and reading: {url}",
       reading_footer: "This may take a moment depending on the page size",
     },

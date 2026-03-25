@@ -88,6 +88,9 @@ COPY --chown=tomori:tomori img/ ./img/
 # Copy legal documents (Terms of Service, Privacy Policy)
 COPY --chown=tomori:tomori legal/ ./legal/
 
+# Copy local tokenizer assets used by model-aware logit-bias resolution
+COPY --chown=tomori:tomori tokenizers/ ./tokenizers/
+
 # Copy SSL certificates for secure database connections
 # AWS RDS CA bundle for verify-full SSL mode (protects against MITM attacks)
 COPY --chown=tomori:tomori docker/certs/ ./certs/
@@ -98,6 +101,7 @@ COPY --chown=tomori:tomori docker/certs/ ./certs/
 # Environment variables that should be consistent
 ENV NODE_ENV=production
 ENV RUN_ENV=production
+ENV TOKENIZER_ASSET_DIR=./tokenizers
 
 # Expose health check port for AWS ECS monitoring
 # This port is only accessible from localhost inside the container

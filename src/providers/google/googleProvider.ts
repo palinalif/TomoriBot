@@ -734,6 +734,7 @@ export class GoogleProvider
         provider: "google",
         locale: userLocale ?? "en-US", // Use user's preferred locale, fallback to en-US
         suppressUserErrors: streamingContext?.suppressUserErrors,
+        suppressTextOutput: streamingContext?.suppressTextOutput,
         rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
         outputPrefill: streamingContext?.outputPrefill,
         outputPrefillState: streamingContext?.outputPrefillState,

@@ -106,3 +106,12 @@ Both store the same entry shape so switching providers can restore the exact sam
 To broaden text-first support beyond OpenAI BPE families, add tokenizer-family resolvers instead of per-model one-offs.
 
 Use `src/db/seed.sql` to inventory the non-deprecated model families that need tokenizer assets. The practical target is one tokenizer implementation per family, not one tokenizer file per seeded row.
+
+## Local Tokenizer Assets
+
+Tomori expects local tokenizer assets at repo-root `tokenizers/` by default.
+
+- Default asset root: `./tokenizers`
+- Optional override: `TOKENIZER_ASSET_DIR`
+
+Deployment must include this directory explicitly. The Docker image now copies repo-root `tokenizers/` into `/app/tokenizers` and sets `TOKENIZER_ASSET_DIR=./tokenizers`.

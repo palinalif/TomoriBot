@@ -97,12 +97,21 @@ interface SceneImageBackendAvailability {
 	defaultBackend: SceneImageBackend | null;
 }
 
-/** Lightweight persona row used only for building the modal selector and resolving webhook identity. */
+/**
+ * Persona fields needed for the modal selector, webhook identity resolution,
+ * and overriding the `buildContext()` persona identity in the hidden agent.
+ */
 interface PersonaSummary {
 	tomori_id: number;
 	tomori_nickname: string;
 	webhook_avatar_url: string | null;
 	is_alter: boolean;
+	/** From persona_configs — null when no persona-specific prompt is set. */
+	persona_prompt: string | null;
+	/** Appearance/personality attribute list used by buildContext(). */
+	attribute_list: string[];
+	/** Lineage ID used by buildContext() for persona-scoped memory/RAG. */
+	persona_lineage_id: number;
 }
 
 type ImageQuotaCheckResult = Awaited<ReturnType<typeof checkImageQuota>>;
@@ -198,7 +207,9 @@ function getBackendOptions(locale: string, providerName: string) {
 // ─── Persona helpers ──────────────────────────────────────────────────────────
 
 /**
- * Fetches the minimal persona rows needed for the modal sender selector.
+ * Fetches persona summaries for the modal selector and context overrides.
+ * Includes the fields needed to override buildContext() persona identity
+ * (nickname, attributes, persona prompt, lineage ID) without loading a full TomoriState.
  * Returns main persona first (is_alter=false), then alters ordered by recency.
  * @param serverId - Numeric DB server ID from tomoriState
  */
@@ -206,10 +217,18 @@ async function loadServerPersonaSummaries(
 	serverId: number,
 ): Promise<PersonaSummary[]> {
 	return await sql<PersonaSummary[]>`
-		SELECT tomori_id, tomori_nickname, webhook_avatar_url, is_alter
-		FROM tomoris
-		WHERE server_id = ${serverId}
-		ORDER BY is_alter ASC, updated_at DESC NULLS LAST, tomori_id DESC
+		SELECT
+			t.tomori_id,
+			t.tomori_nickname,
+			t.webhook_avatar_url,
+			t.is_alter,
+			t.attribute_list,
+			t.persona_lineage_id,
+			pc.persona_prompt
+		FROM tomoris t
+		LEFT JOIN persona_configs pc ON pc.tomori_id = t.tomori_id
+		WHERE t.server_id = ${serverId}
+		ORDER BY t.is_alter ASC, t.updated_at DESC NULLS LAST, t.tomori_id DESC
 	`;
 }
 
@@ -661,6 +680,18 @@ export async function execute(
 		//     This replaces the old structured-output planner: the model now sees the
 		//     full conversation context (persona prompt, users, memories, RAG docs, etc.)
 		//     and is directed via a tail directive to call the appropriate image tool.
+		// Pass a context override only when the selected persona differs from the active one,
+		// so buildContext() prompts the model as the chosen sender persona.
+		const contextPersonaOverride =
+			selectedPersona && selectedPersona.tomori_id !== tomoriState.tomori_id
+				? {
+						tomoriNickname: selectedPersona.tomori_nickname,
+						personaPrompt: selectedPersona.persona_prompt,
+						tomoriAttributes: selectedPersona.attribute_list,
+						personaLineageId: selectedPersona.persona_lineage_id,
+					}
+				: undefined;
+
 		const agentResult = await runHiddenImageTurn({
 			channel: interaction.channel as Parameters<typeof runHiddenImageTurn>[0]["channel"],
 			client,
@@ -677,6 +708,7 @@ export async function execute(
 			webhook: senderWebhook,
 			personaUsername: senderPersonaUsername,
 			personaAvatarUrl: senderPersonaAvatarUrl,
+			contextPersonaOverride,
 		});
 
 		if (!agentResult.success) {

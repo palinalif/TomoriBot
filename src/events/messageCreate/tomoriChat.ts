@@ -1247,6 +1247,9 @@ interface ChannelLockEntry {
   serverDiscId: string; // Server/DM channel Discord ID for rate limiting
   userDiscId?: string; // Discord ID of user whose message is currently being processed
   currentIsPersonaJob?: boolean; // Skip user rate limits for internal persona jobs
+  activePersonaId?: number; // Persona currently generating — follow-ups inherit this to avoid fallback to main
+  isInToolCallChain?: boolean; // True while multi-turn tool calling is active — suppresses follow-up interrupts
+  isCommandTriggered?: boolean; // True when generation was triggered by a slash command (/respond, /impersonate) — suppresses follow-up interrupts entirely
   typingKeepaliveTimer: NodeJS.Timeout | null;
   followUpCount: number; // Consecutive follow-up interrupts for rate limiting
   messageQueue: Array<{
@@ -2081,6 +2084,9 @@ export default async function tomoriChat(
       lockEntry.isLocked = false; // Release stale lock
       lockEntry.userDiscId = undefined; // Clear user tracking
       lockEntry.currentIsPersonaJob = false;
+      lockEntry.activePersonaId = undefined; // Clear active persona tracking
+      lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
+      lockEntry.isCommandTriggered = false; // Clear command trigger flag
       lockEntry.messageQueue = []; // Clear queue as well, as context might be very old
       // The current message will now attempt to acquire the lock.
     }
@@ -2115,18 +2121,46 @@ export default async function tomoriChat(
     }
 
     // Follow-up messaging: same user sends a non-stop message during their active generation.
-    // This triggers a mid-stream interrupt so the bot rebuilds context (now including the
-    // follow-up from Discord history) and regenerates from scratch — a more natural flow.
+    // Three behaviors:
+    //   1. Slash-command trigger (/respond, /impersonate): no follow-up at all — fall through to normal queue.
+    //   2. Mid tool-call chain: queue without interrupt so tool progress is preserved.
+    //      Tool results live only in memory (functionInteractionHistory) — interrupting would
+    //      discard them and force the bot to redo all tool calls from scratch.
+    //   3. Pure text streaming: interrupt and regenerate with follow-up included (natural flow).
     if (
       lockEntry.isLocked &&
       !isStopResponse &&
       !isPersonaJob &&
       !message.author.bot &&
       !message.webhookId &&
+      !lockEntry.isCommandTriggered && // Slash-command triggers don't support follow-ups
       lockEntry.userDiscId === userDiscId &&
       !isNaturalStopMessage(message.content) &&
       lockEntry.followUpCount < MAX_FOLLOW_UP_INTERRUPTS
     ) {
+      if (lockEntry.isInToolCallChain) {
+        // Mid tool-call chain: queue the follow-up at the front WITHOUT interrupting.
+        // The bot finishes its current tool chain → responds → then processes this follow-up.
+        lockEntry.messageQueue.unshift({
+          message,
+          isManuallyTriggered: true,
+          forceReason: false,
+          isFollowUp: true,
+          selectedPersonaId: lockEntry.activePersonaId,
+          textQuotaSource,
+          textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
+          textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
+        });
+
+        log.info(
+          `Follow-up message during tool-call chain in channel ${channelLockId} from user ${userDiscId}. ` +
+            `Queued without interrupt to preserve tool progress. Queue size: ${lockEntry.messageQueue.length}`,
+        );
+
+        return;
+      }
+
+      // Pure text streaming: interrupt and regenerate with follow-up context.
       const { StreamOrchestrator } = await import(
         "../../utils/discord/streamOrchestrator"
       );
@@ -2135,11 +2169,14 @@ export default async function tomoriChat(
 
       // Put at FRONT of queue (unshift) — this is the next thing to process after the
       // interrupted generation completes its teardown, so the follow-up gets immediate attention.
+      // Inherit the active persona so the follow-up continues with the same alter persona
+      // instead of falling back to main.
       lockEntry.messageQueue.unshift({
         message,
         isManuallyTriggered: true, // Bypass trigger/cooldown checks since already validated
         forceReason: false,
         isFollowUp: true,
+        selectedPersonaId: lockEntry.activePersonaId, // Preserve interrupted persona
         textQuotaSource,
         textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
         textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
@@ -2372,6 +2409,7 @@ export default async function tomoriChat(
     lockEntry.currentMessageId = message.id;
     lockEntry.userDiscId = userDiscId; // Track user for rate limiting
     lockEntry.currentIsPersonaJob = isPersonaJob;
+    lockEntry.isCommandTriggered = !!manualTriggerInvoker; // Slash command triggers suppress follow-up interrupts
   }
   // --- End Semaphore Logic ---
 
@@ -4475,6 +4513,13 @@ export default async function tomoriChat(
           `Starting response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}" (${currentPersona.is_alter ? "alter" : "main"})`,
         );
 
+        // Track active persona on lock entry so follow-up messages inherit the correct persona
+        // instead of falling back to main. Also reset tool-call chain flag for this persona turn.
+        if (lockEntry) {
+          lockEntry.activePersonaId = currentPersona.tomori_id ?? undefined;
+          lockEntry.isInToolCallChain = false;
+        }
+
         // Assign currentPersona to tomoriState for this iteration
         // This allows all existing code to work without modification
         tomoriState = currentPersona;
@@ -5437,22 +5482,21 @@ export default async function tomoriChat(
           let naiConsecutiveToolFailures = 0; // Tracks consecutive tool failures for NAI GLM retry logic (Case 2)
 
           for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
-            // Check for follow-up interrupt between tool-call iterations.
-            // On iteration 0 the stream loop itself handles this, but on subsequent
-            // iterations (after tool execution) we need to catch it before the next
-            // runWithFallbackModels() call to avoid starting a new stream that would
-            // be immediately interrupted.
+            // Between tool-call iterations, check for stop requests (but NOT follow-ups).
+            // Follow-ups during tool chains are now queued without interrupt (see isInToolCallChain),
+            // so tool progress is preserved. The follow-up processes after the chain completes.
+            // Only regular stop requests should abort the tool chain here.
             if (i > 0 && StreamOrchestrator.hasStopRequest(channel.id)) {
               if (StreamOrchestrator.isFollowUpRequest(channel.id)) {
+                // Follow-up arrived during the initial text stream before tools started.
+                // Now that we're mid-tool-chain, clear it and let the chain finish.
+                // The follow-up message is already queued and will be processed after.
                 log.info(
-                  `Follow-up interrupt detected between tool-call iterations (iteration ${i}) for channel ${channel.id}. Aborting multi-turn loop.`,
+                  `Follow-up request found between tool-call iterations (iteration ${i}) for channel ${channel.id}. ` +
+                    `Clearing interrupt to preserve tool chain progress — follow-up is queued.`,
                 );
                 StreamOrchestrator.clearStopRequest(channel.id);
-                // Treat the same as the stream-loop follow-up case
-                const midToolLockEntry = channelLocks.get(channel.id);
-                if (midToolLockEntry) midToolLockEntry.followUpCount++;
-                finalStreamCompleted = true;
-                break;
+                // Don't break — continue the tool chain
               }
               // Regular stop requests fall through to the stream loop's built-in handling
             }
@@ -6225,6 +6269,11 @@ export default async function tomoriChat(
 
                   const funcCall = streamResult.data as FunctionCall; // Type assertion
                   const funcName = funcCall.name?.trim() ?? "";
+
+                  // Mark tool-call chain active so follow-up messages are queued
+                  // instead of interrupting — preserves tool execution progress.
+                  if (lockEntry) lockEntry.isInToolCallChain = true;
+
                   log.info(
                     `Stream LLM wants to call function: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
                   );
@@ -7725,6 +7774,9 @@ export default async function tomoriChat(
       lockEntry.currentMessageId = undefined;
       lockEntry.userDiscId = undefined; // Clear user tracking for rate limiting
       lockEntry.currentIsPersonaJob = false;
+      lockEntry.activePersonaId = undefined; // Clear active persona tracking
+      lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
+      lockEntry.isCommandTriggered = false; // Clear command trigger flag
       stopDiscordTypingKeepalive(channelLockId, lockEntry, "lock_released");
       log.info(
         `Channel ${channelLockId} lock released for message ${message.id}.`,
