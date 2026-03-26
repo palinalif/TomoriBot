@@ -612,6 +612,117 @@ export async function execute(
       return;
     }
 
+    // 7.5. Special handling for account-setting: prompt for OpenRouter model name
+    // Uses button → modal pattern (modal → modal is not allowed by Discord)
+    if (selectedModel.llm_codename === "account-setting") {
+      try {
+        const { promptAccountSettingModel } = await import(
+          "../../../utils/discord/customProviderModal"
+        );
+        const { getOrFetchOpenRouterCapabilities } = await import(
+          "../../../utils/cache/openrouterCapabilityCache"
+        );
+
+        // Defer first — required before editReply in promptAccountSettingModel
+        // (same pattern as custom provider flow)
+        await modalSubmitInteraction.deferReply({
+          flags: MessageFlags.Ephemeral,
+        });
+
+        // 1. Show button prompt → user clicks → modal appears for model name input
+        const promptResult = await promptAccountSettingModel(
+          modalSubmitInteraction,
+          locale,
+        );
+
+        if (!promptResult.success || !promptResult.modelName) {
+          await replyInfoEmbed(modalSubmitInteraction, locale, {
+            titleKey: "general.interaction.timeout_title",
+            descriptionKey: "general.interaction.timeout_description",
+            color: ColorCode.ERROR,
+          });
+          return;
+        }
+
+        const enteredModelName = promptResult.modelName;
+
+        // 2. Validate and fetch real capabilities from OpenRouter API
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey:
+            "commands.config.model.text.account_setting_validating_title",
+          descriptionKey:
+            "commands.config.model.text.account_setting_validating_description",
+          descriptionVars: { model_name: enteredModelName },
+          color: ColorCode.INFO,
+        });
+
+        const capabilities =
+          await getOrFetchOpenRouterCapabilities(enteredModelName);
+
+        if (!capabilities) {
+          await replyInfoEmbed(modalSubmitInteraction, locale, {
+            titleKey:
+              "commands.config.model.text.account_setting_validation_failed_title",
+            descriptionKey:
+              "commands.config.model.text.account_setting_validation_failed_description",
+            descriptionVars: { model_name: enteredModelName },
+            color: ColorCode.ERROR,
+          });
+          return;
+        }
+
+        // 3. Store detected model + capabilities in database
+        const now = new Date();
+        await sql`
+          UPDATE tomori_configs
+          SET account_setting_actual_model = ${enteredModelName},
+              account_setting_capabilities = ${JSON.stringify(capabilities)}::jsonb,
+              account_setting_capabilities_fetched_at = ${now}
+          WHERE server_id = ${tomoriState.server_id}
+        `;
+
+        // 4. Invalidate cache so next message uses fresh capabilities
+        invalidateTomoriStateCache(
+          interaction.guild?.id ?? interaction.user.id,
+        );
+
+        // 5. Build capability flags display
+        const capabilityFlags: string[] = [];
+        if (capabilities.hasTools) capabilityFlags.push("TOOLS");
+        if (capabilities.seesImages) capabilityFlags.push("IMG");
+        if (capabilities.seesVideos) capabilityFlags.push("VID");
+        if (capabilities.supportsStructuredOutput) capabilityFlags.push("STRUCT");
+        const capabilitiesDisplay =
+          capabilityFlags.length > 0
+            ? capabilityFlags.join(" + ")
+            : localizer(locale, "general.none");
+
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey:
+            "commands.config.model.text.account_setting_configured_title",
+          descriptionKey:
+            "commands.config.model.text.account_setting_configured_description",
+          descriptionVars: {
+            model_name: enteredModelName,
+            capabilities: capabilitiesDisplay,
+          },
+          color: ColorCode.SUCCESS,
+        });
+        return;
+      } catch (error) {
+        await log.error(
+          `Error configuring account-setting for user ${userData.user_disc_id}`,
+          error as Error,
+        );
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey: "general.errors.unknown_error_title",
+          descriptionKey: "general.errors.unknown_error_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+    }
+
     // 8. Check if this is the same as the current model
     if (selectedModel.llm_id === tomoriState.config.llm_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {

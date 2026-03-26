@@ -1,4 +1,5 @@
-import { AttachmentBuilder } from "discord.js";
+import { AttachmentBuilder, Routes } from "discord.js";
+import type { Webhook } from "discord.js";
 import {
 	BaseTool,
 	type ToolContext,
@@ -9,9 +10,16 @@ import { synthesizeSpeechWithElevenLabs } from "@/utils/audio/elevenLabsTts";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { generateVoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
+import type { VoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 import { log } from "@/utils/misc/logger";
+
+/** Discord IS_VOICE_MESSAGE flag value (1 << 13). */
+const IS_VOICE_MESSAGE_FLAG = 8192;
+
+/** Discord REST API base URL. */
+const DISCORD_API_BASE = "https://discord.com/api/v10";
 
 export class GenerateVoiceMessageTool extends BaseTool {
 	name = "generate_voice_message";
@@ -53,6 +61,138 @@ export class GenerateVoiceMessageTool extends BaseTool {
 
 		const safeBaseName = baseName.length > 0 ? baseName : "voice";
 		return `${safeBaseName}.${extension}`;
+	}
+
+	/**
+	 * Sends a native Discord voice message via raw REST, bypassing discord.js's
+	 * MessagePayload serialization which drops unknown attachment fields like
+	 * `waveform` and `duration_secs`.
+	 *
+	 * @returns The sent message ID, or undefined if the request failed
+	 */
+	private async sendNativeVoiceMessageViaRest(options: {
+		webhook: Webhook;
+		audioBuffer: Buffer;
+		mimeType: string;
+		filename: string;
+		voiceMeta: VoiceMessageMetadata;
+		username?: string;
+		avatarUrl?: string | null;
+		threadId?: string;
+	}): Promise<string | undefined> {
+		try {
+			const { webhook, audioBuffer, mimeType, filename, voiceMeta, username, avatarUrl, threadId } = options;
+
+			if (!webhook.token) return undefined;
+
+			// Build multipart form — Discord requires payload_json + binary file part
+			const form = new FormData();
+
+			const payloadJson: Record<string, unknown> = {
+				flags: IS_VOICE_MESSAGE_FLAG,
+				attachments: [
+					{
+						id: 0,
+						filename,
+						waveform: voiceMeta.waveform,
+						duration_secs: voiceMeta.durationSecs,
+					},
+				],
+				allowed_mentions: { parse: [] },
+			};
+
+			// Username and avatar override for persona identity
+			if (username) payloadJson.username = username;
+			// data: URIs cannot be used as avatar_url — only HTTP(S) URLs are accepted
+			if (avatarUrl && !avatarUrl.startsWith("data:image/")) {
+				payloadJson.avatar_url = avatarUrl;
+			}
+
+			form.append("payload_json", JSON.stringify(payloadJson));
+			form.append(
+				"files[0]",
+				new Blob([new Uint8Array(audioBuffer)], { type: mimeType }),
+				filename,
+			);
+
+			// ?wait=true is required to receive a Message object back (otherwise 204)
+			const threadParam = threadId
+				? `&thread_id=${encodeURIComponent(threadId)}`
+				: "";
+			const url = `${DISCORD_API_BASE}/webhooks/${webhook.id}/${webhook.token}?wait=true${threadParam}`;
+
+			const response = await fetch(url, { method: "POST", body: form });
+
+			if (!response.ok) {
+				const errorText = await response.text().catch(() => "unknown");
+				log.warn(
+					`[VoiceWaveform] Discord API rejected native voice message: HTTP ${response.status} — ${errorText}`,
+				);
+				return undefined;
+			}
+
+			const data = (await response.json()) as { id?: string };
+			return data.id;
+		} catch (error) {
+			log.warn("[VoiceWaveform] Exception during native voice message send", error);
+			return undefined;
+		}
+	}
+
+	/**
+	 * Sends a native Discord voice message via the bot's REST client, bypassing
+	 * webhook delivery. Used when no persona webhook is in scope (e.g. main
+	 * persona or non-alter context). Does not support username/avatar overrides.
+	 *
+	 * @returns The sent message ID, or undefined if the request failed
+	 */
+	private async sendNativeVoiceMessageViaBotRest(options: {
+		channel: ToolContext["channel"];
+		audioBuffer: Buffer;
+		mimeType: string;
+		filename: string;
+		voiceMeta: VoiceMessageMetadata;
+	}): Promise<string | undefined> {
+		try {
+			const { channel, audioBuffer, mimeType, filename, voiceMeta } = options;
+
+			// Build multipart form — same payload_json structure as the webhook path
+			const form = new FormData();
+
+			const payloadJson: Record<string, unknown> = {
+				flags: IS_VOICE_MESSAGE_FLAG,
+				attachments: [
+					{
+						id: 0,
+						filename,
+						waveform: voiceMeta.waveform,
+						duration_secs: voiceMeta.durationSecs,
+					},
+				],
+				allowed_mentions: { parse: [] },
+			};
+
+			form.append("payload_json", JSON.stringify(payloadJson));
+			form.append(
+				"files[0]",
+				new Blob([new Uint8Array(audioBuffer)], { type: mimeType }),
+				filename,
+			);
+
+			// Post directly to the channel via bot identity.
+			// passThroughBody: true prevents the REST manager from JSON-serializing
+			// the FormData body, which would corrupt the multipart boundary.
+			// channel.id is correct for both regular channels and threads.
+			const data = (await channel.client.rest.post(
+				Routes.channelMessages(channel.id),
+				{ body: form, passThroughBody: true },
+			)) as { id?: string };
+
+			return data.id;
+		} catch (error) {
+			log.warn("[VoiceWaveform] Exception during bot REST voice message send", error);
+			return undefined;
+		}
 	}
 
 	async execute(
@@ -111,72 +251,107 @@ export class GenerateVoiceMessageTool extends BaseTool {
 			};
 		}
 
-		const attachment = new AttachmentBuilder(synthesisResult.audioBuffer, {
-			name: this.buildAttachmentName(title, synthesisResult.extension ?? "mp3"),
-		});
+		const attachmentName = this.buildAttachmentName(
+			title,
+			synthesisResult.extension ?? "mp3",
+		);
 		const threadId = this.resolveThreadId(context);
 		const captionText = synthesisResult.cleanedCaptionText ?? "";
+		// Strip any MIME parameters (e.g. "audio/mpeg; codecs=mp3" → "audio/mpeg")
+		// Discord rejects waveform/duration_secs when the content type isn't a
+		// bare audio/* type — it falls back to application/octet-stream otherwise.
+		const mimeType = (synthesisResult.contentType ?? "audio/mpeg")
+			.split(";")[0]
+			.trim();
 
 		// Attempt to generate waveform + duration for Discord's native voice
 		// message UI. Falls back gracefully to a plain attachment if it fails.
 		const voiceMeta = await generateVoiceMessageMetadata(
 			synthesisResult.audioBuffer,
-			synthesisResult.contentType ?? "audio/mpeg",
+			mimeType,
 		);
-		const isNativeVoiceMessage = voiceMeta !== null;
-
-		if (isNativeVoiceMessage) {
-			// Patch toJSON on this instance so the extra fields flow through
-			// discord.js's MessagePayload serialization into the Discord API's
-			// attachments[] array. AttachmentBuilder.data is not publicly typed
-			// so we override at the toJSON level instead.
-			const originalToJSON = attachment.toJSON.bind(attachment);
-			// biome-ignore lint/suspicious/noExplicitAny: injecting waveform/duration_secs into attachment payload
-			(attachment as any).toJSON = () => ({
-				...(originalToJSON() as Record<string, unknown>),
-				waveform: voiceMeta.waveform,
-				duration_secs: voiceMeta.durationSecs,
-			});
-		}
-
-		// IS_VOICE_MESSAGE (1 << 13 = 8192) tells Discord to render the native
-		// voice message UI. discord.js restricts the flags union to user-facing
-		// flags only, so we bypass types with a raw number.
-		// biome-ignore lint/suspicious/noExplicitAny: IS_VOICE_MESSAGE not in discord.js allowed flags union
-		const messageFlags = isNativeVoiceMessage ? (8192 as any) : undefined;
 
 		let sentMessageId: string | undefined;
 
-		// Send audio only — no text caption in chat.
-		// The caption is still cached below so history context can show the
-		// spoken words without re-running STT on the audio attachment.
-		if (context.webhook && context.personaUsername) {
-			const sentMessage = await sendWebhookMessageWithIdentity(
-				context.webhook,
-				{
-					files: [attachment],
-					flags: messageFlags,
-					allowedMentions: {
-						parse: [],
-						repliedUser: false,
-					},
-					...(threadId ? { threadId } : {}),
-				},
-				{
+		if (!voiceMeta) {
+			log.warn("[VoiceWaveform] Waveform generation returned null — falling back to plain attachment");
+		}
+
+		// --- Native voice message path ---
+		// Bypasses discord.js MessagePayload serialization, which silently drops
+		// unknown attachment fields like waveform and duration_secs.
+		// Two sub-paths: webhook identity (alter persona) vs. bot identity (main persona).
+		if (voiceMeta) {
+			if (context.webhook?.token) {
+				// 1. Webhook identity path: alter persona with a valid token
+				sentMessageId = await this.sendNativeVoiceMessageViaRest({
+					webhook: context.webhook,
+					audioBuffer: synthesisResult.audioBuffer,
+					mimeType,
+					filename: attachmentName,
+					voiceMeta,
 					username: context.personaUsername,
 					avatarUrl: context.personaAvatarUrl,
-					avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
-						? context.personaAvatarUrl
-						: undefined,
-				},
-			);
-			sentMessageId = sentMessage.id;
-		} else {
-			const sentMessage = await context.channel.send({
-				files: [attachment],
-				flags: messageFlags,
+					threadId,
+				});
+				if (!sentMessageId) {
+					log.warn("[VoiceWaveform] Webhook REST send failed — trying bot REST path");
+				}
+			} else if (context.webhook && !context.webhook.token) {
+				// Log when the webhook object exists but Discord nulled out its token
+				log.warn(
+					`[VoiceWaveform] Webhook token is null (id=${context.webhook.id}) — trying bot REST path`,
+				);
+			}
+
+			if (!sentMessageId) {
+				// 2. Bot identity path: main persona, no webhook, or webhook with no token
+				sentMessageId = await this.sendNativeVoiceMessageViaBotRest({
+					channel: context.channel,
+					audioBuffer: synthesisResult.audioBuffer,
+					mimeType,
+					filename: attachmentName,
+					voiceMeta,
+				});
+				if (!sentMessageId) {
+					log.warn("[VoiceWaveform] Bot REST send failed — falling back to plain attachment");
+				}
+			}
+		}
+
+		// --- Fallback: plain attachment via discord.js ---
+		// Used when waveform generation failed or both native REST paths failed.
+		if (!sentMessageId) {
+			const attachment = new AttachmentBuilder(synthesisResult.audioBuffer, {
+				name: attachmentName,
 			});
-			sentMessageId = sentMessage.id;
+
+			if (context.webhook && context.personaUsername) {
+				const sentMessage = await sendWebhookMessageWithIdentity(
+					context.webhook,
+					{
+						files: [attachment],
+						allowedMentions: {
+							parse: [],
+							repliedUser: false,
+						},
+						...(threadId ? { threadId } : {}),
+					},
+					{
+						username: context.personaUsername,
+						avatarUrl: context.personaAvatarUrl,
+						avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
+							? context.personaAvatarUrl
+							: undefined,
+					},
+				);
+				sentMessageId = sentMessage.id;
+			} else {
+				const sentMessage = await context.channel.send({
+					files: [attachment],
+				});
+				sentMessageId = sentMessage.id;
+			}
 		}
 
 		// Cache caption text keyed by message ID so the history formatter can

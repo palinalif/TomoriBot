@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
@@ -33,7 +34,11 @@ import type {
   GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
-import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
+import {
+	resolvePersonaAvatarPublicUrl,
+	isLocalPersonaAvatarPath,
+	loadStoredPersonaAvatarBuffer,
+} from "@/utils/storage/avatarStorage";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
@@ -937,12 +942,70 @@ function buildV2StatusComponents(
   return [container];
 }
 
+/**
+ * Resolves avatar images for a single page of personas.
+ *
+ * Resolution order per alter persona:
+ * 1. Public HTTP(S) URL (always works in production, and in dev when
+ *    AVATAR_PUBLIC_BASE_URL is configured)
+ * 2. Discord file attachment — used in non-production when the avatar is stored
+ *    as a local path and AVATAR_PUBLIC_BASE_URL is not set. The buffer is loaded
+ *    from disk and returned as an AttachmentBuilder so the caller can include it
+ *    in the reply. The media URL is set to `attachment://avatar_{idx}.png` which
+ *    Discord resolves against the message's attachments.
+ * 3. Fallback URL (bot server avatar) when no avatar is available.
+ *
+ * @param pagePersonas - The personas visible on the current page
+ * @param fallbackAvatarUrl - URL to use when no avatar can be resolved
+ */
+async function resolvePersonaPageAvatarData(
+	pagePersonas: TomoriState[],
+	fallbackAvatarUrl: string,
+): Promise<{ avatarUrls: Map<number, string>; files: AttachmentBuilder[] }> {
+	const avatarUrls = new Map<number, string>();
+	const files: AttachmentBuilder[] = [];
+
+	await Promise.all(
+		pagePersonas.map(async (persona, idx) => {
+			if (!persona.is_alter) {
+				avatarUrls.set(idx, fallbackAvatarUrl);
+				return;
+			}
+
+			// 1. Try public URL resolution first (http/https refs or configured base URL)
+			const publicUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
+			if (publicUrl) {
+				avatarUrls.set(idx, publicUrl);
+				return;
+			}
+
+			// 2. For local paths with no public URL, attach the file directly
+			const avatarRef = persona.webhook_avatar_url;
+			if (avatarRef && isLocalPersonaAvatarPath(avatarRef)) {
+				const buffer = await loadStoredPersonaAvatarBuffer(avatarRef);
+				if (buffer) {
+					const attachmentName = `avatar_${idx}.png`;
+					files.push(new AttachmentBuilder(buffer, { name: attachmentName }));
+					avatarUrls.set(idx, `attachment://${attachmentName}`);
+					return;
+				}
+			}
+
+			// 3. Nothing resolved — use fallback
+			avatarUrls.set(idx, fallbackAvatarUrl);
+		}),
+	);
+
+	return { avatarUrls, files };
+}
+
 function buildPersonaPageComponents(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
   locale: string,
   options: PersonaPaginatedChoiceOptions,
   currentPage: number,
   totalPages: number,
+  avatarUrlMap: Map<number, string>,
 ): TopLevelComponentData[] {
   const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
   const endIdx = Math.min(
@@ -1011,10 +1074,9 @@ function buildPersonaPageComponents(
       accessory: {
         type: ComponentType.Thumbnail,
         media: {
-          url: persona.is_alter
-            ? resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ||
-              fallbackAvatarUrl
-            : fallbackAvatarUrl,
+          // avatarUrlMap is pre-resolved by resolvePersonaPageAvatarData, which
+          // handles public URLs, attachment:// refs for local files, and fallbacks
+          url: avatarUrlMap.get(idx) ?? fallbackAvatarUrl,
         },
       },
     });
@@ -1485,17 +1547,51 @@ export async function replyPaginatedPersonaChoicesV2(
     };
   }
 
+  // Compute fallback avatar URL once — used when no persona avatar can be resolved.
+  // Mirrors the same logic inside buildPersonaPageComponents so both agree on the fallback.
+  const serverAvatarUrl = interaction.guild?.members.me?.displayAvatarURL({
+    extension: "png",
+    size: 128,
+    forceStatic: true,
+  });
+  const fallbackAvatarUrl =
+    serverAvatarUrl ??
+    interaction.client.user?.displayAvatarURL({
+      extension: "png",
+      size: 128,
+      forceStatic: true,
+    }) ??
+    "https://cdn.discordapp.com/embed/avatars/0.png";
+
   try {
     while (true) {
+      // Determine which personas are on the current page
+      const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
+      const endIdx = Math.min(
+        startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE,
+        options.personas.length,
+      );
+      const pagePersonas = options.personas.slice(startIdx, endIdx);
+
+      // Pre-resolve avatar URLs (and collect local file attachments when needed).
+      // In non-production without AVATAR_PUBLIC_BASE_URL, alter avatars stored as
+      // local paths are loaded from disk and attached directly to the message.
+      const { avatarUrls, files } = await resolvePersonaPageAvatarData(
+        pagePersonas,
+        fallbackAvatarUrl,
+      );
+
       const components = buildPersonaPageComponents(
         interaction,
         locale,
         options,
         currentPage,
         totalPages,
+        avatarUrls,
       );
       const baseReplyOptions: Omit<InteractionReplyOptions, "flags"> = {
         components,
+        files,
       };
 
       let message: Message;

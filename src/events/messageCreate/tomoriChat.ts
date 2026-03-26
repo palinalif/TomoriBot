@@ -846,7 +846,16 @@ function resolveReferencedWebhookTarget(
     return { replyPersona: null, impersonatedUserId: null };
   }
 
-  // 4. Last resort: try to match webhook identity against guild members
+  // 4. Last resort: try to match webhook identity against guild members.
+  // Only attempt this if the webhook was previously known to TomoriBot's relay
+  // cache (i.e., cachedRelay is non-null but not user_impersonation, meaning
+  // it was seen before and may have just expired). Skipping this for wholly
+  // unknown webhooks prevents foreign bots' interaction responses from being
+  // misidentified as user impersonation targets.
+  if (!cachedRelay) {
+    return { replyPersona: null, impersonatedUserId: null };
+  }
+
   const webhookName = stripBridgePrefix(rawWebhookName);
   const webhookAvatarUrl = referenceMessage.author.displayAvatarURL({
     size: 1024,
@@ -1898,6 +1907,9 @@ export default async function tomoriChat(
     }
   }
 
+  // Note: The guard for replies to other bots' messages is placed after earlyAllPersonas
+  // is loaded (below), so all persona/alter trigger words can be checked before blocking.
+
   if (isRealUserLikeMessage(message)) {
     updateSelfReplyChainState(channel.id, false);
   }
@@ -2137,6 +2149,72 @@ export default async function tomoriChat(
           metadata: { serverDiscId: serverDiscId, channelId: channel.id },
         },
       );
+    }
+  }
+
+  // Guard: block replies to other bots' messages unless Tomori is directly addressed.
+  // Placed here (after earlyAllPersonas load) so all persona/alter trigger words are
+  // available for the check, not just BASE_TRIGGER_WORDS.
+  if (
+    !isManuallyTriggered &&
+    !isBotAuthor &&
+    message.reference?.messageId
+  ) {
+    let referencedMessage = message.channel.messages.cache.get(
+      message.reference.messageId,
+    );
+
+    if (!referencedMessage && "messages" in channel) {
+      try {
+        referencedMessage = await channel.messages.fetch(
+          message.reference.messageId,
+        );
+      } catch {
+        referencedMessage = undefined;
+      }
+    }
+
+    if (
+      referencedMessage?.author.bot &&
+      referencedMessage.author.id !== client.user?.id
+    ) {
+      // Check if Tomori is directly addressed via @mention, base trigger word, or
+      // any persona/alter trigger word before blocking the message.
+      const isBotDirectlyAddressed =
+        // 1. Explicit @mention of the bot
+        (client.user && message.mentions.users.has(client.user.id)) ||
+        // 2. Base trigger words (module-level constant, always available)
+        BASE_TRIGGER_WORDS.some((word) => {
+          if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(word)) {
+            return message.content.includes(word);
+          }
+          return new RegExp(`\\b${escapeRegExp(word)}\\b`, "i").test(
+            message.content,
+          );
+        }) ||
+        // 3. Persona/alter trigger words (requires earlyAllPersonas to be loaded)
+        earlyAllPersonas.some((persona) => {
+          const triggers =
+            persona.trigger_words ??
+            (persona.is_alter
+              ? (persona.alter_triggers ?? [])
+              : (persona.config?.trigger_words ?? []));
+
+          return triggers.some((trigger: string) => {
+            if (trigger.startsWith("<@")) {
+              return message.mentions.users.has(trigger.replace(/[<@!>]/g, ""));
+            }
+            if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(trigger)) {
+              return message.content.includes(trigger);
+            }
+            return createScreamingRegex(trigger).test(message.content);
+          });
+        });
+
+      if (!isBotDirectlyAddressed) {
+        updateSelfReplyChainState(channel.id, false);
+        return;
+      }
     }
   }
 

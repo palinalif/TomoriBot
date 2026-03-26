@@ -2814,6 +2814,18 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           scope_persona: `Persona (specific persona only)`,
           scope_set_channel_success: `Model for {channel} set to **{model}**`,
           scope_set_persona_success: `Model for **{persona}** set to **{model}**`,
+          // Account-setting configuration
+          account_setting_prompt_title: `Configure Account-Setting Model`,
+          account_setting_prompt_description: `You've selected **account-setting**.\n\nClick the button below and enter your OpenRouter model codename (e.g., \`xai/grok-2\`, \`openrouter/free\`, \`nvidia/nemotron-4-340b-instruct\`).`,
+          account_setting_modal_title: `Enter OpenRouter Model`,
+          account_setting_model_label: `OpenRouter Model Codename`,
+          account_setting_model_placeholder: `xai/grok-2`,
+          account_setting_validating_title: `Validating Model`,
+          account_setting_validating_description: `Fetching capabilities for \`{model_name}\` from OpenRouter...`,
+          account_setting_validation_failed_title: `Model Not Found`,
+          account_setting_validation_failed_description: `Could not find \`{model_name}\` on OpenRouter. Check the model ID is correct and try again.`,
+          account_setting_configured_title: `Account-Setting Configured`,
+          account_setting_configured_description: `Your account-setting model is now set to \`{model_name}\`.\n\n**Detected Capabilities:** {capabilities}`,
         },
         embedding: {
           description: `Change the embedding model used for document retrieval.`,

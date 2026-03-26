@@ -625,6 +625,14 @@ export class OpenrouterProvider
               "[ACCOUNT-SETTING] Stored detected model and capabilities to database",
             );
 
+            // 4. Invalidate cache so future requests use fresh data
+            const { invalidateTomoriStateCache: invalidateCache } = await import(
+              "../../utils/cache/tomoriStateCache"
+            );
+            invalidateCache(
+              tomoriState.server_id.toString(),
+            );
+
             // 4. Use the detected capabilities
             effectiveHasTools = capabilities.hasTools;
             effectiveSeesImages = capabilities.seesImages;

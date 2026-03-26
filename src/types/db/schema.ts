@@ -268,16 +268,22 @@ export const tomoriConfigSchema = z.object({
   ), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
   nai_exclusive_imggen: z.boolean().default(false), // Added March 2026 - Hides standard generate_image when NovelAI opt key is present
   account_setting_actual_model: z.string().nullable().optional(), // Added March 2026 - Real OpenRouter model detected for account-setting
-  account_setting_capabilities: z
-    .object({
-      hasTools: z.boolean().default(false),
-      seesImages: z.boolean().default(false),
-      seesVideos: z.boolean().default(false),
-      supportsStructuredOutput: z.boolean().default(false),
-    })
-    .nullable()
-    .optional(), // Added March 2026 - Cached capabilities for account-setting model
-  account_setting_capabilities_fetched_at: z.date().nullable().optional(), // Added March 2026 - Timestamp of last capability fetch for account-setting
+  account_setting_capabilities: z.preprocess(
+    (value) => (typeof value === "string" ? JSON.parse(value) : value),
+    z
+      .object({
+        hasTools: z.boolean().default(false),
+        seesImages: z.boolean().default(false),
+        seesVideos: z.boolean().default(false),
+        supportsStructuredOutput: z.boolean().default(false),
+      })
+      .nullable()
+      .optional(),
+  ), // Added March 2026 - Cached capabilities for account-setting model (stored as JSONB)
+  account_setting_capabilities_fetched_at: z.preprocess(
+    (value) => (typeof value === "string" ? new Date(value) : value),
+    z.date().nullable().optional(),
+  ), // Added March 2026 - Timestamp of last capability fetch for account-setting
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

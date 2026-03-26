@@ -2824,6 +2824,18 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           scope_persona: `ペルソナ（特定のペルソナのみ）`,
           scope_set_channel_success: `{channel} のモデルを **{model}** に設定しました`,
           scope_set_persona_success: `**{persona}** のモデルを **{model}** に設定しました`,
+          // Account-setting configuration
+          account_setting_prompt_title: `アカウント設定モデルの設定`,
+          account_setting_prompt_description: `**account-setting** を選択しました。\n\n下のボタンをクリックして、OpenRouter モデルのコードネームを入力してください（例：\`xai/grok-2\`、\`openrouter/free\`、\`nvidia/nemotron-4-340b-instruct\`）。`,
+          account_setting_modal_title: `OpenRouter モデルを入力`,
+          account_setting_model_label: `OpenRouter モデルコードネーム`,
+          account_setting_model_placeholder: `xai/grok-2`,
+          account_setting_validating_title: `モデルを検証中`,
+          account_setting_validating_description: `OpenRouter で \`{model_name}\` の機能を取得しています...`,
+          account_setting_validation_failed_title: `モデルが見つかりません`,
+          account_setting_validation_failed_description: `OpenRouter で \`{model_name}\` が見つかりませんでした。モデルIDが正しいか確認して再試行してください。`,
+          account_setting_configured_title: `アカウント設定が完了`,
+          account_setting_configured_description: `アカウント設定モデルが \`{model_name}\` に設定されました。\n\n**検出された機能:** {capabilities}`,
         },
         embedding: {
           description: `文書検索に使用する埋め込みモデルを変更します。`,

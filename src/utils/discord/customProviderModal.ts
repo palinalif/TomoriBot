@@ -14,6 +14,7 @@
 
 import {
   ActionRowBuilder,
+  ComponentType,
   StringSelectMenuBuilder,
   type ModalSubmitInteraction,
   type ButtonInteraction,
@@ -509,6 +510,129 @@ export async function saveCustomEndpointConfig(
   log.info(
     `Saved custom endpoint config for server ${serverId}${customModelName ? ` with model name: ${customModelName}` : ""}`,
   );
+}
+
+/**
+ * Result of the account-setting model configuration
+ */
+export interface AccountSettingModelResult {
+  success: boolean;
+  modelName?: string;
+  error?: string;
+}
+
+/**
+ * Prompt user for their OpenRouter model codename using button → modal pattern
+ *
+ * Flow:
+ * 1. Edit the deferred reply with a "Enter Model" button
+ * 2. Button click opens a text input modal (button → modal is Discord-allowed)
+ * 3. User submits model codename (e.g., "xai/grok-2")
+ * 4. Return the entered model name for validation by the caller
+ *
+ * @param interaction - Already-deferred interaction to edit
+ * @param locale - User's locale for localized strings
+ * @returns Promise<AccountSettingModelResult>
+ */
+export async function promptAccountSettingModel(
+  interaction: ModalSubmitInteraction | ButtonInteraction,
+  locale: string,
+): Promise<AccountSettingModelResult> {
+  try {
+    // 1. Build the "Enter Model" button and edit the deferred reply
+    const enterModelButton = new ButtonBuilder()
+      .setCustomId("enter_model_name")
+      .setLabel(
+        localizer(locale, "commands.config.model.text.account_setting_model_label"),
+      )
+      .setStyle(ButtonStyle.Primary);
+
+    const message = await interaction.editReply({
+      content: localizer(
+        locale,
+        "commands.config.model.text.account_setting_prompt_description",
+      ),
+      components: [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(enterModelButton),
+      ],
+    });
+
+    // 2. Await button click using awaitMessageComponent (more reliable than collector on ephemeral replies)
+    let buttonInteraction: ButtonInteraction;
+    try {
+      buttonInteraction = await message.awaitMessageComponent({
+        componentType: ComponentType.Button,
+        filter: (i) =>
+          i.user.id === interaction.user.id &&
+          i.customId === "enter_model_name",
+        time: 300000, // 5 minutes
+      });
+    } catch {
+      // Timed out waiting for button click
+      return {
+        success: false,
+        error: localizer(locale, "general.interaction.timeout_description"),
+      };
+    }
+
+    // 3. Show modal from button click (button → modal is Discord-allowed)
+    const modal = new ModalBuilder()
+      .setCustomId("account_setting_model_modal")
+      .setTitle(
+        localizer(locale, "commands.config.model.text.account_setting_modal_title"),
+      );
+
+    const modelInput = new TextInputBuilder()
+      .setCustomId("model_name_input")
+      .setLabel(
+        localizer(locale, "commands.config.model.text.account_setting_model_label"),
+      )
+      .setPlaceholder(
+        localizer(locale, "commands.config.model.text.account_setting_model_placeholder"),
+      )
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMinLength(3)
+      .setMaxLength(100);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(modelInput),
+    );
+
+    await buttonInteraction.showModal(modal);
+
+    // 4. Await modal submission
+    let modalSubmit: ModalSubmitInteraction;
+    try {
+      modalSubmit = await buttonInteraction.awaitModalSubmit({
+        filter: (m) =>
+          m.customId === "account_setting_model_modal" &&
+          m.user.id === buttonInteraction.user.id,
+        time: 300000,
+      });
+    } catch {
+      // Timed out waiting for modal submit
+      return {
+        success: false,
+        error: localizer(locale, "general.interaction.timeout_description"),
+      };
+    }
+
+    const enteredModel = modalSubmit.fields
+      .getTextInputValue("model_name_input")
+      .trim();
+
+    // Defer the modal so the caller can use editReply for follow-up messages
+    await modalSubmit.deferUpdate();
+
+    return { success: true, modelName: enteredModel };
+  } catch (error) {
+    log.error("Error in promptAccountSettingModel:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
 }
 
 /**
