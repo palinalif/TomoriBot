@@ -72,6 +72,7 @@ import {
 } from "../../utils/cache/llmCache";
 import {
   getOpenRouterCapabilities,
+  getOrFetchOpenRouterCapabilities,
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
@@ -577,16 +578,68 @@ export class OpenrouterProvider
     let effectiveSeesImages = tomoriState.llm.sees_images;
     let effectiveSeesVideos = tomoriState.llm.sees_videos;
 
-    // Special case: account-setting cannot be validated against API cache
-    // (we don't know which model the user has set as their OpenRouter default)
-    // So we respect database flags - conservative by default, but user-configurable
+    // Special case: account-setting models need on-demand capability fetching
+    // The model codename is user-specified (from their OpenRouter account), so it may not
+    // be in the startup cache. Fetch its real capabilities from the OpenRouter API.
     if (tomoriState.llm.llm_codename === "account-setting") {
-      log.info(
-        "[ACCOUNT-SETTING] Using database flags (cannot validate against API): " +
-          `tools=${effectiveHasTools}, images=${effectiveSeesImages}, videos=${effectiveSeesVideos}`,
-      );
+      try {
+        const accountSettingCapabilities =
+          await getOrFetchOpenRouterCapabilities(tomoriState.llm.llm_codename);
+
+        if (accountSettingCapabilities) {
+          // Log and override each capability if different from database
+          if (accountSettingCapabilities.hasTools !== effectiveHasTools) {
+            log.info(
+              `[ACCOUNT-SETTING API OVERRIDE] has_tools: ${effectiveHasTools} (DB) → ` +
+                `${accountSettingCapabilities.hasTools} (OpenRouter API)`,
+            );
+            effectiveHasTools = accountSettingCapabilities.hasTools;
+          }
+
+          if (
+            accountSettingCapabilities.seesImages !==
+            effectiveSeesImages
+          ) {
+            log.info(
+              `[ACCOUNT-SETTING API OVERRIDE] sees_images: ${effectiveSeesImages} (DB) → ` +
+                `${accountSettingCapabilities.seesImages} (OpenRouter API)`,
+            );
+            effectiveSeesImages = accountSettingCapabilities.seesImages;
+          }
+
+          if (
+            accountSettingCapabilities.seesVideos !==
+            effectiveSeesVideos
+          ) {
+            log.info(
+              `[ACCOUNT-SETTING API OVERRIDE] sees_videos: ${effectiveSeesVideos} (DB) → ` +
+                `${accountSettingCapabilities.seesVideos} (OpenRouter API)`,
+            );
+            effectiveSeesVideos = accountSettingCapabilities.seesVideos;
+          }
+        } else {
+          // "account-setting" is not a real model — use conservative defaults to prevent
+          // sending unsupported features (images/videos) to text-only models like Nemotron.
+          // Users can ask to configure their account-setting capabilities if needed.
+          log.warn(
+            "[ACCOUNT-SETTING] Could not fetch capabilities (expected for proxy model) - " +
+              "using conservative defaults to prevent unsupported feature errors",
+          );
+          effectiveHasTools = false;
+          effectiveSeesImages = false;
+          effectiveSeesVideos = false;
+        }
+      } catch (error) {
+        log.warn(
+          "[ACCOUNT-SETTING] Error fetching capabilities - using conservative defaults: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
+        effectiveHasTools = false;
+        effectiveSeesImages = false;
+        effectiveSeesVideos = false;
+      }
     }
-    // Override with OpenRouter API capabilities if available
+    // Override with OpenRouter API capabilities if available (for registered models)
     else if (isOpenRouterCapabilityCacheReady()) {
       const apiCapabilities = getOpenRouterCapabilities(
         tomoriState.llm.llm_codename,

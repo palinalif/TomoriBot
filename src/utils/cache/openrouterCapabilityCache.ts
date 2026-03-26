@@ -86,6 +86,13 @@ const tokenLimitsCache = new Map<string, ModelTokenLimits>();
 const pricingCache = new Map<string, ModelPricing>();
 
 /**
+ * On-demand fetch cache for models not in the startup cache
+ * Used for account-setting and other dynamically-specified models
+ * Separate from startup cache to avoid unbounded memory growth
+ */
+const onDemandCapabilityCache = new Map<string, ModelCapabilities>();
+
+/**
  * Cache initialization state
  */
 let cacheReady = false;
@@ -430,4 +437,113 @@ export function getOpenRouterPricing(
 ): ModelPricing | undefined {
   if (!cacheReady) return undefined;
   return pricingCache.get(modelCodename);
+}
+
+/**
+ * Gets or fetches capabilities for an OpenRouter model
+ *
+ * This function provides a fallback mechanism for account-setting and other
+ * dynamically-specified models that may not be in the startup cache:
+ * 1. Checks the startup cache first (fastest)
+ * 2. Checks the on-demand cache (previously fetched models)
+ * 3. Fetches from OpenRouter API if not cached (for account-setting models)
+ * 4. Caches the result to avoid repeated API calls
+ *
+ * @param modelCodename - Model codename (e.g., "anthropic/claude-3.5-sonnet" or "account-setting" user's model)
+ * @returns ModelCapabilities if found or fetched, undefined on error or if cache not ready
+ *
+ * @example
+ * // For registered models (in startup cache)
+ * const capabilities = await getOrFetchOpenRouterCapabilities("anthropic/claude-3.5-sonnet");
+ *
+ * // For account-setting models (fetches on-demand if not cached)
+ * const accountSettingCaps = await getOrFetchOpenRouterCapabilities("openai/gpt-4-turbo");
+ * if (accountSettingCaps?.seesImages) {
+ *   // User's account-setting model supports images
+ * }
+ */
+export async function getOrFetchOpenRouterCapabilities(
+  modelCodename: string,
+): Promise<ModelCapabilities | undefined> {
+  // 1. Cache not ready - cannot even fetch on-demand
+  if (!cacheReady) {
+    log.warn(
+      `Cannot fetch capabilities for ${modelCodename}: cache not ready`,
+    );
+    return undefined;
+  }
+
+  // 2. Check startup cache first (populated at bot startup)
+  const cachedCapabilities = capabilityCache.get(modelCodename);
+  if (cachedCapabilities) {
+    return cachedCapabilities;
+  }
+
+  // 3. Check on-demand cache (previously fetched models)
+  const onDemandCached = onDemandCapabilityCache.get(modelCodename);
+  if (onDemandCached) {
+    return onDemandCached;
+  }
+
+  // 4. Model not in either cache - fetch from OpenRouter API
+  try {
+    log.info(
+      `Fetching capabilities on-demand for model: ${modelCodename}`,
+    );
+
+    // Fetch specific model from OpenRouter API
+    const response = await fetch(
+      `https://openrouter.ai/api/v1/models/${encodeURIComponent(modelCodename)}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    // 5. Check response status
+    if (!response.ok) {
+      log.warn(
+        `Failed to fetch capabilities for ${modelCodename}: ${response.status} ${response.statusText}`,
+      );
+      return undefined;
+    }
+
+    // 6. Parse response and extract model data
+    const data = await response.json();
+
+    // OpenRouter returns the model in a 'data' property
+    const model: OpenRouterModel | undefined = data.data;
+
+    if (!model) {
+      log.warn(
+        `OpenRouter API returned no model data for ${modelCodename}`,
+      );
+      return undefined;
+    }
+
+    // 7. Extract capabilities using the same detection functions
+    const capabilities: ModelCapabilities = {
+      hasTools: detectToolSupport(model),
+      seesImages: detectImageSupport(model),
+      seesVideos: detectVideoSupport(model),
+      supportsStructuredOutput: detectStructuredOutputSupport(model),
+    };
+
+    // 8. Cache the result for future requests
+    onDemandCapabilityCache.set(modelCodename, capabilities);
+
+    log.info(
+      `Fetched capabilities for ${modelCodename}: ` +
+        `tools=${capabilities.hasTools}, images=${capabilities.seesImages}, ` +
+        `videos=${capabilities.seesVideos}, structOutput=${capabilities.supportsStructuredOutput}`,
+    );
+
+    return capabilities;
+  } catch (error) {
+    log.warn(
+      `Error fetching capabilities for ${modelCodename}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
 }

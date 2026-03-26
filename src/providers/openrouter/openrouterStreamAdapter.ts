@@ -275,6 +275,40 @@ export class OpenrouterStreamAdapter implements StreamProvider {
   }
 
   /**
+   * Strips image content from messages for fallback requests
+   * Used when auto-routers select models that don't support vision
+   *
+   * Handles both:
+   * - Simple string content: "text only"
+   * - Array content: [{ type: "text", text: "..." }, { type: "image_url", ... }]
+   *
+   * Removes any content blocks with type: "image_url" or "image"
+   */
+  private stripImagesFromMessages(
+    messages: Array<Record<string, unknown>>,
+  ): Array<Record<string, unknown>> {
+    return messages.map((message) => {
+      const content = message.content;
+      // If content is an array, filter out image blocks
+      if (Array.isArray(content)) {
+        const filteredContent = content.filter((block: unknown) => {
+          if (typeof block !== "object" || block === null) return true;
+          const blockObj = block as Record<string, unknown>;
+          const type = blockObj.type;
+          // Remove image_url and image content types
+          return type !== "image_url" && type !== "image";
+        });
+        // Only return modified message if content actually changed
+        if (filteredContent.length < content.length) {
+          return { ...message, content: filteredContent };
+        }
+      }
+      // Return unchanged if content is string or no images found
+      return message;
+    });
+  }
+
+  /**
    * Estimate input tokens for context-window safety capping.
    *
    * This intentionally ignores inline base64 data-URI payloads (for image_url
@@ -783,12 +817,33 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
 
-      addAttempt(
-        "minimal_payload",
+      // For routing models (e.g., openrouter/free): after sampling params,
+      // try stripping images before tools. Vision support varies more than tool support,
+      // so preserve tools for auto-router to use for model selection if possible.
+      let strippedMessages = messages;
+      const probeWithoutImages = { ...probeBaseline };
+      if (Array.isArray((probeBaseline.messages as unknown[]))) {
+        strippedMessages = this.stripImagesFromMessages(
+          probeBaseline.messages as Array<Record<string, unknown>>,
+        );
+        probeWithoutImages.messages = strippedMessages;
+      }
+      addAttempt("strip_images", probeWithoutImages);
+
+      // Then try dropping tools while keeping images (less common than tools-only models)
+      if ("tools" in probeBaseline) {
+        addAttempt(
+          "probe_drop_tools",
+          this.cloneWithoutKeys(probeBaseline, ["tools"]),
+        );
+      }
+
+      // Finally, minimal text-only payload with stripped images
+      const minimalBody =
         config.model !== "account-setting"
-          ? { model: config.model, messages, stream: true }
-          : { messages, stream: true },
-      );
+          ? { model: config.model, messages: strippedMessages, stream: true }
+          : { messages: strippedMessages, stream: true };
+      addAttempt("minimal_payload", minimalBody);
 
       let response: Response | null = null;
       for (let i = 0; i < attempts.length; i++) {
@@ -856,16 +911,25 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         const isNoEndpoints404 =
           parsedError.statusCode === 404 &&
           this.isNoEndpointsFound(parsedError.errorMessage);
+        // 502 Bad Gateway from routing models (e.g., openrouter/free) may indicate
+        // the selected backend doesn't support the requested parameters.
+        // Probe-drop can find a compatible parameter subset.
+        const isBackendIncompatible502 = parsedError.statusCode === 502;
 
         if (
-          (isGeneric400 || isParamRejection400 || isNoEndpoints404) &&
+          (isGeneric400 ||
+            isParamRejection400 ||
+            isNoEndpoints404 ||
+            isBackendIncompatible502) &&
           hasMoreAttempts
         ) {
           const reason = isNoEndpoints404
             ? "no endpoints found (404)"
             : isParamRejection400
               ? "parameter rejection (400)"
-              : "generic HTTP 400";
+              : isBackendIncompatible502
+                ? "backend incompatible with parameters (502)"
+                : "generic HTTP 400";
           log.warn(
             `OpenRouter returned ${reason} on attempt '${attempt.label}', trying fallback payload`,
             {

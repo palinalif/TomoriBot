@@ -951,9 +951,12 @@ export async function updateTomori(
     // Validate the partial data with Zod (Rule #7)
     const validTomoriData = tomoriSchema.partial().parse(tomoriData);
 
-    // Extract field names and values for the SQL query
+    // Extract field names and values for the SQL query.
+    // Filter to only keys present in the original input — Zod injects defaults
+    // for all schema fields with .default(), which would incorrectly expand the
+    // SET clause (e.g. attribute_list: [] would overwrite existing data).
     const fields = Object.keys(validTomoriData).filter(
-      (key) => key !== "tomori_id", // Exclude the primary key
+      (key) => key !== "tomori_id" && key in tomoriData,
     );
 
     if (fields.length === 0) {
@@ -968,10 +971,21 @@ export async function updateTomori(
     const setParts: string[] = [];
     const values: SqlParameterArray = [];
 
-    // 2. Iterate through fields to build SET clause parts and collect values
+    // 2. Iterate through fields to build SET clause parts and collect values.
+    // sql.unsafe() cannot infer PostgreSQL column types, so JavaScript arrays
+    // must be manually serialized to PostgreSQL array literals (e.g. {"a","b"}).
     fields.forEach((field, index) => {
       setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
-      values.push(validTomoriData[field as keyof typeof validTomoriData]);
+      const rawValue = validTomoriData[field as keyof typeof validTomoriData];
+      if (Array.isArray(rawValue)) {
+        // Serialize to PostgreSQL array literal: {"val1","val2"} or {}
+        const escaped = rawValue.map(
+          (v) => `"${String(v).replace(/(["\\])/g, "\\$1")}"`,
+        );
+        values.push(`{${escaped.join(",")}}`);
+      } else {
+        values.push(rawValue);
+      }
     });
 
     // 3. Join the SET parts
@@ -981,7 +995,8 @@ export async function updateTomori(
     const finalPlaceholderIndex = values.length + 1;
     values.push(tomoriId);
 
-    // 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
+    // 5. Execute the UPDATE using sql.unsafe() with the values array (not spread —
+    // Bun SQL expects a single array argument, not individual arguments).
     const result = await sql.unsafe(
       `
 			UPDATE tomoris
@@ -989,7 +1004,7 @@ export async function updateTomori(
 			WHERE tomori_id = $${finalPlaceholderIndex}
 			RETURNING *
 		`,
-      ...values, // Pass the values array directly spreading
+      values, // Pass values as a single array — sql.unsafe(query, valuesArray)
     );
 
     if (!result.length) {
@@ -1062,9 +1077,12 @@ export async function updateUser(
     // Validate the partial data with Zod (Rule #7)
     const validUserData = userSchema.partial().parse(userData);
 
-    // Extract field names and values for the SQL query
+    // Extract field names and values for the SQL query.
+    // Filter to only keys present in the original input — Zod injects defaults
+    // for all schema fields with .default(), which would incorrectly expand the
+    // SET clause (e.g. personal_memories: [] would overwrite existing data).
     const fields = Object.keys(validUserData).filter(
-      (key) => key !== "user_id", // Exclude the primary key
+      (key) => key !== "user_id" && key in userData,
     );
 
     if (fields.length === 0) {
@@ -1079,10 +1097,20 @@ export async function updateUser(
     const setParts: string[] = [];
     const values: SqlParameterArray = [];
 
-    // 2. Iterate through fields to build SET clause parts and collect values
+    // 2. Iterate through fields to build SET clause parts and collect values.
+    // sql.unsafe() cannot infer PostgreSQL column types, so JavaScript arrays
+    // must be manually serialized to PostgreSQL array literals (e.g. {"a","b"}).
     fields.forEach((field, index) => {
       setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
-      values.push(validUserData[field as keyof typeof validUserData]);
+      const rawValue = validUserData[field as keyof typeof validUserData];
+      if (Array.isArray(rawValue)) {
+        const escaped = rawValue.map(
+          (v) => `"${String(v).replace(/(["\\])/g, "\\$1")}"`,
+        );
+        values.push(`{${escaped.join(",")}}`);
+      } else {
+        values.push(rawValue);
+      }
     });
 
     // 3. Join the SET parts
@@ -1092,7 +1120,8 @@ export async function updateUser(
     const finalPlaceholderIndex = values.length + 1;
     values.push(userId);
 
-    // 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
+    // 5. Execute the UPDATE using sql.unsafe() with the values array (not spread —
+    // Bun SQL expects a single array argument, not individual arguments).
     const result = await sql.unsafe(
       `
             UPDATE users
@@ -1100,7 +1129,7 @@ export async function updateUser(
             WHERE user_id = $${finalPlaceholderIndex}
             RETURNING *
         `,
-      ...values, // Spread the values array as arguments
+      values, // Pass values as a single array — sql.unsafe(query, valuesArray)
     );
 
     if (!result.length) {

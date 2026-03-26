@@ -48,6 +48,10 @@ const ALLOWED_TOMORI_FIELDS = new Set<keyof TomoriRow>([
   "nai_attg_tags",
   "nai_attg_genre",
   "nai_attg_stars",
+  "persona_lineage_id",
+  "is_alter",
+  "webhook_avatar_url",
+  "alter_triggers",
   // Exclude: tomori_id (primary key), created_at, updated_at (auto-managed)
 ]);
 

@@ -14,19 +14,24 @@ import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 export class GenerateVoiceMessageTool extends BaseTool {
 	name = "generate_voice_message";
 	description =
-		"Generate a spoken Discord audio message using the active persona's configured ElevenLabs voice. Use this only when voice delivery materially improves the reply. You may include short bracketed expression tags such as [whispers], [laughs], or [excited]. The tool sends the audio attachment and a clean text caption directly to the channel.";
+		"Generate a spoken Discord audio message using the active persona's configured ElevenLabs voice. Use this only when voice delivery materially improves the reply. You may include bracketed expression tags anywhere in the script to shape delivery — both emotional states (e.g. [happy], [sad], [tired], [nervous]) and actions (e.g. [whispers], [laughs], [sighs softly]) are supported. Use them when they naturally fit the character and tone. The tool sends the audio attachment directly to the channel with no text caption.";
 	category = "discord" as const;
 
 	parameters: ToolParameterSchema = {
 		type: "object",
 		properties: {
+			title: {
+				type: "string",
+				description:
+					"A short descriptive title for the voice message (e.g. \"greeting\", \"farewell\", \"apology\"). Used as the audio filename. Keep it lowercase with no spaces.",
+			},
 			script: {
 				type: "string",
 				description:
-					"The exact spoken script for the voice message. Keep it concise and natural for speech. Optional short expression tags in square brackets are allowed.",
+					"The exact spoken script for the voice message. Keep it concise and natural for speech. Bracketed expression tags (emotional states like [happy], [sad], [tired] or actions like [whispers], [laughs]) can be placed inline to shape the delivery.",
 			},
 		},
-		required: ["script"],
+		required: ["title", "script"],
 	};
 
 	private resolveThreadId(context: ToolContext): string | undefined {
@@ -37,23 +42,15 @@ export class GenerateVoiceMessageTool extends BaseTool {
 			: undefined;
 	}
 
-	private buildAttachmentName(
-		context: ToolContext,
-		extension: string,
-	): string {
-		const baseName = (
-			context.tomoriState.elevenlabs_voice_name ||
-			context.personaUsername ||
-			context.tomoriState.tomori_nickname ||
-			"voice"
-		)
+	private buildAttachmentName(title: string, extension: string): string {
+		const baseName = title
 			.trim()
 			.replace(/[^A-Za-z0-9_-]+/g, "_")
 			.replace(/^_+|_+$/g, "")
 			.slice(0, 40);
 
 		const safeBaseName = baseName.length > 0 ? baseName : "voice";
-		return `${safeBaseName}_${Date.now()}.${extension}`;
+		return `${safeBaseName}.${extension}`;
 	}
 
 	async execute(
@@ -68,6 +65,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
 			};
 		}
 
+		const title = typeof args.title === "string" ? args.title.trim() : "voice";
 		const script = typeof args.script === "string" ? args.script.trim() : "";
 		if (!script) {
 			return {
@@ -112,24 +110,23 @@ export class GenerateVoiceMessageTool extends BaseTool {
 		}
 
 		const attachment = new AttachmentBuilder(synthesisResult.audioBuffer, {
-			name: this.buildAttachmentName(
-				context,
-				synthesisResult.extension ?? "mp3",
-			),
+			name: this.buildAttachmentName(title, synthesisResult.extension ?? "mp3"),
 		});
 		const threadId = this.resolveThreadId(context);
 		const captionText = synthesisResult.cleanedCaptionText ?? "";
 
 		let sentMessageId: string | undefined;
 
+		// Send audio only — no text caption in chat.
+		// The caption is still cached below so history context can show the
+		// spoken words without re-running STT on the audio attachment.
 		if (context.webhook && context.personaUsername) {
 			const sentMessage = await sendWebhookMessageWithIdentity(
 				context.webhook,
 				{
-					content: captionText,
 					files: [attachment],
 					allowedMentions: {
-						parse: ["users", "roles"],
+						parse: [],
 						repliedUser: false,
 					},
 					...(threadId ? { threadId } : {}),
@@ -145,7 +142,6 @@ export class GenerateVoiceMessageTool extends BaseTool {
 			sentMessageId = sentMessage.id;
 		} else {
 			const sentMessage = await context.channel.send({
-				content: captionText,
 				files: [attachment],
 			});
 			sentMessageId = sentMessage.id;

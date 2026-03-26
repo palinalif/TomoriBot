@@ -2272,17 +2272,23 @@ export async function promptWithPaginatedModal(
     ...pageButtons,
   );
 
-  // Send page selection message
-  const pageSelectMessage = await (interaction.deferred || interaction.replied
-    ? interaction.editReply({
-        embeds: [pageSelectEmbed],
-        components: [actionRow],
-      })
-    : interaction.reply({
-        embeds: [pageSelectEmbed],
-        components: [actionRow],
-        flags: MessageFlags.Ephemeral,
-      }));
+  // Send page selection message.
+  // Always resolve to a Message (not InteractionResponse) so that
+  // awaitMessageComponent works reliably on ephemeral messages.
+  let pageSelectMessage: Message;
+  if (interaction.deferred || interaction.replied) {
+    pageSelectMessage = await interaction.editReply({
+      embeds: [pageSelectEmbed],
+      components: [actionRow],
+    });
+  } else {
+    await interaction.reply({
+      embeds: [pageSelectEmbed],
+      components: [actionRow],
+      flags: MessageFlags.Ephemeral,
+    });
+    pageSelectMessage = await interaction.fetchReply();
+  }
 
   try {
     // Wait for page button interaction
