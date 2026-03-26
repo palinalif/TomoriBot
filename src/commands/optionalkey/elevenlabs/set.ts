@@ -92,7 +92,7 @@ export async function execute(
 		const validationResult = await validateElevenLabsApiKey(apiKey);
 		if (!validationResult.success) {
 			log.info(
-				`ElevenLabs API key validation failed for server ${tomoriState.server_id}: ${validationResult.details ?? validationResult.errorKind ?? "unknown"}`,
+				`ElevenLabs API key validation failed for server ${tomoriState.server_id}: HTTP ${validationResult.statusCode ?? "?"} — ${validationResult.details ?? validationResult.errorKind ?? "unknown"}`,
 			);
 			await replyInfoEmbed(interaction, locale, {
 				titleKey:

@@ -39,8 +39,11 @@ export async function validateElevenLabsApiKey(
 	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
 	try {
+		// Use /v1/voices for validation — accessible with TTS permissions alone,
+		// unlike /v1/user/subscription which requires account:read scope and
+		// returns 401 (not 403) for fine-grained STT/TTS-only keys.
 		const response = await fetch(
-			`${ELEVENLABS_API_BASE_URL}/v1/user/subscription`,
+			`${ELEVENLABS_API_BASE_URL}/v1/voices`,
 			{
 				method: "GET",
 				headers: {
@@ -60,33 +63,28 @@ export async function validateElevenLabsApiKey(
 			responseJson = null;
 		}
 
-		if (!response.ok) {
+		// Only 401 means the key itself is invalid or revoked. Any other status
+		// (including 403) means the key authenticated but lacks this specific scope,
+		// which is still a valid key.
+		if (response.status === 401) {
+			const detail =
+				typeof responseJson?.detail === "string"
+					? responseJson.detail
+					: `HTTP 401`;
 			return {
 				success: false,
 				errorKind: "request_failed",
 				statusCode: response.status,
-				details:
-					typeof responseJson?.detail === "string"
-						? responseJson.detail
-						: `HTTP ${response.status}`,
+				details: `Invalid or revoked ElevenLabs API key. (${detail})`,
 			};
 		}
 
 		return {
 			success: true,
-			tier: typeof responseJson?.tier === "string" ? responseJson.tier : null,
-			characterLimit:
-				typeof responseJson?.character_limit === "number"
-					? responseJson.character_limit
-					: null,
-			characterCount:
-				typeof responseJson?.character_count === "number"
-					? responseJson.character_count
-					: null,
-			canUseInstantVoiceCloning:
-				typeof responseJson?.can_use_instant_voice_cloning === "boolean"
-					? responseJson.can_use_instant_voice_cloning
-					: null,
+			tier: null,
+			characterLimit: null,
+			characterCount: null,
+			canUseInstantVoiceCloning: null,
 		};
 	} catch (error) {
 		clearTimeout(timeoutId);

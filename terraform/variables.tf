@@ -231,13 +231,13 @@ variable "container_image" {
 variable "ecs_task_cpu" {
   description = "Task CPU units (Fargate task-level)"
   type        = string
-  default     = "256"
+  default     = "512"
 }
 
 variable "ecs_task_memory" {
   description = "Task memory in MiB (Fargate task-level)"
   type        = string
-  default     = "512"
+  default     = "1024"
 }
 
 variable "node_env" {

@@ -537,6 +537,13 @@ export async function execute(
 			modalTitleKey: "commands.bot.generate.image.modal.title",
 			components: [
 				{
+					customId: PERSONA_INPUT_ID,
+					labelKey: "commands.bot.generate.image.modal.persona_label",
+					descriptionKey: "commands.bot.generate.image.modal.persona_description",
+					required: true,
+					options: getPersonaSelectOptions(personaSummaries, tomoriState.tomori_id ?? -1),
+				},
+				{
 					customId: PROMPT_INPUT_ID,
 					labelKey: "commands.bot.generate.image.modal.prompt_label",
 					descriptionKey:
@@ -574,13 +581,6 @@ export async function execute(
 							},
 						]
 					: []),
-			{
-				customId: PERSONA_INPUT_ID,
-				labelKey: "commands.bot.generate.image.modal.persona_label",
-				descriptionKey: "commands.bot.generate.image.modal.persona_description",
-				required: true,
-				options: getPersonaSelectOptions(personaSummaries, tomoriState.tomori_id ?? -1),
-			},
 			],
 		},
 		MessageFlags.Ephemeral,

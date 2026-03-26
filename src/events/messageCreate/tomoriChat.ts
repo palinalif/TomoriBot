@@ -2058,6 +2058,12 @@ export default async function tomoriChat(
     );
   }
 
+  // Easter egg: Respond to "$whoami" as the main persona
+  if (message.content === "$whoami" && "send" in channel) {
+    await channel.send("I'm Tomowi!");
+    return;
+  }
+
   const explicitLongTermMemoryIntent = hasExplicitLongTermMemoryIntent(
     message.content,
   );

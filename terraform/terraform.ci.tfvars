@@ -4,6 +4,8 @@ aws_region  = "us-east-1"
 environment = "production"
 
 ecr_scan_on_push = false
+ecs_task_cpu     = "512"
+ecs_task_memory  = "1024"
 
 # Keep in sync with the current AWS OIDC thumbprint.
 github_actions_oidc_thumbprints = ["2b18947a6a9fc7764fd8b5fb18a863b0c6dac24f"]
