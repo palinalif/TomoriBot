@@ -156,9 +156,13 @@ import {
   type ThoughtLogOwner,
 } from "@/utils/discord/thoughtLog";
 import {
-  buildTranscriptRelayContent,
+  isAudioAttachment,
   transcribeMessageAudioAttachment,
 } from "@/utils/audio/audioAttachmentTranscription";
+import {
+  getCachedVoiceTranscript,
+  setCachedVoiceTranscript,
+} from "@/utils/audio/voiceTranscriptCache";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -377,7 +381,7 @@ const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 
 const SELF_REPLY_SUPPRESSION_TTL_MS = 5000;
 const selfReplySuppressionUntil = new Map<string, number>();
 const USER_IMPERSONATION_WEBHOOK_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-type CachedWebhookRelayKind = "user_impersonation" | "stt_transcript";
+type CachedWebhookRelayKind = "user_impersonation";
 type CachedWebhookRelay = {
   userId: string;
   kind: CachedWebhookRelayKind;
@@ -608,12 +612,6 @@ function cacheUserImpersonationWebhook(
   cacheWebhookRelay(webhookId, userId, "user_impersonation");
 }
 
-function cacheSttTranscriptWebhook(
-  webhookId: string,
-  userId: string,
-): void {
-  cacheWebhookRelay(webhookId, userId, "stt_transcript");
-}
 
 function getCachedWebhookRelay(
   webhookId: string | null | undefined,
@@ -635,11 +633,6 @@ function getCachedWebhookRelay(
   return cached;
 }
 
-function getCachedWebhookRelayUserId(
-  webhookId: string | null | undefined,
-): string | null {
-  return getCachedWebhookRelay(webhookId)?.userId ?? null;
-}
 
 function getCachedImpersonatedUserIdForWebhook(
   webhookId: string | null | undefined,
@@ -652,11 +645,6 @@ function getCachedImpersonatedUserIdForWebhook(
   return cachedRelay.userId;
 }
 
-function isCachedSttTranscriptWebhookId(
-  webhookId: string | null | undefined,
-): boolean {
-  return getCachedWebhookRelay(webhookId)?.kind === "stt_transcript";
-}
 
 function markAudioTranscriptionHandled(message: Message): void {
   (message as MessageWithInternalFlags)[AUDIO_TRANSCRIPTION_HANDLED_KEY] = true;
@@ -701,17 +689,10 @@ function isMatrixRelayMessage(message: Pick<Message, "webhookId" | "author">): b
   );
 }
 
-function isSttTranscriptRelayMessage(
-  message: Pick<Message, "webhookId">,
-): boolean {
-  return isCachedSttTranscriptWebhookId(message.webhookId);
-}
-
 function isRealUserLikeMessage(message: Message): boolean {
   return (
     (!message.author.bot && !message.webhookId) ||
-    isMatrixRelayMessage(message) ||
-    isSttTranscriptRelayMessage(message)
+    isMatrixRelayMessage(message)
   );
 }
 
@@ -829,110 +810,6 @@ async function resolveImpersonatedIdentity(
   };
 }
 
-function resolveTranscriptRelayTargetChannel(
-  channel: Message["channel"],
-): BaseGuildTextChannel | null {
-  const isThread =
-    "isThread" in channel &&
-    typeof channel.isThread === "function" &&
-    channel.isThread();
-
-  if (isThread) {
-    return channel.parent && "fetchWebhooks" in channel.parent
-      ? (channel.parent as BaseGuildTextChannel)
-      : null;
-  }
-
-  return "fetchWebhooks" in channel && "createWebhook" in channel
-    ? (channel as BaseGuildTextChannel)
-    : null;
-}
-
-function resolveTranscriptRelayThreadId(
-  channel: Message["channel"],
-): string | undefined {
-  return "isThread" in channel &&
-    typeof channel.isThread === "function" &&
-    channel.isThread()
-    ? channel.id
-    : undefined;
-}
-
-async function relayTranscriptAsWebhookMessage(
-  message: Message,
-  relayContent: string,
-  userDiscId: string,
-): Promise<boolean> {
-  const targetChannel = resolveTranscriptRelayTargetChannel(message.channel);
-  if (!targetChannel) {
-    return false;
-  }
-
-  let relayWebhook: Webhook | null = null;
-
-  try {
-    relayWebhook = await targetChannel.createWebhook({
-      name: "TomoriBot Transcript Relay",
-      reason: "TomoriBot audio transcript relay",
-    });
-
-    const relayDisplayName = resolvePreferredDiscordDisplayName({
-      memberDisplayName: message.member?.displayName,
-      user: message.author,
-      fallback: message.author.username,
-    });
-    const relayAvatarUrl =
-      message.member?.displayAvatarURL({
-        size: 1024,
-        extension: "png",
-        forceStatic: true,
-      }) ||
-      message.author.displayAvatarURL({
-        size: 1024,
-        extension: "png",
-        forceStatic: true,
-      }) ||
-      undefined;
-    const threadId = resolveTranscriptRelayThreadId(message.channel);
-
-    const sentMessage = await sendWebhookMessageWithIdentity(
-      relayWebhook,
-      {
-        content: relayContent,
-        allowedMentions: {
-          parse: ["users", "roles"],
-          repliedUser: false,
-        },
-        ...(threadId ? { threadId } : {}),
-      },
-      {
-        username: relayDisplayName,
-        avatarUrl: relayAvatarUrl,
-      },
-    );
-
-    cacheSttTranscriptWebhook(sentMessage.webhookId ?? relayWebhook.id, userDiscId);
-    return true;
-  } catch (error) {
-    log.warn(
-      `Failed to relay transcript webhook for message ${message.id}`,
-      error,
-    );
-    return false;
-  } finally {
-    if (relayWebhook) {
-      try {
-        await relayWebhook.delete("Audio transcript relay complete");
-      } catch (deleteError) {
-        log.warn(
-          `Failed to delete temporary transcript relay webhook for message ${message.id}`,
-          deleteError,
-        );
-      }
-    }
-  }
-}
-
 function resolveReferencedWebhookTarget(
   referenceMessage: Message,
   personaByNickname: Map<string, TomoriState>,
@@ -943,9 +820,6 @@ function resolveReferencedWebhookTarget(
   }
 
   const cachedRelay = getCachedWebhookRelay(referenceMessage.webhookId);
-  if (cachedRelay?.kind === "stt_transcript") {
-    return { replyPersona: null, impersonatedUserId: null };
-  }
 
   // 1. Check persona nickname first — this is authoritative based on the
   //    webhook's current display name, so it must take priority over the
@@ -1969,9 +1843,8 @@ export default async function tomoriChat(
   // They must not be treated as self-messages or persona jobs — exempt them from all
   // webhook/bot guards so TomoriBot responds to them like regular user messages.
   const isMatrixRelay = isMatrixRelayMessage(message);
-  const isSttRelay = isSttTranscriptRelayMessage(message);
   const isLikelySelfMessage =
-    !isMatrixRelay && !isSttRelay && (isFromClientUser || isWebhookMessage);
+    !isMatrixRelay && (isFromClientUser || isWebhookMessage);
 
   const isSeedPlaceholderMessage =
     isFromClientUser &&
@@ -2084,7 +1957,6 @@ export default async function tomoriChat(
 
   const userDiscId =
     manualTriggerInvoker?.userDiscId ??
-    (isSttRelay ? getCachedWebhookRelayUserId(message.webhookId) : null) ??
     message.author.id;
   const triggererUsername =
     manualTriggerInvoker?.username ?? message.author.username;
@@ -2283,30 +2155,27 @@ export default async function tomoriChat(
       markAudioTranscriptionHandled(message);
 
       if (transcriptionResult.transcriptText) {
-        const relayContent = buildTranscriptRelayContent(
-          message.content,
+        // 1. Cache the transcript so the history formatter can inline it
+        //    on future context passes without re-running STT.
+        setCachedVoiceTranscript(
+          message.id,
           transcriptionResult.transcriptText,
+          "user_stt",
         );
 
-        if (relayContent.length > 0) {
-          const relayed = await relayTranscriptAsWebhookMessage(
-            message,
-            relayContent,
-            userDiscId,
-          );
+        // 2. Build the effective content: original text (if any) + system
+        //    voice-message marker + transcript so trigger detection runs on
+        //    the spoken words naturally.
+        const existingText = message.content.trim();
+        const voiceContent = existingText
+          ? `${existingText}\n[System: This was sent as a voice message.]\n${transcriptionResult.transcriptText}`
+          : `[System: This was sent as a voice message.]\n${transcriptionResult.transcriptText}`;
 
-          if (relayed) {
-            log.info(
-              `Relayed audio transcript for message ${message.id} as temporary webhook transcript`,
-            );
-            return;
-          }
-
-          applyEffectiveMessageContent(message, relayContent);
-          log.info(
-            `Applied in-process transcript fallback for message ${message.id} (no relay webhook available)`,
-          );
-        }
+        applyEffectiveMessageContent(message, voiceContent);
+        log.info(
+          `Applied voice transcript for message ${message.id} (${transcriptionResult.transcriptText.length} chars)`,
+        );
+        // No return — trigger detection runs on voiceContent naturally.
       } else {
         log.warn(
           `Audio transcription failed for message ${message.id}: ${transcriptionResult.failureReason ?? "unknown"}${transcriptionResult.failureDetails ? ` (${transcriptionResult.failureDetails})` : ""}`,
@@ -2831,8 +2700,7 @@ export default async function tomoriChat(
         (message.author.bot || message.webhookId) &&
         !isSelfMessage &&
         !isManuallyTriggered &&
-        !isMatrixRelay &&
-        !isSttRelay
+        !isMatrixRelay
       ) {
         return;
       }
@@ -3851,6 +3719,34 @@ export default async function tomoriChat(
             ? resetIndex
             : resetIndex + 1;
       const relevantMessagesArray = messagesArray.slice(startIndex);
+
+      // Pre-populate the voice transcript cache for audio messages in history.
+      // This runs STT (if needed) before the simplifiedMessages loop so that
+      // subsequent cache lookups in the loop are synchronous and fast.
+      // Only user messages are STT'd; bot/webhook messages are skipped.
+      if (earlyTomoriState) {
+        for (const msg of relevantMessagesArray) {
+          // 1. Skip bots and webhooks — only user audio is STT'd
+          if (msg.author.bot || msg.webhookId) continue;
+          // 2. Skip if already cached (current-turn message was cached above)
+          if (getCachedVoiceTranscript(msg.id)) continue;
+          // 3. Run STT only if the message has at least one audio attachment
+          const hasAudio = [...msg.attachments.values()].some(isAudioAttachment);
+          if (!hasAudio) continue;
+
+          const result = await transcribeMessageAudioAttachment(
+            msg,
+            earlyTomoriState.server_id,
+          );
+          if (result.transcriptText) {
+            setCachedVoiceTranscript(msg.id, result.transcriptText, "user_stt");
+            log.info(
+              `Pre-populated voice transcript for history message ${msg.id} (${result.transcriptText.length} chars)`,
+            );
+          }
+        }
+      }
+
       // 10. Build the `SimplifiedMessageForContext` array and user list from relevant messages
       const simplifiedMessages: SimplifiedMessageForContext[] = []; // Array for structured messages
       const userListSet = new Set<string>(); // Still useful for fetching user-specific memories/data
@@ -4451,9 +4347,31 @@ export default async function tomoriChat(
                 `Processed video attachment: ${attachment.name} (${attachment.contentType})`,
               );
             }
-            // Non-media attachments (PDF, TXT, MD, etc.) — append text placeholder
-            // with message ID so the LLM can call read_document with the correct ID
-            else {
+            // Non-media attachments (PDF, TXT, MD, etc.) — check for audio cache first,
+            // otherwise append a text placeholder with message ID for read_document
+            else if (isAudioAttachment(attachment)) {
+              const cached = getCachedVoiceTranscript(msg.id);
+              if (cached?.source === "user_stt") {
+                // Inline the transcript instead of a filename placeholder.
+                // Guard against double-appending if applyEffectiveMessageContent
+                // already embedded the transcript in processedContent.
+                if (!messageContentForLlm?.includes(cached.transcript)) {
+                  const voiceText = `[System: This was sent as a voice message.]\n${cached.transcript}`;
+                  messageContentForLlm = messageContentForLlm
+                    ? `${messageContentForLlm}\n${voiceText}`
+                    : voiceText;
+                }
+              }
+              // For "tts" source or cache miss, fall through to a generic attachment hint
+              // so the LLM still knows an audio file was present.
+              else {
+                const attachName = attachment.name ?? "file";
+                const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
+                messageContentForLlm = messageContentForLlm
+                  ? `${messageContentForLlm} ${attachHint}`
+                  : attachHint;
+              }
+            } else {
               const attachName = attachment.name ?? "file";
               const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
               messageContentForLlm = messageContentForLlm

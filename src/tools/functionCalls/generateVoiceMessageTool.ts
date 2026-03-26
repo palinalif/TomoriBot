@@ -7,6 +7,7 @@ import {
 } from "@/types/tool/interfaces";
 import { synthesizeSpeechWithElevenLabs } from "@/utils/audio/elevenLabsTts";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
+import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 
@@ -119,8 +120,10 @@ export class GenerateVoiceMessageTool extends BaseTool {
 		const threadId = this.resolveThreadId(context);
 		const captionText = synthesisResult.cleanedCaptionText ?? "";
 
+		let sentMessageId: string | undefined;
+
 		if (context.webhook && context.personaUsername) {
-			await sendWebhookMessageWithIdentity(
+			const sentMessage = await sendWebhookMessageWithIdentity(
 				context.webhook,
 				{
 					content: captionText,
@@ -139,11 +142,19 @@ export class GenerateVoiceMessageTool extends BaseTool {
 						: undefined,
 				},
 			);
+			sentMessageId = sentMessage.id;
 		} else {
-			await context.channel.send({
+			const sentMessage = await context.channel.send({
 				content: captionText,
 				files: [attachment],
 			});
+			sentMessageId = sentMessage.id;
+		}
+
+		// Cache caption text keyed by message ID so the history formatter can
+		// inline the clean text in future context passes without re-running STT.
+		if (sentMessageId && captionText) {
+			setCachedVoiceTranscript(sentMessageId, captionText, "tts");
 		}
 
 		return {

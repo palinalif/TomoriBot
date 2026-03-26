@@ -2,10 +2,8 @@ import type { Attachment, Message } from "discord.js";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { safeDownload } from "@/utils/security/safeDownload";
 import {
-	DISCORD_MESSAGE_MAX_CHARS,
 	ELEVENLABS_SERVICE_NAME,
 	getElevenLabsSttConfig,
-	normalizeTranscriptText,
 } from "@/utils/audio/elevenLabsShared";
 import { transcribeWithElevenLabs } from "@/utils/audio/elevenLabsStt";
 
@@ -27,7 +25,8 @@ export interface AudioAttachmentTranscriptionResult {
 	failureDetails?: string;
 }
 
-function isAudioAttachment(attachment: Attachment): boolean {
+/** Returns true if the attachment is an audio file by MIME type or extension. */
+export function isAudioAttachment(attachment: Attachment): boolean {
 	const mimeType = attachment.contentType?.toLowerCase() ?? "";
 	if (mimeType.startsWith("audio/")) {
 		return true;
@@ -44,32 +43,6 @@ function getFirstAudioAttachment(message: Message): Attachment | null {
 	}
 
 	return null;
-}
-
-export function buildTranscriptRelayContent(
-	originalText: string,
-	transcriptText: string,
-): string {
-	const normalizedOriginal = normalizeTranscriptText(
-		originalText,
-		DISCORD_MESSAGE_MAX_CHARS,
-	);
-	const normalizedTranscript = normalizeTranscriptText(
-		transcriptText,
-		DISCORD_MESSAGE_MAX_CHARS,
-	);
-
-	if (normalizedOriginal && normalizedTranscript) {
-		return `${normalizedOriginal}\n${normalizedTranscript}`.slice(
-			0,
-			DISCORD_MESSAGE_MAX_CHARS,
-		);
-	}
-
-	return (normalizedOriginal || normalizedTranscript).slice(
-		0,
-		DISCORD_MESSAGE_MAX_CHARS,
-	);
 }
 
 export async function transcribeMessageAudioAttachment(

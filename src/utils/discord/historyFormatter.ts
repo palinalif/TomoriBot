@@ -9,6 +9,8 @@ import { MessageType } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import { isRefreshMarkerEmbed } from "@/utils/discord/embedDetection";
 import { stripBridgePrefix } from "@/utils/bridge";
+import { isAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
+import { getCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 
 /** Result of formatting messages for extraction */
 export interface FormattedHistoryResult {
@@ -123,8 +125,26 @@ export function formatMessagesForExtraction(
     // 2. Build message content
     let content = msg.content ? resolveMentions(msg.content, msg) : "";
 
-    // 3. Append attachment indicators
+    // 3. Append attachment indicators (or cached voice transcript for audio)
+    let audioTranscriptAppended = false;
     for (const attachment of msg.attachments.values()) {
+      if (isAudioAttachment(attachment)) {
+        // Check the in-memory cache first — avoids re-running STT on history audio.
+        // "tts" source = Tomori's own voice message; caption text is already
+        // included in msg.content (sent alongside the attachment), so we just
+        // skip the [Attachment] tag to avoid duplication.
+        // "user_stt" source = user-sent audio; inline the transcript so the
+        // extraction LLM sees the spoken words rather than just a filename.
+        const cached = getCachedVoiceTranscript(msg.id);
+        if (cached) {
+          if (cached.source === "user_stt" && !audioTranscriptAppended) {
+            content += ` [Voice message: ${cached.transcript}]`;
+            audioTranscriptAppended = true;
+          }
+          // Either way, skip the generic [Attachment: ...] tag
+          continue;
+        }
+      }
       content += ` [Attachment: ${attachment.name ?? "file"}]`;
     }
 
