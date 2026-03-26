@@ -8,8 +8,10 @@ import {
 import { synthesizeSpeechWithElevenLabs } from "@/utils/audio/elevenLabsTts";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
+import { generateVoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
+import { log } from "@/utils/misc/logger";
 
 export class GenerateVoiceMessageTool extends BaseTool {
 	name = "generate_voice_message";
@@ -115,6 +117,34 @@ export class GenerateVoiceMessageTool extends BaseTool {
 		const threadId = this.resolveThreadId(context);
 		const captionText = synthesisResult.cleanedCaptionText ?? "";
 
+		// Attempt to generate waveform + duration for Discord's native voice
+		// message UI. Falls back gracefully to a plain attachment if it fails.
+		const voiceMeta = await generateVoiceMessageMetadata(
+			synthesisResult.audioBuffer,
+			synthesisResult.contentType ?? "audio/mpeg",
+		);
+		const isNativeVoiceMessage = voiceMeta !== null;
+
+		if (isNativeVoiceMessage) {
+			// Patch toJSON on this instance so the extra fields flow through
+			// discord.js's MessagePayload serialization into the Discord API's
+			// attachments[] array. AttachmentBuilder.data is not publicly typed
+			// so we override at the toJSON level instead.
+			const originalToJSON = attachment.toJSON.bind(attachment);
+			// biome-ignore lint/suspicious/noExplicitAny: injecting waveform/duration_secs into attachment payload
+			(attachment as any).toJSON = () => ({
+				...(originalToJSON() as Record<string, unknown>),
+				waveform: voiceMeta.waveform,
+				duration_secs: voiceMeta.durationSecs,
+			});
+		}
+
+		// IS_VOICE_MESSAGE (1 << 13 = 8192) tells Discord to render the native
+		// voice message UI. discord.js restricts the flags union to user-facing
+		// flags only, so we bypass types with a raw number.
+		// biome-ignore lint/suspicious/noExplicitAny: IS_VOICE_MESSAGE not in discord.js allowed flags union
+		const messageFlags = isNativeVoiceMessage ? (8192 as any) : undefined;
+
 		let sentMessageId: string | undefined;
 
 		// Send audio only — no text caption in chat.
@@ -125,6 +155,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
 				context.webhook,
 				{
 					files: [attachment],
+					flags: messageFlags,
 					allowedMentions: {
 						parse: [],
 						repliedUser: false,
@@ -143,6 +174,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
 		} else {
 			const sentMessage = await context.channel.send({
 				files: [attachment],
+				flags: messageFlags,
 			});
 			sentMessageId = sentMessage.id;
 		}
@@ -151,6 +183,9 @@ export class GenerateVoiceMessageTool extends BaseTool {
 		// inline the clean text in future context passes without re-running STT.
 		if (sentMessageId && captionText) {
 			setCachedVoiceTranscript(sentMessageId, captionText, "tts");
+			log.info(
+				`[VoiceCache] SET tts | msg=${sentMessageId} | chars=${captionText.length} | preview="${captionText.slice(0, 60)}${captionText.length > 60 ? "…" : ""}"`,
+			);
 		}
 
 		return {

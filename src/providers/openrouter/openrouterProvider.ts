@@ -17,6 +17,7 @@ import type {
   AnyThreadChannel,
 } from "discord.js";
 import type { ZodType } from "zod";
+import { sql } from "../../utils/db/client";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   OpenrouterStreamAdapter,
@@ -72,7 +73,7 @@ import {
 } from "../../utils/cache/llmCache";
 import {
   getOpenRouterCapabilities,
-  getOrFetchOpenRouterCapabilities,
+  testAccountSettingModel,
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
@@ -578,65 +579,79 @@ export class OpenrouterProvider
     let effectiveSeesImages = tomoriState.llm.sees_images;
     let effectiveSeesVideos = tomoriState.llm.sees_videos;
 
-    // Special case: account-setting models need on-demand capability fetching
-    // The model codename is user-specified (from their OpenRouter account), so it may not
-    // be in the startup cache. Fetch its real capabilities from the OpenRouter API.
+    // Special case: account-setting models need to detect the actual OpenRouter default
+    // and use its real capabilities. We store the detected model + capabilities in the DB.
     if (tomoriState.llm.llm_codename === "account-setting") {
-      try {
-        const accountSettingCapabilities =
-          await getOrFetchOpenRouterCapabilities(tomoriState.llm.llm_codename);
+      // 1. Check if we have cached capabilities that are fresh (within 7 days)
+      const storedCapabilities = tomoriState.config
+        .account_setting_capabilities;
+      const fetchedAt = tomoriState.config
+        .account_setting_capabilities_fetched_at;
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      const isCacheFresh =
+        fetchedAt &&
+        Date.now() - fetchedAt.getTime() < sevenDaysMs &&
+        storedCapabilities;
 
-        if (accountSettingCapabilities) {
-          // Log and override each capability if different from database
-          if (accountSettingCapabilities.hasTools !== effectiveHasTools) {
-            log.info(
-              `[ACCOUNT-SETTING API OVERRIDE] has_tools: ${effectiveHasTools} (DB) → ` +
-                `${accountSettingCapabilities.hasTools} (OpenRouter API)`,
-            );
-            effectiveHasTools = accountSettingCapabilities.hasTools;
-          }
+      if (isCacheFresh && storedCapabilities) {
+        log.info(
+          `[ACCOUNT-SETTING] Using cached capabilities for ${tomoriState.config.account_setting_actual_model} (${Math.round((Date.now() - (fetchedAt?.getTime() ?? 0)) / (24 * 60 * 60 * 1000))} days old)`,
+        );
+        effectiveHasTools = storedCapabilities.hasTools;
+        effectiveSeesImages = storedCapabilities.seesImages;
+        effectiveSeesVideos = storedCapabilities.seesVideos;
+      } else {
+        // 2. Cache is missing or stale - test account-setting to detect actual model
+        try {
+          const testResult = await testAccountSettingModel(apiKey);
 
-          if (
-            accountSettingCapabilities.seesImages !==
-            effectiveSeesImages
-          ) {
+          if ("actualModel" in testResult) {
+            const { actualModel, capabilities } = testResult;
             log.info(
-              `[ACCOUNT-SETTING API OVERRIDE] sees_images: ${effectiveSeesImages} (DB) → ` +
-                `${accountSettingCapabilities.seesImages} (OpenRouter API)`,
+              `[ACCOUNT-SETTING] Detected and tested: ${actualModel} ` +
+                `(tools=${capabilities.hasTools}, images=${capabilities.seesImages}, videos=${capabilities.seesVideos})`,
             );
-            effectiveSeesImages = accountSettingCapabilities.seesImages;
-          }
 
-          if (
-            accountSettingCapabilities.seesVideos !==
-            effectiveSeesVideos
-          ) {
+            // 3. Store detected model + capabilities in database for future use
+            const now = new Date();
+            await sql`
+              UPDATE tomori_configs
+              SET account_setting_actual_model = ${actualModel},
+                  account_setting_capabilities = ${JSON.stringify(capabilities)}::jsonb,
+                  account_setting_capabilities_fetched_at = ${now}
+              WHERE server_id = ${tomoriState.server_id}
+            `;
             log.info(
-              `[ACCOUNT-SETTING API OVERRIDE] sees_videos: ${effectiveSeesVideos} (DB) → ` +
-                `${accountSettingCapabilities.seesVideos} (OpenRouter API)`,
+              "[ACCOUNT-SETTING] Stored detected model and capabilities to database",
             );
-            effectiveSeesVideos = accountSettingCapabilities.seesVideos;
+
+            // 4. Use the detected capabilities
+            effectiveHasTools = capabilities.hasTools;
+            effectiveSeesImages = capabilities.seesImages;
+            effectiveSeesVideos = capabilities.seesVideos;
+          } else {
+            // Test failed - use conservative defaults to prevent errors
+            log.warn(
+              `[ACCOUNT-SETTING] Could not detect actual model: ${testResult.error}`,
+            );
+            log.warn(
+              "[ACCOUNT-SETTING] Using conservative defaults (no tools, no images, no videos)",
+            );
+            effectiveHasTools = false;
+            effectiveSeesImages = false;
+            effectiveSeesVideos = false;
           }
-        } else {
-          // "account-setting" is not a real model — use conservative defaults to prevent
-          // sending unsupported features (images/videos) to text-only models like Nemotron.
-          // Users can ask to configure their account-setting capabilities if needed.
+        } catch (error) {
           log.warn(
-            "[ACCOUNT-SETTING] Could not fetch capabilities (expected for proxy model) - " +
-              "using conservative defaults to prevent unsupported feature errors",
+            `[ACCOUNT-SETTING] Error testing account-setting: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          log.warn(
+            "[ACCOUNT-SETTING] Using conservative defaults (no tools, no images, no videos)",
           );
           effectiveHasTools = false;
           effectiveSeesImages = false;
           effectiveSeesVideos = false;
         }
-      } catch (error) {
-        log.warn(
-          "[ACCOUNT-SETTING] Error fetching capabilities - using conservative defaults: " +
-            (error instanceof Error ? error.message : String(error)),
-        );
-        effectiveHasTools = false;
-        effectiveSeesImages = false;
-        effectiveSeesVideos = false;
       }
     }
     // Override with OpenRouter API capabilities if available (for registered models)

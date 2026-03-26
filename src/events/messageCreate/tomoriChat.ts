@@ -2173,7 +2173,7 @@ export default async function tomoriChat(
 
         applyEffectiveMessageContent(message, voiceContent);
         log.info(
-          `Applied voice transcript for message ${message.id} (${transcriptionResult.transcriptText.length} chars)`,
+          `[VoiceCache] SET user_stt | msg=${message.id} | chars=${transcriptionResult.transcriptText.length} | preview="${transcriptionResult.transcriptText.slice(0, 60)}${transcriptionResult.transcriptText.length > 60 ? "…" : ""}"`,
         );
         // No return — trigger detection runs on voiceContent naturally.
       } else {
@@ -2182,17 +2182,17 @@ export default async function tomoriChat(
         );
 
         if (message.content.trim().length === 0) {
-          await sendStandardEmbed(channel, locale, {
-            color: ColorCode.WARN,
-            titleKey:
-              transcriptionResult.failureReason === "missing_api_key"
-                ? "general.errors.voice_transcription_unavailable_title"
-                : "general.errors.voice_transcription_failed_title",
-            descriptionKey:
-              transcriptionResult.failureReason === "missing_api_key"
-                ? "general.errors.voice_transcription_unavailable_description"
-                : "general.errors.voice_transcription_failed_description",
-          });
+          // Silently drop voice-only messages when no API key is configured —
+          // most servers don't use STT and the unavailable embed is noisy.
+          // Only surface an error embed for actual failures (timeout, STT error, etc.)
+          if (transcriptionResult.failureReason !== "missing_api_key") {
+            await sendStandardEmbed(channel, locale, {
+              color: ColorCode.WARN,
+              titleKey: "general.errors.voice_transcription_failed_title",
+              descriptionKey:
+                "general.errors.voice_transcription_failed_description",
+            });
+          }
           return;
         }
       }
@@ -3741,7 +3741,7 @@ export default async function tomoriChat(
           if (result.transcriptText) {
             setCachedVoiceTranscript(msg.id, result.transcriptText, "user_stt");
             log.info(
-              `Pre-populated voice transcript for history message ${msg.id} (${result.transcriptText.length} chars)`,
+              `[VoiceCache] SET user_stt (history) | msg=${msg.id} | chars=${result.transcriptText.length} | preview="${result.transcriptText.slice(0, 60)}${result.transcriptText.length > 60 ? "…" : ""}"`,
             );
           }
         }

@@ -440,6 +440,124 @@ export function getOpenRouterPricing(
 }
 
 /**
+ * Tests account-setting model by making a minimal request to detect the actual model
+ *
+ * When a user selects "account-setting" in OpenRouter, it resolves to their default model
+ * at request time. This function makes a test request and extracts which model was actually
+ * used, then fetches that model's real capabilities.
+ *
+ * @param apiKey - OpenRouter API key for the user
+ * @returns Object with { actualModel, capabilities } or { error } if test fails
+ *
+ * @example
+ * const result = await testAccountSettingModel(apiKey);
+ * if ("actualModel" in result) {
+ *   console.log("User's default:", result.actualModel); // e.g., "xai/grok-2"
+ *   console.log("Supports images:", result.capabilities.seesImages);
+ * }
+ */
+export async function testAccountSettingModel(apiKey: string): Promise<
+  | {
+      actualModel: string;
+      capabilities: ModelCapabilities;
+    }
+  | { error: string }
+> {
+  try {
+    log.info("Testing account-setting model to detect actual OpenRouter default...");
+
+    // Make a minimal streaming request to account-setting to see which model OpenRouter picks
+    // Using streaming because some models/configurations prefer it
+    const testPayload = {
+      model: "account-setting",
+      messages: [{ role: "user", content: "hi" }],
+      stream: true,
+      temperature: 1.0,
+      max_tokens: 5,
+    };
+
+    const testResponse = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(testPayload),
+      },
+    );
+
+    if (!testResponse.ok) {
+      const errorText = await testResponse.text();
+      return {
+        error: `OpenRouter API error: ${testResponse.status} ${testResponse.statusText} | ${errorText}`,
+      };
+    }
+
+    // For streaming, read the first chunk to get model info
+    const reader = testResponse.body?.getReader();
+    if (!reader) {
+      return {
+        error: "Response body is null",
+      };
+    }
+
+    const decoder = new TextDecoder();
+    let actualModel: string | undefined;
+
+    try {
+      const { value } = await reader.read();
+      const chunk = decoder.decode(value);
+
+      // Parse the first SSE chunk to extract model
+      // Format: data: {"id":"...", "model":"actual-model-name", ...}
+      const lines = chunk.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const jsonStr = line.substring(6); // Remove "data: "
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.model) {
+              actualModel = parsed.model;
+              break;
+            }
+          } catch {
+            // Continue to next line
+          }
+        }
+      }
+    } finally {
+      reader.cancel();
+    }
+
+    if (!actualModel) {
+      return {
+        error:
+          "Could not determine actual model from OpenRouter streaming response",
+      };
+    }
+
+    log.info(`Detected account-setting resolves to: ${actualModel}`);
+
+    // Now fetch capabilities for the actual model
+    const capabilities = await getOrFetchOpenRouterCapabilities(actualModel);
+
+    if (!capabilities) {
+      return {
+        error: `Could not fetch capabilities for detected model: ${actualModel}`,
+      };
+    }
+
+    return { actualModel, capabilities };
+  } catch (error) {
+    return {
+      error: `Test request failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/**
  * Gets or fetches capabilities for an OpenRouter model
  *
  * This function provides a fallback mechanism for account-setting and other
