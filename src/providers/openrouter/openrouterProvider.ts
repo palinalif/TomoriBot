@@ -73,7 +73,7 @@ import {
 } from "../../utils/cache/llmCache";
 import {
   getOpenRouterCapabilities,
-  testAccountSettingModel,
+  getOrFetchOpenRouterCapabilities,
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
@@ -601,64 +601,57 @@ export class OpenrouterProvider
         effectiveSeesImages = storedCapabilities.seesImages;
         effectiveSeesVideos = storedCapabilities.seesVideos;
       } else {
-        // 2. Cache is missing or stale - test account-setting to detect actual model
-        try {
-          const testResult = await testAccountSettingModel(apiKey);
+        // 2. Cache is missing or stale — re-fetch using stored model name
+        const storedModel = tomoriState.config.account_setting_actual_model;
 
-          if ("actualModel" in testResult) {
-            const { actualModel, capabilities } = testResult;
-            log.info(
-              `[ACCOUNT-SETTING] Detected and tested: ${actualModel} ` +
-                `(tools=${capabilities.hasTools}, images=${capabilities.seesImages}, videos=${capabilities.seesVideos})`,
-            );
+        if (!storedModel) {
+          // Not yet configured — user needs to run /config model text
+          log.warn(
+            "[ACCOUNT-SETTING] No model configured — use /config model text to set your OpenRouter model. Using conservative defaults.",
+          );
+          effectiveHasTools = false;
+          effectiveSeesImages = false;
+          effectiveSeesVideos = false;
+        } else {
+          try {
+            // Re-fetch capabilities for the stored model (handles stale cache + 502 refresh)
+            const capabilities =
+              await getOrFetchOpenRouterCapabilities(storedModel);
 
-            // 3. Store detected model + capabilities in database for future use
-            const now = new Date();
-            await sql`
-              UPDATE tomori_configs
-              SET account_setting_actual_model = ${actualModel},
-                  account_setting_capabilities = ${JSON.stringify(capabilities)}::jsonb,
-                  account_setting_capabilities_fetched_at = ${now}
-              WHERE server_id = ${tomoriState.server_id}
-            `;
-            log.info(
-              "[ACCOUNT-SETTING] Stored detected model and capabilities to database",
-            );
+            if (capabilities) {
+              log.info(
+                `[ACCOUNT-SETTING] Refreshed capabilities for ${storedModel}: ` +
+                  `tools=${capabilities.hasTools}, images=${capabilities.seesImages}, videos=${capabilities.seesVideos}`,
+              );
 
-            // 4. Invalidate cache so future requests use fresh data
-            const { invalidateTomoriStateCache: invalidateCache } = await import(
-              "../../utils/cache/tomoriStateCache"
-            );
-            invalidateCache(
-              tomoriState.server_id.toString(),
-            );
+              // Store refreshed capabilities in database
+              const now = new Date();
+              await sql`
+                UPDATE tomori_configs
+                SET account_setting_capabilities = ${JSON.stringify(capabilities)}::jsonb,
+                    account_setting_capabilities_fetched_at = ${now}
+                WHERE server_id = ${tomoriState.server_id}
+              `;
 
-            // 4. Use the detected capabilities
-            effectiveHasTools = capabilities.hasTools;
-            effectiveSeesImages = capabilities.seesImages;
-            effectiveSeesVideos = capabilities.seesVideos;
-          } else {
-            // Test failed - use conservative defaults to prevent errors
+              effectiveHasTools = capabilities.hasTools;
+              effectiveSeesImages = capabilities.seesImages;
+              effectiveSeesVideos = capabilities.seesVideos;
+            } else {
+              log.warn(
+                `[ACCOUNT-SETTING] Could not fetch capabilities for ${storedModel} — using conservative defaults`,
+              );
+              effectiveHasTools = false;
+              effectiveSeesImages = false;
+              effectiveSeesVideos = false;
+            }
+          } catch (error) {
             log.warn(
-              `[ACCOUNT-SETTING] Could not detect actual model: ${testResult.error}`,
-            );
-            log.warn(
-              "[ACCOUNT-SETTING] Using conservative defaults (no tools, no images, no videos)",
+              `[ACCOUNT-SETTING] Error refreshing capabilities: ${error instanceof Error ? error.message : String(error)} — using conservative defaults`,
             );
             effectiveHasTools = false;
             effectiveSeesImages = false;
             effectiveSeesVideos = false;
           }
-        } catch (error) {
-          log.warn(
-            `[ACCOUNT-SETTING] Error testing account-setting: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          log.warn(
-            "[ACCOUNT-SETTING] Using conservative defaults (no tools, no images, no videos)",
-          );
-          effectiveHasTools = false;
-          effectiveSeesImages = false;
-          effectiveSeesVideos = false;
         }
       }
     }
@@ -739,7 +732,13 @@ export class OpenrouterProvider
     );
 
     const config: OpenrouterProviderConfig = {
-      model: tomoriState.llm.llm_codename,
+      // For account-setting, use the user-configured actual model (e.g., "openrouter/free")
+      // rather than the placeholder codename "account-setting" which OpenRouter rejects
+      model:
+        tomoriState.llm.llm_codename === "account-setting" &&
+        tomoriState.config.account_setting_actual_model
+          ? tomoriState.config.account_setting_actual_model
+          : tomoriState.llm.llm_codename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,
       maxOutputTokens: resolvedMaxOutputTokens,

@@ -1414,7 +1414,11 @@ async function startDiscordTypingKeepalive(
   stopDiscordTypingKeepalive(channel.id, lockEntry, "restart");
   await refreshDiscordTypingIndicator(channel, "lock_scope_start");
   lockEntry.typingKeepaliveTimer = setInterval(() => {
-    if (!lockEntry.isLocked || lockEntry.currentMessageId !== messageId) {
+    if (
+      !lockEntry.isLocked ||
+      lockEntry.currentMessageId !== messageId ||
+      StreamOrchestrator.hasStopRequest(channel.id) // Stop refreshing immediately when kill is requested
+    ) {
       stopDiscordTypingKeepalive(channel.id, lockEntry, "lock_scope_end");
       return;
     }

@@ -426,16 +426,25 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       // Begin provider streaming
       const streamGenerator = provider.startStream(config, context);
 
-      // Pre-stream check: if a follow-up arrived during context building, return immediately
-      if (
-        StreamOrchestrator.hasStopRequest(context.channel.id) &&
-        StreamOrchestrator.isFollowUpRequest(context.channel.id)
-      ) {
+      // Pre-stream check: if a stop or follow-up arrived during context building, cancel before
+      // the LLM API call starts — avoids wasting a full round-trip to the provider.
+      if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+        if (StreamOrchestrator.isFollowUpRequest(context.channel.id)) {
+          log.info(
+            `Follow-up interrupt detected before stream started for channel ${context.channel.id}. Returning immediately.`,
+          );
+          StreamOrchestrator.activeStopRequests.delete(context.channel.id);
+          return { status: "follow_up_interrupt" };
+        }
+
+        // Regular kill — clear and return stopped before the stream begins
         log.info(
-          `Follow-up interrupt detected before stream started for channel ${context.channel.id}. Returning immediately.`,
+          `Kill request detected before stream started for channel ${context.channel.id}. Aborting stream.`,
         );
-        StreamOrchestrator.activeStopRequests.delete(context.channel.id);
-        return { status: "follow_up_interrupt" };
+        const preStreamStopRequest = StreamOrchestrator.activeStopRequests.get(context.channel.id);
+        const preStreamStopReason = StreamOrchestrator.getStopReason(preStreamStopRequest);
+        StreamOrchestrator.clearStopRequest(context.channel.id);
+        return { status: "stopped_by_user", stopReason: preStreamStopReason };
       }
 
       // Process the stream

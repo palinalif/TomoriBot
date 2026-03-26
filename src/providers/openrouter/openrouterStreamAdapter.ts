@@ -480,14 +480,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       );
     }
 
-    // Log model being used (or account default)
-    if (config.model === "account-setting") {
-      log.info(
-        "Generating content with OpenRouter account default model (model parameter omitted)",
-      );
-    } else {
-      log.info(`Generating content with model ${config.model}`);
-    }
+    log.info(`Generating content with model ${config.model}`);
 
     // Log tools FIRST (before conversation history for better readability)
     if (
@@ -505,9 +498,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
     try {
       const supportedParameters =
-        config.model &&
-        config.model !== "account-setting" &&
-        isOpenRouterCapabilityCacheReady()
+        config.model && isOpenRouterCapabilityCacheReady()
           ? (getOpenRouterSupportedParameters(config.model) ?? null)
           : null;
       const skippedUnsupportedParams: string[] = [];
@@ -521,8 +512,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
       // Build request body (OpenAI-compatible)
       const requestBody: Record<string, unknown> = {
-        // Only include model if it's not "account-setting" (which signals to use the user's OpenRouter account default)
-        ...(config.model !== "account-setting" && { model: config.model }),
+        model: config.model,
         messages,
         stream: true,
         stream_options: { include_usage: true },
@@ -553,7 +543,6 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       if (
         effectiveMaxOutputTokens !== undefined &&
         config.model &&
-        config.model !== "account-setting" &&
         isOpenRouterCapabilityCacheReady()
       ) {
         const tokenLimits = getOpenRouterTokenLimits(config.model);
@@ -839,11 +828,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       }
 
       // Finally, minimal text-only payload with stripped images
-      const minimalBody =
-        config.model !== "account-setting"
-          ? { model: config.model, messages: strippedMessages, stream: true }
-          : { messages: strippedMessages, stream: true };
-      addAttempt("minimal_payload", minimalBody);
+      addAttempt("minimal_payload", {
+        model: config.model,
+        messages: strippedMessages,
+        stream: true,
+      });
 
       let response: Response | null = null;
       for (let i = 0; i < attempts.length; i++) {
