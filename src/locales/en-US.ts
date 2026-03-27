@@ -722,6 +722,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       },
       compact: {
         description: `Summarize the recent conversation into a compact system memory.`,
+        channel_description: `Optional channel to post the summary in (defaults to this channel).`,
         modal: {
           title: `Compact Summary`,
           type_label: `Summary Type`,
@@ -739,6 +740,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         processing_description: `I'm compacting the recent conversation now...`,
         success_title: `✅ Summary Posted`,
         success_description: `Your compact summary has been posted in this channel.`,
+        success_description_redirect: `Your compact summary has been posted in {channel}.`,
         failed_title: `Summary Failed`,
         failed_description: `I couldn't generate the summary: {error}`,
         provider_unsupported_title: `Provider Not Supported`,
@@ -1306,7 +1308,9 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         model_incompatible_title: `Incompatible Model`,
         model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.\n\n**Next steps:**\nUse \`/config model text\` to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
         image_vision_required_title: `🔴 Image Vision Required`,
-        image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION**.\n\n**Next steps:**\n1. Use \`/config model text\` to switch to a vision-capable model, OR\n2. Remove the image and regenerate without it`,
+        image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION** and no vision model is configured.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a dedicated vision model, OR\n2. Use \`/config model text\` to switch to a vision-capable model, OR\n3. Remove the image and regenerate without it`,
+        vision_model_provider_unsupported_title: `🔴 Vision Model Provider Unsupported`,
+        vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a vision model from a supported provider (Google or OpenRouter), OR\n2. Use \`/config model text\` to switch your primary model to one that supports both vision and preset generation`,
         web_search_tools_required_title: `🔴 Web Search Unavailable`,
         web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.\n\n**Next steps:**\n1. Use \`/config model text\` to switch to a tool-enabled model, OR\n2. Regenerate without web search (choose "No" when asked)`,
         api_key_decrypt_failed_title: `🔴 API Key Error`,
@@ -1668,7 +1672,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         google_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // DeepSeek
         deepseek_title: `Setting Up DeepSeek API Key`,
-        deepseek_description: `DeepSeek provides direct access to its own chat and reasoning models on a pay-as-you-go basis.
+        deepseek_description: `DeepSeek provides direct access to its own chat and reasoning models on a cheap pay-as-you-go basis.
 - Supports DeepSeek chat and reasoning models in TomoriBot
 - Supports tool-capable and structured-output-capable text models in TomoriBot
 - Native image generation and embeddings are not currently available through TomoriBot's DeepSeek provider
@@ -1686,7 +1690,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // NVIDIA NIM
         nvidia_title: `Setting Up NVIDIA NIM API Key`,
-        nvidia_description: `NVIDIA NIM provides hosted chat, embeddings, and image generation through NVIDIA's API catalog.
+        nvidia_description: `NVIDIA NIM provides free hosted chat, embeddings, and image generation through NVIDIA's API catalog.
 - Chat and embeddings use NVIDIA's hosted \`integrate.api.nvidia.com\` surface
 - Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint
 - Structured output and history extraction are available only on supported NVIDIA text models`,
@@ -1715,7 +1719,6 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Supports all GLM chat models with vision and reasoning capabilities`,
         zai_coding_endpoint_title: `Coding Endpoint:`,
         zai_coding_endpoint_description: `The dedicated Coding endpoint is optimized for GLM Coding Plan and coding-tool workflows.
-- Intended for coding scenarios rather than general API usage
 - Uses a separate endpoint with potentially different billing and access patterns
 - If you need standard API billing and broader general usage, use the general endpoint`,
         zai_getting_key_title: `Getting Your API Key:`,
@@ -1725,9 +1728,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 4. Create a new API key
 5. Copy this API key into {configSetup} or {configApikeySet}`,
         zai_model_notes_title: `Model Notes:`,
-        zai_model_notes_description: `- \`glm-5\` is the most capable model with advanced reasoning
-- \`glm-4.7\` supports reasoning/thinking mode
-- \`glm-4.7-flash\` is the fast, free model
+        zai_model_notes_description: `- \`glm-5.1\` is the most capable model with advanced reasoning
 - \`glm-4.6v\` is the vision-capable model that can see images
 - \`glm-image\` generates images from text prompts`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,

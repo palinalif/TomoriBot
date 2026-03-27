@@ -726,6 +726,7 @@ export default {
       },
       compact: {
         description: `最近の会話をコンパクトなシステム要約にまとめます。`,
+        channel_description: `要約を投稿するチャンネル（省略時はこのチャンネルに投稿）。`,
         modal: {
           title: `コンパクト要約`,
           type_label: `要約タイプ`,
@@ -743,6 +744,7 @@ export default {
         processing_description: `最近の会話を要約しています...`,
         success_title: `✅ 要約を投稿しました`,
         success_description: `コンパクト要約をこのチャンネルに投稿しました。`,
+        success_description_redirect: `コンパクト要約を {channel} に投稿しました。`,
         failed_title: `要約に失敗しました`,
         failed_description: `要約の生成に失敗しました: {error}`,
         provider_unsupported_title: `未対応のプロバイダー`,
@@ -1310,7 +1312,9 @@ export default {
         model_incompatible_title: `互換性のないモデル`,
         model_incompatible_description: `現在のモデル（**{model_name}**）は、ペルソナ生成に必要な**構造化出力**をサポートしていません。\n\n**次のステップ:**\n\`/config model text\`を使用して、構造化出力をサポートするモデル（例：「STRUCT」機能を持つモデル）に切り替えてください。`,
         image_vision_required_title: `🔴 画像ビジョンが必要`,
-        image_vision_required_description: `画像がアップロードされましたが、現在のモデル（**{model_name}**）は**画像ビジョン**をサポートしていません。\n\n**次のステップ:**\n1. \`/config model text\`を使用してビジョン対応モデルに切り替える、または\n2. 画像を削除して画像なしで再生成する`,
+        image_vision_required_description: `画像がアップロードされましたが、現在のモデル（**{model_name}**）は**画像ビジョン**をサポートしておらず、ビジョンモデルも設定されていません。\n\n**次のステップ:**\n1. \`/config model vision\`を使用して専用ビジョンモデルを設定する、または\n2. \`/config model text\`を使用してビジョン対応モデルに切り替える、または\n3. 画像を削除して画像なしで再生成する`,
+        vision_model_provider_unsupported_title: `🔴 ビジョンモデルのプロバイダー非対応`,
+        vision_model_provider_unsupported_description: `ビジョンモデル（**{vision_model_name}**）はプロバイダー **{vision_provider}** に設定されていますが、このプロバイダーはペルソナプリセット生成に対応していません。\n\n**次のステップ:**\n1. \`/config model vision\`を使用して対応プロバイダー（GoogleまたはOpenRouter）のビジョンモデルを設定する、または\n2. \`/config model text\`を使用してビジョンとプリセット生成の両方に対応したプライマリモデルに切り替える`,
         web_search_tools_required_title: `🔴 ウェブ検索を利用できません`,
         web_search_tools_required_description: `ウェブ検索が選択されましたが、現在のモデル（**{model_name}**）は**ツール**に対応していません。\n\n**次のステップ:**\n1. \`/config model text\`を使用してツール対応モデルに切り替える、または\n2. ウェブ検索なしで再生成する（質問されたら「いいえ」を選択）`,
         api_key_decrypt_failed_title: `🔴 APIキーエラー`,

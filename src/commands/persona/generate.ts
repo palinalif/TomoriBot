@@ -417,6 +417,11 @@ export async function execute(
     const characterDesc = characterInfo;
     const speechExamples = characterInfo; // AI will extract speech patterns from context
 
+    // Effective generation context — may be overridden to use vision_llm when the primary
+    // model lacks vision support but a dedicated vision model is configured
+    let generationTomoriState = tomoriState;
+    let generationProviderName = providerName;
+
     if (imageAttachment) {
       // Early memory guard check
       const memCheck = memoryGuard.checkMemory();
@@ -549,31 +554,72 @@ export async function execute(
       imageMimeType = imageAttachment.content_type || "image/png";
       log.info("Image attachment downloaded and converted to base64");
 
-      // Validate that model supports image vision
+      // Validate that model supports image vision; fall back to vision_llm if configured
       if (!tomoriState.llm.sees_images) {
-        await modalSubmitInteraction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.generate.image_vision_required_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.generate.image_vision_required_description",
-                  {
-                    model_name: effectiveModelName,
-                  },
-                ),
-              )
-              .setColor(ColorCode.ERROR),
-          ],
-          files: [getInputAttachment()],
-        });
-        return;
+        const visionLlm = tomoriState.vision_llm;
+
+        if (!visionLlm?.sees_images) {
+          // Neither the primary model nor the vision model supports vision
+          await modalSubmitInteraction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(
+                  localizer(
+                    locale,
+                    "commands.persona.generate.image_vision_required_title",
+                  ),
+                )
+                .setDescription(
+                  localizer(
+                    locale,
+                    "commands.persona.generate.image_vision_required_description",
+                    {
+                      model_name: effectiveModelName,
+                    },
+                  ),
+                )
+                .setColor(ColorCode.ERROR),
+            ],
+            files: [getInputAttachment()],
+          });
+          return;
+        }
+
+        const visionProviderName = visionLlm.llm_provider.toLowerCase();
+        if (!providerSupportsFeature(visionProviderName, "presetGeneration")) {
+          // Vision model is set but its provider cannot perform preset generation
+          await modalSubmitInteraction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(
+                  localizer(
+                    locale,
+                    "commands.persona.generate.vision_model_provider_unsupported_title",
+                  ),
+                )
+                .setDescription(
+                  localizer(
+                    locale,
+                    "commands.persona.generate.vision_model_provider_unsupported_description",
+                    {
+                      vision_model_name: visionLlm.llm_codename,
+                      vision_provider: visionLlm.llm_provider,
+                    },
+                  ),
+                )
+                .setColor(ColorCode.ERROR),
+            ],
+            files: [getInputAttachment()],
+          });
+          return;
+        }
+
+        // Delegate preset generation to the vision model so the image can be analyzed
+        log.info(
+          `Primary model lacks vision; delegating preset generation to vision model ${visionLlm.llm_codename} (${visionLlm.llm_provider})`,
+        );
+        generationTomoriState = { ...tomoriState, llm: visionLlm };
+        generationProviderName = visionProviderName;
       }
     }
 
@@ -651,9 +697,9 @@ export async function execute(
       presetToolContext = {
         channel: toolChannel,
         client,
-        tomoriState,
+        tomoriState: generationTomoriState,
         locale,
-        provider: providerName,
+        provider: generationProviderName,
         userId: interaction.user.id,
         guildId: interaction.guild?.id,
       };
@@ -662,12 +708,12 @@ export async function execute(
     }
 
     // 13. Generate preset data
-    log.info(`Generating preset data with ${tomoriState.llm.llm_provider}...`);
+    log.info(`Generating preset data with ${generationTomoriState.llm.llm_provider}...`);
 
     const genResult = await generatePresetForProvider({
-      providerName,
+      providerName: generationProviderName,
       apiKey: decryptedApiKey,
-      tomoriState,
+      tomoriState: generationTomoriState,
       params: genParams,
       locale,
       toolContext: presetToolContext,

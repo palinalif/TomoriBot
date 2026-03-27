@@ -7,7 +7,7 @@ import type {
   Embed,
   Message,
 } from "discord.js";
-import { EmbedBuilder, MessageFlags, TextInputStyle } from "discord.js";
+import { ChannelType, EmbedBuilder, MessageFlags, TextInputStyle } from "discord.js";
 import { localizer, getSupportedLocales } from "@/utils/text/localizer";
 import { ColorCode, log } from "@/utils/misc/logger";
 import {
@@ -57,7 +57,16 @@ export const configureSubcommand = (
 ) =>
   subcommand
     .setName("compact")
-    .setDescription(localizer("en-US", "commands.tool.compact.description"));
+    .setDescription(localizer("en-US", "commands.tool.compact.description"))
+    .addChannelOption((option) =>
+      option
+        .setName("channel")
+        .setDescription(
+          localizer("en-US", "commands.tool.compact.channel_description"),
+        )
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false),
+    );
 
 function truncateEmbedDescription(text: string, maxLength = 4000): string {
   if (text.length <= maxLength) return text;
@@ -797,6 +806,9 @@ export async function execute(
     return;
   }
 
+  // Read optional redirect channel — if provided, summary posts there instead of here
+  const targetChannelOption = interaction.options.getChannel("channel");
+
   const modalComponents: ModalComponent[] = [
     {
       // Radio Group: mutually exclusive mode selection (exactly one choice)
@@ -1051,7 +1063,32 @@ export async function execute(
   }
 
   const textChannel = channel as TextBasedChannel;
-  const sendableChannel = channel as SendableChannel;
+
+  // 1. Resolve the output channel: fetch the redirect target if specified, otherwise use the current channel
+  let outputChannel: SendableChannel = channel as SendableChannel;
+  if (targetChannelOption) {
+    const fetchedTarget = await client.channels
+      .fetch(targetChannelOption.id)
+      .catch(() => null);
+    if (!fetchedTarget || !("send" in fetchedTarget)) {
+      await submitInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(
+              localizer(locale, "general.errors.channel_only_title"),
+            )
+            .setDescription(
+              localizer(locale, "general.errors.channel_only_description"),
+            )
+            .setColor(ColorCode.ERROR),
+        ],
+      });
+      return;
+    }
+    outputChannel = fetchedTarget as SendableChannel;
+  }
+
+  // 2. Always build conversation context from the current channel (where the command was run)
   const { conversationText, imageReferences, userIds } =
     await buildConversationContext({
       channel: textChannel,
@@ -1113,7 +1150,7 @@ export async function execute(
         refresh,
       );
 
-      await sendEmbedsInChunks(sendableChannel, [summaryEmbed]);
+      await sendEmbedsInChunks(outputChannel, [summaryEmbed]);
     } else {
       const prompt = buildRoleplayPrompt({
         conversationText,
@@ -1172,16 +1209,21 @@ export async function execute(
         refresh,
         avatarMap,
       );
-      await sendEmbedsInChunks(sendableChannel, embeds);
+      await sendEmbedsInChunks(outputChannel, embeds);
     }
+
+    // Show success — if summary was redirected, tell the user which channel it went to
+    const successDescription = targetChannelOption
+      ? localizer(locale, "commands.tool.compact.success_description_redirect", {
+          channel: `<#${targetChannelOption.id}>`,
+        })
+      : localizer(locale, "commands.tool.compact.success_description");
 
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
           .setTitle(localizer(locale, "commands.tool.compact.success_title"))
-          .setDescription(
-            localizer(locale, "commands.tool.compact.success_description"),
-          )
+          .setDescription(successDescription)
           .setColor(ColorCode.SUCCESS),
       ],
     });
