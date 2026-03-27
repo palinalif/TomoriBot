@@ -15,10 +15,10 @@ export const deepseekProviderInfo: ProviderInfo = {
 		nativeImageGeneration: false,
 		embeddings: false,
 		structuredOutput: true,
-		presetGeneration: false,
+		presetGeneration: true,
 		expressionInitialization: false,
 		liveTokenCounting: true,
-		conversationCompaction: false,
+		conversationCompaction: true,
 		historyExtraction: true,
 	},
 };

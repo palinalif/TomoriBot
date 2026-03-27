@@ -1,30 +1,32 @@
+/**
+ * AI-Powered Preset Generation for the DeepSeek provider.
+ *
+ * Uses json_object response mode with the preset schema injected into
+ * the system prompt, since DeepSeek does not support json_schema strict
+ * mode. Includes a full tool-calling loop for models with web-search
+ * tools enabled (has_tools=true).
+ */
+import { log } from "@/utils/misc/logger";
 import { executeTool } from "@/tools/toolRegistry";
 import type { ToolContext, ToolResult } from "@/types/tool/interfaces";
 import type {
 	GeneratePresetParams,
 	PresetGenerationResult,
 } from "@/types/provider/featureInterfaces";
-import { log } from "@/utils/misc/logger";
-import {
-	sanitizeSampleDialogueText,
-} from "@/providers/google/presetGenerator";
-import { getCustomToolAdapter } from "@/providers/custom/customToolAdapter";
-import {
-	callCustomChatCompletions,
-	extractCustomResponseText,
-	parseCustomJsonResponse,
-} from "@/providers/custom/customOpenAICompatibleUtils";
+import { getDeepseekToolAdapter } from "@/providers/deepseek/deepseekToolAdapter";
+import { sanitizeSampleDialogueText } from "@/providers/google/presetGenerator";
 import {
 	buildPresetResponseSchema,
 	buildPresetPrompt,
 	buildToolErrorResult,
-	type PresetContentPart as CustomContentPart,
-	type PresetMessage as CustomMessage,
-	type PresetToolCall as CustomToolCall,
+	type PresetMessage,
+	type PresetToolCall,
 } from "@/providers/utils/presetCommon";
 
-interface CustomPresetGenerationOptions {
-	endpointUrl: string;
+const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
+
+/** Options for DeepSeek preset generation. */
+interface DeepseekPresetGenerationOptions {
 	model: string;
 	temperature?: number;
 	tools?: Array<Record<string, unknown>>;
@@ -32,118 +34,129 @@ interface CustomPresetGenerationOptions {
 	maxToolRounds?: number;
 }
 
-export async function generatePresetFromPromptCustom(
+/**
+ * Build a system prompt that steers the model toward the preset JSON schema.
+ * DeepSeek does not support json_schema strict mode, so the schema is injected
+ * into the system message and response_format: json_object is used instead.
+ */
+function buildDeepseekPresetSystemPrompt(): string {
+	const schema = buildPresetResponseSchema();
+	return [
+		"You are a JSON-only character preset generator.",
+		"Return a valid json object only.",
+		"The word json is intentional and required.",
+		"Target json schema for preset_export_data:",
+		JSON.stringify(schema, null, 2),
+		"Do not wrap the json in markdown fences and do not add extra prose.",
+	].join("\n\n");
+}
+
+/**
+ * Generate preset data from user prompts using the DeepSeek API.
+ *
+ * @param apiKey - Decrypted DeepSeek API key
+ * @param params - Generation parameters (character info, instructions, image)
+ * @param _locale - User's locale (reserved for future error localisation)
+ * @param options - DeepSeek-specific options (model, tools, temperature)
+ * @returns Generated preset or a typed error result
+ */
+export async function generatePresetFromPromptDeepseek(
 	apiKey: string,
 	params: GeneratePresetParams,
-	_optionsLocale: string,
-	options: CustomPresetGenerationOptions,
+	_locale: string,
+	options: DeepseekPresetGenerationOptions,
 ): Promise<PresetGenerationResult> {
-	const customAdapter = getCustomToolAdapter();
+	if (!apiKey || apiKey.trim().length < 10) {
+		return { error: "Invalid DeepSeek API key", errorType: "API_KEY" };
+	}
+
+	const deepseekAdapter = getDeepseekToolAdapter();
 	const tools = options.tools ?? [];
 	const toolContext = options.toolContext;
 	const toolsEnabled = tools.length > 0 && toolContext;
 
-	const responseFormat = {
-		type: "json_schema" as const,
-		json_schema: {
-			name: "preset_export_data",
-			description: "Structured persona preset data",
-			schema: buildPresetResponseSchema(),
-		},
-	};
-
-	const prompt = buildPresetPrompt(params);
-	const contentParts: CustomContentPart[] = [{ type: "text", text: prompt }];
-
-	if (params.imageBase64 && params.imageMimeType) {
-		contentParts.push({
-			type: "image_url",
-			image_url: {
-				url: `data:${params.imageMimeType};base64,${params.imageBase64}`,
-			},
-		});
-		log.info("Custom preset generation: image included in prompt");
-	}
-
-	const userContent =
-		contentParts.length === 1 && contentParts[0].type === "text"
-			? contentParts[0].text
-			: contentParts;
-
-	const messages: CustomMessage[] = [
-		{
-			role: "user",
-			content: userContent,
-		},
+	// 1. Build messages: schema-steered system prompt + user character prompt
+	const messages: PresetMessage[] = [
+		{ role: "system", content: buildDeepseekPresetSystemPrompt() },
+		{ role: "user", content: buildPresetPrompt(params) },
 	];
 
 	const maxToolRounds = options.maxToolRounds ?? 3;
 	let toolRounds = 0;
 
 	while (true) {
+		// 2. Build the request body
 		const body: Record<string, unknown> = {
-			...(options.model !== "other-model" ? { model: options.model } : {}),
+			model: options.model,
 			messages,
-			temperature: options.temperature ?? 1.0,
 			max_tokens: 8192,
-			response_format: responseFormat,
+			response_format: { type: "json_object" },
 			stream: false,
 		};
+
+		// 3. Omit temperature for deepseek-reasoner (not supported by that model)
+		if (options.model !== "deepseek-reasoner") {
+			body.temperature = options.temperature ?? 1.0;
+		}
 
 		if (toolsEnabled) {
 			body.tools = tools;
 			body.tool_choice = "auto";
 		}
 
-		const response = await callCustomChatCompletions({
-			endpointUrl: options.endpointUrl,
-			apiKey,
-			body,
-			logLabel: "Custom preset generation",
-			messagesForLog: messages as Array<Record<string, unknown>>,
+		// 4. Send the request
+		const response = await fetch(DEEPSEEK_CHAT_COMPLETIONS_URL, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(body),
 		});
 
-		if (!response.success) {
+		if (!response.ok) {
+			const errorBody = await response.text();
 			log.error(
-				"Custom preset generation request failed",
-				new Error(response.error.errorBody),
+				"DeepSeek preset generation request failed",
+				new Error(errorBody),
 				{
-					errorType: "CustomPresetGenerationHttpError",
+					errorType: "DeepseekPresetHttpError",
 					metadata: {
 						model: options.model,
-						status: response.error.status,
-						errorBody: response.error.errorBody,
+						status: response.status,
+						errorBody,
 					},
 				},
 			);
 			return {
-				error:
-					response.error.status === 0
-						? response.error.errorBody
-						: `Custom endpoint request failed (${response.error.status}): ${response.error.statusText}`,
+				error: `DeepSeek request failed (${response.status}): ${response.statusText}`,
 				errorType: "CONNECTION",
 			};
 		}
 
-		const message = response.data.choices?.[0]?.message as
-			| {
+		const result = (await response.json()) as {
+			choices?: Array<{
+				message?: {
 					content?: unknown;
-					tool_calls?: CustomToolCall[];
-			  }
-			| undefined;
+					tool_calls?: PresetToolCall[];
+				};
+			}>;
+		};
 
+		const message = result.choices?.[0]?.message;
 		if (!message) {
 			return {
-				error: "Custom endpoint returned an empty response.",
+				error: "DeepSeek returned an empty response.",
 				errorType: "EMPTY_RESPONSE",
 			};
 		}
 
+		// 5. Handle tool calls
 		const toolCalls = message.tool_calls ?? [];
 		if (toolCalls.length > 0) {
 			if (!toolsEnabled || !toolContext) {
 				return {
-					error: "Custom endpoint requested tool calls but tools are not available.",
+					error: "DeepSeek requested tool calls but tools are not available.",
 					errorType: "MODEL_ERROR",
 				};
 			}
@@ -151,41 +164,37 @@ export async function generatePresetFromPromptCustom(
 			toolRounds += 1;
 			if (toolRounds > maxToolRounds) {
 				return {
-					error: "Custom endpoint tool call loop exceeded limit.",
+					error: "DeepSeek tool call loop exceeded limit.",
 					errorType: "TIMEOUT",
 				};
 			}
 
-			const normalizedToolCalls = toolCalls.map((toolCall, index) => ({
-				...toolCall,
-				id: toolCall.id ?? `tool_call_${toolRounds}_${index}`,
+			const normalizedToolCalls = toolCalls.map((tc, idx) => ({
+				...tc,
+				id: tc.id ?? `tool_call_${toolRounds}_${idx}`,
 			}));
 
 			messages.push({
 				role: "assistant",
-				content:
-					typeof message.content === "string" ? message.content : null,
+				content: typeof message.content === "string" ? message.content : null,
 				tool_calls: normalizedToolCalls,
 			});
 
 			for (const toolCall of normalizedToolCalls) {
 				const functionName = toolCall.function?.name;
 				const rawArgs = toolCall.function?.arguments ?? "";
-
 				let toolResult: ToolResult | undefined;
 				let parsedArgs: Record<string, unknown> = {};
 
 				if (!functionName) {
-					toolResult = buildToolErrorResult(
-						"Tool call missing function name",
-					);
+					toolResult = buildToolErrorResult("Tool call missing function name");
 				} else {
 					if (rawArgs) {
 						try {
 							parsedArgs = JSON.parse(rawArgs);
 						} catch (parseError) {
 							log.warn(
-								`Custom tool call args parse failed for ${functionName}: ${rawArgs}`,
+								`DeepSeek tool call args parse failed for ${functionName}: ${rawArgs}`,
 								parseError as Error,
 							);
 							toolResult = buildToolErrorResult(
@@ -196,7 +205,7 @@ export async function generatePresetFromPromptCustom(
 
 					if (!toolResult) {
 						log.info(
-							`Executing custom preset-generation tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
+							`Executing DeepSeek preset tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
 						);
 						toolResult = await executeTool(
 							functionName,
@@ -206,18 +215,17 @@ export async function generatePresetFromPromptCustom(
 					}
 				}
 
-				const convertedResult = customAdapter.convertResult(
+				const convertedResult = deepseekAdapter.convertResult(
 					toolResult ?? buildToolErrorResult("Tool execution failed"),
 				);
 				const resultContent =
 					typeof convertedResult.content === "string"
 						? convertedResult.content
 						: JSON.stringify(convertedResult.content);
-				const toolCallId = toolCall.id ?? "tool_call_unknown";
 
 				messages.push({
 					role: "tool",
-					tool_call_id: toolCallId,
+					tool_call_id: toolCall.id ?? "tool_call_unknown",
 					content: resultContent,
 				});
 			}
@@ -225,10 +233,12 @@ export async function generatePresetFromPromptCustom(
 			continue;
 		}
 
-		const responseText = extractCustomResponseText(message.content);
+		// 6. Extract and parse the final JSON response
+		const responseText =
+			typeof message.content === "string" ? message.content.trim() : "";
 		if (!responseText) {
 			return {
-				error: "Custom endpoint returned an empty response.",
+				error: "DeepSeek returned an empty response.",
 				errorType: "EMPTY_RESPONSE",
 			};
 		}
@@ -240,18 +250,14 @@ export async function generatePresetFromPromptCustom(
 		};
 
 		try {
-			parsedResponse = parseCustomJsonResponse(responseText) as {
-				attribute_list?: string[];
-				sample_dialogues_in?: string[];
-				sample_dialogues_out?: string[];
-			};
+			parsedResponse = JSON.parse(responseText);
 		} catch (parseError) {
 			log.error(
-				"Custom preset generation JSON parse failed",
+				"DeepSeek preset generation JSON parse failed",
 				parseError as Error,
 			);
 			return {
-				error: "Invalid JSON response from custom endpoint.",
+				error: "Invalid JSON response from DeepSeek.",
 				errorType: "INVALID_JSON",
 			};
 		}
@@ -315,7 +321,7 @@ export async function generatePresetFromPromptCustom(
 		};
 
 		log.success(
-			`Custom preset generation successful for ${params.characterName}`,
+			`DeepSeek preset generation successful for ${params.characterName}`,
 		);
 		return { preset };
 	}

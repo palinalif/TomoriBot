@@ -5,6 +5,7 @@ import type {
   ProviderCompactSummaryRequest as CompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import type { CompactRoleplaySummary } from "@/types/misc/compact";
+import { buildRoleplaySchema } from "@/providers/utils/compactCommon";
 export type {
   CompactConversationResult,
   CompactRoleplayResult,
@@ -18,38 +19,6 @@ type OpenrouterContentPart =
 type OpenrouterMessage =
   | { role: "system"; content: string }
   | { role: "user"; content: string | OpenrouterContentPart[] };
-
-function buildRoleplaySchema() {
-  return {
-    type: "object" as const,
-    properties: {
-      overall_scene_summary: { type: "string" as const },
-      characters: {
-        type: "array" as const,
-        items: {
-          type: "object" as const,
-          properties: {
-            name: { type: "string" as const },
-            current_goals: { type: "string" as const },
-            emotional_status: { type: "string" as const },
-            physical_status: { type: "string" as const },
-            appearance_clothing: { type: "string" as const },
-            inventory: { type: "string" as const },
-          },
-          required: [
-            "name",
-            "current_goals",
-            "emotional_status",
-            "physical_status",
-            "appearance_clothing",
-            "inventory",
-          ],
-        },
-      },
-    },
-    required: ["overall_scene_summary", "characters"],
-  };
-}
 
 function buildUserContent(
   userPrompt: string,

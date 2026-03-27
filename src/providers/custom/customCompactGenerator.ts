@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
 	buildCustomMessages,
 	callCustomChatCompletions,
@@ -11,52 +10,10 @@ import type {
 	ProviderCompactSummaryRequest as CompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-
-function buildRoleplaySchema() {
-	return {
-		type: "object" as const,
-		properties: {
-			overall_scene_summary: { type: "string" as const },
-			characters: {
-				type: "array" as const,
-				items: {
-					type: "object" as const,
-					properties: {
-						name: { type: "string" as const },
-						current_goals: { type: "string" as const },
-						emotional_status: { type: "string" as const },
-						physical_status: { type: "string" as const },
-						appearance_clothing: { type: "string" as const },
-						inventory: { type: "string" as const },
-					},
-					required: [
-						"name",
-						"current_goals",
-						"emotional_status",
-						"physical_status",
-						"appearance_clothing",
-						"inventory",
-					],
-				},
-			},
-		},
-		required: ["overall_scene_summary", "characters"],
-	};
-}
-
-const CompactRoleplaySummarySchema = z.object({
-	overall_scene_summary: z.string(),
-	characters: z.array(
-		z.object({
-			name: z.string(),
-			current_goals: z.string(),
-			emotional_status: z.string(),
-			physical_status: z.string(),
-			appearance_clothing: z.string(),
-			inventory: z.string(),
-		}),
-	),
-});
+import {
+	buildRoleplaySchema,
+	CompactRoleplaySummarySchema,
+} from "@/providers/utils/compactCommon";
 
 export async function generateConversationSummaryCustom(
 	request: CompactSummaryRequest,

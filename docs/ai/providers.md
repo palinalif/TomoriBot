@@ -151,7 +151,9 @@ Rule:
 - `/tool estimate cost` supports DeepSeek using conservative cache-miss input pricing by default
 - no native image generation rows are seeded
 - no embedding rows are seeded
-- provider-level feature flags remain disabled for native image generation, embeddings, preset generation, expression initialization, and compaction
+- provider-level feature flags remain disabled for native image generation, embeddings, and expression initialization
+- preset generation is enabled: `json_object` mode with schema injected into the system prompt + Zod validation; `deepseek-reasoner` omits the `temperature` param
+- conversation and roleplay compaction are enabled through the provider-owned structured output capability
 
 ## Z.ai Provider Notes
 
@@ -167,6 +169,8 @@ Rule:
 - Model codenames stored with `zai/` prefix in DB (e.g., `zai/glm-5`), stripped to `glm-5` for API calls
 - No img2img support — reference images are ignored with a user warning
 - MCP vision: users can add `@z_ai/mcp-server` via `/config mcp add` for image/video analysis on non-vision models
+- Conversation and roleplay compaction are enabled through the provider-owned structured output capability
+- Preset generation is enabled: `json_object` mode with schema injected into the system prompt + Zod validation; reasoning models omit `temperature`
 
 ## Z.ai (Coding) Provider Notes
 
@@ -176,6 +180,8 @@ Rule:
 - **Image generation**: `glm-image` via the coding-endpoint image generation route
 - Uses the same streaming, tool-calling, and structured-output pipeline as the general `zai` provider
 - Intended for dedicated coding-endpoint access such as GLM Coding Plan workflows
+- Conversation compaction and roleplay compaction delegate to the shared ZAI generators with the coding endpoint URL
+- Preset generation delegates to the shared ZAI generator with the coding endpoint URL and the Zaicoding tool adapter
 
 ## NVIDIA NIM Provider Notes
 
@@ -188,6 +194,8 @@ Rule:
 - Structured output and history extraction are enabled only for the validated subset of NVIDIA text models
 - Native image generation is text-to-image only right now; reference images are ignored with a warning
 - `/tool estimate cost` does not support NVIDIA live token counting
+- Conversation and roleplay compaction are enabled; the compact generator preprocesses images via `fetchAndOptimizeImage()`
+- Preset generation is enabled: tries strict `json_schema` mode first, falls back to `json_object` + prompt steering on 400/422 errors with schema-related keywords
 
 ## Tool Integration Across Providers
 
@@ -234,6 +242,8 @@ Current capability layer:
 - typed resolver: `src/utils/provider/providerCapabilityResolver.ts`
 - thin app-level wrappers: `src/providers/utils/providerFeatureExecutors.ts`
 - shared schema/builders only: `src/providers/utils/structuredOutput.ts`
+- shared compaction schema/builders: `src/providers/utils/compactCommon.ts`
+- shared preset schema/prompt/type builders: `src/providers/utils/presetCommon.ts`
 - provider-local structured output runtimes:
   - `src/providers/google/googleStructuredOutput.ts`
   - `src/providers/openrouter/openrouterStructuredOutput.ts`
@@ -252,12 +262,18 @@ Google and OpenRouter currently own runtime execution for:
 DeepSeek currently owns runtime execution for:
 
 - structured output execution
+- preset generation
+- conversation compaction
+- roleplay compaction
 - history extraction (via structured output capability)
 
 NVIDIA currently owns runtime execution for:
 
 - embeddings
 - structured output execution
+- preset generation
+- conversation compaction
+- roleplay compaction
 - history extraction (via structured output capability)
 - native image generation
 
@@ -268,6 +284,15 @@ Custom currently owns runtime execution for:
 - conversation compaction
 - roleplay compaction
 - history extraction (via structured output capability)
+
+ZAI and ZAI (Coding) currently own runtime execution for:
+
+- structured output execution
+- preset generation
+- conversation compaction
+- roleplay compaction
+- history extraction (via structured output capability)
+- native image generation
 
 Live token counting for `/tool estimate cost` still uses a temporary legacy command path for Google, OpenRouter, DeepSeek, and the Z.ai family. NVIDIA intentionally does not implement live token counting.
 

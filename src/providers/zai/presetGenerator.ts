@@ -1,146 +1,148 @@
 /**
- * AI-Powered Preset Generation for TomoriBot
- * Uses OpenRouter structured output with optional tool-assisted web search.
+ * AI-Powered Preset Generation for the Z.ai provider (shared with Zaicoding).
+ *
+ * Uses json_object response mode with the preset schema injected into
+ * the system prompt (Z.ai uses prompt-steered JSON output, similar to
+ * DeepSeek). Includes a full tool-calling loop for models with web-search
+ * tools enabled (has_tools=true).
+ *
+ * Both the endpoint URL and tool adapter are configurable so this generator
+ * can be reused by both the Z.ai and Zaicoding providers.
  */
-
 import { log } from "@/utils/misc/logger";
-import {
-	sanitizeSampleDialogueText,
-} from "@/providers/google/presetGenerator";
+import { executeTool } from "@/tools/toolRegistry";
+import type { ToolContext, ToolResult } from "@/types/tool/interfaces";
 import type {
 	GeneratePresetParams,
 	PresetGenerationResult,
 } from "@/types/provider/featureInterfaces";
-import type { ToolContext } from "@/types/tool/interfaces";
-import { executeTool } from "@/tools/toolRegistry";
-import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
+import type { OpenAICompatibleToolAdapter } from "@/providers/openaiCompatible/openaiCompatibleToolAdapter";
+import { getZaiToolAdapter } from "@/providers/zai/zaiToolAdapter";
+import { sanitizeSampleDialogueText } from "@/providers/google/presetGenerator";
+import {
+	toZaiApiModelName,
+	ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+	ZAI_REASONING_MODELS,
+} from "@/providers/zai/zaiShared";
 import {
 	buildPresetResponseSchema,
 	buildPresetPrompt,
-	extractResponseText,
 	buildToolErrorResult,
-	type PresetContentPart,
 	type PresetMessage,
 	type PresetToolCall,
 } from "@/providers/utils/presetCommon";
 
-interface OpenrouterPresetGenerationOptions {
+/** Options for Z.ai preset generation. */
+interface ZaiPresetGenerationOptions {
 	model: string;
 	temperature?: number;
 	tools?: Array<Record<string, unknown>>;
 	toolContext?: ToolContext;
 	maxToolRounds?: number;
+	/** Override endpoint URL — used by Zaicoding to point to its coding endpoint. */
+	endpointUrl?: string;
+	/** Override tool adapter — used by Zaicoding to supply its own adapter. */
+	toolAdapter?: OpenAICompatibleToolAdapter;
 }
 
 /**
- * Generate preset data from user prompts using OpenRouter structured output
- *
- * @param apiKey - Decrypted OpenRouter API key
- * @param params - Generation parameters
- * @param _locale - User's locale for error messages
- * @param options - OpenRouter-specific options (model, tools, temperature)
- * @returns Promise<PresetGenerationResult> - Generated preset or error
+ * Build a system prompt that steers the model toward the preset JSON schema.
+ * Z.ai uses prompt-steered json_object mode (no native json_schema support).
  */
-export async function generatePresetFromPromptOpenrouter(
+function buildZaiPresetSystemPrompt(): string {
+	const schema = buildPresetResponseSchema();
+	return [
+		"You are a JSON-only character preset generator.",
+		"Return a valid json object only.",
+		"The word json is intentional and required.",
+		"Target json schema for preset_export_data:",
+		JSON.stringify(schema, null, 2),
+		"Do not wrap the json in markdown fences and do not add extra prose.",
+	].join("\n\n");
+}
+
+/**
+ * Generate preset data from user prompts using the Z.ai API.
+ *
+ * @param apiKey - Decrypted Z.ai API key
+ * @param params - Generation parameters (character info, instructions, image)
+ * @param _locale - User's locale (reserved for future error localisation)
+ * @param options - Z.ai-specific options (model, tools, temperature, endpointUrl, toolAdapter)
+ * @returns Generated preset or a typed error result
+ */
+export async function generatePresetFromPromptZai(
 	apiKey: string,
 	params: GeneratePresetParams,
 	_locale: string,
-	options: OpenrouterPresetGenerationOptions,
+	options: ZaiPresetGenerationOptions,
 ): Promise<PresetGenerationResult> {
 	if (!apiKey || apiKey.trim().length < 10) {
-		return {
-			error: "Invalid OpenRouter API key",
-			errorType: "API_KEY",
-		};
+		return { error: "Invalid Z.ai API key", errorType: "API_KEY" };
 	}
 
-	const openrouterAdapter = getOpenrouterToolAdapter();
+	// Strip the zai/ prefix so the API receives the raw model name
+	const apiModel = toZaiApiModelName(options.model);
+	const toolAdapter = options.toolAdapter ?? getZaiToolAdapter();
+	const endpointUrl = options.endpointUrl ?? ZAI_GENERAL_CHAT_COMPLETIONS_URL;
 	const tools = options.tools ?? [];
 	const toolContext = options.toolContext;
 	const toolsEnabled = tools.length > 0 && toolContext;
 
-	const responseFormat = {
-		type: "json_schema" as const,
-		json_schema: {
-			name: "preset_export_data",
-			description: "Structured persona preset data",
-			schema: buildPresetResponseSchema(),
-		},
-	};
-
-	const contentParts: PresetContentPart[] = [
-		{ type: "text", text: buildPresetPrompt(params) },
-	];
-
-	if (params.imageBase64 && params.imageMimeType) {
-		contentParts.push({
-			type: "image_url",
-			image_url: {
-				url: `data:${params.imageMimeType};base64,${params.imageBase64}`,
-			},
-		});
-		log.info("OpenRouter preset generation: image included in prompt");
-	}
-
-	const userContent =
-		contentParts.length === 1 && contentParts[0].type === "text"
-			? contentParts[0].text
-			: contentParts;
-
+	// 1. Build messages: schema-steered system prompt + user character prompt
 	const messages: PresetMessage[] = [
-		{
-			role: "user",
-			content: userContent,
-		},
+		{ role: "system", content: buildZaiPresetSystemPrompt() },
+		{ role: "user", content: buildPresetPrompt(params) },
 	];
 
 	const maxToolRounds = options.maxToolRounds ?? 3;
 	let toolRounds = 0;
 
 	while (true) {
+		// 2. Build the request body
 		const body: Record<string, unknown> = {
-			...(options.model !== "other-model" ? { model: options.model } : {}),
+			model: apiModel,
 			messages,
-			temperature: options.temperature ?? 1.0,
 			max_tokens: 8192,
-			response_format: responseFormat,
-			plugins: [{ id: "response-healing" }],
+			response_format: { type: "json_object" },
 			stream: false,
 		};
+
+		// 3. Skip temperature for reasoning models (they don't support it)
+		if (!ZAI_REASONING_MODELS.includes(apiModel)) {
+			body.temperature = options.temperature ?? 1.0;
+		}
 
 		if (toolsEnabled) {
 			body.tools = tools;
 			body.tool_choice = "auto";
 		}
 
-		const response = await fetch(
-			"https://openrouter.ai/api/v1/chat/completions",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(body),
+		// 4. Send the request
+		const response = await fetch(endpointUrl, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+				"Content-Type": "application/json",
 			},
-		);
+			body: JSON.stringify(body),
+		});
 
 		if (!response.ok) {
 			const errorBody = await response.text();
 			log.error(
-				"OpenRouter preset generation request failed",
+				"Z.ai preset generation request failed",
 				new Error(errorBody),
 				{
-					errorType: "OpenrouterPresetHttpError",
+					errorType: "ZaiPresetHttpError",
 					metadata: {
-						model: options.model,
+						model: apiModel,
 						status: response.status,
 						errorBody,
 					},
 				},
 			);
 			return {
-				error: `OpenRouter request failed (${response.status}): ${response.statusText}`,
+				error: `Z.ai request failed (${response.status}): ${response.statusText}`,
 				errorType: "CONNECTION",
 			};
 		}
@@ -157,16 +159,17 @@ export async function generatePresetFromPromptOpenrouter(
 		const message = result.choices?.[0]?.message;
 		if (!message) {
 			return {
-				error: "OpenRouter returned an empty response.",
+				error: "Z.ai returned an empty response.",
 				errorType: "EMPTY_RESPONSE",
 			};
 		}
 
+		// 5. Handle tool calls
 		const toolCalls = message.tool_calls ?? [];
 		if (toolCalls.length > 0) {
 			if (!toolsEnabled || !toolContext) {
 				return {
-					error: "OpenRouter requested tool calls but tools are not available.",
+					error: "Z.ai requested tool calls but tools are not available.",
 					errorType: "MODEL_ERROR",
 				};
 			}
@@ -174,14 +177,14 @@ export async function generatePresetFromPromptOpenrouter(
 			toolRounds += 1;
 			if (toolRounds > maxToolRounds) {
 				return {
-					error: "OpenRouter tool call loop exceeded limit.",
+					error: "Z.ai tool call loop exceeded limit.",
 					errorType: "TIMEOUT",
 				};
 			}
 
-			const normalizedToolCalls = toolCalls.map((toolCall, index) => ({
-				...toolCall,
-				id: toolCall.id ?? `tool_call_${toolRounds}_${index}`,
+			const normalizedToolCalls = toolCalls.map((tc, idx) => ({
+				...tc,
+				id: tc.id ?? `tool_call_${toolRounds}_${idx}`,
 			}));
 
 			messages.push({
@@ -193,8 +196,7 @@ export async function generatePresetFromPromptOpenrouter(
 			for (const toolCall of normalizedToolCalls) {
 				const functionName = toolCall.function?.name;
 				const rawArgs = toolCall.function?.arguments ?? "";
-
-				let toolResult: import("@/types/tool/interfaces").ToolResult | undefined;
+				let toolResult: ToolResult | undefined;
 				let parsedArgs: Record<string, unknown> = {};
 
 				if (!functionName) {
@@ -205,7 +207,7 @@ export async function generatePresetFromPromptOpenrouter(
 							parsedArgs = JSON.parse(rawArgs);
 						} catch (parseError) {
 							log.warn(
-								`OpenRouter tool call args parse failed for ${functionName}: ${rawArgs}`,
+								`Z.ai tool call args parse failed for ${functionName}: ${rawArgs}`,
 								parseError as Error,
 							);
 							toolResult = buildToolErrorResult(
@@ -216,7 +218,7 @@ export async function generatePresetFromPromptOpenrouter(
 
 					if (!toolResult) {
 						log.info(
-							`Executing OpenRouter tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
+							`Executing Z.ai preset tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
 						);
 						toolResult = await executeTool(
 							functionName,
@@ -226,18 +228,17 @@ export async function generatePresetFromPromptOpenrouter(
 					}
 				}
 
-				const convertedResult = openrouterAdapter.convertResult(
+				const convertedResult = toolAdapter.convertResult(
 					toolResult ?? buildToolErrorResult("Tool execution failed"),
 				);
 				const resultContent =
 					typeof convertedResult.content === "string"
 						? convertedResult.content
 						: JSON.stringify(convertedResult.content);
-				const toolCallId = toolCall.id ?? "tool_call_unknown";
 
 				messages.push({
 					role: "tool",
-					tool_call_id: toolCallId,
+					tool_call_id: toolCall.id ?? "tool_call_unknown",
 					content: resultContent,
 				});
 			}
@@ -245,10 +246,12 @@ export async function generatePresetFromPromptOpenrouter(
 			continue;
 		}
 
-		const responseText = extractResponseText(message.content);
-		if (!responseText || responseText.trim() === "") {
+		// 6. Extract and parse the final JSON response
+		const responseText =
+			typeof message.content === "string" ? message.content.trim() : "";
+		if (!responseText) {
 			return {
-				error: "OpenRouter returned an empty response.",
+				error: "Z.ai returned an empty response.",
 				errorType: "EMPTY_RESPONSE",
 			};
 		}
@@ -262,12 +265,9 @@ export async function generatePresetFromPromptOpenrouter(
 		try {
 			parsedResponse = JSON.parse(responseText);
 		} catch (parseError) {
-			log.error(
-				"OpenRouter preset generation JSON parse failed",
-				parseError as Error,
-			);
+			log.error("Z.ai preset generation JSON parse failed", parseError as Error);
 			return {
-				error: "Invalid JSON response from OpenRouter.",
+				error: "Invalid JSON response from Z.ai.",
 				errorType: "INVALID_JSON",
 			};
 		}
@@ -330,9 +330,7 @@ export async function generatePresetFromPromptOpenrouter(
 			sample_dialogues_out: sanitizedDialoguesOut,
 		};
 
-		log.success(
-			`OpenRouter preset generation successful for ${params.characterName}`,
-		);
+		log.success(`Z.ai preset generation successful for ${params.characterName}`);
 		return { preset };
 	}
 }

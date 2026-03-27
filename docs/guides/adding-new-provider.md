@@ -388,6 +388,36 @@ Use this as the last pass before you call a provider integration "done".
 - confirm embedding selection/config flows behave correctly for the provider
 - if embeddings are not implemented, leave `featureSupport.embeddings = false` and do not seed embedding rows
 
+### Conversation Compaction
+
+- create `src/providers/{providerName}/compactGenerator.ts` with two exports:
+  - `generateConversationSummary{Provider}(request)` — plain text POST to the provider chat endpoint
+  - `generateRoleplaySummary{Provider}(request)` — structured output POST using the provider's `callStructuredJSON()` helper
+- import `buildRoleplaySchema()` and `CompactRoleplaySummarySchema` from `src/providers/utils/compactCommon.ts` instead of duplicating them
+- for plain text summary: omit `response_format`; just request a text completion using the provider's chat completions endpoint
+- for reasoning-model providers that reject `temperature`, guard the parameter before sending (e.g. DeepSeek-reasoner, ZAI GLM reasoning models)
+- implement `SupportsConversationCompaction` on the provider class and wire both methods
+- set `featureSupport.conversationCompaction: true` in `providerInfo.ts`
+- if the provider needs image preprocessing before sending to the compaction endpoint (e.g. NVIDIA), apply it inside `generateConversationSummary{Provider}()`
+
+### Preset Generation
+
+- create `src/providers/{providerName}/presetGenerator.ts` with one export:
+  - `generatePresetFromPrompt{Provider}(apiKey, params, locale, options)` — structured output POST with an optional tool-calling loop
+- import `buildPresetResponseSchema()`, `buildPresetPrompt()`, `buildToolErrorResult()`, and the shared types (`PresetContentPart`, `PresetMessage`, `PresetToolCall`) from `src/providers/utils/presetCommon.ts`
+- choose the right structured output mode for the vendor:
+  - **strict schema** (`json_schema` response format): preferred when the vendor supports it (e.g. OpenRouter, NVIDIA); validate the response shape locally if needed
+  - **JSON object mode** (`json_object` response format): required for vendors that only support JSON-mode (e.g. DeepSeek, ZAI); inject the JSON schema into the system prompt via a helper like `build{Provider}PresetSystemPrompt()` and run Zod validation locally
+  - **schema fallback** (try strict, retry with JSON object on 400/422): useful when strict schema support is model-dependent (e.g. NVIDIA)
+- implement the tool-calling loop:
+  - build tool definitions via `getPresetGenerationTools()` (private helper that calls `getAvailableToolsWithMCP()` and `isBraveSearchAvailable()`)
+  - if the model returns `tool_calls`, execute each tool, append results, and loop up to `options.maxToolRounds`
+  - use `buildToolErrorResult()` for failed tool executions
+- for reasoning-model providers that reject `temperature`, guard the parameter before sending
+- implement `SupportsPresetGeneration` on the provider class and wire `generatePreset()`
+- set `featureSupport.presetGeneration: true` in `providerInfo.ts`
+- if two providers share an endpoint family (e.g. ZAI and ZAI Coding), parameterize the generator by `endpointUrl?` and `toolAdapter?` so the secondary provider can delegate without code duplication
+
 ## 12. Test the Integration
 
 Minimum test checklist:

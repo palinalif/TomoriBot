@@ -21,11 +21,25 @@ import {
 	normalizeOpenAICompatibleProviderError,
 } from "@/providers/openaiCompatible/openaiCompatibleErrorFormatter";
 import { callDeepseekStructuredJSON } from "@/providers/deepseek/deepseekStructuredOutput";
+import {
+	generateConversationSummaryDeepseek,
+	generateRoleplaySummaryDeepseek,
+} from "@/providers/deepseek/compactGenerator";
+import { generatePresetFromPromptDeepseek } from "@/providers/deepseek/presetGenerator";
+import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchService";
+import { getMCPManager } from "@/utils/mcp/mcpManager";
 import type { TomoriState } from "@/types/db/schema";
 import type { StructuredContextItem } from "@/types/misc/context";
 import type {
+	CompactConversationResult,
+	CompactRoleplayResult,
+	PresetGenerationResult,
+	ProviderCompactSummaryRequest,
+	ProviderPresetGenerationRequest,
 	ProviderStructuredJsonRequest,
 	StructuredOutputResult,
+	SupportsConversationCompaction,
+	SupportsPresetGeneration,
 	SupportsStructuredOutput,
 } from "@/types/provider/featureInterfaces";
 import type { ZodType } from "zod";
@@ -67,7 +81,11 @@ export interface DeepseekProviderConfig extends ProviderConfig {
 
 export class DeepseekProvider
 	extends BaseLLMProvider
-	implements LLMProvider, SupportsStructuredOutput
+	implements
+		LLMProvider,
+		SupportsStructuredOutput,
+		SupportsConversationCompaction,
+		SupportsPresetGeneration
 {
 	getInfo(): ProviderInfo {
 		return deepseekProviderInfo;
@@ -379,5 +397,105 @@ export class DeepseekProvider
 				data: error as Error,
 			};
 		}
+	}
+
+	/** Resolve web-search tools for preset generation, or undefined if not needed. */
+	private async getPresetGenerationTools(
+		request: ProviderPresetGenerationRequest,
+	): Promise<Array<Record<string, unknown>> | undefined> {
+		if (!request.params.useWebSearch) {
+			return undefined;
+		}
+
+		if (!request.toolContext) {
+			log.warn(
+				"DeepSeek preset generation skipped search tools: no tool context available.",
+			);
+			return undefined;
+		}
+
+		const hasBraveApiKey = await isBraveSearchAvailable(
+			request.tomoriState.server_id,
+		);
+
+		if (!hasBraveApiKey) {
+			const mcpManager = getMCPManager();
+			if (!mcpManager.isReady()) {
+				await mcpManager.initializeMCPServers();
+			}
+		}
+
+		const toolStateForContext: ToolStateForContext = {
+			server_id: request.tomoriState.server_id.toString(),
+			activePersonaHasElevenlabsVoice: Boolean(
+				request.tomoriState.elevenlabs_voice_id?.trim(),
+			),
+			llm: {
+				llm_codename: request.tomoriState.llm.llm_codename,
+				has_tools: request.tomoriState.llm.has_tools,
+				sees_images: request.tomoriState.llm.sees_images,
+				sees_videos: request.tomoriState.llm.sees_videos,
+				sees_youtube: request.tomoriState.llm.sees_youtube,
+				supports_structoutput: request.tomoriState.llm.supports_structoutput,
+			},
+			config: {
+				sticker_usage_enabled: false,
+				web_search_enabled: true,
+				self_teaching_enabled: false,
+				pin_message_enabled: false,
+				imagegen_enabled: false,
+				nai_exclusive_imggen: false,
+				voice_message_enabled: false,
+			},
+		};
+
+		const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
+			"deepseek",
+			toolStateForContext,
+		);
+
+		const searchTools = builtInTools.filter(
+			(tool) =>
+				tool.category === "search" ||
+				tool.requiresFeatureFlag === "web_search",
+		);
+
+		const adapter = getDeepseekToolAdapter();
+		return await adapter.getAllToolsInOpenAICompatibleFormat(
+			searchTools,
+			request.tomoriState.server_id,
+			mcpFunctionNames,
+		);
+	}
+
+	async generatePreset(
+		request: ProviderPresetGenerationRequest,
+	): Promise<PresetGenerationResult> {
+		const tools = await this.getPresetGenerationTools(request);
+
+		return await generatePresetFromPromptDeepseek(
+			request.apiKey,
+			request.params,
+			request.locale,
+			{
+				model: request.tomoriState.llm.llm_codename,
+				temperature: request.tomoriState.config.llm_temperature,
+				tools,
+				toolContext: request.toolContext,
+				maxToolRounds: request.maxToolRounds,
+			},
+		);
+	}
+
+	async generateConversationSummary(
+		request: ProviderCompactSummaryRequest,
+	): Promise<CompactConversationResult> {
+		return await generateConversationSummaryDeepseek(request);
+	}
+
+	async generateRoleplaySummary(
+		request: ProviderCompactSummaryRequest,
+	): Promise<CompactRoleplayResult> {
+		return await generateRoleplaySummaryDeepseek(request);
 	}
 }

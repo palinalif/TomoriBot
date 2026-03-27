@@ -709,6 +709,14 @@ Use the web search information to accurately represent the character's personali
     }
 
     // 10. Add additional instructions if provided
+    if (params.existingPresetContext?.trim()) {
+      prompt += `\n\nExisting Character Data (from uploaded card/preset):
+Use this as reference material to transform, refine, or expand upon according to the user's description and instructions. Preserve the core character identity while incorporating requested changes.
+
+${params.existingPresetContext.trim()}`;
+    }
+
+    // 11. Add additional instructions if provided
     if (params.additionalInstructions?.trim()) {
       prompt += `\n\nAdditional Instructions: ${params.additionalInstructions.trim()}`;
     }

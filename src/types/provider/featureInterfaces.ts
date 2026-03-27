@@ -54,6 +54,8 @@ export interface GeneratePresetParams {
 	imageMimeType?: string;
 	useWebSearch?: boolean;
 	modelName?: string;
+	/** Serialized existing card/preset data extracted from the uploaded image, used as AI reference context */
+	existingPresetContext?: string;
 }
 
 export interface PresetGenerationResult {

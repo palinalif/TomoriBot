@@ -1729,6 +1729,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 5. Copy this API key into {configSetup} or {configApikeySet}`,
         zai_model_notes_title: `Model Notes:`,
         zai_model_notes_description: `- \`glm-5.1\` is the most capable model with advanced reasoning
+- \`glm-4.7-flash\` is a free alternative to the default
 - \`glm-4.6v\` is the vision-capable model that can see images
 - \`glm-image\` generates images from text prompts`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,

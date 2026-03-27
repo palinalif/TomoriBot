@@ -15,10 +15,10 @@ export const nvidiaProviderInfo: ProviderInfo = {
 		nativeImageGeneration: true,
 		embeddings: true,
 		structuredOutput: true,
-		presetGeneration: false,
+		presetGeneration: true,
 		expressionInitialization: false,
 		liveTokenCounting: false,
-		conversationCompaction: false,
+		conversationCompaction: true,
 		historyExtraction: true,
 	},
 };

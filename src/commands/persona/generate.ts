@@ -30,7 +30,12 @@ import type {
 } from "../../providers/google/presetGenerator";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
 import { centerCropToSquare } from "../../utils/image/imageProcessor";
-import { embedMetadataInPNG } from "../../utils/image/pngMetadata";
+import {
+	extractMetadataFromPNG,
+	extractSillyTavernMetadataFromPNG,
+	embedMetadataInPNG,
+} from "../../utils/image/pngMetadata";
+import { convertSillyTavernMetadataToPresetData } from "../../utils/db/sillyTavernImport";
 import {
   presetExportDataSchema,
   PRESET_EXPORT_VERSION,
@@ -375,6 +380,7 @@ export async function execute(
     let imageBase64: string | undefined;
     let imageMimeType: string | undefined;
     let imageBuffer: Buffer | undefined;
+    let extractedPresetContext: string | undefined;
 
     const getInputAttachment = () =>
       buildGenerationInputAttachment({
@@ -554,72 +560,117 @@ export async function execute(
       imageMimeType = imageAttachment.content_type || "image/png";
       log.info("Image attachment downloaded and converted to base64");
 
+      // 8a. Attempt to extract existing card/preset data from the uploaded image
+      // This enables "transform/tweak" workflows where users upload a card
+      // and ask the AI to modify it (e.g., "make it more conversational")
+
+      // 1. Try Tomori preset format first (native format)
+      const tomoriPreset = extractMetadataFromPNG(imageBuffer);
+      if (tomoriPreset?.data) {
+        extractedPresetContext = JSON.stringify(tomoriPreset.data);
+        log.info("Extracted Tomori preset data from uploaded image");
+      }
+
+      // 2. Try SillyTavern card format if no native preset was found
+      if (!extractedPresetContext) {
+        const stMetadata =
+          extractSillyTavernMetadataFromPNG(imageBuffer);
+        if (stMetadata) {
+          const conversionResult =
+            convertSillyTavernMetadataToPresetData(stMetadata);
+          if (conversionResult.success) {
+            extractedPresetContext = JSON.stringify(conversionResult.data);
+            log.info("Extracted SillyTavern card data from uploaded image");
+          }
+        }
+      }
+
       // Validate that model supports image vision; fall back to vision_llm if configured
+      // If card/preset data was extracted, vision is optional — the data serves as text context
       if (!tomoriState.llm.sees_images) {
         const visionLlm = tomoriState.vision_llm;
 
         if (!visionLlm?.sees_images) {
           // Neither the primary model nor the vision model supports vision
-          await modalSubmitInteraction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle(
-                  localizer(
-                    locale,
-                    "commands.persona.generate.image_vision_required_title",
-                  ),
-                )
-                .setDescription(
-                  localizer(
-                    locale,
-                    "commands.persona.generate.image_vision_required_description",
-                    {
-                      model_name: effectiveModelName,
-                    },
-                  ),
-                )
-                .setColor(ColorCode.ERROR),
-            ],
-            files: [getInputAttachment()],
-          });
-          return;
+          if (extractedPresetContext) {
+            // Card data was found — proceed without vision, using extracted data instead
+            log.info(
+              "No vision support available, but card/preset data was extracted from image. Proceeding with text-only context.",
+            );
+            imageBase64 = undefined;
+            imageMimeType = undefined;
+          } else {
+            // No card data and no vision — cannot process the image at all
+            await modalSubmitInteraction.editReply({
+              embeds: [
+                new EmbedBuilder()
+                  .setTitle(
+                    localizer(
+                      locale,
+                      "commands.persona.generate.image_vision_required_title",
+                    ),
+                  )
+                  .setDescription(
+                    localizer(
+                      locale,
+                      "commands.persona.generate.image_vision_required_description",
+                      {
+                        model_name: effectiveModelName,
+                      },
+                    ),
+                  )
+                  .setColor(ColorCode.ERROR),
+              ],
+              files: [getInputAttachment()],
+            });
+            return;
+          }
+        } else {
+          const visionProviderName = visionLlm.llm_provider.toLowerCase();
+          if (!providerSupportsFeature(visionProviderName, "presetGeneration")) {
+            // Vision model is set but its provider cannot perform preset generation
+            if (extractedPresetContext) {
+              // Fall back to text-only with extracted card data
+              log.info(
+                "Vision model provider unsupported for preset generation, but card/preset data was extracted. Proceeding with text-only context.",
+              );
+              imageBase64 = undefined;
+              imageMimeType = undefined;
+            } else {
+              await modalSubmitInteraction.editReply({
+                embeds: [
+                  new EmbedBuilder()
+                    .setTitle(
+                      localizer(
+                        locale,
+                        "commands.persona.generate.vision_model_provider_unsupported_title",
+                      ),
+                    )
+                    .setDescription(
+                      localizer(
+                        locale,
+                        "commands.persona.generate.vision_model_provider_unsupported_description",
+                        {
+                          vision_model_name: visionLlm.llm_codename,
+                          vision_provider: visionLlm.llm_provider,
+                        },
+                      ),
+                    )
+                    .setColor(ColorCode.ERROR),
+                ],
+                files: [getInputAttachment()],
+              });
+              return;
+            }
+          } else {
+            // Delegate preset generation to the vision model so the image can be analyzed
+            log.info(
+              `Primary model lacks vision; delegating preset generation to vision model ${visionLlm.llm_codename} (${visionLlm.llm_provider})`,
+            );
+            generationTomoriState = { ...tomoriState, llm: visionLlm };
+            generationProviderName = visionProviderName;
+          }
         }
-
-        const visionProviderName = visionLlm.llm_provider.toLowerCase();
-        if (!providerSupportsFeature(visionProviderName, "presetGeneration")) {
-          // Vision model is set but its provider cannot perform preset generation
-          await modalSubmitInteraction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle(
-                  localizer(
-                    locale,
-                    "commands.persona.generate.vision_model_provider_unsupported_title",
-                  ),
-                )
-                .setDescription(
-                  localizer(
-                    locale,
-                    "commands.persona.generate.vision_model_provider_unsupported_description",
-                    {
-                      vision_model_name: visionLlm.llm_codename,
-                      vision_provider: visionLlm.llm_provider,
-                    },
-                  ),
-                )
-                .setColor(ColorCode.ERROR),
-            ],
-            files: [getInputAttachment()],
-          });
-          return;
-        }
-
-        // Delegate preset generation to the vision model so the image can be analyzed
-        log.info(
-          `Primary model lacks vision; delegating preset generation to vision model ${visionLlm.llm_codename} (${visionLlm.llm_provider})`,
-        );
-        generationTomoriState = { ...tomoriState, llm: visionLlm };
-        generationProviderName = visionProviderName;
       }
     }
 
@@ -689,6 +740,7 @@ export async function execute(
       imageBase64,
       imageMimeType,
       useWebSearch,
+      existingPresetContext: extractedPresetContext,
     };
 
     let presetToolContext: ToolContext | undefined;
