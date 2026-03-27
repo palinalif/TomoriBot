@@ -73,8 +73,8 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
   const baseDescription =
     description || model.llm_description || `${model.llm_provider} model`;
 
-  // Skip flags for account-setting (don't show TOOLS+IMG+VID+etc. for this special model)
-  if (model.llm_codename === "account-setting") {
+  // Skip flags for other-model (don't show TOOLS+IMG+VID+etc. for this special model)
+  if (model.llm_codename === "other-model") {
     return baseDescription;
   }
 
@@ -612,11 +612,11 @@ export async function execute(
       return;
     }
 
-    // 7.5. Special handling for account-setting: prompt for OpenRouter model name
+    // 7.5. Special handling for other-model: prompt for OpenRouter model name
     // Uses button → modal pattern (modal → modal is not allowed by Discord)
-    if (selectedModel.llm_codename === "account-setting") {
+    if (selectedModel.llm_codename === "other-model") {
       try {
-        const { promptAccountSettingModel } = await import(
+        const { promptOtherModelConfig } = await import(
           "../../../utils/discord/customProviderModal"
         );
         const { getOrFetchOpenRouterCapabilities } = await import(
@@ -630,7 +630,7 @@ export async function execute(
         });
 
         // 1. Show button prompt → user clicks → modal appears for model name input
-        const promptResult = await promptAccountSettingModel(
+        const promptResult = await promptOtherModelConfig(
           modalSubmitInteraction,
           locale,
         );
@@ -649,9 +649,9 @@ export async function execute(
         // 2. Validate and fetch real capabilities from OpenRouter API
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey:
-            "commands.config.model.text.account_setting_validating_title",
+            "commands.config.model.text.other_model_validating_title",
           descriptionKey:
-            "commands.config.model.text.account_setting_validating_description",
+            "commands.config.model.text.other_model_validating_description",
           descriptionVars: { model_name: enteredModelName },
           color: ColorCode.INFO,
         });
@@ -662,22 +662,26 @@ export async function execute(
         if (!capabilities) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey:
-              "commands.config.model.text.account_setting_validation_failed_title",
+              "commands.config.model.text.other_model_validation_failed_title",
             descriptionKey:
-              "commands.config.model.text.account_setting_validation_failed_description",
+              "commands.config.model.text.other_model_validation_failed_description",
             descriptionVars: { model_name: enteredModelName },
             color: ColorCode.ERROR,
           });
           return;
         }
 
-        // 3. Store detected model + capabilities in database
+        // 3. Store detected model + capabilities in database.
+        //    Also update llm_id so the server actually switches to the other-model
+        //    LLM entry — without this, createConfig would never enter the other-model
+        //    branch and the real model name would not be sent to OpenRouter.
         const now = new Date();
         await sql`
           UPDATE tomori_configs
-          SET account_setting_actual_model = ${enteredModelName},
-              account_setting_capabilities = ${JSON.stringify(capabilities)}::jsonb,
-              account_setting_capabilities_fetched_at = ${now}
+          SET llm_id = ${selectedModel.llm_id},
+              other_model_codename = ${enteredModelName},
+              other_model_capabilities = ${JSON.stringify(capabilities)}::jsonb,
+              other_model_capabilities_fetched_at = ${now}
           WHERE server_id = ${tomoriState.server_id}
         `;
 
@@ -699,9 +703,9 @@ export async function execute(
 
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey:
-            "commands.config.model.text.account_setting_configured_title",
+            "commands.config.model.text.other_model_configured_title",
           descriptionKey:
-            "commands.config.model.text.account_setting_configured_description",
+            "commands.config.model.text.other_model_configured_description",
           descriptionVars: {
             model_name: enteredModelName,
             capabilities: capabilitiesDisplay,
@@ -711,7 +715,7 @@ export async function execute(
         return;
       } catch (error) {
         await log.error(
-          `Error configuring account-setting for user ${userData.user_disc_id}`,
+          `Error configuring other-model for user ${userData.user_disc_id}`,
           error as Error,
         );
         await replyInfoEmbed(modalSubmitInteraction, locale, {

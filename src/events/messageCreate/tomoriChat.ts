@@ -5082,7 +5082,7 @@ export default async function tomoriChat(
           const activeLlm = tomoriState?.llm;
           if (
             activeLlm?.llm_provider === "openrouter" &&
-            activeLlm.llm_codename !== "account-setting" &&
+            activeLlm.llm_codename !== "other-model" &&
             isOpenRouterCapabilityCacheReady()
           ) {
             const apiCaps = getOpenRouterCapabilities(activeLlm.llm_codename);
@@ -5152,7 +5152,7 @@ export default async function tomoriChat(
             // NovelAI:    uses perks.contextTokens from GET /user/subscription (cached per guild, 24h TTL).
             if (
               tomoriState.llm.llm_provider === "openrouter" &&
-              tomoriState.llm.llm_codename !== "account-setting" &&
+              tomoriState.llm.llm_codename !== "other-model" &&
               isOpenRouterCapabilityCacheReady()
             ) {
               const tokenLimits = getOpenRouterTokenLimits(
@@ -6934,7 +6934,7 @@ export default async function tomoriChat(
                       // NovelAI:    uses perks.contextTokens from GET /user/subscription (cached per guild, 24h TTL).
                       if (
                         tomoriState.llm.llm_provider === "openrouter" &&
-                        tomoriState.llm.llm_codename !== "account-setting" &&
+                        tomoriState.llm.llm_codename !== "other-model" &&
                         isOpenRouterCapabilityCacheReady()
                       ) {
                         const tokenLimits = getOpenRouterTokenLimits(

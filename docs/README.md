@@ -42,6 +42,7 @@ This folder is organized by topic instead of numeric filenames.
 - [`integrations/message-components-v2.md`](./integrations/message-components-v2.md)
 - [`integrations/modal-input-components.md`](./integrations/modal-input-components.md)
 - [`integrations/matrix-bridge.md`](./integrations/matrix-bridge.md)
+- [`integrations/voice-system.md`](./integrations/voice-system.md)
 
 ## Guides
 

@@ -81,7 +81,7 @@ export async function callOpenrouterStructuredJSON<T>(
 		};
 
 		const body = {
-			...(request.model !== "account-setting" ? { model: request.model } : {}),
+			...(request.model !== "other-model" ? { model: request.model } : {}),
 			messages,
 			temperature: request.temperature ?? 1.0,
 			max_tokens: request.maxOutputTokens ?? 8192,
@@ -252,7 +252,7 @@ export async function callOpenrouterStructuredOutput(
 		};
 
 		const body = {
-			...(request.model !== "account-setting" ? { model: request.model } : {}),
+			...(request.model !== "other-model" ? { model: request.model } : {}),
 			messages,
 			temperature: request.temperature ?? 1.0,
 			max_tokens: 8192,

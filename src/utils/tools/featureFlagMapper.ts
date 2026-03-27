@@ -147,6 +147,7 @@ export function configToFeatureFlags(config: {
   self_teaching_enabled: boolean;
   pin_message_enabled: boolean;
   imagegen_enabled: boolean;
+  voice_message_enabled: boolean;
 }): Record<string, boolean> {
   return {
     sticker_usage: config.sticker_usage_enabled,
@@ -154,5 +155,6 @@ export function configToFeatureFlags(config: {
     self_teaching: config.self_teaching_enabled,
     pin_message: config.pin_message_enabled,
     image_gen: config.imagegen_enabled,
+    voice_message: config.voice_message_enabled,
   };
 }

@@ -1,355 +1,385 @@
 import {
-  MessageFlags,
-  type ChatInputCommandInteraction,
-  type Client,
-  type SlashCommandSubcommandBuilder,
+	EmbedBuilder,
+	MessageFlags,
+	type ChatInputCommandInteraction,
+	type Client,
+	type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache"; // Rule 17
-import { localizer } from "../../utils/text/localizer"; // Rule 9
-import { log, ColorCode } from "../../utils/misc/logger"; // Rule 18
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper"; // Rule 12, 19
+	getCachedTomoriState,
+	invalidateTomoriStateCache,
+} from "../../utils/cache/tomoriStateCache";
+import { localizer } from "../../utils/text/localizer";
+import { log, ColorCode } from "../../utils/misc/logger";
 import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema, // Rule 6
+	replyInfoEmbed,
+	promptWithRawModal,
+} from "../../utils/discord/interactionHelper";
+import {
+	type UserRow,
+	type ErrorContext,
+	tomoriConfigSchema,
+	type TomoriConfigRow,
 } from "../../types/db/schema";
-import { sql } from "@/utils/db/client"; // Rule 4
-// Rule 21: Configure the subcommand
+import { sql } from "@/utils/db/client";
+import { hasOptApiKey } from "@/utils/security/crypto";
+import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
+import type { CheckboxGroupOption } from "@/types/discord/modal";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+// Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
+// awaitModalSubmit listeners from a previous run resolving on the same submission.
+const PERMISSIONS_CHECKBOX_ID = "config_permissions_checkbox";
+
+// Rule 21: Configure the subcommand — no options needed, UI is a checkbox modal
 export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
+	subcommand: SlashCommandSubcommandBuilder,
 ) =>
-  subcommand
-    .setName("permissions")
-    .setDescription(
-      localizer("en-US", "commands.config.permissions.description"),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("permission")
-        .setDescription(
-          localizer("en-US", "commands.config.permissions.option_description"),
-        )
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.selfteaching_option",
-            ),
-            value: "selfteaching",
-          },
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.personalization_option",
-            ),
-            value: "personalization",
-          },
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.emojiusage_option",
-            ),
-            value: "emojiusage",
-          },
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.stickerusage_option",
-            ),
-            value: "stickerusage",
-          },
-          // New: Added Google Search permission choice
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.websearch_option",
-            ),
-            value: "websearch",
-          },
-          // New: Added Pin Message permission choice
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.pinmessage_option",
-            ),
-            value: "pinmessage",
-          },
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.imagegen_option",
-            ),
-            value: "imagegen",
-          },
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.hiderespondembed_option",
-            ),
-            value: "hiderespondembed",
-          },
-          {
-            name: localizer(
-              "en-US",
-              "commands.config.permissions.hideimpersonationembeds_option",
-            ),
-            value: "hideimpersonationembeds",
-          },
-        ),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("set")
-        .setDescription(
-          localizer("en-US", "commands.config.permissions.set_description"),
-        )
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.config.options.enable"),
-            value: "enable",
-          },
-          {
-            name: localizer("en-US", "commands.config.options.disable"),
-            value: "disable",
-          },
-        ),
-    );
+	subcommand
+		.setName("permissions")
+		.setDescription(
+			localizer("en-US", "commands.config.permissions.description"),
+		);
 
 /**
- * Rule 1: JSDoc comment
- * Configures various permissions for Tomori's behavior on the server.
+ * Defines all configurable permissions for the checkbox modal.
+ * Each entry maps a checkbox value to its DB column and locale keys.
+ */
+interface PermissionDefinition {
+	/** Value used as the checkbox option identifier */
+	value: string;
+	/** The tomori_configs column to update */
+	dbColumn: string;
+	/** Locale key for the option label */
+	labelKey: string;
+	/** Locale key for the short option description shown in the checkbox */
+	descKey: string;
+	/** Extracts current state from a config row */
+	getState: (config: TomoriConfigRow) => boolean;
+	/** If true, this option is only shown when an ElevenLabs key is configured */
+	requiresElevenLabs?: boolean;
+}
+
+const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
+	{
+		value: "selfteaching",
+		dbColumn: "self_teaching_enabled",
+		labelKey: "commands.config.permissions.selfteaching_option",
+		descKey: "commands.config.permissions.selfteaching_desc",
+		getState: (c) => c.self_teaching_enabled,
+	},
+	{
+		value: "personalization",
+		dbColumn: "personal_memories_enabled",
+		labelKey: "commands.config.permissions.personalization_option",
+		descKey: "commands.config.permissions.personalization_desc",
+		getState: (c) => c.personal_memories_enabled,
+	},
+	{
+		value: "emojiusage",
+		dbColumn: "emoji_usage_enabled",
+		labelKey: "commands.config.permissions.emojiusage_option",
+		descKey: "commands.config.permissions.emojiusage_desc",
+		getState: (c) => c.emoji_usage_enabled,
+	},
+	{
+		value: "stickerusage",
+		dbColumn: "sticker_usage_enabled",
+		labelKey: "commands.config.permissions.stickerusage_option",
+		descKey: "commands.config.permissions.stickerusage_desc",
+		getState: (c) => c.sticker_usage_enabled,
+	},
+	{
+		value: "websearch",
+		dbColumn: "web_search_enabled",
+		labelKey: "commands.config.permissions.websearch_option",
+		descKey: "commands.config.permissions.websearch_desc",
+		getState: (c) => c.web_search_enabled,
+	},
+	{
+		value: "pinmessage",
+		dbColumn: "pin_message_enabled",
+		labelKey: "commands.config.permissions.pinmessage_option",
+		descKey: "commands.config.permissions.pinmessage_desc",
+		getState: (c) => c.pin_message_enabled,
+	},
+	{
+		value: "imagegen",
+		dbColumn: "imagegen_enabled",
+		labelKey: "commands.config.permissions.imagegen_option",
+		descKey: "commands.config.permissions.imagegen_desc",
+		getState: (c) => c.imagegen_enabled,
+	},
+	{
+		value: "hiderespondembed",
+		dbColumn: "hide_respond_embed",
+		labelKey: "commands.config.permissions.hiderespondembed_option",
+		descKey: "commands.config.permissions.hiderespondembed_desc",
+		getState: (c) => c.hide_respond_embed,
+	},
+	{
+		value: "hideimpersonationembeds",
+		dbColumn: "hide_impersonation_embeds",
+		labelKey: "commands.config.permissions.hideimpersonationembeds_option",
+		descKey: "commands.config.permissions.hideimpersonationembeds_desc",
+		getState: (c) => c.hide_impersonation_embeds,
+	},
+	{
+		value: "voicemessage",
+		dbColumn: "voice_message_enabled",
+		labelKey: "commands.config.permissions.voicemessage_option",
+		descKey: "commands.config.permissions.voicemessage_desc",
+		getState: (c) => c.voice_message_enabled ?? true,
+		requiresElevenLabs: true,
+	},
+];
+
+/**
+ * Configures various permissions for Tomori's behavior on the server using
+ * a checkbox modal. Checked items = enabled.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
  * @param locale - Locale of the interaction
  */
 export async function execute(
-  _client: Client,
-  interaction: ChatInputCommandInteraction,
-  userData: UserRow,
-  locale: string,
+	_client: Client,
+	interaction: ChatInputCommandInteraction,
+	userData: UserRow,
+	locale: string,
 ): Promise<void> {
-  // 1. Ensure command is run in a channel
-  if (!interaction.channel) {
-    await replyInfoEmbed(interaction, userData.language_pref, {
-      titleKey: "general.errors.channel_only_title",
-      descriptionKey: "general.errors.channel_only_description",
-      color: ColorCode.ERROR,
-    });
-    return;
-  }
+	// 0. Scope modal custom ID to this invocation — prevents stale awaitModalSubmit
+	//    listeners from a prior (un-submitted) run resolving on this submission.
+	const MODAL_CUSTOM_ID = `config_permissions_modal_${interaction.id}`;
 
-  // 1.5. Defer the interaction before async work to prevent timeout
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	// 1. Ensure command is run in a channel
+	if (!interaction.channel) {
+		await replyInfoEmbed(interaction, userData.language_pref, {
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
 
-  try {
-    // 2. Get command options
-    const permissionChoice = interaction.options.getString("permission", true);
-    const setAction = interaction.options.getString("set", true);
-    const isEnabled = setAction === "enable";
+	// NOTE: No deferReply here — promptWithRawModal must be the first
+	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
 
-    // 3. Load the Tomori state for this server - let helper functions manage interaction state
-    const tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
-    if (!tomoriState) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.tomori_not_setup_title",
-        descriptionKey: "general.errors.tomori_not_setup_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
+	try {
+		// 2. Load the Tomori state for this server
+		const guildKey = interaction.guild?.id ?? interaction.user.id;
+		const tomoriState = await getCachedTomoriState(guildKey);
+		if (!tomoriState) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
 
-    // 5. Determine the database column and localization key based on permission choice
-    let dbColumnName = "";
-    let permissionTypeKey = ""; // For user-facing permission name
-    let currentSetting: boolean | undefined;
+		// 3. Determine which permissions to show (voicemessage requires ElevenLabs key)
+		let activeDefinitions = PERMISSION_DEFINITIONS;
+		if (tomoriState.server_id) {
+			const hasElevenLabsKey = await hasOptApiKey(
+				tomoriState.server_id,
+				ELEVENLABS_SERVICE_NAME,
+			);
+			if (!hasElevenLabsKey) {
+				activeDefinitions = PERMISSION_DEFINITIONS.filter(
+					(def) => !def.requiresElevenLabs,
+				);
+			}
+		}
 
-    switch (permissionChoice) {
-      case "selfteaching":
-        dbColumnName = "self_teaching_enabled";
-        permissionTypeKey = "commands.config.permissions.selfteaching_option";
-        currentSetting = tomoriState.config.self_teaching_enabled;
-        break;
-      case "personalization":
-        dbColumnName = "personal_memories_enabled";
-        permissionTypeKey =
-          "commands.config.permissions.personalization_option";
-        currentSetting = tomoriState.config.personal_memories_enabled;
-        break;
-      case "emojiusage":
-        dbColumnName = "emoji_usage_enabled";
-        permissionTypeKey = "commands.config.permissions.emojiusage_option";
-        currentSetting = tomoriState.config.emoji_usage_enabled;
-        break;
-      case "stickerusage":
-        dbColumnName = "sticker_usage_enabled";
-        permissionTypeKey = "commands.config.permissions.stickerusage_option";
-        currentSetting = tomoriState.config.sticker_usage_enabled;
-        break;
-      // New: Handle Web Search permission (Brave Search)
-      case "websearch":
-        dbColumnName = "web_search_enabled";
-        permissionTypeKey = "commands.config.permissions.websearch_option";
-        currentSetting = tomoriState.config.web_search_enabled;
-        break;
-      // New: Handle Pin Message permission
-      case "pinmessage":
-        dbColumnName = "pin_message_enabled";
-        permissionTypeKey = "commands.config.permissions.pinmessage_option";
-        currentSetting = tomoriState.config.pin_message_enabled;
-        break;
-      case "imagegen":
-        dbColumnName = "imagegen_enabled";
-        permissionTypeKey = "commands.config.permissions.imagegen_option";
-        currentSetting = tomoriState.config.imagegen_enabled;
-        break;
-      case "hiderespondembed":
-        dbColumnName = "hide_respond_embed";
-        permissionTypeKey =
-          "commands.config.permissions.hiderespondembed_option";
-        currentSetting = tomoriState.config.hide_respond_embed;
-        break;
-      case "hideimpersonationembeds":
-        dbColumnName = "hide_impersonation_embeds";
-        permissionTypeKey =
-          "commands.config.permissions.hideimpersonationembeds_option";
-        currentSetting = tomoriState.config.hide_impersonation_embeds;
-        break;
-      default:
-        // This should not happen due to Discord's option validation
-        log.error(
-          `Invalid permissionChoice received in /config permissions: ${permissionChoice}`,
-        );
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-    }
+		// 4. Build checkbox options, pre-checking currently-enabled permissions
+		const checkboxOptions: CheckboxGroupOption[] = activeDefinitions.map((def) => ({
+			label: localizer(locale, def.labelKey),
+			value: def.value,
+			description: localizer(locale, def.descKey),
+			default: def.getState(tomoriState.config),
+		}));
 
-    // 6. Check if the setting is already the desired value
-    if (currentSetting === isEnabled) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.permissions.already_set_title",
-        descriptionKey: isEnabled
-          ? "commands.config.permissions.already_enabled_description"
-          : "commands.config.permissions.already_disabled_description",
-        descriptionVars: {
-          permission_type: localizer(locale, permissionTypeKey),
-        },
-        color: ColorCode.WARN,
-      });
-      return;
-    }
+		// 5. Show the checkbox modal — first interaction acknowledgment
+		const modalResult = await promptWithRawModal(
+			interaction,
+			locale,
+			{
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.config.permissions.select_embed_title",
+				components: [
+					{
+						kind: "checkboxGroup",
+						customId: PERMISSIONS_CHECKBOX_ID,
+						labelKey: "commands.config.permissions.select_placeholder",
+						descriptionKey:
+							"commands.config.permissions.select_embed_description",
+						minValues: 0,
+						required: false,
+						options: checkboxOptions,
+					},
+				],
+			},
+			MessageFlags.Ephemeral,
+		);
 
-    // 7. Update the config in the database using direct SQL (Rule #4, #15)
-    // sql.unsafe is used here because dbColumnName is dynamic.
-    // This is safe because dbColumnName is strictly controlled by the switch statement.
-    const [updatedRow] = await sql`
-            UPDATE tomori_configs
-            SET ${sql.unsafe(dbColumnName)} = ${isEnabled}
-            WHERE server_id = ${tomoriState.server_id}
-            RETURNING *
-        `;
+		if (modalResult.outcome !== "submit") return;
 
-    // 8. Validate the returned data (Rules #3, #5 - critical config change)
-    const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+		if (!modalResult.interaction) {
+			log.error("Permissions modal unexpectedly missing interaction");
+			return;
+		}
+		const modalInteraction = modalResult.interaction;
 
-    if (!validatedConfig.success || !updatedRow) {
-      const context: ErrorContext = {
-        tomoriId: tomoriState.tomori_id,
-        serverId: tomoriState.server_id,
-        userId: userData.user_id,
-        errorType: "DatabaseUpdateError",
-        metadata: {
-          command: "config permissions",
-          guildId: interaction.guild?.id ?? interaction.user.id,
-          permissionChoice,
-          dbColumnName,
-          isEnabled,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
-        },
-      };
-      await log.error(
-        "Failed to update or validate Tomori permissions config",
-        validatedConfig.success
-          ? new Error("Database update returned no rows or unexpected data")
-          : new Error("Updated config data failed validation"),
-        context,
-      );
+		// 6. Determine which permissions changed
+		const newlyEnabled = new Set(
+			modalResult.multiValues?.[PERMISSIONS_CHECKBOX_ID] ?? [],
+		);
+		const changes: Array<{ dbColumn: string; isEnabled: boolean; label: string }> =
+			[];
 
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.update_failed_title",
-        descriptionKey: "general.errors.update_failed_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
+		for (const def of activeDefinitions) {
+			const wasEnabled = def.getState(tomoriState.config);
+			const willBeEnabled = newlyEnabled.has(def.value);
+			if (wasEnabled !== willBeEnabled) {
+				changes.push({
+					dbColumn: def.dbColumn,
+					isEnabled: willBeEnabled,
+					label: localizer(locale, def.labelKey),
+				});
+			}
+		}
 
-    // 9. Invalidate cache so next message gets fresh config
-    invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+		// 7. If nothing changed, say so and exit
+		if (changes.length === 0) {
+			await replyInfoEmbed(modalInteraction, locale, {
+				titleKey: "commands.config.permissions.no_changes_title",
+				descriptionKey: "commands.config.permissions.no_changes_description",
+				color: ColorCode.WARN,
+			});
+			return;
+		}
 
-    // 10. Success! Show the permission change
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.permissions.success_title",
-      descriptionKey: isEnabled
-        ? "commands.config.permissions.enabled_success"
-        : "commands.config.permissions.disabled_success",
-      descriptionVars: {
-        permission_type: localizer(locale, permissionTypeKey),
-      },
-      color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN, // WARN for disable
-    });
-  } catch (error) {
-    // 10. Log error with context (Rule #22)
-    let serverIdForError: number | null = null;
-    let tomoriIdForError: number | null = null;
-    if (interaction.guild?.id) {
-      const state = await getCachedTomoriState(interaction.guild.id);
-      serverIdForError = state?.server_id ?? null;
-      tomoriIdForError = state?.tomori_id ?? null;
-    }
+		// 8. Apply each changed permission to the database.
+		//    sql.unsafe is safe here: dbColumn values are strictly controlled by PERMISSION_DEFINITIONS.
+		for (const change of changes) {
+			const [updatedRow] = await sql`
+				UPDATE tomori_configs
+				SET ${sql.unsafe(change.dbColumn)} = ${change.isEnabled}
+				WHERE server_id = ${tomoriState.server_id}
+				RETURNING *
+			`;
 
-    const context: ErrorContext = {
-      userId: userData.user_id,
-      serverId: serverIdForError,
-      tomoriId: tomoriIdForError,
-      errorType: "CommandExecutionError",
-      metadata: {
-        command: "config permissions",
-        guildId: interaction.guild?.id ?? interaction.user.id,
-        executorDiscordId: interaction.user.id,
-        permissionAttempted: interaction.options.getString("permission"),
-        actionAttempted: interaction.options.getString("set"),
-      },
-    };
-    await log.error(
-      `Error executing /config permissions for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+			const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+			if (!validatedConfig.success || !updatedRow) {
+				const context: ErrorContext = {
+					tomoriId: tomoriState.tomori_id,
+					serverId: tomoriState.server_id,
+					userId: userData.user_id,
+					errorType: "DatabaseUpdateError",
+					metadata: {
+						command: "config permissions",
+						guildId: interaction.guild?.id ?? interaction.user.id,
+						dbColumn: change.dbColumn,
+						isEnabled: change.isEnabled,
+						validationErrors: validatedConfig.success
+							? null
+							: validatedConfig.error.flatten(),
+					},
+				};
+				await log.error(
+					`Failed to update permission column: ${change.dbColumn}`,
+					validatedConfig.success
+						? new Error("Database update returned no rows")
+						: new Error("Updated config failed validation"),
+					context,
+				);
 
-    // 11. Inform user of unknown error
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: localizer(locale, "general.errors.unknown_error_description"),
-        flags: MessageFlags.Ephemeral,
-      });
-    } else {
-      await interaction.followUp({
-        content: localizer(locale, "general.errors.unknown_error_description"),
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-  }
+				await replyInfoEmbed(modalInteraction, locale, {
+					titleKey: "general.errors.update_failed_title",
+					descriptionKey: "general.errors.update_failed_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+		}
+
+		// 9. Invalidate cache so next message picks up the fresh config
+		invalidateTomoriStateCache(guildKey);
+
+		// 10. Build the success result embed listing what was enabled/disabled
+		const enabledLabels = changes
+			.filter((c) => c.isEnabled)
+			.map((c) => `\`${c.label}\``);
+		const disabledLabels = changes
+			.filter((c) => !c.isEnabled)
+			.map((c) => `\`${c.label}\``);
+
+		let resultDescription = localizer(
+			locale,
+			"commands.config.permissions.success_description",
+			{ count: changes.length },
+		);
+		if (enabledLabels.length > 0) {
+			resultDescription += `\n✅ **Enabled:** ${enabledLabels.join(", ")}`;
+		}
+		if (disabledLabels.length > 0) {
+			resultDescription += `\n🔴 **Disabled:** ${disabledLabels.join(", ")}`;
+		}
+
+		await modalInteraction.reply({
+			embeds: [
+				new EmbedBuilder()
+					.setTitle(
+						localizer(locale, "commands.config.permissions.success_title"),
+					)
+					.setDescription(resultDescription)
+					.setColor(ColorCode.SUCCESS),
+			],
+			flags: MessageFlags.Ephemeral,
+		});
+	} catch (error) {
+		// 11. Log the error with context
+		let serverIdForError: number | null = null;
+		let tomoriIdForError: number | null = null;
+		if (interaction.guild?.id) {
+			const state = await getCachedTomoriState(interaction.guild.id);
+			serverIdForError = state?.server_id ?? null;
+			tomoriIdForError = state?.tomori_id ?? null;
+		}
+
+		const context: ErrorContext = {
+			userId: userData.user_id,
+			serverId: serverIdForError,
+			tomoriId: tomoriIdForError,
+			errorType: "CommandExecutionError",
+			metadata: {
+				command: "config permissions",
+				guildId: interaction.guild?.id ?? interaction.user.id,
+				executorDiscordId: interaction.user.id,
+			},
+		};
+		await log.error(
+			`Error executing /config permissions for user ${userData.user_disc_id}`,
+			error as Error,
+			context,
+		);
+
+		// 12. Inform user of unknown error
+		if (!interaction.replied && !interaction.deferred) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+		} else {
+			await interaction.followUp({
+				content: localizer(locale, "general.errors.unknown_error_description"),
+				flags: MessageFlags.Ephemeral,
+			});
+		}
+	}
 }

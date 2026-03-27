@@ -348,6 +348,7 @@ function estimateToolSchemaTokens(): number {
         pin_message_enabled: true,
         imagegen_enabled: true,
         nai_exclusive_imggen: false,
+        voice_message_enabled: true,
       },
     };
 
@@ -970,7 +971,7 @@ async function buildRuntimeParityContext(
 
   if (
     provider === "openrouter" &&
-    tomoriState.llm.llm_codename !== "account-setting" &&
+    tomoriState.llm.llm_codename !== "other-model" &&
     isOpenRouterCapabilityCacheReady()
   ) {
     const tokenLimits = getOpenRouterTokenLimits(tomoriState.llm.llm_codename);
@@ -1153,7 +1154,7 @@ function buildOpenRouterProbeRequest(
   messages: Array<Record<string, unknown>>,
 ): Record<string, unknown> {
   const requestBody: Record<string, unknown> = {
-    ...(providerConfig.model !== "account-setting" && {
+    ...(providerConfig.model !== "other-model" && {
       model: providerConfig.model,
     }),
     messages,
@@ -1218,9 +1219,9 @@ async function measureOpenRouterInputTokens(
     throw new Error("OpenRouter probe response missing prompt token usage");
   }
 
-  if (providerConfig.model === "account-setting") {
+  if (providerConfig.model === "other-model") {
     throw new Error(
-      "OpenRouter model pricing unavailable for account-setting model",
+      "OpenRouter model pricing unavailable for other-model",
     );
   }
 

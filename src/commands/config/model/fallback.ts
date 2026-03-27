@@ -66,7 +66,7 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
 	const baseDescription =
 		description || model.llm_description || `${model.llm_provider} model`;
 
-	if (model.llm_codename === "account-setting") return baseDescription;
+	if (model.llm_codename === "other-model") return baseDescription;
 
 	const flags: string[] = [];
 	if (model.is_free) flags.push("FREE");

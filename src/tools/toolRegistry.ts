@@ -40,6 +40,7 @@ export interface ToolStateForContext {
     pin_message_enabled: boolean;
     imagegen_enabled: boolean;
     nai_exclusive_imggen: boolean;
+    voice_message_enabled: boolean;
   };
 }
 
@@ -474,7 +475,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
         if (
           !hasElevenLabsOptKey ||
-          !stateForContext.activePersonaHasElevenlabsVoice
+          !stateForContext.activePersonaHasElevenlabsVoice ||
+          !stateForContext.config.voice_message_enabled
         ) {
           const beforeCount = builtInTools.length;
           builtInTools = builtInTools.filter(
@@ -485,7 +487,9 @@ class ToolRegistryImpl implements ToolRegistryInterface {
               `Excluded generate_voice_message (${
                 !hasElevenLabsOptKey
                   ? "no ElevenLabs opt key"
-                  : "active persona has no ElevenLabs voice"
+                  : !stateForContext.activePersonaHasElevenlabsVoice
+                    ? "active persona has no ElevenLabs voice"
+                    : "voice_message_enabled is disabled"
               })`,
             );
           }

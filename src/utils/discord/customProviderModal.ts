@@ -513,9 +513,9 @@ export async function saveCustomEndpointConfig(
 }
 
 /**
- * Result of the account-setting model configuration
+ * Result of the other-model configuration
  */
-export interface AccountSettingModelResult {
+export interface OtherModelConfigResult {
   success: boolean;
   modelName?: string;
   error?: string;
@@ -532,25 +532,25 @@ export interface AccountSettingModelResult {
  *
  * @param interaction - Already-deferred interaction to edit
  * @param locale - User's locale for localized strings
- * @returns Promise<AccountSettingModelResult>
+ * @returns Promise<OtherModelConfigResult>
  */
-export async function promptAccountSettingModel(
+export async function promptOtherModelConfig(
   interaction: ModalSubmitInteraction | ButtonInteraction,
   locale: string,
-): Promise<AccountSettingModelResult> {
+): Promise<OtherModelConfigResult> {
   try {
     // 1. Build the "Enter Model" button and edit the deferred reply
     const enterModelButton = new ButtonBuilder()
       .setCustomId("enter_model_name")
       .setLabel(
-        localizer(locale, "commands.config.model.text.account_setting_model_label"),
+        localizer(locale, "commands.config.model.text.other_model_model_label"),
       )
       .setStyle(ButtonStyle.Primary);
 
     const message = await interaction.editReply({
       content: localizer(
         locale,
-        "commands.config.model.text.account_setting_prompt_description",
+        "commands.config.model.text.other_model_prompt_description",
       ),
       components: [
         new ActionRowBuilder<ButtonBuilder>().addComponents(enterModelButton),
@@ -577,18 +577,18 @@ export async function promptAccountSettingModel(
 
     // 3. Show modal from button click (button → modal is Discord-allowed)
     const modal = new ModalBuilder()
-      .setCustomId("account_setting_model_modal")
+      .setCustomId("other_model_modal")
       .setTitle(
-        localizer(locale, "commands.config.model.text.account_setting_modal_title"),
+        localizer(locale, "commands.config.model.text.other_model_modal_title"),
       );
 
     const modelInput = new TextInputBuilder()
       .setCustomId("model_name_input")
       .setLabel(
-        localizer(locale, "commands.config.model.text.account_setting_model_label"),
+        localizer(locale, "commands.config.model.text.other_model_model_label"),
       )
       .setPlaceholder(
-        localizer(locale, "commands.config.model.text.account_setting_model_placeholder"),
+        localizer(locale, "commands.config.model.text.other_model_model_placeholder"),
       )
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
@@ -606,7 +606,7 @@ export async function promptAccountSettingModel(
     try {
       modalSubmit = await buttonInteraction.awaitModalSubmit({
         filter: (m) =>
-          m.customId === "account_setting_model_modal" &&
+          m.customId === "other_model_modal" &&
           m.user.id === buttonInteraction.user.id,
         time: 300000,
       });
@@ -627,7 +627,7 @@ export async function promptAccountSettingModel(
 
     return { success: true, modelName: enteredModel };
   } catch (error) {
-    log.error("Error in promptAccountSettingModel:", error);
+    log.error("Error in promptOtherModelConfig:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

@@ -250,6 +250,7 @@ export const tomoriConfigSchema = z.object({
   imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
   hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
   hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds
+  voice_message_enabled: z.boolean().default(true), // Added March 2026 - Allow Tomori to send ElevenLabs TTS voice messages
   self_debug_enabled: z.boolean().default(false), // Added March 2026 - Include Tomori error embeds in context as [System: ...]
   uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
   uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle
@@ -267,8 +268,8 @@ export const tomoriConfigSchema = z.object({
     z.array(z.number().int()).default([]),
   ), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
   nai_exclusive_imggen: z.boolean().default(false), // Added March 2026 - Hides standard generate_image when NovelAI opt key is present
-  account_setting_actual_model: z.string().nullable().optional(), // Added March 2026 - Real OpenRouter model detected for account-setting
-  account_setting_capabilities: z.preprocess(
+  other_model_codename: z.string().nullable().optional(), // Added March 2026 - Real OpenRouter model codename for other-model (e.g. "xai/grok-2")
+  other_model_capabilities: z.preprocess(
     (value) => (typeof value === "string" ? JSON.parse(value) : value),
     z
       .object({
@@ -279,11 +280,11 @@ export const tomoriConfigSchema = z.object({
       })
       .nullable()
       .optional(),
-  ), // Added March 2026 - Cached capabilities for account-setting model (stored as JSONB)
-  account_setting_capabilities_fetched_at: z.preprocess(
+  ), // Added March 2026 - Cached capabilities for other-model (stored as JSONB)
+  other_model_capabilities_fetched_at: z.preprocess(
     (value) => (typeof value === "string" ? new Date(value) : value),
     z.date().nullable().optional(),
-  ), // Added March 2026 - Timestamp of last capability fetch for account-setting
+  ), // Added March 2026 - Timestamp of last capability fetch for other-model
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

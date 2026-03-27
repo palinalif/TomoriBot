@@ -215,7 +215,7 @@ export async function generatePresetFromPromptCustom(
 
 	while (true) {
 		const body: Record<string, unknown> = {
-			...(options.model !== "account-setting" ? { model: options.model } : {}),
+			...(options.model !== "other-model" ? { model: options.model } : {}),
 			messages,
 			temperature: options.temperature ?? 1.0,
 			max_tokens: 8192,

@@ -249,14 +249,6 @@ export default {
         "画像の数によって少し時間がかかる場合があります",
     },
 
-    avatar: {
-      inspecting_title: "👤 プロフィール画像を確認中...",
-      inspecting_description:
-        "指定されたプロフィール画像を読み込み、解析しています",
-      inspecting_footer:
-        "画像サイズによって少し時間がかかる場合があります",
-    },
-
     gif: {
       processing_title: "🎞️ GIFを処理中...",
       processing_description:
@@ -832,6 +824,8 @@ export default {
         field_autoch_channels: `自動チャットチャンネル`,
         field_rp_channels: `RPチャンネル`,
         field_thought_logs_channel: `思考ログチャンネル`,
+        field_welcome_channel: `ウェルカムチャンネル`,
+        field_welcome_persona: `ウェルカムペルソナ`,
         field_trigger_words: `トリガーワード`,
         field_whitelist_channels: `チャネルホワイトリスト`,
         field_whitelist_roles: `ロールホワイトリスト`,
@@ -1712,11 +1706,21 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
         zai_title: `Z.ai APIキーの設定`,
-        zai_description: `Z.aiはGLMモデルファミリーへのアクセスを提供し、チャット、推論、画像生成機能を備えています。
-- ビジョンや推論バリアントを含む4つのチャットモデルをサポート
+        zai_description: `Z.aiはGLMモデルファミリーへのアクセスを提供し、汎用APIと専用Codingエンドポイントの両方に対応しています。
+- チャット、推論、画像生成、コーディングワークフローをサポート
+- ビジョンや推論バリアントを含むGLMモデルを使用
 - \`glm-image\`によるネイティブ画像生成
 - すべてのチャットモデルでツール呼び出しと構造化出力に対応
 - 追加の画像/動画ワークフロー向けに\`/config mcp add\`で任意のMCPアドオンを利用可能`,
+        zai_general_endpoint_title: `汎用APIエンドポイント：`,
+        zai_general_endpoint_description: `汎用Z.aiエンドポイントはチャット、推論、画像生成へのアクセスを提供します。
+- 一般的なAI利用と幅広い互換性に最適
+- ビジョンや推論機能を持つすべてのGLMチャットモデルに対応`,
+        zai_coding_endpoint_title: `Codingエンドポイント：`,
+        zai_coding_endpoint_description: `専用のCodingエンドポイントはGLM Coding PlanとコーディングツールワークフローにGLM向けに最適化されています。
+- 一般的なAPI利用ではなくコーディング用途を想定
+- 異なる課金体系とアクセスパターンを持つ専用エンドポイントを使用
+- 標準課金の通常APIや幅広い一般用途が必要な場合は汎用エンドポイントをご利用ください`,
         zai_getting_key_title: `APIキーの取得：`,
         zai_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
 2. ログインまたはアカウントを作成
@@ -1730,24 +1734,6 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`glm-4.6v\` は画像を見ることができるビジョン対応モデルです
 - \`glm-image\` はテキストプロンプトから画像を生成します`,
         zai_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
-        zaicoding_title: `Z.ai (Coding) APIキーの設定`,
-        zaicoding_description: `Z.ai (Coding)はGLM Coding Planやコーディング系ワークフロー向けの専用Codingエンドポイントを使用します。
-- 通常のAPIエンドポイントではなく専用のCodingエンドポイントを使用します
-- 一般的なAPI利用ではなく、対応するコーディング用途向けです
-- TomoriBotではこのエンドポイント上でチャット、推論、ツール利用、画像生成を扱います
-- 通常のZ.ai APIを使いたい場合は\`Z.ai\`を選んでください`,
-        zaicoding_getting_key_title: `APIキーの取得：`,
-        zaicoding_getting_key_description: `1. [Z.aiプラットフォーム](https://z.ai)にアクセス
-2. ログインまたはアカウントを作成
-3. ダッシュボードでAPIキーに移動
-4. 新しいAPIキーを作成
-5. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
-        zaicoding_model_notes_title: `モデルに関するメモ：`,
-        zaicoding_model_notes_description: `- デフォルトエンドポイント: \`https://api.z.ai/api/coding/paas/v4\`
-- \`glm-4.7\` はCodingエンドポイントで最も安全なデフォルトです
-- \`glm-5\` と \`glm-4.7-flash\` の利用可否はZ.ai側のCodingアクセスに依存します
-- 標準課金の通常APIや幅広い一般用途が必要な場合は\`Z.ai\`に切り替えてください`,
-        zaicoding_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
         // NovelAI
         novelai_title: `NovelAI APIキーの設定`,
         novelai_description: `NovelAIはクリエイティブなストーリーテリングとロールプレイに焦点を当てたサブスクリプションベースのサービスです。
@@ -1780,7 +1766,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 	  - (STRUCT) = 構造化出力をサポート（ペルソナ生成や表情の初期化に必要）
 	  - (REASON) = 推論／シンキング特化モデル
 	  - (FREE) = 無料ですが、レート制限がある場合があります
-	- 希望のモデルが見つからない場合は、\`account-setting\`プロバイダーオプションを試してみてください
+	- 希望のモデルが見つからない場合は、\`other-model\`プロバイダーオプションを試してみてください
 	- {supportServer}で追加のモデルを提案してください`,
         openrouter_pricing_title: `重要な価格に関する注意事項：`,
         openrouter_pricing_description: `- **無料モデルは厳格なレート制限があります** - より信頼性の高い有料モデルをお勧めします
@@ -1789,6 +1775,34 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         openrouter_settings_title: `OpenRouterアカウント設定：`,
         openrouter_settings_description: `OpenRouterアカウントで設定された設定（モデルの優先順位、レート制限など）は、TomoriBotを使用する際にも適用されます`,
         openrouter_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+      },
+
+      // /help elevenlabs
+      elevenlabs: {
+        description: `ElevenLabs音声合成の設定方法を学ぶ`,
+        title: `ElevenLabs TTSの設定`,
+        what_is_title: `ElevenLabsとは？`,
+        what_is_description: `ElevenLabsはリアルなAI音声で話しかけるオプションの音声合成（TTS）プロバイダーです。
+- 多くのボイスオプションを持つ高品質な音声合成
+- メインAIプロバイダーと並行して動作
+- 月間文字数制限のある無料ティア利用可能
+- [ElevenLabs価格](https://elevenlabs.io/pricing)`,
+        getting_key_title: `APIキーの取得：`,
+        getting_key_description: `1. [ElevenLabs](https://elevenlabs.io/app/settings/api-keys)にアクセス
+2. アカウントにサインインまたは新規登録
+3. 新しいAPIキーを作成
+4. {optionalkeyElevenlabsSet}を使用してAPIキーを入力`,
+        choosing_voice_title: `ボイスの選択：`,
+        choosing_voice_description: `APIキーを設定したら、使用するボイスを選択できます。
+- {configVoiceElevenlabs}を使用して利用可能なボイスを参照・選択
+- ボイスには異なる性別、年齢、アクセントが含まれます
+- ボイス選択はいつでも変更・削除可能`,
+        important_notes_title: `重要な注意点：`,
+        important_notes_description: `- ElevenLabsはオプションです - 音声なしでもテキストで返信できます
+- 音声メッセージを生成する際に文字数がカウントされます
+- 無料ティアには月間制限があります - ElevenLabsダッシュボードで使用量を確認してください
+- APIキーは{optionalkeyElevenlabsRemove}でいつでも削除できます`,
+        footer: `APIキーは{optionalkeyElevenlabsRemove}でいつでも削除できます`,
       },
 
       // /help memory
@@ -2824,18 +2838,18 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           scope_persona: `ペルソナ（特定のペルソナのみ）`,
           scope_set_channel_success: `{channel} のモデルを **{model}** に設定しました`,
           scope_set_persona_success: `**{persona}** のモデルを **{model}** に設定しました`,
-          // Account-setting configuration
-          account_setting_prompt_title: `アカウント設定モデルの設定`,
-          account_setting_prompt_description: `**account-setting** を選択しました。\n\n下のボタンをクリックして、OpenRouter モデルのコードネームを入力してください（例：\`xai/grok-2\`、\`openrouter/free\`、\`nvidia/nemotron-4-340b-instruct\`）。`,
-          account_setting_modal_title: `OpenRouter モデルを入力`,
-          account_setting_model_label: `OpenRouter モデルコードネーム`,
-          account_setting_model_placeholder: `xai/grok-2`,
-          account_setting_validating_title: `モデルを検証中`,
-          account_setting_validating_description: `OpenRouter で \`{model_name}\` の機能を取得しています...`,
-          account_setting_validation_failed_title: `モデルが見つかりません`,
-          account_setting_validation_failed_description: `OpenRouter で \`{model_name}\` が見つかりませんでした。モデルIDが正しいか確認して再試行してください。`,
-          account_setting_configured_title: `アカウント設定が完了`,
-          account_setting_configured_description: `アカウント設定モデルが \`{model_name}\` に設定されました。\n\n**検出された機能:** {capabilities}`,
+          // Other-model configuration
+          other_model_prompt_title: `カスタム OpenRouter モデルの設定`,
+          other_model_prompt_description: `**other-model** を選択しました。\n\n下のボタンをクリックして、OpenRouter モデルのコードネームを入力してください（例：\`xai/grok-2\`、\`openrouter/free\`、\`nvidia/nemotron-4-340b-instruct\`）。`,
+          other_model_modal_title: `OpenRouter モデルを入力`,
+          other_model_model_label: `OpenRouter モデルコードネーム`,
+          other_model_model_placeholder: `xai/grok-2`,
+          other_model_validating_title: `モデルを検証中`,
+          other_model_validating_description: `OpenRouter で \`{model_name}\` の機能を取得しています...`,
+          other_model_validation_failed_title: `モデルが見つかりません`,
+          other_model_validation_failed_description: `OpenRouter で \`{model_name}\` が見つかりませんでした。モデルIDが正しいか確認して再試行してください。`,
+          other_model_configured_title: `カスタムモデルの設定が完了`,
+          other_model_configured_description: `カスタム OpenRouter モデルが \`{model_name}\` に設定されました。\n\n**検出された機能:** {capabilities}`,
         },
         embedding: {
           description: `文書検索に使用する埋め込みモデルを変更します。`,
@@ -3150,6 +3164,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         imagegen_option: "画像生成",
         hiderespondembed_option: "応答埋め込みを非表示",
         hideimpersonationembeds_option: "なりすまし埋め込みを非表示",
+        voicemessage_option: "ボイスメッセージ（ElevenLabs）",
         permission_choice_selfteaching: `自己学習`,
         permission_choice_personalization: `パーソナライズ (記憶/ニックネーム)`,
         permission_choice_emojiusage: `絵文字の使用`,
@@ -3158,11 +3173,31 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         permission_choice_pinmessage: "メッセージのピン留め",
         permission_choice_imagegen: "画像生成",
         permission_choice_hiderespondembed: "応答埋め込みを非表示",
+        // セレクトメニューに表示する短い説明文
+        selfteaching_desc: "サーバーの会話から学習する",
+        personalization_desc: "個人記憶とニックネーム",
+        emojiusage_desc: "返答に絵文字を使用する",
+        stickerusage_desc: "スタンプを送信する",
+        websearch_desc: "ウェブで情報を検索する",
+        pinmessage_desc: "重要なメッセージをピン留め",
+        imagegen_desc: "リクエストに応じて画像生成",
+        hiderespondembed_desc: "/bot respond の成功埋め込みを非表示",
+        hideimpersonationembeds_desc: "なりすまし通知を非表示",
+        voicemessage_desc: "ElevenLabs TTSボイスメッセージを送信",
+        // チェックボックスセレクトメニューの文字列
+        select_placeholder: "有効にする権限を選択...",
+        select_embed_title: "権限の設定",
+        select_embed_description: "**有効にする**権限を選択してください。チェックあり = 有効、チェックなし = 無効。",
+        no_changes_title: "変更なし",
+        no_changes_description: "すべての権限はすでに選択した値に設定されています。",
+        timed_out_title: "タイムアウト",
+        timed_out_description: "権限メニューがタイムアウトしました。変更は適用されませんでした。",
         set_description: `私のためにこの権限を有効または無効にします。`,
         already_set_title: `権限は既に設定済みです`,
         already_enabled_description: `権限 \`{permission_type}\` は既に**有効**です。`,
         already_disabled_description: `権限 \`{permission_type}\` は既に**無効**です。`,
         success_title: `権限が更新されました`,
+        success_description: `**{count}** 件の権限を更新しました。`,
         enabled_success: `\`{permission_type}\` の権限が**有効**になりました。`,
         disabled_success: `\`{permission_type}\` の権限が**無効**になりました。`,
       },
@@ -3799,8 +3834,21 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         permission_choice_servermemories: `サーバーの記憶`,
         permission_choice_attributelist: `属性リスト`,
         permission_choice_sampledialogues: `サンプル対話`,
+        // セレクトメニューに表示する短い説明文
+        servermemories_desc: "サーバー記憶の追加・削除",
+        attributelist_desc: "性格属性の追加・削除",
+        sampledialogues_desc: "サンプル対話の追加・削除",
+        // チェックボックスセレクトメニューの文字列
+        select_placeholder: "メンバーに許可することを選択...",
+        select_embed_title: "メンバー教育権限",
+        select_embed_description: "管理者以外のメンバーが**教えられる**ことを選択してください。チェックあり = 許可。",
+        no_changes_title: "変更なし",
+        no_changes_description: "すべての権限はすでに選択した値に設定されています。",
+        timed_out_title: "タイムアウト",
+        timed_out_description: "権限メニューがタイムアウトしました。変更は適用されませんでした。",
         set_description: `メンバーに対してこの権限を有効または無効にします。`,
         success_title: `メンバー権限が更新されました`,
+        success_description: `**{count}** 件の権限を更新しました。`,
         enabled_success: `メンバーは \`{permission_type}\` を教えることができます。`,
         disabled_success: `メンバーはもう \`{permission_type}\` を教えることはできません。`,
         already_set_title: `権限は既に設定済みです`,

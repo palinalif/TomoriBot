@@ -33,6 +33,7 @@ import type {
   RoleWhitelistRow,
   RandomTriggerRow,
   LlmRow,
+  TomoriConfigRow,
 } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
 import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/schema";
@@ -430,6 +431,47 @@ function formatPersonaLlmOverrides(
 }
 
 /**
+ * Formats welcome channel configuration as a single-line string.
+ * Shows channel mention with associated persona if configured.
+ * When no welcome channel is set, shows a localized "None" message.
+ * @param client - Discord client for channel mentions
+ * @param config - TomoriState config containing welcome_channel_disc_id and welcome_persona_id
+ * @param personaNameMap - Map of persona IDs to nicknames
+ * @param locale - User locale
+ * @returns Formatted welcome channel string
+ */
+async function formatWelcomeChannel(
+  client: Client,
+  config: TomoriConfigRow,
+  personaNameMap: Map<number, string>,
+  locale: string,
+): Promise<string> {
+  const welcomeChannelId = config.welcome_channel_disc_id;
+
+  if (!welcomeChannelId) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  // 1. Resolve channel mention
+  const channelMention = await resolveChannelMention(
+    client,
+    welcomeChannelId,
+    locale,
+  );
+
+  // 2. Resolve persona name (null welcome_persona_id = random persona selection)
+  const personaName = config.welcome_persona_id != null
+    ? (personaNameMap.get(config.welcome_persona_id) ?? `ID:${config.welcome_persona_id}`)
+    : localizer(
+        locale,
+        "commands.tool.status.random_trigger_persona_random",
+      );
+
+  // 3. Format: "#channel · Persona"
+  return `${channelMention} · ${personaName}`;
+}
+
+/**
  * Configures the 'status' subcommand with scope options.
  */
 export const configureSubcommand = (
@@ -674,10 +716,11 @@ export async function execute(
                   { current: blacklistedCount },
                 );
 
-        // 7. Format channel lists (auto-chat, RP, whitelist, random triggers, channel model overrides)
+        // 7. Format channel lists (auto-chat, RP, welcome, whitelist, random triggers, channel model overrides)
         const [
           autoChannelsValue,
           rpChannelsValue,
+          welcomeChannelValue,
           thoughtLogChannelValue,
           whitelistValue,
           whitelistRolesValue,
@@ -686,6 +729,7 @@ export async function execute(
         ] = await Promise.all([
           formatChannelList(client, config.autoch_disc_ids, locale),
           formatChannelList(client, config.rp_channel_ids, locale),
+          formatWelcomeChannel(client, config, personaNameMap, locale),
           formatChannelList(
             client,
             config.thought_log_channel_disc_id
@@ -834,6 +878,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_rp_channels",
               value: rpChannelsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_welcome_channel",
+              value: welcomeChannelValue,
               inline: false,
             },
             {

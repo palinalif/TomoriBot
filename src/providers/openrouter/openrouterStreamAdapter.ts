@@ -428,7 +428,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
     return {
       error: new Error(
-        `${statusLabel}: ${errorMessage}${shouldAppendRawBody ? ` | raw_response: ${rawErrorBodySnippet}` : ""} | model: ${model ?? "account-setting"} | request_params: ${requestParamKeys} | request_attempt: ${attemptLabel}`,
+        `${statusLabel}: ${errorMessage}${shouldAppendRawBody ? ` | raw_response: ${rawErrorBodySnippet}` : ""} | model: ${model ?? "other-model"} | request_params: ${requestParamKeys} | request_attempt: ${attemptLabel}`,
       ),
       errorMessage,
       statusCode: responseStatus,

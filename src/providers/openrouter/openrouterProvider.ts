@@ -401,6 +401,7 @@ export class OpenrouterProvider
         pin_message_enabled: false,
         imagegen_enabled: false,
         nai_exclusive_imggen: false,
+        voice_message_enabled: false,
       },
     };
 
@@ -487,6 +488,7 @@ export class OpenrouterProvider
           pin_message_enabled: tomoriState.config.pin_message_enabled,
           imagegen_enabled: tomoriState.config.imagegen_enabled,
           nai_exclusive_imggen: tomoriState.config.nai_exclusive_imggen,
+          voice_message_enabled: tomoriState.config.voice_message_enabled,
         },
       };
 
@@ -579,14 +581,14 @@ export class OpenrouterProvider
     let effectiveSeesImages = tomoriState.llm.sees_images;
     let effectiveSeesVideos = tomoriState.llm.sees_videos;
 
-    // Special case: account-setting models need to detect the actual OpenRouter default
-    // and use its real capabilities. We store the detected model + capabilities in the DB.
-    if (tomoriState.llm.llm_codename === "account-setting") {
+    // Special case: other-model uses a user-configured OpenRouter model codename
+    // stored in other_model_codename, with real capabilities in other_model_capabilities.
+    if (tomoriState.llm.llm_codename === "other-model") {
       // 1. Check if we have cached capabilities that are fresh (within 7 days)
       const storedCapabilities = tomoriState.config
-        .account_setting_capabilities;
+        .other_model_capabilities;
       const fetchedAt = tomoriState.config
-        .account_setting_capabilities_fetched_at;
+        .other_model_capabilities_fetched_at;
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
       const isCacheFresh =
         fetchedAt &&
@@ -595,19 +597,19 @@ export class OpenrouterProvider
 
       if (isCacheFresh && storedCapabilities) {
         log.info(
-          `[ACCOUNT-SETTING] Using cached capabilities for ${tomoriState.config.account_setting_actual_model} (${Math.round((Date.now() - (fetchedAt?.getTime() ?? 0)) / (24 * 60 * 60 * 1000))} days old)`,
+          `[OTHER-MODEL] Using cached capabilities for ${tomoriState.config.other_model_codename} (${Math.round((Date.now() - (fetchedAt?.getTime() ?? 0)) / (24 * 60 * 60 * 1000))} days old)`,
         );
         effectiveHasTools = storedCapabilities.hasTools;
         effectiveSeesImages = storedCapabilities.seesImages;
         effectiveSeesVideos = storedCapabilities.seesVideos;
       } else {
         // 2. Cache is missing or stale — re-fetch using stored model name
-        const storedModel = tomoriState.config.account_setting_actual_model;
+        const otherModelCodename = tomoriState.config.other_model_codename;
 
-        if (!storedModel) {
+        if (!otherModelCodename) {
           // Not yet configured — user needs to run /config model text
           log.warn(
-            "[ACCOUNT-SETTING] No model configured — use /config model text to set your OpenRouter model. Using conservative defaults.",
+            "[OTHER-MODEL] No model configured — use /config model text to set your OpenRouter model. Using conservative defaults.",
           );
           effectiveHasTools = false;
           effectiveSeesImages = false;
@@ -616,11 +618,11 @@ export class OpenrouterProvider
           try {
             // Re-fetch capabilities for the stored model (handles stale cache + 502 refresh)
             const capabilities =
-              await getOrFetchOpenRouterCapabilities(storedModel);
+              await getOrFetchOpenRouterCapabilities(otherModelCodename);
 
             if (capabilities) {
               log.info(
-                `[ACCOUNT-SETTING] Refreshed capabilities for ${storedModel}: ` +
+                `[OTHER-MODEL] Refreshed capabilities for ${otherModelCodename}: ` +
                   `tools=${capabilities.hasTools}, images=${capabilities.seesImages}, videos=${capabilities.seesVideos}`,
               );
 
@@ -628,8 +630,8 @@ export class OpenrouterProvider
               const now = new Date();
               await sql`
                 UPDATE tomori_configs
-                SET account_setting_capabilities = ${JSON.stringify(capabilities)}::jsonb,
-                    account_setting_capabilities_fetched_at = ${now}
+                SET other_model_capabilities = ${JSON.stringify(capabilities)}::jsonb,
+                    other_model_capabilities_fetched_at = ${now}
                 WHERE server_id = ${tomoriState.server_id}
               `;
 
@@ -638,7 +640,7 @@ export class OpenrouterProvider
               effectiveSeesVideos = capabilities.seesVideos;
             } else {
               log.warn(
-                `[ACCOUNT-SETTING] Could not fetch capabilities for ${storedModel} — using conservative defaults`,
+                `[OTHER-MODEL] Could not fetch capabilities for ${otherModelCodename} — using conservative defaults`,
               );
               effectiveHasTools = false;
               effectiveSeesImages = false;
@@ -646,7 +648,7 @@ export class OpenrouterProvider
             }
           } catch (error) {
             log.warn(
-              `[ACCOUNT-SETTING] Error refreshing capabilities: ${error instanceof Error ? error.message : String(error)} — using conservative defaults`,
+              `[OTHER-MODEL] Error refreshing capabilities: ${error instanceof Error ? error.message : String(error)} — using conservative defaults`,
             );
             effectiveHasTools = false;
             effectiveSeesImages = false;
@@ -706,7 +708,7 @@ export class OpenrouterProvider
     // If the model reports a max_completion_tokens value, use it — but cap it
     // at OPENROUTER_MAX_OUTPUT_TOKENS (default: 8192) to avoid 402 errors on
     // accounts with low daily credit limits.
-    // If unknown (cache miss or account-setting), leave it undefined so the
+    // If unknown (cache miss or other-model), leave it undefined so the
     // stream adapter omits max_tokens entirely and lets the model decide.
     const maxOutputTokensCap = Number.parseInt(
       process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
@@ -714,7 +716,7 @@ export class OpenrouterProvider
     );
     let resolvedMaxOutputTokens: number | undefined;
     if (
-      tomoriState.llm.llm_codename !== "account-setting" &&
+      tomoriState.llm.llm_codename !== "other-model" &&
       isOpenRouterCapabilityCacheReady()
     ) {
       const tokenLimits = getOpenRouterTokenLimits(
@@ -732,12 +734,12 @@ export class OpenrouterProvider
     );
 
     const config: OpenrouterProviderConfig = {
-      // For account-setting, use the user-configured actual model (e.g., "openrouter/free")
-      // rather than the placeholder codename "account-setting" which OpenRouter rejects
+      // For other-model, use the user-configured model codename (e.g., "openrouter/free")
+      // rather than the placeholder codename "other-model" which OpenRouter rejects
       model:
-        tomoriState.llm.llm_codename === "account-setting" &&
-        tomoriState.config.account_setting_actual_model
-          ? tomoriState.config.account_setting_actual_model
+        tomoriState.llm.llm_codename === "other-model" &&
+        tomoriState.config.other_model_codename
+          ? tomoriState.config.other_model_codename
           : tomoriState.llm.llm_codename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,

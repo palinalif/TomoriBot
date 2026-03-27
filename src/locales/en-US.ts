@@ -246,13 +246,6 @@ export default {
       analyzing_footer: "This may take a moment depending on image count",
     },
 
-    avatar: {
-      inspecting_title: "👤  Checking Profile Picture...",
-      inspecting_description:
-        "Loading and analyzing the requested profile picture",
-      inspecting_footer: "This may take a moment depending on image size",
-    },
-
     gif: {
       processing_title: "🎞️  Processing GIF...",
       processing_description:
@@ -827,6 +820,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_autoch_channels: `Auto-Chat Channels`,
         field_rp_channels: `RP Channels`,
         field_thought_logs_channel: `Thought Logs Channel`,
+        field_welcome_channel: `Welcome Channel`,
+        field_welcome_persona: `Welcome Persona`,
         field_trigger_words: `Trigger Words`,
         field_whitelist_channels: `Channel Whitelist`,
         field_whitelist_roles: `Role Whitelist`,
@@ -1641,6 +1636,8 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
+        provider_choice_zai: `Z.ai`,
+        provider_choice_zaicoding: `Z.ai (Coding)`,
         // Brave Search
         brave_title: `Setting Up Brave Search API Key`,
         brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
@@ -1705,14 +1702,22 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`stabilityai/stable-diffusion-3-medium\` is the default NVIDIA image model`,
         nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
         // Z.ai
-        provider_choice_zai: `Z.ai`,
-        provider_choice_zaicoding: `Z.ai (Coding)`,
         zai_title: `Setting Up Z.ai API Key`,
-        zai_description: `Z.ai provides access to the GLM model family with chat, reasoning, and image generation capabilities.
-- Supports 4 chat models including vision and reasoning variants
+        zai_description: `Z.ai provides access to the GLM model family with both general API and a dedicated coding endpoint.
+- Supports chat, reasoning, image generation, and coding workflows
+- GLM models include vision and reasoning variants
 - Native image generation via \`glm-image\`
 - Tool calling and structured output on all chat models
 - Optional MCP add-ons available via \`/config mcp add\` for extra image/video workflows`,
+        zai_general_endpoint_title: `General API Endpoint:`,
+        zai_general_endpoint_description: `The general Z.ai endpoint provides access to chat, reasoning, and image generation.
+- Best for general AI usage and broad compatibility
+- Supports all GLM chat models with vision and reasoning capabilities`,
+        zai_coding_endpoint_title: `Coding Endpoint:`,
+        zai_coding_endpoint_description: `The dedicated Coding endpoint is optimized for GLM Coding Plan and coding-tool workflows.
+- Intended for coding scenarios rather than general API usage
+- Uses a separate endpoint with potentially different billing and access patterns
+- If you need standard API billing and broader general usage, use the general endpoint`,
         zai_getting_key_title: `Getting Your API Key:`,
         zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
 2. Sign in or create an account
@@ -1726,24 +1731,6 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`glm-4.6v\` is the vision-capable model that can see images
 - \`glm-image\` generates images from text prompts`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        zaicoding_title: `Setting Up Z.ai (Coding) API Key`,
-        zaicoding_description: `Z.ai (Coding) uses Z.ai's dedicated Coding endpoint for GLM Coding Plan and coding-tool workflows.
-- Uses the dedicated coding endpoint instead of the general API endpoint
-- Intended for supported coding scenarios rather than general API usage
-- TomoriBot keeps chat, reasoning, tool calling, and image generation on this endpoint
-- If you want the normal Z.ai API, choose \`Z.ai\` instead`,
-        zaicoding_getting_key_title: `Getting Your API Key:`,
-        zaicoding_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
-2. Sign in or create an account
-3. Navigate to API Keys in your dashboard
-4. Create a new API key
-5. Copy this API key into {configSetup} or {configApikeySet}`,
-        zaicoding_model_notes_title: `Model Notes:`,
-        zaicoding_model_notes_description: `- Default endpoint: \`https://api.z.ai/api/coding/paas/v4\`
-- \`glm-4.7\` is the safest default for coding-endpoint access
-- Availability of \`glm-5\` and \`glm-4.7-flash\` depends on your Z.ai coding access
-- If you need standard API billing and broader general usage, switch to \`Z.ai\``,
-        zaicoding_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // NovelAI
         novelai_title: `Setting Up NovelAI API Key`,
         novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
@@ -1776,7 +1763,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
   - (STRUCT) = Supports structured output (needed for persona generation and expression initialization)
   - (REASON) = Reasoning / thinking-focused model
   - (FREE) = No cost, but may have rate limits
-- If you can't find what you want, try using the \`account-setting\` provider option
+- If you can't find what you want, try using the \`other-model\` provider option
 - Suggest additional models in {supportServer}`,
         openrouter_pricing_title: `Important Pricing Notes:`,
         openrouter_pricing_description: `- **Free models have strict rate limits** - paid models are recommended for better reliability
@@ -1785,6 +1772,34 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         openrouter_settings_title: `OpenRouter Account Settings:`,
         openrouter_settings_description: `Settings configured in your OpenRouter account (such as model preferences, rate limits, etc.) will also apply when using TomoriBot`,
         openrouter_footer: `After setting up this provider, you may change its default model with {configModel}`,
+      },
+
+      // /help elevenlabs
+      elevenlabs: {
+        description: `Learn how to set up ElevenLabs text-to-speech`,
+        title: `Setting Up ElevenLabs TTS`,
+        what_is_title: `What is ElevenLabs?`,
+        what_is_description: `ElevenLabs is an optional text-to-speech (TTS) provider that lets me speak to you using realistic AI-generated voices.
+- High-quality voice synthesis with many voice options
+- Works alongside any main AI provider
+- Free tier available with monthly character limits
+- [ElevenLabs Pricing](https://elevenlabs.io/pricing)`,
+        getting_key_title: `Getting Your API Key:`,
+        getting_key_description: `1. Visit [ElevenLabs](https://elevenlabs.io/app/settings/api-keys)
+2. Sign up or sign in to your account
+3. Create a new API key
+4. Copy this API key using {optionalkeyElevenlabsSet}`,
+        choosing_voice_title: `Choosing a Voice:`,
+        choosing_voice_description: `After setting up your API key, you can select which voice I use.
+- Use {configVoiceElevenlabs} to browse and select from available voices
+- Voices include different genders, ages, and accents
+- You can always change or remove the voice selection`,
+        important_notes_title: `Important Notes:`,
+        important_notes_description: `- ElevenLabs is optional - I can still respond via text
+- Characters are counted when I generate voice messages
+- Free tier has monthly limits - check your usage on ElevenLabs dashboard
+- Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
+        footer: `Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
       },
 
       // /help memory
@@ -2814,18 +2829,18 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           scope_persona: `Persona (specific persona only)`,
           scope_set_channel_success: `Model for {channel} set to **{model}**`,
           scope_set_persona_success: `Model for **{persona}** set to **{model}**`,
-          // Account-setting configuration
-          account_setting_prompt_title: `Configure Account-Setting Model`,
-          account_setting_prompt_description: `You've selected **account-setting**.\n\nClick the button below and enter your OpenRouter model codename (e.g., \`xai/grok-2\`, \`openrouter/free\`, \`nvidia/nemotron-4-340b-instruct\`).`,
-          account_setting_modal_title: `Enter OpenRouter Model`,
-          account_setting_model_label: `OpenRouter Model Codename`,
-          account_setting_model_placeholder: `xai/grok-2`,
-          account_setting_validating_title: `Validating Model`,
-          account_setting_validating_description: `Fetching capabilities for \`{model_name}\` from OpenRouter...`,
-          account_setting_validation_failed_title: `Model Not Found`,
-          account_setting_validation_failed_description: `Could not find \`{model_name}\` on OpenRouter. Check the model ID is correct and try again.`,
-          account_setting_configured_title: `Account-Setting Configured`,
-          account_setting_configured_description: `Your account-setting model is now set to \`{model_name}\`.\n\n**Detected Capabilities:** {capabilities}`,
+          // Other-model configuration
+          other_model_prompt_title: `Configure Custom OpenRouter Model`,
+          other_model_prompt_description: `You've selected **other-model**.\n\nClick the button below and enter your OpenRouter model codename (e.g., \`xai/grok-2\`, \`openrouter/free\`, \`nvidia/nemotron-4-340b-instruct\`).`,
+          other_model_modal_title: `Enter OpenRouter Model`,
+          other_model_model_label: `OpenRouter Model Codename`,
+          other_model_model_placeholder: `xai/grok-2`,
+          other_model_validating_title: `Validating Model`,
+          other_model_validating_description: `Fetching capabilities for \`{model_name}\` from OpenRouter...`,
+          other_model_validation_failed_title: `Model Not Found`,
+          other_model_validation_failed_description: `Could not find \`{model_name}\` on OpenRouter. Check the model ID is correct and try again.`,
+          other_model_configured_title: `Custom Model Configured`,
+          other_model_configured_description: `Your custom OpenRouter model is now set to \`{model_name}\`.\n\n**Detected Capabilities:** {capabilities}`,
         },
         embedding: {
           description: `Change the embedding model used for document retrieval.`,
@@ -3140,6 +3155,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         imagegen_option: "Image Generation",
         hiderespondembed_option: "Hide Response Embeds",
         hideimpersonationembeds_option: "Hide Impersonation Embeds",
+        voicemessage_option: "Voice Messages (ElevenLabs)",
         permission_choice_selfteaching: `Self-Teaching`,
         permission_choice_personalization: `Personalization (Memories/Nicknames)`,
         permission_choice_emojiusage: `Emoji Usage`,
@@ -3148,11 +3164,31 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         permission_choice_pinmessage: "Pin Messages",
         permission_choice_imagegen: "Image Generation",
         permission_choice_hiderespondembed: "Hide Response Embeds",
+        // Short option descriptions shown inside the select menu dropdown
+        selfteaching_desc: "Learn from server conversations",
+        personalization_desc: "Personal memories & nicknames",
+        emojiusage_desc: "Use emojis in responses",
+        stickerusage_desc: "Send sticker reactions",
+        websearch_desc: "Browse the web for information",
+        pinmessage_desc: "Pin important messages",
+        imagegen_desc: "Generate images on request",
+        hiderespondembed_desc: "Hide /bot respond success embed",
+        hideimpersonationembeds_desc: "Hide persona impersonation notices",
+        voicemessage_desc: "Send ElevenLabs TTS voice messages",
+        // Checkbox select menu UI strings
+        select_placeholder: "Select permissions to enable...",
+        select_embed_title: "Configure Permissions",
+        select_embed_description: "Select which permissions to **enable**. Checked = active, unchecked = disabled.",
+        no_changes_title: "No Changes Made",
+        no_changes_description: "All permissions are already at the selected values.",
+        timed_out_title: "Selection Timed Out",
+        timed_out_description: "The permission menu timed out. No changes were applied.",
         set_description: `Enable or disable this permission for me.`,
         already_set_title: `Permission Already Set`,
         already_enabled_description: `The permission \`{permission_type}\` is already **enabled**.`,
         already_disabled_description: `The permission \`{permission_type}\` is already **disabled**.`,
-        success_title: `Permission Updated`,
+        success_title: `Permissions Updated`,
+        success_description: `Updated **{count}** permission(s).`,
         enabled_success: `My permission for \`{permission_type}\` is now **enabled**.`,
         disabled_success: `My permission for \`{permission_type}\` is now **disabled**.`,
       },
@@ -3789,8 +3825,21 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         permission_choice_servermemories: `Server Memories`,
         permission_choice_attributelist: `Attribute List`,
         permission_choice_sampledialogues: `Sample Dialogues`,
+        // Short descriptions shown in the select menu dropdown
+        servermemories_desc: "Add/remove server-wide memories",
+        attributelist_desc: "Add/remove personality attributes",
+        sampledialogues_desc: "Add/remove sample dialogue pairs",
+        // Checkbox select menu UI strings
+        select_placeholder: "Select what members can teach...",
+        select_embed_title: "Member Teaching Permissions",
+        select_embed_description: "Select which things non-admin members can **teach** me. Checked = allowed.",
+        no_changes_title: "No Changes Made",
+        no_changes_description: "All permissions are already at the selected values.",
+        timed_out_title: "Selection Timed Out",
+        timed_out_description: "The permission menu timed out. No changes were applied.",
         set_description: `Enable or disable this permission for members.`,
         success_title: `Member Permissions Updated`,
+        success_description: `Updated **{count}** permission(s).`,
         enabled_success: `Members can now teach: \`{permission_type}\`.`,
         disabled_success: `Members can no longer teach: \`{permission_type}\`.`,
         already_set_title: `Permission Already Set`,

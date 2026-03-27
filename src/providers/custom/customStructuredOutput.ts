@@ -217,7 +217,7 @@ async function executeStructuredJsonRequest<T>(params: {
 	});
 
 	const body: Record<string, unknown> = {
-		...(params.request.model !== "account-setting"
+		...(params.request.model !== "other-model"
 			? { model: params.request.model }
 			: {}),
 		messages,

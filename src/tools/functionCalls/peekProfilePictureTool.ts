@@ -4,10 +4,17 @@
  * This prevents automatic processing and enables targeted avatar analysis
  */
 
-import { log, ColorCode } from "../../utils/misc/logger";
+import { GoogleGenAI } from "@google/genai";
+import type { Part } from "@google/genai";
+import { log } from "../../utils/misc/logger";
 import type { EnhancedImageContent } from "@/types/tool/enhancedContextTypes";
 import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
-import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import { decryptApiKey } from "@/utils/security/crypto";
+import {
+  toZaiApiModelName,
+  ZAI_CODING_CHAT_COMPLETIONS_URL,
+  ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+} from "@/providers/zai/zaiShared";
 import {
   BaseTool,
   type ToolContext,
@@ -18,6 +25,21 @@ import {
   ContextItemTag,
   type StructuredContextItem,
 } from "../../types/misc/context";
+
+/**
+ * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
+ * Google uses its own SDK and is handled separately.
+ */
+const PROVIDER_CHAT_COMPLETIONS_URLS: Record<string, string> = {
+  openrouter: "https://openrouter.ai/api/v1/chat/completions",
+  zai: ZAI_GENERAL_CHAT_COMPLETIONS_URL,
+  zaicoding: ZAI_CODING_CHAT_COMPLETIONS_URL,
+  deepseek: "https://api.deepseek.com/chat/completions",
+};
+
+/** Default prompt sent to the vision model when analyzing a profile picture */
+const DEFAULT_AVATAR_ANALYSIS_PROMPT =
+  "Describe this user's profile picture in detail. Include their appearance, style, and any notable elements visible in the avatar.";
 
 /**
  * Tool for processing Discord user profile pictures on-demand
@@ -34,9 +56,7 @@ export class PeekProfilePictureTool extends BaseTool {
   description =
     "Process and analyze a Discord user's profile picture using AI vision capabilities. ONLY use this when specifically asked to look at someone's avatar. The target may be 'self' for the current active persona, a Discord/webhook ID, or a persona ID. Prefer 'self' when you mean the active persona instead of the bot's Discord user ID. If you don't see a user ID or mention in recent messages, avoid calling this function.";
   category = "utility" as const;
-  requiredModelCapabilities = {
-    sees_images: true,
-  };
+  requiresFollowUp = true;
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -64,10 +84,9 @@ export class PeekProfilePictureTool extends BaseTool {
 
   /**
    * Check if profile picture tool is available for the given provider.
-   * Availability is provider-agnostic; model vision support is handled by
-   * `requiredModelCapabilities` and `isAvailableForContext()`.
+   * Availability is provider-agnostic; model vision support is handled by `isAvailableForContext()`.
    * @param _provider - LLM provider name
-   * @returns True if provider supports image analysis (actual vision check in isAvailableForContext)
+   * @returns True (availability gated by isAvailableForContext)
    */
   isAvailableFor(_provider: string): boolean {
     return true;
@@ -93,12 +112,15 @@ export class PeekProfilePictureTool extends BaseTool {
       return false;
     }
 
-    // Check if model has vision capabilities
+    // Check if model has vision capabilities OR a dedicated vision model is configured.
+    // A non-vision primary model with a vision_llm set will redirect analysis to
+    // the vision model instead of using an enhanced context restart.
     const hasVision = context.tomoriState.llm.sees_images;
+    const hasVisionModel = !!context.tomoriState.vision_llm;
 
-    if (!hasVision) {
+    if (!hasVision && !hasVisionModel) {
       log.info(
-        `PeekProfilePictureTool: Model ${context.tomoriState.llm.llm_codename} does not support vision (sees_images=false). Tool disabled.`,
+        `PeekProfilePictureTool: Model ${context.tomoriState.llm.llm_codename} does not support vision and no vision model is configured. Tool disabled.`,
       );
       return false;
     }
@@ -176,23 +198,6 @@ export class PeekProfilePictureTool extends BaseTool {
         };
       }
 
-      await sendToolProgressNotice(
-        context.channel,
-        context.locale,
-        {
-          titleKey: "genai.avatar.inspecting_title",
-          descriptionKey: "genai.avatar.inspecting_description",
-          footerKey: "genai.avatar.inspecting_footer",
-          color: ColorCode.INFO,
-        },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
-        "PeekProfilePictureTool",
-      );
-
       // Resolve ID as either Discord user or webhook and get avatar URL
       const avatarData = await resolveAvatarByDiscordId(userId, context, {
         forceStatic: true,
@@ -204,7 +209,7 @@ export class PeekProfilePictureTool extends BaseTool {
       );
 
       log.success(
-        `Profile picture processed for enhanced context restart: ${userId} (Username: ${avatarData.username})`,
+        `Profile picture fetched for ${userId} (Username: ${avatarData.username})`,
       );
 
       // Build display text with optional server nickname
@@ -219,6 +224,21 @@ export class PeekProfilePictureTool extends BaseTool {
             ? "webhook"
             : "user";
 
+      // Non-vision redirect path: if the primary model cannot see images but a dedicated
+      // vision model is configured, call the vision model directly with the avatar image
+      // and return a text description. The primary model then responds to that description.
+      if (!context.tomoriState.llm.sees_images && context.tomoriState.vision_llm) {
+        return await this.redirectToVisionModel(
+          base64ImageData,
+          targetTypeLabel,
+          userDisplayText,
+          reason,
+          context,
+        );
+      }
+
+      // Enhanced context restart path: inject the raw image into the context so the
+      // vision-capable primary model can see it directly on the next iteration.
       // Check if this is the bot's own profile picture (Discord user identity only)
       const isBotSelf =
         avatarData.sourceType === "user" &&
@@ -327,6 +347,226 @@ export class PeekProfilePictureTool extends BaseTool {
         },
       };
     }
+  }
+
+  /**
+   * Redirect profile picture analysis to the configured vision model.
+   * Used when the primary chat model cannot see images but a vision_llm is configured.
+   * Calls the vision model's API directly with the avatar image and returns a text description.
+   * @param base64ImageData - Base64-encoded avatar image
+   * @param targetTypeLabel - "user", "webhook", or "persona"
+   * @param userDisplayText - Display name (with optional nickname)
+   * @param reason - Original reason for the request
+   * @param context - Tool execution context
+   * @returns Promise resolving to a text-description ToolResult
+   */
+  private async redirectToVisionModel(
+    base64ImageData: string,
+    targetTypeLabel: string,
+    userDisplayText: string,
+    reason: string,
+    context: ToolContext,
+  ): Promise<ToolResult> {
+    // Vision model is guaranteed to exist here (caller already checked)
+    // biome-ignore lint/style/noNonNullAssertion: caller checked vision_llm
+    const visionLlm = context.tomoriState.vision_llm!;
+
+    if (!context.tomoriState.config.api_key) {
+      return {
+        success: false,
+        error: "No API key configured for this server.",
+      };
+    }
+
+    // 1. Decrypt the API key
+    const keyVersion = context.tomoriState.config.key_version || 1;
+    const apiKey = await decryptApiKey(
+      context.tomoriState.config.api_key,
+      keyVersion,
+    );
+
+    if (!apiKey) {
+      return {
+        success: false,
+        error: "Failed to decrypt API key.",
+      };
+    }
+
+    // 2. Resolve API model name and provider from the vision LLM row
+    const provider = visionLlm.llm_provider.toLowerCase();
+    const apiModelName =
+      provider === "zai" || provider === "zaicoding"
+        ? toZaiApiModelName(visionLlm.llm_codename)
+        : visionLlm.llm_codename;
+
+    const prompt = `${DEFAULT_AVATAR_ANALYSIS_PROMPT} This is the profile picture of ${targetTypeLabel}: ${userDisplayText}. Reason for analysis: ${reason}`;
+
+    log.info(
+      `PeekProfilePictureTool: Redirecting avatar analysis to vision model ${provider}/${apiModelName} (primary model is non-vision)`,
+    );
+
+    // 3. Route to the appropriate API based on provider family
+    let analysisResult: string;
+
+    if (provider === "google") {
+      analysisResult = await this.callGoogleVisionWithBase64(
+        apiKey,
+        apiModelName,
+        base64ImageData,
+        prompt,
+      );
+    } else {
+      const endpointUrl = this.getVisionEndpointUrl(provider, context);
+      analysisResult = await this.callOpenAICompatibleVisionWithBase64(
+        apiKey,
+        apiModelName,
+        endpointUrl,
+        base64ImageData,
+        prompt,
+      );
+    }
+
+    log.success(
+      `PeekProfilePictureTool: Vision model analysis completed for ${targetTypeLabel}: ${userDisplayText}`,
+    );
+
+    return {
+      success: true,
+      message: analysisResult,
+      data: {
+        type: "vision_model_redirect",
+        target_type: targetTypeLabel,
+        username: userDisplayText,
+        vision_model: visionLlm.llm_codename,
+        vision_provider: provider,
+      },
+    };
+  }
+
+  /**
+   * Resolve the chat completions endpoint URL for a given provider.
+   * @param provider - Lowercase provider name
+   * @param context - Tool context (for custom endpoint URL)
+   * @returns Chat completions URL
+   */
+  private getVisionEndpointUrl(provider: string, context: ToolContext): string {
+    const knownUrl = PROVIDER_CHAT_COMPLETIONS_URLS[provider];
+    if (knownUrl) return knownUrl;
+
+    const customUrl = context.tomoriState.config.custom_endpoint_url;
+    if (customUrl) {
+      return customUrl.endsWith("/chat/completions")
+        ? customUrl
+        : `${customUrl}/chat/completions`;
+    }
+
+    return "https://api.openai.com/v1/chat/completions";
+  }
+
+  /**
+   * Call the Google GenAI vision API with a single base64 image.
+   * @param apiKey - Decrypted Google API key
+   * @param model - Model name (e.g., "gemini-2.0-flash")
+   * @param base64ImageData - Base64-encoded image data (PNG)
+   * @param prompt - Analysis prompt
+   * @returns Text description from the vision model
+   */
+  private async callGoogleVisionWithBase64(
+    apiKey: string,
+    model: string,
+    base64ImageData: string,
+    prompt: string,
+  ): Promise<string> {
+    const genAI = new GoogleGenAI({ apiKey });
+
+    const parts: Part[] = [
+      { text: prompt },
+      {
+        inlineData: {
+          data: base64ImageData,
+          mimeType: "image/png",
+        },
+      },
+    ];
+
+    const result = await genAI.models.generateContent({
+      model,
+      contents: [{ role: "user", parts }],
+    });
+
+    const text = result.text;
+    if (!text) {
+      throw new Error("Google Vision API returned an empty response.");
+    }
+
+    return text;
+  }
+
+  /**
+   * Call an OpenAI-compatible vision API with a single base64 image.
+   * @param apiKey - Decrypted API key
+   * @param model - Model name
+   * @param endpointUrl - Chat completions endpoint URL
+   * @param base64ImageData - Base64-encoded image data (PNG)
+   * @param prompt - Analysis prompt
+   * @returns Text description from the vision model
+   */
+  private async callOpenAICompatibleVisionWithBase64(
+    apiKey: string,
+    model: string,
+    endpointUrl: string,
+    base64ImageData: string,
+    prompt: string,
+  ): Promise<string> {
+    const requestBody = {
+      model,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/png;base64,${base64ImageData}`,
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 1024,
+    };
+
+    const response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "Unknown error");
+      throw new Error(
+        `Vision API returned ${response.status}: ${errorText}`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{
+        message?: { content?: string };
+      }>;
+    };
+
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error(
+        "Vision API returned an empty response. The model may not support image inputs.",
+      );
+    }
+
+    return content;
   }
 
   /**

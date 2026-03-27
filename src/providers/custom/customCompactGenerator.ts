@@ -69,7 +69,7 @@ export async function generateConversationSummaryCustom(
 		});
 
 		const body: Record<string, unknown> = {
-			...(request.model !== "account-setting" ? { model: request.model } : {}),
+			...(request.model !== "other-model" ? { model: request.model } : {}),
 			messages,
 			temperature: request.temperature ?? 0.7,
 			max_tokens: 4096,
