@@ -52,6 +52,7 @@ import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   getOrCreateWebhook,
   resolvePersonaWebhookIdentity,
+  sendUserTranscriptViaWebhook,
   sendWebhookMessageWithIdentity,
   type WebhookCreateErrorReason,
 } from "../../utils/discord/webhookManager";
@@ -353,7 +354,12 @@ const REACTION_CONTEXT_MAX_USERS_PER_REACTION = parseIntegerEnvFlag(
   0,
 );
 
-const MAX_FUNCTION_CALL_ITERATIONS = 8; // Safety break for function call loops
+/** Maximum number of tool-call round-trips before giving up and showing the "Thinking Loop" embed. Configurable via BOT_MAX_FUNCTION_CALL_ITERATIONS (min: 1). */
+const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(
+  process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS,
+  20,
+  1,
+);
 const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
   process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3",
   10,
@@ -2237,26 +2243,50 @@ export default async function tomoriChat(
       markAudioTranscriptionHandled(message);
 
       if (transcriptionResult.transcriptText) {
-        // 1. Cache the transcript so the history formatter can inline it
-        //    on future context passes without re-running STT.
-        setCachedVoiceTranscript(
-          message.id,
-          transcriptionResult.transcriptText,
-          "user_stt",
-        );
+        const isChatMode =
+          earlyTomoriState.config?.voice_transcript_chat_mode ?? false;
 
-        // 2. Build the effective content: original text (if any) + system
-        //    voice-message marker + transcript so trigger detection runs on
-        //    the spoken words naturally.
+        if (isChatMode) {
+          // 1. Chat mode: post transcript as a visible webhook message instead of
+          //    caching internally. The LLM will read it naturally from chat history,
+          //    no re-transcription needed. Silently skip on webhook errors (non-fatal).
+          const displayName =
+            message.member?.displayName ?? message.author.displayName;
+          const avatarUrl = message.author.displayAvatarURL({
+            size: 256,
+            extension: "png",
+            forceStatic: true,
+          });
+          await sendUserTranscriptViaWebhook(
+            channel as BaseGuildTextChannel | AnyThreadChannel,
+            displayName,
+            avatarUrl,
+            transcriptionResult.transcriptText,
+          );
+          log.info(
+            `[VoiceChat] Posted transcript webhook | msg=${message.id} | chars=${transcriptionResult.transcriptText.length} | preview="${transcriptionResult.transcriptText.slice(0, 60)}${transcriptionResult.transcriptText.length > 60 ? "…" : ""}"`,
+          );
+        } else {
+          // 1. Default mode: cache the transcript so the history formatter can
+          //    inline it on future context passes without re-running STT.
+          setCachedVoiceTranscript(
+            message.id,
+            transcriptionResult.transcriptText,
+            "user_stt",
+          );
+          log.info(
+            `[VoiceCache] SET user_stt | msg=${message.id} | chars=${transcriptionResult.transcriptText.length} | preview="${transcriptionResult.transcriptText.slice(0, 60)}${transcriptionResult.transcriptText.length > 60 ? "…" : ""}"`,
+          );
+        }
+
+        // 2. Build the effective content regardless of mode — trigger detection
+        //    and the current-turn LLM context both need to see the spoken words.
         const existingText = message.content.trim();
         const voiceContent = existingText
           ? `${existingText}\n[System: This was sent as a voice message.]\n${transcriptionResult.transcriptText}`
           : `[System: This was sent as a voice message.]\n${transcriptionResult.transcriptText}`;
 
         applyEffectiveMessageContent(message, voiceContent);
-        log.info(
-          `[VoiceCache] SET user_stt | msg=${message.id} | chars=${transcriptionResult.transcriptText.length} | preview="${transcriptionResult.transcriptText.slice(0, 60)}${transcriptionResult.transcriptText.length > 60 ? "…" : ""}"`,
-        );
         // No return — trigger detection runs on voiceContent naturally.
       } else {
         log.warn(
@@ -3806,7 +3836,9 @@ export default async function tomoriChat(
       // This runs STT (if needed) before the simplifiedMessages loop so that
       // subsequent cache lookups in the loop are synchronous and fast.
       // Only user messages are STT'd; bot/webhook messages are skipped.
-      if (earlyTomoriState) {
+      // Skip entirely in chat mode — transcripts are already posted as chat
+      // messages and the cache is not used in that mode.
+      if (earlyTomoriState && !(earlyTomoriState.config?.voice_transcript_chat_mode ?? false)) {
         for (const msg of relevantMessagesArray) {
           // 1. Skip bots and webhooks — only user audio is STT'd
           if (msg.author.bot || msg.webhookId) continue;
@@ -4432,26 +4464,31 @@ export default async function tomoriChat(
             // Non-media attachments (PDF, TXT, MD, etc.) — check for audio cache first,
             // otherwise append a text placeholder with message ID for read_document
             else if (isAudioAttachment(attachment)) {
-              const cached = getCachedVoiceTranscript(msg.id);
-              if (cached?.source === "user_stt") {
-                // Inline the transcript instead of a filename placeholder.
-                // Guard against double-appending if applyEffectiveMessageContent
-                // already embedded the transcript in processedContent.
-                if (!messageContentForLlm?.includes(cached.transcript)) {
-                  const voiceText = `[System: This was sent as a voice message.]\n${cached.transcript}`;
-                  messageContentForLlm = messageContentForLlm
-                    ? `${messageContentForLlm}\n${voiceText}`
-                    : voiceText;
+              if (config.voice_transcript_chat_mode) {
+                // Chat mode: skip audio entirely. The transcript was already posted
+                // as a visible webhook message; audio never reaches the AI context.
+              } else {
+                const cached = getCachedVoiceTranscript(msg.id);
+                if (cached?.source === "user_stt") {
+                  // Inline the transcript instead of a filename placeholder.
+                  // Guard against double-appending if applyEffectiveMessageContent
+                  // already embedded the transcript in processedContent.
+                  if (!messageContentForLlm?.includes(cached.transcript)) {
+                    const voiceText = `[System: This was sent as a voice message.]\n${cached.transcript}`;
+                    messageContentForLlm = messageContentForLlm
+                      ? `${messageContentForLlm}\n${voiceText}`
+                      : voiceText;
+                  }
                 }
-              }
-              // For "tts" source or cache miss, fall through to a generic attachment hint
-              // so the LLM still knows an audio file was present.
-              else {
-                const attachName = attachment.name ?? "file";
-                const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
-                messageContentForLlm = messageContentForLlm
-                  ? `${messageContentForLlm} ${attachHint}`
-                  : attachHint;
+                // For "tts" source or cache miss, fall through to a generic attachment hint
+                // so the LLM still knows an audio file was present.
+                else {
+                  const attachName = attachment.name ?? "file";
+                  const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
+                  messageContentForLlm = messageContentForLlm
+                    ? `${messageContentForLlm} ${attachHint}`
+                    : attachHint;
+                }
               }
             } else {
               const attachName = attachment.name ?? "file";

@@ -2774,6 +2774,16 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       voice: {
         description: `Manage persona voice settings.`,
+        transcripts: {
+          description: `Toggle voice transcript chat mode.`,
+          set_description: `Enable to post transcripts as chat messages; disable to use internal cache.`,
+          already_set_title: `Already Set`,
+          already_enabled_description: `Voice transcript chat mode is already enabled for this server.`,
+          already_disabled_description: `Voice transcript chat mode is already disabled for this server.`,
+          success_title: `Voice Transcript Mode Updated`,
+          enabled_success: `Voice transcript chat mode is now **enabled**. Voice messages will be transcribed and posted as visible chat messages via webhook. Audio will not be passed to the AI directly.`,
+          disabled_success: `Voice transcript chat mode is now **disabled**. Transcripts will be handled internally as before.`,
+        },
         elevenlabs: {
           description: `Choose an ElevenLabs voice for a persona.`,
           select_persona_title: `Select Persona Voice Target`,
@@ -3178,11 +3188,14 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         // Checkbox select menu UI strings
         select_placeholder: "Select permissions to enable...",
         select_embed_title: "Configure Permissions",
-        select_embed_description: "Select which permissions to **enable**. Checked = active, unchecked = disabled.",
+        select_embed_description:
+          "Select which permissions to enable. Checked = active, unchecked = disabled.",
         no_changes_title: "No Changes Made",
-        no_changes_description: "All permissions are already at the selected values.",
+        no_changes_description:
+          "All permissions are already at the selected values.",
         timed_out_title: "Selection Timed Out",
-        timed_out_description: "The permission menu timed out. No changes were applied.",
+        timed_out_description:
+          "The permission menu timed out. No changes were applied.",
         set_description: `Enable or disable this permission for me.`,
         already_set_title: `Permission Already Set`,
         already_enabled_description: `The permission \`{permission_type}\` is already **enabled**.`,
@@ -3514,6 +3527,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           key_validation_failed_description: `The provided ElevenLabs API key is not valid. Please check the key and try again.`,
           success_title: `ElevenLabs API Key Set`,
           success_description: `The ElevenLabs API key has been successfully validated, encrypted, and saved. Voice transcription and persona voice output are now available where configured.`,
+          success_voices_title: `Premade Voices (Free Tier)`,
+          success_voices_description: `Premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
+          success_custom_voices_title: `Library & Custom Voices (Paid)`,
+          success_custom_voices_description: `Library voices and custom/cloned voices both require a paid ElevenLabs plan. Once added to your account, they will appear automatically in {configVoiceElevenlabs}.`,
+          success_transcript_mode_title: `Voice Transcript Mode`,
+          success_transcript_mode_description: `Use {configVoiceTranscripts} to post voice message transcripts as visible chat messages via webhook which saves re-processing credits and lets everyone see what was said.`,
         },
         remove: {
           description: `Remove the currently configured ElevenLabs API key.`,
@@ -3832,11 +3851,14 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         // Checkbox select menu UI strings
         select_placeholder: "Select what members can teach...",
         select_embed_title: "Member Teaching Permissions",
-        select_embed_description: "Select which things non-admin members can **teach** me. Checked = allowed.",
+        select_embed_description:
+          "Select which things non-admin members can **teach** me. Checked = allowed.",
         no_changes_title: "No Changes Made",
-        no_changes_description: "All permissions are already at the selected values.",
+        no_changes_description:
+          "All permissions are already at the selected values.",
         timed_out_title: "Selection Timed Out",
-        timed_out_description: "The permission menu timed out. No changes were applied.",
+        timed_out_description:
+          "The permission menu timed out. No changes were applied.",
         set_description: `Enable or disable this permission for members.`,
         success_title: `Member Permissions Updated`,
         success_description: `Updated **{count}** permission(s).`,

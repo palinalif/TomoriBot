@@ -2783,6 +2783,16 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       },
       voice: {
         description: `ペルソナごとの音声設定を管理します。`,
+        transcripts: {
+          description: `音声トランスクリプトのチャットモードを切り替えます。`,
+          set_description: `有効にするとトランスクリプトをチャットメッセージとして投稿します。無効にすると内部キャッシュを使用します。`,
+          already_set_title: `既に設定済み`,
+          already_enabled_description: `このサーバーでは音声トランスクリプトのチャットモードは既に有効になっています。`,
+          already_disabled_description: `このサーバーでは音声トランスクリプトのチャットモードは既に無効になっています。`,
+          success_title: `音声トランスクリプトモードを更新しました`,
+          enabled_success: `音声トランスクリプトのチャットモードが**有効**になりました。音声メッセージはトランスクリプトされ、Webhookを通じてチャットメッセージとして投稿されます。音声ファイルはAIに直接渡されません。`,
+          disabled_success: `音声トランスクリプトのチャットモードが**無効**になりました。トランスクリプトは従来通り内部で処理されます。`,
+        },
         elevenlabs: {
           description: `ペルソナに使うElevenLabs音声を選択します。`,
           select_persona_title: `音声を設定するペルソナを選択`,
@@ -3523,6 +3533,12 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           key_validation_failed_description: `提供されたElevenLabs APIキーは無効です。キーを確認してもう一度お試しください。`,
           success_title: `ElevenLabs APIキーが設定されました`,
           success_description: `ElevenLabs APIキーが正常に検証、暗号化、保存されました。設定されている場所では音声文字起こしとペルソナの音声出力が利用可能になります。`,
+          success_voices_title: `プリメイド音声（無料プラン対応）`,
+          success_voices_description: `プリメイド音声は無料プランでも利用できます。一覧は [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices) で確認し、{configVoiceElevenlabs} で各ペルソナに割り当てましょう。`,
+          success_custom_voices_title: `ライブラリ音声・カスタム音声（有料プラン必須）`,
+          success_custom_voices_description: `ライブラリ音声とカスタム（クローン・生成）音声はどちらもElevenLabsの有料プランが必要です。アカウントに追加した音声は {configVoiceElevenlabs} に自動で表示されます。`,
+          success_transcript_mode_title: `音声トランスクリプトモード`,
+          success_transcript_mode_description: `{configVoiceTranscripts} を使うと、音声メッセージのトランスクリプトをWebhook経由でチャットメッセージとして投稿できます。再処理クレジットの節約と透明性の向上に役立ちます。`,
         },
         remove: {
           description: `現在設定されているElevenLabs APIキーを削除します。`,

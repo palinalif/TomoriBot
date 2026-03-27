@@ -363,6 +363,45 @@ export class GenerateVoiceMessageTool extends BaseTool {
 			);
 		}
 
+		// In chat mode, also post the script as a visible blockquote text message
+		// so users can read what was said without playing the audio. The LLM will
+		// see it naturally from chat history; no extra context injection needed.
+		if (sentMessageId && captionText && context.tomoriState.config.voice_transcript_chat_mode) {
+			const quotedCaption = `> ${captionText.replace(/\n/g, "\n> ")}`;
+			try {
+				if (context.webhook && context.personaUsername) {
+					await sendWebhookMessageWithIdentity(
+						context.webhook,
+						{
+							content: quotedCaption,
+							allowedMentions: { parse: [] },
+							...(threadId ? { threadId } : {}),
+						},
+						{
+							username: context.personaUsername,
+							avatarUrl: context.personaAvatarUrl,
+							avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
+								? context.personaAvatarUrl
+								: undefined,
+						},
+					);
+				} else {
+					await context.channel.send({
+						content: quotedCaption,
+						allowedMentions: { parse: [] },
+					});
+				}
+				log.info(
+					`[VoiceChat] Posted TTS transcript | msg=${sentMessageId} | persona="${context.personaUsername ?? "bot"}"`,
+				);
+			} catch (error) {
+				log.warn(
+					`[VoiceChat] Failed to post TTS transcript for msg=${sentMessageId}`,
+					error,
+				);
+			}
+		}
+
 		return {
 			success: true,
 			message: "Voice message generated and sent to Discord.",

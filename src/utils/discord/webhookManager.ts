@@ -1,4 +1,5 @@
 import type {
+  AnyThreadChannel,
   BaseGuildTextChannel,
   TextChannel,
   Webhook,
@@ -964,6 +965,95 @@ export async function sendAsPersona(
           error,
         },
       },
+    );
+    return null;
+  }
+}
+
+/**
+ * Sends a voice transcript as a blockquote chat message impersonating the user.
+ *
+ * Used when `voice_transcript_chat_mode` is enabled. Instead of storing the
+ * transcript in an internal TTL cache, it is posted visibly to the channel so:
+ *   - Other users can see what was said
+ *   - The LLM reads it naturally from chat history (no re-transcription)
+ *   - Audio attachments are never sent to the AI
+ *
+ * The message is prefixed with `> ` (Discord blockquote) to visually distinguish
+ * it from a regular typed message.
+ *
+ * @param channel - The channel or thread where the voice message was sent
+ * @param displayName - The sender's display name for the webhook identity
+ * @param avatarUrl - The sender's avatar URL for the webhook identity
+ * @param transcript - The transcript text to post
+ * @returns The sent Discord message, or null if posting failed
+ */
+export async function sendUserTranscriptViaWebhook(
+  channel: BaseGuildTextChannel | AnyThreadChannel,
+  displayName: string,
+  avatarUrl: string,
+  transcript: string,
+): Promise<Message | null> {
+  // 1. Threads cannot own webhooks — use the parent channel for creation/lookup
+  const isThread = channel.isThread();
+  const webhookTargetChannel = isThread
+    ? (channel.parent as BaseGuildTextChannel | null)
+    : channel;
+
+  if (
+    !webhookTargetChannel ||
+    !("fetchWebhooks" in webhookTargetChannel) ||
+    !("createWebhook" in webhookTargetChannel)
+  ) {
+    log.warn(
+      `[Webhook Manager] Channel ${channel.id} does not support webhooks for transcript posting`,
+    );
+    return null;
+  }
+
+  // 2. Reuse the shared TomoriBot Multi-Persona webhook for this channel
+  const webhookResult = await getOrCreateWebhook(webhookTargetChannel);
+  if (!webhookResult.webhook) {
+    log.warn(
+      `[Webhook Manager] Could not get webhook for transcript posting in channel ${channel.id}: ${webhookResult.errorReason}`,
+    );
+    return null;
+  }
+
+  // 3. Escape newlines so multi-line transcripts stay in the blockquote block
+  const quotedTranscript = `> ${transcript.replace(/\n/g, "\n> ")}`;
+
+  const payload: WebhookSendPayload = {
+    content: quotedTranscript,
+    // Never ping anyone accidentally from transcribed text
+    allowedMentions: { parse: [] },
+    // When inside a thread, route the message to it via threadId
+    ...(isThread ? { threadId: channel.id } : {}),
+  };
+
+  // 4. Impersonate the original sender so the message clearly belongs to them
+  const identity: ResolvedWebhookIdentity = {
+    username: displayName,
+    avatarUrl,
+  };
+
+  try {
+    const message = await sendWebhookMessageWithIdentity(
+      webhookResult.webhook,
+      payload,
+      identity,
+    );
+    log.info(
+      `[Webhook Manager] Sent voice transcript webhook as "${displayName}" in channel ${channel.id}`,
+    );
+    return message;
+  } catch (error) {
+    if (isInvalidWebhookError(error) && webhookResult.webhook.channelId) {
+      invalidateWebhookCache(webhookResult.webhook.channelId);
+    }
+    log.warn(
+      `[Webhook Manager] Failed to send transcript webhook in channel ${channel.id}`,
+      error,
     );
     return null;
   }

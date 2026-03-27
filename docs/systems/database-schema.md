@@ -150,6 +150,19 @@ Schema is idempotent and startup-safe:
 - helper functions like `add_column_if_not_exists` and `drop_column_if_exists`
 - guarded `DO $$ ... $$` blocks for conditional constraint/index/column changes
 
+### Adding Columns — Always Use `seed.sql`
+
+`seed.sql` runs on **every startup** (via `scripts/seedDb.ts`). This means any `add_column_if_not_exists` call placed there is automatically applied to existing databases on the next restart — no separate one-off migration script needed.
+
+**The rule:** whenever you add a column to any table, add the corresponding `add_column_if_not_exists` line to `seed.sql`. Group by table under a clearly labeled comment block (e.g. `-- Ensure all required columns exist in tomori_configs table`).
+
+```sql
+-- Ensure all required columns exist in tomori_configs table
+SELECT add_column_if_not_exists('tomori_configs', 'my_new_flag', 'BOOLEAN', 'false');
+```
+
+One-off `scripts/add*.ts` migration scripts are **not necessary** for column additions and should be avoided — they require manual execution and are easily forgotten. The `seed.sql` approach is self-applying and idempotent.
+
 ## Operational Notes
 
 - `cleanup_expired_cooldowns()` is defined in schema and used by startup cleanup + optional pg_cron.

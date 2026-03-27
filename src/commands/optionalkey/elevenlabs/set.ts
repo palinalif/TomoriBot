@@ -8,7 +8,11 @@ import {
 	getCachedTomoriState,
 	invalidateTomoriStateCache,
 } from "@/utils/cache/tomoriStateCache";
-import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	replySummaryEmbed,
+} from "@/utils/discord/interactionHelper";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { storeOptApiKey } from "@/utils/security/crypto";
 import {
@@ -137,12 +141,61 @@ export async function execute(
 
 		invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.optionalkey.elevenlabs.set.success_title",
-			descriptionKey: "commands.optionalkey.elevenlabs.set.success_description",
-			color: ColorCode.SUCCESS,
-			flags: MessageFlags.Ephemeral,
-		});
+		// Resolve command mentions for the next-steps fields
+		const configVoiceElevenlabsMention = commandRegistry.getCommandMention(
+			"config",
+			"voice",
+			"elevenlabs",
+		);
+		const configVoiceTranscriptsMention = commandRegistry.getCommandMention(
+			"config",
+			"voice",
+			"transcripts",
+		);
+
+		await replySummaryEmbed(
+			interaction,
+			locale,
+			{
+				titleKey: "commands.optionalkey.elevenlabs.set.success_title",
+				descriptionKey:
+					"commands.optionalkey.elevenlabs.set.success_description",
+				color: ColorCode.SUCCESS,
+				fields: [
+					{
+						nameKey:
+							"commands.optionalkey.elevenlabs.set.success_voices_title",
+						value: localizer(
+							locale,
+							"commands.optionalkey.elevenlabs.set.success_voices_description",
+							{ configVoiceElevenlabs: configVoiceElevenlabsMention },
+						),
+						inline: false,
+					},
+					{
+						nameKey:
+							"commands.optionalkey.elevenlabs.set.success_custom_voices_title",
+						value: localizer(
+							locale,
+							"commands.optionalkey.elevenlabs.set.success_custom_voices_description",
+							{ configVoiceElevenlabs: configVoiceElevenlabsMention },
+						),
+						inline: false,
+					},
+					{
+						nameKey:
+							"commands.optionalkey.elevenlabs.set.success_transcript_mode_title",
+						value: localizer(
+							locale,
+							"commands.optionalkey.elevenlabs.set.success_transcript_mode_description",
+							{ configVoiceTranscripts: configVoiceTranscriptsMention },
+						),
+						inline: false,
+					},
+				],
+			},
+			MessageFlags.Ephemeral,
+		);
 	} catch (error) {
 		const context: ErrorContext = {
 			userId: userData.user_id,
