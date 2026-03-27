@@ -2,6 +2,10 @@ nul
 .venv*
 *.backup
 .tmp
+
+# Tokenizers
+tokenizers/
+
 # Matrix Appservice registration file — contains hs_token / as_token secrets
 appservice-registration.yaml
 
