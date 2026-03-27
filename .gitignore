@@ -185,6 +185,10 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+# Windows OS files
+desktop.ini
+Thumbs.db
+
 # Terraform
 *.tfstate
 *.tfstate.*
