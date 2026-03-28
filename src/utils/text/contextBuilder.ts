@@ -972,6 +972,12 @@ export interface BuildContextParams {
 	seesVideos?: boolean;
 	hasVisionTool?: boolean;
 	explicitLongTermMemoryIntent?: boolean;
+	/**
+	 * When `true`, skips the `DEFAULT_SYSTEM_PROMPT` fallback in the humanizer block.
+	 * Set by the routing wrapper when a SillyTavern preset is active and no custom
+	 * `/sysprompt` has been configured — the preset fully controls the system prompt.
+	 */
+	suppressDefaultSystemPrompt?: boolean;
 }
 
 /** Return type for both buildContext variants. */
@@ -1000,8 +1006,11 @@ export async function buildContext(
 		if (serverId) {
 			const presetData = await getCachedActivePreset(serverId);
 			if (presetData) {
-				// 1. Build native context (produces tagged items in fixed order)
-				const nativeOutput = await buildContextNative(params);
+				// 1. Build native context (produces tagged items in fixed order).
+				// Suppress the DEFAULT_SYSTEM_PROMPT fallback when the preset is active
+				// and the user has NOT set a custom /sysprompt — the preset owns the system prompt.
+				const suppressDefaultSystemPrompt = !params.tomoriConfig.system_prompt?.trim();
+				const nativeOutput = await buildContextNative({ ...params, suppressDefaultSystemPrompt });
 
 				// 2. Extract macro context from params
 				const lastUserMsg = params.simplifiedMessageHistory
@@ -1080,6 +1089,7 @@ async function buildContextNative({
   seesVideos: seesVideosOverride,
   hasVisionTool = false,
   explicitLongTermMemoryIntent: explicitLongTermMemoryIntentOverride,
+  suppressDefaultSystemPrompt = false,
 }: BuildContextParams): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
@@ -1117,26 +1127,32 @@ async function buildContextNative({
     !isUserImpersonation &&
     tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT
   ) {
+    // When a SillyTavern preset is active and no custom /sysprompt is set,
+    // skip the DEFAULT_SYSTEM_PROMPT fallback — the preset fully owns the system prompt.
     const systemPrompt =
-      tomoriConfig.system_prompt?.trim() || DEFAULT_SYSTEM_PROMPT;
-    let humanizerText = systemPrompt;
+      tomoriConfig.system_prompt?.trim() ||
+      (suppressDefaultSystemPrompt ? null : DEFAULT_SYSTEM_PROMPT);
 
-    // CRITICAL: Use stable "User" placeholder for system instruction to prevent cache invalidation across different users
-    humanizerText = await convertMentions(
-      humanizerText,
-      client,
-      guildId,
-      "User", // Stable placeholder instead of triggererName
-      botName,
-      tomoriConfig.personal_memories_enabled,
-      snapshot,
-    );
+    if (systemPrompt) {
+      let humanizerText = systemPrompt;
 
-    contextItems.push({
-      role: "system",
-      parts: [{ type: "text", text: humanizerText }],
-      metadataTag: ContextItemTag.SYSTEM_HUMANIZER_RULES,
-    });
+      // CRITICAL: Use stable "User" placeholder for system instruction to prevent cache invalidation across different users
+      humanizerText = await convertMentions(
+        humanizerText,
+        client,
+        guildId,
+        "User", // Stable placeholder instead of triggererName
+        botName,
+        tomoriConfig.personal_memories_enabled,
+        snapshot,
+      );
+
+      contextItems.push({
+        role: "system",
+        parts: [{ type: "text", text: humanizerText }],
+        metadataTag: ContextItemTag.SYSTEM_HUMANIZER_RULES,
+      });
+    }
   }
 
   // 1.5. Persona-specific prompt (appended in addition to system prompt when set)

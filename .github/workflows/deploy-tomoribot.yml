@@ -892,66 +892,193 @@ jobs:
           STATUS: ${{ needs.verify-ecs-deployment.outputs.deployment-status }}
           VERSION: ${{ needs.check-release-assets.outputs.version }}
           IMAGE_NAME: ${{ steps.release-notes.outputs.image-name }}
+          MENTION_ROLE_ID: ${{ secrets.RELEASE_DISCORD_MENTION_ROLE_ID }}
         run: |
           if [ "$STATUS" == "success" ]; then
-            echo "Preparing success notification for Discord..."
-            status="SUCCESS"
-            color="3066993"  # Green
+            statusLabel="✅ Deployed successfully"
           else
-            echo "Preparing failure notification for Discord..."
-            status="FAILED"
-            color="15158332"  # Red
+            statusLabel="❌ Deployment failed"
           fi
 
-          # Read and process release notes for Discord
+          # Read release notes and strip markdown image syntax (![alt](url) patterns)
           releaseNotes=$(cat processed-release-notes.md)
+          releaseNotes=$(echo "$releaseNotes" | sed 's/!\[[^]]*\]([^)]*)//g')
 
-          # Strip markdown image syntax
-          releaseNotes=$(echo "$releaseNotes" | sed 's/!\[.*\]([^)]*)//g')
+          # Write processed notes to file so Python can read them safely
+          printf '%s' "$releaseNotes" > discord_release_notes.txt
 
-          # Clean up extra whitespace and truncate for Discord limits
-          releaseNotes=$(echo "$releaseNotes" | sed '/^$/d')
-          if [ ${#releaseNotes} -gt 4090 ]; then
-            releaseNotes="${releaseNotes:0:4090}..."
-          fi
+          # Write smart text-splitter script: splits at the best available markdown
+          # breakpoint so no message exceeds Discord's 2000-character limit.
+          # Uses grouped echo redirect instead of heredoc to stay YAML-indent-valid.
+          {
+            echo 'MAX_CHARS = 1900'
+            echo ''
+            echo 'def split_text(text, max_chars):'
+            echo '    chunks = []'
+            echo '    remaining = text.strip()'
+            echo ''
+            echo '    while remaining:'
+            echo '        if len(remaining) <= max_chars:'
+            echo '            chunks.append(remaining)'
+            echo '            break'
+            echo ''
+            echo '        candidate = remaining[:max_chars]'
+            echo ''
+            echo '        # 1. Split just before a markdown header on a new line (## / ###)'
+            echo '        split_pos = -1'
+            echo '        for i in range(len(candidate) - 2, 0, -1):'
+            echo "            if candidate[i] == '\\n' and candidate[i + 1] == '#':"
+            echo '                split_pos = i'
+            echo '                break'
+            echo ''
+            echo '        # 2. Split at a paragraph break (double newline)'
+            echo '        if split_pos == -1:'
+            echo "            split_pos = candidate.rfind('\\n\\n')"
+            echo ''
+            echo '        # 3. Split at a single newline'
+            echo '        if split_pos == -1:'
+            echo "            split_pos = candidate.rfind('\\n')"
+            echo ''
+            echo '        # 4. Split at a word boundary (space)'
+            echo '        if split_pos == -1:'
+            echo "            split_pos = candidate.rfind(' ')"
+            echo ''
+            echo '        # 5. Hard cut as a last resort'
+            echo '        if split_pos <= 0:'
+            echo '            split_pos = max_chars - 1'
+            echo ''
+            echo '        chunks.append(remaining[:split_pos].rstrip())'
+            echo "        remaining = remaining[split_pos:].lstrip('\\n ')"
+            echo ''
+            echo '    return [c for c in chunks if c.strip()]'
+            echo ''
+            echo "with open('discord_release_notes.txt', 'r') as f:"
+            echo '    text = f.read()'
+            echo ''
+            echo 'chunks = split_text(text, MAX_CHARS)'
+            echo ''
+            echo 'for i, chunk in enumerate(chunks):'
+            echo "    with open(f'discord_chunk_{i}.txt', 'w') as f:"
+            echo '        f.write(chunk)'
+            echo ''
+            echo "with open('discord_chunk_count.txt', 'w') as f:"
+            echo '    f.write(str(len(chunks)))'
+            echo ''
+            echo "print(f'Release notes split into {len(chunks)} message(s)')"
+          } > discord_split.py
+          python3 discord_split.py
 
-          # Construct image URL
-          imageUrl=""
+          chunkCount=$(cat discord_chunk_count.txt)
+          echo "Prepared $chunkCount Discord message(s)"
+
+          # Attempt to download the release image; it becomes the first attachment
+          # in the forum post, which Discord uses as the post's preview image
+          hasImage=false
           if [ -n "$IMAGE_NAME" ]; then
             imageUrl="https://github.com/${{ github.repository }}/raw/main/.github/release/v$VERSION/$IMAGE_NAME"
-            echo "Image URL: $imageUrl"
-          else
-            echo "Text-only Discord notification (no image found)"
-          fi
-
-          # Construct Discord webhook payload
-          if [ -n "$imageUrl" ]; then
-            payload=$(jq -n \
-              --arg title "TomoriBot v$VERSION Released!" \
-              --arg desc "$releaseNotes" \
-              --arg color "$color" \
-              --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")" \
-              --arg imageUrl "$imageUrl" \
-              '{embeds: [{title: $title, description: $desc, color: ($color | tonumber), timestamp: $timestamp, image: {url: $imageUrl}}]}')
-          else
-            payload=$(jq -n \
-              --arg title "TomoriBot v$VERSION Released!" \
-              --arg desc "$releaseNotes" \
-              --arg color "$color" \
-              --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")" \
-              '{embeds: [{title: $title, description: $desc, color: ($color | tonumber), timestamp: $timestamp}]}')
-          fi
-
-          # Send to Discord
-          discordWebhookUrl="${{ secrets.DISCORD_WEBHOOK_URL }}"
-          if [ -n "$discordWebhookUrl" ]; then
-            if curl -X POST -H "Content-Type: application/json" -d "$payload" "$discordWebhookUrl"; then
-              echo "Discord notification sent successfully!"
+            echo "Downloading release image: $imageUrl"
+            if curl -sL --max-time 30 "$imageUrl" -o "release-post-image.png" && [ -s "release-post-image.png" ]; then
+              hasImage=true
+              echo "Release image downloaded"
             else
-              echo "Failed to send Discord notification"
+              echo "Could not download image — forum post will be text-only"
             fi
-          else
-            echo "DISCORD_WEBHOOK_URL secret not configured - notification skipped"
-            echo "Discord payload would be:"
-            echo "$payload"
           fi
+
+          discordWebhookUrl="${{ secrets.DISCORD_WEBHOOK_URL }}"
+          if [ -z "$discordWebhookUrl" ]; then
+            echo "DISCORD_WEBHOOK_URL not configured — skipping Discord notification"
+            exit 0
+          fi
+
+          # 1. Create the forum thread (thread_name triggers forum-post creation)
+          threadTitle="TomoriBot v$VERSION — $statusLabel"
+          firstChunk=$(cat discord_chunk_0.txt)
+          echo "Creating Discord forum post: $threadTitle"
+
+          if [ "$hasImage" = true ]; then
+            # Upload image as a form attachment so it appears as the post's lead image
+            firstPayload=$(jq -n \
+              --arg content "$firstChunk" \
+              --arg thread_name "$threadTitle" \
+              '{content: $content, thread_name: $thread_name}')
+
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -F "payload_json=$firstPayload" \
+              -F "files[0]=@release-post-image.png" \
+              "${discordWebhookUrl}?wait=true")
+          else
+            firstPayload=$(jq -n \
+              --arg content "$firstChunk" \
+              --arg thread_name "$threadTitle" \
+              '{content: $content, thread_name: $thread_name}')
+
+            response=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d "$firstPayload" \
+              "${discordWebhookUrl}?wait=true")
+          fi
+
+          httpCode=$(echo "$response" | tail -1)
+          responseBody=$(echo "$response" | sed '$d')
+
+          if [ "$httpCode" -lt 200 ] || [ "$httpCode" -ge 300 ]; then
+            echo "Failed to create Discord forum post (HTTP $httpCode)"
+            echo "Response: $responseBody"
+            exit 1
+          fi
+
+          echo "Forum post created (HTTP $httpCode)"
+
+          # 2. Extract the created thread ID from the response message object;
+          #    in Discord forum webhooks the message's channel_id IS the thread ID
+          threadId=$(echo "$responseBody" | jq -r '.channel_id // empty')
+
+          # 3. Send any remaining text chunks as replies inside the same thread
+          if [ "$chunkCount" -gt 1 ] && [ -n "$threadId" ]; then
+            i=1
+            while [ "$i" -lt "$chunkCount" ]; do
+              chunk=$(cat "discord_chunk_${i}.txt")
+              chunkPayload=$(jq -n --arg content "$chunk" '{content: $content}')
+
+              replyResponse=$(curl -s -w "\n%{http_code}" -X POST \
+                -H "Content-Type: application/json" \
+                -d "$chunkPayload" \
+                "${discordWebhookUrl}?thread_id=${threadId}")
+
+              replyCode=$(echo "$replyResponse" | tail -1)
+              if [ "$replyCode" -lt 200 ] || [ "$replyCode" -ge 300 ]; then
+                echo "Warning: Failed to send message chunk $i (HTTP $replyCode)"
+              else
+                echo "Sent message chunk $((i + 1))/$chunkCount (HTTP $replyCode)"
+              fi
+
+              i=$((i + 1))
+              sleep 1  # Respect Discord rate limits between messages
+            done
+          elif [ "$chunkCount" -gt 1 ] && [ -z "$threadId" ]; then
+            echo "Warning: Could not extract thread ID — remaining $((chunkCount - 1)) chunk(s) skipped"
+            echo "Response body: $responseBody"
+          fi
+
+          # 4. Send role mention as the final message in the thread so it pings
+          #    subscribers after all release content has been posted
+          if [ -n "$MENTION_ROLE_ID" ] && [ -n "$threadId" ]; then
+            mentionPayload=$(jq -n --arg content "<@&${MENTION_ROLE_ID}> Follow-up hotfixes or patches for this update will be posted in this Forum post, feel free to follow this post to keep track of them!" '{content: $content}')
+
+            mentionResponse=$(curl -s -w "\n%{http_code}" -X POST \
+              -H "Content-Type: application/json" \
+              -d "$mentionPayload" \
+              "${discordWebhookUrl}?thread_id=${threadId}")
+
+            mentionCode=$(echo "$mentionResponse" | tail -1)
+            if [ "$mentionCode" -lt 200 ] || [ "$mentionCode" -ge 300 ]; then
+              echo "Warning: Failed to send role mention (HTTP $mentionCode)"
+            else
+              echo "Role mention sent (HTTP $mentionCode)"
+            fi
+          elif [ -n "$MENTION_ROLE_ID" ] && [ -z "$threadId" ]; then
+            echo "Warning: Role mention skipped — thread ID unavailable"
+          fi
+
+          echo "Discord forum notification complete!"
