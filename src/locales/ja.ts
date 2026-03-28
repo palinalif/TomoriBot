@@ -1784,7 +1784,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         vertex_title: `Google Vertex AIの設定`,
         vertex_description: `Google Vertex AIは、Google Cloudを通じてGeminiモデルへのエンタープライズグレードのアクセスを提供します。
 - 認証にApplication Default Credentials（ADC）を使用 — APIキーの管理が不要
-- チャット、ツール呼び出し、ストリーミングに対応（v1）
+- チャット、ツール呼び出し、ストリーミング、構造化出力、圧縮、埋め込み、プリセット生成に対応
 - BotがGCP IDで実行されるセルフホストまたは信頼できる環境に最適
 - [Vertex AIドキュメント](https://cloud.google.com/vertex-ai/docs)`,
         vertex_getting_key_title: `設定手順：`,

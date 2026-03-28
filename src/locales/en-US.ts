@@ -1779,7 +1779,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         vertex_title: `Setting Up Google Vertex AI`,
         vertex_description: `Google Vertex AI provides enterprise-grade access to Gemini models through Google Cloud.
 - Uses Application Default Credentials (ADC) for authentication — no API key to manage
-- Supports chat, tool calling, and streaming (v1)
+- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation
 - Best for self-hosted or trusted deployments where the bot runs with a GCP identity
 - [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)`,
         vertex_getting_key_title: `Configuration:`,

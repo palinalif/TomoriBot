@@ -340,7 +340,7 @@ export async function execute(
 
 		// 9. Persist changed states to DB
 		if (toggled.length > 0) {
-			await updateNodeEnabledStates(preset.preset_id, enabledMap);
+			await updateNodeEnabledStates(preset.preset_id, enabledMap, preset.server_id);
 		}
 
 		// 10. Reply with summary

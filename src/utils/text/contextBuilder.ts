@@ -58,6 +58,8 @@ import { getCachedAllPersonas } from "../cache/tomoriStateCache";
 import { getCachedUserRow } from "../cache/userCache";
 import { formatMemoryWithId } from "../memory/memoryId";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
+import { getCachedActivePreset } from "../cache/stPresetCache";
+import { reassembleWithPreset } from "./presetContextBuilder";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -934,18 +936,129 @@ function pushDialogueHistoryContextItem(
   });
 }
 
-export async function buildContext({
+/** Shared parameter type for both the routing wrapper and native context builder. */
+export interface BuildContextParams {
+	guildId: string;
+	serverName: string;
+	serverDescription: string | null;
+	simplifiedMessageHistory: SimplifiedMessageForContext[];
+	userList: string[];
+	channelDesc: string | null;
+	channelName: string;
+	channelId: string;
+	client: Client;
+	triggererName: string;
+	emojiStrings?: string[];
+	tomoriNickname: string;
+	tomoriAttributes: string[];
+	tomoriConfig: TomoriConfigRow;
+	personaPrompt?: string | null;
+	personaLineageId?: number;
+	isDMChannel?: boolean;
+	mediaContextWindow?: number;
+	snapshot?: import("../../types/misc/context").RequestSnapshot;
+	preloadedEmojis?: ServerEmojiRow[] | null;
+	preloadedStickers?: ServerStickerRow[] | null;
+	isUserImpersonation?: boolean;
+	impersonatedUserId?: string;
+	impersonatedUserNickname?: string;
+	impersonatedUserPrompt?: string | null;
+	/** Matrix bridge users: Matrix user ID → stripped display name. */
+	matrixUsers?: Map<string, string>;
+	/** Synthetic participants surfaced as user-like entries. */
+	syntheticUsers?: Map<string, { displayName: string; type: "persona" | "webhook" }>;
+	includeTimestamps?: boolean;
+	seesImages?: boolean;
+	seesVideos?: boolean;
+	hasVisionTool?: boolean;
+	explicitLongTermMemoryIntent?: boolean;
+}
+
+/** Return type for both buildContext variants. */
+type BuildContextResult = {
+	contextItems: StructuredContextItem[];
+	tailDirectives: string[];
+	uncensorDirective?: string;
+};
+
+/**
+ * Build context with optional SillyTavern preset rearrangement.
+ *
+ * Routing logic:
+ *   1. If user impersonation is active → always use native assembly (presets are character-centric)
+ *   2. If an active ST preset exists for this server → build native, then rearrange via preset
+ *   3. Otherwise → use native fixed 9-block assembly
+ *
+ * All callers use this function; the preset check is transparent.
+ */
+export async function buildContext(
+	params: BuildContextParams,
+): Promise<BuildContextResult> {
+	// Skip preset routing for user impersonation
+	if (!params.isUserImpersonation) {
+		const serverId = params.snapshot?.tomoriState?.server_id;
+		if (serverId) {
+			const presetData = await getCachedActivePreset(serverId);
+			if (presetData) {
+				// 1. Build native context (produces tagged items in fixed order)
+				const nativeOutput = await buildContextNative(params);
+
+				// 2. Extract macro context from params
+				const lastUserMsg = params.simplifiedMessageHistory
+					.filter((m) => m.authorType === "user")
+					.at(-1)?.content ?? "";
+
+				const tomoriStateForPreset =
+					params.snapshot?.tomoriState ??
+					await loadTomoriState(params.guildId);
+
+				// 3. Rearrange native output according to preset node order
+				return reassembleWithPreset(
+					nativeOutput,
+					presetData,
+					{
+						triggererName: params.triggererName,
+						tomoriNickname: params.tomoriNickname,
+						tomoriAttributes: params.tomoriAttributes,
+						personaPrompt: params.personaPrompt,
+						sampleDialoguesIn: tomoriStateForPreset?.sample_dialogues_in ?? [],
+						sampleDialoguesOut: tomoriStateForPreset?.sample_dialogues_out ?? [],
+						lastUserMessage: lastUserMsg,
+					},
+					{
+						client: params.client,
+						guildId: params.guildId,
+						triggererName: params.triggererName,
+						botName: params.tomoriNickname,
+						personalMemoriesEnabled: params.tomoriConfig.personal_memories_enabled ?? true,
+					},
+				);
+			}
+		}
+	}
+
+	// No active preset (or user impersonation) — use native assembly
+	return buildContextNative(params);
+}
+
+/**
+ * Native context assembly — fixed 9-block sequence.
+ * This is the original buildContext() implementation, now called internally.
+ * When a ST preset is active, the routing wrapper in buildContext() calls this
+ * to get tagged items, then rearranges them via reassembleWithPreset().
+ */
+async function buildContextNative({
   guildId,
   serverName,
   serverDescription,
   simplifiedMessageHistory,
   userList,
-  channelDesc: _channelDesc, // Unused after Phase 1 optimization (channel info now in Users in Conversation section)
+  channelDesc: _channelDesc,
   channelName,
-  channelId, // Added for short-term memory context
+  channelId,
   client,
   triggererName,
-  emojiStrings: _emojiStrings, // Unused after Phase 1 optimization (emojis fetched directly from guild cache)
+  emojiStrings: _emojiStrings,
   tomoriNickname,
   tomoriAttributes,
   tomoriConfig,
@@ -967,64 +1080,7 @@ export async function buildContext({
   seesVideos: seesVideosOverride,
   hasVisionTool = false,
   explicitLongTermMemoryIntent: explicitLongTermMemoryIntentOverride,
-}: {
-  guildId: string;
-  serverName: string;
-  serverDescription: string | null;
-  simplifiedMessageHistory: SimplifiedMessageForContext[];
-  userList: string[];
-  channelDesc: string | null;
-  channelName: string;
-  channelId: string; // Added for short-term memory context
-  client: Client;
-  triggererName: string;
-  emojiStrings?: string[];
-  tomoriNickname: string;
-  tomoriAttributes: string[];
-  tomoriConfig: TomoriConfigRow;
-  personaPrompt?: string | null;
-  personaLineageId?: number;
-  isDMChannel?: boolean; // Added for DM support
-  mediaContextWindow?: number; // Optional override for media window size
-  snapshot?: import("../../types/misc/context").RequestSnapshot; // Optional per-request snapshot
-  preloadedEmojis?: ServerEmojiRow[] | null; // Pre-loaded emoji data to avoid redundant DB query
-  preloadedStickers?: ServerStickerRow[] | null; // Pre-loaded sticker data to avoid redundant DB query
-  isUserImpersonation?: boolean; // Added February 2026 - Flag for user impersonation mode
-  impersonatedUserId?: string; // Added February 2026 - User ID being impersonated
-  impersonatedUserNickname?: string; // Added February 2026 - Database nickname for impersonated user (optional)
-  impersonatedUserPrompt?: string | null; // Added March 2026 - User-owned prompt for impersonation replies
-  /** Matrix bridge users: Matrix user ID (e.g. "@bred:localhost") → stripped display name.
-   *  These cannot be looked up in the Discord guild, so they get lightweight entries
-   *  with a plain-text mention handle instead of a Discord <@userId> ping. */
-  matrixUsers?: Map<string, string>;
-  /** Synthetic participants surfaced as user-like entries.
-   *  Keys are either persona DB IDs (short numeric tomori_id) or webhook snowflakes. */
-  syntheticUsers?: Map<
-    string,
-    { displayName: string; type: "persona" | "webhook" }
-  >;
-  /** When true, append a [System: Sent ...] timestamp annotation to every dialogue message. */
-  includeTimestamps?: boolean;
-  /**
-   * Effective image-capability override from the provider's capability cache.
-   * When provided, takes precedence over `tomoriState.llm.sees_images` (DB flag).
-   * Use this to pass the API-resolved value so the context builder and stream
-   * adapter stay in sync — the DB flag can lag behind newly-supported models.
-   */
-  seesImages?: boolean;
-  /**
-   * Effective video-capability override from the provider's capability cache.
-   * When provided, takes precedence over `tomoriState.llm.sees_videos` (DB flag).
-   */
-  seesVideos?: boolean;
-  /**
-   * When true, the analyze_image tool is available for the current model.
-   * Changes the non-vision image placeholder from "do not claim to see" to
-   * "use analyze_image tool to view this image".
-   */
-  hasVisionTool?: boolean;
-  explicitLongTermMemoryIntent?: boolean;
-}): Promise<{
+}: BuildContextParams): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
   uncensorDirective?: string;

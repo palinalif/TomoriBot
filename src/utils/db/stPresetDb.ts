@@ -7,6 +7,7 @@
 import { sql } from "@/utils/db/client";
 import type { StPresetRow, StPresetNodeRow } from "@/types/db/schema";
 import { log } from "@/utils/misc/logger";
+import { invalidateStPresetCache } from "@/utils/cache/stPresetCache";
 
 // ─── Preset-Level Operations ─────────────────────────────────────────
 
@@ -65,6 +66,8 @@ export async function insertPresetWithNodes(
 		});
 
 		log.success(`[StPresetDb] Inserted preset "${presetName}" with ${nodes.length} nodes for server ${serverId}`);
+		// Invalidate cache after successful write
+		invalidateStPresetCache(serverId);
 		return result as StPresetRow;
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
@@ -199,11 +202,13 @@ export async function loadAllNodes(
  *
  * @param presetId - The preset_id owning these nodes
  * @param enabledMap - Map of node identifier → desired enabled state
+ * @param serverId - Internal server_id for cache invalidation (required to keep preset cache consistent)
  * @returns True if the update succeeded
  */
 export async function updateNodeEnabledStates(
 	presetId: number,
 	enabledMap: Map<string, boolean>,
+	serverId: number,
 ): Promise<boolean> {
 	try {
 		await sql.begin(async (tx) => {
@@ -217,6 +222,8 @@ export async function updateNodeEnabledStates(
 		});
 
 		log.info(`[StPresetDb] Updated ${enabledMap.size} node states for preset ${presetId}`);
+		// Invalidate cache after successful toggle (node states affect context assembly)
+		invalidateStPresetCache(serverId);
 		return true;
 	} catch (error) {
 		log.error(`[StPresetDb] Failed to update node states for preset ${presetId}`, error);
@@ -230,10 +237,12 @@ export async function updateNodeEnabledStates(
  * Delete a preset and all its nodes (CASCADE handles node cleanup).
  *
  * @param presetId - The preset_id to delete
+ * @param serverId - Internal server_id for cache invalidation (required to keep preset cache consistent)
  * @returns True if a row was deleted
  */
 export async function deletePreset(
 	presetId: number,
+	serverId: number,
 ): Promise<boolean> {
 	try {
 		const result = await sql`
@@ -242,6 +251,8 @@ export async function deletePreset(
 		const deleted = (result as unknown[]).length > 0 || (result as { count?: number }).count === 1;
 		if (deleted) {
 			log.success(`[StPresetDb] Deleted preset ${presetId}`);
+			// Invalidate cache after successful delete
+			invalidateStPresetCache(serverId);
 		}
 		return deleted;
 	} catch (error) {
@@ -277,6 +288,8 @@ export async function setActivePreset(
 		});
 
 		log.success(`[StPresetDb] Activated preset ${presetId} for server ${serverId}`);
+		// Invalidate cache after successful activation change
+		invalidateStPresetCache(serverId);
 		return true;
 	} catch (error) {
 		log.error(`[StPresetDb] Failed to activate preset ${presetId} for server ${serverId}`, error);

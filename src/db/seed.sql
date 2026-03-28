@@ -126,7 +126,7 @@ VALUES
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint
   ('custom', 'custom/bootstrap', false, false, false, false, true, false, false, false, false, true, false, 'Self-hosted OpenAI-compatible endpoint (Ollama, KoboldCPP, vLLM, LocalAI)', 'セルフホスト型OpenAI互換エンドポイント（Ollama、KoboldCPP、vLLM、LocalAI）')
-ON CONFLICT (llm_codename) DO UPDATE SET
+ON CONFLICT (llm_provider, llm_codename) DO UPDATE SET
   llm_description = EXCLUDED.llm_description,
   ja_description = EXCLUDED.ja_description,
   is_smartest = EXCLUDED.is_smartest,
@@ -140,7 +140,6 @@ ON CONFLICT (llm_codename) DO UPDATE SET
   sees_youtube = EXCLUDED.sees_youtube,
   is_uncensored = EXCLUDED.is_uncensored,
   supports_structoutput = EXCLUDED.supports_structoutput,
-  llm_provider = EXCLUDED.llm_provider,
   updated_at = CURRENT_TIMESTAMP;
 
 -- Rename account_setting_* columns in tomori_configs to other_model_* (idempotent).

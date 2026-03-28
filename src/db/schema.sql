@@ -205,10 +205,29 @@ ON tomoris(server_id, lower(btrim(tomori_nickname)));
 CREATE TABLE IF NOT EXISTS llms (
   llm_id SERIAL PRIMARY KEY,
   llm_provider TEXT NOT NULL,
-  llm_codename TEXT NOT NULL UNIQUE,
+  llm_codename TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Drop old single-column unique constraint if it exists (idempotent migration)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'llms_llm_codename_key' AND contype = 'u'
+  ) THEN
+    ALTER TABLE llms DROP CONSTRAINT llms_llm_codename_key;
+    RAISE NOTICE 'Dropped old unique constraint llms_llm_codename_key';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Could not drop llms_llm_codename_key (may not exist): %', SQLERRM;
+END $$;
+
+-- Allow same codenames across different providers (e.g., gemini-2.5-flash via google AND vertex)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_llms_provider_codename
+  ON llms(llm_provider, llm_codename);
 
 SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');
