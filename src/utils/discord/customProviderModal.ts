@@ -27,6 +27,7 @@ import {
 } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
+import type { McpUrlValidationResult } from "@/utils/mcp/mcpUrlSecurity";
 import { localizer } from "@/utils/text/localizer";
 
 /**
@@ -646,7 +647,8 @@ export function isCustomProvider(provider: string): boolean {
 }
 
 /**
- * Validate custom endpoint URL format
+ * Validate custom endpoint URL format (lightweight sync check).
+ * Use validateRemoteMcpUrl() from mcpUrlSecurity for the full security gate.
  *
  * @param url - The URL to validate
  * @returns boolean - True if the URL appears to be a valid endpoint
@@ -661,5 +663,43 @@ export function validateEndpointUrl(url: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Maps a McpUrlValidationResult failure code to the appropriate locale keys
+ * for the custom provider endpoint URL error messages.
+ *
+ * @param validation - The failed validation result from validateRemoteMcpUrl()
+ * @returns Locale key and optional variable substitutions for replyInfoEmbed
+ */
+export function getCustomEndpointValidationMessage(
+  validation: McpUrlValidationResult,
+): {
+  descriptionKey: string;
+  descriptionVars?: Record<string, string>;
+} {
+  switch (validation.failureCode) {
+    case "INVALID_PROTOCOL":
+      return { descriptionKey: "commands.config.custom.endpoint_url_protocol_description" };
+    case "PRODUCTION_HTTPS_REQUIRED":
+      return { descriptionKey: "commands.config.custom.endpoint_url_https_required_description" };
+    case "REMOTE_HTTP_FORBIDDEN":
+      return { descriptionKey: "commands.config.custom.endpoint_url_http_localhost_only_description" };
+    case "PRODUCTION_LOCALHOST_FORBIDDEN":
+      return { descriptionKey: "commands.config.custom.endpoint_url_localhost_blocked_description" };
+    case "DNS_RESOLUTION_FAILED":
+      return {
+        descriptionKey: "commands.config.custom.endpoint_url_dns_failed_description",
+        descriptionVars: { hostname: validation.hostname ?? "unknown" },
+      };
+    case "PRODUCTION_BLOCKED_ADDRESS":
+      return {
+        descriptionKey: "commands.config.custom.endpoint_url_private_address_description",
+        descriptionVars: { address: validation.blockedAddress ?? "unknown" },
+      };
+    default:
+      // INVALID_FORMAT or unexpected codes
+      return { descriptionKey: "commands.config.custom.endpoint_url_invalid_description" };
   }
 }

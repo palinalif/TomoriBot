@@ -48,11 +48,12 @@ import { encryptApiKey } from "@/utils/security/crypto";
 import { sql } from "@/utils/db/client";
 import {
 	isCustomProvider,
-	validateEndpointUrl,
 	promptCustomCapabilities,
+	getCustomEndpointValidationMessage,
 	CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
 	type CustomCapabilitiesResult,
 } from "@/utils/discord/customProviderModal";
+import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 
 // Modal configuration constants
@@ -170,10 +171,7 @@ export async function execute(
 			{
 				customId: API_KEY_INPUT_ID,
 				labelKey: "commands.config.provider.switch.api_key_label",
-				descriptionKey:
-					process.env.RUN_ENV !== "production"
-						? "commands.config.provider.switch.api_key_description_with_custom"
-						: "commands.config.provider.switch.api_key_description",
+				descriptionKey: "commands.config.provider.switch.api_key_description_with_custom",
 				placeholder: "commands.config.provider.switch.api_key_placeholder",
 				required: false,
 				style: TextInputStyle.Short,
@@ -353,11 +351,21 @@ export async function execute(
 			newLogitBiasEntries = savedConfig.llm_logit_biases ?? [];
 
 			if (isCustomProvider(normalizedProvider)) {
-				if (!customEndpointUrl || !validateEndpointUrl(customEndpointUrl)) {
+				if (!customEndpointUrl) {
 					await replyInfoEmbed(modalSubmitInteraction, locale, {
 						titleKey: "commands.config.custom.endpoint_url_invalid_title",
-						descriptionKey:
-							"commands.config.custom.endpoint_url_invalid_description",
+						descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+				const savedUrlValidation = await validateRemoteMcpUrl(customEndpointUrl);
+				if (!savedUrlValidation.valid) {
+					const validationMessage = getCustomEndpointValidationMessage(savedUrlValidation);
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "commands.config.custom.endpoint_url_invalid_title",
+						descriptionKey: validationMessage.descriptionKey,
+						descriptionVars: validationMessage.descriptionVars,
 						color: ColorCode.ERROR,
 					});
 					return;
@@ -437,11 +445,15 @@ export async function execute(
 				? apiKeyInput
 				: savedConfig?.custom_endpoint_url;
 
-			if (!endpointUrl || !validateEndpointUrl(endpointUrl)) {
+			const endpointUrlValidation = await validateRemoteMcpUrl(endpointUrl ?? "");
+		if (!endpointUrl || !endpointUrlValidation.valid) {
+				const validationMessage = endpointUrl
+					? getCustomEndpointValidationMessage(endpointUrlValidation)
+					: { descriptionKey: "commands.config.custom.endpoint_url_invalid_description" };
 				await replyInfoEmbed(modalSubmitInteraction, locale, {
 					titleKey: "commands.config.custom.endpoint_url_invalid_title",
-					descriptionKey:
-						"commands.config.custom.endpoint_url_invalid_description",
+					descriptionKey: validationMessage.descriptionKey,
+					descriptionVars: validationMessage.descriptionVars,
 					color: ColorCode.ERROR,
 				});
 				return;

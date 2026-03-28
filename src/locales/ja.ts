@@ -2573,15 +2573,26 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           no_keys_title: `ローテーションキーがありません`,
           no_keys_description: `削除するローテーションキーがありません。メインAPIキーのみが設定されています。`,
         },
+        help: {
+          description: `カスタムプロバイダー（OpenAI互換エンドポイント）のセットアップ方法。`,
+          title: `カスタムプロバイダーのセットアップ`,
+          body: `Ollama・vLLM・LiteLLM・OneAPI・KoboldCPPなど、任意のOpenAI互換エンドポイントに接続できます。\n\n**エンドポイントURL**\nカスタムプロバイダーを選択する際に、APIキーフィールドにベースURLを入力してください。\n例: \`https://my-server.com/v1\`\n\`/chat/completions\` は自動で付加されます。自分で追加しないでください。\n本番環境では**HTTPS**かつ公開アクセス可能なURLが必要です（localhostやプライベートIPは不可）。\n\n**モデル名**\nURL入力後に表示される機能設定プロンプトで設定します。エンドポイントが期待する正確な名前を入力してください。例: Ollamaなら \`gemma3:latest\`、プロキシならそのモデルID。\nリクエストの \`model\` フィールドとして送信されます。\n\n**APIキー / Bearerトークン**\nオプションです。セットアップ後に \`/config apikey set\` で認証トークンを保存できます。\n設定した場合、\`Authorization: Bearer {token}\` として送信されます。\n認証不要なエンドポイントでは設定不要です。`,
+        },
       },
-      // カスタムプロバイダー設定（非本番環境のみ）
+      // カスタムプロバイダー設定
       custom: {
         // エンドポイントURLフィールドのヘルプテキスト（カスタムプロバイダーのAPIキーフィールドの代わりに表示）
         endpoint_url_label: `エンドポイントURL`,
-        endpoint_url_description: `OpenAI互換エンドポイントのURLを入力してください（例：http://localhost:11434/v1）`,
-        endpoint_url_placeholder: `http://localhost:11434/v1`,
+        endpoint_url_description: `OpenAI互換エンドポイントのURLを入力してください（例：https://my-llm-server.com/v1 、開発環境では http://localhost:11434/v1）`,
+        endpoint_url_placeholder: `https://my-llm-server.com/v1`,
         endpoint_url_invalid_title: `無効なエンドポイントURL`,
         endpoint_url_invalid_description: `カスタムエンドポイントの有効なHTTPまたはHTTPS URLを入力してください。`,
+        endpoint_url_protocol_description: `URLはHTTPまたはHTTPSプロトコルを使用する必要があります。`,
+        endpoint_url_https_required_description: `本番環境ではHTTPSが必要です。公開アクセス可能なHTTPSエンドポイントを使用してください（例：https://my-llm-server.com/v1）。`,
+        endpoint_url_http_localhost_only_description: `HTTPは開発環境のlocalhost専用です。リモートサーバーにはHTTPSを使用してください。`,
+        endpoint_url_localhost_blocked_description: `本番環境ではlocalhostエンドポイントは使用できません。公開アクセス可能なHTTPSエンドポイントを使用してください。`,
+        endpoint_url_dns_failed_description: `ホスト名 \`{hostname}\` を解決できませんでした。サーバーが公開アクセス可能であり、URLが正しいことを確認してください。`,
+        endpoint_url_private_address_description: `\`{address}\` はプライベートまたは予約済みIPアドレスです。公開アクセス可能なHTTPSエンドポイントを使用してください。`,
         // モデル名設定
         model_name_label: `モデル名（必須）`,
         model_name_description: `必須です。エンドポイントが期待する正確な上流モデル名を入力してください（例：「gpt-5.4」「gpt-5.3-codex」「gemma3:latest」）。`,
@@ -2607,7 +2618,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         setup_success_description: `カスタムのOpenAI互換エンドポイントが正常に設定されました。`,
         capabilities_timeout: `モデル機能の設定がタイムアウトしました。もう一度お試しください。`,
         // セレクトメニューに表示されるプロバイダー説明
-        provider_description: `セルフホスト型のOpenAI互換エンドポイント（非本番環境のみ）`,
+        provider_description: `任意のOpenAI互換エンドポイント（Ollama、vLLMなど）に接続`,
       },
       // プロバイダー設定の永続化 — 保存されたプロバイダー設定の切替/削除
       provider: {

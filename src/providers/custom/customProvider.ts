@@ -4,8 +4,8 @@
  * This provider allows self-hosted TomoriBot users to connect to any OpenAI-compatible
  * endpoint such as Ollama, KoboldCPP, vLLM, LocalAI, or OpenRouter proxies.
  *
- * IMPORTANT: This provider is only available in non-production environments.
- * When RUN_ENV=production, this provider should be filtered out from loadUniqueProviders().
+ * Available in all environments. In production, endpoint URLs are validated via
+ * validateRemoteMcpUrl() which blocks localhost, private IPs, and non-HTTPS URLs.
  *
  * Key differences from OpenRouter:
  * - Uses custom endpoint URL from tomori_configs.custom_endpoint_url

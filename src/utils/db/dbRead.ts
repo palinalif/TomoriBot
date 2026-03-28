@@ -1617,19 +1617,7 @@ export async function loadUniqueProviders(
     }
 
     // 4. Convert back to array, sorted by the normalized keys
-    let providers = Array.from(providerMap.values()).sort();
-
-    // 5. Filter out 'custom' provider in production environment
-    // Custom provider is only available for self-hosted instances
-    if (process.env.RUN_ENV === "production") {
-      const beforeCount = providers.length;
-      providers = providers.filter((p) => p.toLowerCase() !== "custom");
-      if (beforeCount !== providers.length) {
-        log.info(
-          "Filtered out 'custom' provider (not available in production)",
-        );
-      }
-    }
+    const providers = Array.from(providerMap.values()).sort();
 
     log.info(
       `Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`,

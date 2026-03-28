@@ -41,11 +41,12 @@ import { encryptApiKey } from "../../../utils/security/crypto";
 import { sql } from "@/utils/db/client";
 import {
   isCustomProvider,
-  validateEndpointUrl,
   promptCustomCapabilities,
+  getCustomEndpointValidationMessage,
   CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
   type CustomCapabilitiesResult,
 } from "../../../utils/discord/customProviderModal";
+import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 
 // Modal configuration constants
@@ -194,12 +195,16 @@ export async function execute(
       // Custom Provider Flow: apiKey field contains the endpoint URL
       log.info(`Custom provider selected - treating api_key as endpoint URL`);
 
-      // Validate the endpoint URL format
-      if (!apiKey || !validateEndpointUrl(apiKey)) {
+      // Validate the endpoint URL format and security (blocks private IPs, localhost in prod, etc.)
+      const urlValidation = await validateRemoteMcpUrl(apiKey ?? "");
+      if (!apiKey || !urlValidation.valid) {
+        const validationMessage = apiKey
+          ? getCustomEndpointValidationMessage(urlValidation)
+          : { descriptionKey: "commands.config.custom.endpoint_url_invalid_description" };
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.custom.endpoint_url_invalid_title",
-          descriptionKey:
-            "commands.config.custom.endpoint_url_invalid_description",
+          descriptionKey: validationMessage.descriptionKey,
+          descriptionVars: validationMessage.descriptionVars,
           color: ColorCode.ERROR,
         });
         return;

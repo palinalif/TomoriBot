@@ -2560,15 +2560,26 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_keys_title: `No Rotation Keys`,
           no_keys_description: `There are no rotation keys to purge. Only your main API key is configured.`,
         },
+        help: {
+          description: `How to set up the Custom provider (OpenAI-compatible endpoints).`,
+          title: `Custom Provider Setup`,
+          body: `Connect to any OpenAI-compatible endpoint: Ollama, vLLM, LiteLLM, OneAPI, KoboldCPP, and more.\n\n**Endpoint URL**\nEnter your base URL in the API Key field when selecting the Custom provider.\nExample: \`https://my-server.com/v1\`\n\`/chat/completions\` is appended automatically. Do not add it yourself.\nIn production the URL must be **HTTPS** and publicly reachable (no localhost or private IPs).\n\n**Model Name**\nSet during the capabilities prompt after entering the URL. Enter the exact name your endpoint expects, e.g. \`gemma3:latest\` for Ollama or the model ID your proxy uses.\nSent as the \`model\` field in every request.\n\n**API Key / Bearer Token**\nOptional. After setup, use \`/config apikey set\` again to store an auth token.\nIf set, it is sent as \`Authorization: Bearer {token}\`.\nLeave unset for endpoints that require no authentication.`,
+        },
       },
-      // Custom provider configuration (non-production only)
+      // Custom provider configuration
       custom: {
         // Endpoint URL field help text (shown instead of API key for custom provider)
         endpoint_url_label: `Endpoint URL`,
-        endpoint_url_description: `Enter your OpenAI-compatible endpoint URL (e.g., http://localhost:11434/v1)`,
-        endpoint_url_placeholder: `http://localhost:11434/v1`,
+        endpoint_url_description: `Enter your OpenAI-compatible endpoint URL (e.g., https://my-llm-server.com/v1 or http://localhost:11434/v1 in dev)`,
+        endpoint_url_placeholder: `https://my-llm-server.com/v1`,
         endpoint_url_invalid_title: `Invalid Endpoint URL`,
         endpoint_url_invalid_description: `Please enter a valid HTTP or HTTPS URL for your custom endpoint.`,
+        endpoint_url_protocol_description: `URL must use HTTP or HTTPS protocol.`,
+        endpoint_url_https_required_description: `Production requires HTTPS. Use a publicly accessible HTTPS endpoint (e.g., https://my-llm-server.com/v1).`,
+        endpoint_url_http_localhost_only_description: `HTTP is only allowed for localhost in development. Use HTTPS for remote servers.`,
+        endpoint_url_localhost_blocked_description: `Localhost endpoints are not allowed in production. Use a publicly accessible HTTPS endpoint.`,
+        endpoint_url_dns_failed_description: `Could not resolve hostname \`{hostname}\`. Ensure the server is publicly accessible and the URL is correct.`,
+        endpoint_url_private_address_description: `\`{address}\` is a private or reserved IP address. Use a publicly accessible HTTPS endpoint.`,
         // Model name configuration
         model_name_label: `Model Name (Required)`,
         model_name_description: `Required. Enter the exact upstream model name your endpoint expects (for example, "gpt-5.4", "gpt-5.3-codex", or "gemma3:latest").`,
@@ -2594,7 +2605,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         setup_success_description: `Your custom OpenAI-compatible endpoint has been configured successfully.`,
         capabilities_timeout: `Model capabilities configuration timed out. Please try again.`,
         // Provider description shown in select menus
-        provider_description: `Self-hosted OpenAI-compatible endpoint (non-production only)`,
+        provider_description: `Connect to any OpenAI-compatible endpoint (Ollama, vLLM, etc.)`,
       },
       // Provider configuration persistence — switch/remove saved provider configs
       provider: {
