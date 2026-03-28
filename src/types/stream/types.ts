@@ -43,6 +43,11 @@ export interface StreamState {
   isInsideThinkBlock: boolean;
   /** Accumulates raw content between <think> and </think> before routing to thoughtRawSegments. */
   thinkBlockBuffer: string;
+  isInsideDetailsBlock: boolean;
+  /** Accumulates raw content between <details> and </details> before routing to detailsSegments. */
+  detailsBlockBuffer: string;
+  /** Completed <details> block bodies (with <summary> stripped), routed to STM after stream ends. */
+  detailsSegments: string[];
   hasSemanticMarkers: boolean;
   messageSentCount: number;
   hasRepliedToOriginalMessage: boolean;
@@ -211,6 +216,9 @@ export function createDefaultStreamState(): StreamState {
     isInsideCodeBlock: false,
     isInsideThinkBlock: false,
     thinkBlockBuffer: "",
+    isInsideDetailsBlock: false,
+    detailsBlockBuffer: "",
+    detailsSegments: [],
     hasSemanticMarkers: false,
     messageSentCount: 0,
     hasRepliedToOriginalMessage: false,

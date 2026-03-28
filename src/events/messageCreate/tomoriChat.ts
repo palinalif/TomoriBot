@@ -5826,6 +5826,7 @@ export default async function tomoriChat(
           }[] = [];
           let finalStreamCompleted = false;
           let finalAccumulatedText = ""; // Track accumulated text from successful stream
+          let finalDetailsContent = ""; // Track extracted <details> block content for STM
           const accumulatedStreamedModelParts: Array<Record<string, unknown>> =
             [];
           let personaThoughtLog: ThoughtLogPayload | undefined;
@@ -6330,6 +6331,13 @@ export default async function tomoriChat(
                   if (streamResult.accumulatedText) {
                     finalAccumulatedText = streamResult.accumulatedText;
                   }
+                  // Accumulate extracted <details> block content for STM routing
+                  // (uses accumulation since the orchestrator resets detailsSegments on each call)
+                  if (streamResult.detailsContent) {
+                    finalDetailsContent = finalDetailsContent
+                      ? `${finalDetailsContent}\n\n${streamResult.detailsContent}`
+                      : streamResult.detailsContent;
+                  }
                   // Reset follow-up counter on successful terminal completion
                   const completedLockEntry = channelLocks.get(channel.id);
                   if (completedLockEntry) completedLockEntry.followUpCount = 0;
@@ -6594,6 +6602,13 @@ export default async function tomoriChat(
                     personaThoughtLog,
                     streamResult.thoughtLog,
                   );
+
+                  // Accumulate any <details> content captured before the tool call
+                  if (streamResult.detailsContent) {
+                    finalDetailsContent = finalDetailsContent
+                      ? `${finalDetailsContent}\n\n${streamResult.detailsContent}`
+                      : streamResult.detailsContent;
+                  }
 
                   if (!streamResult.data) {
                     // Function call without data - log error and break
@@ -7772,9 +7787,14 @@ export default async function tomoriChat(
           );
 
           if (finalStreamCompleted && finalAccumulatedText.trim()) {
+            // Append extracted <details> block metadata to the response text for STM.
+            // This preserves scene/state metadata that was stripped from Discord output.
+            const responseText = finalDetailsContent.trim()
+              ? `${finalAccumulatedText.trim()}\n\n[Scene Metadata]\n${finalDetailsContent.trim()}`
+              : finalAccumulatedText.trim();
             personaResponses.push({
               personaName: currentPersona.tomori_nickname,
-              text: finalAccumulatedText.trim(),
+              text: responseText,
               tomoriId: currentPersona.tomori_id,
               personaLineageId: currentPersona.persona_lineage_id,
             });
@@ -7783,7 +7803,7 @@ export default async function tomoriChat(
               setLastRespondedPersona(channel.id, currentPersona.tomori_id);
             }
             log.info(
-              `[SHORT_TERM_MEMORY] Captured response from ${currentPersona.tomori_nickname} - length=${finalAccumulatedText.trim().length}`,
+              `[SHORT_TERM_MEMORY] Captured response from ${currentPersona.tomori_nickname} - length=${responseText.length}${finalDetailsContent.trim() ? `, detailsContent=${finalDetailsContent.trim().length}` : ""}`,
             );
           } else {
             log.warn(

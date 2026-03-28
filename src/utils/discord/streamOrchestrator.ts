@@ -612,6 +612,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         status: "completed",
         messageSentCount: state.messageSentCount,
         accumulatedText: state.accumulatedText, // Return accumulated text for short-term memory
+        detailsContent: state.detailsSegments.length > 0
+          ? state.detailsSegments.join("\n\n")
+          : undefined,
         thoughtLog: this.buildThoughtLogPayload(state),
         data: terminalDoneMetadata,
       };
@@ -732,6 +735,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 					status: "function_call",
             data: chunk.functionCall,
             accumulatedText: state.accumulatedText,
+            detailsContent: state.detailsSegments.length > 0
+              ? state.detailsSegments.join("\n\n")
+              : undefined,
             thoughtLog: this.buildThoughtLogPayload(state),
           };
         }
@@ -809,11 +815,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       return;
     }
 
-    // Route content to the correct buffer: while inside a think block, new chunks belong in the
-    // think accumulator — NOT the main output buffer. This prevents think content from leaking
-    // into Discord when the model streams the <think> tag split across multiple tiny SSE chunks.
+    // Route content to the correct buffer: while inside a think or details block, new chunks
+    // belong in the respective accumulator — NOT the main output buffer. This prevents content
+    // from leaking into Discord when the model streams tags split across multiple tiny SSE chunks.
     if (state.isInsideThinkBlock) {
       state.thinkBlockBuffer += normalizedTextContent;
+    } else if (state.isInsideDetailsBlock) {
+      state.detailsBlockBuffer += normalizedTextContent;
     } else {
       state.buffer += normalizedTextContent;
     }
@@ -822,6 +830,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     // Extract any <think> blocks arriving in the buffer, routing them to the thought log.
     // This handles think tags that arrive split across multiple tiny SSE chunks.
     this.drainThinkBlocksFromBuffer(state);
+
+    // Extract any <details> blocks arriving in the buffer, routing body text to detailsSegments.
+    // Same split-tag handling pattern as think blocks.
+    this.drainDetailsBlocksFromBuffer(state);
 
     // Process buffer iteratively
     let processedSomething: boolean;
@@ -855,6 +867,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       state.buffer.length > 0 &&
       !state.isInsideCodeBlock &&
       !state.isInsideThinkBlock &&
+      !state.isInsideDetailsBlock &&
       !state.hasSemanticMarkers
     );
 
@@ -862,6 +875,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     while (
       !state.isInsideCodeBlock &&
       !state.isInsideThinkBlock &&
+      !state.isInsideDetailsBlock &&
       !state.hasSemanticMarkers &&
       state.buffer.length >=
         DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR
@@ -1048,6 +1062,76 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   }
 
   /**
+   * Strips <summary>...</summary> tags from details block content.
+   * Summary tags are headings/labels (e.g. "Global Position Tracker") — only
+   * the body text has context value for STM.
+   */
+  private static stripSummaryTag(content: string): string {
+    return content.replace(/<summary>[\s\S]*?<\/summary>/i, "").trim();
+  }
+
+  /**
+   * Drains <details> blocks from the buffer, mirroring drainThinkBlocksFromBuffer.
+   * Completed blocks have their <summary>...</summary> stripped and the remaining
+   * body text is pushed to state.detailsSegments for later routing to STM.
+   *
+   * @param state - The current stream state with buffer and details block tracking fields
+   */
+  private drainDetailsBlocksFromBuffer(state: StreamState): void {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (state.isInsideDetailsBlock) {
+        // 1. Safety: absorb any content that landed in the main buffer while inside a details block
+        if (state.buffer.length > 0) {
+          state.detailsBlockBuffer += state.buffer;
+          state.buffer = "";
+        }
+        // 2. Waiting for </details> — look in the details block accumulator
+        const closeIdx = state.detailsBlockBuffer.indexOf("</details>");
+        if (closeIdx === -1) {
+          // Still accumulating details content, nothing to do yet
+          break;
+        }
+
+        // 3. Route completed details content to detailsSegments
+        let detailsContent = state.detailsBlockBuffer.slice(0, closeIdx).trim();
+        if (detailsContent) {
+          // Strip <summary>...</summary> — it's just a label, not data worth storing
+          detailsContent = StreamOrchestrator.stripSummaryTag(detailsContent);
+          if (detailsContent) {
+            state.detailsSegments.push(detailsContent);
+            log.info(
+              `Stream: Captured ${detailsContent.length} chars of details block content for STM`,
+            );
+          }
+        }
+
+        // 4. Content after </details> returns to the main buffer
+        const afterClose = state.detailsBlockBuffer.slice(closeIdx + "</details>".length);
+        state.detailsBlockBuffer = "";
+        state.isInsideDetailsBlock = false;
+        state.buffer += afterClose;
+        // Continue loop — there may be another <details> block in the resumed buffer
+      } else {
+        // Look for an opening <details> tag in the main buffer (with optional attributes)
+        const openMatch = state.buffer.match(/<details(?:\s[^>]*)?>/);
+        if (!openMatch || openMatch.index === undefined) {
+          break; // No details block in buffer
+        }
+
+        const openIdx = openMatch.index;
+        const fullTag = openMatch[0]; // e.g. "<details>" or "<details open>"
+
+        // Split on <details...>: content before stays in buffer, content after goes to accumulator
+        state.detailsBlockBuffer = state.buffer.slice(openIdx + fullTag.length);
+        state.buffer = state.buffer.slice(0, openIdx);
+        state.isInsideDetailsBlock = true;
+        // Continue loop — check for immediate </details> in detailsBlockBuffer
+      }
+    }
+  }
+
+  /**
    * Simplified semantic marker detection that checks for INCOMPLETE semantic blocks
    * Returns true only if there are unclosed/incomplete semantic markers that we should wait for
    * Focuses on the core cases that cause broken text formatting
@@ -1111,6 +1195,24 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     for (let len = THINK_OPEN.length - 1; len >= 1; len--) {
       if (buffer.endsWith(THINK_OPEN.slice(0, len))) {
         log.info(`Stream: Buffer ends with partial <think> tag prefix`);
+        return true;
+      }
+    }
+
+    // 6. Check for a partial or unclosed <details> tag at the end of the buffer.
+    // Covers plain "<details>" and attribute variants like "<details open>" — holds until
+    // the tag closes with ">". Uses regex instead of the prefix-loop pattern because
+    // <details> can carry attributes (unlike <think> which is always bare).
+    if (/<details(?:\s[^>]*)?$/.test(buffer)) {
+      log.info(`Stream: Buffer ends with partial or unclosed <details> tag`);
+      return true;
+    }
+    // Also check for the very early prefix stage: "<", "<d", "<de", ..., "<detail"
+    // (before the full word "details" arrives). Same approach as <think> prefix detection.
+    const DETAILS_PREFIX = "<details";
+    for (let len = DETAILS_PREFIX.length - 1; len >= 1; len--) {
+      if (buffer.endsWith(DETAILS_PREFIX.slice(0, len))) {
+        log.info(`Stream: Buffer ends with partial <details> tag prefix`);
         return true;
       }
     }
@@ -1227,8 +1329,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     state: StreamState,
     config: StreamConfig,
   ): ChunkProcessingResult {
-    // Hold the buffer entirely while accumulating a think block — don't flush any content
-    if (state.isInsideThinkBlock) {
+    // Hold the buffer entirely while accumulating a think or details block — don't flush any content
+    if (state.isInsideThinkBlock || state.isInsideDetailsBlock) {
       return { shouldFlush: false, updatedBuffer: state.buffer, newCodeBlockState: undefined };
     }
 
@@ -2315,6 +2417,20 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       state.thinkBlockBuffer = "";
       state.isInsideThinkBlock = false;
     }
+
+    // Route any details block content that was still accumulating when the stream ended.
+    // Never send incomplete details content to Discord — route to detailsSegments for STM.
+    if (state.isInsideDetailsBlock && state.detailsBlockBuffer.trim()) {
+      const detailsContent = StreamOrchestrator.stripSummaryTag(state.detailsBlockBuffer);
+      if (detailsContent) {
+        state.detailsSegments.push(detailsContent);
+        log.info(
+          `Stream Seg: Captured ${detailsContent.length} chars of unterminated details block to STM on final flush`,
+        );
+      }
+      state.detailsBlockBuffer = "";
+      state.isInsideDetailsBlock = false;
+    }
   }
 
   /**
@@ -2337,6 +2453,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       }
       state.thinkBlockBuffer = "";
       state.isInsideThinkBlock = false;
+    }
+
+    if (state.isInsideDetailsBlock) {
+      const detailsContent = StreamOrchestrator.stripSummaryTag(state.detailsBlockBuffer);
+      if (detailsContent) {
+        state.detailsSegments.push(detailsContent);
+        log.info(
+          `Stream Seg: Captured ${detailsContent.length} chars of details block to STM before flush`,
+        );
+      }
+      state.detailsBlockBuffer = "";
+      state.isInsideDetailsBlock = false;
     }
 
     if (state.isInsideCodeBlock) {

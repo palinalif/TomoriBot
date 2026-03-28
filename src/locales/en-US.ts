@@ -1650,6 +1650,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
         provider_choice_vertex: `Google Vertex AI`,
+        provider_choice_elevenlabs: `ElevenLabs TTS`,
         // Brave Search
         brave_title: `Setting Up Brave Search API Key`,
         brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
@@ -1825,6 +1826,8 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Use {configVoiceElevenlabs} to browse and select from available voices
 - Voices include different genders, ages, and accents
 - You can always change or remove the voice selection`,
+        free_voices_title: `Premade Voices (Free Tier):`,
+        free_voices_description: `Premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
         important_notes_title: `Important Notes:`,
         important_notes_description: `- ElevenLabs is optional - I can still respond via text
 - Characters are counted when I generate voice messages

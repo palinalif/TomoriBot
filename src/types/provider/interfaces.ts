@@ -78,6 +78,8 @@ export interface StreamResult {
     | "follow_up_interrupt";
   data?: unknown | Error; // Function call data or error details
   accumulatedText?: string; // Text sent to Discord (for short-term memory storage)
+  /** Extracted <details> block body text (with <summary> stripped), for routing to STM. */
+  detailsContent?: string;
   stopReason?: StreamStopReason; // Specific stop source for debugging/logging
   thoughtLog?: ThoughtLogPayload; // Reasoning/thought text captured separately from visible output
   /** NAI GLM-4.6: incomplete trailing sentence dropped by sentenceTrailingBuffer, available for prompt continuation on retry */

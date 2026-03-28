@@ -1717,6 +1717,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
         provider_choice_vertex: `Google Vertex AI`,
+        provider_choice_elevenlabs: `ElevenLabs TTS`,
         zai_title: `Z.ai APIキーの設定`,
         zai_description: `Z.aiはGLMモデルファミリーへのアクセスを提供し、汎用APIと専用Codingエンドポイントの両方に対応しています。
 - チャット、推論、画像生成、コーディングワークフローをサポート
@@ -1830,6 +1831,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - {configVoiceElevenlabs}を使用して利用可能なボイスを参照・選択
 - ボイスには異なる性別、年齢、アクセントが含まれます
 - ボイス選択はいつでも変更・削除可能`,
+        free_voices_title: `プリメイド音声（無料プラン対応）：`,
+        free_voices_description: `プリメイド音声は無料プランでも利用できます。一覧は [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices) で確認し、{configVoiceElevenlabs} で各ペルソナに割り当てましょう。`,
         important_notes_title: `重要な注意点：`,
         important_notes_description: `- ElevenLabsはオプションです - 音声なしでもテキストで返信できます
 - 音声メッセージを生成する際に文字数がカウントされます

@@ -934,7 +934,8 @@ jobs:
           fi
 
           # 1. Create the forum thread (thread_name triggers forum-post creation)
-          threadTitle="TomoriBot v$VERSION — $statusLabel"
+          # Extract title from first H1 line of release notes (strips leading "# ")
+          threadTitle=$(head -1 processed-release-notes.md | sed 's/^# *//')
           firstChunk=$(cat discord_chunk_0.txt)
           echo "Creating Discord forum post: $threadTitle"
 

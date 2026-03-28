@@ -86,6 +86,13 @@ export const configureSubcommand = (
             ),
             value: "vertex",
           },
+          {
+            name: localizer(
+              "en-US",
+              "commands.help.apikey.provider_choice_elevenlabs",
+            ),
+            value: "elevenlabs",
+          },
         ),
     );
 
@@ -139,6 +146,21 @@ export async function execute(
     const supportServerMention = commandRegistry.getCommandMention(
       "support",
       "discord",
+    );
+    const optionalkeyElevenlabsSetMention = commandRegistry.getCommandMention(
+      "optionalkey",
+      "elevenlabs",
+      "set",
+    );
+    const optionalkeyElevenlabsRemoveMention = commandRegistry.getCommandMention(
+      "optionalkey",
+      "elevenlabs",
+      "remove",
+    );
+    const configVoiceElevenlabsMention = commandRegistry.getCommandMention(
+      "config",
+      "voice",
+      "elevenlabs",
     );
 
     // Build options based on provider
@@ -430,6 +452,61 @@ export async function execute(
           footerKey: "commands.help.apikey.vertex_footer",
           footerVars: {
             configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "elevenlabs":
+        embedOptions = {
+          titleKey: "commands.help.elevenlabs.title",
+          descriptionKey: "commands.help.elevenlabs.description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.elevenlabs.what_is_title",
+              value: localizer(locale, "commands.help.elevenlabs.what_is_description"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.elevenlabs.getting_key_title",
+              value: localizer(
+                locale,
+                "commands.help.elevenlabs.getting_key_description",
+                { optionalkeyElevenlabsSet: optionalkeyElevenlabsSetMention },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.elevenlabs.free_voices_title",
+              value: localizer(
+                locale,
+                "commands.help.elevenlabs.free_voices_description",
+                { configVoiceElevenlabs: configVoiceElevenlabsMention },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.elevenlabs.choosing_voice_title",
+              value: localizer(
+                locale,
+                "commands.help.elevenlabs.choosing_voice_description",
+                { configVoiceElevenlabs: configVoiceElevenlabsMention },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.elevenlabs.important_notes_title",
+              value: localizer(
+                locale,
+                "commands.help.elevenlabs.important_notes_description",
+                { optionalkeyElevenlabsRemove: optionalkeyElevenlabsRemoveMention },
+              ),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.elevenlabs.footer",
+          footerVars: {
+            optionalkeyElevenlabsRemove: optionalkeyElevenlabsRemoveMention,
           },
         };
         break;
