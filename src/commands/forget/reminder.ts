@@ -152,177 +152,185 @@ export async function execute(
       return;
     }
 
-    const personaSelection = await replyPaginatedPersonaChoicesV2(
-      interaction,
-      locale,
-      {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      },
-    );
-
-    if (
-      !personaSelection.success ||
-      personaSelection.selectedIndex === undefined ||
-      !personaSelection.interaction
-    ) {
-      return;
-    }
-
-    personaSelectionInteraction = personaSelection.interaction;
-    const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-    if (!selectedPersona?.tomori_id) {
-      await replyInfoEmbed(personaSelectionInteraction, locale, {
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "general.errors.invalid_option_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-    targetTomoriId = selectedPersona.tomori_id;
-    targetIsAlter = selectedPersona.is_alter === true;
-
-    let remindersQuery = sql<ReminderSelectionRow[]>`
-			SELECT
-				r.reminder_id,
-				r.reminder_purpose,
-				r.reminder_time,
-				r.repetition_interval_hours,
-				r.channel_disc_id,
-				r.created_by_user_id,
-				r.user_discord_id,
-				r.user_nickname,
-				u.user_nickname AS created_by_nickname
-			FROM reminders r
-			LEFT JOIN users u
-				ON r.created_by_user_id = u.user_id
-			WHERE r.server_id = ${tomoriState.server_id}
-		`;
-
-    remindersQuery = targetIsAlter
-      ? sql`${remindersQuery} AND r.persona_id = ${targetTomoriId}`
-      : sql`${remindersQuery} AND (r.persona_id = ${targetTomoriId} OR r.persona_id IS NULL)`;
-
-    if (!hasManagePermission) {
-      remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
-    }
-
-    remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
-    const reminders = await remindersQuery;
-    const selectionInteraction = personaSelectionInteraction ?? interaction;
-
-    if (!reminders || reminders.length === 0) {
-      await replyInfoEmbed(selectionInteraction, locale, {
-        titleKey: "commands.forget.reminder.no_reminders_title",
-        descriptionKey: "commands.forget.reminder.no_reminders",
-        color: ColorCode.WARN,
-      });
-      return;
-    }
-
-    const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
-    const reminderSelectOptions: SelectOption[] = reminders.map(
-      (reminder: ReminderSelectionRow, index: number) => {
-        const formattedTime = formatTimeWithOffset(
-          new Date(reminder.reminder_time),
-          timezoneOffset,
-          {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          },
-        );
-
-        const channelName =
-          interaction.guild?.channels.cache.get(reminder.channel_disc_id)
-            ?.name ?? reminder.channel_disc_id;
-        const repeatText =
-          typeof reminder.repetition_interval_hours === "number" &&
-          reminder.repetition_interval_hours >= 1
-            ? ` | repeats every ${reminder.repetition_interval_hours}h`
-            : "";
-        // For Matrix-originated reminders (created_by_user_id = null, user_discord_id
-        // is a Matrix ID like "@bred:localhost"), show who the reminder is for so
-        // server managers can identify and clean up "orphan" reminders.
-        const isMatrixReminder =
-          reminder.created_by_user_id === null &&
-          isBridgeUserId(reminder.user_discord_id);
-        const creatorName = isMatrixReminder
-          ? `${reminder.user_nickname} (Matrix)`
-          : (reminder.created_by_nickname ??
-            (reminder.created_by_user_id
-              ? `user #${reminder.created_by_user_id}`
-              : "unknown"));
-        const managerCreatedByText =
-          hasManagePermission &&
-          reminder.created_by_user_id !== userData.user_id
-            ? isMatrixReminder
-              ? ` | for ${creatorName}`
-              : ` | created by ${creatorName}`
-            : "";
-        const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}${managerCreatedByText}`;
-
-        return {
-          label: safeSelectOptionText(reminder.reminder_purpose, 40),
-          value: index.toString(),
-          description: safeSelectOptionText(description),
-        };
-      },
-    );
-
-    const modalResult = await promptWithPaginatedModal(
-      selectionInteraction,
-      locale,
-      {
-        modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.forget.reminder.modal_title",
-        components: [
-          {
-            customId: REMINDER_SELECT_ID,
-            labelKey: "commands.forget.reminder.select_label",
-            descriptionKey: "commands.forget.reminder.select_description",
-            placeholder: "commands.forget.reminder.select_placeholder",
-            required: true,
-            options: reminderSelectOptions,
-          },
-        ],
-      },
-    );
-
-    if (modalResult.outcome !== "submit") {
-      log.info(
-        `Reminder deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+    while (true) {
+      const personaSelection = await replyPaginatedPersonaChoicesV2(
+        interaction,
+        locale,
+        {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        },
       );
-      return;
+
+      if (!personaSelection.success) {
+        if (personaSelection.reason === "cancelled") return;
+        continue;
+      }
+      if (
+        personaSelection.selectedIndex === undefined ||
+        !personaSelection.interaction
+      ) {
+        return;
+      }
+
+      personaSelectionInteraction = personaSelection.interaction;
+      const selectedPersona =
+        allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await replyInfoEmbed(personaSelectionInteraction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      targetTomoriId = selectedPersona.tomori_id;
+      targetIsAlter = selectedPersona.is_alter === true;
+
+      let remindersQuery = sql<ReminderSelectionRow[]>`
+				SELECT
+					r.reminder_id,
+					r.reminder_purpose,
+					r.reminder_time,
+					r.repetition_interval_hours,
+					r.channel_disc_id,
+					r.created_by_user_id,
+					r.user_discord_id,
+					r.user_nickname,
+					u.user_nickname AS created_by_nickname
+				FROM reminders r
+				LEFT JOIN users u
+					ON r.created_by_user_id = u.user_id
+				WHERE r.server_id = ${tomoriState.server_id}
+			`;
+
+      remindersQuery = targetIsAlter
+        ? sql`${remindersQuery} AND r.persona_id = ${targetTomoriId}`
+        : sql`${remindersQuery} AND (r.persona_id = ${targetTomoriId} OR r.persona_id IS NULL)`;
+
+      if (!hasManagePermission) {
+        remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
+      }
+
+      remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
+      const reminders = await remindersQuery;
+      const selectionInteraction = personaSelectionInteraction ?? interaction;
+
+      if (!reminders || reminders.length === 0) {
+        await replyInfoEmbed(selectionInteraction, locale, {
+          titleKey: "commands.forget.reminder.no_reminders_title",
+          descriptionKey: "commands.forget.reminder.no_reminders",
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+
+      const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
+      const reminderSelectOptions: SelectOption[] = reminders.map(
+        (reminder: ReminderSelectionRow, index: number) => {
+          const formattedTime = formatTimeWithOffset(
+            new Date(reminder.reminder_time),
+            timezoneOffset,
+            {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            },
+          );
+
+          const channelName =
+            interaction.guild?.channels.cache.get(reminder.channel_disc_id)
+              ?.name ?? reminder.channel_disc_id;
+          const repeatText =
+            typeof reminder.repetition_interval_hours === "number" &&
+            reminder.repetition_interval_hours >= 1
+              ? ` | repeats every ${reminder.repetition_interval_hours}h`
+              : "";
+          // For Matrix-originated reminders (created_by_user_id = null, user_discord_id
+          // is a Matrix ID like "@bred:localhost"), show who the reminder is for so
+          // server managers can identify and clean up "orphan" reminders.
+          const isMatrixReminder =
+            reminder.created_by_user_id === null &&
+            isBridgeUserId(reminder.user_discord_id);
+          const creatorName = isMatrixReminder
+            ? `${reminder.user_nickname} (Matrix)`
+            : (reminder.created_by_nickname ??
+              (reminder.created_by_user_id
+                ? `user #${reminder.created_by_user_id}`
+                : "unknown"));
+          const managerCreatedByText =
+            hasManagePermission &&
+            reminder.created_by_user_id !== userData.user_id
+              ? isMatrixReminder
+                ? ` | for ${creatorName}`
+                : ` | created by ${creatorName}`
+              : "";
+          const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}${managerCreatedByText}`;
+
+          return {
+            label: safeSelectOptionText(reminder.reminder_purpose, 40),
+            value: index.toString(),
+            description: safeSelectOptionText(description),
+          };
+        },
+      );
+
+      const modalResult = await promptWithPaginatedModal(
+        selectionInteraction,
+        locale,
+        {
+          modalCustomId: MODAL_CUSTOM_ID,
+          modalTitleKey: "commands.forget.reminder.modal_title",
+          components: [
+            {
+              customId: REMINDER_SELECT_ID,
+              labelKey: "commands.forget.reminder.select_label",
+              descriptionKey: "commands.forget.reminder.select_description",
+              placeholder: "commands.forget.reminder.select_placeholder",
+              required: true,
+              options: reminderSelectOptions,
+            },
+          ],
+        },
+      );
+
+      // Handle modal outcome - loop back to persona picker on dismiss
+      if (modalResult.outcome !== "submit") {
+        log.info(
+          `Reminder deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+        );
+        continue;
+      }
+
+      const modalSubmitInteraction = modalResult.interaction;
+      const selectedIndex = modalResult.values?.[REMINDER_SELECT_ID];
+
+      if (!modalSubmitInteraction || !selectedIndex) {
+        log.error("Modal result unexpectedly missing interaction or values");
+        return;
+      }
+
+      const selectedReminder = reminders[Number.parseInt(selectedIndex, 10)];
+      if (!selectedReminder) {
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey: "general.errors.operation_failed_title",
+          descriptionKey: "general.errors.operation_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      await performReminderRemoval(
+        selectedReminder,
+        modalSubmitInteraction,
+        locale,
+      );
+      break;
     }
-
-    const modalSubmitInteraction = modalResult.interaction;
-    const selectedIndex = modalResult.values?.[REMINDER_SELECT_ID];
-
-    if (!modalSubmitInteraction || !selectedIndex) {
-      log.error("Modal result unexpectedly missing interaction or values");
-      return;
-    }
-
-    const selectedReminder = reminders[Number.parseInt(selectedIndex, 10)];
-    if (!selectedReminder) {
-      await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey: "general.errors.operation_failed_title",
-        descriptionKey: "general.errors.operation_failed_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    await performReminderRemoval(
-      selectedReminder,
-      modalSubmitInteraction,
-      locale,
-    );
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,

@@ -3,6 +3,7 @@ import {
 	MessageFlags,
 	type ChatInputCommandInteraction,
 	type Client,
+	type ModalSubmitInteraction,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import {
@@ -333,7 +334,7 @@ export async function execute(
 			resultDescription += `\n🔴 **Disabled:** ${disabledLabels.join(", ")}`;
 		}
 
-		await modalInteraction.reply({
+		await modalInteraction.editReply({
 			embeds: [
 				new EmbedBuilder()
 					.setTitle(
@@ -342,7 +343,6 @@ export async function execute(
 					.setDescription(resultDescription)
 					.setColor(ColorCode.SUCCESS),
 			],
-			flags: MessageFlags.Ephemeral,
 		});
 	} catch (error) {
 		// 11. Log the error with context

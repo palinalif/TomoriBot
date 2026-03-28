@@ -177,120 +177,126 @@ export async function execute(
 			return;
 		}
 
-		const personaSelection = await replyPaginatedPersonaChoicesV2(
-			interaction,
-			locale,
-			{
-				personas: allPersonas,
-				color: ColorCode.INFO,
-				preserveSelectedInteraction: true,
-				titleKey: "commands.config.voice.elevenlabs.select_persona_title",
-				onSelect: async () => {},
-			},
-		);
-		if (
-			!personaSelection.success ||
-			personaSelection.selectedIndex === undefined ||
-			!personaSelection.interaction
-		) {
-			return;
-		}
+		while (true) {
+			const personaSelection = await replyPaginatedPersonaChoicesV2(
+				interaction,
+				locale,
+				{
+					personas: allPersonas,
+					color: ColorCode.INFO,
+					preserveSelectedInteraction: true,
+					titleKey: "commands.config.voice.elevenlabs.select_persona_title",
+					onSelect: async () => {},
+				},
+			);
+			if (!personaSelection.success) {
+				if (personaSelection.reason !== "cancelled") continue;
+				return;
+			}
+			if (
+				personaSelection.selectedIndex === undefined ||
+				!personaSelection.interaction
+			) {
+				return;
+			}
 
-		const personaButtonInteraction = personaSelection.interaction as ButtonInteraction;
-		selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-		if (!selectedPersona?.tomori_id) {
-			await replyInfoEmbed(personaButtonInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+			const personaButtonInteraction = personaSelection.interaction as ButtonInteraction;
+			selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+			if (!selectedPersona?.tomori_id) {
+				await replyInfoEmbed(personaButtonInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
 
-		modalResult = await promptWithPaginatedModal(
-			personaButtonInteraction,
-			locale,
-			{
-				modalCustomId: VOICE_SELECT_MODAL_ID,
-				modalTitleKey: "commands.config.voice.elevenlabs.modal_title",
-				components: [
-					{
-						customId: VOICE_SELECT_ID,
-						labelKey: "commands.config.voice.elevenlabs.select_label",
-						descriptionKey:
-							"commands.config.voice.elevenlabs.select_description",
-						placeholder:
-							"commands.config.voice.elevenlabs.select_placeholder",
-						required: true,
-						options: buildVoiceOptions(availableVoices, locale),
-					},
-				],
-			},
-		);
-		if (modalResult.outcome !== "submit" || !modalResult.interaction) {
-			return;
-		}
-
-		const modalInteraction = modalResult.interaction;
-		const selectedVoiceId = modalResult.values?.[VOICE_SELECT_ID];
-		if (!selectedVoiceId) {
-			await replyInfoEmbed(modalInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		const nextVoice =
-			selectedVoiceId === CLEAR_VOICE_VALUE
-				? null
-				: (availableVoices.find((voice) => voice.voiceId === selectedVoiceId) ??
-					null);
-		if (selectedVoiceId !== CLEAR_VOICE_VALUE && !nextVoice) {
-			await replyInfoEmbed(modalInteraction, locale, {
-				titleKey: "general.errors.invalid_option_title",
-				descriptionKey: "general.errors.invalid_option_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
-			elevenlabs_voice_id: nextVoice?.voiceId ?? null,
-			elevenlabs_voice_name: nextVoice?.name ?? null,
-		});
-		if (!updatedTomori) {
-			await replyInfoEmbed(modalInteraction, locale, {
-				titleKey: "general.errors.update_failed_title",
-				descriptionKey: "general.errors.update_failed_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		invalidateTomoriStateCache(serverDiscId);
-
-		await replyInfoEmbed(modalInteraction, locale, {
-			titleKey:
-				nextVoice === null
-					? "commands.config.voice.elevenlabs.cleared_title"
-					: "commands.config.voice.elevenlabs.success_title",
-			descriptionKey:
-				nextVoice === null
-					? "commands.config.voice.elevenlabs.cleared_description"
-					: "commands.config.voice.elevenlabs.success_description",
-			descriptionVars:
-				nextVoice === null
-					? {
-							persona: selectedPersona.tomori_nickname,
-						}
-					: {
-							persona: selectedPersona.tomori_nickname,
-							voice: nextVoice.name,
+			modalResult = await promptWithPaginatedModal(
+				personaButtonInteraction,
+				locale,
+				{
+					modalCustomId: VOICE_SELECT_MODAL_ID,
+					modalTitleKey: "commands.config.voice.elevenlabs.modal_title",
+					components: [
+						{
+							customId: VOICE_SELECT_ID,
+							labelKey: "commands.config.voice.elevenlabs.select_label",
+							descriptionKey:
+								"commands.config.voice.elevenlabs.select_description",
+							placeholder:
+								"commands.config.voice.elevenlabs.select_placeholder",
+							required: true,
+							options: buildVoiceOptions(availableVoices, locale),
 						},
-			color: ColorCode.SUCCESS,
-		});
+					],
+				},
+			);
+			if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+				continue;
+			}
+
+			const modalInteraction = modalResult.interaction;
+			const selectedVoiceId = modalResult.values?.[VOICE_SELECT_ID];
+			if (!selectedVoiceId) {
+				await replyInfoEmbed(modalInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			const nextVoice =
+				selectedVoiceId === CLEAR_VOICE_VALUE
+					? null
+					: (availableVoices.find((voice) => voice.voiceId === selectedVoiceId) ??
+						null);
+			if (selectedVoiceId !== CLEAR_VOICE_VALUE && !nextVoice) {
+				await replyInfoEmbed(modalInteraction, locale, {
+					titleKey: "general.errors.invalid_option_title",
+					descriptionKey: "general.errors.invalid_option_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
+				elevenlabs_voice_id: nextVoice?.voiceId ?? null,
+				elevenlabs_voice_name: nextVoice?.name ?? null,
+			});
+			if (!updatedTomori) {
+				await replyInfoEmbed(modalInteraction, locale, {
+					titleKey: "general.errors.update_failed_title",
+					descriptionKey: "general.errors.update_failed_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			invalidateTomoriStateCache(serverDiscId);
+
+			await replyInfoEmbed(modalInteraction, locale, {
+				titleKey:
+					nextVoice === null
+						? "commands.config.voice.elevenlabs.cleared_title"
+						: "commands.config.voice.elevenlabs.success_title",
+				descriptionKey:
+					nextVoice === null
+						? "commands.config.voice.elevenlabs.cleared_description"
+						: "commands.config.voice.elevenlabs.success_description",
+				descriptionVars:
+					nextVoice === null
+						? {
+								persona: selectedPersona.tomori_nickname,
+							}
+						: {
+								persona: selectedPersona.tomori_nickname,
+								voice: nextVoice.name,
+							},
+				color: ColorCode.SUCCESS,
+			});
+			break;
+		}
 	} catch (error) {
 		const errorReplyInteraction = modalResult?.interaction ?? interaction;
 		const context: ErrorContext = {

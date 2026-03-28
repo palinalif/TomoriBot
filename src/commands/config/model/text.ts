@@ -409,112 +409,118 @@ export async function execute(
       });
       return;
     }
-    // Show persona picker — preserveSelectedInteraction returns unacknowledged ButtonInteraction
-    const personaSelection = await replyPaginatedPersonaChoicesV2(
-      interaction,
-      locale,
-      {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      },
-    );
-    if (
-      !personaSelection.success ||
-      personaSelection.selectedIndex === undefined ||
-      !personaSelection.interaction
-    ) {
-      return;
-    }
-    const personaButtonInteraction: ButtonInteraction =
-      personaSelection.interaction;
-    const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-    if (!selectedPersona?.tomori_id) {
-      await replyInfoEmbed(personaButtonInteraction, locale, {
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "general.errors.invalid_option_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-    // Show model picker (ButtonInteraction → modal is valid in Discord)
-    const personaAvailableModels =
-      await loadAvailableModelsForProvider(currentProvider);
-    if (!personaAvailableModels || personaAvailableModels.length === 0) {
-      await replyInfoEmbed(personaButtonInteraction, locale, {
-        titleKey: "commands.config.model.text.no_models_title",
-        descriptionKey: "commands.config.model.text.no_models_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-    const personaModelOptions = personaAvailableModels.map((m) => ({
-      label: safeSelectOptionText(m.llm_codename),
-      value: safeSelectOptionText(m.llm_codename),
-      description: safeSelectOptionText(
-        getLocalizedDescription(m, userData.language_pref),
-      ),
-    }));
-    const personaModalResult = await promptWithPaginatedModal(
-      personaButtonInteraction,
-      locale,
-      {
-        modalCustomId: "config_model_text_persona_modal",
-        modalTitleKey: "commands.config.model.text.modal_title",
-        components: [
-          {
-            customId: MODEL_SELECT_ID,
-            labelKey: "commands.config.model.text.select_label",
-            descriptionKey: "commands.config.model.text.select_description",
-            placeholder: "commands.config.model.text.select_placeholder",
-            required: true,
-            options: personaModelOptions,
-          },
-        ],
-      },
-    );
-    if (personaModalResult.outcome !== "submit") return;
-    // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
-    const personaModalInteraction = personaModalResult.interaction!;
-    // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
-    const selectedPersonaCodename = personaModalResult.values![MODEL_SELECT_ID];
-    const selectedPersonaModel =
-      personaAvailableModels.find(
-        (m) => m.llm_codename === selectedPersonaCodename,
-      ) ?? null;
-    if (!selectedPersonaModel?.llm_id) {
+    while (true) {
+      // Show persona picker — preserveSelectedInteraction returns unacknowledged ButtonInteraction
+      const personaSelection = await replyPaginatedPersonaChoicesV2(
+        interaction,
+        locale,
+        {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        },
+      );
+      if (!personaSelection.success) {
+        if (personaSelection.reason === "cancelled") return;
+        continue;
+      }
+      if (
+        personaSelection.selectedIndex === undefined ||
+        !personaSelection.interaction
+      ) {
+        return;
+      }
+      const personaButtonInteraction: ButtonInteraction =
+        personaSelection.interaction;
+      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await replyInfoEmbed(personaButtonInteraction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      // Show model picker (ButtonInteraction → modal is valid in Discord)
+      const personaAvailableModels =
+        await loadAvailableModelsForProvider(currentProvider);
+      if (!personaAvailableModels || personaAvailableModels.length === 0) {
+        await replyInfoEmbed(personaButtonInteraction, locale, {
+          titleKey: "commands.config.model.text.no_models_title",
+          descriptionKey: "commands.config.model.text.no_models_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      const personaModelOptions = personaAvailableModels.map((m) => ({
+        label: safeSelectOptionText(m.llm_codename),
+        value: safeSelectOptionText(m.llm_codename),
+        description: safeSelectOptionText(
+          getLocalizedDescription(m, userData.language_pref),
+        ),
+      }));
+      const personaModalResult = await promptWithPaginatedModal(
+        personaButtonInteraction,
+        locale,
+        {
+          modalCustomId: "config_model_text_persona_modal",
+          modalTitleKey: "commands.config.model.text.modal_title",
+          components: [
+            {
+              customId: MODEL_SELECT_ID,
+              labelKey: "commands.config.model.text.select_label",
+              descriptionKey: "commands.config.model.text.select_description",
+              placeholder: "commands.config.model.text.select_placeholder",
+              required: true,
+              options: personaModelOptions,
+            },
+          ],
+        },
+      );
+      if (personaModalResult.outcome !== "submit") continue;
+      // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
+      const personaModalInteraction = personaModalResult.interaction!;
+      // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
+      const selectedPersonaCodename = personaModalResult.values![MODEL_SELECT_ID];
+      const selectedPersonaModel =
+        personaAvailableModels.find(
+          (m) => m.llm_codename === selectedPersonaCodename,
+        ) ?? null;
+      if (!selectedPersonaModel?.llm_id) {
+        await replyInfoEmbed(personaModalInteraction, locale, {
+          titleKey: "commands.config.model.text.invalid_model_title",
+          descriptionKey: "commands.config.model.text.invalid_model_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      // Write the persona override to DB
+      const personaWriteOk = await setPersonaLlmOverride(
+        selectedPersona.tomori_id,
+        selectedPersonaModel.llm_id,
+      );
+      if (!personaWriteOk) {
+        await replyInfoEmbed(personaModalInteraction, locale, {
+          titleKey: "general.errors.update_failed_title",
+          descriptionKey: "general.errors.update_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      // Invalidate server cache so next loadAllPersonasForServer picks up persona_llm
+      invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
       await replyInfoEmbed(personaModalInteraction, locale, {
-        titleKey: "commands.config.model.text.invalid_model_title",
-        descriptionKey: "commands.config.model.text.invalid_model_description",
-        color: ColorCode.ERROR,
+        titleKey: "commands.config.model.text.success_title",
+        descriptionKey: "commands.config.model.text.scope_set_persona_success",
+        descriptionVars: {
+          persona: selectedPersona.tomori_nickname,
+          model: selectedPersonaModel.llm_codename,
+        },
+        color: ColorCode.SUCCESS,
       });
-      return;
+      break;
     }
-    // Write the persona override to DB
-    const personaWriteOk = await setPersonaLlmOverride(
-      selectedPersona.tomori_id,
-      selectedPersonaModel.llm_id,
-    );
-    if (!personaWriteOk) {
-      await replyInfoEmbed(personaModalInteraction, locale, {
-        titleKey: "general.errors.update_failed_title",
-        descriptionKey: "general.errors.update_failed_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-    // Invalidate server cache so next loadAllPersonasForServer picks up persona_llm
-    invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-    await replyInfoEmbed(personaModalInteraction, locale, {
-      titleKey: "commands.config.model.text.success_title",
-      descriptionKey: "commands.config.model.text.scope_set_persona_success",
-      descriptionVars: {
-        persona: selectedPersona.tomori_nickname,
-        model: selectedPersonaModel.llm_codename,
-      },
-      color: ColorCode.SUCCESS,
-    });
     return;
   }
 

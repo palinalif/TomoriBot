@@ -806,21 +806,23 @@ export async function replySummaryEmbed(
   );
 
   if (wasRawModalSent && !interaction.deferred && !interaction.replied) {
-    // State desync detected: Discord thinks acknowledged, but Discord.js doesn't know
+    // State desync: raw REST modal acknowledged the interaction but Discord.js
+    // still thinks replied=false / deferred=false. Use webhook.send() to bypass
+    // the followUp() INTERACTION_NOT_REPLIED guard.
     log.info(
-      `Raw modal state desync detected for interaction ${interaction.id}, using followUp directly`,
+      `Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`,
     );
     try {
-      await interaction.followUp({
+      await interaction.webhook.send({
         embeds: [embed],
         components: [],
         flags: flags || MessageFlags.Ephemeral,
       });
       return;
-    } catch (followUpError) {
+    } catch (webhookError) {
       log.error(
-        "followUp failed for raw-modal-acknowledged interaction:",
-        followUpError,
+        "webhook.send failed for raw-modal-acknowledged interaction:",
+        webhookError,
       );
       // Fall through to standard error handling
     }
@@ -841,8 +843,10 @@ export async function replySummaryEmbed(
         error instanceof Error ? error.message : String(error);
 
       if (errorMessage.includes("has already been acknowledged")) {
-        log.info("Attempting followUp due to acknowledgment conflict");
-        await interaction.followUp({
+        log.info(
+          "Attempting webhook.send due to acknowledgment conflict (raw REST desync)",
+        );
+        await interaction.webhook.send({
           embeds: [embed],
           components: [],
           flags: flags || MessageFlags.Ephemeral,
@@ -855,8 +859,8 @@ export async function replySummaryEmbed(
           flags: flags || MessageFlags.Ephemeral,
         });
       } else {
-        log.info("Attempting followUp as last resort fallback");
-        await interaction.followUp({
+        log.info("Attempting webhook.send as last resort fallback");
+        await interaction.webhook.send({
           embeds: [embed],
           components: [],
           flags: flags || MessageFlags.Ephemeral,

@@ -2655,13 +2655,27 @@ async function buildContextNative({
       });
     }
 
-    pushDialogueHistoryContextItem(
-      contextItems,
-      "user",
-      detachedSystemParts,
-      msg.id,
-    );
-    pushDialogueHistoryContextItem(contextItems, role, parts, msg.id);
+    // When the message is from a user (not the model), combine system hints
+    // and content into a single turn so the model sees image context alongside
+    // the message text. For model-authored turns, keep them split to prevent
+    // the model from treating [System: ...] metadata as dialogue it produced.
+    if (role === "user" && detachedSystemParts.length > 0) {
+      const combinedParts = [...detachedSystemParts, ...parts];
+      pushDialogueHistoryContextItem(
+        contextItems,
+        "user",
+        combinedParts,
+        msg.id,
+      );
+    } else {
+      pushDialogueHistoryContextItem(
+        contextItems,
+        "user",
+        detachedSystemParts,
+        msg.id,
+      );
+      pushDialogueHistoryContextItem(contextItems, role, parts, msg.id);
+    }
   }
 
   // Inject user impersonation system prompt as the LAST message (February 2026)

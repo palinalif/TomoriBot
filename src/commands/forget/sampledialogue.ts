@@ -259,157 +259,165 @@ export async function execute(
       return;
     }
 
-    const personaSelection = await replyPaginatedPersonaChoicesV2(
-      interaction,
-      locale,
-      {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      },
-    );
-
-    if (
-      !personaSelection.success ||
-      personaSelection.selectedIndex === undefined ||
-      !personaSelection.interaction
-    ) {
-      return;
-    }
-
-    personaSelectionInteraction = personaSelection.interaction;
-    selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-    if (!selectedPersona?.tomori_id) {
-      await replyInfoEmbed(personaSelectionInteraction, locale, {
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "general.errors.invalid_option_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    // Check if user has Manage Server permission - admins can bypass teaching restriction
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
-
-    // 4. Check if teaching is enabled - FIX: Access through config object
-    if (
-      !tomoriState.config.sampledialogue_memteaching_enabled &&
-      !hasManagePermission
-    ) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
-        descriptionKey:
-          "commands.teach.sampledialogue.teaching_disabled_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    // 5. Get the current dialogue pairs
-    let currentIn = selectedPersona.sample_dialogues_in ?? [];
-    let currentOut = selectedPersona.sample_dialogues_out ?? [];
-
-    // 6. Self-heal mismatched arrays before checking emptiness
-    // This repairs corruption from the old array_remove() bug
-    if (
-      currentIn.length !== currentOut.length &&
-      currentIn.length > 0 &&
-      currentOut.length > 0
-    ) {
-      const repaired = await repairMismatchedDialogues(
-        selectedPersona.tomori_id,
-        currentIn.length,
-        currentOut.length,
+    while (true) {
+      const personaSelection = await replyPaginatedPersonaChoicesV2(
+        interaction,
+        locale,
+        {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        },
       );
-      if (repaired) {
-        currentIn = repaired.repairedIn;
-        currentOut = repaired.repairedOut;
-        // Invalidate cache so subsequent operations see repaired data
-        if (interaction.guildId) {
-          invalidateTomoriStateCache(interaction.guildId);
+
+      if (!personaSelection.success) {
+        if (personaSelection.reason === "cancelled") return;
+        continue;
+      }
+      if (
+        personaSelection.selectedIndex === undefined ||
+        !personaSelection.interaction
+      ) {
+        return;
+      }
+
+      personaSelectionInteraction = personaSelection.interaction;
+      selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await replyInfoEmbed(personaSelectionInteraction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      // Check if user has Manage Server permission - admins can bypass teaching restriction
+      const hasManagePermission =
+        interaction.memberPermissions?.has("ManageGuild") ?? false;
+
+      // 4. Check if teaching is enabled - FIX: Access through config object
+      if (
+        !tomoriState.config.sampledialogue_memteaching_enabled &&
+        !hasManagePermission
+      ) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
+          descriptionKey:
+            "commands.teach.sampledialogue.teaching_disabled_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      // 5. Get the current dialogue pairs
+      let currentIn = selectedPersona.sample_dialogues_in ?? [];
+      let currentOut = selectedPersona.sample_dialogues_out ?? [];
+
+      // 6. Self-heal mismatched arrays before checking emptiness
+      // This repairs corruption from the old array_remove() bug
+      if (
+        currentIn.length !== currentOut.length &&
+        currentIn.length > 0 &&
+        currentOut.length > 0
+      ) {
+        const repaired = await repairMismatchedDialogues(
+          selectedPersona.tomori_id,
+          currentIn.length,
+          currentOut.length,
+        );
+        if (repaired) {
+          currentIn = repaired.repairedIn;
+          currentOut = repaired.repairedOut;
+          // Invalidate cache so subsequent operations see repaired data
+          if (interaction.guildId) {
+            invalidateTomoriStateCache(interaction.guildId);
+          }
         }
       }
-    }
 
-    // 7. Check if there are any dialogues to remove after potential repair
-    if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
-      await replyInfoEmbed(personaSelectionInteraction, locale, {
-        titleKey: "commands.forget.sampledialogue.no_dialogues_title",
-        descriptionKey: "commands.forget.sampledialogue.no_dialogues",
-        color: ColorCode.WARN,
-      });
-      return;
-    }
+      // 7. Check if there are any dialogues to remove after potential repair
+      if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
+        await replyInfoEmbed(personaSelectionInteraction, locale, {
+          titleKey: "commands.forget.sampledialogue.no_dialogues_title",
+          descriptionKey: "commands.forget.sampledialogue.no_dialogues",
+          color: ColorCode.WARN,
+        });
+        return;
+      }
 
-    // 8. Create dialogue select options for the modal
-    const dialogueSelectOptions: SelectOption[] = currentIn.map(
-      (input, index) => {
-        const output = currentOut[index];
-        const truncatedInput = safeSelectOptionText(input, 50);
-        const truncatedOutput = safeSelectOptionText(output, 50);
-        //const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
+      // 8. Create dialogue select options for the modal
+      const dialogueSelectOptions: SelectOption[] = currentIn.map(
+        (input, index) => {
+          const output = currentOut[index];
+          const truncatedInput = safeSelectOptionText(input, 50);
+          const truncatedOutput = safeSelectOptionText(output, 50);
+          //const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
 
-        return {
-          label: safeSelectOptionText(truncatedInput),
-          value: index.toString(),
-          description: safeSelectOptionText(truncatedOutput),
-        };
-      },
-    );
-
-    // 9. Show the paginated modal with dialogue selection
-    const modalResult = await promptWithPaginatedModal(
-      personaSelectionInteraction,
-      locale,
-      {
-        modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.forget.sampledialogue.modal_title",
-        components: [
-          {
-            customId: DIALOGUE_SELECT_ID,
-            labelKey: "commands.forget.sampledialogue.select_label",
-            descriptionKey: "commands.forget.sampledialogue.select_description",
-            placeholder: "commands.forget.sampledialogue.select_placeholder",
-            required: true,
-            options: dialogueSelectOptions,
-          },
-        ],
-      },
-    );
-
-    // 10. Handle modal outcome
-    if (modalResult.outcome !== "submit") {
-      log.info(
-        `Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+          return {
+            label: safeSelectOptionText(truncatedInput),
+            value: index.toString(),
+            description: safeSelectOptionText(truncatedOutput),
+          };
+        },
       );
-      return;
+
+      // 9. Show the paginated modal with dialogue selection
+      const modalResult = await promptWithPaginatedModal(
+        personaSelectionInteraction,
+        locale,
+        {
+          modalCustomId: MODAL_CUSTOM_ID,
+          modalTitleKey: "commands.forget.sampledialogue.modal_title",
+          components: [
+            {
+              customId: DIALOGUE_SELECT_ID,
+              labelKey: "commands.forget.sampledialogue.select_label",
+              descriptionKey:
+                "commands.forget.sampledialogue.select_description",
+              placeholder:
+                "commands.forget.sampledialogue.select_placeholder",
+              required: true,
+              options: dialogueSelectOptions,
+            },
+          ],
+        },
+      );
+
+      // 10. Handle modal outcome - loop back to persona picker on dismiss
+      if (modalResult.outcome !== "submit") {
+        log.info(
+          `Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+        );
+        continue;
+      }
+
+      // 11. Extract values from the modal
+      const modalSubmitInteraction = modalResult.interaction;
+      const selectedIndexStr = modalResult.values?.[DIALOGUE_SELECT_ID];
+
+      // Safety checks (should never be null after submit outcome)
+      if (!modalSubmitInteraction || !selectedIndexStr) {
+        log.error("Modal result unexpectedly missing interaction or values");
+        return;
+      }
+
+      const selectedIndex = Number.parseInt(selectedIndexStr, 10);
+
+      // 12. Perform the database update using the helper function - let helper manage interaction state
+      await performSampleDialogueRemoval(
+        selectedPersona,
+        selectedIndex,
+        currentIn,
+        currentOut,
+        userData,
+        modalSubmitInteraction,
+        locale,
+      );
+      break;
     }
-
-    // 11. Extract values from the modal
-    const modalSubmitInteraction = modalResult.interaction;
-    const selectedIndexStr = modalResult.values?.[DIALOGUE_SELECT_ID];
-
-    // Safety checks (should never be null after submit outcome)
-    if (!modalSubmitInteraction || !selectedIndexStr) {
-      log.error("Modal result unexpectedly missing interaction or values");
-      return;
-    }
-
-    const selectedIndex = Number.parseInt(selectedIndexStr, 10);
-
-    // 12. Perform the database update using the helper function - let helper manage interaction state
-    await performSampleDialogueRemoval(
-      selectedPersona,
-      selectedIndex,
-      currentIn,
-      currentOut,
-      userData,
-      modalSubmitInteraction,
-      locale,
-    );
   } catch (error) {
     // 15. Catch unexpected errors
     const context: ErrorContext = {

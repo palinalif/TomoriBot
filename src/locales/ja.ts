@@ -663,6 +663,7 @@ export default {
           select_page_title: `ページを選択`,
           select_page_description: `**{preset_name}**には**{total_nodes}**個の切り替え可能なノードが**{total_pages}**ページにわたってあります。\nページを選択してノードを表示・切り替え:`,
           group_description: `チェックで有効、チェック解除で無効`,
+          done_button: `完了`,
           no_changes: `変更なし`,
           result_title: `ノード切り替え結果`,
           result_description: `**{enabled}** / **{total}** ノードが有効。\n\n{changes}`,

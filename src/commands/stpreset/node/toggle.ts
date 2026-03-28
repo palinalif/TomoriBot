@@ -16,7 +16,7 @@ import {
 	promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
-import type { UserRow, ErrorContext, StPresetNodeRow } from "@/types/db/schema";
+import type { UserRow, ErrorContext, StPresetNodeRow, StPresetRow } from "@/types/db/schema";
 import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
 import {
 	loadActivePreset,
@@ -240,150 +240,18 @@ export async function execute(
 
 		// 4. Determine if pagination is needed
 		const totalPages = Math.ceil(dbNodes.length / NODES_PER_PAGE);
-		let pageNodes: StPresetNodeRow[];
-		let pageOffset = 0;
-		let modalInteractionSource: ChatInputCommandInteraction | ButtonInteraction = interaction;
+
+		// preset_id is guaranteed non-null by the guard above
+		const presetId = preset.preset_id as number;
 
 		if (totalPages > 1) {
-			// 4a. Multi-page: show page-selection embed with numbered buttons
-			const pageSelectEmbed = createStandardEmbed(locale, {
-				titleKey: "commands.stpreset.node.toggle.select_page_title",
-				descriptionKey: "commands.stpreset.node.toggle.select_page_description",
-				descriptionVars: {
-					preset_name: preset.preset_name,
-					total_nodes: dbNodes.length.toString(),
-					total_pages: totalPages.toString(),
-				},
-				color: ColorCode.INFO,
-			});
-
-			// Build numbered page buttons — max 5 per action row, up to 5 rows (25 pages)
-			const maxButtons = Math.min(totalPages, 25);
-			const pageButtons: ButtonBuilder[] = [];
-
-			for (let i = 1; i <= maxButtons; i++) {
-				const startNode = (i - 1) * NODES_PER_PAGE + 1;
-				const endNode = Math.min(i * NODES_PER_PAGE, dbNodes.length);
-				pageButtons.push(
-					new ButtonBuilder()
-						.setCustomId(`stpreset_page_${i}`)
-						.setLabel(`${startNode}–${endNode}`)
-						.setStyle(ButtonStyle.Primary),
-				);
-			}
-
-			// Split buttons into action rows of 5 (Discord's per-row limit)
-			const actionRows: ActionRowBuilder<ButtonBuilder>[] = [];
-			for (let i = 0; i < pageButtons.length; i += 5) {
-				actionRows.push(
-					new ActionRowBuilder<ButtonBuilder>().addComponents(
-						...pageButtons.slice(i, i + 5),
-					),
-				);
-			}
-
-			// Send page selection message
-			const pageSelectMessage = await interaction.reply({
-				embeds: [pageSelectEmbed],
-				components: actionRows,
-				flags: MessageFlags.Ephemeral,
-			});
-
-			// Wait for page button click
-			let pageButtonInteraction: ButtonInteraction;
-			try {
-				pageButtonInteraction = (await pageSelectMessage.awaitMessageComponent({
-					filter: (i) =>
-						i.user.id === interaction.user.id &&
-						i.customId.startsWith("stpreset_page_"),
-					time: PAGE_SELECT_TIMEOUT_MS,
-				})) as ButtonInteraction;
-			} catch {
-				log.info("[ST Preset Node Toggle] Page selection timed out");
-				return;
-			}
-
-			// Extract selected page and slice nodes
-			const selectedPage = Number.parseInt(
-				pageButtonInteraction.customId.replace("stpreset_page_", ""),
-				10,
-			);
-			const startIndex = (selectedPage - 1) * NODES_PER_PAGE;
-			pageNodes = dbNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
-			pageOffset = startIndex;
-			modalInteractionSource = pageButtonInteraction;
+			// 4a. Multi-page: page-selection loop
+			//     Users can pick pages, toggle nodes, and return to pick another page.
+			await executeMultiPageToggle(interaction, locale, preset, presetId, dbNodes, totalPages);
 		} else {
-			// 4b. Single page: use all nodes directly
-			pageNodes = dbNodes;
+			// 4b. Single page: show modal directly
+			await executeSinglePageToggle(interaction, locale, preset, presetId, dbNodes);
 		}
-
-		// 5. Build checkbox groups for the selected page
-		const checkboxGroups = buildCheckboxGroups(pageNodes, pageOffset);
-
-		// 6. Show modal — use the preset name as the title (passthrough via localizer)
-		const modalResult = await promptWithRawModal(
-			modalInteractionSource,
-			locale,
-			{
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: preset.preset_name,
-				components: checkboxGroups,
-			},
-			MessageFlags.Ephemeral,
-		);
-
-		if (modalResult.outcome !== "submit") {
-			log.info(`[ST Preset Node Toggle] Modal ${modalResult.outcome}`);
-			return;
-		}
-
-		if (!modalResult.interaction) {
-			log.error("[ST Preset Node Toggle] Modal submit interaction is undefined");
-			return;
-		}
-
-		// 7. Collect selected node identifiers from all checkbox groups
-		const selectedIds = collectSelectedIds(modalResult.multiValues, checkboxGroups.length);
-
-		// 8. Build the enabled state map and detect changes
-		const enabledMap = new Map<string, boolean>();
-		const toggled: string[] = [];
-
-		for (const node of pageNodes) {
-			const isNowEnabled = selectedIds.has(node.identifier);
-			enabledMap.set(node.identifier, isNowEnabled);
-
-			if (isNowEnabled !== node.is_enabled) {
-				const state = isNowEnabled ? "ON" : "OFF";
-				toggled.push(`${state} ${node.name}`);
-			}
-		}
-
-		// 9. Persist changed states to DB
-		if (toggled.length > 0) {
-			await updateNodeEnabledStates(preset.preset_id, enabledMap, preset.server_id);
-		}
-
-		// 10. Reply with summary
-		const summary = toggled.length > 0
-			? toggled.join("\n")
-			: localizer(locale, "commands.stpreset.node.toggle.no_changes");
-
-		await replyInfoEmbed(modalResult.interaction, locale, {
-			titleKey: "commands.stpreset.node.toggle.result_title",
-			descriptionKey: "commands.stpreset.node.toggle.result_description",
-			descriptionVars: {
-				total: pageNodes.length.toString(),
-				enabled: selectedIds.size.toString(),
-				changes: summary,
-			},
-			color: toggled.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
-			flags: MessageFlags.Ephemeral,
-		});
-
-		log.info(
-			`[ST Preset Node Toggle] ${selectedIds.size}/${pageNodes.length} nodes enabled, ${toggled.length} changed for preset "${preset.preset_name}"`,
-		);
 	} catch (error) {
 		const context: ErrorContext = {
 			userId: userData.user_id,
@@ -399,4 +267,310 @@ export async function execute(
 			flags: MessageFlags.Ephemeral,
 		});
 	}
+}
+
+// ─── Page Flow Helpers ──────────────────────────────────────────────
+
+/** Custom ID for the "Done" button in the page-selection loop */
+const DONE_BUTTON_ID = "stpreset_toggle_done";
+
+/**
+ * Build the page-selection action rows (page buttons + "Done" button).
+ *
+ * @param totalPages - Total number of pages
+ * @param totalNodes - Total number of toggleable nodes
+ * @returns Array of action rows with page buttons and a trailing "Done" button
+ */
+function buildPageActionRows(
+	totalPages: number,
+	totalNodes: number,
+	locale: string,
+): ActionRowBuilder<ButtonBuilder>[] {
+	const maxButtons = Math.min(totalPages, 24); // Reserve 1 slot for "Done"
+	const pageButtons: ButtonBuilder[] = [];
+
+	for (let i = 1; i <= maxButtons; i++) {
+		const startNode = (i - 1) * NODES_PER_PAGE + 1;
+		const endNode = Math.min(i * NODES_PER_PAGE, totalNodes);
+		pageButtons.push(
+			new ButtonBuilder()
+				.setCustomId(`stpreset_page_${i}`)
+				.setLabel(`${startNode}–${endNode}`)
+				.setStyle(ButtonStyle.Primary),
+		);
+	}
+
+	// Add "Done" button at the end
+	pageButtons.push(
+		new ButtonBuilder()
+			.setCustomId(DONE_BUTTON_ID)
+			.setLabel(localizer(locale, "commands.stpreset.node.toggle.done_button"))
+			.setStyle(ButtonStyle.Secondary),
+	);
+
+	// Split buttons into action rows of 5 (Discord's per-row limit)
+	const actionRows: ActionRowBuilder<ButtonBuilder>[] = [];
+	for (let i = 0; i < pageButtons.length; i += 5) {
+		actionRows.push(
+			new ActionRowBuilder<ButtonBuilder>().addComponents(
+				...pageButtons.slice(i, i + 5),
+			),
+		);
+	}
+
+	return actionRows;
+}
+
+/**
+ * Handle the single-page flow: show modal directly, process results.
+ *
+ * @param interaction - The command interaction (used as modal source)
+ * @param locale - User's preferred locale
+ * @param preset - The active preset
+ * @param presetId - The validated preset_id (guaranteed non-null by caller)
+ * @param dbNodes - All toggleable nodes for this preset
+ */
+async function executeSinglePageToggle(
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+	preset: StPresetRow,
+	presetId: number,
+	dbNodes: StPresetNodeRow[],
+): Promise<void> {
+	const checkboxGroups = buildCheckboxGroups(dbNodes, 0);
+
+	const modalResult = await promptWithRawModal(
+		interaction,
+		locale,
+		{
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: preset.preset_name,
+			components: checkboxGroups,
+		},
+		MessageFlags.Ephemeral,
+	);
+
+	if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+		log.info(`[ST Preset Node Toggle] Modal ${modalResult.outcome}`);
+		return;
+	}
+
+	const { summary, selectedCount, totalCount } = processToggleResults(
+		modalResult, dbNodes, checkboxGroups.length,
+	);
+
+	// Persist changes
+	if (summary.changes.length > 0) {
+		await updateNodeEnabledStates(presetId, summary.enabledMap, preset.server_id);
+	}
+
+	// Reply with summary
+	const changesText = summary.changes.length > 0
+		? summary.changes.join("\n")
+		: localizer(locale, "commands.stpreset.node.toggle.no_changes");
+
+	await replyInfoEmbed(modalResult.interaction, locale, {
+		titleKey: "commands.stpreset.node.toggle.result_title",
+		descriptionKey: "commands.stpreset.node.toggle.result_description",
+		descriptionVars: {
+			total: totalCount.toString(),
+			enabled: selectedCount.toString(),
+			changes: changesText,
+		},
+		color: summary.changes.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
+		flags: MessageFlags.Ephemeral,
+	});
+
+	log.info(
+		`[ST Preset Node Toggle] ${selectedCount}/${totalCount} nodes enabled, ${summary.changes.length} changed for preset "${preset.preset_name}"`,
+	);
+}
+
+/**
+ * Handle the multi-page flow: page-selection loop with "Done" button.
+ * Users can pick a page, toggle nodes in a modal, and return to pick
+ * another page — no need to re-run the command.
+ *
+ * @param interaction - The command interaction
+ * @param locale - User's preferred locale
+ * @param preset - The active preset
+ * @param presetId - The validated preset_id (guaranteed non-null by caller)
+ * @param dbNodes - All toggleable nodes (will be reloaded after each toggle)
+ * @param totalPages - Total number of pages
+ */
+async function executeMultiPageToggle(
+	interaction: ChatInputCommandInteraction,
+	locale: string,
+	preset: StPresetRow,
+	presetId: number,
+	dbNodes: StPresetNodeRow[],
+	totalPages: number,
+): Promise<void> {
+	// 1. Build and send the page-selection embed with buttons
+	const pageSelectEmbed = createStandardEmbed(locale, {
+		titleKey: "commands.stpreset.node.toggle.select_page_title",
+		descriptionKey: "commands.stpreset.node.toggle.select_page_description",
+		descriptionVars: {
+			preset_name: preset.preset_name,
+			total_nodes: dbNodes.length.toString(),
+			total_pages: totalPages.toString(),
+		},
+		color: ColorCode.INFO,
+	});
+
+	const actionRows = buildPageActionRows(totalPages, dbNodes.length, locale);
+
+	const pageSelectMessage = await interaction.reply({
+		embeds: [pageSelectEmbed],
+		components: actionRows,
+		flags: MessageFlags.Ephemeral,
+	});
+
+	// 2. Loop: await page button → show modal → process → repeat
+	let currentNodes = dbNodes;
+
+	while (true) {
+		// Wait for a button click (page or "Done")
+		let buttonInteraction: ButtonInteraction;
+		try {
+			buttonInteraction = (await pageSelectMessage.awaitMessageComponent({
+				filter: (i) =>
+					i.user.id === interaction.user.id &&
+					(i.customId.startsWith("stpreset_page_") || i.customId === DONE_BUTTON_ID),
+				time: PAGE_SELECT_TIMEOUT_MS,
+			})) as ButtonInteraction;
+		} catch {
+			// Timeout — silently end the loop
+			log.info("[ST Preset Node Toggle] Page selection timed out");
+			break;
+		}
+
+		// "Done" button pressed — exit the loop
+		if (buttonInteraction.customId === DONE_BUTTON_ID) {
+			await buttonInteraction.deferUpdate();
+			break;
+		}
+
+		// Extract selected page and slice nodes
+		const selectedPage = Number.parseInt(
+			buttonInteraction.customId.replace("stpreset_page_", ""),
+			10,
+		);
+		const startIndex = (selectedPage - 1) * NODES_PER_PAGE;
+		const pageNodes = currentNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
+
+		// Show modal for this page
+		const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex);
+
+		const modalResult = await promptWithRawModal(
+			buttonInteraction,
+			locale,
+			{
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: preset.preset_name,
+				components: checkboxGroups,
+			},
+			MessageFlags.Ephemeral,
+		);
+
+		if (modalResult.outcome === "submit" && modalResult.interaction) {
+			// Process the toggle results
+			const { summary, selectedCount, totalCount } = processToggleResults(
+				modalResult, pageNodes, checkboxGroups.length,
+			);
+
+			// Persist changes
+			if (summary.changes.length > 0) {
+				await updateNodeEnabledStates(presetId, summary.enabledMap, preset.server_id);
+
+				// Reload nodes from DB so the next modal shows updated defaults
+				currentNodes = await loadToggleableNodes(presetId);
+			}
+
+			// Reply with summary on the modal interaction
+			const changesText = summary.changes.length > 0
+				? summary.changes.join("\n")
+				: localizer(locale, "commands.stpreset.node.toggle.no_changes");
+
+			await replyInfoEmbed(modalResult.interaction, locale, {
+				titleKey: "commands.stpreset.node.toggle.result_title",
+				descriptionKey: "commands.stpreset.node.toggle.result_description",
+				descriptionVars: {
+					total: totalCount.toString(),
+					enabled: selectedCount.toString(),
+					changes: changesText,
+				},
+				color: summary.changes.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
+				flags: MessageFlags.Ephemeral,
+			});
+
+			log.info(
+				`[ST Preset Node Toggle] ${selectedCount}/${totalCount} nodes enabled, ${summary.changes.length} changed for preset "${preset.preset_name}"`,
+			);
+		} else {
+			log.info(`[ST Preset Node Toggle] Modal ${modalResult.outcome}, returning to page selection`);
+		}
+
+		// Edit the page selection message to refresh buttons for the next loop iteration.
+		// awaitMessageComponent only resolves once per call, so we need to keep the message
+		// alive with active components for the next iteration's await to work.
+		try {
+			await interaction.editReply({
+				embeds: [pageSelectEmbed],
+				components: buildPageActionRows(totalPages, currentNodes.length, locale),
+			});
+		} catch {
+			// If editing fails (e.g. interaction expired), break the loop
+			log.info("[ST Preset Node Toggle] Could not refresh page buttons, ending loop");
+			break;
+		}
+	}
+
+	// 3. Clean up — remove buttons from the page selection message
+	try {
+		await interaction.editReply({
+			embeds: [pageSelectEmbed],
+			components: [],
+		});
+	} catch {
+		// Best-effort cleanup
+	}
+}
+
+/**
+ * Process modal toggle results: build the enabled state map and detect changes.
+ *
+ * @param modalResult - The modal submission result
+ * @param pageNodes - The nodes that were shown in this modal
+ * @param groupCount - Number of checkbox groups in the modal
+ * @returns Object with the summary, selected count, and total count
+ */
+function processToggleResults(
+	modalResult: { multiValues?: Record<string, string[]> },
+	pageNodes: StPresetNodeRow[],
+	groupCount: number,
+): {
+	summary: { enabledMap: Map<string, boolean>; changes: string[] };
+	selectedCount: number;
+	totalCount: number;
+} {
+	const selectedIds = collectSelectedIds(modalResult.multiValues, groupCount);
+	const enabledMap = new Map<string, boolean>();
+	const changes: string[] = [];
+
+	for (const node of pageNodes) {
+		const isNowEnabled = selectedIds.has(node.identifier);
+		enabledMap.set(node.identifier, isNowEnabled);
+
+		if (isNowEnabled !== node.is_enabled) {
+			const state = isNowEnabled ? "ON" : "OFF";
+			changes.push(`${state} ${node.name}`);
+		}
+	}
+
+	return {
+		summary: { enabledMap, changes },
+		selectedCount: selectedIds.size,
+		totalCount: pageNodes.length,
+	};
 }

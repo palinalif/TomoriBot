@@ -221,146 +221,153 @@ export async function execute(
       scopeInput === "serverwide" ? "serverwide" : "persona";
 
     // 5. Handle persona scope: show persona selector
-    if (scope === "persona") {
-      const allPersonas = await loadAllPersonasForServer(
-        interaction.guild?.id ?? interaction.user.id,
+    while (true) {
+      if (scope === "persona") {
+        const allPersonas = await loadAllPersonasForServer(
+          interaction.guild?.id ?? interaction.user.id,
+        );
+        if (allPersonas.length === 0) {
+          await replyInfoEmbed(interaction, locale, {
+            titleKey: "general.errors.tomori_not_setup_title",
+            descriptionKey: "general.errors.tomori_not_setup_description",
+            color: ColorCode.ERROR,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const personaSelection = await replyPaginatedPersonaChoicesV2(
+          interaction,
+          locale,
+          {
+            personas: allPersonas,
+            color: ColorCode.INFO,
+            preserveSelectedInteraction: true,
+            onSelect: async () => {},
+          },
+        );
+
+        if (!personaSelection.success) {
+          if (personaSelection.reason === "cancelled") return;
+          continue;
+        }
+        if (
+          personaSelection.selectedIndex === undefined ||
+          !personaSelection.interaction
+        ) {
+          return;
+        }
+
+        personaSelectionInteraction = personaSelection.interaction;
+        const selectedPersona =
+          allPersonas[personaSelection.selectedIndex] ?? null;
+        if (!selectedPersona?.tomori_id) {
+          await replyInfoEmbed(personaSelectionInteraction, locale, {
+            titleKey: "general.errors.invalid_option_title",
+            descriptionKey: "general.errors.invalid_option_description",
+            color: ColorCode.ERROR,
+          });
+          return;
+        }
+        targetTomoriId = selectedPersona.tomori_id;
+      }
+
+      // 6. Query history-extracted documents for the selected scope
+      const selectionInteraction = personaSelectionInteraction ?? interaction;
+      const documents =
+        targetTomoriId === null
+          ? await sql<Array<{ document_id: number; document_name: string }>>`
+						SELECT document_id, document_name
+						FROM documents
+						WHERE server_id = ${tomoriState.server_id}
+						  AND tomori_id IS NULL
+						  AND source_type = 'history'
+						ORDER BY created_at DESC
+					`
+          : await sql<Array<{ document_id: number; document_name: string }>>`
+						SELECT document_id, document_name
+						FROM documents
+						WHERE server_id = ${tomoriState.server_id}
+						  AND tomori_id = ${targetTomoriId}
+						  AND source_type = 'history'
+						ORDER BY created_at DESC
+					`;
+
+      if (!documents || documents.length === 0) {
+        await replyInfoEmbed(selectionInteraction, locale, {
+          titleKey: "commands.forget.history.none_title",
+          descriptionKey: "commands.forget.history.none_description",
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+
+      // 7. Show paginated document selection modal
+      const documentOptions: SelectOption[] = documents.map((doc) => ({
+        label: safeSelectOptionText(doc.document_name),
+        value: doc.document_id.toString(),
+      }));
+
+      const modalResult = await promptWithPaginatedModal(
+        selectionInteraction,
+        locale,
+        {
+          modalCustomId: MODAL_CUSTOM_ID,
+          modalTitleKey: "commands.forget.history.modal_title",
+          components: [
+            {
+              customId: DOCUMENT_SELECT_ID,
+              labelKey: "commands.forget.history.select_label",
+              descriptionKey: "commands.forget.history.select_description",
+              placeholder: "commands.forget.history.select_placeholder",
+              required: true,
+              options: documentOptions,
+            },
+          ],
+        },
       );
-      if (allPersonas.length === 0) {
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "general.errors.tomori_not_setup_title",
-          descriptionKey: "general.errors.tomori_not_setup_description",
+
+      // Handle modal outcome - loop back to persona picker on dismiss
+      if (modalResult.outcome !== "submit") {
+        log.info(
+          `History document removal modal ${modalResult.outcome} for user ${userData.user_id}`,
+        );
+        continue;
+      }
+
+      if (!modalResult.interaction || !modalResult.values) {
+        await replyInfoEmbed(selectionInteraction, locale, {
+          titleKey: "general.errors.unknown_error_title",
+          descriptionKey: "general.errors.unknown_error_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      const selectedIdStr = modalResult.values[DOCUMENT_SELECT_ID];
+      if (!selectedIdStr) {
+        await replyInfoEmbed(modalResult.interaction, locale, {
+          titleKey: "commands.forget.history.none_title",
+          descriptionKey: "commands.forget.history.none_description",
           color: ColorCode.ERROR,
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
+      const selectedId = Number.parseInt(selectedIdStr, 10);
+
+      // 8. Perform deletion
+      await performHistoryDocumentRemoval(
+        tomoriState,
+        targetTomoriId,
+        selectedId,
+        userData,
+        modalResult.interaction,
         locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
       );
-
-      if (
-        !personaSelection.success ||
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
-        return;
-      }
-
-      personaSelectionInteraction = personaSelection.interaction;
-      const selectedPersona =
-        allPersonas[personaSelection.selectedIndex] ?? null;
-      if (!selectedPersona?.tomori_id) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
-      targetTomoriId = selectedPersona.tomori_id;
+      break;
     }
-
-    // 6. Query history-extracted documents for the selected scope
-    const selectionInteraction = personaSelectionInteraction ?? interaction;
-    const documents =
-      targetTomoriId === null
-        ? await sql<Array<{ document_id: number; document_name: string }>>`
-					SELECT document_id, document_name
-					FROM documents
-					WHERE server_id = ${tomoriState.server_id}
-					  AND tomori_id IS NULL
-					  AND source_type = 'history'
-					ORDER BY created_at DESC
-				`
-        : await sql<Array<{ document_id: number; document_name: string }>>`
-					SELECT document_id, document_name
-					FROM documents
-					WHERE server_id = ${tomoriState.server_id}
-					  AND tomori_id = ${targetTomoriId}
-					  AND source_type = 'history'
-					ORDER BY created_at DESC
-				`;
-
-    if (!documents || documents.length === 0) {
-      await replyInfoEmbed(selectionInteraction, locale, {
-        titleKey: "commands.forget.history.none_title",
-        descriptionKey: "commands.forget.history.none_description",
-        color: ColorCode.WARN,
-      });
-      return;
-    }
-
-    // 7. Show paginated document selection modal
-    const documentOptions: SelectOption[] = documents.map((doc) => ({
-      label: safeSelectOptionText(doc.document_name),
-      value: doc.document_id.toString(),
-    }));
-
-    const modalResult = await promptWithPaginatedModal(
-      selectionInteraction,
-      locale,
-      {
-        modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.forget.history.modal_title",
-        components: [
-          {
-            customId: DOCUMENT_SELECT_ID,
-            labelKey: "commands.forget.history.select_label",
-            descriptionKey: "commands.forget.history.select_description",
-            placeholder: "commands.forget.history.select_placeholder",
-            required: true,
-            options: documentOptions,
-          },
-        ],
-      },
-    );
-
-    if (modalResult.outcome !== "submit") {
-      log.info(
-        `History document removal modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
-      return;
-    }
-
-    if (!modalResult.interaction || !modalResult.values) {
-      await replyInfoEmbed(selectionInteraction, locale, {
-        titleKey: "general.errors.unknown_error_title",
-        descriptionKey: "general.errors.unknown_error_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    const selectedIdStr = modalResult.values[DOCUMENT_SELECT_ID];
-    if (!selectedIdStr) {
-      await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.forget.history.none_title",
-        descriptionKey: "commands.forget.history.none_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const selectedId = Number.parseInt(selectedIdStr, 10);
-
-    // 8. Perform deletion
-    await performHistoryDocumentRemoval(
-      tomoriState,
-      targetTomoriId,
-      selectedId,
-      userData,
-      modalResult.interaction,
-      locale,
-    );
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,

@@ -182,122 +182,128 @@ export async function execute(
       return;
     }
 
-    const personaSelection = await replyPaginatedPersonaChoicesV2(
-      interaction,
-      locale,
-      {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      },
-    );
-
-    if (
-      !personaSelection.success ||
-      personaSelection.selectedIndex === undefined ||
-      !personaSelection.interaction
-    ) {
-      return;
-    }
-
-    personaSelectionInteraction = personaSelection.interaction;
-    selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-    if (!selectedPersona?.tomori_id) {
-      await replyInfoEmbed(personaSelectionInteraction, locale, {
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "general.errors.invalid_option_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    // Check if user has Manage Server permission - admins can bypass teaching restriction
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
-
-    // 4. Check if teaching is enabled
-    if (
-      !tomoriState.config.attribute_memteaching_enabled &&
-      !hasManagePermission
-    ) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.attribute.teaching_disabled_title",
-        descriptionKey:
-          "commands.teach.attribute.teaching_disabled_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    // 5. Get the current attribute list
-    const currentAttributes = selectedPersona.attribute_list ?? [];
-
-    // 6. Check if there are any attributes to remove
-    if (currentAttributes.length === 0) {
-      await replyInfoEmbed(personaSelectionInteraction, locale, {
-        titleKey: "commands.forget.attribute.no_attributes_title",
-        descriptionKey: "commands.forget.attribute.no_attributes",
-        color: ColorCode.WARN,
-      });
-      return;
-    }
-
-    // 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
-    const attributeSelectOptions: SelectOption[] = currentAttributes.map(
-      (attribute, index) => ({
-        label: safeSelectOptionText(attribute),
-        value: index.toString(), // Use index to avoid truncation issues
-        description: undefined, // No description needed for attributes
-      }),
-    );
-
-    const modalResult = await promptWithPaginatedModal(
-      personaSelectionInteraction,
-      locale,
-      {
-        modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.forget.attribute.modal_title",
-        components: [
-          {
-            customId: ATTRIBUTE_SELECT_ID,
-            labelKey: "commands.forget.attribute.select_label",
-            descriptionKey: "commands.forget.attribute.select_description",
-            placeholder: "commands.forget.attribute.select_placeholder",
-            required: true,
-            options: attributeSelectOptions,
-          },
-        ],
-      },
-    );
-
-    // Handle modal outcome
-    if (modalResult.outcome !== "submit") {
-      log.info(
-        `Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`,
+    while (true) {
+      const personaSelection = await replyPaginatedPersonaChoicesV2(
+        interaction,
+        locale,
+        {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        },
       );
-      return;
-    }
 
-    // Extract values from the modal
-    // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-    const modalSubmitInteraction = modalResult.interaction!;
-    const selectedIndex = Number.parseInt(
+      if (!personaSelection.success) {
+        if (personaSelection.reason === "cancelled") return;
+        continue;
+      }
+      if (
+        personaSelection.selectedIndex === undefined ||
+        !personaSelection.interaction
+      ) {
+        return;
+      }
+
+      personaSelectionInteraction = personaSelection.interaction;
+      selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await replyInfoEmbed(personaSelectionInteraction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      // Check if user has Manage Server permission - admins can bypass teaching restriction
+      const hasManagePermission =
+        interaction.memberPermissions?.has("ManageGuild") ?? false;
+
+      // 4. Check if teaching is enabled
+      if (
+        !tomoriState.config.attribute_memteaching_enabled &&
+        !hasManagePermission
+      ) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.teach.attribute.teaching_disabled_title",
+          descriptionKey:
+            "commands.teach.attribute.teaching_disabled_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      // 5. Get the current attribute list
+      const currentAttributes = selectedPersona.attribute_list ?? [];
+
+      // 6. Check if there are any attributes to remove
+      if (currentAttributes.length === 0) {
+        await replyInfoEmbed(personaSelectionInteraction, locale, {
+          titleKey: "commands.forget.attribute.no_attributes_title",
+          descriptionKey: "commands.forget.attribute.no_attributes",
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+
+      // 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
+      const attributeSelectOptions: SelectOption[] = currentAttributes.map(
+        (attribute, index) => ({
+          label: safeSelectOptionText(attribute),
+          value: index.toString(), // Use index to avoid truncation issues
+          description: undefined, // No description needed for attributes
+        }),
+      );
+
+      const modalResult = await promptWithPaginatedModal(
+        personaSelectionInteraction,
+        locale,
+        {
+          modalCustomId: MODAL_CUSTOM_ID,
+          modalTitleKey: "commands.forget.attribute.modal_title",
+          components: [
+            {
+              customId: ATTRIBUTE_SELECT_ID,
+              labelKey: "commands.forget.attribute.select_label",
+              descriptionKey: "commands.forget.attribute.select_description",
+              placeholder: "commands.forget.attribute.select_placeholder",
+              required: true,
+              options: attributeSelectOptions,
+            },
+          ],
+        },
+      );
+
+      // Handle modal outcome - loop back to persona picker on dismiss
+      if (modalResult.outcome !== "submit") {
+        log.info(
+          `Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`,
+        );
+        continue;
+      }
+
+      // Extract values from the modal
       // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-      modalResult.values![ATTRIBUTE_SELECT_ID],
-      10,
-    );
-    const attributeToRemove = currentAttributes[selectedIndex];
+      const modalSubmitInteraction = modalResult.interaction!;
+      const selectedIndex = Number.parseInt(
+        // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+        modalResult.values![ATTRIBUTE_SELECT_ID],
+        10,
+      );
+      const attributeToRemove = currentAttributes[selectedIndex];
 
-    // Perform the database update - let helper functions manage interaction state
-    await performAttributeRemoval(
-      selectedPersona,
-      attributeToRemove,
-      userData,
-      modalSubmitInteraction,
-      locale,
-    );
+      // Perform the database update - let helper functions manage interaction state
+      await performAttributeRemoval(
+        selectedPersona,
+        attributeToRemove,
+        userData,
+        modalSubmitInteraction,
+        locale,
+      );
+      break;
+    }
   } catch (error) {
     // 15. Catch unexpected errors
     const context: ErrorContext = {

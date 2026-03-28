@@ -241,153 +241,160 @@ export async function execute(
         return;
       }
 
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
-
-      if (
-        !personaSelection.success ||
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
-        return;
-      }
-
-      personaSelectionInteraction = personaSelection.interaction;
-      selectionInteraction = personaSelectionInteraction;
-      selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-      if (!selectedPersona) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
-
-      targetLineageId = selectedPersona.persona_lineage_id ?? 0;
-      if (targetLineageId === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID) {
-        await replyInfoEmbed(selectionInteraction, locale, {
-          titleKey: "general.errors.operation_failed_title",
-          descriptionKey: "general.errors.operation_failed_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
-    }
-
-    // 5. Get current personal memories from lineage-scoped table
-    const includeGlobalMemories = memoryScope === GLOBAL_SCOPE_VALUE;
-    const fetchedMemories = userData.user_id
-      ? await loadPersonalMemoriesForUserLineage(
-          userData.user_id,
-          targetLineageId,
-          includeGlobalMemories,
-        )
-      : [];
-    const currentMemories = fetchedMemories.filter((memory) =>
-      memoryScope === GLOBAL_SCOPE_VALUE
-        ? memory.persona_lineage_id === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID
-        : memory.persona_lineage_id === targetLineageId,
-    );
-
-    // 6. Check if there are any memories to remove
-    if (currentMemories.length === 0) {
-      await replyInfoEmbed(selectionInteraction, locale, {
-        titleKey: "commands.forget.memory.personal.no_memories_title",
-        descriptionKey: "commands.forget.memory.personal.no_memories",
-        color: ColorCode.WARN,
-      });
-      return;
-    }
-
-    // 7. Create memory select options for the modal
-    const memorySelectOptions: SelectOption[] = currentMemories.map(
-      (memory, index) => ({
-        label: safeSelectOptionText(memory.content, 20),
-        value: index.toString(), // Use index to avoid truncation issues
-        description: safeSelectOptionText(memory.content),
-      }),
-    );
-
-    // 8. Show the paginated modal with memory selection
-    const modalResult = await promptWithPaginatedModal(
-      selectionInteraction,
-      locale,
-      {
-        modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.forget.memory.personal.modal_title",
-        components: [
+      while (true) {
+        const personaSelection = await replyPaginatedPersonaChoicesV2(
+          interaction,
+          locale,
           {
-            customId: MEMORY_SELECT_ID,
-            labelKey: "commands.forget.memory.personal.select_label",
-            descriptionKey:
-              "commands.forget.memory.personal.select_description",
-            placeholder: "commands.forget.memory.personal.select_placeholder",
-            required: true,
-            options: memorySelectOptions,
+            personas: allPersonas,
+            color: ColorCode.INFO,
+            preserveSelectedInteraction: true,
+            onSelect: async () => {},
           },
-        ],
-      },
-    );
+        );
 
-    // 9. Handle modal outcome
-    if (modalResult.outcome !== "submit") {
-      log.info(
-        `Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
-      return;
-    }
+        if (!personaSelection.success) {
+          if (personaSelection.reason === "cancelled") return;
+          continue;
+        }
+        if (
+          personaSelection.selectedIndex === undefined ||
+          !personaSelection.interaction
+        ) {
+          return;
+        }
 
-    // 10. Extract values from the modal
-    const modalSubmitInteraction = modalResult.interaction;
-    const selectedIndex = modalResult.values?.[MEMORY_SELECT_ID];
+        personaSelectionInteraction = personaSelection.interaction;
+        selectionInteraction = personaSelectionInteraction;
+        selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+        if (!selectedPersona) {
+          await replyInfoEmbed(personaSelectionInteraction, locale, {
+            titleKey: "general.errors.invalid_option_title",
+            descriptionKey: "general.errors.invalid_option_description",
+            color: ColorCode.ERROR,
+          });
+          return;
+        }
 
-    // Safety checks (should never be null after submit outcome)
-    if (!modalSubmitInteraction || !selectedIndex) {
-      log.error("Modal result unexpectedly missing interaction or values");
-      return;
-    }
+        targetLineageId = selectedPersona.persona_lineage_id ?? 0;
+        if (targetLineageId === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID) {
+          await replyInfoEmbed(selectionInteraction, locale, {
+            titleKey: "general.errors.operation_failed_title",
+            descriptionKey: "general.errors.operation_failed_description",
+            color: ColorCode.ERROR,
+          });
+          return;
+        }
 
-    // Get the full memory row from the original array
-    const selectedMemory = currentMemories[Number.parseInt(selectedIndex, 10)];
-    if (!selectedMemory) {
-      await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey: "general.errors.operation_failed_title",
-        descriptionKey: "commands.forget.memory.personal.no_memories",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
+        // 5. Get current personal memories from lineage-scoped table
+        // (Inside PERSONAL_SCOPE_VALUE block, so always persona-scoped)
+        const fetchedMemories = userData.user_id
+          ? await loadPersonalMemoriesForUserLineage(
+              userData.user_id,
+              targetLineageId,
+              false,
+            )
+          : [];
+        const currentMemories = fetchedMemories.filter(
+          (memory) => memory.persona_lineage_id === targetLineageId,
+        );
 
-    // 11. Perform the database update using the helper function
-    await performPersonalMemoryRemoval(
-      selectedMemory,
-      userData,
-      modalSubmitInteraction,
-      locale,
-    );
-
-    // 12. If personalization is disabled, send a warning follow-up
-    if (personalizationDisabledWarning) {
-      await modalSubmitInteraction.followUp({
-        embeds: [
-          createStandardEmbed(locale, {
-            titleKey: "commands.forget.memory.personal.warning_disabled_title",
-            descriptionKey:
-              "commands.forget.memory.personal.warning_disabled_description",
+        // 6. Check if there are any memories to remove
+        if (currentMemories.length === 0) {
+          await replyInfoEmbed(selectionInteraction, locale, {
+            titleKey: "commands.forget.memory.personal.no_memories_title",
+            descriptionKey: "commands.forget.memory.personal.no_memories",
             color: ColorCode.WARN,
+          });
+          return;
+        }
+
+        // 7. Create memory select options for the modal
+        const memorySelectOptions: SelectOption[] = currentMemories.map(
+          (memory, index) => ({
+            label: safeSelectOptionText(memory.content, 20),
+            value: index.toString(), // Use index to avoid truncation issues
+            description: safeSelectOptionText(memory.content),
           }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
+        );
+
+        // 8. Show the paginated modal with memory selection
+        const modalResult = await promptWithPaginatedModal(
+          selectionInteraction,
+          locale,
+          {
+            modalCustomId: MODAL_CUSTOM_ID,
+            modalTitleKey: "commands.forget.memory.personal.modal_title",
+            components: [
+              {
+                customId: MEMORY_SELECT_ID,
+                labelKey: "commands.forget.memory.personal.select_label",
+                descriptionKey:
+                  "commands.forget.memory.personal.select_description",
+                placeholder:
+                  "commands.forget.memory.personal.select_placeholder",
+                required: true,
+                options: memorySelectOptions,
+              },
+            ],
+          },
+        );
+
+        // 9. Handle modal outcome - loop back to persona picker on dismiss
+        if (modalResult.outcome !== "submit") {
+          log.info(
+            `Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+          );
+          continue;
+        }
+
+        // 10. Extract values from the modal
+        const modalSubmitInteraction = modalResult.interaction;
+        const selectedIndex = modalResult.values?.[MEMORY_SELECT_ID];
+
+        // Safety checks (should never be null after submit outcome)
+        if (!modalSubmitInteraction || !selectedIndex) {
+          log.error("Modal result unexpectedly missing interaction or values");
+          return;
+        }
+
+        // Get the full memory row from the original array
+        const selectedMemory =
+          currentMemories[Number.parseInt(selectedIndex, 10)];
+        if (!selectedMemory) {
+          await replyInfoEmbed(modalSubmitInteraction, locale, {
+            titleKey: "general.errors.operation_failed_title",
+            descriptionKey: "commands.forget.memory.personal.no_memories",
+            color: ColorCode.ERROR,
+          });
+          return;
+        }
+
+        // 11. Perform the database update using the helper function
+        await performPersonalMemoryRemoval(
+          selectedMemory,
+          userData,
+          modalSubmitInteraction,
+          locale,
+        );
+
+        // 12. If personalization is disabled, send a warning follow-up
+        if (personalizationDisabledWarning) {
+          await modalSubmitInteraction.followUp({
+            embeds: [
+              createStandardEmbed(locale, {
+                titleKey:
+                  "commands.forget.memory.personal.warning_disabled_title",
+                descriptionKey:
+                  "commands.forget.memory.personal.warning_disabled_description",
+                color: ColorCode.WARN,
+              }),
+            ],
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        break;
+      }
     }
   } catch (error) {
     // 16. Catch unexpected errors
