@@ -167,6 +167,20 @@ Before running TomoriBot, ensure you have the following installed:
   ```
   - Don't forget to set `ACTIVATE_LOCAL_RAG` as true in your .env
 
+* **Tokenizer assets** (Optional, for logit bias) - Required for model-aware logit bias (emoji/word repetition penalties)
+  ```sh
+  bun run setup:tokenizers
+  ```
+  - Some families (e.g. Gemma) are gated and require a [HuggingFace access token](https://huggingface.co/settings/tokens) after accepting their license. If prompted, re-run with:
+  ```sh
+  # Windows (PowerShell)
+  $env:HF_TOKEN="hf_xxx"; bun run setup:tokenizers
+
+  # macOS/Linux
+  HF_TOKEN=hf_xxx bun run setup:tokenizers
+  ```
+  - Without this step, logit bias is silently disabled — everything else works normally.
+
 * **Python 3** (Optional but recommended) - Required for URL Fetching MCP server tool
   ```sh
   # Windows (using Chocolatey)

@@ -23,7 +23,8 @@
     "check-limits": "bun run scripts/checkDiscordLimits.ts",
     "audit-keys": "bun run scripts/auditKeyVersions.ts",
     "rotate-keys": "bun run scripts/rotateAllKeys.ts",
-    "check-keys": "bun run scripts/checkKeys.ts"
+    "check-keys": "bun run scripts/checkKeys.ts",
+    "setup:tokenizers": "bun run scripts/download-tokenizers.ts"
   },
   "author": "Bredrumb",
   "license": "ISC",

@@ -157,6 +157,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download tokenizer assets for logit bias
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          echo "Downloading tokenizer assets from HuggingFace..."
+          bun run scripts/download-tokenizers.ts
+          echo "Tokenizer families:"
+          du -sh tokenizers/*/
+
       - name: Pre-download Python packages with platform-specific wheels
         run: |
           echo "Downloading Python packages (musllinux wheels for Alpine 3.20 Python 3.12)..."
