@@ -31,14 +31,21 @@ export async function insertPresetWithNodes(
 	try {
 		// 1. Use a transaction to ensure atomicity (preset + all nodes or nothing)
 		const result = await sql.begin(async (tx) => {
-			// 2. Insert the preset metadata + raw JSON
+			// 2. Remove any existing preset with the same name for this server.
+			//    The FK cascade on st_preset_nodes deletes old nodes automatically.
+			await tx`
+				DELETE FROM st_presets
+				WHERE server_id = ${serverId} AND preset_name = ${presetName}
+			`;
+
+			// 3. Insert the preset metadata + raw JSON
 			const [preset] = await tx`
 				INSERT INTO st_presets (server_id, preset_name, raw_json)
 				VALUES (${serverId}, ${presetName}, ${JSON.stringify(rawJson)})
 				RETURNING *
 			`;
 
-			// 3. Insert each node with a reference to the new preset_id
+			// 4. Insert each node with a reference to the new preset_id
 			for (const node of nodes) {
 				await tx`
 					INSERT INTO st_preset_nodes (
@@ -70,12 +77,7 @@ export async function insertPresetWithNodes(
 		invalidateStPresetCache(serverId);
 		return result as StPresetRow;
 	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		if (errorMessage.includes("unique") || errorMessage.includes("duplicate")) {
-			log.warn(`[StPresetDb] Duplicate preset name "${presetName}" for server ${serverId}`);
-		} else {
-			log.error(`[StPresetDb] Failed to insert preset "${presetName}" for server ${serverId}`, error);
-		}
+		log.error(`[StPresetDb] Failed to insert preset "${presetName}" for server ${serverId}`, error);
 		return null;
 	}
 }

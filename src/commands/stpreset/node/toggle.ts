@@ -29,7 +29,7 @@ import {
 
 const MODAL_CUSTOM_ID = "stpreset_node_toggle_modal";
 
-/** Maximum checkbox options per group (Discord limit) */
+/** Maximum checkbox options per group (Discord limit: 10) */
 const MAX_OPTIONS_PER_GROUP = 10;
 
 /** Maximum checkbox groups per modal (Discord limit: 5 action rows) */
@@ -83,14 +83,17 @@ function buildNodeDescription(content: string): string | undefined {
 
 /**
  * Build checkbox groups for a page of nodes.
- * Chunks the given nodes into groups of MAX_OPTIONS_PER_GROUP (10) and
- * creates up to MAX_GROUPS_PER_MODAL (5) checkbox group components.
+ * Chunks the given nodes into groups of MAX_OPTIONS_PER_GROUP and
+ * creates up to MAX_GROUPS_PER_MODAL checkbox group components.
  *
- * @param pageNodes - The nodes for this page (max 50)
+ * @param pageNodes - The nodes for this page
+ * @param pageOffset - The 0-based index of the first node on this page
+ *                     (used to compute human-readable group labels)
  * @returns Array of checkbox group modal components
  */
 function buildCheckboxGroups(
 	pageNodes: StPresetNodeRow[],
+	pageOffset: number,
 ): ModalCheckboxGroupField[] {
 	const groups: ModalCheckboxGroupField[] = [];
 
@@ -99,18 +102,28 @@ function buildCheckboxGroups(
 		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
 
 		const options: CheckboxGroupOption[] = chunk.map((node) => ({
-			label: node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
+			label: node.name.length > 100
+				? `${node.name.slice(0, 97)}...`
+				: node.name,
 			value: node.identifier,
 			description: buildNodeDescription(node.content),
 			default: node.is_enabled,
 		}));
 
+		// Build a dynamic label like "Nodes 1–10" or "Nodes 51–60"
+		// (pageOffset converts page-relative indices to overall node numbers)
+		const rangeStart = pageOffset + i + 1;
+		const rangeEnd = pageOffset + i + chunk.length;
+		const dynamicLabel = `Nodes ${rangeStart}–${rangeEnd}`;
+
 		groups.push({
 			kind: "checkboxGroup" as const,
 			customId: `stpreset_nodes_${groupIndex}`,
-			labelKey: `commands.stpreset.node.toggle.group_label_${groupIndex}`,
+			// Pass raw label — localizer returns the key itself when no match is found
+			labelKey: dynamicLabel,
 			descriptionKey: "commands.stpreset.node.toggle.group_description",
 			minValues: 0,
+			maxValues: chunk.length,
 			required: false,
 			options,
 		});
@@ -228,6 +241,7 @@ export async function execute(
 		// 4. Determine if pagination is needed
 		const totalPages = Math.ceil(dbNodes.length / NODES_PER_PAGE);
 		let pageNodes: StPresetNodeRow[];
+		let pageOffset = 0;
 		let modalInteractionSource: ChatInputCommandInteraction | ButtonInteraction = interaction;
 
 		if (totalPages > 1) {
@@ -243,8 +257,8 @@ export async function execute(
 				color: ColorCode.INFO,
 			});
 
-			// Build numbered page buttons (up to 9 pages)
-			const maxButtons = Math.min(totalPages, 9);
+			// Build numbered page buttons — max 5 per action row, up to 5 rows (25 pages)
+			const maxButtons = Math.min(totalPages, 25);
 			const pageButtons: ButtonBuilder[] = [];
 
 			for (let i = 1; i <= maxButtons; i++) {
@@ -258,14 +272,20 @@ export async function execute(
 				);
 			}
 
-			const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				...pageButtons,
-			);
+			// Split buttons into action rows of 5 (Discord's per-row limit)
+			const actionRows: ActionRowBuilder<ButtonBuilder>[] = [];
+			for (let i = 0; i < pageButtons.length; i += 5) {
+				actionRows.push(
+					new ActionRowBuilder<ButtonBuilder>().addComponents(
+						...pageButtons.slice(i, i + 5),
+					),
+				);
+			}
 
 			// Send page selection message
 			const pageSelectMessage = await interaction.reply({
 				embeds: [pageSelectEmbed],
-				components: [actionRow],
+				components: actionRows,
 				flags: MessageFlags.Ephemeral,
 			});
 
@@ -290,6 +310,7 @@ export async function execute(
 			);
 			const startIndex = (selectedPage - 1) * NODES_PER_PAGE;
 			pageNodes = dbNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
+			pageOffset = startIndex;
 			modalInteractionSource = pageButtonInteraction;
 		} else {
 			// 4b. Single page: use all nodes directly
@@ -297,7 +318,7 @@ export async function execute(
 		}
 
 		// 5. Build checkbox groups for the selected page
-		const checkboxGroups = buildCheckboxGroups(pageNodes);
+		const checkboxGroups = buildCheckboxGroups(pageNodes, pageOffset);
 
 		// 6. Show modal — use the preset name as the title (passthrough via localizer)
 		const modalResult = await promptWithRawModal(

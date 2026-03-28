@@ -353,9 +353,7 @@ export async function execute(
 
 		if (!preset) {
 			await interaction.editReply({
-				content: localizer(locale, "commands.stpreset.upload.duplicate_name", {
-					name: presetName,
-				}),
+				content: localizer(locale, "general.errors.unknown_error_description"),
 			});
 			return;
 		}

@@ -3042,8 +3042,14 @@ export default async function tomoriChat(
           filename: string;
         } | null;
       } {
-        // 1. Check if this is a link preview embed (has url and some content)
-        if (!embed.url && !embed.title && !embed.description) {
+        // 1. Check if this embed has any meaningful content to extract
+        const hasContent =
+          embed.url ||
+          embed.title ||
+          embed.description ||
+          embed.author?.name ||
+          embed.fields.length > 0;
+        if (!hasContent) {
           return {
             isLinkPreview: false,
             textContent: null,
@@ -3063,16 +3069,22 @@ export default async function tomoriChat(
           };
         }
 
-        // 3. Extract text content (title, description) with simple "Link Content:" prefix
+        // 3. Extract all text content from the embed
         let textContent = "";
 
-        // Build content parts
+        // Build content parts from all available embed fields
         const contentParts: string[] = [];
+
+        // 3a. Author name (e.g., "Now Playing", Twitter handle via webhook)
+        if (embed.author?.name) {
+          contentParts.push(embed.author.name);
+        }
+        // 3b. Title (e.g., page title, song name)
         if (embed.title) {
           contentParts.push(embed.title);
         }
+        // 3c. Description (e.g., tweet text, page summary)
         if (embed.description) {
-          // Limit description length to avoid overly long content
           const maxDescLength = 500;
           const description =
             embed.description.length > maxDescLength
@@ -3080,10 +3092,23 @@ export default async function tomoriChat(
               : embed.description;
           contentParts.push(description);
         }
+        // 3d. Structured fields (e.g., "Duration: 3:45", "Likes: 500")
+        if (embed.fields.length > 0) {
+          for (const field of embed.fields) {
+            // Only include non-empty fields
+            if (field.name || field.value) {
+              contentParts.push(
+                field.name && field.value
+                  ? `${field.name}: ${field.value}`
+                  : (field.name || field.value),
+              );
+            }
+          }
+        }
 
-        // Format with simple "Link Content:" prefix if we have any content
+        // Format with "Link Content:" prefix if we have any content
         if (contentParts.length > 0) {
-          textContent = `[Link Content: ${contentParts.join(" - ")}]`;
+          textContent = `[Embed Content: ${contentParts.join(" - ")}]`;
         }
 
         // 4. Process embed image if present
@@ -4357,8 +4382,9 @@ export default async function tomoriChat(
               }
             }
 
-            // 3. Process link preview embeds (new logic) - ONLY for non-bot messages
-            else if (!msg.author.bot) {
+            // 3. Process link preview embeds - for all messages EXCEPT TomoriBot's own
+            // (other bots/webhooks often carry useful content embeds like Twitter/X posts)
+            else if (!isTomoriAuthoredMessage) {
               const linkEmbedData = processLinkEmbed(embed);
               if (linkEmbedData.isLinkPreview) {
                 // Add link embed text content to message if present

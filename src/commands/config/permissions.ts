@@ -166,6 +166,10 @@ export async function execute(
 	// NOTE: No deferReply here — promptWithRawModal must be the first
 	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
 
+	// Declared outside try/catch so the catch block can use the modal interaction
+	// (which is auto-deferred) for error reporting instead of the consumed original interaction.
+	let modalInteraction: ModalSubmitInteraction | null = null;
+
 	try {
 		// 2. Load the Tomori state for this server
 		const guildKey = interaction.guild?.id ?? interaction.user.id;
@@ -231,7 +235,7 @@ export async function execute(
 			log.error("Permissions modal unexpectedly missing interaction");
 			return;
 		}
-		const modalInteraction = modalResult.interaction;
+		modalInteraction = modalResult.interaction;
 
 		// 6. Determine which permissions changed
 		const newlyEnabled = new Set(
@@ -368,18 +372,14 @@ export async function execute(
 		);
 
 		// 12. Inform user of unknown error
-		if (!interaction.replied && !interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		}
+		// Use modalInteraction (auto-deferred) if available since the original
+		// interaction is consumed by promptWithRawModal's raw REST acknowledgment.
+		const activeInteraction = modalInteraction ?? interaction;
+		await replyInfoEmbed(activeInteraction, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

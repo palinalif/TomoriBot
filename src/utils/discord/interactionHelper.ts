@@ -672,21 +672,24 @@ export async function replyInfoEmbed(
   );
 
   if (wasRawModalSent && !interaction.deferred && !interaction.replied) {
-    // State desync detected: Discord thinks acknowledged, but Discord.js doesn't know
+    // State desync detected: raw REST modal acknowledged the interaction on Discord's
+    // side, but Discord.js still thinks replied=false / deferred=false.
+    // interaction.followUp() would throw INTERACTION_NOT_REPLIED because of a
+    // Discord.js internal guard — bypass it by calling webhook.send() directly.
     log.info(
-      `Raw modal state desync detected for interaction ${interaction.id}, using followUp directly`,
+      `Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`,
     );
     try {
-      await interaction.followUp({
+      await interaction.webhook.send({
         embeds: [embed],
         components: [],
         flags: flags || MessageFlags.Ephemeral,
       });
       return;
-    } catch (followUpError) {
+    } catch (webhookError) {
       log.error(
-        "followUp failed for raw-modal-acknowledged interaction:",
-        followUpError,
+        "webhook.send failed for raw-modal-acknowledged interaction:",
+        webhookError,
       );
       // Fall through to standard error handling
     }
@@ -705,18 +708,20 @@ export async function replyInfoEmbed(
 
     // Enhanced fallback logic with more specific error handling
     try {
-      // Only attempt followUp if the interaction was actually replied to successfully
-      // Check if the error suggests the interaction wasn't properly replied to
       const errorMessage =
         error instanceof Error ? error.message : String(error);
 
       if (errorMessage.includes("has already been acknowledged")) {
-        // Interaction was acknowledged but editReply failed - try followUp
-        log.info("Attempting followUp due to acknowledgment conflict");
-        await interaction.followUp({
+        // Interaction was acknowledged via raw REST (e.g. modal shown) but
+        // Discord.js state is out of sync. followUp() would hit the same
+        // INTERACTION_NOT_REPLIED guard — use webhook.send() instead.
+        log.info(
+          "Attempting webhook.send due to acknowledgment conflict (raw REST desync)",
+        );
+        await interaction.webhook.send({
           embeds: [embed],
           components: [],
-          flags: flags || MessageFlags.Ephemeral, // Default to ephemeral for followUps
+          flags: flags || MessageFlags.Ephemeral,
         });
       } else if (errorMessage.includes("not been sent or deferred")) {
         // Interaction wasn't properly acknowledged - try reply without flags first
@@ -724,12 +729,12 @@ export async function replyInfoEmbed(
         await interaction.reply({
           embeds: [embed],
           components: [],
-          flags: MessageFlags.Ephemeral, // Force ephemeral for fallback
+          flags: MessageFlags.Ephemeral,
         });
       } else {
-        // Other error - try followUp as last resort
-        log.info("Attempting followUp as last resort fallback");
-        await interaction.followUp({
+        // Other error - try webhook.send as last resort (avoids followUp guard)
+        log.info("Attempting webhook.send as last resort fallback");
+        await interaction.webhook.send({
           embeds: [embed],
           components: [],
           flags: flags || MessageFlags.Ephemeral,
@@ -1848,12 +1853,22 @@ export async function promptWithRawModal(
 
   const { modalTitleKey, modalCustomId, components } = options;
 
+  // Generate a unique nonce for this modal instance. Discord's client caches
+  // checked state by custom_id — without a nonce, re-opening a modal (or
+  // opening a different page that reuses the same component custom_ids)
+  // causes the client to restore stale selections instead of honoring defaults.
+  const modalNonce = Date.now().toString(36);
+  const noncedModalCustomId = `${modalCustomId}_${modalNonce}`;
+
+  /** Append the nonce to a component custom_id for cache-busting */
+  const nonceCustomId = (id: string) => `${id}_${modalNonce}`;
+
   try {
     // Build raw Discord API payload with Component Type 18 (Label) support
     const rawModalPayload = {
       type: InteractionResponseType.Modal, // Type 9
       data: {
-        custom_id: modalCustomId,
+        custom_id: noncedModalCustomId,
         title: safeSelectOptionText(
           localizer(locale, modalTitleKey),
           MODAL_TITLE_MAX_LENGTH,
@@ -1869,7 +1884,7 @@ export async function promptWithRawModal(
             const c = component as ModalRadioGroupField;
             const rawComponent: RawDiscordComponent = {
               type: 21, // ComponentType.RadioGroup
-              custom_id: c.customId,
+              custom_id: nonceCustomId(c.customId),
               options: c.options.map((opt) => ({
                 value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
                 label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
@@ -1904,7 +1919,7 @@ export async function promptWithRawModal(
             const cg = component as ModalCheckboxGroupField;
             const rawComponent: RawDiscordComponent = {
               type: 22, // ComponentType.CheckboxGroup
-              custom_id: cg.customId,
+              custom_id: nonceCustomId(cg.customId),
               options: cg.options.map((opt) => ({
                 value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
                 label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
@@ -1942,7 +1957,7 @@ export async function promptWithRawModal(
             const cb = component as ModalCheckboxField;
             const rawComponent: RawDiscordComponent = {
               type: 23, // ComponentType.Checkbox
-              custom_id: cb.customId,
+              custom_id: nonceCustomId(cb.customId),
             };
 
             if (cb.default !== undefined) rawComponent.default = cb.default;
@@ -2135,10 +2150,12 @@ export async function promptWithRawModal(
       const submitted = await interaction.awaitModalSubmit({
         time: 600000, // 10 minutes - matches Discord's natural modal timeout
         filter: (i) =>
-          i.customId === modalCustomId && i.user.id === interaction.user.id,
+          i.customId === noncedModalCustomId && i.user.id === interaction.user.id,
       });
 
       // Extract values using Discord.js methods and stored select values
+      // Keys are stored under the ORIGINAL (non-nonce'd) custom_id so callers
+      // don't need to know about the nonce.
       const values: Record<string, string> = {};
       const multiValues: Record<string, string[]> = {};
       const attachments: Record<string, APIAttachment> = {};
@@ -2153,9 +2170,9 @@ export async function promptWithRawModal(
         if (isModalRadioGroupField(component)) {
           try {
             const c = component as ModalRadioGroupField;
-            // Radio Group value is stored in modalSelectValues as a plain string
+            // Radio Group value is stored in modalSelectValues under the nonce'd custom_id
             const storedValues = modalSelectValues.get(submitted.id);
-            const radioValue = storedValues?.[c.customId];
+            const radioValue = storedValues?.[nonceCustomId(c.customId)];
             if (radioValue !== undefined) {
               values[c.customId] = radioValue;
             } else {
@@ -2167,9 +2184,9 @@ export async function promptWithRawModal(
         } else if (isModalCheckboxGroupField(component)) {
           try {
             const cg = component as ModalCheckboxGroupField;
-            // Checkbox Group values are stored in modalCheckboxGroupValues as a string array
+            // Checkbox Group values are stored under the nonce'd custom_id
             const storedValues = modalCheckboxGroupValues.get(submitted.id);
-            const checkboxValues = storedValues?.[cg.customId];
+            const checkboxValues = storedValues?.[nonceCustomId(cg.customId)];
             if (checkboxValues !== undefined) {
               multiValues[cg.customId] = checkboxValues;
             } else {
@@ -2183,9 +2200,9 @@ export async function promptWithRawModal(
         } else if (isModalCheckboxField(component)) {
           try {
             const cb = component as ModalCheckboxField;
-            // Checkbox value is stored in modalSelectValues as "true" or "false"
+            // Checkbox value is stored under the nonce'd custom_id
             const storedValues = modalSelectValues.get(submitted.id);
-            const checkboxValue = storedValues?.[cb.customId];
+            const checkboxValue = storedValues?.[nonceCustomId(cb.customId)];
             if (checkboxValue !== undefined) {
               values[cb.customId] = checkboxValue;
             } else {
