@@ -55,9 +55,11 @@ Note: If your preset uses HTML/CSS code, please disable its corresponding node t
 - Increased function call limit to 20 (long tool call chains are usually intentional, but if you see an actual loop you can use `/bot kill` to stop it manually)
 - TomoriBot now sees embeds by other bots
 - Bug wherein server data export doesn't work due to it not matching new constraints
-## Rolling Updates
+## Delayed Updates
 These are updates that will be slowly released under your nose after this update as they are still not ready (im kidding, I'll send messages in this forum post)
 - Currently in the process of accommodating more and more SillyTavern preset patterns, if your favorite preset doesn't work as expected/is buggy, feel free to reach out in #support! 
 - Default System Prompt Improvements
 - Elevated persona privileges (may be stalled to further in the future)
+- README.md cleanup
+- /scripts/ folder cleanup
 - Nerine and reworking of the other 4 sister's prompts (yes, she's not available right *now* but soon:tm:)

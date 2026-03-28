@@ -7,7 +7,7 @@ index 0906e2a6..eed396f1 100644
    "dependencies": {
      "@smithy/types": "^4.13.1",
 -    "fast-xml-parser": "5.4.1",
-+    "fast-xml-parser": "5.5.6",
++    "fast-xml-parser": "5.5.9",
      "tslib": "^2.6.2"
    },
    "scripts": {
