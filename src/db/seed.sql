@@ -44,6 +44,14 @@ VALUES
   ('google', 'gemini-3-pro-preview', false, false, true, true, false, true, true, true, true, false, true, 'Preview model focused on advanced reasoning and analysis (deprecated, use gemini-3.1-pro-preview)', '高度な推論と分析に特化したプレビューモデル（非推奨、gemini-3.1-pro-preview を使用）'),
   ('google', 'gemini-3.1-pro-preview', false, false, true, false, false, true, true, true, true, false, true, 'Latest Gemini 3.1 Pro preview model focused on advanced reasoning and analysis', '高度な推論と分析に特化した最新のGemini 3.1 Proプレビューモデル'),
   ('google', 'gemma-3-27b-it', false, false, false, false, true, false, true, false, false, false, false, 'Instruction-tuned Gemma model with image understanding', '画像理解に対応した指示調整済みGemmaモデル'),
+  -- Vertex AI Models (full feature parity with Google AI Studio via ADC)
+  ('vertex', 'gemini-2.5-flash-lite', false, false, false, false, false, true, true, true, true, false, true, 'Lightweight version optimized for speed and efficiency via Vertex AI', 'Vertex AI経由の速度と効率を最適化した軽量版モデル'),
+  ('vertex', 'gemini-2.5-flash', false, true, false, false, false, true, true, true, true, false, true, 'Balanced model for general-purpose applications via Vertex AI', 'Vertex AI経由の汎用アプリケーション向けバランス型モデル'),
+  ('vertex', 'gemini-2.5-pro', true, false, true, false, false, true, true, true, true, false, true, 'Most capable model for complex reasoning and analysis via Vertex AI', 'Vertex AI経由の複雑な推論と分析に最も優れたモデル'),
+  ('vertex', 'gemini-3-flash-preview', false, false, false, false, false, true, true, true, true, false, true, 'Latest preview model with enhanced performance and capabilities via Vertex AI', 'Vertex AI経由の強化されたパフォーマンスと機能を備えた最新のプレビューモデル'),
+  ('vertex', 'gemini-3.1-flash-lite-preview', false, false, false, false, false, true, true, true, true, false, true, 'Latest Gemini 3.1 Flash Lite preview model with full multimodal and tool capabilities via Vertex AI', 'Vertex AI経由のツール利用を含むフルマルチモーダル機能に対応した最新のGemini 3.1 Flash Liteプレビューモデル'),
+  ('vertex', 'gemini-3.1-pro-preview', false, false, true, false, false, true, true, true, true, false, true, 'Latest Gemini 3.1 Pro preview model focused on advanced reasoning and analysis via Vertex AI', 'Vertex AI経由の高度な推論と分析に特化した最新のGemini 3.1 Proプレビューモデル'),
+  ('vertex', 'gemma-3-27b-it', false, false, false, false, false, false, true, false, false, false, false, 'Instruction-tuned Gemma model with image understanding via Vertex AI', 'Vertex AI経由の画像理解に対応した指示調整済みGemmaモデル'),
   -- NovelAI Models (text-only, no vision or structured output capabilities)
   ('novelai', 'glm-4-6', true, true, false, false, false, true, false, false, false, false, false, 'Latest NovelAI roleplay model with enhanced creativity and character consistency', '創造性とキャラクター一貫性を強化した最新のNovelAIロールプレイモデル'),
   ('novelai', 'kayra-v1', false, false, false, false, false, false, false, false, false, false, false, 'Legacy Kayra model for storytelling and roleplay', 'ストーリーテリングとロールプレイ向けのレガシーKayraモデル'),

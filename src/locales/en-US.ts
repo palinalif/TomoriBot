@@ -1642,6 +1642,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_openrouter: `OpenRouter`,
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
+        provider_choice_vertex: `Google Vertex AI`,
         // Brave Search
         brave_title: `Setting Up Brave Search API Key`,
         brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
@@ -1774,6 +1775,27 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         openrouter_settings_title: `OpenRouter Account Settings:`,
         openrouter_settings_description: `Settings configured in your OpenRouter account (such as model preferences, rate limits, etc.) will also apply when using TomoriBot`,
         openrouter_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        // Vertex AI
+        vertex_title: `Setting Up Google Vertex AI`,
+        vertex_description: `Google Vertex AI provides enterprise-grade access to Gemini models through Google Cloud.
+- Uses Application Default Credentials (ADC) for authentication — no API key to manage
+- Supports chat, tool calling, and streaming (v1)
+- Best for self-hosted or trusted deployments where the bot runs with a GCP identity
+- [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)`,
+        vertex_getting_key_title: `Configuration:`,
+        vertex_getting_key_description: `1. Ensure you have a Google Cloud project with the Vertex AI API enabled
+2. Set up Application Default Credentials on the host machine:
+   - **Service account**: Attach a service account to your VM/container with Vertex AI access
+   - **Local dev**: Run \`gcloud auth application-default login\`
+   - **Env var**: Set \`GOOGLE_APPLICATION_CREDENTIALS\` to your service account key file
+3. Enter your configuration as \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
+   - Example: \`my-gcp-project::us-central1\``,
+        vertex_important_title: `Important Notes:`,
+        vertex_important_description: `- The stored value is **configuration** (project + location), not a credential secret
+- All Vertex requests use the host's ADC identity — there is no per-server credential isolation
+- This provider is intended for self-hosted or trusted private deployments
+- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation`,
+        vertex_footer: `After setting up this provider, you may change its default model with {configModel}`,
       },
 
       // /help elevenlabs

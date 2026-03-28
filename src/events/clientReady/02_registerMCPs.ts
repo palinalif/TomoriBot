@@ -12,6 +12,7 @@ import { getCustomToolAdapter } from "../../providers/custom/customToolAdapter";
 import { getNvidiaToolAdapter } from "../../providers/nvidia/nvidiaToolAdapter";
 import { getZaiToolAdapter } from "../../providers/zai/zaiToolAdapter";
 import { getZaicodingToolAdapter } from "../../providers/zaicoding/zaicodingToolAdapter";
+import { getVertexToolAdapter } from "../../providers/vertex/vertexToolAdapter";
 
 /**
  * Event handler for initializing MCP servers when the bot is ready
@@ -54,6 +55,10 @@ export default async (): Promise<void> => {
     const zaicodingAdapter = getZaicodingToolAdapter();
     registerMCPAdapter(zaicodingAdapter);
     log.info("Registered Z.ai Coding tool adapter with MCP capabilities");
+
+    const vertexAdapter = getVertexToolAdapter();
+    registerMCPAdapter(vertexAdapter);
+    log.info("Registered Vertex tool adapter with MCP capabilities");
 
     // Get the MCP manager singleton instance
     const mcpManager = getMCPManager();

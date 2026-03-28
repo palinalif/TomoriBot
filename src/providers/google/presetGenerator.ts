@@ -215,9 +215,10 @@ export async function searchCharacterInfo(
   locale: string,
   modelName: string,
   context?: CharacterSearchContext,
+  client?: GoogleGenAI,
 ): Promise<CharacterSearchResult> {
-  // 1. Validate API key
-  if (!apiKey || apiKey.trim().length < 10) {
+  // 1. Validate API key (skip when using pre-built client)
+  if (!client && (!apiKey || apiKey.trim().length < 10)) {
     return {
       error: createGoogleErrorMessage(
         "API_KEY",
@@ -230,8 +231,8 @@ export async function searchCharacterInfo(
   }
 
   try {
-    // 2. Initialize Gemini client
-    const genAI = new GoogleGenAI({ apiKey });
+    // 2. Initialize Gemini client (use pre-built if provided)
+    const genAI = client ?? new GoogleGenAI({ apiKey });
 
     // 3. Use configured model for search
     const MODEL_NAME = modelName;
@@ -470,9 +471,10 @@ export async function generatePresetFromPrompt(
   apiKey: string,
   params: GeneratePresetParams,
   locale: string,
+  client?: GoogleGenAI,
 ): Promise<PresetGenerationResult> {
-  // 1. Validate API key
-  if (!apiKey || apiKey.trim().length < 10) {
+  // 1. Validate API key (skip when using pre-built client)
+  if (!client && (!apiKey || apiKey.trim().length < 10)) {
     return {
       error: createGoogleErrorMessage(
         "API_KEY",
@@ -485,8 +487,8 @@ export async function generatePresetFromPrompt(
   }
 
   try {
-    // 2. Initialize Gemini client
-    const genAI = new GoogleGenAI({ apiKey });
+    // 2. Initialize Gemini client (use pre-built if provided)
+    const genAI = client ?? new GoogleGenAI({ apiKey });
 
     // 3. Determine which approach to use based on model
     const configuredModel = params.modelName || "gemini-3-flash-preview";
@@ -530,6 +532,7 @@ export async function generatePresetFromPrompt(
           speechExamples: params.speechExamples,
           additionalInstructions: params.additionalInstructions,
         },
+        client,
       );
 
       // 5b. Handle search errors

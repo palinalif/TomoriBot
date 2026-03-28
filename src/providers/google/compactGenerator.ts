@@ -2,6 +2,7 @@ import {
   GoogleGenAI,
   type Content,
   type GenerateContentConfig,
+  type GoogleGenAI as GoogleGenAIType,
   type Part,
 } from "@google/genai";
 import type {
@@ -51,15 +52,22 @@ async function buildUserParts(
   return parts;
 }
 
+/**
+ * Generate a conversation summary using Google Gemini.
+ *
+ * @param request - Summary generation request
+ * @param client - Optional pre-built GoogleGenAI client (used by Vertex provider)
+ */
 export async function generateConversationSummaryGoogle(
   request: CompactSummaryRequest,
+  client?: GoogleGenAIType,
 ): Promise<CompactConversationResult> {
   try {
-    if (!request.apiKey || request.apiKey.trim().length < 10) {
+    if (!client && (!request.apiKey || request.apiKey.trim().length < 10)) {
       return { error: "Invalid Google API key" };
     }
 
-    const genAI = new GoogleGenAI({ apiKey: request.apiKey });
+    const genAI = client ?? new GoogleGenAI({ apiKey: request.apiKey });
     const prompt = request.systemPrompt
       ? `${request.systemPrompt}\n\n${request.userPrompt}`
       : request.userPrompt;
@@ -126,15 +134,22 @@ function buildRoleplaySchema() {
   };
 }
 
+/**
+ * Generate a roleplay summary using Google Gemini with structured output.
+ *
+ * @param request - Summary generation request
+ * @param client - Optional pre-built GoogleGenAI client (used by Vertex provider)
+ */
 export async function generateRoleplaySummaryGoogle(
   request: CompactSummaryRequest,
+  client?: GoogleGenAIType,
 ): Promise<CompactRoleplayResult> {
   try {
-    if (!request.apiKey || request.apiKey.trim().length < 10) {
+    if (!client && (!request.apiKey || request.apiKey.trim().length < 10)) {
       return { error: "Invalid Google API key" };
     }
 
-    const genAI = new GoogleGenAI({ apiKey: request.apiKey });
+    const genAI = client ?? new GoogleGenAI({ apiKey: request.apiKey });
     const prompt = request.systemPrompt
       ? `${request.systemPrompt}\n\n${request.userPrompt}`
       : request.userPrompt;

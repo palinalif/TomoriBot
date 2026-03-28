@@ -211,6 +211,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Run Semgrep SAST scan
         uses: returntocorp/semgrep-action@v1
         with:
@@ -285,6 +291,12 @@ jobs:
         with:
           fetch-depth: 0 # Fetch full history for TruffleHog
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Run TruffleHog secret scan
         uses: trufflesecurity/trufflehog@main
         with:
@@ -314,6 +326,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Download Docker image artifact
         uses: actions/download-artifact@v4

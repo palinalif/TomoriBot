@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type GoogleGenAI as GoogleGenAIType } from "@google/genai";
 import type { Content, GenerateContentConfig, Part } from "@google/genai";
 import type { z } from "zod";
 import {
@@ -25,9 +25,10 @@ export async function callGoogleStructuredJSON<T>(
 	request: GenericStructuredOutputRequest,
 	responseSchema: Record<string, unknown>,
 	zodSchema: z.ZodType<T>,
+	client?: GoogleGenAIType,
 ): Promise<StructuredOutputResult<T>> {
 	try {
-		const genAI = new GoogleGenAI({ apiKey: request.apiKey });
+		const genAI = client ?? new GoogleGenAI({ apiKey: request.apiKey });
 		const parts: Part[] = [{ text: request.userPrompt }];
 
 		if (request.images) {
@@ -134,11 +135,12 @@ export async function callGoogleStructuredJSON<T>(
  */
 export async function callGoogleStructuredOutput(
 	request: GoogleStructuredOutputRequest,
+	client?: GoogleGenAIType,
 ): Promise<StructuredOutputResult<ExpressionBatchResult>> {
 	const images = request.images ?? [];
 
 	try {
-		const genAI = new GoogleGenAI({ apiKey: request.apiKey });
+		const genAI = client ?? new GoogleGenAI({ apiKey: request.apiKey });
 		const parts: Part[] = [{ text: request.userPrompt }];
 
 		for (const image of images) {

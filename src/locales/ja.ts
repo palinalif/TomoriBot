@@ -1709,6 +1709,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         // Z.ai
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
+        provider_choice_vertex: `Google Vertex AI`,
         zai_title: `Z.ai APIキーの設定`,
         zai_description: `Z.aiはGLMモデルファミリーへのアクセスを提供し、汎用APIと専用Codingエンドポイントの両方に対応しています。
 - チャット、推論、画像生成、コーディングワークフローをサポート
@@ -1779,6 +1780,27 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         openrouter_settings_title: `OpenRouterアカウント設定：`,
         openrouter_settings_description: `OpenRouterアカウントで設定された設定（モデルの優先順位、レート制限など）は、TomoriBotを使用する際にも適用されます`,
         openrouter_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        // Vertex AI
+        vertex_title: `Google Vertex AIの設定`,
+        vertex_description: `Google Vertex AIは、Google Cloudを通じてGeminiモデルへのエンタープライズグレードのアクセスを提供します。
+- 認証にApplication Default Credentials（ADC）を使用 — APIキーの管理が不要
+- チャット、ツール呼び出し、ストリーミングに対応（v1）
+- BotがGCP IDで実行されるセルフホストまたは信頼できる環境に最適
+- [Vertex AIドキュメント](https://cloud.google.com/vertex-ai/docs)`,
+        vertex_getting_key_title: `設定手順：`,
+        vertex_getting_key_description: `1. Vertex AI APIが有効なGoogle Cloudプロジェクトを用意
+2. ホストマシンでApplication Default Credentialsを設定：
+   - **サービスアカウント**：Vertex AIアクセス権を持つサービスアカウントをVM/コンテナにアタッチ
+   - **ローカル開発**：\`gcloud auth application-default login\`を実行
+   - **環境変数**：\`GOOGLE_APPLICATION_CREDENTIALS\`にサービスアカウントキーファイルのパスを設定
+3. {configSetup}または{configApikeySet}で\`{project_id}::{location}\`の形式で設定
+   - 例：\`my-gcp-project::us-central1\``,
+        vertex_important_title: `重要な注意事項：`,
+        vertex_important_description: `- 保存される値は**設定情報**（プロジェクト＋ロケーション）であり、認証情報ではありません
+- すべてのVertexリクエストはホストのADC IDを使用 — サーバーごとの認証情報の分離はありません
+- このプロバイダーはセルフホストまたは信頼できるプライベート環境を想定しています
+- チャット、ツール呼び出し、ストリーミング、構造化出力、圧縮、埋め込み、プリセット生成に対応`,
+        vertex_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
       },
 
       // /help elevenlabs

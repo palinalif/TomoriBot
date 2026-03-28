@@ -79,6 +79,13 @@ export const configureSubcommand = (
             ),
             value: "zai",
           },
+          {
+            name: localizer(
+              "en-US",
+              "commands.help.apikey.provider_choice_vertex",
+            ),
+            value: "vertex",
+          },
         ),
     );
 
@@ -387,6 +394,40 @@ export async function execute(
             },
           ],
           footerKey: "commands.help.apikey.zai_footer",
+          footerVars: {
+            configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "vertex":
+        embedOptions = {
+          titleKey: "commands.help.apikey.vertex_title",
+          descriptionKey: "commands.help.apikey.vertex_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.apikey.vertex_getting_key_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.vertex_getting_key_description",
+                {
+                  configSetup: configSetupMention,
+                  configApikeySet: configApikeySetMention,
+                },
+              ),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.apikey.vertex_important_title",
+              value: localizer(
+                locale,
+                "commands.help.apikey.vertex_important_description",
+              ),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.apikey.vertex_footer",
           footerVars: {
             configModel: configModelMention,
           },
