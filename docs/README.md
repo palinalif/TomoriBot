@@ -30,6 +30,7 @@ This folder is organized by topic instead of numeric filenames.
 - [`ai/text-flushing-and-chunking.md`](./ai/text-flushing-and-chunking.md)
 - [`ai/multi-persona.md`](./ai/multi-persona.md)
 - [`ai/rag.md`](./ai/rag.md)
+- [`ai/context-assembly.md`](./ai/context-assembly.md)
 - NovelAI:
   - [`ai/novelai/tool-calling.md`](./ai/novelai/tool-calling.md)
   - [`ai/novelai/limitations.md`](./ai/novelai/limitations.md)

@@ -637,6 +637,15 @@ export default {
         success_title: `Preset Uploaded`,
         success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n\nUse \`/stpreset node toggle\` to adjust which nodes are active.`,
       },
+      remove: {
+        description: `Remove the active SillyTavern preset`,
+        no_preset_title: `No Active Preset`,
+        no_preset_description: `There is no active SillyTavern preset on this server. Nothing to remove.`,
+        failed_title: `Removal Failed`,
+        failed_description: `Failed to remove the preset. Please try again.`,
+        success_title: `Preset Removed`,
+        success_description: `**{name}** has been removed. Context assembly has reverted to the default behavior.`,
+      },
       node: {
         description: `Manage preset prompt nodes`,
         toggle: {

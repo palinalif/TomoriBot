@@ -641,6 +641,15 @@ export default {
         success_title: `プリセットをアップロードしました`,
         success_description: `**{name}**をインポートしました。\n\n• **{total}** 合計ノード\n• **{markers}** 構造マーカー\n• **{toggleable}** 切り替え可能ノード（**{enabled}** 有効）\n\n\`/stpreset node toggle\`でアクティブなノードを調整できます。`,
       },
+      remove: {
+        description: `アクティブなSillyTavernプリセットを削除`,
+        no_preset_title: `アクティブなプリセットがありません`,
+        no_preset_description: `このサーバーにアクティブなSillyTavernプリセットがありません。削除するものがありません。`,
+        failed_title: `削除に失敗しました`,
+        failed_description: `プリセットの削除に失敗しました。もう一度お試しください。`,
+        success_title: `プリセットを削除しました`,
+        success_description: `**{name}**を削除しました。コンテキスト組み立てがデフォルトの動作に戻りました。`,
+      },
       node: {
         description: `プリセットのプロンプトノードを管理`,
         toggle: {

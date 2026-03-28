@@ -3,8 +3,9 @@ nul
 *.backup
 .tmp
 
-# Tokenizers
-tokenizers/
+# Tokenizers (assets ignored; manifest tracked)
+tokenizers/*
+!tokenizers/manifest.json
 
 # Matrix Appservice registration file — contains hs_token / as_token secrets
 appservice-registration.yaml
