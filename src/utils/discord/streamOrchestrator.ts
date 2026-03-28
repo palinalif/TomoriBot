@@ -809,9 +809,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       return;
     }
 
-    // Add to buffer
-    state.buffer += normalizedTextContent;
+    // Route content to the correct buffer: while inside a think block, new chunks belong in the
+    // think accumulator — NOT the main output buffer. This prevents think content from leaking
+    // into Discord when the model streams the <think> tag split across multiple tiny SSE chunks.
+    if (state.isInsideThinkBlock) {
+      state.thinkBlockBuffer += normalizedTextContent;
+    } else {
+      state.buffer += normalizedTextContent;
+    }
     metrics.totalCharacters += normalizedTextContent.length;
+
+    // Extract any <think> blocks arriving in the buffer, routing them to the thought log.
+    // This handles think tags that arrive split across multiple tiny SSE chunks.
+    this.drainThinkBlocksFromBuffer(state);
 
     // Process buffer iteratively
     let processedSomething: boolean;
@@ -844,12 +854,14 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       processedSomething &&
       state.buffer.length > 0 &&
       !state.isInsideCodeBlock &&
+      !state.isInsideThinkBlock &&
       !state.hasSemanticMarkers
     );
 
     // Handle oversized regular buffer (not in code block and no semantic markers)
     while (
       !state.isInsideCodeBlock &&
+      !state.isInsideThinkBlock &&
       !state.hasSemanticMarkers &&
       state.buffer.length >=
         DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR
@@ -982,6 +994,60 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   }
 
   /**
+   * Iteratively extract complete and in-progress `<think>` blocks from `state.buffer`.
+   * Think block content is routed to `thoughtRawSegments`; everything else stays in `state.buffer`.
+   *
+   * Handles think tags that span multiple SSE chunks by accumulating into `thinkBlockBuffer`
+   * until `</think>` arrives.
+   */
+  private drainThinkBlocksFromBuffer(state: StreamState): void {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (state.isInsideThinkBlock) {
+        // Safety: absorb any content that landed in the main buffer while inside a think block
+        if (state.buffer.length > 0) {
+          state.thinkBlockBuffer += state.buffer;
+          state.buffer = "";
+        }
+        // Waiting for </think> — look in the think block accumulator
+        const closeIdx = state.thinkBlockBuffer.indexOf("</think>");
+        if (closeIdx === -1) {
+          // Still accumulating think content, nothing to do yet
+          break;
+        }
+
+        // Route completed think content to the thought log
+        const thinkContent = state.thinkBlockBuffer.slice(0, closeIdx).trim();
+        if (thinkContent) {
+          state.thoughtRawSegments.push(thinkContent);
+          log.info(
+            `Stream: Captured ${thinkContent.length} chars of think block content for thought log`,
+          );
+        }
+
+        // Content after </think> returns to the main buffer
+        const afterClose = state.thinkBlockBuffer.slice(closeIdx + "</think>".length);
+        state.thinkBlockBuffer = "";
+        state.isInsideThinkBlock = false;
+        state.buffer += afterClose;
+        // Continue loop — there may be another <think> block in the resumed buffer
+      } else {
+        // Look for an opening <think> tag in the main buffer
+        const openIdx = state.buffer.indexOf("<think>");
+        if (openIdx === -1) {
+          break; // No think block in buffer
+        }
+
+        // Split on <think>: content before stays in buffer, content after goes to accumulator
+        state.thinkBlockBuffer = state.buffer.slice(openIdx + "<think>".length);
+        state.buffer = state.buffer.slice(0, openIdx);
+        state.isInsideThinkBlock = true;
+        // Continue loop — check for immediate </think> in thinkBlockBuffer
+      }
+    }
+  }
+
+  /**
    * Simplified semantic marker detection that checks for INCOMPLETE semantic blocks
    * Returns true only if there are unclosed/incomplete semantic markers that we should wait for
    * Focuses on the core cases that cause broken text formatting
@@ -1037,6 +1103,16 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     if (buffer.match(/https?:$|https?:\/$|https?:\/\/$/)) {
       log.info(`Stream: Buffer ends with incomplete URL protocol`);
       return true;
+    }
+
+    // 5. Check for a partial <think> opening tag at the end of the buffer.
+    // e.g. buffer ends with "<", "<t", "<th", "<thi", "<thin", "<think" — hold until complete.
+    const THINK_OPEN = "<think>";
+    for (let len = THINK_OPEN.length - 1; len >= 1; len--) {
+      if (buffer.endsWith(THINK_OPEN.slice(0, len))) {
+        log.info(`Stream: Buffer ends with partial <think> tag prefix`);
+        return true;
+      }
     }
 
     return false; // No incomplete semantic markers detected
@@ -1151,6 +1227,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     state: StreamState,
     config: StreamConfig,
   ): ChunkProcessingResult {
+    // Hold the buffer entirely while accumulating a think block — don't flush any content
+    if (state.isInsideThinkBlock) {
+      return { shouldFlush: false, updatedBuffer: state.buffer, newCodeBlockState: undefined };
+    }
+
     if (state.isInsideCodeBlock) {
       // Look for closing code block
       const closingBackticksIndex = state.buffer.indexOf("```", 3);
@@ -2222,6 +2303,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       state.isInsideCodeBlock = false;
       state.hasSemanticMarkers = false;
     }
+
+    // Route any think block content that was still accumulating when the stream ended.
+    // Never send incomplete think content to Discord — discard or route to thought log.
+    if (state.isInsideThinkBlock && state.thinkBlockBuffer.trim()) {
+      const thinkContent = state.thinkBlockBuffer.trim();
+      state.thoughtRawSegments.push(thinkContent);
+      log.info(
+        `Stream Seg: Captured ${thinkContent.length} chars of unterminated think block to thought log on final flush`,
+      );
+      state.thinkBlockBuffer = "";
+      state.isInsideThinkBlock = false;
+    }
   }
 
   /**
@@ -2234,6 +2327,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     context: StreamContext,
     trimTrailingIncompleteClause: boolean = false,
   ): Promise<void> {
+    if (state.isInsideThinkBlock) {
+      const thinkContent = state.thinkBlockBuffer.trim();
+      if (thinkContent) {
+        state.thoughtRawSegments.push(thinkContent);
+        log.info(
+          `Stream Seg: Captured ${thinkContent.length} chars of think block to thought log before flush`,
+        );
+      }
+      state.thinkBlockBuffer = "";
+      state.isInsideThinkBlock = false;
+    }
+
     if (state.isInsideCodeBlock) {
       log.warn(
         "Stream Seg: Function call received while inside a code block. Flushing incomplete block.",

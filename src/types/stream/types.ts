@@ -35,11 +35,14 @@ export const DISCORD_STREAMING_CONSTANTS = {
 } as const;
 
 /**
- * Stream state tracking for buffer management and code block detection
+ * Stream state tracking for buffer management and code block and think block detection
  */
 export interface StreamState {
   buffer: string;
   isInsideCodeBlock: boolean;
+  isInsideThinkBlock: boolean;
+  /** Accumulates raw content between <think> and </think> before routing to thoughtRawSegments. */
+  thinkBlockBuffer: string;
   hasSemanticMarkers: boolean;
   messageSentCount: number;
   hasRepliedToOriginalMessage: boolean;
@@ -206,6 +209,8 @@ export function createDefaultStreamState(): StreamState {
   return {
     buffer: "",
     isInsideCodeBlock: false,
+    isInsideThinkBlock: false,
+    thinkBlockBuffer: "",
     hasSemanticMarkers: false,
     messageSentCount: 0,
     hasRepliedToOriginalMessage: false,

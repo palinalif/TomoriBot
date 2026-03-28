@@ -609,7 +609,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 	private stripThinkBlocksFromChunkContent(
 		chunk: OpenAICompatibleStreamChunk,
 	): OpenAICompatibleStreamChunk {
-		if (!this.options.stripThinkBlocksFromContent) {
+		if (this.options.stripThinkBlocksFromContent === false) {
 			return chunk;
 		}
 
@@ -690,7 +690,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 	}
 
 	private captureThinkBlockThoughtText(text: string): void {
-		if (!this.options.captureThinkBlocksAsThoughts || !text) {
+		if (this.options.captureThinkBlocksAsThoughts === false || !text) {
 			return;
 		}
 

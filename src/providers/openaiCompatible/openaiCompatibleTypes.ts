@@ -103,7 +103,9 @@ export interface OpenAICompatibleStreamAdapterOptions {
 	placeholderApiKey?: string;
 	enableSpeakerGuard?: boolean;
 	preserveReasoningContent?: boolean;
+	/** Set to `false` to disable stripping `<think>` blocks from content. Defaults to `true`. */
 	stripThinkBlocksFromContent?: boolean;
+	/** Set to `false` to discard stripped `<think>` content instead of routing it to the thought log. Defaults to `true`. */
 	captureThinkBlocksAsThoughts?: boolean;
 	resolveApiUrl: (config: OpenAICompatibleStreamConfig) => string;
 	mutateRequestBody?: (

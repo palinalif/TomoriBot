@@ -18,8 +18,6 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
 			localeNamespace: ["genai", "custom"].join("."),
 			errorMessagePrefix: "Custom endpoint error",
 			placeholderApiKey: CUSTOM_PROVIDER_PLACEHOLDER_API_KEY,
-			stripThinkBlocksFromContent: true,
-			captureThinkBlocksAsThoughts: true,
 			resolveApiUrl: (config) => normalizeCustomApiUrl(config.endpointUrl),
 			shouldRetryWithoutStop: (statusCode, errorText) => {
 				if (statusCode !== 400 && statusCode !== 422) {
