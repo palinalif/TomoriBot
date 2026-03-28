@@ -78,6 +78,46 @@ const TRIM_REGEX = /\{\{trim\}\}/g;
 /** Detects HTML tags that Discord cannot render */
 const HTML_TAG_REGEX = /<(?:div|span|style|br|p|h[1-6]|table|tr|td|th|ul|ol|li|details|summary|img|a|strong|em|b|i|u|s|pre|code)\b[^>]*>/i;
 
+// ─── Preset Compatibility Patches ────────────────────────────────────────
+//
+// Additional placeholder conventions found in real ST presets that fall
+// outside the official ST macro spec. Some presets rely on ST's regex
+// post-processing to resolve these — since we don't implement the regex
+// engine, we handle them here as direct replacements instead.
+//
+// Each entry documents the observed preset(s) and rationale.
+// Add new compatibility patches here so they're all in one auditable location.
+
+/**
+ * Resolve additional identity placeholders used by some preset authors.
+ * These may originate from presets that rely on ST's regex post-processing
+ * pipeline (which TomoriBot does not implement) to substitute identity tokens.
+ * The standard ST macros are {{user}}/{{char}}, but some presets also use:
+ *
+ * - `<USER>` → triggerer display name (seen in: Marinara's Spaghetti Recipe)
+ * - `<BOT>` → bot/persona display name (seen in: Marinara's Spaghetti Recipe)
+ *
+ * Applied after all standard macro processing so it doesn't interfere
+ * with HTML detection (these are uppercase XML tags, not real HTML elements).
+ *
+ * @param text - Node content after standard macro resolution
+ * @param userName - Triggerer's display name
+ * @param charName - Bot/persona display name
+ * @returns Text with additional placeholders resolved
+ */
+function applyCompatibilityPatches(
+	text: string,
+	userName: string,
+	charName: string,
+): string {
+	// Patch 1: <USER> / <BOT> XML-style identity placeholders
+	// Case-sensitive to avoid false positives with lowercase HTML-like tags
+	let result = text.replaceAll("<USER>", userName);
+	result = result.replaceAll("<BOT>", charName);
+
+	return result;
+}
+
 // ─── Macro Processors (Pure Functions) ──────────────────────────────────
 
 /**
@@ -406,11 +446,14 @@ export function resolvePresetMacros(
 		// 6. Evaluate dice rolls
 		content = processRoll(content);
 
-		// 7. Process trim (must be last text transform)
+		// 7. Apply compatibility patches (additional placeholders like <USER>, <BOT>)
+		content = applyCompatibilityPatches(content, macroContext.userName, macroContext.charName);
+
+		// 8. Process trim (must be last text transform)
 		const { result: trimmedContent, isEmpty } = processTrim(content);
 		content = trimmedContent;
 
-		// 8. Detect HTML content
+		// 9. Detect HTML content
 		const hasHtml = content.length > 0 && detectHtmlContent(content);
 		if (hasHtml) htmlWarningCount++;
 

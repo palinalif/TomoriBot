@@ -635,7 +635,9 @@ export default {
         no_nodes: `No usable prompt nodes were found in this preset.`,
         duplicate_name: `A preset named "{name}" already exists for this server. Remove it first or rename the file.`,
         success_title: `Preset Uploaded`,
-        success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n\nUse \`/stpreset node toggle\` to adjust which nodes are active.`,
+        success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n{notes}\nUse \`/stpreset node toggle\` to adjust which nodes are active.\nUse \`/stpreset remove\` to revert to default behavior.`,
+        note_comment_only: `\n> **{count}** comment-only node(s) were skipped (contain only \`{{// comments}}\` and produce no output).`,
+        note_disabled_by_preset: `\n> **{count}** node(s) are disabled by default in this preset. Use \`/stpreset node toggle\` to enable them.`,
       },
       remove: {
         description: `Remove the active SillyTavern preset`,
@@ -1284,7 +1286,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         avatar_update_skipped_dm: `Preset was applied successfully, except avatar updates which are not available in Direct Messages`,
       },
       generate: {
-        description: `AI-powered personality generation using Google Gemini or OpenRouter`,
+        description: `AI-powered personality generation (requires a compatible provider)`,
         // Modal fields
         modal: {
           title: `Generate AI Personality`,
@@ -1301,8 +1303,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           web_search_no: `No, create original character`,
           additional_inst_label: `Additional Instructions`,
           additional_inst_placeholder: `Optional: Other instructions (e.g., "please keep the character's responses short")`,
-          file_upload_label: `Character Image (Optional)`,
-          file_upload_description: `Upload an image for export and to help with generating the character`,
+          file_upload_label: `Character Image / Card (Optional)`,
+          file_upload_description: `Upload an image, Tomori preset, or SillyTavern card PNG to generate or transform a character`,
         },
         // Field labels for memory critical error preservation
         field_character_name: `Character Name`,
@@ -1319,7 +1321,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         image_vision_required_title: `🔴 Image Vision Required`,
         image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION** and no vision model is configured.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a dedicated vision model, OR\n2. Use \`/config model text\` to switch to a vision-capable model, OR\n3. Remove the image and regenerate without it`,
         vision_model_provider_unsupported_title: `🔴 Vision Model Provider Unsupported`,
-        vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a vision model from a supported provider (Google or OpenRouter), OR\n2. Use \`/config model text\` to switch your primary model to one that supports both vision and preset generation`,
+        vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a vision model from a supported provider (Google, OpenRouter, DeepSeek, Z.ai, Custom, NVIDIA NIM), OR\n2. Use \`/config model text\` to switch your primary model to one that supports both vision and preset generation`,
         web_search_tools_required_title: `🔴 Web Search Unavailable`,
         web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.\n\n**Next steps:**\n1. Use \`/config model text\` to switch to a tool-enabled model, OR\n2. Regenerate without web search (choose "No" when asked)`,
         api_key_decrypt_failed_title: `🔴 API Key Error`,
@@ -1888,7 +1890,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 
 **Persona Commands:**
 - {personaCreate} - Create a custom personality from scratch
-- {personaGenerate} - AI-generate a personality based on a description and image (Requires a vision + structured output model like Gemini or OpenRouter)
+- {personaGenerate} - AI-generate a personality based on a description and image (requires a compatible provider with structured output; also supports uploading Tomori presets and SillyTavern cards to transform existing characters)
 - {personaDefault} - Switch to a default personality
 - {personaExport} - Export your persona to share or backup
 - {personaImport} - Import a persona from a file (supports importing as an alter persona with its own triggers and webhook avatar)

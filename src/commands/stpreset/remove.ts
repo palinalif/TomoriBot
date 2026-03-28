@@ -8,7 +8,7 @@ import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
-import { loadActivePreset, deletePreset } from "@/utils/db/stPresetDb";
+import { loadActivePreset, loadPresetsForServer, deletePreset } from "@/utils/db/stPresetDb";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 // ─── Subcommand Configuration ────────────────────────────────────────
@@ -59,8 +59,14 @@ export async function execute(
 	}
 
 	try {
-		// 2. Check if there's an active preset
-		const preset = await loadActivePreset(tomoriState.server_id);
+		// 2. Find the active preset, or fall back to the most recent preset for this server
+		// Fallback handles the edge case where a preset was uploaded before activation logic existed
+		let preset = await loadActivePreset(tomoriState.server_id);
+		if (!preset) {
+			const allPresets = await loadPresetsForServer(tomoriState.server_id);
+			preset = allPresets[0] ?? null;
+		}
+
 		if (!preset || !preset.preset_id) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.stpreset.remove.no_preset_title",

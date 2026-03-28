@@ -10,7 +10,7 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { safeDownload } from "@/utils/security/safeDownload";
-import { insertPresetWithNodes } from "@/utils/db/stPresetDb";
+import { insertPresetWithNodes, setActivePreset } from "@/utils/db/stPresetDb";
 import type { UserRow, ErrorContext, StPresetNodeRow } from "@/types/db/schema";
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -137,6 +137,15 @@ function derivePresetName(filename: string): string {
 
 // ─── Preset Parsing ──────────────────────────────────────────────────
 
+/** Result of parsing a preset, including nodes and filtering stats */
+interface ParseResult {
+	nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[];
+	/** Number of comment-only nodes that were filtered out entirely */
+	commentOnlySkipped: number;
+	/** Number of non-marker nodes disabled by the preset's prompt_order */
+	disabledByPreset: number;
+}
+
 /**
  * Parse a raw SillyTavern preset JSON into storable nodes.
  *
@@ -145,14 +154,12 @@ function derivePresetName(filename: string): string {
  * 2. Walk the `prompt_order` for character_id 100001 (user-prompt order)
  *    to determine sequence and default enabled states
  * 3. Filter out comment-only nodes (no content after macro resolution)
- * 4. Return ordered nodes ready for DB insertion
+ * 4. Return ordered nodes ready for DB insertion, plus filtering stats
  *
  * @param raw - Parsed SillyTavern preset JSON
- * @returns Array of nodes in prompt_order sequence, or null if the preset is invalid
+ * @returns Parse result with nodes and stats, or null if the preset is invalid
  */
-function parsePresetNodes(
-	raw: RawSTPreset,
-): Omit<StPresetNodeRow, "node_id" | "preset_id">[] | null {
+function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
 	const prompts = raw.prompts;
 	if (!Array.isArray(prompts) || prompts.length === 0) {
 		return null;
@@ -185,9 +192,11 @@ function parsePresetNodes(
 		}));
 	}
 
-	// 4. Walk the order and build nodes, filtering comment-only entries
+	// 4. Walk the order and build nodes, tracking filtering stats
 	const nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[] = [];
 	let nodeOrder = 0;
+	let commentOnlySkipped = 0;
+	let disabledByPreset = 0;
 
 	for (const entry of orderEntries) {
 		const prompt = promptMap.get(entry.identifier);
@@ -198,7 +207,13 @@ function parsePresetNodes(
 
 		// Skip comment-only nodes (no usable content after macro resolution)
 		if (!isMarker && isCommentOnly(content)) {
+			commentOnlySkipped++;
 			continue;
+		}
+
+		// Track nodes disabled by the preset's prompt_order
+		if (!isMarker && !entry.enabled) {
+			disabledByPreset++;
 		}
 
 		nodes.push({
@@ -215,7 +230,8 @@ function parsePresetNodes(
 		});
 	}
 
-	return nodes.length > 0 ? nodes : null;
+	if (nodes.length === 0) return null;
+	return { nodes, commentOnlySkipped, disabledByPreset };
 }
 
 // ─── Execution ───────────────────────────────────────────────────────
@@ -314,13 +330,15 @@ export async function execute(
 		}
 
 		// 8. Parse nodes from the preset
-		const nodes = parsePresetNodes(rawPreset);
-		if (!nodes) {
+		const parseResult = parsePresetNodes(rawPreset);
+		if (!parseResult) {
 			await interaction.editReply({
 				content: localizer(locale, "commands.stpreset.upload.no_nodes"),
 			});
 			return;
 		}
+
+		const { nodes, commentOnlySkipped, disabledByPreset } = parseResult;
 
 		// 9. Derive preset name from filename
 		const presetName = derivePresetName(attachment.name ?? "Unnamed Preset");
@@ -342,12 +360,35 @@ export async function execute(
 			return;
 		}
 
-		// 11. Count node types for the summary
+		// 11. Activate the newly uploaded preset (deactivates any previously active preset)
+		if (preset.preset_id) {
+			await setActivePreset(tomoriState.server_id, preset.preset_id);
+		}
+
+		// 12. Count node types for the summary
 		const markerCount = nodes.filter((n) => n.is_marker).length;
 		const toggleableCount = nodes.filter((n) => !n.is_marker).length;
 		const enabledCount = nodes.filter((n) => n.is_enabled && !n.is_marker).length;
 
-		// 12. Success response
+		// 13. Build filtering notes for the success embed
+		const filterNotes: string[] = [];
+		if (commentOnlySkipped > 0) {
+			filterNotes.push(
+				localizer(locale, "commands.stpreset.upload.note_comment_only", {
+					count: commentOnlySkipped.toString(),
+				}),
+			);
+		}
+		if (disabledByPreset > 0) {
+			filterNotes.push(
+				localizer(locale, "commands.stpreset.upload.note_disabled_by_preset", {
+					count: disabledByPreset.toString(),
+				}),
+			);
+		}
+		const notes = filterNotes.length > 0 ? filterNotes.join("\n") : "";
+
+		// 14. Success response
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "commands.stpreset.upload.success_title",
 			descriptionKey: "commands.stpreset.upload.success_description",
@@ -357,12 +398,13 @@ export async function execute(
 				markers: markerCount.toString(),
 				toggleable: toggleableCount.toString(),
 				enabled: enabledCount.toString(),
+				notes,
 			},
 			color: ColorCode.SUCCESS,
 		});
 
 		log.success(
-			`[ST Preset Upload] "${presetName}" uploaded for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers)`,
+			`[ST Preset Upload] "${presetName}" uploaded for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers, ${commentOnlySkipped} comment-only skipped, ${disabledByPreset} disabled by preset)`,
 		);
 	} catch (error) {
 		const context: ErrorContext = {

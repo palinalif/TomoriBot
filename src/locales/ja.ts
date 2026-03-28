@@ -639,7 +639,9 @@ export default {
         no_nodes: `このプリセットに使用可能なプロンプトノードが見つかりませんでした。`,
         duplicate_name: `"{name}"という名前のプリセットはこのサーバーに既に存在します。先に削除するか、ファイル名を変更してください。`,
         success_title: `プリセットをアップロードしました`,
-        success_description: `**{name}**をインポートしました。\n\n• **{total}** 合計ノード\n• **{markers}** 構造マーカー\n• **{toggleable}** 切り替え可能ノード（**{enabled}** 有効）\n\n\`/stpreset node toggle\`でアクティブなノードを調整できます。`,
+        success_description: `**{name}**をインポートしました。\n\n• **{total}** 合計ノード\n• **{markers}** 構造マーカー\n• **{toggleable}** 切り替え可能ノード（**{enabled}** 有効）\n{notes}\n\`/stpreset node toggle\`でアクティブなノードを調整できます。\n\`/stpreset remove\`でデフォルトの動作に戻せます。`,
+        note_comment_only: `\n> **{count}** 個のコメントのみのノードが���キップされました（\`{{// コメント}}\`のみで出力がないため）。`,
+        note_disabled_by_preset: `\n> **{count}** 個のノードがこのプリセットでデフォルトで無効になっています。\`/stpreset node toggle\`で有効にできます。`,
       },
       remove: {
         description: `アクティブなSillyTavernプリセットを削除`,
@@ -1288,7 +1290,7 @@ export default {
         avatar_update_skipped_dm: `プリセットは正常に適用されましたが、アバター更新はダイレクトメッセージでは利用できません`,
       },
       generate: {
-        description: `Google GeminiまたはOpenRouterを使用した人格生成`,
+        description: `AIによる人格生成（対応プロバイダーが必要）`,
         // Modal fields
         modal: {
           title: `AI人格生成`,
@@ -1305,8 +1307,8 @@ export default {
           web_search_no: `いいえ、オリジナルキャラクターを作成します`,
           additional_inst_label: `追加の指示`,
           additional_inst_placeholder: `任意：その他の指示（例：「キャラクターの返答は短くしてください」）`,
-          file_upload_label: `キャラクター画像 (任意)`,
-          file_upload_description: `エクスポート用およびキャラクター生成の補助のために画像をアップロード`,
+          file_upload_label: `キャラクター画像 / カード (任意)`,
+          file_upload_description: `画像、Tomoriプリセット、またはSillyTavernカードPNGをアップロードして生成・変換`,
         },
         // Field labels for memory critical error preservation
         field_character_name: `キャラクター名`,
@@ -1323,7 +1325,7 @@ export default {
         image_vision_required_title: `🔴 画像ビジョンが必要`,
         image_vision_required_description: `画像がアップロードされましたが、現在のモデル（**{model_name}**）は**画像ビジョン**をサポートしておらず、ビジョンモデルも設定されていません。\n\n**次のステップ:**\n1. \`/config model vision\`を使用して専用ビジョンモデルを設定する、または\n2. \`/config model text\`を使用してビジョン対応モデルに切り替える、または\n3. 画像を削除して画像なしで再生成する`,
         vision_model_provider_unsupported_title: `🔴 ビジョンモデルのプロバイダー非対応`,
-        vision_model_provider_unsupported_description: `ビジョンモデル（**{vision_model_name}**）はプロバイダー **{vision_provider}** に設定されていますが、このプロバイダーはペルソナプリセット生成に対応していません。\n\n**次のステップ:**\n1. \`/config model vision\`を使用して対応プロバイダー（GoogleまたはOpenRouter）のビジョンモデルを設定する、または\n2. \`/config model text\`を使用してビジョンとプリセット生成の両方に対応したプライマリモデルに切り替える`,
+        vision_model_provider_unsupported_description: `ビジョンモデル（**{vision_model_name}**）はプロバイダー **{vision_provider}** に設定されていますが、このプロバイダーはペルソナプリセット生成に対応していません。\n\n**次のステップ:**\n1. \`/config model vision\`を使用して対応プロバイダー（Google、OpenRouter、DeepSeek、Z.ai、Custom、NVIDIA NIM）のビジョンモデルを設定する、または\n2. \`/config model text\`を使用してビジョンとプリセット生成の両方に対応したプライマリモデルに切り替える`,
         web_search_tools_required_title: `🔴 ウェブ検索を利用できません`,
         web_search_tools_required_description: `ウェブ検索が選択されましたが、現在のモデル（**{model_name}**）は**ツール**に対応していません。\n\n**次のステップ:**\n1. \`/config model text\`を使用してツール対応モデルに切り替える、または\n2. ウェブ検索なしで再生成する（質問されたら「いいえ」を選択）`,
         api_key_decrypt_failed_title: `🔴 APIキーエラー`,
@@ -1893,7 +1895,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
 **ペルソナコマンド：**
 - {personaCreate} - ゼロからカスタムパーソナリティを作成
-- {personaGenerate} - 説明に基づいてAIがパーソナリティを生成（GeminiまたはOpenRouterが必要）
+- {personaGenerate} - 説明と画像に基づいてAIがパーソナリティを生成（構造化出力に対応したプロバイダーが必要。TomoriプリセットやSillyTavernカードをアップロードして既存キャラクターを変換することも可能）
 - {personaDefault} - デフォルトのパーソナリティに切り替え
 - {personaExport} - ペルソナを共有またはバックアップ用にエクスポート
 - {personaImport} - ファイルからペルソナをインポート（独自のトリガーとウェブフックアバターを持つアルターペルソナとしてインポートも対応）

@@ -2186,7 +2186,10 @@ export default async function tomoriChat(
 
     if (
       referencedMessage?.author.bot &&
-      referencedMessage.author.id !== client.user?.id
+      referencedMessage.author.id !== client.user?.id &&
+      // Webhook messages (alter personas, user impersonation) are handled by
+      // resolveReferencedWebhookTarget below — don't block them here.
+      !referencedMessage.webhookId
     ) {
       // Check if Tomori is directly addressed via @mention, base trigger word, or
       // any persona/alter trigger word before blocking the message.

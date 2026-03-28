@@ -220,15 +220,20 @@ function pullFirstFromBucket(
 }
 
 /**
- * Merge depth-injected content into an existing dialogue history item.
- * Appends the injection content as a new text part to avoid role-alternation violations.
+ * Batch-merge depth-injected content into dialogue history items.
+ *
+ * Instead of appending one `[System: ...]` text part per injection node,
+ * this groups all injections targeting the same depth into a single
+ * `[System: ...]` block. This reduces token waste from repeated prefixes
+ * and produces cleaner output that more closely matches SillyTavern's
+ * contiguous injection behavior.
  *
  * @param contextItems - The assembled context items array
- * @param injection - The resolved depth-injection node
+ * @param injections - Array of { depth, content } pairs, already sorted by depth ascending then injection_order ascending
  */
-function mergeDepthInjection(
+function batchMergeDepthInjections(
 	contextItems: StructuredContextItem[],
-	injection: ResolvedNode,
+	injections: Array<{ depth: number; content: string; name: string }>,
 ): void {
 	// 1. Find all DIALOGUE_HISTORY items and their indices
 	const historyIndices: number[] = [];
@@ -240,24 +245,35 @@ function mergeDepthInjection(
 
 	if (historyIndices.length === 0) {
 		log.warn(
-			`[Preset Builder] Cannot merge depth injection "${injection.name}" — no dialogue history items found`,
+			`[Preset Builder] Cannot merge ${injections.length} depth injection(s) — no dialogue history items found`,
 		);
 		return;
 	}
 
-	// 2. Calculate target: count from end
-	const depth = injection.injection_depth;
-	const targetHistoryIndex = historyIndices.length - 1 - depth;
+	// 2. Group injections by their target context index (clamped depth → actual array index)
+	const groupedByTarget = new Map<number, string[]>();
 
-	// 3. Clamp to valid range
-	const clampedIndex = Math.max(0, Math.min(targetHistoryIndex, historyIndices.length - 1));
-	const actualIndex = historyIndices[clampedIndex];
+	for (const injection of injections) {
+		const targetHistoryIndex = historyIndices.length - 1 - injection.depth;
+		const clampedIndex = Math.max(0, Math.min(targetHistoryIndex, historyIndices.length - 1));
+		const actualIndex = historyIndices[clampedIndex];
 
-	// 4. Append injection content as a new text part
-	contextItems[actualIndex].parts.push({
-		type: "text",
-		text: `\n[System: ${injection.content}]`,
-	});
+		const group = groupedByTarget.get(actualIndex);
+		if (group) {
+			group.push(injection.content);
+		} else {
+			groupedByTarget.set(actualIndex, [injection.content]);
+		}
+	}
+
+	// 3. Append one combined [System: ...] text part per target item
+	for (const [actualIndex, contents] of groupedByTarget) {
+		const combinedText = contents.join("\n");
+		contextItems[actualIndex].parts.push({
+			type: "text",
+			text: `\n[System: ${combinedText}]`,
+		});
+	}
 }
 
 // ─── Main Export ─────────────────────────────────────────────────────────
@@ -451,7 +467,7 @@ export async function reassembleWithPreset(
 				node.content,
 				mentionParams.client,
 				mentionParams.guildId,
-				node.role === "system" ? "User" : mentionParams.triggererName, // Stable placeholder for system role
+				mentionParams.triggererName, // Preset custom nodes should resolve {{user}} to the actual triggerer
 				mentionParams.botName,
 				mentionParams.personalMemoriesEnabled,
 			);
@@ -479,8 +495,10 @@ export async function reassembleWithPreset(
 
 	// ── Step 6: Process depth-injection nodes ──
 	// These merge INTO existing dialogue history items rather than creating new messages.
-	// Process in sorted order (highest depth first → lowest depth last) so that
-	// earlier injections don't shift indices for later ones.
+	// Same-depth injections are batched into a single [System: ...] block to reduce
+	// token waste and match SillyTavern's contiguous injection behavior.
+	const resolvedInjections: Array<{ depth: number; content: string; name: string }> = [];
+
 	for (const depthNode of depthNodes) {
 		if (depthNode.content.length === 0) continue;
 
@@ -494,10 +512,15 @@ export async function reassembleWithPreset(
 			mentionParams.personalMemoriesEnabled,
 		);
 
-		mergeDepthInjection(contextItems, {
-			...depthNode,
+		resolvedInjections.push({
+			depth: depthNode.injection_depth,
 			content: resolvedContent,
+			name: depthNode.name,
 		});
+	}
+
+	if (resolvedInjections.length > 0) {
+		batchMergeDepthInjections(contextItems, resolvedInjections);
 	}
 
 	log.info(

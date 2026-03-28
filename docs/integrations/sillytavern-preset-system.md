@@ -123,6 +123,19 @@ The engine tracks which content macros were expanded with real (non-empty) data 
 | `{{trim}}` | Trim whitespace | If empty after trim, node is disabled |
 | `{{// comment }}` | *(removed)* | Stripped entirely |
 
+### Compatibility Patches
+
+Some presets use additional placeholder conventions that fall outside the official ST macro spec — often because they rely on ST's regex post-processing pipeline (which TomoriBot does not implement) to substitute these tokens. We resolve them directly instead.
+
+All compatibility patches are in one location in `stPresetEngine.ts` for easy auditing.
+
+| Placeholder | Replacement | Observed in |
+|-------------|-------------|-------------|
+| `<USER>` | Triggerer's display name | Marinara's Spaghetti Recipe |
+| `<BOT>` | Bot/persona display name | Marinara's Spaghetti Recipe |
+
+These are case-sensitive (uppercase only) to avoid false positives with lowercase HTML tags.
+
 ## Context Assembly Override (Phase 3)
 
 When an active preset exists, the context builder uses a **Build-Then-Rearrange** strategy instead of the fixed 9-block order. Located in `src/utils/text/presetContextBuilder.ts`.
@@ -234,9 +247,31 @@ depth 1 = append to second-to-last item
 depth N = append to Nth-from-last item (clamped to first if exceeds length)
 ```
 
-The injection is appended as a text part: `\n[System: <content>]`
-
 Multiple injections at the same depth are ordered by `injection_order` (ascending).
+
+#### Batched Injection
+
+All injections targeting the same depth are **batched into a single `[System: ...]` text part** rather than creating one `[System: ...]` per node. This reduces token waste and closely matches SillyTavern's contiguous injection behavior.
+
+For example, a preset with 5 depth-0 nodes (XML wrappers + instructions) produces:
+
+```text
+# Before (unbatched — each node gets its own wrapper):
+\n[System: </chat_history>]
+\n[System: <task>]
+\n[System: Write the next response.]
+\n[System: </task>]
+\n[System: <output_format>]
+
+# After (batched — one wrapper per depth target):
+\n[System: </chat_history>
+<task>
+Write the next response.
+</task>
+<output_format>]
+```
+
+This batching is transparent — the LLM sees the same instructions, just without repeated `[System: ` prefixes.
 
 ### Role Mapping
 
@@ -394,7 +429,7 @@ This section documents what our implementation supports versus what native Silly
 
 | Area | SillyTavern | TomoriBot |
 |------|------------|-----------|
-| **Depth injection** | Inserts new standalone messages at target depth | Merges into existing messages as `[System: ...]` text parts. This prevents role-alternation violations on Gemini/Anthropic but may not match exact ST positioning. |
+| **Depth injection** | Inserts new standalone messages at target depth | Merges into existing messages as `[System: ...]` text parts. Same-depth injections are batched into a single `[System: ...]` block for token efficiency. This prevents role-alternation violations on Gemini/Anthropic but may not match exact ST positioning. |
 | **TomoriBot-only blocks** | N/A | Server info, server memories, emojis, stickers, user list, STM have no ST markers. They are always included and auto-flushed at anchor points. Users cannot reorder or disable them via the preset. |
 | **Variable scope** | May support scoped/local variables | All `{{setvar}}` variables are global across enabled nodes. No scoping. |
 | **`prompt_order` parsing** | Both `character_id: 100000` (system) and `100001` (user) | Only `100001` (user prompt order) is parsed. The `100000` system order is ignored. |
