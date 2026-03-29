@@ -69,17 +69,14 @@ async function postTopggStats(client: Client): Promise<void> {
 
   try {
     // 3. POST server count to Top.gg REST API
-    const response = await fetch(
-      `https://top.gg/api/bots/${botId}/stats`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": topggToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ server_count: serverCount }),
+    const response = await fetch(`https://top.gg/api/bots/${botId}/stats`, {
+      method: "POST",
+      headers: {
+        Authorization: topggToken,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ server_count: serverCount }),
+    });
 
     if (!response.ok) {
       log.warn(`Top.gg stats update failed: HTTP ${response.status}`, {
@@ -164,7 +161,7 @@ const handler = async (client: Client): Promise<void> => {
       // 5. Build normal status options with current server count
       const normalStatus: ActivityOptions[] = [
         {
-          name: `Multi-Persona Update! /updates`,
+          name: `Summer Update! /updates`,
           type: ActivityType.Playing,
         },
         {

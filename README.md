@@ -60,39 +60,42 @@ After adding her to your server through either method above, run the `/config se
 ## Feature Showcase
 
 
-![Screenshots 2.5](img/scs/multi-persona.png)
-![Screenshots 2](img/scs/2nd.png)
-
-<h3 align="center">Each Server's TomoriBot is Unique</h3>
-<p align="center"> 50+ slash commands are available for complete customization, including having multiple personas! TomoriBot's in-server personality, behavior, and avatar can be easily changed as well as exported for others as Personas (akin to shareable AI Character Cards). She also remembers interactions using Memories, which can only be accessed by you and your server (with complete options to delete or block for privacy) </p>
-
-<br />
-
-
-![Screenshots 1](img/scs/1st.png)
-![Screenshots 1.5](img/scs/agentic-orchestration.png)
-
+![Screenshots 1](img/scs/1.png)
 <h3 align="center">Agentic AI-Powered Conversation</h3>
-<p align="center">TomoriBot has LOTS of tools that allows her to go beyond just chatting, such as searching the web, setting reminders, analyzing images, binge-watching YouTube, and utilizing your server's emotes/stickers. You can also orchestrate multiple personas to work with each other to do work in your server!</p>
+<p align="center">TomoriBot has LOTS of tools that allows her to go beyond just chatting, such as searching the web, setting recurrent tasks/reminders, utilizing your server's emotes/stickers, and memory options such as RAG and STM that allow her to remember context across channels and servers. </p>
 
 <br />
 
 
+![Screenshots 2](img/scs/2.png)
+<h3 align="center">Complete Multimodal Input/Output</h3>
+<p align="center">TomoriBot can process images, audio, and video sent       
+  directly in Discord and generate them in return directly in Discord using various APIs such as NovelAI, ElevenLabs and Google's NanoBanana/Veo. All keys are encrypted and securely stored in a persistent database. Support for local image/audio models are currently in the works, while local LLMs are already supported!</p>
 
-![Screenshots 3](img/scs/3rd.png)
+<br />
 
-<h3 align="center">Multilingual and Multi-Provider Support</h3>
-<p align="center">Different AI providers and models are available (currently Google Gemini, OpenRouter, NovelAI, and locally hosted models (KoboldCPP, Ollama)), ranging from practical coding AI to role-playing AI that would power your TomoriBot's "brain". TomoriBot is also multilingual based on your chosen AI provider/model</p>
+![Screenshots 3](img/scs/3.png)
+<h3 align="center">Multi-Persona Support</h3>
+<p align="center">TomoriBot's in-server personality, behavior, and avatar can be easily changed, created, as well as exported for others as Personas (akin to shareable AI Character Cards). Import and even transform your favorite SillyTavern cards through `/persona generate`. You can have an unlimited amount of different personas in a single server, each having their own memories and agendas. You can also orchestrate them to work with each other to do work in your server (or just mess around with each other).</p>
 
 <br />
 
 
-![Screenshots 4.5](img/scs/roleplay-tools.png)
-![Screenshots 4](img/scs/4th.png)
+![Screenshots 4](img/scs/4.png)
+<h3 align="center">100+ Native Commands for Configuration</h3>
+<p align="center">Everything can be managed through Discord's native slash commands and interactive UI. Completely manage personas, tweak model parameters, set up MCP tool servers, adjust permissions, configure memory, set server member rate limits, and much more! You can also ask TomoriBot directly on what she can do and what her slash commands are. Currently, a Web Dashboard is in the works for even easier management.</p>
 
-<h3 align="center">...and much MORE!</h3>
-<p align="center">TomoriBot is currently in Beta, with new features such as Image Generation and role-playing tools such as prefills and impersonations! (please report through GitHub issues or the official Discord for any bugs!)</p>
+<br />
 
+
+![Screenshots 6](img/scs/6.png)
+
+<h3 align="center">SillyTavern Integration (Beta)</h3>
+<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like in SillyTavern. You can also import SillyTavern V2 character cards directly through `/persona import` or you can modify them first with `/persona generate`.</p>
+
+![Screenshots 5](img/scs/5.png)
+<h3 align="center">Lots of More Features, and Counting!</h3>
+<p align="center">A bunch of fun features that are easy to setup ranging from practical automatic greetings for new server members and cross-channel movement, to silly ones like user impersonations for some trolling. New ones are constantly in development, so please report through GitHub issues or the official Discord for any bugs (or to share any fun suggestions).</p>
 
 <!-- GETTING STARTED -->
 ## Self-Hosting
@@ -393,13 +396,14 @@ The PostgreSQL datasource is automatically configured and ready to create dashbo
 - [x] Memory system implementation
 - [x] Slash command structure
 - [x] Multi-language Support (Locale system)
-- [x] Multiple Provider Support
+- [x] Multiple Provider Support (Google, OpenRouter, NovelAI, Nvidia, Vertex AI, ZAI, Custom)
+- [x] Image Generation Capabilities
+- [x] Voice integration (ElevenLabs TTS/STT)
+- [x] SillyTavern card import and preset system
+- [ ] Knowledge graph memory system (Qdrant)
 - [ ] TomoriBot Wiki (for local set-up and locale contributions)
 - [ ] Replace AI-generated placeholder assets
-- [x] Image Generation Capabilities
 - [ ] Video Generation Capabilities
-- [ ] KoboldCPP integration (local only)
-- [ ] Voice channel integration
 - [ ] Web dashboard for configuration
 - [ ] Create "easy install" file for non-technical users wishing to host their own TomoriBot
 

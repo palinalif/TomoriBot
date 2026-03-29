@@ -19,6 +19,7 @@ import { ToolRegistry } from "../toolRegistry";
 import { getBraveApiKeyStatus } from "../../utils/db/dbRead";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { getLlmDisplayName } from "@/utils/provider/modelDisplay";
+import { getCachedActivePreset } from "@/utils/cache/stPresetCache";
 
 /**
  * Tool for reviewing TomoriBot's capabilities and available commands
@@ -276,6 +277,54 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "Image generation is not available with the current provider.\n\n";
       }
 
+      // 5d. Voice System section (conditional on ElevenLabs voice assignment + server permission)
+      const elevenlabsVoiceId = context.tomoriState.elevenlabs_voice_id?.trim();
+      const voiceEnabled = config.voice_message_enabled ?? true;
+
+      capabilitiesContent += "## Voice System\n\n";
+      if (elevenlabsVoiceId && voiceEnabled) {
+        const voiceName = context.tomoriState.elevenlabs_voice_name || "Unknown";
+        capabilitiesContent += "You CAN send and receive voice messages:\n";
+        capabilitiesContent += `- **Voice**: ${voiceName} (ElevenLabs)\n`;
+        capabilitiesContent +=
+          "- **TTS**: Generate spoken responses using the `generate_voice_message` tool with a title and script\n";
+        capabilitiesContent +=
+          "- **STT**: Automatically transcribe user audio attachments (voice messages, audio files)\n";
+        capabilitiesContent +=
+          "- **Expression tags**: Use tags like [happy], [sad], [whispers], [laughs] in voice scripts for emotional delivery\n";
+        capabilitiesContent +=
+          "- Users can also ask you to speak or say something out loud (triggers the voice message tool)\n\n";
+      } else if (!voiceEnabled) {
+        capabilitiesContent +=
+          "Voice messages are **disabled** by server configuration. An admin can re-enable with `/config permissions`.\n\n";
+      } else {
+        capabilitiesContent +=
+          "Voice messages are not configured for this persona. An admin can assign a voice with `/config voice elevenlabs`.\n\n";
+      }
+
+      // 5e. SillyTavern Preset section (conditional on active ST preset)
+      const serverId = context.tomoriState.server_id;
+      if (serverId) {
+        const presetData = await getCachedActivePreset(serverId);
+        capabilitiesContent += "## SillyTavern Preset\n\n";
+        if (presetData) {
+          const enabledNodes = presetData.nodes.filter((n) => n.is_enabled);
+          capabilitiesContent += `An active SillyTavern preset is loaded: **${presetData.preset.preset_name}**\n`;
+          capabilitiesContent += `- **Nodes**: ${enabledNodes.length} of ${presetData.nodes.length} enabled\n`;
+          capabilitiesContent +=
+            "- The preset controls how your system prompt, persona description, personality, dialogue examples, and chat history are assembled\n";
+          capabilitiesContent +=
+            "- Supports macros like `{{user}}`, `{{char}}`, `{{personality}}`, `{{description}}`, `{{random: A, B, C}}`, and more\n";
+          capabilitiesContent +=
+            "- Nodes can be toggled on/off by admins with `/stpreset node toggle`\n\n";
+        } else {
+          capabilitiesContent +=
+            "No SillyTavern preset is active. Using native context assembly.\n";
+          capabilitiesContent +=
+            "- Upload a preset with `/stpreset upload` to customize how context is structured\n\n";
+        }
+      }
+
       // 6. Memory & Personalization section (always available)
       capabilitiesContent += "## Memory & Personalization\n\n";
       capabilitiesContent += "You HAVE access to:\n";
@@ -353,7 +402,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent +=
           "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
         capabilitiesContent +=
-          "- **select_sticker_for_response** (choose stickers)\n\n";
+          "- **select_sticker_for_response** (choose stickers)\n";
+        const voiceNote = elevenlabsVoiceId && voiceEnabled
+          ? "generate spoken voice messages via ElevenLabs TTS"
+          : "not configured (assign a voice with `/config voice elevenlabs`)";
+        capabilitiesContent += `- **generate_voice_message** (${voiceNote})\n\n`;
       }
 
       // 9. Model-specific characteristics section
@@ -681,6 +734,41 @@ export class ReviewCapabilitiesTool extends BaseTool {
       } else {
         settingsContent +=
           "Image generation is **disabled**. Enable with `/config permissions`.\n\n";
+      }
+
+      // 6b-2. Voice System Configuration
+      settingsContent += "## Voice System\n\n";
+      const voiceEnabledSettings = config.voice_message_enabled ?? true;
+      const personaVoiceId = context.tomoriState.elevenlabs_voice_id?.trim();
+      const personaVoiceName = context.tomoriState.elevenlabs_voice_name;
+      if (voiceEnabledSettings && personaVoiceId) {
+        settingsContent += `Voice messages are **enabled** and configured.\n`;
+        settingsContent += `- **Voice**: ${personaVoiceName || "Unknown"} (${personaVoiceId})\n`;
+        settingsContent += `- **STT**: User audio attachments are automatically transcribed\n`;
+        settingsContent += `- **TTS**: AI responses can be sent as native Discord voice messages\n\n`;
+      } else if (voiceEnabledSettings && !personaVoiceId) {
+        settingsContent += `Voice messages are enabled but **no voice is assigned** to this persona.\n`;
+        settingsContent += `- Assign a voice with \`/config voice elevenlabs\`\n\n`;
+      } else {
+        settingsContent += `Voice messages are **disabled** by server configuration.\n`;
+        settingsContent += `- Re-enable with \`/config permissions\`\n\n`;
+      }
+
+      // 6b-3. SillyTavern Preset Configuration
+      settingsContent += "## SillyTavern Preset\n\n";
+      const settingsServerId = context.tomoriState.server_id;
+      if (settingsServerId) {
+        const presetData = await getCachedActivePreset(settingsServerId);
+        if (presetData) {
+          const enabledNodes = presetData.nodes.filter((n) => n.is_enabled);
+          settingsContent += `An active preset is loaded: **${presetData.preset.preset_name}**\n`;
+          settingsContent += `- **Total nodes**: ${presetData.nodes.length} (${enabledNodes.length} enabled)\n`;
+          settingsContent += `- **Template macros**: \`{{user}}\`, \`{{char}}\`, \`{{personality}}\`, \`{{description}}\`, \`{{random: ...}}\`, etc.\n`;
+          settingsContent += `- **Manage**: \`/stpreset node toggle\` to enable/disable nodes, \`/stpreset remove\` to deactivate\n\n`;
+        } else {
+          settingsContent += `No SillyTavern preset is active. Using native context assembly.\n`;
+          settingsContent += `- Upload one with \`/stpreset upload\` to customize context structure\n\n`;
+        }
       }
 
       // 6c. System Prompt Configuration

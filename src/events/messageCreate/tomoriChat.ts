@@ -735,8 +735,14 @@ function resolveImpersonatedUserIdByWebhookIdentity(
     return null;
   }
 
+  // Only match human users — bot accounts are guild members too, so their
+  // webhook display names would match their own member entries, causing
+  // foreign bot slash-command responses to be misidentified as user
+  // impersonation targets and cached as such.
   const matchingMembers = Array.from(guild.members.cache.values()).filter(
     (member) => {
+      if (member.user.bot) return false;
+
       const candidateNames = [
         member.displayName,
         member.user.displayName,
@@ -8593,38 +8599,83 @@ export function shouldBotReply(
   }
 
   // 4. Check if the message content triggers ANY persona (main or alters)
-  const triggersActive = allPersonas.some((persona) => {
+  let triggersActive = false;
+  let selfMsgTriggerDiag: {
+    matchedPersona: string;
+    matchedTrigger: string;
+    triggerSource: string;
+    senderPersona: string;
+    contentSnippet: string;
+  } | null = null;
+
+  for (const persona of allPersonas) {
     // Prevent self-triggers: skip if this persona sent the message
     if (senderPersona && persona.tomori_id === senderPersona.tomori_id) {
-      return false;
+      continue;
     }
 
     // Determine which trigger list to use
+    const triggerSource = persona.trigger_words
+      ? "trigger_words"
+      : persona.is_alter
+        ? "alter_triggers"
+        : "config_trigger_words";
     const triggers =
       persona.trigger_words ??
       (persona.is_alter
         ? (persona.alter_triggers ?? [])
         : (persona.config?.trigger_words ?? []));
 
-    return triggers.some((trigger: string) => {
+    for (const trigger of triggers) {
+      let matched = false;
+
       // Check if trigger is a mention (starts with <@)
       if (trigger.startsWith("<@")) {
         const userId = trigger.replace(/[<@!>]/g, ""); // Extract user ID
-        return message.mentions.users.has(userId);
+        matched = message.mentions.users.has(userId);
+      } else {
+        // Check if trigger contains Japanese characters
+        const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(
+          trigger,
+        );
+        if (isJapanese) {
+          // Japanese triggers: direct substring match (no screaming support)
+          matched = message.content.includes(trigger);
+        } else {
+          // English triggers: use screaming-aware regex with word boundaries (case-insensitive)
+          const regex = createScreamingRegex(trigger);
+          matched = regex.test(message.content);
+        }
       }
-      // Check if trigger contains Japanese characters
-      const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(
-        trigger,
-      );
-      if (isJapanese) {
-        // Japanese triggers: direct substring match (no screaming support)
-        return message.content.includes(trigger);
+
+      if (matched) {
+        triggersActive = true;
+        // Log diagnostic for self-messages to trace cross-persona trigger chains
+        if (isSelfMessage) {
+          selfMsgTriggerDiag = {
+            matchedPersona: persona.tomori_nickname ?? `id:${persona.tomori_id}`,
+            matchedTrigger: trigger,
+            triggerSource,
+            senderPersona:
+              senderPersona?.tomori_nickname ??
+              `id:${senderPersona?.tomori_id}`,
+            contentSnippet: message.content.slice(0, 120),
+          };
+        }
+        break; // Found a match for this persona, stop checking triggers
       }
-      // English triggers: use screaming-aware regex with word boundaries (case-insensitive)
-      const regex = createScreamingRegex(trigger);
-      return regex.test(message.content);
-    });
-  });
+    }
+    if (triggersActive) break; // Found a matching persona, stop iterating
+  }
+
+  if (selfMsgTriggerDiag) {
+    log.info(
+      `[Self-Msg Cross-Trigger] Persona "${selfMsgTriggerDiag.senderPersona}" message ` +
+        `triggered "${selfMsgTriggerDiag.matchedPersona}" via ${selfMsgTriggerDiag.triggerSource} ` +
+        `trigger "${selfMsgTriggerDiag.matchedTrigger}" in channel ${message.channel.id}. ` +
+        `Content: "${selfMsgTriggerDiag.contentSnippet}"`,
+    );
+  }
 
   // 5. Check if the shared auto-chat range hit for this message.
   const isAutoMsgHit = isAutochatCounterHit(tomoriState, message.channel.id);
@@ -8658,15 +8709,38 @@ export function shouldBotReply(
     isMatrixRelayMessage &&
     pendingMatrixReplyChannels.delete(message.channelId);
 
-  return (
+  const wouldReply =
     isReplyToBot ||
     isReplyToPersona ||
     isBotMentioned ||
     triggersActive ||
     isAutoMsgHit ||
     isAlwaysReplyHit ||
-    isMatrixReplyToPersona
-  );
+    isMatrixReplyToPersona;
+
+  // Diagnostic: log full decision breakdown for self-messages that would trigger a reply.
+  // This captures cases where the cross-trigger log above didn't fire (e.g. auto-chat leak).
+  if (isSelfMessage && wouldReply) {
+    const reasons = [
+      isReplyToBot && "isReplyToBot",
+      isReplyToPersona && "isReplyToPersona",
+      isBotMentioned && "isBotMentioned",
+      triggersActive && "triggersActive",
+      isAutoMsgHit && "isAutoMsgHit",
+      isAlwaysReplyHit && "isAlwaysReplyHit",
+      isMatrixReplyToPersona && "isMatrixReplyToPersona",
+    ].filter(Boolean);
+
+    log.info(
+      `[Self-Msg Reply Decision] msg ${message.id} in ch ${message.channel.id} ` +
+        `from "${senderPersona?.tomori_nickname ?? message.author.username}" → would reply. ` +
+        `Reasons: [${reasons.join(", ")}]. ` +
+        `autoch_counter=${tomoriState.autoch_counter}/${tomoriState.autoch_next_target}, ` +
+        `selfReplyLimit=${selfReplyLimit}, chainDepth=${getSelfReplyChainState(message.channel.id).depth}`,
+    );
+  }
+
+  return wouldReply;
 }
 
 /**

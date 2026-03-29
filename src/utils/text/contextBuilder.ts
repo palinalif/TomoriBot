@@ -2557,10 +2557,55 @@ async function buildContextNative({
       }
     }
 
+    // 9.c-pre. Build the media attribution hint for significant media messages.
+    // This merges sender attribution with the tool-use media ID into a single structured
+    // note that is appended to the end of the user's text (or used as the sole text for
+    // media-only messages). Format: [System: This image (Media ID: X) was sent by Author]
+    let mediaAttributionHint: string | null = null;
+    if (hasSignificantMedia && !mediaIdHintAdded) {
+      const mediaMessageIds = msg.mediaSourceMessageIds ?? [msg.id];
+      const nonEmojiImageCount = msg.imageAttachments.filter((a) => !a.isEmoji).length;
+      const videoCount = msg.videoAttachments.length;
+      const totalMediaCount = nonEmojiImageCount + videoCount;
+
+      let mediaWord: string;
+      if (nonEmojiImageCount > 0 && videoCount === 0) {
+        mediaWord = nonEmojiImageCount === 1 ? "image" : "images";
+      } else if (videoCount > 0 && nonEmojiImageCount === 0) {
+        mediaWord = videoCount === 1 ? "video" : "videos";
+      } else {
+        mediaWord = "media files";
+      }
+
+      const thisOrThese = totalMediaCount === 1 ? "This" : "These";
+      const idLabel = mediaMessageIds.length === 1 ? "Media ID" : "Media IDs";
+      const wasSent = totalMediaCount === 1 ? "was" : "were";
+      const idList = mediaMessageIds.join(", ");
+
+      // If the current message's ID is absent from mediaSourceMessageIds, all media
+      // came from a referenced message (reply scenario) — the [System: referring to...]
+      // block already names the original sender, so don't misattribute to the replying user.
+      const isReferenceOnlyMedia = !mediaMessageIds.includes(msg.id);
+      if (isReferenceOnlyMedia) {
+        mediaAttributionHint = `[System: ${thisOrThese} ${mediaWord} (${idLabel}: ${idList}) ${wasSent} included in the message being replied to]`;
+      } else {
+        // Resolve the author name through convertMentions — msg.authorName may be a raw
+        // <@userId> mention for regular users, which needs guild cache resolution.
+        const resolvedHintAuthorName = await convertMentions(
+          msg.authorName,
+          client,
+          guildId,
+          msg.authorName,
+          botName,
+          tomoriConfig.personal_memories_enabled,
+        );
+        mediaAttributionHint = `[System: ${thisOrThese} ${mediaWord} (${idLabel}: ${idList}) ${wasSent} sent by ${resolvedHintAuthorName}]`;
+      }
+    }
+
     // 9.c. Add text part if content exists (always included, regardless of window).
-    // If there is no text but media was added, synthesize an attribution line so the model
-    // knows who sent the media — the "authorName:" prefix format is reserved for actual
-    // utterances, so we use "Misuzu sent this image" prose instead.
+    // If there is no text but media was added, use the attribution hint as the sole text
+    // (or fall back to prose form for non-significant media like emoji-only attachments).
     if (msg.content) {
       // Request 4: Prepend speaker name to content
       const normalizedContent = normalizeCustomEmojisForLlm(msg.content);
@@ -2611,6 +2656,11 @@ async function buildContextNative({
           uncensorInputOptions,
         );
       }
+      // Append media attribution hint at the end of the user's message so the model
+      // knows both who sent the media and its tool-use ID after reading the utterance.
+      if (mediaAttributionHint) {
+        processedContent += `\n${mediaAttributionHint}`;
+      }
       parts.push({ type: "text", text: processedContent });
 
       // Append timestamp annotation when context was rebuilt with timestamps enabled
@@ -2621,52 +2671,36 @@ async function buildContextNative({
         });
       }
     } else if (parts.length > 0 || detachedSystemParts.length > 0) {
-      // Media-only message (no text content): synthesize an attribution line so the model
-      // knows who sent it. Prose form is used ("Misuzu sent this image") rather than the
-      // "authorName:" prefix, which is reserved strictly for actual utterances.
-      const mediaAttributionText = buildMediaAttributionText(
-        msg,
-        msg.authorName,
-      );
-      const resolvedMediaAttributionText = await convertMentions(
-        mediaAttributionText,
-        client,
-        guildId,
-        msg.authorName,
-        botName,
-        tomoriConfig.personal_memories_enabled,
-      );
-      parts.push({
-        type: "text",
-        text: resolvedMediaAttributionText,
-      });
+      // Media-only message (no text content): use the attribution hint as the sole text
+      // if available, since it already identifies the sender and exposes the tool-use ID.
+      // Fall back to prose form only for non-significant media (e.g., emoji-only attachments)
+      // where no media ID hint is generated.
+      if (mediaAttributionHint) {
+        parts.push({ type: "text", text: mediaAttributionHint });
+      } else {
+        const mediaAttributionText = buildMediaAttributionText(msg, msg.authorName);
+        const resolvedMediaAttributionText = await convertMentions(
+          mediaAttributionText,
+          client,
+          guildId,
+          msg.authorName,
+          botName,
+          tomoriConfig.personal_memories_enabled,
+        );
+        parts.push({ type: "text", text: resolvedMediaAttributionText });
+      }
     }
 
-    // Expose message ID(s) for media messages so tools (generate_image, process_gif) can reference attachments
-    if (hasSignificantMedia && !mediaIdHintAdded) {
-      const mediaMessageIds = msg.mediaSourceMessageIds ?? [msg.id];
-      const hintText =
-        mediaMessageIds.length === 1
-          ? `[System: Media message ID for tool use: ${mediaMessageIds[0]}]`
-          : `[System: Media message IDs for tool use: ${mediaMessageIds.join(", ")}]`;
-      detachedSystemParts.push({
-        type: "text",
-        text: hintText,
-      });
-    }
-
-    // When the message is from a user (not the model), combine system hints
-    // and content into a single turn so the model sees image context alongside
-    // the message text. For model-authored turns, keep them split to prevent
-    // the model from treating [System: ...] metadata as dialogue it produced.
-    if (role === "user" && detachedSystemParts.length > 0) {
-      const combinedParts = [...detachedSystemParts, ...parts];
-      pushDialogueHistoryContextItem(
-        contextItems,
-        "user",
-        combinedParts,
-        msg.id,
-      );
+    // When the message is from a user (not the model), combine all parts into a single
+    // turn with media first (Gemini best practice: image before text prompt), followed
+    // by remaining system hints, then the attributed text. For model-authored turns,
+    // keep system hints as a separate user turn to prevent the model from treating them
+    // as its own dialogue.
+    if (role === "user" && (parts.length > 0 || detachedSystemParts.length > 0)) {
+      const mediaParts = parts.filter((p) => p.type !== "text");
+      const textParts = parts.filter((p) => p.type === "text");
+      const combinedParts = [...mediaParts, ...detachedSystemParts, ...textParts];
+      pushDialogueHistoryContextItem(contextItems, "user", combinedParts, msg.id);
     } else {
       pushDialogueHistoryContextItem(
         contextItems,

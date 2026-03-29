@@ -16,17 +16,17 @@ SELECT add_column_if_not_exists('llms', 'supports_structoutput', 'BOOLEAN', 'fal
 SELECT add_column_if_not_exists('llms', 'llm_description', 'TEXT');
 SELECT add_column_if_not_exists('llms', 'ja_description', 'TEXT');
 
--- Rename account-setting LLM row to other-model in-place (preserves llm_id for FK references).
--- Must run before the INSERT block so ON CONFLICT hits the renamed row and updates it correctly.
+-- Mark account-setting as deprecated (legacy codename no longer used for new configs).
+-- Databases that still have this row will see it deprecated; new installs get it via the INSERT below.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM llms WHERE llm_codename = 'account-setting') THEN
-        UPDATE llms SET llm_codename = 'other-model' WHERE llm_codename = 'account-setting';
-        RAISE NOTICE 'Renamed LLM codename account-setting → other-model';
+        UPDATE llms SET is_deprecated = true WHERE llm_codename = 'account-setting';
+        RAISE NOTICE 'Marked account-setting as deprecated';
     END IF;
 EXCEPTION
     WHEN OTHERS THEN
-        RAISE NOTICE 'account-setting → other-model rename skipped: %', SQLERRM;
+        RAISE NOTICE 'account-setting deprecation skipped: %', SQLERRM;
 END $$;
 
 -- Insert LLMs with conflict resolution that updates descriptions
@@ -94,7 +94,8 @@ VALUES
   ('openrouter', 'nvidia/nemotron-3-super-120b-a12b:free', false, false, false, true, true, true, false, false, false, false, true, 'Free Nemotron model with tool use and structured output support (deprecated, use non-free variant)', 'ツール利用と構造化出力に対応した無料のNemotronモデル（非推奨、有料バージョンを使用）'),
   ('openrouter', 'moonshotai/kimi-k2.5', false, false, false, false, false, true, true, false, false, false, true, 'Moonshot AI''s state-of-the-art native multimodal model', 'Moonshot AIの最先端ネイティブ・マルチモーダルモデル'),
   ('openrouter', 'aion-labs/aion-2.0', false, false, false, false, false, false, false, false, false, false, false, 'Cheap role-play fine-tune of DeepSeek with no tools, vision, or structured output support', 'ツール・画像理解・構造化出力に対応しない、DeepSeekベースの低コストなロールプレイ特化ファインチューニングモデル'),
-  ('openrouter', 'other-model', false, false, false, true, false, true, true, true, true, false, true, 'Advanced: Use any OpenRouter model by entering its codename', '上級者向け：コードネームを入力して任意のOpenRouterモデルを使用'),
+  ('openrouter', 'account-setting', false, false, false, true, false, false, false, false, false, false, false, 'Legacy codename (deprecated, use other-model)', '旧コードネーム（非推奨、other-modelを使用）'),
+  ('openrouter', 'other-model', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Use any OpenRouter model by entering its codename', '上級者向け：コードネームを入力して任意のOpenRouterモデルを使用'),
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
   ('deepseek', 'deepseek-chat', false, true, false, false, false, true, false, false, false, false, true, 'Default DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekのデフォルトチャットモデル'),
   ('deepseek', 'deepseek-reasoner', true, false, true, false, false, true, false, false, false, false, true, 'Reasoning-focused DeepSeek model with thinking mode, seeded tool use, and JSON structured output', 'シンキングモード、シード済みツール利用、JSON構造化出力に対応した、推論特化のDeepSeekモデル'),
