@@ -80,7 +80,8 @@ export class PeekProfilePictureTool extends BaseTool {
    * Discord IDs are 17-19 digit snowflakes
    */
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
+  private static readonly PERSONA_ID_PATTERN =
+    /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   /**
    * Check if profile picture tool is available for the given provider.
@@ -227,7 +228,10 @@ export class PeekProfilePictureTool extends BaseTool {
       // Non-vision redirect path: if the primary model cannot see images but a dedicated
       // vision model is configured, call the vision model directly with the avatar image
       // and return a text description. The primary model then responds to that description.
-      if (!context.tomoriState.llm.sees_images && context.tomoriState.vision_llm) {
+      if (
+        !context.tomoriState.llm.sees_images &&
+        context.tomoriState.vision_llm
+      ) {
         return await this.redirectToVisionModel(
           base64ImageData,
           targetTypeLabel,
@@ -548,9 +552,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new Error(
-        `Vision API returned ${response.status}: ${errorText}`,
-      );
+      throw new Error(`Vision API returned ${response.status}: ${errorText}`);
     }
 
     const data = (await response.json()) as {

@@ -687,7 +687,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
       if (openrouterConfig.logitBias !== undefined) {
-        if (this.isOpenRouterParamSupported(supportedParameters, "logit_bias")) {
+        if (
+          this.isOpenRouterParamSupported(supportedParameters, "logit_bias")
+        ) {
           requestBody.logit_bias = openrouterConfig.logitBias;
         } else {
           skippedUnsupportedParams.push("logit_bias");
@@ -811,7 +813,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // so preserve tools for auto-router to use for model selection if possible.
       let strippedMessages = messages;
       const probeWithoutImages = { ...probeBaseline };
-      if (Array.isArray((probeBaseline.messages as unknown[]))) {
+      if (Array.isArray(probeBaseline.messages as unknown[])) {
         strippedMessages = this.stripImagesFromMessages(
           probeBaseline.messages as Array<Record<string, unknown>>,
         );

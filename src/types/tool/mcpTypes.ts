@@ -473,14 +473,14 @@ export const MCPTypeGuards = {
  * @property lastUsedAt - Epoch ms of last tool execution (for TTL eviction)
  */
 export interface GuildMCPConnection {
-	guildMcpId: number;
-	serverId: number;
-	name: string;
-	client: unknown; // MCP Client — typed as unknown to avoid coupling mcpTypes to SDK imports
-	callableTool: unknown; // CallableTool from @google/genai — same reason
-	functionNames: string[];
-	connectedAt: number;
-	lastUsedAt: number;
+  guildMcpId: number;
+  serverId: number;
+  name: string;
+  client: unknown; // MCP Client — typed as unknown to avoid coupling mcpTypes to SDK imports
+  callableTool: unknown; // CallableTool from @google/genai — same reason
+  functionNames: string[];
+  connectedAt: number;
+  lastUsedAt: number;
 }
 
 /**
@@ -488,10 +488,10 @@ export interface GuildMCPConnection {
  * to validate a remote MCP server before persisting the registration.
  */
 export interface GuildMCPTestResult {
-	success: boolean;
-	toolCount: number;
-	functionNames: string[];
-	error?: string;
+  success: boolean;
+  toolCount: number;
+  functionNames: string[];
+  error?: string;
 }
 
 /**

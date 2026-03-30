@@ -769,7 +769,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // Check for text content
     if (novelaiChunk.token) {
       if (this.toolsEnabled) {
-        return withThoughts(this.processTokenWithToolParsing(novelaiChunk.token));
+        return withThoughts(
+          this.processTokenWithToolParsing(novelaiChunk.token),
+        );
       }
 
       // GLM 4.6: Strip any <think>...</think> blocks before visible text processing.

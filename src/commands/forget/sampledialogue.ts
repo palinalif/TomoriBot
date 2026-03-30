@@ -42,18 +42,18 @@ const DIALOGUE_SELECT_ID = "dialogue_select";
  * @returns The repaired [in, out] arrays, or null if repair failed
  */
 async function repairMismatchedDialogues(
-	tomoriId: number,
-	inLength: number,
-	outLength: number,
+  tomoriId: number,
+  inLength: number,
+  outLength: number,
 ): Promise<{ repairedIn: string[]; repairedOut: string[] } | null> {
-	// Truncate both arrays to the shorter length to restore alignment
-	const safeLength = Math.min(inLength, outLength);
+  // Truncate both arrays to the shorter length to restore alignment
+  const safeLength = Math.min(inLength, outLength);
 
-	log.warn(
-		`Self-healing: truncating sample dialogues for tomori ${tomoriId} from (in: ${inLength}, out: ${outLength}) to ${safeLength} pairs`,
-	);
+  log.warn(
+    `Self-healing: truncating sample dialogues for tomori ${tomoriId} from (in: ${inLength}, out: ${outLength}) to ${safeLength} pairs`,
+  );
 
-	const [updatedRow] = await sql`
+  const [updatedRow] = await sql`
 		UPDATE tomoris
 		SET
 			sample_dialogues_in = sample_dialogues_in[1:${safeLength}],
@@ -62,21 +62,19 @@ async function repairMismatchedDialogues(
 		RETURNING sample_dialogues_in, sample_dialogues_out
 	`;
 
-	if (!updatedRow) {
-		log.error(
-			`Self-healing failed: no rows returned for tomori ${tomoriId}`,
-		);
-		return null;
-	}
+  if (!updatedRow) {
+    log.error(`Self-healing failed: no rows returned for tomori ${tomoriId}`);
+    return null;
+  }
 
-	log.success(
-		`Self-healing complete: sample dialogues for tomori ${tomoriId} repaired to ${safeLength} pairs`,
-	);
+  log.success(
+    `Self-healing complete: sample dialogues for tomori ${tomoriId} repaired to ${safeLength} pairs`,
+  );
 
-	return {
-		repairedIn: (updatedRow.sample_dialogues_in as string[]) ?? [],
-		repairedOut: (updatedRow.sample_dialogues_out as string[]) ?? [],
-	};
+  return {
+    repairedIn: (updatedRow.sample_dialogues_in as string[]) ?? [],
+    repairedOut: (updatedRow.sample_dialogues_out as string[]) ?? [],
+  };
 }
 
 /**
@@ -377,8 +375,7 @@ export async function execute(
               labelKey: "commands.forget.sampledialogue.select_label",
               descriptionKey:
                 "commands.forget.sampledialogue.select_description",
-              placeholder:
-                "commands.forget.sampledialogue.select_placeholder",
+              placeholder: "commands.forget.sampledialogue.select_placeholder",
               required: true,
               options: dialogueSelectOptions,
             },

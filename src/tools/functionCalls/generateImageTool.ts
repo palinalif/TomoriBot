@@ -12,8 +12,8 @@ import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
-	BaseTool,
-	type ToolContext,
+  BaseTool,
+  type ToolContext,
   type ToolResult,
   type ToolParameterSchema,
 } from "../../types/tool/interfaces";
@@ -42,7 +42,8 @@ export class GenerateImageTool extends BaseTool {
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
+  private static readonly PERSONA_ID_PATTERN =
+    /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -636,15 +637,15 @@ export class GenerateImageTool extends BaseTool {
     }
 
     // Extract arguments
-		const prompt = args.prompt as string;
-		const messageId = args.message_id as string | undefined;
-		const userId = args.user_id as string | undefined;
-		const aspectRatio = (args.aspect_ratio as string) || "1:1";
-		const usesReferences = !!(messageId || userId);
+    const prompt = args.prompt as string;
+    const messageId = args.message_id as string | undefined;
+    const userId = args.user_id as string | undefined;
+    const aspectRatio = (args.aspect_ratio as string) || "1:1";
+    const usesReferences = !!(messageId || userId);
 
-		try {
-			// Get the diffusion model codename from database
-			const diffusionModelId = context.tomoriState.config.diffusion_model_id;
+    try {
+      // Get the diffusion model codename from database
+      const diffusionModelId = context.tomoriState.config.diffusion_model_id;
 
       if (!diffusionModelId) {
         return {
@@ -672,36 +673,36 @@ export class GenerateImageTool extends BaseTool {
 
       const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
 
-			if (!apiKey) {
-				return {
-					success: false,
-					error: "Failed to decrypt API key",
-				};
-			}
+      if (!apiKey) {
+        return {
+          success: false,
+          error: "Failed to decrypt API key",
+        };
+      }
 
-			if (!context.suppressProgressNotices) {
-				await sendToolProgressNotice(
-					context.channel,
-					context.locale,
-					{
-						titleKey: "genai.image.generating_title",
-						descriptionKey: usesReferences
-							? "genai.image.generating_with_references_description"
-							: "genai.image.generating_description",
-						footerKey: "genai.image.generating_footer",
-						color: ColorCode.INFO,
-					},
-					{
-						webhook: context.webhook,
-						personaUsername: context.personaUsername,
-						personaAvatarUrl: context.personaAvatarUrl,
-					},
-					"GenerateImageTool",
-				);
-			}
+      if (!context.suppressProgressNotices) {
+        await sendToolProgressNotice(
+          context.channel,
+          context.locale,
+          {
+            titleKey: "genai.image.generating_title",
+            descriptionKey: usesReferences
+              ? "genai.image.generating_with_references_description"
+              : "genai.image.generating_description",
+            footerKey: "genai.image.generating_footer",
+            color: ColorCode.INFO,
+          },
+          {
+            webhook: context.webhook,
+            personaUsername: context.personaUsername,
+            personaAvatarUrl: context.personaAvatarUrl,
+          },
+          "GenerateImageTool",
+        );
+      }
 
-			// Collect reference images from message attachments and/or profile picture
-			const referenceImages: Array<{ mimeType: string; data: string }> = [];
+      // Collect reference images from message attachments and/or profile picture
+      const referenceImages: Array<{ mimeType: string; data: string }> = [];
 
       if (messageId) {
         log.info(
@@ -770,10 +771,11 @@ export class GenerateImageTool extends BaseTool {
       let generatedImageData: string | null = null;
       let referenceImagesUsed = referenceImages.length > 0;
       let referenceImagesIgnoredReason = "";
-      const imageGenerationImplementation = resolveProviderFeatureImplementation(
-        context.provider,
-        "nativeImageGeneration",
-      );
+      const imageGenerationImplementation =
+        resolveProviderFeatureImplementation(
+          context.provider,
+          "nativeImageGeneration",
+        );
 
       if (imageGenerationImplementation === "openrouter") {
         // Use OpenRouter API
@@ -866,7 +868,8 @@ export class GenerateImageTool extends BaseTool {
           model: modelCodename,
           prompt,
           aspectRatio,
-          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          referenceImages:
+            referenceImages.length > 0 ? referenceImages : undefined,
         });
         generatedImageData = result.imageData;
       } else {
@@ -926,7 +929,9 @@ export class GenerateImageTool extends BaseTool {
         message: successMessage,
         // imageMetadata intentionally omitted to avoid 403 errors when OpenRouter tries to fetch Discord CDN URLs
         // End the LLM turn immediately when this tool is the target of a hidden agent turn
-        endTurn: context.streamContext?.endTurnAfterTools?.includes(this.name) ?? false,
+        endTurn:
+          context.streamContext?.endTurnAfterTools?.includes(this.name) ??
+          false,
       };
     } catch (error) {
       // Handle specific Google API errors

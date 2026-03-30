@@ -433,7 +433,8 @@ export async function execute(
       }
       const personaButtonInteraction: ButtonInteraction =
         personaSelection.interaction;
-      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+      const selectedPersona =
+        allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
         await replyInfoEmbed(personaButtonInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -481,8 +482,8 @@ export async function execute(
       if (personaModalResult.outcome !== "submit") continue;
       // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
       const personaModalInteraction = personaModalResult.interaction!;
-      // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
-      const selectedPersonaCodename = personaModalResult.values![MODEL_SELECT_ID];
+      const selectedPersonaCodename =
+        personaModalResult.values?.[MODEL_SELECT_ID];
       const selectedPersonaModel =
         personaAvailableModels.find(
           (m) => m.llm_codename === selectedPersonaCodename,
@@ -490,7 +491,8 @@ export async function execute(
       if (!selectedPersonaModel?.llm_id) {
         await replyInfoEmbed(personaModalInteraction, locale, {
           titleKey: "commands.config.model.text.invalid_model_title",
-          descriptionKey: "commands.config.model.text.invalid_model_description",
+          descriptionKey:
+            "commands.config.model.text.invalid_model_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -654,8 +656,7 @@ export async function execute(
 
         // 2. Validate and fetch real capabilities from OpenRouter API
         await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey:
-            "commands.config.model.text.other_model_validating_title",
+          titleKey: "commands.config.model.text.other_model_validating_title",
           descriptionKey:
             "commands.config.model.text.other_model_validating_description",
           descriptionVars: { model_name: enteredModelName },
@@ -701,15 +702,15 @@ export async function execute(
         if (capabilities.hasTools) capabilityFlags.push("TOOLS");
         if (capabilities.seesImages) capabilityFlags.push("IMG");
         if (capabilities.seesVideos) capabilityFlags.push("VID");
-        if (capabilities.supportsStructuredOutput) capabilityFlags.push("STRUCT");
+        if (capabilities.supportsStructuredOutput)
+          capabilityFlags.push("STRUCT");
         const capabilitiesDisplay =
           capabilityFlags.length > 0
             ? capabilityFlags.join(" + ")
             : localizer(locale, "general.none");
 
         await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey:
-            "commands.config.model.text.other_model_configured_title",
+          titleKey: "commands.config.model.text.other_model_configured_title",
           descriptionKey:
             "commands.config.model.text.other_model_configured_description",
           descriptionVars: {
@@ -778,9 +779,8 @@ export async function execute(
           const { ProviderFactory } = await import(
             "../../../utils/provider/providerFactory"
           );
-          const provider = await ProviderFactory.getProviderByName(
-            newModelProvider,
-          );
+          const provider =
+            await ProviderFactory.getProviderByName(newModelProvider);
 
           const validationResult =
             await provider.validateApiKey(decryptedApiKey);

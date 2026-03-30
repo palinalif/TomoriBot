@@ -1,25 +1,25 @@
 import {
-	EmbedBuilder,
-	MessageFlags,
-	type ChatInputCommandInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type Client,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import {
-	getCachedTomoriState,
-	invalidateTomoriStateCache,
+  getCachedTomoriState,
+  invalidateTomoriStateCache,
 } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
-	replyInfoEmbed,
-	promptWithRawModal,
+  replyInfoEmbed,
+  promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import {
-	type UserRow,
-	type ErrorContext,
-	tomoriConfigSchema,
-	type TomoriConfigRow,
+  type UserRow,
+  type ErrorContext,
+  tomoriConfigSchema,
+  type TomoriConfigRow,
 } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import type { CheckboxGroupOption } from "@/types/discord/modal";
@@ -32,47 +32,47 @@ const MEMBERPERMISSIONS_CHECKBOX_ID = "memberpermissions_checkbox";
 
 // Configure the subcommand — no options needed, UI is a checkbox modal
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("memberpermissions")
-		.setDescription(
-			localizer("en-US", "commands.server.memberpermissions.description"),
-		);
+  subcommand
+    .setName("memberpermissions")
+    .setDescription(
+      localizer("en-US", "commands.server.memberpermissions.description"),
+    );
 
 /**
  * Defines all configurable member teaching permissions for the checkbox modal.
  */
 interface MemberPermissionDefinition {
-	value: string;
-	dbColumn: string;
-	labelKey: string;
-	descKey: string;
-	getState: (config: TomoriConfigRow) => boolean;
+  value: string;
+  dbColumn: string;
+  labelKey: string;
+  descKey: string;
+  getState: (config: TomoriConfigRow) => boolean;
 }
 
 const MEMBER_PERMISSION_DEFINITIONS: MemberPermissionDefinition[] = [
-	{
-		value: "servermemories",
-		dbColumn: "server_memteaching_enabled",
-		labelKey: "commands.server.memberpermissions.servermemories_option",
-		descKey: "commands.server.memberpermissions.servermemories_desc",
-		getState: (c) => c.server_memteaching_enabled,
-	},
-	{
-		value: "attributelist",
-		dbColumn: "attribute_memteaching_enabled",
-		labelKey: "commands.server.memberpermissions.attributelist_option",
-		descKey: "commands.server.memberpermissions.attributelist_desc",
-		getState: (c) => c.attribute_memteaching_enabled,
-	},
-	{
-		value: "sampledialogues",
-		dbColumn: "sampledialogue_memteaching_enabled",
-		labelKey: "commands.server.memberpermissions.sampledialogues_option",
-		descKey: "commands.server.memberpermissions.sampledialogues_desc",
-		getState: (c) => c.sampledialogue_memteaching_enabled,
-	},
+  {
+    value: "servermemories",
+    dbColumn: "server_memteaching_enabled",
+    labelKey: "commands.server.memberpermissions.servermemories_option",
+    descKey: "commands.server.memberpermissions.servermemories_desc",
+    getState: (c) => c.server_memteaching_enabled,
+  },
+  {
+    value: "attributelist",
+    dbColumn: "attribute_memteaching_enabled",
+    labelKey: "commands.server.memberpermissions.attributelist_option",
+    descKey: "commands.server.memberpermissions.attributelist_desc",
+    getState: (c) => c.attribute_memteaching_enabled,
+  },
+  {
+    value: "sampledialogues",
+    dbColumn: "sampledialogue_memteaching_enabled",
+    labelKey: "commands.server.memberpermissions.sampledialogues_option",
+    descKey: "commands.server.memberpermissions.sampledialogues_desc",
+    getState: (c) => c.sampledialogue_memteaching_enabled,
+  },
 ];
 
 /**
@@ -84,233 +84,235 @@ const MEMBER_PERMISSION_DEFINITIONS: MemberPermissionDefinition[] = [
  * @param locale - Locale of the interaction
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 0. Scope modal custom ID to this invocation — prevents stale awaitModalSubmit
-	//    listeners from a prior (un-submitted) run resolving on this submission.
-	const MODAL_CUSTOM_ID = `server_memberpermissions_modal_${interaction.id}`;
+  // 0. Scope modal custom ID to this invocation — prevents stale awaitModalSubmit
+  //    listeners from a prior (un-submitted) run resolving on this submission.
+  const MODAL_CUSTOM_ID = `server_memberpermissions_modal_${interaction.id}`;
 
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
-		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
+  // 1. Ensure command is run in a guild
+  if (!interaction.guild || !interaction.channel) {
+    await replyInfoEmbed(interaction, userData.language_pref, {
+      titleKey: "general.errors.guild_only_title",
+      descriptionKey: "general.errors.guild_only_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
 
-	// NOTE: No deferReply here — promptWithRawModal must be the first
-	// acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
+  // NOTE: No deferReply here — promptWithRawModal must be the first
+  // acknowledgment. Pre-modal checks are cache-backed and complete within 3 seconds.
 
-	try {
-		// 2. Load the Tomori state for this server
-		const tomoriState = await getCachedTomoriState(interaction.guild.id);
-		if (!tomoriState) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+  try {
+    // 2. Load the Tomori state for this server
+    const tomoriState = await getCachedTomoriState(interaction.guild.id);
+    if (!tomoriState) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		// 3. Build checkbox options, pre-checking currently-allowed permissions
-		const checkboxOptions: CheckboxGroupOption[] = MEMBER_PERMISSION_DEFINITIONS.map(
-			(def) => ({
-				label: localizer(locale, def.labelKey),
-				value: def.value,
-				description: localizer(locale, def.descKey),
-				default: def.getState(tomoriState.config),
-			}),
-		);
+    // 3. Build checkbox options, pre-checking currently-allowed permissions
+    const checkboxOptions: CheckboxGroupOption[] =
+      MEMBER_PERMISSION_DEFINITIONS.map((def) => ({
+        label: localizer(locale, def.labelKey),
+        value: def.value,
+        description: localizer(locale, def.descKey),
+        default: def.getState(tomoriState.config),
+      }));
 
-		// 4. Show the checkbox modal — first interaction acknowledgment
-		const modalResult = await promptWithRawModal(
-			interaction,
-			locale,
-			{
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.server.memberpermissions.select_embed_title",
-				components: [
-					{
-						kind: "checkboxGroup",
-						customId: MEMBERPERMISSIONS_CHECKBOX_ID,
-						labelKey: "commands.server.memberpermissions.select_placeholder",
-						descriptionKey:
-							"commands.server.memberpermissions.select_embed_description",
-						minValues: 0,
-						required: false,
-						options: checkboxOptions,
-					},
-				],
-			},
-			MessageFlags.Ephemeral,
-		);
+    // 4. Show the checkbox modal — first interaction acknowledgment
+    const modalResult = await promptWithRawModal(
+      interaction,
+      locale,
+      {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.server.memberpermissions.select_embed_title",
+        components: [
+          {
+            kind: "checkboxGroup",
+            customId: MEMBERPERMISSIONS_CHECKBOX_ID,
+            labelKey: "commands.server.memberpermissions.select_placeholder",
+            descriptionKey:
+              "commands.server.memberpermissions.select_embed_description",
+            minValues: 0,
+            required: false,
+            options: checkboxOptions,
+          },
+        ],
+      },
+      MessageFlags.Ephemeral,
+    );
 
-		if (modalResult.outcome !== "submit") return;
+    if (modalResult.outcome !== "submit") return;
 
-		if (!modalResult.interaction) {
-			log.error("Member permissions modal unexpectedly missing interaction");
-			return;
-		}
-		const modalInteraction = modalResult.interaction;
+    if (!modalResult.interaction) {
+      log.error("Member permissions modal unexpectedly missing interaction");
+      return;
+    }
+    const modalInteraction = modalResult.interaction;
 
-		// 5. Determine which permissions changed
-		const newlyEnabled = new Set(
-			modalResult.multiValues?.[MEMBERPERMISSIONS_CHECKBOX_ID] ?? [],
-		);
-		const changes: Array<{ dbColumn: string; isEnabled: boolean; label: string }> =
-			[];
+    // 5. Determine which permissions changed
+    const newlyEnabled = new Set(
+      modalResult.multiValues?.[MEMBERPERMISSIONS_CHECKBOX_ID] ?? [],
+    );
+    const changes: Array<{
+      dbColumn: string;
+      isEnabled: boolean;
+      label: string;
+    }> = [];
 
-		for (const def of MEMBER_PERMISSION_DEFINITIONS) {
-			const wasEnabled = def.getState(tomoriState.config);
-			const willBeEnabled = newlyEnabled.has(def.value);
-			if (wasEnabled !== willBeEnabled) {
-				changes.push({
-					dbColumn: def.dbColumn,
-					isEnabled: willBeEnabled,
-					label: localizer(locale, def.labelKey),
-				});
-			}
-		}
+    for (const def of MEMBER_PERMISSION_DEFINITIONS) {
+      const wasEnabled = def.getState(tomoriState.config);
+      const willBeEnabled = newlyEnabled.has(def.value);
+      if (wasEnabled !== willBeEnabled) {
+        changes.push({
+          dbColumn: def.dbColumn,
+          isEnabled: willBeEnabled,
+          label: localizer(locale, def.labelKey),
+        });
+      }
+    }
 
-		// 6. If nothing changed, say so and exit
-		if (changes.length === 0) {
-			await replyInfoEmbed(modalInteraction, locale, {
-				titleKey: "commands.server.memberpermissions.no_changes_title",
-				descriptionKey:
-					"commands.server.memberpermissions.no_changes_description",
-				color: ColorCode.WARN,
-			});
-			return;
-		}
+    // 6. If nothing changed, say so and exit
+    if (changes.length === 0) {
+      await replyInfoEmbed(modalInteraction, locale, {
+        titleKey: "commands.server.memberpermissions.no_changes_title",
+        descriptionKey:
+          "commands.server.memberpermissions.no_changes_description",
+        color: ColorCode.WARN,
+      });
+      return;
+    }
 
-		// 7. Apply each changed permission to the database.
-		//    sql.unsafe is safe here: dbColumn values are strictly controlled by MEMBER_PERMISSION_DEFINITIONS.
-		for (const change of changes) {
-			const [updatedRow] = await sql`
+    // 7. Apply each changed permission to the database.
+    //    sql.unsafe is safe here: dbColumn values are strictly controlled by MEMBER_PERMISSION_DEFINITIONS.
+    for (const change of changes) {
+      const [updatedRow] = await sql`
 				UPDATE tomori_configs
 				SET ${sql.unsafe(change.dbColumn)} = ${change.isEnabled}
 				WHERE server_id = ${tomoriState.server_id}
 				RETURNING *
 			`;
 
-			const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
-			if (!validatedConfig.success || !updatedRow) {
-				const context: ErrorContext = {
-					tomoriId: tomoriState.tomori_id,
-					serverId: tomoriState.server_id,
-					userId: userData.user_id,
-					errorType: "DatabaseUpdateError",
-					metadata: {
-						command: "server memberpermissions",
-						guildId: interaction.guild.id,
-						dbColumn: change.dbColumn,
-						isEnabled: change.isEnabled,
-						validationErrors: validatedConfig.success
-							? null
-							: validatedConfig.error.flatten(),
-					},
-				};
-				await log.error(
-					`Failed to update member permission column: ${change.dbColumn}`,
-					validatedConfig.success
-						? new Error("Database update returned no rows")
-						: new Error("Updated config failed validation"),
-					context,
-				);
+      const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+      if (!validatedConfig.success || !updatedRow) {
+        const context: ErrorContext = {
+          tomoriId: tomoriState.tomori_id,
+          serverId: tomoriState.server_id,
+          userId: userData.user_id,
+          errorType: "DatabaseUpdateError",
+          metadata: {
+            command: "server memberpermissions",
+            guildId: interaction.guild.id,
+            dbColumn: change.dbColumn,
+            isEnabled: change.isEnabled,
+            validationErrors: validatedConfig.success
+              ? null
+              : validatedConfig.error.flatten(),
+          },
+        };
+        await log.error(
+          `Failed to update member permission column: ${change.dbColumn}`,
+          validatedConfig.success
+            ? new Error("Database update returned no rows")
+            : new Error("Updated config failed validation"),
+          context,
+        );
 
-				await replyInfoEmbed(modalInteraction, locale, {
-					titleKey: "general.errors.update_failed_title",
-					descriptionKey: "general.errors.update_failed_description",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
-		}
+        await replyInfoEmbed(modalInteraction, locale, {
+          titleKey: "general.errors.update_failed_title",
+          descriptionKey: "general.errors.update_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+    }
 
-		// 8. Invalidate cache so next message picks up the fresh config
-		invalidateTomoriStateCache(interaction.guild.id);
+    // 8. Invalidate cache so next message picks up the fresh config
+    invalidateTomoriStateCache(interaction.guild.id);
 
-		// 9. Build the success result embed
-		const enabledLabels = changes
-			.filter((c) => c.isEnabled)
-			.map((c) => `\`${c.label}\``);
-		const disabledLabels = changes
-			.filter((c) => !c.isEnabled)
-			.map((c) => `\`${c.label}\``);
+    // 9. Build the success result embed
+    const enabledLabels = changes
+      .filter((c) => c.isEnabled)
+      .map((c) => `\`${c.label}\``);
+    const disabledLabels = changes
+      .filter((c) => !c.isEnabled)
+      .map((c) => `\`${c.label}\``);
 
-		let resultDescription = localizer(
-			locale,
-			"commands.server.memberpermissions.success_description",
-			{ count: changes.length },
-		);
-		if (enabledLabels.length > 0) {
-			resultDescription += `\n✅ **Enabled:** ${enabledLabels.join(", ")}`;
-		}
-		if (disabledLabels.length > 0) {
-			resultDescription += `\n🔴 **Disabled:** ${disabledLabels.join(", ")}`;
-		}
+    let resultDescription = localizer(
+      locale,
+      "commands.server.memberpermissions.success_description",
+      { count: changes.length },
+    );
+    if (enabledLabels.length > 0) {
+      resultDescription += `\n✅ **Enabled:** ${enabledLabels.join(", ")}`;
+    }
+    if (disabledLabels.length > 0) {
+      resultDescription += `\n🔴 **Disabled:** ${disabledLabels.join(", ")}`;
+    }
 
-		await modalInteraction.reply({
-			embeds: [
-				new EmbedBuilder()
-					.setTitle(
-						localizer(
-							locale,
-							"commands.server.memberpermissions.success_title",
-						),
-					)
-					.setDescription(resultDescription)
-					.setColor(ColorCode.SUCCESS),
-			],
-			flags: MessageFlags.Ephemeral,
-		});
-	} catch (error) {
-		// 10. Log the error with context
-		let serverIdForError: number | null = null;
-		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			const state = await getCachedTomoriState(interaction.guild.id);
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
+    await modalInteraction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(
+            localizer(
+              locale,
+              "commands.server.memberpermissions.success_title",
+            ),
+          )
+          .setDescription(resultDescription)
+          .setColor(ColorCode.SUCCESS),
+      ],
+      flags: MessageFlags.Ephemeral,
+    });
+  } catch (error) {
+    // 10. Log the error with context
+    let serverIdForError: number | null = null;
+    let tomoriIdForError: number | null = null;
+    if (interaction.guild?.id) {
+      const state = await getCachedTomoriState(interaction.guild.id);
+      serverIdForError = state?.server_id ?? null;
+      tomoriIdForError = state?.tomori_id ?? null;
+    }
 
-		const context: ErrorContext = {
-			userId: userData.user_id,
-			serverId: serverIdForError,
-			tomoriId: tomoriIdForError,
-			errorType: "CommandExecutionError",
-			metadata: {
-				command: "server memberpermissions",
-				guildId: interaction.guild?.id,
-				executorDiscordId: interaction.user.id,
-			},
-		};
-		await log.error(
-			`Error executing /server memberpermissions for user ${userData.user_disc_id}`,
-			error as Error,
-			context,
-		);
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: serverIdForError,
+      tomoriId: tomoriIdForError,
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "server memberpermissions",
+        guildId: interaction.guild?.id,
+        executorDiscordId: interaction.user.id,
+      },
+    };
+    await log.error(
+      `Error executing /server memberpermissions for user ${userData.user_disc_id}`,
+      error as Error,
+      context,
+    );
 
-		// 11. Inform user of unknown error
-		if (!interaction.replied && !interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-	}
+    // 11. Inform user of unknown error
+    if (!interaction.replied && !interaction.deferred) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+    } else {
+      await interaction.followUp({
+        content: localizer(locale, "general.errors.unknown_error_description"),
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  }
 }

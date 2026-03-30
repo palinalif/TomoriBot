@@ -1,28 +1,36 @@
 import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
-	MessageFlags,
-	type ButtonInteraction,
-	type ChatInputCommandInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type Client,
+  type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
-	replyInfoEmbed,
-	promptWithRawModal,
+  replyInfoEmbed,
+  promptWithRawModal,
 } from "@/utils/discord/interactionHelper";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
-import type { UserRow, ErrorContext, StPresetNodeRow, StPresetRow } from "@/types/db/schema";
-import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
+import type {
+  UserRow,
+  ErrorContext,
+  StPresetNodeRow,
+  StPresetRow,
+} from "@/types/db/schema";
+import type {
+  CheckboxGroupOption,
+  ModalCheckboxGroupField,
+} from "@/types/discord/modal";
 import {
-	loadActivePreset,
-	loadPresetsForServer,
-	loadToggleableNodes,
-	updateNodeEnabledStates,
+  loadActivePreset,
+  loadPresetsForServer,
+  loadToggleableNodes,
+  updateNodeEnabledStates,
 } from "@/utils/db/stPresetDb";
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -56,29 +64,29 @@ const DESCRIPTION_MAX_LENGTH = 100;
  * @returns Cleaned text truncated to DESCRIPTION_MAX_LENGTH, or undefined if empty
  */
 function buildNodeDescription(content: string): string | undefined {
-	let cleaned = content
-		// 1. Strip comment blocks: {{// ... }}
-		.replace(/\{\{\/\/[^}]*\}\}/g, "")
-		// 2. Strip {{trim}} macros
-		.replace(/\{\{trim\}\}/g, "")
-		// 3. Extract value from setvar: {{setvar::key::value}} → value
-		.replace(/\{\{setvar::[^:}]+::([^}]*)\}\}/g, "$1")
-		// 4. Resolve getvar to placeholder: {{getvar::key}} → [key]
-		.replace(/\{\{getvar::([^}]*)\}\}/g, "[$1]")
-		// 5. Simplify remaining template vars: {{user}} → user, {{char}} → char
-		.replace(/\{\{(\w+)\}\}/g, "$1")
-		// 6. Collapse whitespace
-		.replace(/\s+/g, " ")
-		.trim();
+  let cleaned = content
+    // 1. Strip comment blocks: {{// ... }}
+    .replace(/\{\{\/\/[^}]*\}\}/g, "")
+    // 2. Strip {{trim}} macros
+    .replace(/\{\{trim\}\}/g, "")
+    // 3. Extract value from setvar: {{setvar::key::value}} → value
+    .replace(/\{\{setvar::[^:}]+::([^}]*)\}\}/g, "$1")
+    // 4. Resolve getvar to placeholder: {{getvar::key}} → [key]
+    .replace(/\{\{getvar::([^}]*)\}\}/g, "[$1]")
+    // 5. Simplify remaining template vars: {{user}} → user, {{char}} → char
+    .replace(/\{\{(\w+)\}\}/g, "$1")
+    // 6. Collapse whitespace
+    .replace(/\s+/g, " ")
+    .trim();
 
-	if (cleaned.length === 0) return undefined;
+  if (cleaned.length === 0) return undefined;
 
-	// 7. Truncate to Discord's limit
-	if (cleaned.length > DESCRIPTION_MAX_LENGTH) {
-		cleaned = `${cleaned.slice(0, DESCRIPTION_MAX_LENGTH - 3)}...`;
-	}
+  // 7. Truncate to Discord's limit
+  if (cleaned.length > DESCRIPTION_MAX_LENGTH) {
+    cleaned = `${cleaned.slice(0, DESCRIPTION_MAX_LENGTH - 3)}...`;
+  }
 
-	return cleaned;
+  return cleaned;
 }
 
 /**
@@ -92,44 +100,43 @@ function buildNodeDescription(content: string): string | undefined {
  * @returns Array of checkbox group modal components
  */
 function buildCheckboxGroups(
-	pageNodes: StPresetNodeRow[],
-	pageOffset: number,
+  pageNodes: StPresetNodeRow[],
+  pageOffset: number,
 ): ModalCheckboxGroupField[] {
-	const groups: ModalCheckboxGroupField[] = [];
+  const groups: ModalCheckboxGroupField[] = [];
 
-	for (let i = 0; i < pageNodes.length; i += MAX_OPTIONS_PER_GROUP) {
-		const chunk = pageNodes.slice(i, i + MAX_OPTIONS_PER_GROUP);
-		const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+  for (let i = 0; i < pageNodes.length; i += MAX_OPTIONS_PER_GROUP) {
+    const chunk = pageNodes.slice(i, i + MAX_OPTIONS_PER_GROUP);
+    const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
 
-		const options: CheckboxGroupOption[] = chunk.map((node) => ({
-			label: node.name.length > 100
-				? `${node.name.slice(0, 97)}...`
-				: node.name,
-			value: node.identifier,
-			description: buildNodeDescription(node.content),
-			default: node.is_enabled,
-		}));
+    const options: CheckboxGroupOption[] = chunk.map((node) => ({
+      label:
+        node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
+      value: node.identifier,
+      description: buildNodeDescription(node.content),
+      default: node.is_enabled,
+    }));
 
-		// Build a dynamic label like "Nodes 1–10" or "Nodes 51–60"
-		// (pageOffset converts page-relative indices to overall node numbers)
-		const rangeStart = pageOffset + i + 1;
-		const rangeEnd = pageOffset + i + chunk.length;
-		const dynamicLabel = `Nodes ${rangeStart}–${rangeEnd}`;
+    // Build a dynamic label like "Nodes 1–10" or "Nodes 51–60"
+    // (pageOffset converts page-relative indices to overall node numbers)
+    const rangeStart = pageOffset + i + 1;
+    const rangeEnd = pageOffset + i + chunk.length;
+    const dynamicLabel = `Nodes ${rangeStart}–${rangeEnd}`;
 
-		groups.push({
-			kind: "checkboxGroup" as const,
-			customId: `stpreset_nodes_${groupIndex}`,
-			// Pass raw label — localizer returns the key itself when no match is found
-			labelKey: dynamicLabel,
-			descriptionKey: "commands.stpreset.node.toggle.group_description",
-			minValues: 0,
-			maxValues: chunk.length,
-			required: false,
-			options,
-		});
-	}
+    groups.push({
+      kind: "checkboxGroup" as const,
+      customId: `stpreset_nodes_${groupIndex}`,
+      // Pass raw label — localizer returns the key itself when no match is found
+      labelKey: dynamicLabel,
+      descriptionKey: "commands.stpreset.node.toggle.group_description",
+      minValues: 0,
+      maxValues: chunk.length,
+      required: false,
+      options,
+    });
+  }
 
-	return groups;
+  return groups;
 }
 
 /**
@@ -140,17 +147,17 @@ function buildCheckboxGroups(
  * @returns Set of selected node identifiers
  */
 function collectSelectedIds(
-	multiValues: Record<string, string[]> | undefined,
-	groupCount: number,
+  multiValues: Record<string, string[]> | undefined,
+  groupCount: number,
 ): Set<string> {
-	const selectedIds = new Set<string>();
-	for (let g = 0; g < groupCount; g++) {
-		const groupValues = multiValues?.[`stpreset_nodes_${g}`] ?? [];
-		for (const id of groupValues) {
-			selectedIds.add(id);
-		}
-	}
-	return selectedIds;
+  const selectedIds = new Set<string>();
+  for (let g = 0; g < groupCount; g++) {
+    const groupValues = multiValues?.[`stpreset_nodes_${g}`] ?? [];
+    for (const id of groupValues) {
+      selectedIds.add(id);
+    }
+  }
+  return selectedIds;
 }
 
 // ─── Subcommand Configuration ────────────────────────────────────────
@@ -161,13 +168,13 @@ function collectSelectedIds(
  * @param subcommand - The subcommand builder
  */
 export const configureSubcommand = (
-	subcommand: SlashCommandSubcommandBuilder,
+  subcommand: SlashCommandSubcommandBuilder,
 ) =>
-	subcommand
-		.setName("toggle")
-		.setDescription(
-			localizer("en-US", "commands.stpreset.node.toggle.description"),
-		);
+  subcommand
+    .setName("toggle")
+    .setDescription(
+      localizer("en-US", "commands.stpreset.node.toggle.description"),
+    );
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -190,83 +197,100 @@ export const configureSubcommand = (
  * @param locale - User's preferred locale
  */
 export async function execute(
-	_client: Client,
-	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
-	locale: string,
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
 ): Promise<void> {
-	// 1. Verify server setup
-	const serverId = interaction.guild?.id ?? interaction.user.id;
-	const tomoriState = await getCachedTomoriState(serverId);
-	if (!tomoriState) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.tomori_not_setup_title",
-			descriptionKey: "general.errors.tomori_not_setup_description",
-			color: ColorCode.ERROR,
-			flags: MessageFlags.Ephemeral,
-		});
-		return;
-	}
+  // 1. Verify server setup
+  const serverId = interaction.guild?.id ?? interaction.user.id;
+  const tomoriState = await getCachedTomoriState(serverId);
+  if (!tomoriState) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.tomori_not_setup_title",
+      descriptionKey: "general.errors.tomori_not_setup_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-	try {
-		// 2. Find the active preset, or fall back to the first available preset
-		let preset = await loadActivePreset(tomoriState.server_id);
-		if (!preset) {
-			const allPresets = await loadPresetsForServer(tomoriState.server_id);
-			preset = allPresets[0] ?? null;
-		}
+  try {
+    // 2. Find the active preset, or fall back to the first available preset
+    let preset = await loadActivePreset(tomoriState.server_id);
+    if (!preset) {
+      const allPresets = await loadPresetsForServer(tomoriState.server_id);
+      preset = allPresets[0] ?? null;
+    }
 
-		if (!preset || !preset.preset_id) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.stpreset.node.toggle.no_preset_title",
-				descriptionKey: "commands.stpreset.node.toggle.no_preset_description",
-				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+    if (!preset || !preset.preset_id) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.stpreset.node.toggle.no_preset_title",
+        descriptionKey: "commands.stpreset.node.toggle.no_preset_description",
+        color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		// 3. Load toggleable nodes from DB (non-marker, ordered by node_order)
-		const dbNodes = await loadToggleableNodes(preset.preset_id);
-		if (dbNodes.length === 0) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.stpreset.node.toggle.no_nodes_title",
-				descriptionKey: "commands.stpreset.node.toggle.no_nodes_description",
-				color: ColorCode.WARN,
-				flags: MessageFlags.Ephemeral,
-			});
-			return;
-		}
+    // 3. Load toggleable nodes from DB (non-marker, ordered by node_order)
+    const dbNodes = await loadToggleableNodes(preset.preset_id);
+    if (dbNodes.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.stpreset.node.toggle.no_nodes_title",
+        descriptionKey: "commands.stpreset.node.toggle.no_nodes_description",
+        color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-		// 4. Determine if pagination is needed
-		const totalPages = Math.ceil(dbNodes.length / NODES_PER_PAGE);
+    // 4. Determine if pagination is needed
+    const totalPages = Math.ceil(dbNodes.length / NODES_PER_PAGE);
 
-		// preset_id is guaranteed non-null by the guard above
-		const presetId = preset.preset_id as number;
+    // preset_id is guaranteed non-null by the guard above
+    const presetId = preset.preset_id as number;
 
-		if (totalPages > 1) {
-			// 4a. Multi-page: page-selection loop
-			//     Users can pick pages, toggle nodes, and return to pick another page.
-			await executeMultiPageToggle(interaction, locale, preset, presetId, dbNodes, totalPages);
-		} else {
-			// 4b. Single page: show modal directly
-			await executeSinglePageToggle(interaction, locale, preset, presetId, dbNodes);
-		}
-	} catch (error) {
-		const context: ErrorContext = {
-			userId: userData.user_id,
-			serverId: null,
-			tomoriId: null,
-			errorType: "CommandExecutionError",
-			metadata: { command: "stpreset node toggle" },
-		};
-		await log.error("Error executing /stpreset node toggle", error as Error, context);
+    if (totalPages > 1) {
+      // 4a. Multi-page: page-selection loop
+      //     Users can pick pages, toggle nodes, and return to pick another page.
+      await executeMultiPageToggle(
+        interaction,
+        locale,
+        preset,
+        presetId,
+        dbNodes,
+        totalPages,
+      );
+    } else {
+      // 4b. Single page: show modal directly
+      await executeSinglePageToggle(
+        interaction,
+        locale,
+        preset,
+        presetId,
+        dbNodes,
+      );
+    }
+  } catch (error) {
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: null,
+      tomoriId: null,
+      errorType: "CommandExecutionError",
+      metadata: { command: "stpreset node toggle" },
+    };
+    await log.error(
+      "Error executing /stpreset node toggle",
+      error as Error,
+      context,
+    );
 
-		await interaction.followUp({
-			content: localizer(locale, "general.errors.unknown_error_description"),
-			flags: MessageFlags.Ephemeral,
-		});
-	}
+    await interaction.followUp({
+      content: localizer(locale, "general.errors.unknown_error_description"),
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 }
 
 // ─── Page Flow Helpers ──────────────────────────────────────────────
@@ -282,43 +306,43 @@ const DONE_BUTTON_ID = "stpreset_toggle_done";
  * @returns Array of action rows with page buttons and a trailing "Done" button
  */
 function buildPageActionRows(
-	totalPages: number,
-	totalNodes: number,
-	locale: string,
+  totalPages: number,
+  totalNodes: number,
+  locale: string,
 ): ActionRowBuilder<ButtonBuilder>[] {
-	const maxButtons = Math.min(totalPages, 24); // Reserve 1 slot for "Done"
-	const pageButtons: ButtonBuilder[] = [];
+  const maxButtons = Math.min(totalPages, 24); // Reserve 1 slot for "Done"
+  const pageButtons: ButtonBuilder[] = [];
 
-	for (let i = 1; i <= maxButtons; i++) {
-		const startNode = (i - 1) * NODES_PER_PAGE + 1;
-		const endNode = Math.min(i * NODES_PER_PAGE, totalNodes);
-		pageButtons.push(
-			new ButtonBuilder()
-				.setCustomId(`stpreset_page_${i}`)
-				.setLabel(`${startNode}–${endNode}`)
-				.setStyle(ButtonStyle.Primary),
-		);
-	}
+  for (let i = 1; i <= maxButtons; i++) {
+    const startNode = (i - 1) * NODES_PER_PAGE + 1;
+    const endNode = Math.min(i * NODES_PER_PAGE, totalNodes);
+    pageButtons.push(
+      new ButtonBuilder()
+        .setCustomId(`stpreset_page_${i}`)
+        .setLabel(`${startNode}–${endNode}`)
+        .setStyle(ButtonStyle.Primary),
+    );
+  }
 
-	// Add "Done" button at the end
-	pageButtons.push(
-		new ButtonBuilder()
-			.setCustomId(DONE_BUTTON_ID)
-			.setLabel(localizer(locale, "commands.stpreset.node.toggle.done_button"))
-			.setStyle(ButtonStyle.Secondary),
-	);
+  // Add "Done" button at the end
+  pageButtons.push(
+    new ButtonBuilder()
+      .setCustomId(DONE_BUTTON_ID)
+      .setLabel(localizer(locale, "commands.stpreset.node.toggle.done_button"))
+      .setStyle(ButtonStyle.Secondary),
+  );
 
-	// Split buttons into action rows of 5 (Discord's per-row limit)
-	const actionRows: ActionRowBuilder<ButtonBuilder>[] = [];
-	for (let i = 0; i < pageButtons.length; i += 5) {
-		actionRows.push(
-			new ActionRowBuilder<ButtonBuilder>().addComponents(
-				...pageButtons.slice(i, i + 5),
-			),
-		);
-	}
+  // Split buttons into action rows of 5 (Discord's per-row limit)
+  const actionRows: ActionRowBuilder<ButtonBuilder>[] = [];
+  for (let i = 0; i < pageButtons.length; i += 5) {
+    actionRows.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        ...pageButtons.slice(i, i + 5),
+      ),
+    );
+  }
 
-	return actionRows;
+  return actionRows;
 }
 
 /**
@@ -331,59 +355,66 @@ function buildPageActionRows(
  * @param dbNodes - All toggleable nodes for this preset
  */
 async function executeSinglePageToggle(
-	interaction: ChatInputCommandInteraction,
-	locale: string,
-	preset: StPresetRow,
-	presetId: number,
-	dbNodes: StPresetNodeRow[],
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+  preset: StPresetRow,
+  presetId: number,
+  dbNodes: StPresetNodeRow[],
 ): Promise<void> {
-	const checkboxGroups = buildCheckboxGroups(dbNodes, 0);
+  const checkboxGroups = buildCheckboxGroups(dbNodes, 0);
 
-	const modalResult = await promptWithRawModal(
-		interaction,
-		locale,
-		{
-			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: preset.preset_name,
-			components: checkboxGroups,
-		},
-		MessageFlags.Ephemeral,
-	);
+  const modalResult = await promptWithRawModal(
+    interaction,
+    locale,
+    {
+      modalCustomId: MODAL_CUSTOM_ID,
+      modalTitleKey: preset.preset_name,
+      components: checkboxGroups,
+    },
+    MessageFlags.Ephemeral,
+  );
 
-	if (modalResult.outcome !== "submit" || !modalResult.interaction) {
-		log.info(`[ST Preset Node Toggle] Modal ${modalResult.outcome}`);
-		return;
-	}
+  if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+    log.info(`[ST Preset Node Toggle] Modal ${modalResult.outcome}`);
+    return;
+  }
 
-	const { summary, selectedCount, totalCount } = processToggleResults(
-		modalResult, dbNodes, checkboxGroups.length,
-	);
+  const { summary, selectedCount, totalCount } = processToggleResults(
+    modalResult,
+    dbNodes,
+    checkboxGroups.length,
+  );
 
-	// Persist changes
-	if (summary.changes.length > 0) {
-		await updateNodeEnabledStates(presetId, summary.enabledMap, preset.server_id);
-	}
+  // Persist changes
+  if (summary.changes.length > 0) {
+    await updateNodeEnabledStates(
+      presetId,
+      summary.enabledMap,
+      preset.server_id,
+    );
+  }
 
-	// Reply with summary
-	const changesText = summary.changes.length > 0
-		? summary.changes.join("\n")
-		: localizer(locale, "commands.stpreset.node.toggle.no_changes");
+  // Reply with summary
+  const changesText =
+    summary.changes.length > 0
+      ? summary.changes.join("\n")
+      : localizer(locale, "commands.stpreset.node.toggle.no_changes");
 
-	await replyInfoEmbed(modalResult.interaction, locale, {
-		titleKey: "commands.stpreset.node.toggle.result_title",
-		descriptionKey: "commands.stpreset.node.toggle.result_description",
-		descriptionVars: {
-			total: totalCount.toString(),
-			enabled: selectedCount.toString(),
-			changes: changesText,
-		},
-		color: summary.changes.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
-		flags: MessageFlags.Ephemeral,
-	});
+  await replyInfoEmbed(modalResult.interaction, locale, {
+    titleKey: "commands.stpreset.node.toggle.result_title",
+    descriptionKey: "commands.stpreset.node.toggle.result_description",
+    descriptionVars: {
+      total: totalCount.toString(),
+      enabled: selectedCount.toString(),
+      changes: changesText,
+    },
+    color: summary.changes.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
+    flags: MessageFlags.Ephemeral,
+  });
 
-	log.info(
-		`[ST Preset Node Toggle] ${selectedCount}/${totalCount} nodes enabled, ${summary.changes.length} changed for preset "${preset.preset_name}"`,
-	);
+  log.info(
+    `[ST Preset Node Toggle] ${selectedCount}/${totalCount} nodes enabled, ${summary.changes.length} changed for preset "${preset.preset_name}"`,
+  );
 }
 
 /**
@@ -399,142 +430,161 @@ async function executeSinglePageToggle(
  * @param totalPages - Total number of pages
  */
 async function executeMultiPageToggle(
-	interaction: ChatInputCommandInteraction,
-	locale: string,
-	preset: StPresetRow,
-	presetId: number,
-	dbNodes: StPresetNodeRow[],
-	totalPages: number,
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+  preset: StPresetRow,
+  presetId: number,
+  dbNodes: StPresetNodeRow[],
+  totalPages: number,
 ): Promise<void> {
-	// 1. Build and send the page-selection embed with buttons
-	const pageSelectEmbed = createStandardEmbed(locale, {
-		titleKey: "commands.stpreset.node.toggle.select_page_title",
-		descriptionKey: "commands.stpreset.node.toggle.select_page_description",
-		descriptionVars: {
-			preset_name: preset.preset_name,
-			total_nodes: dbNodes.length.toString(),
-			total_pages: totalPages.toString(),
-		},
-		color: ColorCode.INFO,
-	});
+  // 1. Build and send the page-selection embed with buttons
+  const pageSelectEmbed = createStandardEmbed(locale, {
+    titleKey: "commands.stpreset.node.toggle.select_page_title",
+    descriptionKey: "commands.stpreset.node.toggle.select_page_description",
+    descriptionVars: {
+      preset_name: preset.preset_name,
+      total_nodes: dbNodes.length.toString(),
+      total_pages: totalPages.toString(),
+    },
+    color: ColorCode.INFO,
+  });
 
-	const actionRows = buildPageActionRows(totalPages, dbNodes.length, locale);
+  const actionRows = buildPageActionRows(totalPages, dbNodes.length, locale);
 
-	const pageSelectMessage = await interaction.reply({
-		embeds: [pageSelectEmbed],
-		components: actionRows,
-		flags: MessageFlags.Ephemeral,
-	});
+  const pageSelectMessage = await interaction.reply({
+    embeds: [pageSelectEmbed],
+    components: actionRows,
+    flags: MessageFlags.Ephemeral,
+  });
 
-	// 2. Loop: await page button → show modal → process → repeat
-	let currentNodes = dbNodes;
+  // 2. Loop: await page button → show modal → process → repeat
+  let currentNodes = dbNodes;
 
-	while (true) {
-		// Wait for a button click (page or "Done")
-		let buttonInteraction: ButtonInteraction;
-		try {
-			buttonInteraction = (await pageSelectMessage.awaitMessageComponent({
-				filter: (i) =>
-					i.user.id === interaction.user.id &&
-					(i.customId.startsWith("stpreset_page_") || i.customId === DONE_BUTTON_ID),
-				time: PAGE_SELECT_TIMEOUT_MS,
-			})) as ButtonInteraction;
-		} catch {
-			// Timeout — silently end the loop
-			log.info("[ST Preset Node Toggle] Page selection timed out");
-			break;
-		}
+  while (true) {
+    // Wait for a button click (page or "Done")
+    let buttonInteraction: ButtonInteraction;
+    try {
+      buttonInteraction = (await pageSelectMessage.awaitMessageComponent({
+        filter: (i) =>
+          i.user.id === interaction.user.id &&
+          (i.customId.startsWith("stpreset_page_") ||
+            i.customId === DONE_BUTTON_ID),
+        time: PAGE_SELECT_TIMEOUT_MS,
+      })) as ButtonInteraction;
+    } catch {
+      // Timeout — silently end the loop
+      log.info("[ST Preset Node Toggle] Page selection timed out");
+      break;
+    }
 
-		// "Done" button pressed — exit the loop
-		if (buttonInteraction.customId === DONE_BUTTON_ID) {
-			await buttonInteraction.deferUpdate();
-			break;
-		}
+    // "Done" button pressed — exit the loop
+    if (buttonInteraction.customId === DONE_BUTTON_ID) {
+      await buttonInteraction.deferUpdate();
+      break;
+    }
 
-		// Extract selected page and slice nodes
-		const selectedPage = Number.parseInt(
-			buttonInteraction.customId.replace("stpreset_page_", ""),
-			10,
-		);
-		const startIndex = (selectedPage - 1) * NODES_PER_PAGE;
-		const pageNodes = currentNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
+    // Extract selected page and slice nodes
+    const selectedPage = Number.parseInt(
+      buttonInteraction.customId.replace("stpreset_page_", ""),
+      10,
+    );
+    const startIndex = (selectedPage - 1) * NODES_PER_PAGE;
+    const pageNodes = currentNodes.slice(
+      startIndex,
+      startIndex + NODES_PER_PAGE,
+    );
 
-		// Show modal for this page
-		const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex);
+    // Show modal for this page
+    const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex);
 
-		const modalResult = await promptWithRawModal(
-			buttonInteraction,
-			locale,
-			{
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: preset.preset_name,
-				components: checkboxGroups,
-			},
-			MessageFlags.Ephemeral,
-		);
+    const modalResult = await promptWithRawModal(
+      buttonInteraction,
+      locale,
+      {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: preset.preset_name,
+        components: checkboxGroups,
+      },
+      MessageFlags.Ephemeral,
+    );
 
-		if (modalResult.outcome === "submit" && modalResult.interaction) {
-			// Process the toggle results
-			const { summary, selectedCount, totalCount } = processToggleResults(
-				modalResult, pageNodes, checkboxGroups.length,
-			);
+    if (modalResult.outcome === "submit" && modalResult.interaction) {
+      // Process the toggle results
+      const { summary, selectedCount, totalCount } = processToggleResults(
+        modalResult,
+        pageNodes,
+        checkboxGroups.length,
+      );
 
-			// Persist changes
-			if (summary.changes.length > 0) {
-				await updateNodeEnabledStates(presetId, summary.enabledMap, preset.server_id);
+      // Persist changes
+      if (summary.changes.length > 0) {
+        await updateNodeEnabledStates(
+          presetId,
+          summary.enabledMap,
+          preset.server_id,
+        );
 
-				// Reload nodes from DB so the next modal shows updated defaults
-				currentNodes = await loadToggleableNodes(presetId);
-			}
+        // Reload nodes from DB so the next modal shows updated defaults
+        currentNodes = await loadToggleableNodes(presetId);
+      }
 
-			// Reply with summary on the modal interaction
-			const changesText = summary.changes.length > 0
-				? summary.changes.join("\n")
-				: localizer(locale, "commands.stpreset.node.toggle.no_changes");
+      // Reply with summary on the modal interaction
+      const changesText =
+        summary.changes.length > 0
+          ? summary.changes.join("\n")
+          : localizer(locale, "commands.stpreset.node.toggle.no_changes");
 
-			await replyInfoEmbed(modalResult.interaction, locale, {
-				titleKey: "commands.stpreset.node.toggle.result_title",
-				descriptionKey: "commands.stpreset.node.toggle.result_description",
-				descriptionVars: {
-					total: totalCount.toString(),
-					enabled: selectedCount.toString(),
-					changes: changesText,
-				},
-				color: summary.changes.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
-				flags: MessageFlags.Ephemeral,
-			});
+      await replyInfoEmbed(modalResult.interaction, locale, {
+        titleKey: "commands.stpreset.node.toggle.result_title",
+        descriptionKey: "commands.stpreset.node.toggle.result_description",
+        descriptionVars: {
+          total: totalCount.toString(),
+          enabled: selectedCount.toString(),
+          changes: changesText,
+        },
+        color: summary.changes.length > 0 ? ColorCode.SUCCESS : ColorCode.INFO,
+        flags: MessageFlags.Ephemeral,
+      });
 
-			log.info(
-				`[ST Preset Node Toggle] ${selectedCount}/${totalCount} nodes enabled, ${summary.changes.length} changed for preset "${preset.preset_name}"`,
-			);
-		} else {
-			log.info(`[ST Preset Node Toggle] Modal ${modalResult.outcome}, returning to page selection`);
-		}
+      log.info(
+        `[ST Preset Node Toggle] ${selectedCount}/${totalCount} nodes enabled, ${summary.changes.length} changed for preset "${preset.preset_name}"`,
+      );
+    } else {
+      log.info(
+        `[ST Preset Node Toggle] Modal ${modalResult.outcome}, returning to page selection`,
+      );
+    }
 
-		// Edit the page selection message to refresh buttons for the next loop iteration.
-		// awaitMessageComponent only resolves once per call, so we need to keep the message
-		// alive with active components for the next iteration's await to work.
-		try {
-			await interaction.editReply({
-				embeds: [pageSelectEmbed],
-				components: buildPageActionRows(totalPages, currentNodes.length, locale),
-			});
-		} catch {
-			// If editing fails (e.g. interaction expired), break the loop
-			log.info("[ST Preset Node Toggle] Could not refresh page buttons, ending loop");
-			break;
-		}
-	}
+    // Edit the page selection message to refresh buttons for the next loop iteration.
+    // awaitMessageComponent only resolves once per call, so we need to keep the message
+    // alive with active components for the next iteration's await to work.
+    try {
+      await interaction.editReply({
+        embeds: [pageSelectEmbed],
+        components: buildPageActionRows(
+          totalPages,
+          currentNodes.length,
+          locale,
+        ),
+      });
+    } catch {
+      // If editing fails (e.g. interaction expired), break the loop
+      log.info(
+        "[ST Preset Node Toggle] Could not refresh page buttons, ending loop",
+      );
+      break;
+    }
+  }
 
-	// 3. Clean up — remove buttons from the page selection message
-	try {
-		await interaction.editReply({
-			embeds: [pageSelectEmbed],
-			components: [],
-		});
-	} catch {
-		// Best-effort cleanup
-	}
+  // 3. Clean up — remove buttons from the page selection message
+  try {
+    await interaction.editReply({
+      embeds: [pageSelectEmbed],
+      components: [],
+    });
+  } catch {
+    // Best-effort cleanup
+  }
 }
 
 /**
@@ -546,31 +596,31 @@ async function executeMultiPageToggle(
  * @returns Object with the summary, selected count, and total count
  */
 function processToggleResults(
-	modalResult: { multiValues?: Record<string, string[]> },
-	pageNodes: StPresetNodeRow[],
-	groupCount: number,
+  modalResult: { multiValues?: Record<string, string[]> },
+  pageNodes: StPresetNodeRow[],
+  groupCount: number,
 ): {
-	summary: { enabledMap: Map<string, boolean>; changes: string[] };
-	selectedCount: number;
-	totalCount: number;
+  summary: { enabledMap: Map<string, boolean>; changes: string[] };
+  selectedCount: number;
+  totalCount: number;
 } {
-	const selectedIds = collectSelectedIds(modalResult.multiValues, groupCount);
-	const enabledMap = new Map<string, boolean>();
-	const changes: string[] = [];
+  const selectedIds = collectSelectedIds(modalResult.multiValues, groupCount);
+  const enabledMap = new Map<string, boolean>();
+  const changes: string[] = [];
 
-	for (const node of pageNodes) {
-		const isNowEnabled = selectedIds.has(node.identifier);
-		enabledMap.set(node.identifier, isNowEnabled);
+  for (const node of pageNodes) {
+    const isNowEnabled = selectedIds.has(node.identifier);
+    enabledMap.set(node.identifier, isNowEnabled);
 
-		if (isNowEnabled !== node.is_enabled) {
-			const state = isNowEnabled ? "ON" : "OFF";
-			changes.push(`${state} ${node.name}`);
-		}
-	}
+    if (isNowEnabled !== node.is_enabled) {
+      const state = isNowEnabled ? "ON" : "OFF";
+      changes.push(`${state} ${node.name}`);
+    }
+  }
 
-	return {
-		summary: { enabledMap, changes },
-		selectedCount: selectedIds.size,
-		totalCount: pageNodes.length,
-	};
+  return {
+    summary: { enabledMap, changes },
+    selectedCount: selectedIds.size,
+    totalCount: pageNodes.length,
+  };
 }

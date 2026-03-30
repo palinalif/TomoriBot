@@ -152,11 +152,8 @@ export async function execute(
       "elevenlabs",
       "set",
     );
-    const optionalkeyElevenlabsRemoveMention = commandRegistry.getCommandMention(
-      "optionalkey",
-      "elevenlabs",
-      "remove",
-    );
+    const optionalkeyElevenlabsRemoveMention =
+      commandRegistry.getCommandMention("optionalkey", "elevenlabs", "remove");
     const configVoiceElevenlabsMention = commandRegistry.getCommandMention(
       "config",
       "voice",
@@ -464,7 +461,10 @@ export async function execute(
           fields: [
             {
               nameKey: "commands.help.elevenlabs.what_is_title",
-              value: localizer(locale, "commands.help.elevenlabs.what_is_description"),
+              value: localizer(
+                locale,
+                "commands.help.elevenlabs.what_is_description",
+              ),
               inline: false,
             },
             {
@@ -499,7 +499,10 @@ export async function execute(
               value: localizer(
                 locale,
                 "commands.help.elevenlabs.important_notes_description",
-                { optionalkeyElevenlabsRemove: optionalkeyElevenlabsRemoveMention },
+                {
+                  optionalkeyElevenlabsRemove:
+                    optionalkeyElevenlabsRemoveMention,
+                },
               ),
               inline: false,
             },

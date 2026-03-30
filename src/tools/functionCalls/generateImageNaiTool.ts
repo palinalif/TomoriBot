@@ -32,19 +32,19 @@ import {
 import { extractImagesFromMessage } from "../../utils/image/imageExtractor";
 import { segmentImage } from "../../utils/image/segmentationService";
 import {
-	resolveNaiImageParams,
-	type EffectiveNaiImageParams,
+  resolveNaiImageParams,
+  type EffectiveNaiImageParams,
 } from "@/utils/image/naiImageParams";
 import { normalizeNaiReferenceImage } from "@/utils/image/imageProcessor";
 import { resolveNaiDiffusionModel } from "@/utils/image/naiDiffusionModels";
 import {
-	NAI_CHAR_REF_INFO_EXTRACTED,
-	NAI_CHAR_REF_STRENGTH,
-	NAI_DEFAULT_NEGATIVE_PROMPT,
-	classifyNaiImageError,
-	generateNovelAiImage,
-	isNaiV4Model,
-	type NaiGenerationCharacterPayload,
+  NAI_CHAR_REF_INFO_EXTRACTED,
+  NAI_CHAR_REF_STRENGTH,
+  NAI_DEFAULT_NEGATIVE_PROMPT,
+  classifyNaiImageError,
+  generateNovelAiImage,
+  isNaiV4Model,
+  type NaiGenerationCharacterPayload,
 } from "@/utils/image/naiImageGeneration";
 import { loadCharRefAsBase64 } from "@/utils/storage/charrefStorage";
 
@@ -352,13 +352,13 @@ export class GenerateImageNaiTool extends BaseTool {
    * @param model - Diffusion model codename
    * @returns True if the model requires v4_prompt format
    */
-	/**
-	 * Derive the inpainting model codename from the base model.
-	 * NovelAI inpainting models use a `-inpainting` suffix and are NOT stored
-	 * in the `image_diffusion_models` table — the codename is derived at runtime.
-	 * @param baseCodename - Base model codename (e.g. "nai-diffusion-4-5-curated")
-	 * @returns Inpainting model codename (e.g. "nai-diffusion-4-5-curated-inpainting")
-	 */
+  /**
+   * Derive the inpainting model codename from the base model.
+   * NovelAI inpainting models use a `-inpainting` suffix and are NOT stored
+   * in the `image_diffusion_models` table — the codename is derived at runtime.
+   * @param baseCodename - Base model codename (e.g. "nai-diffusion-4-5-curated")
+   * @returns Inpainting model codename (e.g. "nai-diffusion-4-5-curated-inpainting")
+   */
   private getInpaintingModelCodename(baseCodename: string): string {
     return `${baseCodename}-inpainting`;
   }
@@ -493,8 +493,10 @@ export class GenerateImageNaiTool extends BaseTool {
       NAI_ENABLE_CHAR_REFERENCES &&
       characters.length === 1;
     const charCaptions: NaiGenerationCharacterPayload["charCaptions"] = [];
-    const negativeCharCaptions: NaiGenerationCharacterPayload["negativeCharCaptions"] = [];
-    const characterPrompts: NaiGenerationCharacterPayload["characterPrompts"] = [];
+    const negativeCharCaptions: NaiGenerationCharacterPayload["negativeCharCaptions"] =
+      [];
+    const characterPrompts: NaiGenerationCharacterPayload["characterPrompts"] =
+      [];
     const referenceImages: string[] = [];
     const referenceStrengths: number[] = [];
     const referenceInfoExtracted: number[] = [];
@@ -1435,7 +1437,9 @@ export class GenerateImageNaiTool extends BaseTool {
         message: successMessage,
         // imageMetadata intentionally omitted — Discord CDN URLs are protected
         // End the LLM turn immediately when this tool is the target of a hidden agent turn
-        endTurn: context.streamContext?.endTurnAfterTools?.includes(this.name) ?? false,
+        endTurn:
+          context.streamContext?.endTurnAfterTools?.includes(this.name) ??
+          false,
       };
     } catch (error) {
       const errorMessage =
@@ -1487,8 +1491,8 @@ export class GenerateImageNaiTool extends BaseTool {
       // Generic error fallback
       return {
         success: false,
-          error: `Failed to ${isInpaintMode ? "inpaint" : "generate"} NAI image: ${errorMessage}`,
-        };
-      }
+        error: `Failed to ${isInpaintMode ? "inpaint" : "generate"} NAI image: ${errorMessage}`,
+      };
+    }
   }
 }

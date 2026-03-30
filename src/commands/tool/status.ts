@@ -36,7 +36,11 @@ import type {
   TomoriConfigRow,
 } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
-import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/schema";
+import {
+  CooldownType,
+  PrivacyLevel,
+  type TomoriState,
+} from "../../types/db/schema";
 import { formatBooleanLocalized } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
@@ -308,7 +312,10 @@ function formatWhitelistRolesEntries(
   locale: string,
 ): string {
   if (entries.length === 0) {
-    return localizer(locale, "commands.tool.status.whitelist_roles_all_allowed");
+    return localizer(
+      locale,
+      "commands.tool.status.whitelist_roles_all_allowed",
+    );
   }
 
   return entries
@@ -460,12 +467,11 @@ async function formatWelcomeChannel(
   );
 
   // 2. Resolve persona name (null welcome_persona_id = random persona selection)
-  const personaName = config.welcome_persona_id != null
-    ? (personaNameMap.get(config.welcome_persona_id) ?? `ID:${config.welcome_persona_id}`)
-    : localizer(
-        locale,
-        "commands.tool.status.random_trigger_persona_random",
-      );
+  const personaName =
+    config.welcome_persona_id != null
+      ? (personaNameMap.get(config.welcome_persona_id) ??
+        `ID:${config.welcome_persona_id}`)
+      : localizer(locale, "commands.tool.status.random_trigger_persona_random");
 
   // 3. Format: "#channel · Persona"
   return `${channelMention} · ${personaName}`;
@@ -556,7 +562,8 @@ export async function execute(
 
         // 3. Get the user's active reminder count
         const reminderCount = await getUserReminderCount(interaction.user.id);
-        const rawImpersonationPrompt = userData.impersonation_prompt?.trim() ?? null;
+        const rawImpersonationPrompt =
+          userData.impersonation_prompt?.trim() ?? null;
         const impersonationPromptValue = rawImpersonationPrompt
           ? `\`\`\`\n${
               rawImpersonationPrompt.length > MAX_PROMPT_PREVIEW
@@ -829,9 +836,10 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_send_message_limit",
-              value: (config.send_message_limit ?? 0) > 0
-                ? String(config.send_message_limit)
-                : localizer(locale, "commands.choices.disabled"),
+              value:
+                (config.send_message_limit ?? 0) > 0
+                  ? String(config.send_message_limit)
+                  : localizer(locale, "commands.choices.disabled"),
               inline: true,
             },
             {

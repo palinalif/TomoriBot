@@ -229,10 +229,12 @@ export class CrossChannelMessageTool extends BaseTool {
     }
 
     let targetChannel: GuildTextBasedChannel | null = null;
-    const activeThreads = await guild.channels.fetchActiveThreads().catch((error) => {
-      log.warn("Cross-channel tool: Failed to fetch active threads", error);
-      return null;
-    });
+    const activeThreads = await guild.channels
+      .fetchActiveThreads()
+      .catch((error) => {
+        log.warn("Cross-channel tool: Failed to fetch active threads", error);
+        return null;
+      });
 
     // Try channel_id first
     if (channelIdArg?.trim()) {
@@ -309,7 +311,8 @@ export class CrossChannelMessageTool extends BaseTool {
         error: `Could not find a text channel or thread matching ${channelIdArg ? `ID "${channelIdArg}"` : `name "${channelNameArg}"`} in this server.`,
         data: {
           status: "cross_channel_failed_channel_not_found",
-          reason: "Target channel or thread not found or not a text-based channel.",
+          reason:
+            "Target channel or thread not found or not a text-based channel.",
         },
       };
     }
@@ -371,7 +374,9 @@ export class CrossChannelMessageTool extends BaseTool {
         : PermissionFlagsBits.SendMessages;
 
       if (perms && !perms.has(sendPermission)) {
-        const permissionName = isThread ? "SendMessagesInThreads" : "SendMessages";
+        const permissionName = isThread
+          ? "SendMessagesInThreads"
+          : "SendMessages";
         const targetName = isThread
           ? `thread "${targetChannel.name}"`
           : `#${targetChannel.name}`;

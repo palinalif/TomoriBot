@@ -52,9 +52,7 @@ import {
   buildExtractionSystemPrompt,
   buildExtractionUserPrompt,
 } from "@/utils/documents/historyExtractionPrompt";
-import type {
-  HistoryMemoryEntry,
-} from "@/providers/utils/historyExtractionSchema";
+import type { HistoryMemoryEntry } from "@/providers/utils/historyExtractionSchema";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { extractHistoryWindowForProvider } from "@/providers/utils/providerFeatureExecutors";
@@ -623,7 +621,12 @@ export async function execute(
       return;
     }
 
-    if (!providerSupportsFeature(tomoriState.llm.llm_provider, "historyExtraction")) {
+    if (
+      !providerSupportsFeature(
+        tomoriState.llm.llm_provider,
+        "historyExtraction",
+      )
+    ) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.provider_not_supported_title",
         descriptionKey: "general.errors.provider_not_supported_description",

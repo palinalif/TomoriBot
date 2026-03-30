@@ -385,7 +385,10 @@ export async function execute(
         if (!apiKey || !urlValidation.valid) {
           const validationMessage = apiKey
             ? getCustomEndpointValidationMessage(urlValidation)
-            : { descriptionKey: "commands.config.custom.endpoint_url_invalid_description" };
+            : {
+                descriptionKey:
+                  "commands.config.custom.endpoint_url_invalid_description",
+              };
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.custom.endpoint_url_invalid_title",
             descriptionKey: validationMessage.descriptionKey,
@@ -854,9 +857,13 @@ export async function execute(
       );
       successFields.push({
         nameKey: "commands.config.setup.next_steps_title",
-        value: localizer(locale, "commands.config.setup.next_steps_description", {
-          helpFeatures: helpFeaturesMention,
-        }),
+        value: localizer(
+          locale,
+          "commands.config.setup.next_steps_description",
+          {
+            helpFeatures: helpFeaturesMention,
+          },
+        ),
       });
 
       // Show success message

@@ -1,11 +1,12 @@
-import type {
-  EmbeddingRequest,
-} from "@/types/provider/featureInterfaces";
+import type { EmbeddingRequest } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { resolveEmbeddingsCapability } from "@/utils/provider/providerCapabilityResolver";
 
 export type EmbeddingProviderName = string;
-export type { EmbeddingTaskType, EmbeddingRequest } from "@/types/provider/featureInterfaces";
+export type {
+  EmbeddingTaskType,
+  EmbeddingRequest,
+} from "@/types/provider/featureInterfaces";
 
 export async function providerSupportsEmbeddingTaskType(
   providerName: string,

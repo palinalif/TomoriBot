@@ -143,7 +143,7 @@ export async function execute(
     const modalSubmitInteraction = modalResult.interaction!;
 
     // 5a. Defer the modal submit interaction — DB write below exceeds the 3-second window
-    await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });;
+    await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
     // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
     const selectedValue = modalResult.values![HUMANIZER_SELECT_ID];
     const humanizerValue = Number.parseInt(selectedValue, 10);
@@ -157,7 +157,10 @@ export async function execute(
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.operation_failed_title",
         descriptionKey: "commands.config.humanizer.invalid_value_description",
-        descriptionVars: { min: String(HUMANIZER_MIN), max: String(HUMANIZER_MAX) },
+        descriptionVars: {
+          min: String(HUMANIZER_MIN),
+          max: String(HUMANIZER_MAX),
+        },
         color: ColorCode.ERROR,
       });
       return;

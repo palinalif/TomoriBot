@@ -375,7 +375,8 @@ const handler = async (client: Client, message: Message): Promise<void> => {
       );
     }
 
-    avatarUrl = resolvePersonaAvatarPublicUrl(persona?.webhook_avatar_url) ?? null;
+    avatarUrl =
+      resolvePersonaAvatarPublicUrl(persona?.webhook_avatar_url) ?? null;
   }
 
   // Fall back to username if no matching persona is found

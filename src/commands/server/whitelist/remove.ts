@@ -243,9 +243,8 @@ export async function execute(
 
     for (let groupIndex = 0; groupIndex < roleGroupCount; groupIndex++) {
       const groupValues =
-        modalResult.multiValues?.[
-          `${ROLE_CHECKBOX_ID_PREFIX}_${groupIndex}`
-        ] ?? [];
+        modalResult.multiValues?.[`${ROLE_CHECKBOX_ID_PREFIX}_${groupIndex}`] ??
+        [];
       for (const roleId of groupValues) {
         checkedRoleIds.add(roleId);
       }
@@ -428,7 +427,10 @@ function getWhitelistChannelSummary(
  * @param locale - The locale to use for localization
  * @returns Localized cooldown type name
  */
-function getCooldownTypeName(cooldownType: CooldownType, locale: string): string {
+function getCooldownTypeName(
+  cooldownType: CooldownType,
+  locale: string,
+): string {
   const key = getCooldownTypeKey(cooldownType);
   return localizer(locale, `commands.config.cooldown.type.choice_${key}`);
 }

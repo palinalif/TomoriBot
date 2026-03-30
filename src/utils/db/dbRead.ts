@@ -638,7 +638,9 @@ export async function loadAllPersonasForServer(
         // 8. Load vision model if configured (server-scoped, loaded once for all personas)
         let visionLlm: LlmRow | undefined;
         if (configData.vision_llm_id) {
-          visionLlm = getCachedLLM(configData.vision_llm_id) as LlmRow | undefined;
+          visionLlm = getCachedLLM(configData.vision_llm_id) as
+            | LlmRow
+            | undefined;
           if (!visionLlm) {
             const visionLlmRows = await sql`
 							SELECT * FROM llms WHERE llm_id = ${configData.vision_llm_id} LIMIT 1
@@ -1206,7 +1208,10 @@ export async function loadLlmById(llmId: number): Promise<LlmRow | null> {
 
     const parsed = llmSchema.safeParse(llmRows[0]);
     if (!parsed.success) {
-      log.error(`Failed to validate model data for llm_id ${llmId}:`, parsed.error.flatten());
+      log.error(
+        `Failed to validate model data for llm_id ${llmId}:`,
+        parsed.error.flatten(),
+      );
       return null;
     }
 

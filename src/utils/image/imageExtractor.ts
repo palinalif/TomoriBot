@@ -12,17 +12,17 @@ import type { ToolContext } from "../../types/tool/interfaces";
 
 /** Intermediate representation of a discovered image URL before base64 conversion */
 interface ImageUrlInfo {
-	url: string;
-	mimeType: string;
-	/** Human-readable source label for logging (e.g. "attachment: photo.png") */
-	source: string;
+  url: string;
+  mimeType: string;
+  /** Human-readable source label for logging (e.g. "attachment: photo.png") */
+  source: string;
 }
 
 /** Base64-encoded image data ready for API consumption */
 export interface ExtractedImage {
-	mimeType: string;
-	/** Raw base64-encoded image data (no data-URI prefix) */
-	data: string;
+  mimeType: string;
+  /** Raw base64-encoded image data (no data-URI prefix) */
+  data: string;
 }
 
 /**
@@ -32,7 +32,7 @@ export interface ExtractedImage {
  * @returns CDN URL string
  */
 function buildEmojiCdnUrl(emojiId: string): string {
-	return `https://cdn.discordapp.com/emojis/${emojiId}.png`;
+  return `https://cdn.discordapp.com/emojis/${emojiId}.png`;
 }
 
 /**
@@ -42,30 +42,30 @@ function buildEmojiCdnUrl(emojiId: string): string {
  * @returns Array of image URL info objects for each unique custom emoji
  */
 function extractCustomEmojis(content: string): ImageUrlInfo[] {
-	const emojiUrls: ImageUrlInfo[] = [];
-	if (!content) return emojiUrls;
+  const emojiUrls: ImageUrlInfo[] = [];
+  if (!content) return emojiUrls;
 
-	// Regex created inside the function to avoid stale lastIndex from module-level g-flag regex
-	const emojiPattern = /<(a?):([^:]+):(\d{17,20})>/g;
-	const seenEmojiIds = new Set<string>();
-	let match: RegExpExecArray | null;
+  // Regex created inside the function to avoid stale lastIndex from module-level g-flag regex
+  const emojiPattern = /<(a?):([^:]+):(\d{17,20})>/g;
+  const seenEmojiIds = new Set<string>();
+  let match: RegExpExecArray | null;
 
-	// biome-ignore lint/suspicious/noAssignInExpressions: Standard regex exec loop pattern
-	while ((match = emojiPattern.exec(content)) !== null) {
-		const emojiName = match[2];
-		const emojiId = match[3];
+  // biome-ignore lint/suspicious/noAssignInExpressions: Standard regex exec loop pattern
+  while ((match = emojiPattern.exec(content)) !== null) {
+    const emojiName = match[2];
+    const emojiId = match[3];
 
-		if (seenEmojiIds.has(emojiId)) continue;
-		seenEmojiIds.add(emojiId);
+    if (seenEmojiIds.has(emojiId)) continue;
+    seenEmojiIds.add(emojiId);
 
-		emojiUrls.push({
-			url: buildEmojiCdnUrl(emojiId),
-			mimeType: "image/png",
-			source: `emoji: ${emojiName}`,
-		});
-	}
+    emojiUrls.push({
+      url: buildEmojiCdnUrl(emojiId),
+      mimeType: "image/png",
+      source: `emoji: ${emojiName}`,
+    });
+  }
 
-	return emojiUrls;
+  return emojiUrls;
 }
 
 /**
@@ -87,116 +87,114 @@ function extractCustomEmojis(content: string): ImageUrlInfo[] {
  * @throws Error if the message is not found or no images could be processed
  */
 export async function extractImagesFromMessage(
-	messageId: string,
-	context: ToolContext,
+  messageId: string,
+  context: ToolContext,
 ): Promise<ExtractedImage[]> {
-	// 1. Fetch the Discord message
-	const message = await context.channel.messages.fetch(messageId);
+  // 1. Fetch the Discord message
+  const message = await context.channel.messages.fetch(messageId);
 
-	if (!message) {
-		throw new Error(`Message ${messageId} not found`);
-	}
+  if (!message) {
+    throw new Error(`Message ${messageId} not found`);
+  }
 
-	// Collect all discovered image URLs before base64 conversion
-	const imageUrls: ImageUrlInfo[] = [];
+  // Collect all discovered image URLs before base64 conversion
+  const imageUrls: ImageUrlInfo[] = [];
 
-	// 2. Direct attachments
-	const imageAttachments = message.attachments.filter((attachment) =>
-		attachment.contentType?.startsWith("image/"),
-	);
+  // 2. Direct attachments
+  const imageAttachments = message.attachments.filter((attachment) =>
+    attachment.contentType?.startsWith("image/"),
+  );
 
-	for (const attachment of imageAttachments.values()) {
-		imageUrls.push({
-			url: attachment.url,
-			mimeType: attachment.contentType || "image/jpeg",
-			source: `attachment: ${attachment.name}`,
-		});
-	}
+  for (const attachment of imageAttachments.values()) {
+    imageUrls.push({
+      url: attachment.url,
+      mimeType: attachment.contentType || "image/jpeg",
+      source: `attachment: ${attachment.name}`,
+    });
+  }
 
-	// 3. Embed images and thumbnails
-	for (const embed of message.embeds) {
-		if (embed.image?.url) {
-			imageUrls.push({
-				url: embed.image.url,
-				mimeType: "image/jpeg", // Embeds don't provide explicit MIME type
-				source: `embed.image: ${embed.url || "unknown"}`,
-			});
-		}
+  // 3. Embed images and thumbnails
+  for (const embed of message.embeds) {
+    if (embed.image?.url) {
+      imageUrls.push({
+        url: embed.image.url,
+        mimeType: "image/jpeg", // Embeds don't provide explicit MIME type
+        source: `embed.image: ${embed.url || "unknown"}`,
+      });
+    }
 
-		if (embed.thumbnail?.url) {
-			imageUrls.push({
-				url: embed.thumbnail.url,
-				mimeType: "image/jpeg",
-				source: `embed.thumbnail: ${embed.url || "unknown"}`,
-			});
-		}
-	}
+    if (embed.thumbnail?.url) {
+      imageUrls.push({
+        url: embed.thumbnail.url,
+        mimeType: "image/jpeg",
+        source: `embed.thumbnail: ${embed.url || "unknown"}`,
+      });
+    }
+  }
 
-	// 4. Discord stickers
-	if (message.stickers.size > 0) {
-		for (const sticker of message.stickers.values()) {
-			imageUrls.push({
-				url: sticker.url,
-				mimeType: "image/png", // Discord serves stickers as PNG
-				source: `sticker: ${sticker.name}`,
-			});
-		}
-	}
+  // 4. Discord stickers
+  if (message.stickers.size > 0) {
+    for (const sticker of message.stickers.values()) {
+      imageUrls.push({
+        url: sticker.url,
+        mimeType: "image/png", // Discord serves stickers as PNG
+        source: `sticker: ${sticker.name}`,
+      });
+    }
+  }
 
-	// 5. Custom emojis from message text
-	if (message.content) {
-		imageUrls.push(...extractCustomEmojis(message.content));
-	}
+  // 5. Custom emojis from message text
+  if (message.content) {
+    imageUrls.push(...extractCustomEmojis(message.content));
+  }
 
-	// Validate we found at least one image source
-	if (imageUrls.length === 0) {
-		throw new Error(
-			`No images found in message ${messageId} (checked attachments, embeds, stickers, and custom emojis)`,
-		);
-	}
+  // Validate we found at least one image source
+  if (imageUrls.length === 0) {
+    throw new Error(
+      `No images found in message ${messageId} (checked attachments, embeds, stickers, and custom emojis)`,
+    );
+  }
 
-	log.info(
-		`Found ${imageUrls.length} image(s) in message ${messageId} (${imageAttachments.size} attachment(s), ${imageUrls.length - imageAttachments.size} embed/sticker/emoji)`,
-	);
+  log.info(
+    `Found ${imageUrls.length} image(s) in message ${messageId} (${imageAttachments.size} attachment(s), ${imageUrls.length - imageAttachments.size} embed/sticker/emoji)`,
+  );
 
-	// 6. Convert each URL to base64
-	const results: ExtractedImage[] = [];
+  // 6. Convert each URL to base64
+  const results: ExtractedImage[] = [];
 
-	for (const imageInfo of imageUrls) {
-		try {
-			const imageResponse = await fetch(imageInfo.url);
-			if (!imageResponse.ok) {
-				log.warn(
-					`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`,
-				);
-				continue;
-			}
+  for (const imageInfo of imageUrls) {
+    try {
+      const imageResponse = await fetch(imageInfo.url);
+      if (!imageResponse.ok) {
+        log.warn(
+          `Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`,
+        );
+        continue;
+      }
 
-			const imageArrayBuffer = await imageResponse.arrayBuffer();
-			results.push({
-				mimeType: imageInfo.mimeType,
-				data: Buffer.from(imageArrayBuffer).toString("base64"),
-			});
+      const imageArrayBuffer = await imageResponse.arrayBuffer();
+      results.push({
+        mimeType: imageInfo.mimeType,
+        data: Buffer.from(imageArrayBuffer).toString("base64"),
+      });
 
-			log.info(
-				`Successfully converted image from ${imageInfo.source} to base64`,
-			);
-		} catch (imgErr) {
-			log.warn(
-				`Failed to process image from ${imageInfo.source}:`,
-				imgErr as Error,
-			);
-		}
-	}
+      log.info(
+        `Successfully converted image from ${imageInfo.source} to base64`,
+      );
+    } catch (imgErr) {
+      log.warn(
+        `Failed to process image from ${imageInfo.source}:`,
+        imgErr as Error,
+      );
+    }
+  }
 
-	// Ensure at least one image was successfully processed
-	if (results.length === 0) {
-		throw new Error(
-			`Failed to process any images from message ${messageId}`,
-		);
-	}
+  // Ensure at least one image was successfully processed
+  if (results.length === 0) {
+    throw new Error(`Failed to process any images from message ${messageId}`);
+  }
 
-	return results;
+  return results;
 }
 
 /**
@@ -207,15 +205,15 @@ export async function extractImagesFromMessage(
  * @throws Error if the fetch fails
  */
 export async function fetchImageAsBuffer(imageUrl: string): Promise<Buffer> {
-	const response = await fetch(imageUrl);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch image: ${response.status} ${response.statusText}`,
-		);
-	}
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch image: ${response.status} ${response.statusText}`,
+    );
+  }
 
-	const arrayBuffer = await response.arrayBuffer();
-	return Buffer.from(arrayBuffer);
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 /**
@@ -226,6 +224,6 @@ export async function fetchImageAsBuffer(imageUrl: string): Promise<Buffer> {
  * @throws Error if the fetch fails
  */
 export async function fetchImageAsBase64(imageUrl: string): Promise<string> {
-	const buffer = await fetchImageAsBuffer(imageUrl);
-	return buffer.toString("base64");
+  const buffer = await fetchImageAsBuffer(imageUrl);
+  return buffer.toString("base64");
 }

@@ -649,7 +649,10 @@ export async function execute(
       // Use Z.ai native image generation API
       if (referenceImages.length > 0) {
         await interaction.followUp({
-          content: localizer(locale, "commands.generate.image.zai_no_img2img_warning"),
+          content: localizer(
+            locale,
+            "commands.generate.image.zai_no_img2img_warning",
+          ),
         });
       }
       const { generateZaiNativeImage } = await import(
@@ -685,7 +688,8 @@ export async function execute(
         model: modelCodename,
         prompt,
         aspectRatio,
-        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+        referenceImages:
+          referenceImages.length > 0 ? referenceImages : undefined,
       });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;

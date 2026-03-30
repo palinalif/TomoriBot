@@ -1,12 +1,12 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
 import {
-	DEFAULT_NAI_NEGATIVE_TAGS,
-	DEFAULT_NAI_STYLE_TAGS,
+  DEFAULT_NAI_NEGATIVE_TAGS,
+  DEFAULT_NAI_STYLE_TAGS,
 } from "@/utils/image/naiTagDefaults";
 import {
-	logitBiasEntrySchema,
-	normalizeLogitBiasEntries,
+  logitBiasEntrySchema,
+  normalizeLogitBiasEntries,
 } from "@/types/provider/logitBias";
 
 export enum HumanizerDegree {
@@ -38,11 +38,11 @@ export const userSchema = z.object({
   language_pref: z.string().default("en-US"),
   registration_locale: z.string().nullable(), // Static locale captured at registration
   privacy_level: z.nativeEnum(PrivacyLevel).default(PrivacyLevel.MINIMAL),
-	personal_memories: z.array(z.string()).default([]),
-	nai_char_tags: z.array(z.string()).default([]), // Added March 2026 - User-specific NovelAI character tags
-	nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - User-specific NovelAI character reference image
-	impersonation_prompt: z.string().nullable().optional(), // Added March 2026 - Global user-owned prompt for user impersonation replies
-	shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
+  personal_memories: z.array(z.string()).default([]),
+  nai_char_tags: z.array(z.string()).default([]), // Added March 2026 - User-specific NovelAI character tags
+  nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - User-specific NovelAI character reference image
+  impersonation_prompt: z.string().nullable().optional(), // Added March 2026 - Global user-owned prompt for user impersonation replies
+  shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -80,12 +80,12 @@ export const tomoriSchema = z.object({
   autoch_next_target: z.number().default(0),
   is_alter: z.boolean().default(false), // Added January 2026 - Distinguishes main persona (false) from alter personas (true)
   webhook_avatar_url: z.string().nullable().optional(), // Added January 2026 - Stored alter avatar reference (production URL; non-production URL or local avatar path)
-	alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
-	nai_tags: z.array(z.string()).default([]), // Imageboard-style persona appearance tags for NovelAI character profile resolution
-	nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - Persona-specific NovelAI character reference image
-	elevenlabs_voice_id: z.string().nullable().optional(), // Added March 2026 - Server-local ElevenLabs voice selection
-	elevenlabs_voice_name: z.string().nullable().optional(), // Added March 2026 - Cached ElevenLabs voice display name
-	nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
+  alter_triggers: z.array(z.string()).default([]), // Added January 2026 - Trigger words for alter personas (main personas use tomori_configs.trigger_words)
+  nai_tags: z.array(z.string()).default([]), // Imageboard-style persona appearance tags for NovelAI character profile resolution
+  nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - Persona-specific NovelAI character reference image
+  elevenlabs_voice_id: z.string().nullable().optional(), // Added March 2026 - Server-local ElevenLabs voice selection
+  elevenlabs_voice_name: z.string().nullable().optional(), // Added March 2026 - Cached ElevenLabs voice display name
+  nai_attg_author: z.string().nullable().optional(), // Added March 2026 - ATTG: Story author name
   nai_attg_title: z.string().nullable().optional(), // Added March 2026 - ATTG: Story title
   nai_attg_tags: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre/style tags
   nai_attg_genre: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre categories
@@ -154,16 +154,16 @@ export type EmbeddingModelRow = z.infer<typeof embeddingModelSchema>;
  * @returns Parsed array, or empty array if parsing fails
  */
 function normalizeJsonbArray(value: unknown): unknown[] {
-	if (Array.isArray(value)) return value;
-	if (typeof value === "string") {
-		try {
-			const parsed = JSON.parse(value);
-			return Array.isArray(parsed) ? parsed : [];
-		} catch {
-			return [];
-		}
-	}
-	return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 function normalizeFallbackLlmIds(value: unknown): number[] {
@@ -183,11 +183,7 @@ function normalizeFallbackLlmIds(value: unknown): number[] {
   return source
     .map((id) => {
       const parsed =
-        typeof id === "number"
-          ? id
-          : typeof id === "string"
-            ? Number(id)
-            : NaN;
+        typeof id === "number" ? id : typeof id === "string" ? Number(id) : NaN;
       return Number.isInteger(parsed) ? parsed : null;
     })
     .filter((id): id is number => id !== null);
@@ -199,40 +195,42 @@ export const tomoriConfigSchema = z.object({
   server_id: z.number().nullable().optional(), // Added January 2026 - Server-scoped config (nullable for legacy rows)
   llm_id: z.number(),
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
-	diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
-	vision_llm_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated vision model for non-vision chat models (FK to llms)
-	nai_diffusion_model_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated NovelAI image model override for generate_image_nai
-	nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
-	nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
-	nai_sampler: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI image sampler
-	nai_steps: z.number().int().min(1).max(50).nullable().optional(), // Added March 2026 - Server override for NovelAI image steps
-	nai_scale: z.number().min(0.0).max(10.0).nullable().optional(), // Added March 2026 - Server override for NovelAI image scale
-	nai_noise_schedule: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI noise schedule
-	nai_cfg_rescale: z.number().min(0.0).max(1.0).nullable().optional(), // Added March 2026 - Server override for NovelAI cfg_rescale
-	llm_temperature: z.number().min(0.0).max(2.0).default(1.0),
+  diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
+  vision_llm_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated vision model for non-vision chat models (FK to llms)
+  nai_diffusion_model_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated NovelAI image model override for generate_image_nai
+  nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
+  nai_negative_tags: z
+    .array(z.string())
+    .default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
+  nai_sampler: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI image sampler
+  nai_steps: z.number().int().min(1).max(50).nullable().optional(), // Added March 2026 - Server override for NovelAI image steps
+  nai_scale: z.number().min(0.0).max(10.0).nullable().optional(), // Added March 2026 - Server override for NovelAI image scale
+  nai_noise_schedule: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI noise schedule
+  nai_cfg_rescale: z.number().min(0.0).max(1.0).nullable().optional(), // Added March 2026 - Server override for NovelAI cfg_rescale
+  llm_temperature: z.number().min(0.0).max(2.0).default(1.0),
   llm_top_p: z.number().min(0.0).max(1.0).default(0.95), // Added February 2026 - Nucleus sampling
   llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
   llm_min_p: z.number().min(0.0).max(1.0).default(0.0), // Added February 2026 - Min-P sampling (0.0=disabled)
-	llm_logit_biases: z.preprocess(
-		(value) => normalizeLogitBiasEntries(value),
-		z.array(logitBiasEntrySchema).default([]),
-	), // Added March 2026 - Stored OpenAI-style logit bias entries (text or explicit token IDs)
+  llm_logit_biases: z.preprocess(
+    (value) => normalizeLogitBiasEntries(value),
+    z.array(logitBiasEntrySchema).default([]),
+  ), // Added March 2026 - Stored OpenAI-style logit bias entries (text or explicit token IDs)
   api_key: z.instanceof(Buffer).nullable(),
   key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
   trigger_words: z.array(z.string()).default([]),
   autoch_disc_ids: z.array(z.string()).default([]),
-	rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
-	welcome_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for member join welcomes
-	thought_log_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for reasoning/thought log embeds
-	welcome_prompt: z.string().nullable().optional(), // Added March 2026 - Additional prompt appended to join welcomes
-	welcome_persona_id: z.number().int().nullable().optional(), // Added March 2026 - NULL means random persona selection for welcomes
-	autoch_threshold: z.number().default(0),
-	autoch_threshold_max: z.number().default(0),
+  rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
+  welcome_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for member join welcomes
+  thought_log_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for reasoning/thought log embeds
+  welcome_prompt: z.string().nullable().optional(), // Added March 2026 - Additional prompt appended to join welcomes
+  welcome_persona_id: z.number().int().nullable().optional(), // Added March 2026 - NULL means random persona selection for welcomes
+  autoch_threshold: z.number().default(0),
+  autoch_threshold_max: z.number().default(0),
   always_reply_enabled: z.boolean().default(false), // Added March 2026 - Main persona replies to all user messages (guild only, alters still require triggers)
   self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
-	send_message_limit: z.number().int().min(0).max(40).default(0), // Added March 2026 - Max Discord messages per response (0 = unlimited, capped by MAX_FLUSH_COUNT)
+  send_message_limit: z.number().int().min(0).max(40).default(0), // Added March 2026 - Max Discord messages per response (0 = unlimited, capped by MAX_FLUSH_COUNT)
   triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message
   message_fetch_limit: z.number().int().min(20).max(100).default(80), // Added February 2026 - Max recent messages fetched for context
   server_memteaching_enabled: z.boolean().default(true),
@@ -796,16 +794,16 @@ export type SetupResult = z.infer<typeof setupResultSchema>;
  * Stored in guild_mcp_servers table; auth_token is PGP-encrypted BYTEA.
  */
 export const guildMcpServerSchema = z.object({
-	guild_mcp_id: z.number().optional(),
-	server_id: z.number(),
-	name: z.string(),
-	url: z.string(),
-	auth_token: z.instanceof(Buffer).nullable().optional(),
-	key_version: z.number().int().default(1),
-	is_enabled: z.boolean().default(true),
-	server_type: z.string().nullable().optional(),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  guild_mcp_id: z.number().optional(),
+  server_id: z.number(),
+  name: z.string(),
+  url: z.string(),
+  auth_token: z.instanceof(Buffer).nullable().optional(),
+  key_version: z.number().int().default(1),
+  is_enabled: z.boolean().default(true),
+  server_type: z.string().nullable().optional(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type GuildMcpServerRow = z.infer<typeof guildMcpServerSchema>;
 
@@ -814,49 +812,57 @@ export type GuildMcpServerRow = z.infer<typeof guildMcpServerSchema>;
  * saved_provider_configs. One row per provider per server; UPSERT on save.
  */
 export const savedProviderConfigSchema = z.object({
-	saved_config_id: z.number().optional(),
-	server_id: z.number(),
-	provider: z.string(),
-	api_key: z.instanceof(Buffer).nullable(),
-	key_version: z.number().int().default(1),
-	llm_id: z.number().nullable(),
-	diffusion_model_id: z.number().nullable(),
-	embedding_model_id: z.number().nullable(),
-	nai_diffusion_model_id: z.number().nullable(),
-	vision_llm_id: z.number().nullable().optional(), // Added March 2026 - Vision model snapshot
-	nai_preset_name: z.string().nullable(),
-	llm_temperature: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
-	llm_top_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
-	llm_top_k: z.number().int().nullable().optional(), // Added March 2026 - Sampler snapshot
-	llm_frequency_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
-	llm_presence_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
-	llm_min_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
-	llm_logit_biases: z.preprocess(
-		(value) => normalizeLogitBiasEntries(value),
-		z.array(logitBiasEntrySchema).default([]),
-	), // Added March 2026 - Logit bias snapshot
-	custom_endpoint_url: z.string().nullable(),
-	custom_model_name: z.string().nullable(),
-	fallback_llm_ids: z.preprocess(
-		(value) => normalizeFallbackLlmIds(value),
-		z.array(z.number().int()).default([]),
-	),
-	channel_llm_overrides: z.preprocess(
-		(value) => normalizeJsonbArray(value),
-		z.array(z.object({
-			channel_disc_id: z.string(),
-			llm_id: z.number().int(),
-		})).default([]),
-	),
-	persona_llm_overrides: z.preprocess(
-		(value) => normalizeJsonbArray(value),
-		z.array(z.object({
-			tomori_id: z.number().int(),
-			llm_id: z.number().int(),
-		})).default([]),
-	),
-	saved_at: z.coerce.date().optional(),
-	updated_at: z.coerce.date().optional(),
+  saved_config_id: z.number().optional(),
+  server_id: z.number(),
+  provider: z.string(),
+  api_key: z.instanceof(Buffer).nullable(),
+  key_version: z.number().int().default(1),
+  llm_id: z.number().nullable(),
+  diffusion_model_id: z.number().nullable(),
+  embedding_model_id: z.number().nullable(),
+  nai_diffusion_model_id: z.number().nullable(),
+  vision_llm_id: z.number().nullable().optional(), // Added March 2026 - Vision model snapshot
+  nai_preset_name: z.string().nullable(),
+  llm_temperature: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_top_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_top_k: z.number().int().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_frequency_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_presence_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_min_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_logit_biases: z.preprocess(
+    (value) => normalizeLogitBiasEntries(value),
+    z.array(logitBiasEntrySchema).default([]),
+  ), // Added March 2026 - Logit bias snapshot
+  custom_endpoint_url: z.string().nullable(),
+  custom_model_name: z.string().nullable(),
+  fallback_llm_ids: z.preprocess(
+    (value) => normalizeFallbackLlmIds(value),
+    z.array(z.number().int()).default([]),
+  ),
+  channel_llm_overrides: z.preprocess(
+    (value) => normalizeJsonbArray(value),
+    z
+      .array(
+        z.object({
+          channel_disc_id: z.string(),
+          llm_id: z.number().int(),
+        }),
+      )
+      .default([]),
+  ),
+  persona_llm_overrides: z.preprocess(
+    (value) => normalizeJsonbArray(value),
+    z
+      .array(
+        z.object({
+          tomori_id: z.number().int(),
+          llm_id: z.number().int(),
+        }),
+      )
+      .default([]),
+  ),
+  saved_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
 });
 export type SavedProviderConfigRow = z.infer<typeof savedProviderConfigSchema>;
 
@@ -865,8 +871,8 @@ export type SavedProviderConfigRow = z.infer<typeof savedProviderConfigSchema>;
  * Omits auto-generated fields (saved_config_id, saved_at, updated_at).
  */
 export type SavedProviderConfigUpsert = Omit<
-	SavedProviderConfigRow,
-	"saved_config_id" | "saved_at" | "updated_at"
+  SavedProviderConfigRow,
+  "saved_config_id" | "saved_at" | "updated_at"
 >;
 
 /**
@@ -875,13 +881,13 @@ export type SavedProviderConfigUpsert = Omit<
  * Multiple presets may exist per server; only one is active at a time.
  */
 export const stPresetSchema = z.object({
-	preset_id: z.number().optional(),
-	server_id: z.number(),
-	preset_name: z.string(),
-	raw_json: z.unknown(),
-	is_active: z.boolean().default(false),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+  preset_id: z.number().optional(),
+  server_id: z.number(),
+  preset_name: z.string(),
+  raw_json: z.unknown(),
+  is_active: z.boolean().default(false),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
 });
 export type StPresetRow = z.infer<typeof stPresetSchema>;
 
@@ -891,17 +897,17 @@ export type StPresetRow = z.infer<typeof stPresetSchema>;
  * Nodes are ordered by node_order (matching the preset's prompt_order).
  */
 export const stPresetNodeSchema = z.object({
-	node_id: z.number().optional(),
-	preset_id: z.number(),
-	identifier: z.string(),
-	name: z.string(),
-	role: z.string().default("system"),
-	content: z.string().default(""),
-	is_marker: z.boolean().default(false),
-	is_enabled: z.boolean().default(true),
-	node_order: z.number(),
-	injection_position: z.number().default(0),
-	injection_depth: z.number().default(4),
-	injection_order: z.number().default(100),
+  node_id: z.number().optional(),
+  preset_id: z.number(),
+  identifier: z.string(),
+  name: z.string(),
+  role: z.string().default("system"),
+  content: z.string().default(""),
+  is_marker: z.boolean().default(false),
+  is_enabled: z.boolean().default(true),
+  node_order: z.number(),
+  injection_position: z.number().default(0),
+  injection_depth: z.number().default(4),
+  injection_order: z.number().default(100),
 });
 export type StPresetNodeRow = z.infer<typeof stPresetNodeSchema>;

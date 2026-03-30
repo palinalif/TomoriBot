@@ -203,7 +203,11 @@ async function initializeDatabase(
 ): Promise<void> {
   const schemaPath = path.join(import.meta.dir, "db", "schema.sql");
   const ragSchemaPath = path.join(import.meta.dir, "db", "schema_rag.sql");
-  const stPresetSchemaPath = path.join(import.meta.dir, "db", "schema_stpreset.sql");
+  const stPresetSchemaPath = path.join(
+    import.meta.dir,
+    "db",
+    "schema_stpreset.sql",
+  );
   const seedPath = path.join(import.meta.dir, "db", "seed.sql");
   const ragEnabled =
     process.env.RUN_ENV === "production" ||

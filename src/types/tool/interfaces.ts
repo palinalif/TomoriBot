@@ -330,7 +330,11 @@ export abstract class BaseTool implements Tool {
 
       for (const [key, nestedValue] of Object.entries(objectValue)) {
         const nestedSchema = schema.properties[key];
-        if (!nestedSchema || nestedValue === undefined || nestedValue === null) {
+        if (
+          !nestedSchema ||
+          nestedValue === undefined ||
+          nestedValue === null
+        ) {
           continue;
         }
 

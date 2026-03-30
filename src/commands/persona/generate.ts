@@ -25,15 +25,13 @@ import {
   reservePersonaQuota,
 } from "../../utils/security/rateLimiter";
 import { safeDownload } from "../../utils/security/safeDownload";
-import type {
-  GeneratePresetParams,
-} from "../../providers/google/presetGenerator";
+import type { GeneratePresetParams } from "../../providers/google/presetGenerator";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
 import { centerCropToSquare } from "../../utils/image/imageProcessor";
 import {
-	extractMetadataFromPNG,
-	extractSillyTavernMetadataFromPNG,
-	embedMetadataInPNG,
+  extractMetadataFromPNG,
+  extractSillyTavernMetadataFromPNG,
+  embedMetadataInPNG,
 } from "../../utils/image/pngMetadata";
 import { convertSillyTavernMetadataToPresetData } from "../../utils/db/sillyTavernImport";
 import {
@@ -573,8 +571,7 @@ export async function execute(
 
       // 2. Try SillyTavern card format if no native preset was found
       if (!extractedPresetContext) {
-        const stMetadata =
-          extractSillyTavernMetadataFromPNG(imageBuffer);
+        const stMetadata = extractSillyTavernMetadataFromPNG(imageBuffer);
         if (stMetadata) {
           const conversionResult =
             convertSillyTavernMetadataToPresetData(stMetadata);
@@ -627,7 +624,9 @@ export async function execute(
           }
         } else {
           const visionProviderName = visionLlm.llm_provider.toLowerCase();
-          if (!providerSupportsFeature(visionProviderName, "presetGeneration")) {
+          if (
+            !providerSupportsFeature(visionProviderName, "presetGeneration")
+          ) {
             // Vision model is set but its provider cannot perform preset generation
             if (extractedPresetContext) {
               // Fall back to text-only with extracted card data
@@ -699,14 +698,14 @@ export async function execute(
               ),
             )
             .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.generate.web_search_tools_required_description",
-                  {
-                    model_name: effectiveModelName,
-                  },
-                ),
-              )
+              localizer(
+                locale,
+                "commands.persona.generate.web_search_tools_required_description",
+                {
+                  model_name: effectiveModelName,
+                },
+              ),
+            )
             .setColor(ColorCode.ERROR),
         ],
         files: [getInputAttachment()],
@@ -756,11 +755,15 @@ export async function execute(
         guildId: interaction.guild?.id,
       };
     } else if (useWebSearch) {
-      log.warn("Preset generation web search skipped: no channel context available.");
+      log.warn(
+        "Preset generation web search skipped: no channel context available.",
+      );
     }
 
     // 13. Generate preset data
-    log.info(`Generating preset data with ${generationTomoriState.llm.llm_provider}...`);
+    log.info(
+      `Generating preset data with ${generationTomoriState.llm.llm_provider}...`,
+    );
 
     const genResult = await generatePresetForProvider({
       providerName: generationProviderName,

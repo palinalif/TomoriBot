@@ -33,20 +33,20 @@ import {
   sendWebhookMessageWithIdentity,
 } from "./webhookManager";
 import {
-	chunkMessage,
-	cleanLLMOutput,
-	humanizeString,
-	replaceMentionHandles,
-	createSentenceSplitRegex,
-	truncateBeforeRegisteredSpeakerLine,
+  chunkMessage,
+  cleanLLMOutput,
+  humanizeString,
+  replaceMentionHandles,
+  createSentenceSplitRegex,
+  truncateBeforeRegisteredSpeakerLine,
 } from "../text/stringHelper";
 import { filterDuplicateCustomEmojis } from "../text/emojiPenalty";
 
 import type {
-	StreamResult,
-	StreamStopReason,
-	ThoughtLogEntry,
-	ThoughtLogPayload,
+  StreamResult,
+  StreamStopReason,
+  ThoughtLogEntry,
+  ThoughtLogPayload,
 } from "../../types/provider/interfaces";
 import {
   ContextItemTag,
@@ -136,41 +136,41 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     );
   }
 
-	private static getStopReasonFromRequesterId(
-		requesterId?: string,
-	): StreamStopReason {
-		switch (requesterId) {
-			case undefined:
-				return "system_request";
-			case "system":
-				return "system_request";
-			case "speaker_guard":
-				return "speaker_guard";
-			case "send_message_limit":
-				return "send_message_limit";
-			case "flush_limit":
-				return "flush_limit";
-			default:
-				return "user_request";
-		}
-	}
+  private static getStopReasonFromRequesterId(
+    requesterId?: string,
+  ): StreamStopReason {
+    switch (requesterId) {
+      case undefined:
+        return "system_request";
+      case "system":
+        return "system_request";
+      case "speaker_guard":
+        return "speaker_guard";
+      case "send_message_limit":
+        return "send_message_limit";
+      case "flush_limit":
+        return "flush_limit";
+      default:
+        return "user_request";
+    }
+  }
 
-	private static getStopReason(
-		stopRequest:
-			| {
-					requesterId: string;
-					type: "stop" | "follow_up";
-			  }
-			| undefined,
-	): StreamStopReason {
-		if (!stopRequest || stopRequest.type !== "stop") {
-			return "unknown";
-		}
+  private static getStopReason(
+    stopRequest:
+      | {
+          requesterId: string;
+          type: "stop" | "follow_up";
+        }
+      | undefined,
+  ): StreamStopReason {
+    if (!stopRequest || stopRequest.type !== "stop") {
+      return "unknown";
+    }
 
-		return StreamOrchestrator.getStopReasonFromRequesterId(
-			stopRequest.requesterId,
-		);
-	}
+    return StreamOrchestrator.getStopReasonFromRequesterId(
+      stopRequest.requesterId,
+    );
+  }
 
   private static activeStopRequests = new Map<
     string,
@@ -347,7 +347,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
   }
 
-  private buildThoughtLogPayload(state: StreamState): ThoughtLogPayload | undefined {
+  private buildThoughtLogPayload(
+    state: StreamState,
+  ): ThoughtLogPayload | undefined {
     const summary = state.thoughtSummarySegments.join("").trim();
     const raw = state.thoughtRawSegments.join("").trim();
 
@@ -441,8 +443,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         log.info(
           `Kill request detected before stream started for channel ${context.channel.id}. Aborting stream.`,
         );
-        const preStreamStopRequest = StreamOrchestrator.activeStopRequests.get(context.channel.id);
-        const preStreamStopReason = StreamOrchestrator.getStopReason(preStreamStopRequest);
+        const preStreamStopRequest = StreamOrchestrator.activeStopRequests.get(
+          context.channel.id,
+        );
+        const preStreamStopReason =
+          StreamOrchestrator.getStopReason(preStreamStopRequest);
         StreamOrchestrator.clearStopRequest(context.channel.id);
         return { status: "stopped_by_user", stopReason: preStreamStopReason };
       }
@@ -468,11 +473,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           const stopRequest = StreamOrchestrator.activeStopRequests.get(
             context.channel.id,
           );
-					const stopReason = StreamOrchestrator.getStopReason(stopRequest);
-					const shouldSkipBufferFlush =
-						(stopRequest?.requesterId === "flush_limit" ||
-							stopRequest?.requesterId === "speaker_guard") &&
-						!stopRequest?.stopContext;
+          const stopReason = StreamOrchestrator.getStopReason(stopRequest);
+          const shouldSkipBufferFlush =
+            (stopRequest?.requesterId === "flush_limit" ||
+              stopRequest?.requesterId === "speaker_guard") &&
+            !stopRequest?.stopContext;
 
           // 2. Clear the stop request
           StreamOrchestrator.clearStopRequest(context.channel.id);
@@ -480,18 +485,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           // 3. Only flush buffer if this is NOT a flush limit stop
           // Flush limit stops shouldn't try to send more messages as they'd just hit the limit again
           // This prevents the duplicate "Response Length Limit Reached" embed
-					if (state.buffer.length > 0 && !shouldSkipBufferFlush) {
-						await this.flushPendingBuffer(
-							state,
-							this.createTextProcessingConfig(config, context),
-							createTypingSimulationConfig(config.humanizerDegree),
-							context,
-						);
-					} else if (shouldSkipBufferFlush) {
-						log.info(
-							"Stream: Skipping buffer flush due to internal no-flush stop",
-						);
-					}
+          if (state.buffer.length > 0 && !shouldSkipBufferFlush) {
+            await this.flushPendingBuffer(
+              state,
+              this.createTextProcessingConfig(config, context),
+              createTypingSimulationConfig(config.humanizerDegree),
+              context,
+            );
+          } else if (shouldSkipBufferFlush) {
+            log.info(
+              "Stream: Skipping buffer flush due to internal no-flush stop",
+            );
+          }
 
           if (
             StreamOrchestrator.isSilentSpeakerGuardStop(
@@ -522,7 +527,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             `Stream loop breaking due to external abort signal for channel ${context.channel.id}.`,
           );
           this.clearInactivityTimer(state);
-          return { status: "error", data: new Error("Stream aborted by SDK call timeout") };
+          return {
+            status: "error",
+            data: new Error("Stream aborted by SDK call timeout"),
+          };
         }
 
         // Check for timeout
@@ -590,17 +598,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         };
       }
 
-			await this.flushFinalBuffer(state, textConfig, typingConfig, context);
+      await this.flushFinalBuffer(state, textConfig, typingConfig, context);
 
-			if (
-				StreamOrchestrator.activeStopRequests.get(context.channel.id)?.requesterId ===
-				"speaker_guard"
-			) {
-				StreamOrchestrator.clearStopRequest(context.channel.id);
-			}
+      if (
+        StreamOrchestrator.activeStopRequests.get(context.channel.id)
+          ?.requesterId === "speaker_guard"
+      ) {
+        StreamOrchestrator.clearStopRequest(context.channel.id);
+      }
 
-			// Complete metrics and return success with message count for empty response detection
-			metrics.endTime = Date.now();
+      // Complete metrics and return success with message count for empty response detection
+      metrics.endTime = Date.now();
 
       // Don't clear stop request here - let the finally block handle it after lock release
 
@@ -612,9 +620,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         status: "completed",
         messageSentCount: state.messageSentCount,
         accumulatedText: state.accumulatedText, // Return accumulated text for short-term memory
-        detailsContent: state.detailsSegments.length > 0
-          ? state.detailsSegments.join("\n\n")
-          : undefined,
+        detailsContent:
+          state.detailsSegments.length > 0
+            ? state.detailsSegments.join("\n\n")
+            : undefined,
         thoughtLog: this.buildThoughtLogPayload(state),
         data: terminalDoneMetadata,
       };
@@ -681,26 +690,26 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             log.info(
               `Stream: Flushing ${state.buffer.length} chars of buffered text before error handling`,
             );
-					await this.flushPendingBuffer(
-						state,
-						textConfig,
-						typingConfig,
-						context,
-					);
-					if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-						return {
-							status: "stopped_by_user",
-							stopReason: StreamOrchestrator.getStopReason(
-								StreamOrchestrator.activeStopRequests.get(context.channel.id),
-							),
-						};
-					}
-				}
-				if (
-					!context.suppressUserErrors &&
-					!isUserImpersonationStreamContext(context)
-				) {
-					await this.handleProviderError(chunk.error, _provider, context);
+            await this.flushPendingBuffer(
+              state,
+              textConfig,
+              typingConfig,
+              context,
+            );
+            if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+              return {
+                status: "stopped_by_user",
+                stopReason: StreamOrchestrator.getStopReason(
+                  StreamOrchestrator.activeStopRequests.get(context.channel.id),
+                ),
+              };
+            }
+          }
+          if (
+            !context.suppressUserErrors &&
+            !isUserImpersonationStreamContext(context)
+          ) {
+            await this.handleProviderError(chunk.error, _provider, context);
           } else {
             log.warn(
               "Stream: Suppressing provider error embed due to retryable failure",
@@ -715,29 +724,30 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         if (chunk.functionCall) {
           // Flush any pending buffer before function call
           if (state.buffer.length > 0) {
-					await this.flushPendingBuffer(
-						state,
-						textConfig,
-						typingConfig,
-						context,
-						true,
-					);
-					if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-						return {
-							status: "stopped_by_user",
-							stopReason: StreamOrchestrator.getStopReason(
-								StreamOrchestrator.activeStopRequests.get(context.channel.id),
-							),
-						};
-					}
-				}
-				return {
-					status: "function_call",
+            await this.flushPendingBuffer(
+              state,
+              textConfig,
+              typingConfig,
+              context,
+              true,
+            );
+            if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+              return {
+                status: "stopped_by_user",
+                stopReason: StreamOrchestrator.getStopReason(
+                  StreamOrchestrator.activeStopRequests.get(context.channel.id),
+                ),
+              };
+            }
+          }
+          return {
+            status: "function_call",
             data: chunk.functionCall,
             accumulatedText: state.accumulatedText,
-            detailsContent: state.detailsSegments.length > 0
-              ? state.detailsSegments.join("\n\n")
-              : undefined,
+            detailsContent:
+              state.detailsSegments.length > 0
+                ? state.detailsSegments.join("\n\n")
+                : undefined,
             thoughtLog: this.buildThoughtLogPayload(state),
           };
         }
@@ -841,21 +851,21 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       processedSomething = false;
       const processingResult = this.processBufferContent(state, config);
 
-			if (processingResult.shouldFlush && processingResult.segmentToFlush) {
-				await this.sendBufferSegment(
-					processingResult.segmentToFlush,
-					textConfig,
+      if (processingResult.shouldFlush && processingResult.segmentToFlush) {
+        await this.sendBufferSegment(
+          processingResult.segmentToFlush,
+          textConfig,
           typingConfig,
           context,
           state,
-				);
+        );
 
-				state.buffer = processingResult.updatedBuffer;
-				if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-					return;
-				}
-				processedSomething = true;
-			}
+        state.buffer = processingResult.updatedBuffer;
+        if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+          return;
+        }
+        processedSomething = true;
+      }
 
       // Update code block state regardless of whether we flushed or not
       // This ensures we properly track when we enter/exit code blocks
@@ -891,19 +901,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         `Stream Seg: Flushing oversized regular buffer at safe breakpoint (total: ${state.buffer.length}, flush: ${segmentToFlush.length}, retain: ${updatedBuffer.length})`,
       );
 
-			await this.sendBufferSegment(
-				segmentToFlush,
-				textConfig,
-				typingConfig,
-				context,
-				state,
-			);
-			state.buffer = updatedBuffer;
-			if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-				return;
-			}
-		}
-	}
+      await this.sendBufferSegment(
+        segmentToFlush,
+        textConfig,
+        typingConfig,
+        context,
+        state,
+      );
+      state.buffer = updatedBuffer;
+      if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+        return;
+      }
+    }
+  }
 
   private deduplicateIncomingTextChunk(
     textContent: string,
@@ -1040,7 +1050,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         }
 
         // Content after </think> returns to the main buffer
-        const afterClose = state.thinkBlockBuffer.slice(closeIdx + "</think>".length);
+        const afterClose = state.thinkBlockBuffer.slice(
+          closeIdx + "</think>".length,
+        );
         state.thinkBlockBuffer = "";
         state.isInsideThinkBlock = false;
         state.buffer += afterClose;
@@ -1107,7 +1119,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         }
 
         // 4. Content after </details> returns to the main buffer
-        const afterClose = state.detailsBlockBuffer.slice(closeIdx + "</details>".length);
+        const afterClose = state.detailsBlockBuffer.slice(
+          closeIdx + "</details>".length,
+        );
         state.detailsBlockBuffer = "";
         state.isInsideDetailsBlock = false;
         state.buffer += afterClose;
@@ -1331,7 +1345,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   ): ChunkProcessingResult {
     // Hold the buffer entirely while accumulating a think or details block — don't flush any content
     if (state.isInsideThinkBlock || state.isInsideDetailsBlock) {
-      return { shouldFlush: false, updatedBuffer: state.buffer, newCodeBlockState: undefined };
+      return {
+        shouldFlush: false,
+        updatedBuffer: state.buffer,
+        newCodeBlockState: undefined,
+      };
     }
 
     if (state.isInsideCodeBlock) {
@@ -1593,46 +1611,46 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     let segmentToSend = prefixedSegment;
     const injectedPrefillThisSegment =
       !wasPrefillInjected && state.prefillInjected;
-		if (
-			injectedPrefillThisSegment &&
-			state.prefillTarget &&
-			/^\s+/.test(strippedSegment)
-		) {
-			segmentToSend = `${state.prefillTarget}${StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL}${strippedSegment}`;
-		}
-		let shouldStopForSpeakerGuard = false;
-		const speakerGuardResult = truncateBeforeRegisteredSpeakerLine(
-			segmentToSend,
-			textConfig.registeredSpeakerNamesLower,
-		);
-		if (speakerGuardResult.stopTriggered) {
-			log.warn(
-				`Stream speaker guard: stopping before speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
-			);
-			segmentToSend = speakerGuardResult.text;
-			shouldStopForSpeakerGuard = true;
-		}
+    if (
+      injectedPrefillThisSegment &&
+      state.prefillTarget &&
+      /^\s+/.test(strippedSegment)
+    ) {
+      segmentToSend = `${state.prefillTarget}${StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL}${strippedSegment}`;
+    }
+    let shouldStopForSpeakerGuard = false;
+    const speakerGuardResult = truncateBeforeRegisteredSpeakerLine(
+      segmentToSend,
+      textConfig.registeredSpeakerNamesLower,
+    );
+    if (speakerGuardResult.stopTriggered) {
+      log.warn(
+        `Stream speaker guard: stopping before speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
+      );
+      segmentToSend = speakerGuardResult.text;
+      shouldStopForSpeakerGuard = true;
+    }
 
-		if (!segmentToSend.trim()) {
-			if (shouldStopForSpeakerGuard) {
-				StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
-			}
-			return;
-		}
+    if (!segmentToSend.trim()) {
+      if (shouldStopForSpeakerGuard) {
+        StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
+      }
+      return;
+    }
 
-		// Send the processed segment
-		await this.sendSegment(
-			segmentToSend,
-			textConfig,
+    // Send the processed segment
+    await this.sendSegment(
+      segmentToSend,
+      textConfig,
       typingConfig,
-			context,
-			state,
-		);
+      context,
+      state,
+    );
 
-		if (shouldStopForSpeakerGuard) {
-			StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
-		}
-	}
+    if (shouldStopForSpeakerGuard) {
+      StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
+    }
+  }
 
   private async sendOutputPrefillIfNeeded(
     context: StreamContext,
@@ -2088,9 +2106,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       });
 
       // Request graceful stop
-			StreamOrchestrator.requestStop(context.channel.id, "flush_limit");
-			return;
-		}
+      StreamOrchestrator.requestStop(context.channel.id, "flush_limit");
+      return;
+    }
 
     try {
       const threadId = resolveWebhookThreadId(context.channel);
@@ -2182,17 +2200,16 @@ export class StreamOrchestrator implements IStreamOrchestrator {
                     parse: ["users", "roles"],
                     repliedUser: false,
                   },
-                  ...(recoveredThreadId
-                    ? { threadId: recoveredThreadId }
-                    : {}),
+                  ...(recoveredThreadId ? { threadId: recoveredThreadId } : {}),
                 },
                 {
                   username: context.personaUsername,
                   avatarUrl: context.personaAvatarUrl,
-                  avatarDataUri:
-                    context.personaAvatarUrl?.startsWith("data:image/")
-                      ? context.personaAvatarUrl
-                      : undefined,
+                  avatarDataUri: context.personaAvatarUrl?.startsWith(
+                    "data:image/",
+                  )
+                    ? context.personaAvatarUrl
+                    : undefined,
                 },
               );
 
@@ -2421,7 +2438,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     // Route any details block content that was still accumulating when the stream ended.
     // Never send incomplete details content to Discord — route to detailsSegments for STM.
     if (state.isInsideDetailsBlock && state.detailsBlockBuffer.trim()) {
-      const detailsContent = StreamOrchestrator.stripSummaryTag(state.detailsBlockBuffer);
+      const detailsContent = StreamOrchestrator.stripSummaryTag(
+        state.detailsBlockBuffer,
+      );
       if (detailsContent) {
         state.detailsSegments.push(detailsContent);
         log.info(
@@ -2456,7 +2475,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
 
     if (state.isInsideDetailsBlock) {
-      const detailsContent = StreamOrchestrator.stripSummaryTag(state.detailsBlockBuffer);
+      const detailsContent = StreamOrchestrator.stripSummaryTag(
+        state.detailsBlockBuffer,
+      );
       if (detailsContent) {
         state.detailsSegments.push(detailsContent);
         log.info(
@@ -2784,92 +2805,92 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   /**
    * Create text processing configuration from stream config and context
    */
-	private createTextProcessingConfig(
-		config: StreamConfig,
-		context: StreamContext,
-	): TextProcessingConfig {
-		const { mentionMap, mentionIdSet } = this.buildMentionLookup(
-			context.contextItems,
-		);
-		this.applyForcedMentions(mentionMap, mentionIdSet, context.forcedMentions);
-		const botName =
-			context.prefixStrippingName ??
-			context.personaUsername ??
-			context.tomoriState.tomori_nickname;
+  private createTextProcessingConfig(
+    config: StreamConfig,
+    context: StreamContext,
+  ): TextProcessingConfig {
+    const { mentionMap, mentionIdSet } = this.buildMentionLookup(
+      context.contextItems,
+    );
+    this.applyForcedMentions(mentionMap, mentionIdSet, context.forcedMentions);
+    const botName =
+      context.prefixStrippingName ??
+      context.personaUsername ??
+      context.tomoriState.tomori_nickname;
 
-		return {
-			humanizerDegree: config.humanizerDegree,
-			emojiUsageEnabled: config.emojiUsageEnabled,
-			emojiStrings: context.emojiStrings || [],
-			mentionMap,
-			mentionIdSet,
-			// Use prefixStrippingName for prefix stripping if provided (e.g., database nickname for user impersonation)
-			// Falls back to personaUsername (webhook display name), then bot's nickname
-			botName,
-			registeredSpeakerNamesLower: this.collectRegisteredSpeakerNames(
-				context.contextItems,
-				botName,
-			),
-			maxMessageLength: config.maxMessageLength,
-			uncensorUnicodeSpacesEnabled:
-				context.tomoriState.config.uncensor_unicode_space_enabled ?? false,
+    return {
+      humanizerDegree: config.humanizerDegree,
+      emojiUsageEnabled: config.emojiUsageEnabled,
+      emojiStrings: context.emojiStrings || [],
+      mentionMap,
+      mentionIdSet,
+      // Use prefixStrippingName for prefix stripping if provided (e.g., database nickname for user impersonation)
+      // Falls back to personaUsername (webhook display name), then bot's nickname
+      botName,
+      registeredSpeakerNamesLower: this.collectRegisteredSpeakerNames(
+        context.contextItems,
+        botName,
+      ),
+      maxMessageLength: config.maxMessageLength,
+      uncensorUnicodeSpacesEnabled:
+        context.tomoriState.config.uncensor_unicode_space_enabled ?? false,
       uncensorSanitizeEnabled:
         context.tomoriState.config.uncensor_sanitize_enabled ?? false,
-		};
-	}
+    };
+  }
 
-	private collectRegisteredSpeakerNames(
-		contextItems: StructuredContextItem[],
-		activeSpeakerName?: string,
-	): Set<string> {
-		const registeredSpeakerNamesLower = new Set<string>();
-		const activeSpeakerNameLower = activeSpeakerName?.trim().toLowerCase();
+  private collectRegisteredSpeakerNames(
+    contextItems: StructuredContextItem[],
+    activeSpeakerName?: string,
+  ): Set<string> {
+    const registeredSpeakerNamesLower = new Set<string>();
+    const activeSpeakerNameLower = activeSpeakerName?.trim().toLowerCase();
 
-		for (const item of contextItems) {
-			if (item.role !== "user" && item.role !== "model") {
-				continue;
-			}
+    for (const item of contextItems) {
+      if (item.role !== "user" && item.role !== "model") {
+        continue;
+      }
 
-			for (const part of item.parts) {
-				if (part.type !== "text") {
-					continue;
-				}
+      for (const part of item.parts) {
+        if (part.type !== "text") {
+          continue;
+        }
 
-				const lines = part.text.split("\n");
-				for (const line of lines) {
-					const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
-					if (!match?.[1]) {
-						continue;
-					}
+        const lines = part.text.split("\n");
+        for (const line of lines) {
+          const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
+          if (!match?.[1]) {
+            continue;
+          }
 
-					const rawName = match[1].trim();
-					if (!rawName) {
-						continue;
-					}
+          const rawName = match[1].trim();
+          if (!rawName) {
+            continue;
+          }
 
-					if (rawName.startsWith("[") || rawName.startsWith("<")) {
-						continue;
-					}
+          if (rawName.startsWith("[") || rawName.startsWith("<")) {
+            continue;
+          }
 
-					const normalizedName = rawName.toLowerCase();
-					if (
-						activeSpeakerNameLower &&
-						normalizedName === activeSpeakerNameLower
-					) {
-						continue;
-					}
+          const normalizedName = rawName.toLowerCase();
+          if (
+            activeSpeakerNameLower &&
+            normalizedName === activeSpeakerNameLower
+          ) {
+            continue;
+          }
 
-					registeredSpeakerNamesLower.add(normalizedName);
-				}
-			}
-		}
+          registeredSpeakerNamesLower.add(normalizedName);
+        }
+      }
+    }
 
-		return registeredSpeakerNamesLower;
-	}
+    return registeredSpeakerNamesLower;
+  }
 
-	private applyForcedMentions(
-		mentionMap: Map<string, string[]>,
-		mentionIdSet: Set<string>,
+  private applyForcedMentions(
+    mentionMap: Map<string, string[]>,
+    mentionIdSet: Set<string>,
     forcedMentions?: Array<{ handle: string; userId: string }>,
   ): void {
     if (!forcedMentions || forcedMentions.length === 0) return;

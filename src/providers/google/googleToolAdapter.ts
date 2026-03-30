@@ -427,15 +427,23 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
                 if (declarations.length > 0) {
                   allFunctionDeclarations.push(...declarations);
-                  log.info(`Added ${declarations.length} guild MCP tool declaration(s) to Google format`);
+                  log.info(
+                    `Added ${declarations.length} guild MCP tool declaration(s) to Google format`,
+                  );
                 }
               }
             } catch (error) {
-              log.warn("Failed to extract guild MCP tool declarations:", error as Error);
+              log.warn(
+                "Failed to extract guild MCP tool declarations:",
+                error as Error,
+              );
             }
           }
         } catch (error) {
-          log.warn("Failed to get guild MCP tools for Google format:", error as Error);
+          log.warn(
+            "Failed to get guild MCP tools for Google format:",
+            error as Error,
+          );
         }
       }
 
@@ -552,9 +560,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
     return convertedSchema;
   }
 
-  private convertObjectSchema(
-    schema: Tool["parameters"],
-  ): GoogleObjectSchema {
+  private convertObjectSchema(schema: Tool["parameters"]): GoogleObjectSchema {
     const convertedSchema = this.convertParameterSchema(schema);
     return {
       ...convertedSchema,

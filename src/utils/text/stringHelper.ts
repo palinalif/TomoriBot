@@ -1164,27 +1164,30 @@ export function replaceMentionHandles(
   });
 
   // Handle @[name] and @[name|id] — LLM hallucination using square brackets instead of curly braces
-  processedText = processedText.replace(/@\[([^\]]+)\]/g, (match, rawHandle) => {
-    const handle = (rawHandle as string).trim();
-    if (!handle) return match;
+  processedText = processedText.replace(
+    /@\[([^\]]+)\]/g,
+    (match, rawHandle) => {
+      const handle = (rawHandle as string).trim();
+      if (!handle) return match;
 
-    const pipeIndex = handle.lastIndexOf("|");
-    if (pipeIndex > -1) {
-      const idPart = handle.slice(pipeIndex + 1).trim();
-      if (/^\d{17,20}$/.test(idPart) && mentionIdSet?.has(idPart)) {
-        return `<@${idPart}>`;
+      const pipeIndex = handle.lastIndexOf("|");
+      if (pipeIndex > -1) {
+        const idPart = handle.slice(pipeIndex + 1).trim();
+        if (/^\d{17,20}$/.test(idPart) && mentionIdSet?.has(idPart)) {
+          return `<@${idPart}>`;
+        }
       }
-    }
 
-    if (/^\d{17,20}$/.test(handle) && mentionIdSet?.has(handle)) {
-      return `<@${handle}>`;
-    }
+      if (/^\d{17,20}$/.test(handle) && mentionIdSet?.has(handle)) {
+        return `<@${handle}>`;
+      }
 
-    const normalizedHandle = handle.toLowerCase();
-    const ids = mentionMap.get(normalizedHandle);
-    if (!ids || ids.length !== 1) return `[${handle}]`;
-    return `<@${ids[0]}>`;
-  });
+      const normalizedHandle = handle.toLowerCase();
+      const ids = mentionMap.get(normalizedHandle);
+      if (!ids || ids.length !== 1) return `[${handle}]`;
+      return `<@${ids[0]}>`;
+    },
+  );
 
   // Handle @name|id format without curly braces (LLM sometimes omits braces)
   processedText = processedText.replace(
@@ -1234,8 +1237,8 @@ export function replaceMentionHandles(
  * @returns Cleaned text suitable for Discord messages
  */
 export function cleanLLMOutput(
-	text: string,
-	botName?: string,
+  text: string,
+  botName?: string,
   emojiStrings?: string[],
   emojiUsageEnabled = true, // New parameter, defaults to true
   mentionMap?: Map<string, string[]>,
@@ -1411,88 +1414,85 @@ export function cleanLLMOutput(
   // 4.5. Convert @{name} handles into mentions when resolvable
   cleanedText = replaceMentionHandles(cleanedText, mentionMap, mentionIdSet);
 
-	// 5. Remove trailing speaker indicator
-	return cleanedText.replace(/\n([^:]+):$/, "");
+  // 5. Remove trailing speaker indicator
+  return cleanedText.replace(/\n([^:]+):$/, "");
 }
 
 const RESERVED_INVALID_SPEAKER_LABELS_LOWER = new Set(["assistant"]);
 
 export function isRegisteredOrReservedSpeakerLabel(
-	rawLabel: string,
-	registeredSpeakerNamesLower?: ReadonlySet<string>,
+  rawLabel: string,
+  registeredSpeakerNamesLower?: ReadonlySet<string>,
 ): boolean {
-	const label = rawLabel.trim();
-	if (!label) {
-		return false;
-	}
-	if (label.length > 64) {
-		return false;
-	}
-	if (label.startsWith("[") || label.startsWith("<")) {
-		return false;
-	}
+  const label = rawLabel.trim();
+  if (!label) {
+    return false;
+  }
+  if (label.length > 64) {
+    return false;
+  }
+  if (label.startsWith("[") || label.startsWith("<")) {
+    return false;
+  }
 
-	const normalizedLabel = label.toLowerCase();
-	return (
-		(registeredSpeakerNamesLower?.has(normalizedLabel) ?? false) ||
-		RESERVED_INVALID_SPEAKER_LABELS_LOWER.has(normalizedLabel)
-	);
+  const normalizedLabel = label.toLowerCase();
+  return (
+    (registeredSpeakerNamesLower?.has(normalizedLabel) ?? false) ||
+    RESERVED_INVALID_SPEAKER_LABELS_LOWER.has(normalizedLabel)
+  );
 }
 
 export function truncateBeforeRegisteredSpeakerLine(
-	text: string,
-	registeredSpeakerNamesLower?: ReadonlySet<string>,
+  text: string,
+  registeredSpeakerNamesLower?: ReadonlySet<string>,
 ): {
-	text: string;
-	stopTriggered: boolean;
-	matchedSpeaker?: string;
+  text: string;
+  stopTriggered: boolean;
+  matchedSpeaker?: string;
 } {
-	if (!text) {
-		return {
-			text,
-			stopTriggered: false,
-		};
-	}
+  if (!text) {
+    return {
+      text,
+      stopTriggered: false,
+    };
+  }
 
-	const speakerLinePattern = /(^|\n+)\s*([^\n:]{1,64}):\s*/g;
-	let match: RegExpExecArray | null = null;
+  const speakerLinePattern = /(^|\n+)\s*([^\n:]{1,64}):\s*/g;
+  let match: RegExpExecArray | null = null;
 
-	while (true) {
-		match = speakerLinePattern.exec(text);
-		if (match === null) {
-			break;
-		}
+  while (true) {
+    match = speakerLinePattern.exec(text);
+    if (match === null) {
+      break;
+    }
 
-		const rawLabel = match[2]?.trim();
-		if (!rawLabel) {
-			continue;
-		}
+    const rawLabel = match[2]?.trim();
+    if (!rawLabel) {
+      continue;
+    }
 
-		if (
-			!isRegisteredOrReservedSpeakerLabel(
-				rawLabel,
-				registeredSpeakerNamesLower,
-			)
-		) {
-			continue;
-		}
+    if (
+      !isRegisteredOrReservedSpeakerLabel(rawLabel, registeredSpeakerNamesLower)
+    ) {
+      continue;
+    }
 
-		return {
-			text: text.slice(0, match.index),
-			stopTriggered: true,
-			matchedSpeaker: rawLabel,
-		};
-	}
+    return {
+      text: text.slice(0, match.index),
+      stopTriggered: true,
+      matchedSpeaker: rawLabel,
+    };
+  }
 
-	return {
-		text,
-		stopTriggered: false,
-	};
+  return {
+    text,
+    stopTriggered: false,
+  };
 }
 
 /** Helper to escape special RegExp characters in a string */
 export function escapeRegExp(s: string): string {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

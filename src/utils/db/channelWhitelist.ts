@@ -45,13 +45,21 @@ export async function checkChannelWhitelist(
 			SELECT COUNT(*) as count FROM channel_whitelist WHERE server_id = ${serverId}
 		`;
 
-    const channelWhitelistCount = Number.parseInt(countRow?.count as string, 10);
+    const channelWhitelistCount = Number.parseInt(
+      countRow?.count as string,
+      10,
+    );
     const hasActiveChannelWhitelist = channelWhitelistCount > 0;
 
     // 3. Check if specific channel is whitelisted
     // For threads: first check the thread itself, then fall back to parent channel
     const [channelRow] = hasActiveChannelWhitelist
-      ? await sql<Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>>`
+      ? await sql<
+          Array<{
+            cooldown_type: CooldownType | null;
+            cooldown_length: number | null;
+          }>
+        >`
 			SELECT cooldown_type, cooldown_length
 			FROM channel_whitelist
 			WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
@@ -59,9 +67,19 @@ export async function checkChannelWhitelist(
       : [null];
 
     // 3a. If channel not whitelisted and this is a thread (parent provided), check parent channel
-    let [parentChannelRow] = [null as { cooldown_type: CooldownType | null; cooldown_length: number | null } | null];
+    let [parentChannelRow] = [
+      null as {
+        cooldown_type: CooldownType | null;
+        cooldown_length: number | null;
+      } | null,
+    ];
     if (!channelRow && parentChannelDiscId && hasActiveChannelWhitelist) {
-      [parentChannelRow] = await sql<Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>>`
+      [parentChannelRow] = await sql<
+        Array<{
+          cooldown_type: CooldownType | null;
+          cooldown_length: number | null;
+        }>
+      >`
 				SELECT cooldown_type, cooldown_length
 				FROM channel_whitelist
 				WHERE server_id = ${serverId} AND channel_disc_id = ${parentChannelDiscId}
@@ -79,17 +97,23 @@ export async function checkChannelWhitelist(
     if (
       isChannelWhitelisted &&
       !hasChannelCooldownOverride &&
-      !(effectiveChannelRow?.cooldown_type === null && effectiveChannelRow?.cooldown_length === null)
+      !(
+        effectiveChannelRow?.cooldown_type === null &&
+        effectiveChannelRow?.cooldown_length === null
+      )
     ) {
-      log.warn("Channel whitelist row has partial cooldown override; falling back to global cooldown", {
-        metadata: {
-          serverDiscId,
-          channelDiscId,
-          parentChannelDiscId,
-          cooldownType: effectiveChannelRow?.cooldown_type ?? null,
-          cooldownLength: effectiveChannelRow?.cooldown_length ?? null,
+      log.warn(
+        "Channel whitelist row has partial cooldown override; falling back to global cooldown",
+        {
+          metadata: {
+            serverDiscId,
+            channelDiscId,
+            parentChannelDiscId,
+            cooldownType: effectiveChannelRow?.cooldown_type ?? null,
+            cooldownLength: effectiveChannelRow?.cooldown_length ?? null,
+          },
         },
-      });
+      );
     }
 
     // 4. Load role whitelist entries for this server
@@ -115,8 +139,7 @@ export async function checkChannelWhitelist(
       }
     }
 
-    const isChannelAllowed =
-      !hasActiveChannelWhitelist || isChannelWhitelisted;
+    const isChannelAllowed = !hasActiveChannelWhitelist || isChannelWhitelisted;
     const isRoleAllowed = !hasActiveRoleWhitelist || isRoleWhitelisted;
     const isTriggerAllowed = isChannelAllowed && isRoleAllowed;
     const hasActiveWhitelist =

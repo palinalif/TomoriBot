@@ -47,7 +47,6 @@ const NAI_INPAINT_PADDING = Number.parseFloat(
   process.env.NAI_INPAINT_PADDING || "0.15",
 );
 
-
 /**
  * Safety settings for Gemini segmentation requests.
  * Set to OFF to fully disable content filtering for segmentation requests.

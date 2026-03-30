@@ -186,7 +186,10 @@ export function isModalFileUploadField(
 export function isModalRadioGroupField(
   component: ModalComponent,
 ): component is ModalRadioGroupField {
-  return "kind" in component && (component as ModalRadioGroupField).kind === "radioGroup";
+  return (
+    "kind" in component &&
+    (component as ModalRadioGroupField).kind === "radioGroup"
+  );
 }
 
 /**
@@ -196,7 +199,10 @@ export function isModalRadioGroupField(
 export function isModalCheckboxGroupField(
   component: ModalComponent,
 ): component is ModalCheckboxGroupField {
-  return "kind" in component && (component as ModalCheckboxGroupField).kind === "checkboxGroup";
+  return (
+    "kind" in component &&
+    (component as ModalCheckboxGroupField).kind === "checkboxGroup"
+  );
 }
 
 /**
@@ -206,7 +212,9 @@ export function isModalCheckboxGroupField(
 export function isModalCheckboxField(
   component: ModalComponent,
 ): component is ModalCheckboxField {
-  return "kind" in component && (component as ModalCheckboxField).kind === "checkbox";
+  return (
+    "kind" in component && (component as ModalCheckboxField).kind === "checkbox"
+  );
 }
 
 /**

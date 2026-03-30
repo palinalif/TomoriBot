@@ -11,10 +11,10 @@ import { keyManager } from "@/utils/security/keyManager";
  * @returns Array of GuildMcpServerRow (may be empty)
  */
 export async function loadGuildMcpServers(
-	serverId: number,
+  serverId: number,
 ): Promise<GuildMcpServerRow[]> {
-	try {
-		const rows = await sql`
+  try {
+    const rows = await sql`
 			SELECT guild_mcp_id, server_id, name, url, auth_token, key_version,
 			       is_enabled, server_type, created_at, updated_at
 			FROM guild_mcp_servers
@@ -22,11 +22,14 @@ export async function loadGuildMcpServers(
 			ORDER BY created_at ASC
 		`;
 
-		return rows as GuildMcpServerRow[];
-	} catch (error) {
-		log.error(`[GuildMcpDb] Failed to load MCP servers for server ${serverId}`, error);
-		return [];
-	}
+    return rows as GuildMcpServerRow[];
+  } catch (error) {
+    log.error(
+      `[GuildMcpDb] Failed to load MCP servers for server ${serverId}`,
+      error,
+    );
+    return [];
+  }
 }
 
 /**
@@ -41,21 +44,21 @@ export async function loadGuildMcpServers(
  * @returns The inserted row, or null on failure (e.g., duplicate name)
  */
 export async function insertGuildMcpServer(
-	serverId: number,
-	name: string,
-	url: string,
-	rawAuthToken?: string,
-	serverType?: string | null,
+  serverId: number,
+  name: string,
+  url: string,
+  rawAuthToken?: string,
+  serverType?: string | null,
 ): Promise<GuildMcpServerRow | null> {
-	try {
-		const currentKey = keyManager.getCurrentKey();
-		const currentVersion = keyManager.getCurrentVersion();
+  try {
+    const currentKey = keyManager.getCurrentKey();
+    const currentVersion = keyManager.getCurrentVersion();
 
-		let row: GuildMcpServerRow;
+    let row: GuildMcpServerRow;
 
-		if (rawAuthToken) {
-			// Encrypt the auth token inline using pgp_sym_encrypt (same pattern as opt_api_keys)
-			const [result] = await sql`
+    if (rawAuthToken) {
+      // Encrypt the auth token inline using pgp_sym_encrypt (same pattern as opt_api_keys)
+      const [result] = await sql`
 				INSERT INTO guild_mcp_servers (server_id, name, url, auth_token, key_version, server_type)
 				VALUES (
 					${serverId},
@@ -67,29 +70,36 @@ export async function insertGuildMcpServer(
 				)
 				RETURNING *
 			`;
-			row = result as GuildMcpServerRow;
-		} else {
-			// No auth token — insert without encryption
-			const [result] = await sql`
+      row = result as GuildMcpServerRow;
+    } else {
+      // No auth token — insert without encryption
+      const [result] = await sql`
 				INSERT INTO guild_mcp_servers (server_id, name, url, server_type)
 				VALUES (${serverId}, ${name}, ${url}, ${serverType ?? null})
 				RETURNING *
 			`;
-			row = result as GuildMcpServerRow;
-		}
+      row = result as GuildMcpServerRow;
+    }
 
-		log.success(`[GuildMcpDb] Registered MCP server "${name}" for server ${serverId}`);
-		return row;
-	} catch (error) {
-		// Unique constraint violation on (server_id, name) is expected when name already exists
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		if (errorMessage.includes("unique") || errorMessage.includes("duplicate")) {
-			log.warn(`[GuildMcpDb] Duplicate MCP server name "${name}" for server ${serverId}`);
-		} else {
-			log.error(`[GuildMcpDb] Failed to insert MCP server "${name}" for server ${serverId}`, error);
-		}
-		return null;
-	}
+    log.success(
+      `[GuildMcpDb] Registered MCP server "${name}" for server ${serverId}`,
+    );
+    return row;
+  } catch (error) {
+    // Unique constraint violation on (server_id, name) is expected when name already exists
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes("unique") || errorMessage.includes("duplicate")) {
+      log.warn(
+        `[GuildMcpDb] Duplicate MCP server name "${name}" for server ${serverId}`,
+      );
+    } else {
+      log.error(
+        `[GuildMcpDb] Failed to insert MCP server "${name}" for server ${serverId}`,
+        error,
+      );
+    }
+    return null;
+  }
 }
 
 /**
@@ -100,24 +110,29 @@ export async function insertGuildMcpServer(
  * @returns True if a row was deleted, false if not found
  */
 export async function deleteGuildMcpServer(
-	serverId: number,
-	name: string,
+  serverId: number,
+  name: string,
 ): Promise<boolean> {
-	try {
-		const result = await sql`
+  try {
+    const result = await sql`
 			DELETE FROM guild_mcp_servers
 			WHERE server_id = ${serverId} AND name = ${name}
 		`;
 
-		const deleted = result.count > 0;
-		if (deleted) {
-			log.success(`[GuildMcpDb] Deleted MCP server "${name}" for server ${serverId}`);
-		}
-		return deleted;
-	} catch (error) {
-		log.error(`[GuildMcpDb] Failed to delete MCP server "${name}" for server ${serverId}`, error);
-		return false;
-	}
+    const deleted = result.count > 0;
+    if (deleted) {
+      log.success(
+        `[GuildMcpDb] Deleted MCP server "${name}" for server ${serverId}`,
+      );
+    }
+    return deleted;
+  } catch (error) {
+    log.error(
+      `[GuildMcpDb] Failed to delete MCP server "${name}" for server ${serverId}`,
+      error,
+    );
+    return false;
+  }
 }
 
 /**
@@ -127,20 +142,21 @@ export async function deleteGuildMcpServer(
  * @param serverId - Internal server_id
  * @returns Count of registered MCP servers
  */
-export async function countGuildMcpServers(
-	serverId: number,
-): Promise<number> {
-	try {
-		const [row] = await sql`
+export async function countGuildMcpServers(serverId: number): Promise<number> {
+  try {
+    const [row] = await sql`
 			SELECT COUNT(*) AS count FROM guild_mcp_servers
 			WHERE server_id = ${serverId}
 		`;
 
-		return Number.parseInt(row?.count as string, 10) || 0;
-	} catch (error) {
-		log.error(`[GuildMcpDb] Failed to count MCP servers for server ${serverId}`, error);
-		return 0;
-	}
+    return Number.parseInt(row?.count as string, 10) || 0;
+  } catch (error) {
+    log.error(
+      `[GuildMcpDb] Failed to count MCP servers for server ${serverId}`,
+      error,
+    );
+    return 0;
+  }
 }
 
 /**
@@ -152,26 +168,31 @@ export async function countGuildMcpServers(
  * @returns True if a row was updated, false if not found
  */
 export async function updateGuildMcpServerEnabled(
-	serverId: number,
-	name: string,
-	enabled: boolean,
+  serverId: number,
+  name: string,
+  enabled: boolean,
 ): Promise<boolean> {
-	try {
-		const result = await sql`
+  try {
+    const result = await sql`
 			UPDATE guild_mcp_servers
 			SET is_enabled = ${enabled}
 			WHERE server_id = ${serverId} AND name = ${name}
 		`;
 
-		const updated = result.count > 0;
-		if (updated) {
-			log.success(`[GuildMcpDb] ${enabled ? "Enabled" : "Disabled"} MCP server "${name}" for server ${serverId}`);
-		}
-		return updated;
-	} catch (error) {
-		log.error(`[GuildMcpDb] Failed to update MCP server enabled state for "${name}" on server ${serverId}`, error);
-		return false;
-	}
+    const updated = result.count > 0;
+    if (updated) {
+      log.success(
+        `[GuildMcpDb] ${enabled ? "Enabled" : "Disabled"} MCP server "${name}" for server ${serverId}`,
+      );
+    }
+    return updated;
+  } catch (error) {
+    log.error(
+      `[GuildMcpDb] Failed to update MCP server enabled state for "${name}" on server ${serverId}`,
+      error,
+    );
+    return false;
+  }
 }
 
 /**
@@ -182,48 +203,57 @@ export async function updateGuildMcpServerEnabled(
  * @returns Decrypted auth token string, or null if no token is stored
  */
 export async function decryptGuildMcpAuthToken(
-	row: GuildMcpServerRow,
+  row: GuildMcpServerRow,
 ): Promise<string | null> {
-	if (!row.auth_token) {
-		return null;
-	}
+  if (!row.auth_token) {
+    return null;
+  }
 
-	try {
-		const keyVersion = row.key_version || 1;
-		const key = keyManager.getKey(keyVersion);
+  try {
+    const keyVersion = row.key_version || 1;
+    const key = keyManager.getKey(keyVersion);
 
-		const [result] = await sql`
+    const [result] = await sql`
 			SELECT pgp_sym_decrypt(${row.auth_token}, ${key}) AS decrypted_token
 		`;
 
-		if (!result?.decrypted_token) {
-			log.warn(`[GuildMcpDb] Decryption returned empty for MCP server "${row.name}"`);
-			return null;
-		}
+    if (!result?.decrypted_token) {
+      log.warn(
+        `[GuildMcpDb] Decryption returned empty for MCP server "${row.name}"`,
+      );
+      return null;
+    }
 
-		const decryptedToken = result.decrypted_token.toString();
+    const decryptedToken = result.decrypted_token.toString();
 
-		// Lazy rotation: re-encrypt with current key version if outdated
-		const currentVersion = keyManager.getCurrentVersion();
-		if (keyVersion !== currentVersion) {
-			log.info(`[GuildMcpDb] Rotating auth token for "${row.name}" from key v${keyVersion} to v${currentVersion}`);
-			const currentKey = keyManager.getCurrentKey();
+    // Lazy rotation: re-encrypt with current key version if outdated
+    const currentVersion = keyManager.getCurrentVersion();
+    if (keyVersion !== currentVersion) {
+      log.info(
+        `[GuildMcpDb] Rotating auth token for "${row.name}" from key v${keyVersion} to v${currentVersion}`,
+      );
+      const currentKey = keyManager.getCurrentKey();
 
-			await sql`
+      await sql`
 				UPDATE guild_mcp_servers
 				SET auth_token = pgp_sym_encrypt(${decryptedToken}, ${currentKey}, 'compress-algo=1, cipher-algo=aes256'),
 				    key_version = ${currentVersion}
 				WHERE guild_mcp_id = ${row.guild_mcp_id}
 			`;
 
-			log.success(`[GuildMcpDb] Key rotation completed for MCP server "${row.name}"`);
-		}
+      log.success(
+        `[GuildMcpDb] Key rotation completed for MCP server "${row.name}"`,
+      );
+    }
 
-		return decryptedToken;
-	} catch (error) {
-		log.error(`[GuildMcpDb] Failed to decrypt auth token for MCP server "${row.name}"`, error);
-		return null;
-	}
+    return decryptedToken;
+  } catch (error) {
+    log.error(
+      `[GuildMcpDb] Failed to decrypt auth token for MCP server "${row.name}"`,
+      error,
+    );
+    return null;
+  }
 }
 
 /**
@@ -232,9 +262,11 @@ export async function decryptGuildMcpAuthToken(
  *
  * @returns Array of GuildMcpServerRow (enabled only)
  */
-export async function loadAllEnabledGuildMcpServers(): Promise<GuildMcpServerRow[]> {
-	try {
-		const rows = await sql`
+export async function loadAllEnabledGuildMcpServers(): Promise<
+  GuildMcpServerRow[]
+> {
+  try {
+    const rows = await sql`
 			SELECT guild_mcp_id, server_id, name, url, auth_token, key_version,
 			       is_enabled, server_type, created_at, updated_at
 			FROM guild_mcp_servers
@@ -242,9 +274,12 @@ export async function loadAllEnabledGuildMcpServers(): Promise<GuildMcpServerRow
 			ORDER BY server_id ASC, created_at ASC
 		`;
 
-		return rows as GuildMcpServerRow[];
-	} catch (error) {
-		log.error("[GuildMcpDb] Failed to load all enabled guild MCP servers", error);
-		return [];
-	}
+    return rows as GuildMcpServerRow[];
+  } catch (error) {
+    log.error(
+      "[GuildMcpDb] Failed to load all enabled guild MCP servers",
+      error,
+    );
+    return [];
+  }
 }

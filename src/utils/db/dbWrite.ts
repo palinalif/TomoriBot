@@ -212,7 +212,10 @@ export async function toggleCrossServerShortTermMemoryOptIn(
   }
 }
 
-function rollAutochatTarget(minThreshold: number, maxThreshold: number): number {
+function rollAutochatTarget(
+  minThreshold: number,
+  maxThreshold: number,
+): number {
   const normalizedMin = Math.max(minThreshold, 0);
   const normalizedMax = Math.max(maxThreshold, normalizedMin);
 
@@ -2009,8 +2012,12 @@ export async function upsertSavedProviderConfig(
   try {
     const provider = config.provider.toLowerCase();
     const fallbackJson = JSON.stringify(config.fallback_llm_ids ?? []);
-    const channelOverridesJson = JSON.stringify(config.channel_llm_overrides ?? []);
-    const personaOverridesJson = JSON.stringify(config.persona_llm_overrides ?? []);
+    const channelOverridesJson = JSON.stringify(
+      config.channel_llm_overrides ?? [],
+    );
+    const personaOverridesJson = JSON.stringify(
+      config.persona_llm_overrides ?? [],
+    );
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     const rows = await sql`
@@ -2130,7 +2137,11 @@ export async function restoreOverridesFromSnapshot(
   channelOverrides: { channel_disc_id: string; llm_id: number }[],
   personaOverrides: { tomori_id: number; llm_id: number }[],
   validChannelIds: Set<string>,
-): Promise<{ channelRestored: number; personaRestored: number; skipped: number }> {
+): Promise<{
+  channelRestored: number;
+  personaRestored: number;
+  skipped: number;
+}> {
   let channelRestored = 0;
   let personaRestored = 0;
   let skipped = 0;

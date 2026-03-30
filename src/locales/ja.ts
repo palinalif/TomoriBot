@@ -235,8 +235,7 @@ export default {
       generating_with_references_description:
         "現在のプロンプトと参照画像を使って画像を作成しています",
       editing_title: "🖌️ 画像を編集中...",
-      editing_description:
-        "参照画像の `{edit_target}` を対象に編集しています",
+      editing_description: "参照画像の `{edit_target}` を対象に編集しています",
       generating_footer:
         "プロバイダーの混雑状況によって少し時間がかかる場合があります",
     },
@@ -245,8 +244,7 @@ export default {
       analyzing_title: "🖼️ 画像を解析中...",
       analyzing_description:
         "現在のモデルはビジョン非対応です。設定されたビジョンモデルを使用して画像を解析しています",
-      analyzing_footer:
-        "画像の数によって少し時間がかかる場合があります",
+      analyzing_footer: "画像の数によって少し時間がかかる場合があります",
     },
 
     gif: {
@@ -3244,11 +3242,14 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         // チェックボックスセレクトメニューの文字列
         select_placeholder: "有効にする権限を選択...",
         select_embed_title: "権限の設定",
-        select_embed_description: "**有効にする**権限を選択してください。チェックあり = 有効、チェックなし = 無効。",
+        select_embed_description:
+          "**有効にする**権限を選択してください。チェックあり = 有効、チェックなし = 無効。",
         no_changes_title: "変更なし",
-        no_changes_description: "すべての権限はすでに選択した値に設定されています。",
+        no_changes_description:
+          "すべての権限はすでに選択した値に設定されています。",
         timed_out_title: "タイムアウト",
-        timed_out_description: "権限メニューがタイムアウトしました。変更は適用されませんでした。",
+        timed_out_description:
+          "権限メニューがタイムアウトしました。変更は適用されませんでした。",
         set_description: `私のためにこの権限を有効または無効にします。`,
         already_set_title: `権限は既に設定済みです`,
         already_enabled_description: `権限 \`{permission_type}\` は既に**有効**です。`,
@@ -3904,11 +3905,14 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         // チェックボックスセレクトメニューの文字列
         select_placeholder: "メンバーに許可することを選択...",
         select_embed_title: "メンバー教育権限",
-        select_embed_description: "管理者以外のメンバーが**教えられる**ことを選択してください。チェックあり = 許可。",
+        select_embed_description:
+          "管理者以外のメンバーが**教えられる**ことを選択してください。チェックあり = 許可。",
         no_changes_title: "変更なし",
-        no_changes_description: "すべての権限はすでに選択した値に設定されています。",
+        no_changes_description:
+          "すべての権限はすでに選択した値に設定されています。",
         timed_out_title: "タイムアウト",
-        timed_out_description: "権限メニューがタイムアウトしました。変更は適用されませんでした。",
+        timed_out_description:
+          "権限メニューがタイムアウトしました。変更は適用されませんでした。",
         set_description: `メンバーに対してこの権限を有効または無効にします。`,
         success_title: `メンバー権限が更新されました`,
         success_description: `**{count}** 件の権限を更新しました。`,

@@ -33,7 +33,7 @@
 
 import { config } from "dotenv";
 import { sql } from "bun";
-import { keyManager } from "@/utils/security/keyManager";
+import { keyManager } from "../src/utils/security/keyManager";
 
 config();
 

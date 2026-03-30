@@ -37,7 +37,10 @@ import {
   type ToolStateForContext,
   getAvailableToolsWithMCP,
 } from "../../tools/toolRegistry";
-import type { StreamingContext, ToolContext } from "../../types/tool/interfaces";
+import type {
+  StreamingContext,
+  ToolContext,
+} from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
@@ -412,8 +415,7 @@ export class OpenrouterProvider
 
     const searchTools = builtInTools.filter(
       (tool) =>
-        tool.category === "search" ||
-        tool.requiresFeatureFlag === "web_search",
+        tool.category === "search" || tool.requiresFeatureFlag === "web_search",
     );
 
     const openrouterAdapter = getOpenrouterToolAdapter();
@@ -585,10 +587,8 @@ export class OpenrouterProvider
     // stored in other_model_codename, with real capabilities in other_model_capabilities.
     if (tomoriState.llm.llm_codename === "other-model") {
       // 1. Check if we have cached capabilities that are fresh (within 7 days)
-      const storedCapabilities = tomoriState.config
-        .other_model_capabilities;
-      const fetchedAt = tomoriState.config
-        .other_model_capabilities_fetched_at;
+      const storedCapabilities = tomoriState.config.other_model_capabilities;
+      const fetchedAt = tomoriState.config.other_model_capabilities_fetched_at;
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
       const isCacheFresh =
         fetchedAt &&

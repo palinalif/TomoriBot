@@ -291,7 +291,8 @@ export async function checkMessageTriggerCooldownWithWhitelist(
     "isThread" in channel &&
     typeof channel.isThread === "function" &&
     channel.isThread();
-  const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+  const parentChannelId =
+    isThread && "parent" in channel ? channel.parent?.id : undefined;
 
   const whitelistStatus = await getCachedWhitelistStatus(
     serverId,
@@ -374,7 +375,8 @@ export async function setMessageTriggerCooldownWithWhitelist(
     "isThread" in channel &&
     typeof channel.isThread === "function" &&
     channel.isThread();
-  const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+  const parentChannelId =
+    isThread && "parent" in channel ? channel.parent?.id : undefined;
 
   const whitelistStatus = await getCachedWhitelistStatus(
     serverId,

@@ -7,7 +7,12 @@ import type {
   Embed,
   Message,
 } from "discord.js";
-import { ChannelType, EmbedBuilder, MessageFlags, TextInputStyle } from "discord.js";
+import {
+  ChannelType,
+  EmbedBuilder,
+  MessageFlags,
+  TextInputStyle,
+} from "discord.js";
 import { localizer, getSupportedLocales } from "@/utils/text/localizer";
 import { ColorCode, log } from "@/utils/misc/logger";
 import {
@@ -903,10 +908,12 @@ export async function execute(
   const summaryType = (modalResult.values[TYPE_FIELD_ID] ||
     "conversation") as CompactSummaryMode;
   // Checkbox Group returns selected values in multiValues; "yes" present = true
-  const refresh =
-    (modalResult.multiValues?.[REFRESH_FIELD_ID] ?? []).includes("yes");
-  const analyzeImages =
-    (modalResult.multiValues?.[ANALYZE_IMAGES_FIELD_ID] ?? []).includes("yes");
+  const refresh = (modalResult.multiValues?.[REFRESH_FIELD_ID] ?? []).includes(
+    "yes",
+  );
+  const analyzeImages = (
+    modalResult.multiValues?.[ANALYZE_IMAGES_FIELD_ID] ?? []
+  ).includes("yes");
   const additionalInstructions =
     modalResult.values[ADDITIONAL_INST_FIELD_ID]?.trim();
 
@@ -1074,9 +1081,7 @@ export async function execute(
       await submitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "general.errors.channel_only_title"),
-            )
+            .setTitle(localizer(locale, "general.errors.channel_only_title"))
             .setDescription(
               localizer(locale, "general.errors.channel_only_description"),
             )
@@ -1214,9 +1219,13 @@ export async function execute(
 
     // Show success — if summary was redirected, tell the user which channel it went to
     const successDescription = targetChannelOption
-      ? localizer(locale, "commands.tool.compact.success_description_redirect", {
-          channel: `<#${targetChannelOption.id}>`,
-        })
+      ? localizer(
+          locale,
+          "commands.tool.compact.success_description_redirect",
+          {
+            channel: `<#${targetChannelOption.id}>`,
+          },
+        )
       : localizer(locale, "commands.tool.compact.success_description");
 
     await submitInteraction.editReply({

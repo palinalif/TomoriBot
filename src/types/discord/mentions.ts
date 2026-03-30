@@ -1,4 +1,4 @@
 export interface ForcedMention {
-	handle: string;
-	userId: string;
+  handle: string;
+  userId: string;
 }

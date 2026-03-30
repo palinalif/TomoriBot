@@ -19,26 +19,26 @@ const DEFAULT_TTL_MINUTES = 120;
 
 /** Public shape returned on cache hit. */
 export interface VoiceTranscriptEntry {
-	/** Raw transcript text, without any system prefix. */
-	transcript: string;
-	/** Whether the audio was produced by the user (STT) or by Tomori (TTS). */
-	source: "user_stt" | "tts";
+  /** Raw transcript text, without any system prefix. */
+  transcript: string;
+  /** Whether the audio was produced by the user (STT) or by Tomori (TTS). */
+  source: "user_stt" | "tts";
 }
 
 interface StoredEntry extends VoiceTranscriptEntry {
-	cachedAt: number;
+  cachedAt: number;
 }
 
 const cache = new Map<string, StoredEntry>();
 
 function getTtlMs(): number {
-	const parsed = Number.parseInt(
-		process.env.VOICE_TRANSCRIPT_CACHE_TTL_MINUTES ?? "",
-		10,
-	);
-	const minutes =
-		Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TTL_MINUTES;
-	return minutes * 60 * 1_000;
+  const parsed = Number.parseInt(
+    process.env.VOICE_TRANSCRIPT_CACHE_TTL_MINUTES ?? "",
+    10,
+  );
+  const minutes =
+    Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TTL_MINUTES;
+  return minutes * 60 * 1_000;
 }
 
 /**
@@ -46,17 +46,17 @@ function getTtlMs(): number {
  * Returns null on miss or expiry (and evicts the stale entry).
  */
 export function getCachedVoiceTranscript(
-	messageId: string,
+  messageId: string,
 ): VoiceTranscriptEntry | null {
-	const entry = cache.get(messageId);
-	if (!entry) return null;
+  const entry = cache.get(messageId);
+  if (!entry) return null;
 
-	if (Date.now() - entry.cachedAt > getTtlMs()) {
-		cache.delete(messageId);
-		return null;
-	}
+  if (Date.now() - entry.cachedAt > getTtlMs()) {
+    cache.delete(messageId);
+    return null;
+  }
 
-	return { transcript: entry.transcript, source: entry.source };
+  return { transcript: entry.transcript, source: entry.source };
 }
 
 /**
@@ -64,9 +64,9 @@ export function getCachedVoiceTranscript(
  * Overwrites any existing entry for the same ID.
  */
 export function setCachedVoiceTranscript(
-	messageId: string,
-	transcript: string,
-	source: "user_stt" | "tts",
+  messageId: string,
+  transcript: string,
+  source: "user_stt" | "tts",
 ): void {
-	cache.set(messageId, { transcript, source, cachedAt: Date.now() });
+  cache.set(messageId, { transcript, source, cachedAt: Date.now() });
 }

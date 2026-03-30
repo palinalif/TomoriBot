@@ -442,9 +442,7 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
   /**
    * Convert generic parameter type to OpenAI type
    */
-  private cloneParameterSchema(
-    schema: Tool["parameters"],
-  ): OpenAIObjectSchema {
+  private cloneParameterSchema(schema: Tool["parameters"]): OpenAIObjectSchema {
     return JSON.parse(JSON.stringify(schema)) as OpenAIObjectSchema;
   }
 

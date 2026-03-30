@@ -16,14 +16,14 @@
  */
 
 import {
-	ContextItemTag,
-	type StructuredContextItem,
+  ContextItemTag,
+  type StructuredContextItem,
 } from "@/types/misc/context";
 import type { CachedPresetData } from "@/utils/cache/stPresetCache";
 import {
-	resolvePresetMacros,
-	type MacroContext,
-	type ResolvedNode,
+  resolvePresetMacros,
+  type MacroContext,
+  type ResolvedNode,
 } from "./stPresetEngine";
 import { convertMentions } from "./contextBuilder";
 import { log } from "@/utils/misc/logger";
@@ -36,30 +36,30 @@ import type { Client } from "discord.js";
  * These are extracted from the native buildContext() params.
  */
 interface PresetMacroParams {
-	/** Triggerer's display name for {{user}} */
-	triggererName: string;
-	/** Bot/persona display name for {{char}} */
-	tomoriNickname: string;
-	/** Personality attributes for {{personality}} */
-	tomoriAttributes: string[];
-	/** Persona-specific prompt for {{description}} */
-	personaPrompt: string | null | undefined;
-	/** Sample dialogues in/out for {{mesExamples}} */
-	sampleDialoguesIn: string[];
-	sampleDialoguesOut: string[];
-	/** Most recent user message for {{lastChatMessage}} */
-	lastUserMessage: string;
+  /** Triggerer's display name for {{user}} */
+  triggererName: string;
+  /** Bot/persona display name for {{char}} */
+  tomoriNickname: string;
+  /** Personality attributes for {{personality}} */
+  tomoriAttributes: string[];
+  /** Persona-specific prompt for {{description}} */
+  personaPrompt: string | null | undefined;
+  /** Sample dialogues in/out for {{mesExamples}} */
+  sampleDialoguesIn: string[];
+  sampleDialoguesOut: string[];
+  /** Most recent user message for {{lastChatMessage}} */
+  lastUserMessage: string;
 }
 
 /**
  * Parameters needed for converting mentions in custom node content.
  */
 interface MentionParams {
-	client: Client;
-	guildId: string;
-	triggererName: string;
-	botName: string;
-	personalMemoriesEnabled: boolean;
+  client: Client;
+  guildId: string;
+  triggererName: string;
+  botName: string;
+  personalMemoriesEnabled: boolean;
 }
 
 // ─── Marker → MetadataTag Mapping ───────────────────────────────────────
@@ -69,18 +69,18 @@ interface MentionParams {
  * When the preset walker encounters a marker, it pulls items from the corresponding bucket.
  */
 const MARKER_TO_TAGS: Record<string, ContextItemTag[]> = {
-	// Primary character blocks
-	main: [ContextItemTag.SYSTEM_HUMANIZER_RULES],
-	charDescription: [ContextItemTag.SYSTEM_HUMANIZER_RULES], // Same tag as main — persona prompt also uses this
-	charPersonality: [ContextItemTag.SYSTEM_PERSONALITY],
+  // Primary character blocks
+  main: [ContextItemTag.SYSTEM_HUMANIZER_RULES],
+  charDescription: [ContextItemTag.SYSTEM_HUMANIZER_RULES], // Same tag as main — persona prompt also uses this
+  charPersonality: [ContextItemTag.SYSTEM_PERSONALITY],
 
-	// Dialogue
-	dialogueExamples: [ContextItemTag.DIALOGUE_SAMPLE],
-	chatHistory: [ContextItemTag.DIALOGUE_HISTORY],
+  // Dialogue
+  dialogueExamples: [ContextItemTag.DIALOGUE_SAMPLE],
+  chatHistory: [ContextItemTag.DIALOGUE_HISTORY],
 
-	// World info / RAG
-	worldInfoBefore: [ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS],
-	worldInfoAfter: [ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS],
+  // World info / RAG
+  worldInfoBefore: [ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS],
+  worldInfoAfter: [ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS],
 };
 
 /**
@@ -88,15 +88,15 @@ const MARKER_TO_TAGS: Record<string, ContextItemTag[]> = {
  * These are always included and flushed at anchor points.
  */
 const TOMORI_ONLY_KNOWLEDGE_TAGS = new Set([
-	ContextItemTag.KNOWLEDGE_SERVER_INFO,
-	ContextItemTag.KNOWLEDGE_SERVER_MEMORIES,
-	ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
-	ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
+  ContextItemTag.KNOWLEDGE_SERVER_INFO,
+  ContextItemTag.KNOWLEDGE_SERVER_MEMORIES,
+  ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
+  ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
 ]);
 
 const TOMORI_ONLY_DIALOGUE_TAGS = new Set([
-	ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION,
-	ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY,
+  ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION,
+  ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY,
 ]);
 
 // ─── Anchor Markers ─────────────────────────────────────────────────────
@@ -107,9 +107,9 @@ const TOMORI_ONLY_DIALOGUE_TAGS = new Set([
  * These are flushed AFTER the anchor marker's items.
  */
 const KNOWLEDGE_FLUSH_ANCHORS = new Set([
-	"charPersonality",
-	"charDescription",
-	"main",
+  "charPersonality",
+  "charDescription",
+  "main",
 ]);
 
 /**
@@ -117,10 +117,7 @@ const KNOWLEDGE_FLUSH_ANCHORS = new Set([
  * (users in conversation, STM).
  * These are flushed BEFORE the anchor marker's items.
  */
-const DIALOGUE_FLUSH_ANCHORS = new Set([
-	"dialogueExamples",
-	"chatHistory",
-]);
+const DIALOGUE_FLUSH_ANCHORS = new Set(["dialogueExamples", "chatHistory"]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -131,24 +128,24 @@ const DIALOGUE_FLUSH_ANCHORS = new Set([
  * @returns MacroContext for the preset template engine
  */
 function buildMacroContext(params: PresetMacroParams): MacroContext {
-	// Format sample dialogues for {{mesExamples}} macro
-	const mesExamples: string[] = [];
-	for (let i = 0; i < params.sampleDialoguesIn.length; i++) {
-		const userLine = params.sampleDialoguesIn[i];
-		const modelLine = params.sampleDialoguesOut[i];
-		if (userLine) mesExamples.push(`<START>\n${userLine}`);
-		if (modelLine) mesExamples.push(`${params.tomoriNickname}: ${modelLine}`);
-	}
+  // Format sample dialogues for {{mesExamples}} macro
+  const mesExamples: string[] = [];
+  for (let i = 0; i < params.sampleDialoguesIn.length; i++) {
+    const userLine = params.sampleDialoguesIn[i];
+    const modelLine = params.sampleDialoguesOut[i];
+    if (userLine) mesExamples.push(`<START>\n${userLine}`);
+    if (modelLine) mesExamples.push(`${params.tomoriNickname}: ${modelLine}`);
+  }
 
-	return {
-		userName: params.triggererName,
-		charName: params.tomoriNickname,
-		personality: params.tomoriAttributes.join("\n"),
-		description: params.personaPrompt ?? "",
-		scenario: "", // No TomoriBot equivalent
-		mesExamples: mesExamples.join("\n"),
-		lastChatMessage: params.lastUserMessage,
-	};
+  return {
+    userName: params.triggererName,
+    charName: params.tomoriNickname,
+    personality: params.tomoriAttributes.join("\n"),
+    description: params.personaPrompt ?? "",
+    scenario: "", // No TomoriBot equivalent
+    mesExamples: mesExamples.join("\n"),
+    lastChatMessage: params.lastUserMessage,
+  };
 }
 
 /**
@@ -160,21 +157,24 @@ function buildMacroContext(params: PresetMacroParams): MacroContext {
  * @returns Map of tag → array of items
  */
 function groupByTag(
-	contextItems: StructuredContextItem[],
+  contextItems: StructuredContextItem[],
 ): Map<ContextItemTag | "untagged", StructuredContextItem[]> {
-	const buckets = new Map<ContextItemTag | "untagged", StructuredContextItem[]>();
+  const buckets = new Map<
+    ContextItemTag | "untagged",
+    StructuredContextItem[]
+  >();
 
-	for (const item of contextItems) {
-		const key = item.metadataTag ?? "untagged";
-		const bucket = buckets.get(key);
-		if (bucket) {
-			bucket.push(item);
-		} else {
-			buckets.set(key, [item]);
-		}
-	}
+  for (const item of contextItems) {
+    const key = item.metadataTag ?? "untagged";
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      buckets.set(key, [item]);
+    }
+  }
 
-	return buckets;
+  return buckets;
 }
 
 /**
@@ -185,12 +185,12 @@ function groupByTag(
  * @returns Array of items (empty if bucket doesn't exist or is exhausted)
  */
 function pullBucket(
-	buckets: Map<ContextItemTag | "untagged", StructuredContextItem[]>,
-	tag: ContextItemTag,
+  buckets: Map<ContextItemTag | "untagged", StructuredContextItem[]>,
+  tag: ContextItemTag,
 ): StructuredContextItem[] {
-	const items = buckets.get(tag) ?? [];
-	buckets.delete(tag); // Consume the bucket
-	return items;
+  const items = buckets.get(tag) ?? [];
+  buckets.delete(tag); // Consume the bucket
+  return items;
 }
 
 /**
@@ -204,19 +204,19 @@ function pullBucket(
  * @returns The first item, or null if the bucket is empty
  */
 function pullFirstFromBucket(
-	buckets: Map<ContextItemTag | "untagged", StructuredContextItem[]>,
-	tag: ContextItemTag,
+  buckets: Map<ContextItemTag | "untagged", StructuredContextItem[]>,
+  tag: ContextItemTag,
 ): StructuredContextItem | null {
-	const items = buckets.get(tag);
-	if (!items || items.length === 0) return null;
+  const items = buckets.get(tag);
+  if (!items || items.length === 0) return null;
 
-	// biome-ignore lint/style/noNonNullAssertion: items.length > 0 is checked above, shift() always returns a value
-	const first = items.shift()!;
-	// If bucket is now empty, delete it
-	if (items.length === 0) {
-		buckets.delete(tag);
-	}
-	return first;
+  // biome-ignore lint/style/noNonNullAssertion: items.length > 0 is checked above, shift() always returns a value
+  const first = items.shift()!;
+  // If bucket is now empty, delete it
+  if (items.length === 0) {
+    buckets.delete(tag);
+  }
+  return first;
 }
 
 /**
@@ -232,48 +232,51 @@ function pullFirstFromBucket(
  * @param injections - Array of { depth, content } pairs, already sorted by depth ascending then injection_order ascending
  */
 function batchMergeDepthInjections(
-	contextItems: StructuredContextItem[],
-	injections: Array<{ depth: number; content: string; name: string }>,
+  contextItems: StructuredContextItem[],
+  injections: Array<{ depth: number; content: string; name: string }>,
 ): void {
-	// 1. Find all DIALOGUE_HISTORY items and their indices
-	const historyIndices: number[] = [];
-	for (let i = 0; i < contextItems.length; i++) {
-		if (contextItems[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY) {
-			historyIndices.push(i);
-		}
-	}
+  // 1. Find all DIALOGUE_HISTORY items and their indices
+  const historyIndices: number[] = [];
+  for (let i = 0; i < contextItems.length; i++) {
+    if (contextItems[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY) {
+      historyIndices.push(i);
+    }
+  }
 
-	if (historyIndices.length === 0) {
-		log.warn(
-			`[Preset Builder] Cannot merge ${injections.length} depth injection(s) — no dialogue history items found`,
-		);
-		return;
-	}
+  if (historyIndices.length === 0) {
+    log.warn(
+      `[Preset Builder] Cannot merge ${injections.length} depth injection(s) — no dialogue history items found`,
+    );
+    return;
+  }
 
-	// 2. Group injections by their target context index (clamped depth → actual array index)
-	const groupedByTarget = new Map<number, string[]>();
+  // 2. Group injections by their target context index (clamped depth → actual array index)
+  const groupedByTarget = new Map<number, string[]>();
 
-	for (const injection of injections) {
-		const targetHistoryIndex = historyIndices.length - 1 - injection.depth;
-		const clampedIndex = Math.max(0, Math.min(targetHistoryIndex, historyIndices.length - 1));
-		const actualIndex = historyIndices[clampedIndex];
+  for (const injection of injections) {
+    const targetHistoryIndex = historyIndices.length - 1 - injection.depth;
+    const clampedIndex = Math.max(
+      0,
+      Math.min(targetHistoryIndex, historyIndices.length - 1),
+    );
+    const actualIndex = historyIndices[clampedIndex];
 
-		const group = groupedByTarget.get(actualIndex);
-		if (group) {
-			group.push(injection.content);
-		} else {
-			groupedByTarget.set(actualIndex, [injection.content]);
-		}
-	}
+    const group = groupedByTarget.get(actualIndex);
+    if (group) {
+      group.push(injection.content);
+    } else {
+      groupedByTarget.set(actualIndex, [injection.content]);
+    }
+  }
 
-	// 3. Append one combined [System: ...] text part per target item
-	for (const [actualIndex, contents] of groupedByTarget) {
-		const combinedText = contents.join("\n");
-		contextItems[actualIndex].parts.push({
-			type: "text",
-			text: `\n[System: ${combinedText}]`,
-		});
-	}
+  // 3. Append one combined [System: ...] text part per target item
+  for (const [actualIndex, contents] of groupedByTarget) {
+    const combinedText = contents.join("\n");
+    contextItems[actualIndex].parts.push({
+      type: "text",
+      text: `\n[System: ${combinedText}]`,
+    });
+  }
 }
 
 // ─── Main Export ─────────────────────────────────────────────────────────
@@ -300,239 +303,246 @@ function batchMergeDepthInjections(
  * @returns Reassembled context in the same format as buildContext()
  */
 export async function reassembleWithPreset(
-	nativeOutput: {
-		contextItems: StructuredContextItem[];
-		tailDirectives: string[];
-		uncensorDirective?: string;
-	},
-	presetData: CachedPresetData,
-	macroParams: PresetMacroParams,
-	mentionParams: MentionParams,
+  nativeOutput: {
+    contextItems: StructuredContextItem[];
+    tailDirectives: string[];
+    uncensorDirective?: string;
+  },
+  presetData: CachedPresetData,
+  macroParams: PresetMacroParams,
+  mentionParams: MentionParams,
 ): Promise<{
-	contextItems: StructuredContextItem[];
-	tailDirectives: string[];
-	uncensorDirective?: string;
+  contextItems: StructuredContextItem[];
+  tailDirectives: string[];
+  uncensorDirective?: string;
 }> {
-	const { nodes } = presetData;
+  const { nodes } = presetData;
 
-	// ── Step 1: Resolve preset macros ──
-	const macroContext = buildMacroContext(macroParams);
-	const { resolved, expandedContentMacros } = resolvePresetMacros(
-		nodes,
-		macroContext,
-	);
+  // ── Step 1: Resolve preset macros ──
+  const macroContext = buildMacroContext(macroParams);
+  const { resolved, expandedContentMacros } = resolvePresetMacros(
+    nodes,
+    macroContext,
+  );
 
-	// ── Step 2: Group native items into buckets ──
-	const buckets = groupByTag(nativeOutput.contextItems);
+  // ── Step 2: Group native items into buckets ──
+  const buckets = groupByTag(nativeOutput.contextItems);
 
-	// ── Step 3: Separate nodes by injection position ──
-	const systemNodes: ResolvedNode[] = [];
-	const depthNodes: ResolvedNode[] = [];
+  // ── Step 3: Separate nodes by injection position ──
+  const systemNodes: ResolvedNode[] = [];
+  const depthNodes: ResolvedNode[] = [];
 
-	for (const node of resolved) {
-		if (!node.is_enabled) continue;
+  for (const node of resolved) {
+    if (!node.is_enabled) continue;
 
-		if (node.injection_position === 1) {
-			depthNodes.push(node);
-		} else {
-			systemNodes.push(node);
-		}
-	}
+    if (node.injection_position === 1) {
+      depthNodes.push(node);
+    } else {
+      systemNodes.push(node);
+    }
+  }
 
-	// Sort depth nodes: by depth ascending (matching ST's bottom-to-top processing),
-	// then injection_order ascending for same-depth nodes
-	depthNodes.sort((a, b) => {
-		if (a.injection_depth !== b.injection_depth) {
-			return a.injection_depth - b.injection_depth; // Lower depth first (closer to end of history)
-		}
-		return a.injection_order - b.injection_order;
-	});
+  // Sort depth nodes: by depth ascending (matching ST's bottom-to-top processing),
+  // then injection_order ascending for same-depth nodes
+  depthNodes.sort((a, b) => {
+    if (a.injection_depth !== b.injection_depth) {
+      return a.injection_depth - b.injection_depth; // Lower depth first (closer to end of history)
+    }
+    return a.injection_order - b.injection_order;
+  });
 
-	// ── Step 4: Walk system-position nodes and build output ──
-	const contextItems: StructuredContextItem[] = [];
-	let knowledgeFlushed = false;
-	let dialogueFlushed = false;
+  // ── Step 4: Walk system-position nodes and build output ──
+  const contextItems: StructuredContextItem[] = [];
+  let knowledgeFlushed = false;
+  let dialogueFlushed = false;
 
-	/**
-	 * Flush TomoriBot-only knowledge blocks (server info, memories, emojis, stickers).
-	 * Called once at the first knowledge anchor marker.
-	 */
-	const flushKnowledgeBlocks = () => {
-		if (knowledgeFlushed) return;
-		knowledgeFlushed = true;
+  /**
+   * Flush TomoriBot-only knowledge blocks (server info, memories, emojis, stickers).
+   * Called once at the first knowledge anchor marker.
+   */
+  const flushKnowledgeBlocks = () => {
+    if (knowledgeFlushed) return;
+    knowledgeFlushed = true;
 
-		for (const tag of TOMORI_ONLY_KNOWLEDGE_TAGS) {
-			contextItems.push(...pullBucket(buckets, tag));
-		}
-	};
+    for (const tag of TOMORI_ONLY_KNOWLEDGE_TAGS) {
+      contextItems.push(...pullBucket(buckets, tag));
+    }
+  };
 
-	/**
-	 * Flush TomoriBot-only dialogue-adjacent blocks (users in conversation, STM).
-	 * Called once before the first dialogue anchor marker.
-	 */
-	const flushDialogueBlocks = () => {
-		if (dialogueFlushed) return;
-		dialogueFlushed = true;
+  /**
+   * Flush TomoriBot-only dialogue-adjacent blocks (users in conversation, STM).
+   * Called once before the first dialogue anchor marker.
+   */
+  const flushDialogueBlocks = () => {
+    if (dialogueFlushed) return;
+    dialogueFlushed = true;
 
-		for (const tag of TOMORI_ONLY_DIALOGUE_TAGS) {
-			contextItems.push(...pullBucket(buckets, tag));
-		}
+    for (const tag of TOMORI_ONLY_DIALOGUE_TAGS) {
+      contextItems.push(...pullBucket(buckets, tag));
+    }
 
-		// Also flush RAG if it hasn't been consumed by a worldInfo marker
-		const ragItems = pullBucket(buckets, ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS);
-		if (ragItems.length > 0) {
-			contextItems.push(...ragItems);
-		}
-	};
+    // Also flush RAG if it hasn't been consumed by a worldInfo marker
+    const ragItems = pullBucket(
+      buckets,
+      ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS,
+    );
+    if (ragItems.length > 0) {
+      contextItems.push(...ragItems);
+    }
+  };
 
-	for (const node of systemNodes) {
-		if (node.is_marker) {
-			// ── Marker node: pull from the corresponding native bucket ──
-			const markerTags = MARKER_TO_TAGS[node.identifier];
+  for (const node of systemNodes) {
+    if (node.is_marker) {
+      // ── Marker node: pull from the corresponding native bucket ──
+      const markerTags = MARKER_TO_TAGS[node.identifier];
 
-			// Log unrecognized markers for debugging (ST presets may have markers we don't handle)
-			if (!markerTags) {
-				log.warn(
-					`[Preset Builder] Unrecognized marker "${node.identifier}" (node_order ${node.node_order}) — skipping`,
-				);
-			}
+      // Log unrecognized markers for debugging (ST presets may have markers we don't handle)
+      if (!markerTags) {
+        log.warn(
+          `[Preset Builder] Unrecognized marker "${node.identifier}" (node_order ${node.node_order}) — skipping`,
+        );
+      }
 
-			// Handle special markers that share the SYSTEM_HUMANIZER_RULES tag.
-			// The native builder puts system prompt + persona prompt under this single tag.
-			// `main` takes only the first item (system prompt), `charDescription` takes the rest (persona).
-			if (node.identifier === "main") {
-				if (markerTags) {
-					for (const tag of markerTags) {
-						const firstItem = pullFirstFromBucket(buckets, tag);
-						if (firstItem) contextItems.push(firstItem);
-					}
-				}
-				if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
-					flushKnowledgeBlocks();
-				}
-				continue;
-			}
+      // Handle special markers that share the SYSTEM_HUMANIZER_RULES tag.
+      // The native builder puts system prompt + persona prompt under this single tag.
+      // `main` takes only the first item (system prompt), `charDescription` takes the rest (persona).
+      if (node.identifier === "main") {
+        if (markerTags) {
+          for (const tag of markerTags) {
+            const firstItem = pullFirstFromBucket(buckets, tag);
+            if (firstItem) contextItems.push(firstItem);
+          }
+        }
+        if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
+          flushKnowledgeBlocks();
+        }
+        continue;
+      }
 
-			if (node.identifier === "charDescription") {
-				// If description was expanded via {{description}} macro in a custom node, skip to avoid duplication
-				if (expandedContentMacros.has("description")) {
-					if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
-						flushKnowledgeBlocks();
-					}
-					continue;
-				}
-				// Pull remaining SYSTEM_HUMANIZER_RULES items (persona prompt, etc.)
-				if (markerTags) {
-					for (const tag of markerTags) {
-						contextItems.push(...pullBucket(buckets, tag));
-					}
-				}
-				if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
-					flushKnowledgeBlocks();
-				}
-				continue;
-			}
+      if (node.identifier === "charDescription") {
+        // If description was expanded via {{description}} macro in a custom node, skip to avoid duplication
+        if (expandedContentMacros.has("description")) {
+          if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
+            flushKnowledgeBlocks();
+          }
+          continue;
+        }
+        // Pull remaining SYSTEM_HUMANIZER_RULES items (persona prompt, etc.)
+        if (markerTags) {
+          for (const tag of markerTags) {
+            contextItems.push(...pullBucket(buckets, tag));
+          }
+        }
+        if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
+          flushKnowledgeBlocks();
+        }
+        continue;
+      }
 
-			if (node.identifier === "charPersonality") {
-				// If personality was expanded via {{personality}} macro in a custom node, skip the native block
-				if (expandedContentMacros.has("personality")) {
-					// Still flush knowledge blocks at this anchor
-					if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
-						flushKnowledgeBlocks();
-					}
-					continue;
-				}
-			}
+      if (node.identifier === "charPersonality") {
+        // If personality was expanded via {{personality}} macro in a custom node, skip the native block
+        if (expandedContentMacros.has("personality")) {
+          // Still flush knowledge blocks at this anchor
+          if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
+            flushKnowledgeBlocks();
+          }
+          continue;
+        }
+      }
 
-			// Flush dialogue-adjacent blocks BEFORE dialogue markers
-			if (DIALOGUE_FLUSH_ANCHORS.has(node.identifier)) {
-				flushDialogueBlocks();
-			}
+      // Flush dialogue-adjacent blocks BEFORE dialogue markers
+      if (DIALOGUE_FLUSH_ANCHORS.has(node.identifier)) {
+        flushDialogueBlocks();
+      }
 
-			// Pull items from the marker's bucket(s)
-			if (markerTags) {
-				for (const tag of markerTags) {
-					contextItems.push(...pullBucket(buckets, tag));
-				}
-			}
+      // Pull items from the marker's bucket(s)
+      if (markerTags) {
+        for (const tag of markerTags) {
+          contextItems.push(...pullBucket(buckets, tag));
+        }
+      }
 
-			// Flush knowledge blocks AFTER knowledge anchor markers
-			if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
-				flushKnowledgeBlocks();
-			}
-		} else if (node.content.length > 0) {
-			// ── Custom node: create a new StructuredContextItem ──
-			// Resolve identity macros ({{user}}, {{char}}) via convertMentions
-			const resolvedContent = await convertMentions(
-				node.content,
-				mentionParams.client,
-				mentionParams.guildId,
-				mentionParams.triggererName, // Preset custom nodes should resolve {{user}} to the actual triggerer
-				mentionParams.botName,
-				mentionParams.personalMemoriesEnabled,
-			);
+      // Flush knowledge blocks AFTER knowledge anchor markers
+      if (KNOWLEDGE_FLUSH_ANCHORS.has(node.identifier)) {
+        flushKnowledgeBlocks();
+      }
+    } else if (node.content.length > 0) {
+      // ── Custom node: create a new StructuredContextItem ──
+      // Resolve identity macros ({{user}}, {{char}}) via convertMentions
+      const resolvedContent = await convertMentions(
+        node.content,
+        mentionParams.client,
+        mentionParams.guildId,
+        mentionParams.triggererName, // Preset custom nodes should resolve {{user}} to the actual triggerer
+        mentionParams.botName,
+        mentionParams.personalMemoriesEnabled,
+      );
 
-			contextItems.push({
-				role: node.role,
-				parts: [{ type: "text", text: resolvedContent }],
-				// No metadataTag — these are preset-custom items
-			});
-		}
-	}
+      contextItems.push({
+        role: node.role,
+        parts: [{ type: "text", text: resolvedContent }],
+        // No metadataTag — these are preset-custom items
+      });
+    }
+  }
 
-	// ── Step 5: Flush any remaining TomoriBot-only blocks ──
-	// If the preset's node order didn't include the anchor markers,
-	// append remaining blocks before dialogue history.
-	flushKnowledgeBlocks();
-	flushDialogueBlocks();
+  // ── Step 5: Flush any remaining TomoriBot-only blocks ──
+  // If the preset's node order didn't include the anchor markers,
+  // append remaining blocks before dialogue history.
+  flushKnowledgeBlocks();
+  flushDialogueBlocks();
 
-	// Append any remaining unconsumed native items (edge case safety)
-	for (const [_tag, items] of buckets) {
-		if (items.length > 0) {
-			contextItems.push(...items);
-		}
-	}
+  // Append any remaining unconsumed native items (edge case safety)
+  for (const [_tag, items] of buckets) {
+    if (items.length > 0) {
+      contextItems.push(...items);
+    }
+  }
 
-	// ── Step 6: Process depth-injection nodes ──
-	// These merge INTO existing dialogue history items rather than creating new messages.
-	// Same-depth injections are batched into a single [System: ...] block to reduce
-	// token waste and match SillyTavern's contiguous injection behavior.
-	const resolvedInjections: Array<{ depth: number; content: string; name: string }> = [];
+  // ── Step 6: Process depth-injection nodes ──
+  // These merge INTO existing dialogue history items rather than creating new messages.
+  // Same-depth injections are batched into a single [System: ...] block to reduce
+  // token waste and match SillyTavern's contiguous injection behavior.
+  const resolvedInjections: Array<{
+    depth: number;
+    content: string;
+    name: string;
+  }> = [];
 
-	for (const depthNode of depthNodes) {
-		if (depthNode.content.length === 0) continue;
+  for (const depthNode of depthNodes) {
+    if (depthNode.content.length === 0) continue;
 
-		// Resolve identity macros in depth-injected content
-		const resolvedContent = await convertMentions(
-			depthNode.content,
-			mentionParams.client,
-			mentionParams.guildId,
-			mentionParams.triggererName,
-			mentionParams.botName,
-			mentionParams.personalMemoriesEnabled,
-		);
+    // Resolve identity macros in depth-injected content
+    const resolvedContent = await convertMentions(
+      depthNode.content,
+      mentionParams.client,
+      mentionParams.guildId,
+      mentionParams.triggererName,
+      mentionParams.botName,
+      mentionParams.personalMemoriesEnabled,
+    );
 
-		resolvedInjections.push({
-			depth: depthNode.injection_depth,
-			content: resolvedContent,
-			name: depthNode.name,
-		});
-	}
+    resolvedInjections.push({
+      depth: depthNode.injection_depth,
+      content: resolvedContent,
+      name: depthNode.name,
+    });
+  }
 
-	if (resolvedInjections.length > 0) {
-		batchMergeDepthInjections(contextItems, resolvedInjections);
-	}
+  if (resolvedInjections.length > 0) {
+    batchMergeDepthInjections(contextItems, resolvedInjections);
+  }
 
-	log.info(
-		`[Preset Builder] Reassembled ${contextItems.length} context items using preset "${presetData.preset.preset_name}" ` +
-		`(${systemNodes.length} system nodes, ${depthNodes.length} depth injections)`,
-	);
+  log.info(
+    `[Preset Builder] Reassembled ${contextItems.length} context items using preset "${presetData.preset.preset_name}" ` +
+      `(${systemNodes.length} system nodes, ${depthNodes.length} depth injections)`,
+  );
 
-	// ── Step 7: Return in the same format ──
-	// Tail directives and uncensor directive pass through unchanged
-	return {
-		contextItems,
-		tailDirectives: nativeOutput.tailDirectives,
-		uncensorDirective: nativeOutput.uncensorDirective,
-	};
+  // ── Step 7: Return in the same format ──
+  // Tail directives and uncensor directive pass through unchanged
+  return {
+    contextItems,
+    tailDirectives: nativeOutput.tailDirectives,
+    uncensorDirective: nativeOutput.uncensorDirective,
+  };
 }

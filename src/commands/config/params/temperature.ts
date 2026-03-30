@@ -88,10 +88,7 @@ export async function execute(
     const temperatureValue = normalizeTemperature(rawValue);
 
     // 3. Additional validation (Discord already handles min/max, but just in case)
-    if (
-      rawValue < TEMPERATURE_MIN ||
-      rawValue > TEMPERATURE_INPUT_MAX
-    ) {
+    if (rawValue < TEMPERATURE_MIN || rawValue > TEMPERATURE_INPUT_MAX) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.temperature.invalid_value_title",
         descriptionKey:

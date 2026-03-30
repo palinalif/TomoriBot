@@ -4,7 +4,7 @@ This document captures coding rules that should stay stable across features and 
 
 ## Formatting and Style
 
-- Use tabs for indentation (Biome project setting).
+- Use 2 spaces for indentation (Biome project setting).
 - Use double quotes for strings.
 - Run `bun run lint` after edits.
 

@@ -103,12 +103,12 @@ export async function execute(
 
   // 4. Resolve :emojiName: patterns into Discord custom emoji syntax if found in guild
   const commentContent = rawContent.replace(/:(\w+):/g, (match, name) => {
-    const emoji = interaction.guild?.emojis.cache.find(
-      (e) => e.name === name,
-    );
+    const emoji = interaction.guild?.emojis.cache.find((e) => e.name === name);
     if (!emoji) return match;
     // Animated emojis use <a:name:id>, static use <:name:id>
-    return emoji.animated ? `<a:${emoji.name}:${emoji.id}>` : `<:${emoji.name}:${emoji.id}>`;
+    return emoji.animated
+      ? `<a:${emoji.name}:${emoji.id}>`
+      : `<:${emoji.name}:${emoji.id}>`;
   });
 
   // 5. Create embed with comment content

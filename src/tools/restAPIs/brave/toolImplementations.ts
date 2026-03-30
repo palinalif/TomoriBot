@@ -672,10 +672,11 @@ export async function brave_image_search(
                   {
                     username: context.personaUsername,
                     avatarUrl: context.personaAvatarUrl,
-                    avatarDataUri:
-                      context.personaAvatarUrl?.startsWith("data:image/")
-                        ? context.personaAvatarUrl
-                        : undefined,
+                    avatarDataUri: context.personaAvatarUrl?.startsWith(
+                      "data:image/",
+                    )
+                      ? context.personaAvatarUrl
+                      : undefined,
                   },
                 )
               : await context.channel.send({

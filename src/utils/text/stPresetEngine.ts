@@ -21,38 +21,38 @@ import { log } from "@/utils/misc/logger";
  * These values are sourced from the current TomoriBot state at context build time.
  */
 export interface MacroContext {
-	/** {{user}} triggerer display name (left for convertMentions, but used in content macros) */
-	userName: string;
-	/** {{char}} bot/persona display name */
-	charName: string;
-	/** {{personality}} joined personality attributes */
-	personality: string;
-	/** {{description}} persona description / persona prompt */
-	description: string;
-	/** {{scenario}} scenario text (no TomoriBot equivalent — typically empty) */
-	scenario: string;
-	/** {{mesExamples}} formatted sample dialogue text */
-	mesExamples: string;
-	/** {{lastChatMessage}} the most recent user message content */
-	lastChatMessage: string;
+  /** {{user}} triggerer display name (left for convertMentions, but used in content macros) */
+  userName: string;
+  /** {{char}} bot/persona display name */
+  charName: string;
+  /** {{personality}} joined personality attributes */
+  personality: string;
+  /** {{description}} persona description / persona prompt */
+  description: string;
+  /** {{scenario}} scenario text (no TomoriBot equivalent — typically empty) */
+  scenario: string;
+  /** {{mesExamples}} formatted sample dialogue text */
+  mesExamples: string;
+  /** {{lastChatMessage}} the most recent user message content */
+  lastChatMessage: string;
 }
 
 /**
  * A preset node after full macro resolution, ready for context assembly.
  */
 export interface ResolvedNode {
-	identifier: string;
-	name: string;
-	role: "system" | "user" | "model";
-	content: string;
-	is_marker: boolean;
-	is_enabled: boolean;
-	node_order: number;
-	injection_position: number;
-	injection_depth: number;
-	injection_order: number;
-	/** True if the resolved content contains HTML tags (Discord incompatible) */
-	hasHtmlWarning: boolean;
+  identifier: string;
+  name: string;
+  role: "system" | "user" | "model";
+  content: string;
+  is_marker: boolean;
+  is_enabled: boolean;
+  node_order: number;
+  injection_position: number;
+  injection_depth: number;
+  injection_order: number;
+  /** True if the resolved content contains HTML tags (Discord incompatible) */
+  hasHtmlWarning: boolean;
 }
 
 // ─── Regex Patterns ─────────────────────────────────────────────────────
@@ -76,7 +76,8 @@ const ROLL_REGEX = /\{\{roll:\s*(\d+)d(\d+)\}\}/gi;
 const TRIM_REGEX = /\{\{trim\}\}/g;
 
 /** Detects HTML tags that Discord cannot render */
-const HTML_TAG_REGEX = /<(?:div|span|style|br|p|h[1-6]|table|tr|td|th|ul|ol|li|details|summary|img|a|strong|em|b|i|u|s|pre|code)\b[^>]*>/i;
+const HTML_TAG_REGEX =
+  /<(?:div|span|style|br|p|h[1-6]|table|tr|td|th|ul|ol|li|details|summary|img|a|strong|em|b|i|u|s|pre|code)\b[^>]*>/i;
 
 // ─── Preset Compatibility Patches ────────────────────────────────────────
 //
@@ -106,16 +107,16 @@ const HTML_TAG_REGEX = /<(?:div|span|style|br|p|h[1-6]|table|tr|td|th|ul|ol|li|d
  * @returns Text with additional placeholders resolved
  */
 function applyCompatibilityPatches(
-	text: string,
-	userName: string,
-	charName: string,
+  text: string,
+  userName: string,
+  charName: string,
 ): string {
-	// Patch 1: <USER> / <BOT> XML-style identity placeholders
-	// Case-sensitive to avoid false positives with lowercase HTML-like tags
-	let result = text.replaceAll("<USER>", userName);
-	result = result.replaceAll("<BOT>", charName);
+  // Patch 1: <USER> / <BOT> XML-style identity placeholders
+  // Case-sensitive to avoid false positives with lowercase HTML-like tags
+  let result = text.replaceAll("<USER>", userName);
+  result = result.replaceAll("<BOT>", charName);
 
-	return result;
+  return result;
 }
 
 // ─── Macro Processors (Pure Functions) ──────────────────────────────────
@@ -126,7 +127,7 @@ function applyCompatibilityPatches(
  * @returns Text with comment blocks stripped
  */
 function stripComments(text: string): string {
-	return text.replace(COMMENT_REGEX, "");
+  return text.replace(COMMENT_REGEX, "");
 }
 
 /**
@@ -137,20 +138,20 @@ function stripComments(text: string): string {
  * @returns Cleaned text + extracted variable map
  */
 function processSetVars(text: string): {
-	cleaned: string;
-	vars: Map<string, string>;
+  cleaned: string;
+  vars: Map<string, string>;
 } {
-	const vars = new Map<string, string>();
+  const vars = new Map<string, string>();
 
-	const cleaned = text.replace(
-		SETVAR_REGEX,
-		(_match, key: string, value: string) => {
-			vars.set(key.trim(), value.trim());
-			return ""; // Remove the setvar macro from content
-		},
-	);
+  const cleaned = text.replace(
+    SETVAR_REGEX,
+    (_match, key: string, value: string) => {
+      vars.set(key.trim(), value.trim());
+      return ""; // Remove the setvar macro from content
+    },
+  );
 
-	return { cleaned, vars };
+  return { cleaned, vars };
 }
 
 /**
@@ -162,9 +163,9 @@ function processSetVars(text: string): {
  * @returns Text with all getvar references resolved
  */
 function processGetVars(text: string, vars: Map<string, string>): string {
-	return text.replace(GETVAR_REGEX, (_match, key: string) => {
-		return vars.get(key.trim()) ?? "";
-	});
+  return text.replace(GETVAR_REGEX, (_match, key: string) => {
+    return vars.get(key.trim()) ?? "";
+  });
 }
 
 /**
@@ -178,58 +179,58 @@ function processGetVars(text: string, vars: Map<string, string>): string {
  * @returns Text with content macros replaced
  */
 function processContentMacros(
-	text: string,
-	ctx: MacroContext,
-	expanded: Set<string>,
+  text: string,
+  ctx: MacroContext,
+  expanded: Set<string>,
 ): string {
-	// Map of ST macro name → { value, trackingKey }
-	// trackingKey is used for deduplication tracking in the context builder
-	const macroMap: Array<{
-		pattern: RegExp;
-		value: string;
-		trackingKey: string;
-	}> = [
-		{
-			pattern: /\{\{personality\}\}/gi,
-			value: ctx.personality,
-			trackingKey: "personality",
-		},
-		{
-			pattern: /\{\{description\}\}/gi,
-			value: ctx.description,
-			trackingKey: "description",
-		},
-		{
-			pattern: /\{\{scenario\}\}/gi,
-			value: ctx.scenario,
-			trackingKey: "scenario",
-		},
-		{
-			pattern: /\{\{mesExamples\}\}/gi,
-			value: ctx.mesExamples,
-			trackingKey: "mesExamples",
-		},
-		{
-			pattern: /\{\{lastChatMessage\}\}/gi,
-			value: ctx.lastChatMessage,
-			trackingKey: "lastChatMessage",
-		},
-	];
+  // Map of ST macro name → { value, trackingKey }
+  // trackingKey is used for deduplication tracking in the context builder
+  const macroMap: Array<{
+    pattern: RegExp;
+    value: string;
+    trackingKey: string;
+  }> = [
+    {
+      pattern: /\{\{personality\}\}/gi,
+      value: ctx.personality,
+      trackingKey: "personality",
+    },
+    {
+      pattern: /\{\{description\}\}/gi,
+      value: ctx.description,
+      trackingKey: "description",
+    },
+    {
+      pattern: /\{\{scenario\}\}/gi,
+      value: ctx.scenario,
+      trackingKey: "scenario",
+    },
+    {
+      pattern: /\{\{mesExamples\}\}/gi,
+      value: ctx.mesExamples,
+      trackingKey: "mesExamples",
+    },
+    {
+      pattern: /\{\{lastChatMessage\}\}/gi,
+      value: ctx.lastChatMessage,
+      trackingKey: "lastChatMessage",
+    },
+  ];
 
-	let result = text;
-	for (const { pattern, value, trackingKey } of macroMap) {
-		if (pattern.test(result)) {
-			// Reset lastIndex after test() for global regexes
-			pattern.lastIndex = 0;
-			result = result.replace(pattern, value);
-			// Track that this macro was expanded with actual content
-			if (value.length > 0) {
-				expanded.add(trackingKey);
-			}
-		}
-	}
+  let result = text;
+  for (const { pattern, value, trackingKey } of macroMap) {
+    if (pattern.test(result)) {
+      // Reset lastIndex after test() for global regexes
+      pattern.lastIndex = 0;
+      result = result.replace(pattern, value);
+      // Track that this macro was expanded with actual content
+      if (value.length > 0) {
+        expanded.add(trackingKey);
+      }
+    }
+  }
 
-	return result;
+  return result;
 }
 
 /**
@@ -239,14 +240,14 @@ function processContentMacros(
  * @returns Text with each random macro replaced by a randomly chosen item
  */
 function processRandom(text: string): string {
-	return text.replace(RANDOM_REGEX, (_match, options: string) => {
-		const items = options
-			.split(",")
-			.map((item) => item.trim())
-			.filter((item) => item.length > 0);
-		if (items.length === 0) return "";
-		return items[Math.floor(Math.random() * items.length)];
-	});
+  return text.replace(RANDOM_REGEX, (_match, options: string) => {
+    const items = options
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    if (items.length === 0) return "";
+    return items[Math.floor(Math.random() * items.length)];
+  });
 }
 
 /**
@@ -257,20 +258,20 @@ function processRandom(text: string): string {
  * @returns Text with each roll macro replaced by the computed sum
  */
 function processRoll(text: string): string {
-	return text.replace(
-		ROLL_REGEX,
-		(_match, countStr: string, sidesStr: string) => {
-			const count = Math.min(Number.parseInt(countStr, 10), 100); // Cap at 100 dice
-			const sides = Math.min(Number.parseInt(sidesStr, 10), 1000); // Cap at 1000 sides
-			if (count <= 0 || sides <= 0) return "0";
+  return text.replace(
+    ROLL_REGEX,
+    (_match, countStr: string, sidesStr: string) => {
+      const count = Math.min(Number.parseInt(countStr, 10), 100); // Cap at 100 dice
+      const sides = Math.min(Number.parseInt(sidesStr, 10), 1000); // Cap at 1000 sides
+      if (count <= 0 || sides <= 0) return "0";
 
-			let sum = 0;
-			for (let i = 0; i < count; i++) {
-				sum += Math.floor(Math.random() * sides) + 1;
-			}
-			return sum.toString();
-		},
-	);
+      let sum = 0;
+      for (let i = 0; i < count; i++) {
+        sum += Math.floor(Math.random() * sides) + 1;
+      }
+      return sum.toString();
+    },
+  );
 }
 
 /**
@@ -281,15 +282,15 @@ function processRoll(text: string): string {
  * @returns The trimmed result and whether it resolved to empty
  */
 function processTrim(text: string): { result: string; isEmpty: boolean } {
-	const hasTrim = TRIM_REGEX.test(text);
-	if (!hasTrim) {
-		return { result: text, isEmpty: false };
-	}
+  const hasTrim = TRIM_REGEX.test(text);
+  if (!hasTrim) {
+    return { result: text, isEmpty: false };
+  }
 
-	// Reset lastIndex after test()
-	TRIM_REGEX.lastIndex = 0;
-	const cleaned = text.replace(TRIM_REGEX, "").trim();
-	return { result: cleaned, isEmpty: cleaned.length === 0 };
+  // Reset lastIndex after test()
+  TRIM_REGEX.lastIndex = 0;
+  const cleaned = text.replace(TRIM_REGEX, "").trim();
+  return { result: cleaned, isEmpty: cleaned.length === 0 };
 }
 
 /**
@@ -300,7 +301,7 @@ function processTrim(text: string): { result: string; isEmpty: boolean } {
  * @returns True if HTML tags are detected
  */
 export function detectHtmlContent(text: string): boolean {
-	return HTML_TAG_REGEX.test(text);
+  return HTML_TAG_REGEX.test(text);
 }
 
 // ─── Role Mapping ───────────────────────────────────────────────────────
@@ -313,14 +314,14 @@ export function detectHtmlContent(text: string): boolean {
  * @returns Mapped role for TomoriBot's context system
  */
 function mapStRole(stRole: string): "system" | "user" | "model" {
-	switch (stRole.toLowerCase()) {
-		case "assistant":
-			return "model";
-		case "user":
-			return "user";
-		default:
-			return "system";
-	}
+  switch (stRole.toLowerCase()) {
+    case "assistant":
+      return "model";
+    case "user":
+      return "user";
+    default:
+      return "system";
+  }
 }
 
 // ─── Main Export ─────────────────────────────────────────────────────────
@@ -348,136 +349,140 @@ function mapStRole(stRole: string): "system" | "user" | "model" {
  * @returns Resolved nodes and set of content macros that were expanded with real data
  */
 export function resolvePresetMacros(
-	nodes: StPresetNodeRow[],
-	macroContext: MacroContext,
+  nodes: StPresetNodeRow[],
+  macroContext: MacroContext,
 ): { resolved: ResolvedNode[]; expandedContentMacros: Set<string> } {
-	const expandedContentMacros = new Set<string>();
-	const globalVars = new Map<string, string>();
+  const expandedContentMacros = new Set<string>();
+  const globalVars = new Map<string, string>();
 
-	// ── Pass 1: Collect setvars from all enabled non-marker nodes ──
-	// Walk in node_order (already sorted from DB query).
-	// If the same key is set by multiple nodes, the last one (highest node_order) wins.
-	for (const node of nodes) {
-		if (!node.is_enabled || node.is_marker) continue;
+  // ── Pass 1: Collect setvars from all enabled non-marker nodes ──
+  // Walk in node_order (already sorted from DB query).
+  // If the same key is set by multiple nodes, the last one (highest node_order) wins.
+  for (const node of nodes) {
+    if (!node.is_enabled || node.is_marker) continue;
 
-		// 1. Strip comments first so they don't interfere
-		const commentStripped = stripComments(node.content);
+    // 1. Strip comments first so they don't interfere
+    const commentStripped = stripComments(node.content);
 
-		// 2. Extract setvar declarations
-		const { vars } = processSetVars(commentStripped);
+    // 2. Extract setvar declarations
+    const { vars } = processSetVars(commentStripped);
 
-		// 3. Merge into global variable map (last writer wins)
-		for (const [key, value] of vars) {
-			globalVars.set(key, value);
-		}
-	}
+    // 3. Merge into global variable map (last writer wins)
+    for (const [key, value] of vars) {
+      globalVars.set(key, value);
+    }
+  }
 
-	if (globalVars.size > 0) {
-		log.info(
-			`[ST Preset Engine] Collected ${globalVars.size} variable(s) from enabled nodes`,
-		);
-	}
+  if (globalVars.size > 0) {
+    log.info(
+      `[ST Preset Engine] Collected ${globalVars.size} variable(s) from enabled nodes`,
+    );
+  }
 
-	// ── Pass 2: Resolve all macros for each node ──
-	const resolved: ResolvedNode[] = [];
-	let htmlWarningCount = 0;
+  // ── Pass 2: Resolve all macros for each node ──
+  const resolved: ResolvedNode[] = [];
+  let htmlWarningCount = 0;
 
-	for (const node of nodes) {
-		let content = node.content;
+  for (const node of nodes) {
+    let content = node.content;
 
-		// Markers pass through with no content processing
-		if (node.is_marker) {
-			resolved.push({
-				identifier: node.identifier,
-				name: node.name,
-				role: mapStRole(node.role),
-				content: "",
-				is_marker: true,
-				is_enabled: node.is_enabled,
-				node_order: node.node_order,
-				injection_position: node.injection_position,
-				injection_depth: node.injection_depth,
-				injection_order: node.injection_order,
-				hasHtmlWarning: false,
-			});
-			continue;
-		}
+    // Markers pass through with no content processing
+    if (node.is_marker) {
+      resolved.push({
+        identifier: node.identifier,
+        name: node.name,
+        role: mapStRole(node.role),
+        content: "",
+        is_marker: true,
+        is_enabled: node.is_enabled,
+        node_order: node.node_order,
+        injection_position: node.injection_position,
+        injection_depth: node.injection_depth,
+        injection_order: node.injection_order,
+        hasHtmlWarning: false,
+      });
+      continue;
+    }
 
-		// Disabled nodes are included in output (for UI tracking) but not processed
-		if (!node.is_enabled) {
-			resolved.push({
-				identifier: node.identifier,
-				name: node.name,
-				role: mapStRole(node.role),
-				content,
-				is_marker: false,
-				is_enabled: false,
-				node_order: node.node_order,
-				injection_position: node.injection_position,
-				injection_depth: node.injection_depth,
-				injection_order: node.injection_order,
-				hasHtmlWarning: false,
-			});
-			continue;
-		}
+    // Disabled nodes are included in output (for UI tracking) but not processed
+    if (!node.is_enabled) {
+      resolved.push({
+        identifier: node.identifier,
+        name: node.name,
+        role: mapStRole(node.role),
+        content,
+        is_marker: false,
+        is_enabled: false,
+        node_order: node.node_order,
+        injection_position: node.injection_position,
+        injection_depth: node.injection_depth,
+        injection_order: node.injection_order,
+        hasHtmlWarning: false,
+      });
+      continue;
+    }
 
-		// ── Processing pipeline (order matters) ──
+    // ── Processing pipeline (order matters) ──
 
-		// 1. Strip comments
-		content = stripComments(content);
+    // 1. Strip comments
+    content = stripComments(content);
 
-		// 2. Remove setvar declarations (already collected in Pass 1)
-		const { cleaned } = processSetVars(content);
-		content = cleaned;
+    // 2. Remove setvar declarations (already collected in Pass 1)
+    const { cleaned } = processSetVars(content);
+    content = cleaned;
 
-		// 3. Resolve getvar references
-		content = processGetVars(content, globalVars);
+    // 3. Resolve getvar references
+    content = processGetVars(content, globalVars);
 
-		// 4. Expand content macros (personality, description, scenario, etc.)
-		content = processContentMacros(
-			content,
-			macroContext,
-			expandedContentMacros,
-		);
+    // 4. Expand content macros (personality, description, scenario, etc.)
+    content = processContentMacros(
+      content,
+      macroContext,
+      expandedContentMacros,
+    );
 
-		// 5. Evaluate random selections
-		content = processRandom(content);
+    // 5. Evaluate random selections
+    content = processRandom(content);
 
-		// 6. Evaluate dice rolls
-		content = processRoll(content);
+    // 6. Evaluate dice rolls
+    content = processRoll(content);
 
-		// 7. Apply compatibility patches (additional placeholders like <USER>, <BOT>)
-		content = applyCompatibilityPatches(content, macroContext.userName, macroContext.charName);
+    // 7. Apply compatibility patches (additional placeholders like <USER>, <BOT>)
+    content = applyCompatibilityPatches(
+      content,
+      macroContext.userName,
+      macroContext.charName,
+    );
 
-		// 8. Process trim (must be last text transform)
-		const { result: trimmedContent, isEmpty } = processTrim(content);
-		content = trimmedContent;
+    // 8. Process trim (must be last text transform)
+    const { result: trimmedContent, isEmpty } = processTrim(content);
+    content = trimmedContent;
 
-		// 9. Detect HTML content
-		const hasHtml = content.length > 0 && detectHtmlContent(content);
-		if (hasHtml) htmlWarningCount++;
+    // 9. Detect HTML content
+    const hasHtml = content.length > 0 && detectHtmlContent(content);
+    if (hasHtml) htmlWarningCount++;
 
-		resolved.push({
-			identifier: node.identifier,
-			name: node.name,
-			role: mapStRole(node.role),
-			content,
-			is_marker: false,
-			// If trim resolved to empty, effectively disable the node
-			is_enabled: !isEmpty,
-			node_order: node.node_order,
-			injection_position: node.injection_position,
-			injection_depth: node.injection_depth,
-			injection_order: node.injection_order,
-			hasHtmlWarning: hasHtml,
-		});
-	}
+    resolved.push({
+      identifier: node.identifier,
+      name: node.name,
+      role: mapStRole(node.role),
+      content,
+      is_marker: false,
+      // If trim resolved to empty, effectively disable the node
+      is_enabled: !isEmpty,
+      node_order: node.node_order,
+      injection_position: node.injection_position,
+      injection_depth: node.injection_depth,
+      injection_order: node.injection_order,
+      hasHtmlWarning: hasHtml,
+    });
+  }
 
-	if (htmlWarningCount > 0) {
-		log.warn(
-			`[ST Preset Engine] ${htmlWarningCount} node(s) contain HTML content (may render poorly in Discord)`,
-		);
-	}
+  if (htmlWarningCount > 0) {
+    log.warn(
+      `[ST Preset Engine] ${htmlWarningCount} node(s) contain HTML content (may render poorly in Discord)`,
+    );
+  }
 
-	return { resolved, expandedContentMacros };
+  return { resolved, expandedContentMacros };
 }

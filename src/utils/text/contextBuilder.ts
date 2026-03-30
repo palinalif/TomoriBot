@@ -48,11 +48,11 @@ import {
   retrieveRelevantDocumentChunks,
 } from "../documents/documentService";
 import {
-	getShortTermMemoriesForServer,
-	getShortTermMemoriesForUser,
-	getShortTermMemoryForServerChannel,
-	getShortTermMemoryForUserChannel,
-	getRelativeTimestamp,
+  getShortTermMemoriesForServer,
+  getShortTermMemoriesForUser,
+  getShortTermMemoryForServerChannel,
+  getShortTermMemoryForUserChannel,
+  getRelativeTimestamp,
 } from "../cache/shortTermMemoryCache";
 import { getCachedAllPersonas } from "../cache/tomoriStateCache";
 import { getCachedUserRow } from "../cache/userCache";
@@ -67,9 +67,9 @@ import { reassembleWithPreset } from "./presetContextBuilder";
  */
 const mentionCache = new Map<string, string>();
 const DISCORD_CHANNEL_LINK_TEST_PATTERN =
-	/https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/\d{17,19}(?:\/\d{17,19})?/i;
+  /https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/\d{17,19}(?:\/\d{17,19})?/i;
 const DISCORD_CHANNEL_LINK_REPLACE_PATTERN =
-	/https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/(\d{17,19})(?:\/(\d{17,19}))?/gi;
+  /https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/(\d{17,19})(?:\/(\d{17,19}))?/gi;
 
 // Environment variables for short-term memory configuration
 const MIN_MESSAGES_FOR_SUMMARY = Number.parseInt(
@@ -89,7 +89,10 @@ const DOCUMENT_MIN_SIMILARITY = 0.2;
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const ENABLE_LOCAL_RAG = process.env.ACTIVATE_LOCAL_RAG === "true";
 const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
-  const parsed = Number.parseInt(process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3", 10);
+  const parsed = Number.parseInt(
+    process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3",
+    10,
+  );
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
 })();
 
@@ -132,31 +135,31 @@ export type SimplifiedMessageForContext = {
  * @returns True if text needs conversion, false otherwise
  */
 function needsConversion(text: string): boolean {
-	// Check for Discord mentions: <@userid>, <#channelid>, <@&roleid>
-	// Check for Discord channel/thread links: https://discord.com/channels/<guild>/<channel>
-	// Check for template variables: {bot}, {user}, {char}, {{user}}, {{char}}, {{bot}}
-	return (
-		/<[@#][!&]?\d{17,19}>/.test(text) ||
-		DISCORD_CHANNEL_LINK_TEST_PATTERN.test(text) ||
-		/(?:\{\{(?:bot|char|user)\}\}|\{(?:bot|char|user)\})/i.test(text)
-	);
+  // Check for Discord mentions: <@userid>, <#channelid>, <@&roleid>
+  // Check for Discord channel/thread links: https://discord.com/channels/<guild>/<channel>
+  // Check for template variables: {bot}, {user}, {char}, {{user}}, {{char}}, {{bot}}
+  return (
+    /<[@#][!&]?\d{17,19}>/.test(text) ||
+    DISCORD_CHANNEL_LINK_TEST_PATTERN.test(text) ||
+    /(?:\{\{(?:bot|char|user)\}\}|\{(?:bot|char|user)\})/i.test(text)
+  );
 }
 
 function normalizeDiscordChannelLinks(text: string): string {
-	return text.replace(
-		DISCORD_CHANNEL_LINK_REPLACE_PATTERN,
-		(_match, channelId: string, messageId?: string) =>
-			messageId
-				? `<#${channelId}> (message ID: ${messageId})`
-				: `<#${channelId}>`,
-	);
+  return text.replace(
+    DISCORD_CHANNEL_LINK_REPLACE_PATTERN,
+    (_match, channelId: string, messageId?: string) =>
+      messageId
+        ? `<#${channelId}> (message ID: ${messageId})`
+        : `<#${channelId}>`,
+  );
 }
 
 function formatDiscordChannelReference(
-	channelId: string | undefined,
-	fallbackText: string,
+  channelId: string | undefined,
+  fallbackText: string,
 ): string {
-	return channelId ? `<#${channelId}>` : fallbackText;
+  return channelId ? `<#${channelId}>` : fallbackText;
 }
 
 /**
@@ -181,15 +184,15 @@ export async function convertMentions(
   personalMemoriesEnabled?: boolean, // Added personalMemoriesEnabled parameter
   snapshot?: import("../../types/misc/context").RequestSnapshot, // Added snapshot parameter
 ): Promise<string> {
-	const normalizedText = normalizeDiscordChannelLinks(text);
+  const normalizedText = normalizeDiscordChannelLinks(text);
 
-	// Early return: if text doesn't contain mentions, Discord channel links, or placeholders, skip processing
-	if (!needsConversion(text)) {
-		return normalizedText;
-	}
+  // Early return: if text doesn't contain mentions, Discord channel links, or placeholders, skip processing
+  if (!needsConversion(text)) {
+    return normalizedText;
+  }
 
-	// Clear the cache before processing new text
-	mentionCache.clear();
+  // Clear the cache before processing new text
+  mentionCache.clear();
 
   // 1. Determine Tomori's nickname for {bot} replacement.
   //    If not passed, load it (using snapshot if available, otherwise DB query).
@@ -625,103 +628,102 @@ async function buildShortTermMemoryContext(
   const memoryItems: StructuredContextItem[] = [];
   let createPromptText: string | undefined;
 
-	try {
-		// 1. Check if user has cross-server opt-in enabled
-		const userRow = await getCachedUserRow(triggeringUserId);
-		const crossServerOptIn =
-			userRow?.shortterm_cache_crossserver_opt_in ?? false;
+  try {
+    // 1. Check if user has cross-server opt-in enabled
+    const userRow = await getCachedUserRow(triggeringUserId);
+    const crossServerOptIn =
+      userRow?.shortterm_cache_crossserver_opt_in ?? false;
 
-		const personaLineageId = tomoriState?.persona_lineage_id;
-		let otherChannelMemories =
-			currentServerId === "DM"
-				? getShortTermMemoriesForUser(
-						triggeringUserId,
-						currentChannelId,
-						personaLineageId,
-					).filter(
-						(memory) =>
-							crossServerOptIn || memory.serverId === currentServerId,
-						)
-				: getShortTermMemoriesForServer(
-						currentServerId,
-						currentChannelId,
-						personaLineageId,
-					);
+    const personaLineageId = tomoriState?.persona_lineage_id;
+    let otherChannelMemories =
+      currentServerId === "DM"
+        ? getShortTermMemoriesForUser(
+            triggeringUserId,
+            currentChannelId,
+            personaLineageId,
+          ).filter(
+            (memory) => crossServerOptIn || memory.serverId === currentServerId,
+          )
+        : getShortTermMemoriesForServer(
+            currentServerId,
+            currentChannelId,
+            personaLineageId,
+          );
 
-		if (currentServerId !== "DM" && crossServerOptIn) {
-			const crossServerUserMemories = getShortTermMemoriesForUser(
-				triggeringUserId,
-				currentChannelId,
-				personaLineageId,
-			).filter((memory) => memory.serverId !== currentServerId);
+    if (currentServerId !== "DM" && crossServerOptIn) {
+      const crossServerUserMemories = getShortTermMemoriesForUser(
+        triggeringUserId,
+        currentChannelId,
+        personaLineageId,
+      ).filter((memory) => memory.serverId !== currentServerId);
 
-			otherChannelMemories = [
-				...otherChannelMemories,
-				...crossServerUserMemories,
-			];
-		}
+      otherChannelMemories = [
+        ...otherChannelMemories,
+        ...crossServerUserMemories,
+      ];
+    }
 
-		otherChannelMemories.sort((a, b) => b.lastUpdated - a.lastUpdated);
+    otherChannelMemories.sort((a, b) => b.lastUpdated - a.lastUpdated);
 
-		// 2. Limit to max number of other-channel memories (most recent first)
-		const limitedMemories = otherChannelMemories.slice(
-			0,
-			MAX_OTHER_CHANNEL_MEMORIES,
-		);
+    // 2. Limit to max number of other-channel memories (most recent first)
+    const limitedMemories = otherChannelMemories.slice(
+      0,
+      MAX_OTHER_CHANNEL_MEMORIES,
+    );
 
-		// 3. Build OTHER-CHANNEL MEMORIES context (Phase 2)
-		// Show summaries when available, fall back to crude conversations
-		if (limitedMemories.length > 0) {
-			let otherChannelText = "";
+    // 3. Build OTHER-CHANNEL MEMORIES context (Phase 2)
+    // Show summaries when available, fall back to crude conversations
+    if (limitedMemories.length > 0) {
+      let otherChannelText = "";
 
-			for (const memory of limitedMemories) {
-				const relativeTime = getRelativeTimestamp(memory.lastUpdated);
-				const isSameServerSharedMemory =
-					currentServerId !== "DM" && memory.serverId === currentServerId;
+      for (const memory of limitedMemories) {
+        const relativeTime = getRelativeTimestamp(memory.lastUpdated);
+        const isSameServerSharedMemory =
+          currentServerId !== "DM" && memory.serverId === currentServerId;
 
-				// Determine channel reference (privacy-safe)
-				let channelReference: string;
-				if (memory.serverId === currentServerId) {
-					channelReference = formatDiscordChannelReference(
-						memory.channelId,
-						memory.channelName
-							? `#${memory.channelName}`
-							: "another channel in this server",
-					);
-				} else {
-					channelReference = "a channel in another server";
-				}
+        // Determine channel reference (privacy-safe)
+        let channelReference: string;
+        if (memory.serverId === currentServerId) {
+          channelReference = formatDiscordChannelReference(
+            memory.channelId,
+            memory.channelName
+              ? `#${memory.channelName}`
+              : "another channel in this server",
+          );
+        } else {
+          channelReference = "a channel in another server";
+        }
 
-				// Show summary if available, otherwise show crude conversation
-				if (memory.summary) {
-					const memoryPrefix = isSameServerSharedMemory
-						? isUserImpersonation
-							? `[System: Recent conversation in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
-							: `[System: ${botName} remembers a recent conversation in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
-						: isUserImpersonation
-							? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
-							: `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`;
-					otherChannelText += memoryPrefix;
-				} else {
-					const memoryPrefix = isSameServerSharedMemory
-						? isUserImpersonation
-							? `[System: Recent conversation in ${channelReference} (${relativeTime}):\n`
-							: `[System: ${botName} remembers a recent conversation in ${channelReference} (${relativeTime}):\n`
-						: isUserImpersonation
-							? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`
-							: `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
-					otherChannelText += memoryPrefix;
+        // Show summary if available, otherwise show crude conversation
+        if (memory.summary) {
+          const memoryPrefix = isSameServerSharedMemory
+            ? isUserImpersonation
+              ? `[System: Recent conversation in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+              : `[System: ${botName} remembers a recent conversation in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+            : isUserImpersonation
+              ? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`
+              : `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n${memory.summary}]\n\n`;
+          otherChannelText += memoryPrefix;
+        } else {
+          const memoryPrefix = isSameServerSharedMemory
+            ? isUserImpersonation
+              ? `[System: Recent conversation in ${channelReference} (${relativeTime}):\n`
+              : `[System: ${botName} remembers a recent conversation in ${channelReference} (${relativeTime}):\n`
+            : isUserImpersonation
+              ? `[System: Recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`
+              : `[System: ${botName} remembers a recent conversation with ${triggererName} in ${channelReference} (${relativeTime}):\n`;
+          otherChannelText += memoryPrefix;
 
-					for (const msg of memory.messages) {
-						const speaker =
-							msg.speakerName ||
-							(msg.role === "user"
-								? isSameServerSharedMemory
-									? "Someone"
-									: triggererName
-								: botName);
-						otherChannelText += `${speaker}: "${msg.content}"\n`;
-					}
+          for (const msg of memory.messages) {
+            const speaker =
+              msg.speakerName ||
+              (msg.role === "user"
+                ? isSameServerSharedMemory
+                  ? "Someone"
+                  : triggererName
+                : botName);
+            otherChannelText += `${speaker}: "${msg.content}"\n`;
+          }
 
           otherChannelText += "]\n\n";
         }
@@ -748,7 +750,7 @@ async function buildShortTermMemoryContext(
       }
     }
 
-		// 4. Build SAME-CHANNEL context (Phase 3)
+    // 4. Build SAME-CHANNEL context (Phase 3)
     // Only shown for tool-calling models
     // - Summary (if exists): Goes with other memories (middle of context)
     // - Create prompt (if no summary): Goes at end as instruction
@@ -760,18 +762,18 @@ async function buildShortTermMemoryContext(
         tomoriState.llm.llm_provider !== "novelai" &&
         !explicitLongTermMemoryIntent;
 
-			const sameChannelMemory =
-				currentServerId === "DM"
-					? getShortTermMemoryForUserChannel(
-							triggeringUserId,
-							currentChannelId,
-							tomoriState?.tomori_id,
-						)
-					: getShortTermMemoryForServerChannel(
-							currentServerId,
-							currentChannelId,
-							tomoriState?.tomori_id,
-						);
+      const sameChannelMemory =
+        currentServerId === "DM"
+          ? getShortTermMemoryForUserChannel(
+              triggeringUserId,
+              currentChannelId,
+              tomoriState?.tomori_id,
+            )
+          : getShortTermMemoryForServerChannel(
+              currentServerId,
+              currentChannelId,
+              tomoriState?.tomori_id,
+            );
 
       if (sameChannelMemory?.summary) {
         // EXISTING SUMMARY - Add to memoryItems (middle of context, with other memories)
@@ -938,53 +940,56 @@ function pushDialogueHistoryContextItem(
 
 /** Shared parameter type for both the routing wrapper and native context builder. */
 export interface BuildContextParams {
-	guildId: string;
-	serverName: string;
-	serverDescription: string | null;
-	simplifiedMessageHistory: SimplifiedMessageForContext[];
-	userList: string[];
-	channelDesc: string | null;
-	channelName: string;
-	channelId: string;
-	client: Client;
-	triggererName: string;
-	emojiStrings?: string[];
-	tomoriNickname: string;
-	tomoriAttributes: string[];
-	tomoriConfig: TomoriConfigRow;
-	personaPrompt?: string | null;
-	personaLineageId?: number;
-	isDMChannel?: boolean;
-	mediaContextWindow?: number;
-	snapshot?: import("../../types/misc/context").RequestSnapshot;
-	preloadedEmojis?: ServerEmojiRow[] | null;
-	preloadedStickers?: ServerStickerRow[] | null;
-	isUserImpersonation?: boolean;
-	impersonatedUserId?: string;
-	impersonatedUserNickname?: string;
-	impersonatedUserPrompt?: string | null;
-	/** Matrix bridge users: Matrix user ID → stripped display name. */
-	matrixUsers?: Map<string, string>;
-	/** Synthetic participants surfaced as user-like entries. */
-	syntheticUsers?: Map<string, { displayName: string; type: "persona" | "webhook" }>;
-	includeTimestamps?: boolean;
-	seesImages?: boolean;
-	seesVideos?: boolean;
-	hasVisionTool?: boolean;
-	explicitLongTermMemoryIntent?: boolean;
-	/**
-	 * When `true`, skips the `DEFAULT_SYSTEM_PROMPT` fallback in the humanizer block.
-	 * Set by the routing wrapper when a SillyTavern preset is active and no custom
-	 * `/sysprompt` has been configured — the preset fully controls the system prompt.
-	 */
-	suppressDefaultSystemPrompt?: boolean;
+  guildId: string;
+  serverName: string;
+  serverDescription: string | null;
+  simplifiedMessageHistory: SimplifiedMessageForContext[];
+  userList: string[];
+  channelDesc: string | null;
+  channelName: string;
+  channelId: string;
+  client: Client;
+  triggererName: string;
+  emojiStrings?: string[];
+  tomoriNickname: string;
+  tomoriAttributes: string[];
+  tomoriConfig: TomoriConfigRow;
+  personaPrompt?: string | null;
+  personaLineageId?: number;
+  isDMChannel?: boolean;
+  mediaContextWindow?: number;
+  snapshot?: import("../../types/misc/context").RequestSnapshot;
+  preloadedEmojis?: ServerEmojiRow[] | null;
+  preloadedStickers?: ServerStickerRow[] | null;
+  isUserImpersonation?: boolean;
+  impersonatedUserId?: string;
+  impersonatedUserNickname?: string;
+  impersonatedUserPrompt?: string | null;
+  /** Matrix bridge users: Matrix user ID → stripped display name. */
+  matrixUsers?: Map<string, string>;
+  /** Synthetic participants surfaced as user-like entries. */
+  syntheticUsers?: Map<
+    string,
+    { displayName: string; type: "persona" | "webhook" }
+  >;
+  includeTimestamps?: boolean;
+  seesImages?: boolean;
+  seesVideos?: boolean;
+  hasVisionTool?: boolean;
+  explicitLongTermMemoryIntent?: boolean;
+  /**
+   * When `true`, skips the `DEFAULT_SYSTEM_PROMPT` fallback in the humanizer block.
+   * Set by the routing wrapper when a SillyTavern preset is active and no custom
+   * `/sysprompt` has been configured — the preset fully controls the system prompt.
+   */
+  suppressDefaultSystemPrompt?: boolean;
 }
 
 /** Return type for both buildContext variants. */
 type BuildContextResult = {
-	contextItems: StructuredContextItem[];
-	tailDirectives: string[];
-	uncensorDirective?: string;
+  contextItems: StructuredContextItem[];
+  tailDirectives: string[];
+  uncensorDirective?: string;
 };
 
 /**
@@ -998,56 +1003,63 @@ type BuildContextResult = {
  * All callers use this function; the preset check is transparent.
  */
 export async function buildContext(
-	params: BuildContextParams,
+  params: BuildContextParams,
 ): Promise<BuildContextResult> {
-	// Skip preset routing for user impersonation
-	if (!params.isUserImpersonation) {
-		const serverId = params.snapshot?.tomoriState?.server_id;
-		if (serverId) {
-			const presetData = await getCachedActivePreset(serverId);
-			if (presetData) {
-				// 1. Build native context (produces tagged items in fixed order).
-				// Suppress the DEFAULT_SYSTEM_PROMPT fallback when the preset is active
-				// and the user has NOT set a custom /sysprompt — the preset owns the system prompt.
-				const suppressDefaultSystemPrompt = !params.tomoriConfig.system_prompt?.trim();
-				const nativeOutput = await buildContextNative({ ...params, suppressDefaultSystemPrompt });
+  // Skip preset routing for user impersonation
+  if (!params.isUserImpersonation) {
+    const serverId = params.snapshot?.tomoriState?.server_id;
+    if (serverId) {
+      const presetData = await getCachedActivePreset(serverId);
+      if (presetData) {
+        // 1. Build native context (produces tagged items in fixed order).
+        // Suppress the DEFAULT_SYSTEM_PROMPT fallback when the preset is active
+        // and the user has NOT set a custom /sysprompt — the preset owns the system prompt.
+        const suppressDefaultSystemPrompt =
+          !params.tomoriConfig.system_prompt?.trim();
+        const nativeOutput = await buildContextNative({
+          ...params,
+          suppressDefaultSystemPrompt,
+        });
 
-				// 2. Extract macro context from params
-				const lastUserMsg = params.simplifiedMessageHistory
-					.filter((m) => m.authorType === "user")
-					.at(-1)?.content ?? "";
+        // 2. Extract macro context from params
+        const lastUserMsg =
+          params.simplifiedMessageHistory
+            .filter((m) => m.authorType === "user")
+            .at(-1)?.content ?? "";
 
-				const tomoriStateForPreset =
-					params.snapshot?.tomoriState ??
-					await loadTomoriState(params.guildId);
+        const tomoriStateForPreset =
+          params.snapshot?.tomoriState ??
+          (await loadTomoriState(params.guildId));
 
-				// 3. Rearrange native output according to preset node order
-				return reassembleWithPreset(
-					nativeOutput,
-					presetData,
-					{
-						triggererName: params.triggererName,
-						tomoriNickname: params.tomoriNickname,
-						tomoriAttributes: params.tomoriAttributes,
-						personaPrompt: params.personaPrompt,
-						sampleDialoguesIn: tomoriStateForPreset?.sample_dialogues_in ?? [],
-						sampleDialoguesOut: tomoriStateForPreset?.sample_dialogues_out ?? [],
-						lastUserMessage: lastUserMsg,
-					},
-					{
-						client: params.client,
-						guildId: params.guildId,
-						triggererName: params.triggererName,
-						botName: params.tomoriNickname,
-						personalMemoriesEnabled: params.tomoriConfig.personal_memories_enabled ?? true,
-					},
-				);
-			}
-		}
-	}
+        // 3. Rearrange native output according to preset node order
+        return reassembleWithPreset(
+          nativeOutput,
+          presetData,
+          {
+            triggererName: params.triggererName,
+            tomoriNickname: params.tomoriNickname,
+            tomoriAttributes: params.tomoriAttributes,
+            personaPrompt: params.personaPrompt,
+            sampleDialoguesIn: tomoriStateForPreset?.sample_dialogues_in ?? [],
+            sampleDialoguesOut:
+              tomoriStateForPreset?.sample_dialogues_out ?? [],
+            lastUserMessage: lastUserMsg,
+          },
+          {
+            client: params.client,
+            guildId: params.guildId,
+            triggererName: params.triggererName,
+            botName: params.tomoriNickname,
+            personalMemoriesEnabled:
+              params.tomoriConfig.personal_memories_enabled ?? true,
+          },
+        );
+      }
+    }
+  }
 
-	// No active preset (or user impersonation) — use native assembly
-	return buildContextNative(params);
+  // No active preset (or user impersonation) — use native assembly
+  return buildContextNative(params);
 }
 
 /**
@@ -2431,19 +2443,14 @@ async function buildContextNative({
           for (const attachment of msg.imageAttachments) {
             const countsTowardRenderedImageLimit =
               isCountedRenderedImageAttachment(attachment);
-            if (
-              countsTowardRenderedImageLimit &&
-              !shouldRenderCountedImages
-            ) {
+            if (countsTowardRenderedImageLimit && !shouldRenderCountedImages) {
               skippedCountedImageCount++;
               continue;
             }
 
             // Skip duplicate images that will be rendered later in a more recent message
             // (e.g. original message image also appears in a reply that merged the reference)
-            const lastIndex = duplicateImageLastIndex.get(
-              attachment.proxyUrl,
-            );
+            const lastIndex = duplicateImageLastIndex.get(attachment.proxyUrl);
             if (
               lastIndex !== undefined &&
               countsTowardRenderedImageLimit &&
@@ -2564,7 +2571,9 @@ async function buildContextNative({
     let mediaAttributionHint: string | null = null;
     if (hasSignificantMedia && !mediaIdHintAdded) {
       const mediaMessageIds = msg.mediaSourceMessageIds ?? [msg.id];
-      const nonEmojiImageCount = msg.imageAttachments.filter((a) => !a.isEmoji).length;
+      const nonEmojiImageCount = msg.imageAttachments.filter(
+        (a) => !a.isEmoji,
+      ).length;
       const videoCount = msg.videoAttachments.length;
       const totalMediaCount = nonEmojiImageCount + videoCount;
 
@@ -2678,7 +2687,10 @@ async function buildContextNative({
       if (mediaAttributionHint) {
         parts.push({ type: "text", text: mediaAttributionHint });
       } else {
-        const mediaAttributionText = buildMediaAttributionText(msg, msg.authorName);
+        const mediaAttributionText = buildMediaAttributionText(
+          msg,
+          msg.authorName,
+        );
         const resolvedMediaAttributionText = await convertMentions(
           mediaAttributionText,
           client,
@@ -2696,11 +2708,23 @@ async function buildContextNative({
     // by remaining system hints, then the attributed text. For model-authored turns,
     // keep system hints as a separate user turn to prevent the model from treating them
     // as its own dialogue.
-    if (role === "user" && (parts.length > 0 || detachedSystemParts.length > 0)) {
+    if (
+      role === "user" &&
+      (parts.length > 0 || detachedSystemParts.length > 0)
+    ) {
       const mediaParts = parts.filter((p) => p.type !== "text");
       const textParts = parts.filter((p) => p.type === "text");
-      const combinedParts = [...mediaParts, ...detachedSystemParts, ...textParts];
-      pushDialogueHistoryContextItem(contextItems, "user", combinedParts, msg.id);
+      const combinedParts = [
+        ...mediaParts,
+        ...detachedSystemParts,
+        ...textParts,
+      ];
+      pushDialogueHistoryContextItem(
+        contextItems,
+        "user",
+        combinedParts,
+        msg.id,
+      );
     } else {
       pushDialogueHistoryContextItem(
         contextItems,

@@ -15,28 +15,28 @@ import type { ToolResult } from "@/types/tool/interfaces";
 
 /** A text or image_url content part in an OpenAI-compatible message. */
 export type PresetContentPart =
-	| { type: "text"; text: string }
-	| { type: "image_url"; image_url: { url: string } };
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 
 /** Message shape used inside the preset generation tool-calling loop. */
 export type PresetMessage =
-	| { role: "system"; content: string }
-	| { role: "user"; content: string | PresetContentPart[] }
-	| {
-			role: "assistant";
-			content?: string | null;
-			tool_calls?: PresetToolCall[];
-	  }
-	| { role: "tool"; tool_call_id: string; content: string };
+  | { role: "system"; content: string }
+  | { role: "user"; content: string | PresetContentPart[] }
+  | {
+      role: "assistant";
+      content?: string | null;
+      tool_calls?: PresetToolCall[];
+    }
+  | { role: "tool"; tool_call_id: string; content: string };
 
 /** Shape of a single tool call from the model response. */
 export interface PresetToolCall {
-	id?: string;
-	type?: string;
-	function?: {
-		name?: string;
-		arguments?: string;
-	};
+  id?: string;
+  type?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -51,45 +51,45 @@ export interface PresetToolCall {
  * is injected into the system prompt alongside `buildPresetPrompt()`.
  */
 export function buildPresetResponseSchema() {
-	return {
-		type: "object" as const,
-		properties: {
-			attribute_list: {
-				type: "array" as const,
-				description:
-					'Array containing exactly 6 items describing different facets of the character, in this exact order: 1) {bot}\'s Description (core identity and essence), 2) {bot}\'s Appearance (physical traits and style), 3) {bot}\'s Personality (personality traits, comma-separated), 4) {bot}\'s Likes (interests and preferences), 5) {bot}\'s Dislikes (aversions and pet peeves), 6) {bot}\'s Behavioral Quirks (unique mannerisms and patterns). Each item maximum 2000 characters, in this specific format per array item: "{bot}\'s Description: "',
-				items: {
-					type: "string" as const,
-					maxLength: 2000,
-				},
-				minItems: 6,
-				maxItems: 6,
-			},
-			sample_dialogues_in: {
-				type: "array" as const,
-				description:
-					"Array of exactly 5 example user messages. MUST include these 3 guided scenarios in order: 1) Self-introduction request, 2) Emotional/personal scenario, 3) Practical/functional scenario. Then add 2 free dialogue scenarios that showcase unique character traits. Do NOT prepend with speaker names. Each message maximum 2000 characters.",
-				items: {
-					type: "string" as const,
-					maxLength: 2000,
-				},
-				minItems: 5,
-				maxItems: 5,
-			},
-			sample_dialogues_out: {
-				type: "array" as const,
-				description:
-					"Array of exactly 5 character responses paired with sample_dialogues_in. Should reflect the character's speaking style, personality, and demonstrate their full range across the 3 guided scenarios and 2 free scenarios. Do NOT prepend with speaker names. Each response maximum 2000 characters.",
-				items: {
-					type: "string" as const,
-					maxLength: 2000,
-				},
-				minItems: 5,
-				maxItems: 5,
-			},
-		},
-		required: ["attribute_list", "sample_dialogues_in", "sample_dialogues_out"],
-	};
+  return {
+    type: "object" as const,
+    properties: {
+      attribute_list: {
+        type: "array" as const,
+        description:
+          "Array containing exactly 6 items describing different facets of the character, in this exact order: 1) {bot}'s Description (core identity and essence), 2) {bot}'s Appearance (physical traits and style), 3) {bot}'s Personality (personality traits, comma-separated), 4) {bot}'s Likes (interests and preferences), 5) {bot}'s Dislikes (aversions and pet peeves), 6) {bot}'s Behavioral Quirks (unique mannerisms and patterns). Each item maximum 2000 characters, in this specific format per array item: \"{bot}'s Description: \"",
+        items: {
+          type: "string" as const,
+          maxLength: 2000,
+        },
+        minItems: 6,
+        maxItems: 6,
+      },
+      sample_dialogues_in: {
+        type: "array" as const,
+        description:
+          "Array of exactly 5 example user messages. MUST include these 3 guided scenarios in order: 1) Self-introduction request, 2) Emotional/personal scenario, 3) Practical/functional scenario. Then add 2 free dialogue scenarios that showcase unique character traits. Do NOT prepend with speaker names. Each message maximum 2000 characters.",
+        items: {
+          type: "string" as const,
+          maxLength: 2000,
+        },
+        minItems: 5,
+        maxItems: 5,
+      },
+      sample_dialogues_out: {
+        type: "array" as const,
+        description:
+          "Array of exactly 5 character responses paired with sample_dialogues_in. Should reflect the character's speaking style, personality, and demonstrate their full range across the 3 guided scenarios and 2 free scenarios. Do NOT prepend with speaker names. Each response maximum 2000 characters.",
+        items: {
+          type: "string" as const,
+          maxLength: 2000,
+        },
+        minItems: 5,
+        maxItems: 5,
+      },
+    },
+    required: ["attribute_list", "sample_dialogues_in", "sample_dialogues_out"],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -104,16 +104,16 @@ export function buildPresetResponseSchema() {
  * optional sections for web search, existing preset context, and additional instructions.
  */
 export function buildPresetPrompt(params: {
-	characterName: string;
-	characterDescription: string;
-	speechExamples: string;
-	additionalInstructions?: string;
-	imageBase64?: string;
-	imageMimeType?: string;
-	useWebSearch?: boolean;
-	existingPresetContext?: string;
+  characterName: string;
+  characterDescription: string;
+  speechExamples: string;
+  additionalInstructions?: string;
+  imageBase64?: string;
+  imageMimeType?: string;
+  useWebSearch?: boolean;
+  existingPresetContext?: string;
 }): string {
-	let prompt = `You are an expert character creator for a Discord chatbot. Create a detailed character profile based on the following information.
+  let prompt = `You are an expert character creator for a Discord chatbot. Create a detailed character profile based on the following information.
 
 Character Name: ${params.characterName}
 
@@ -171,25 +171,25 @@ The sample_dialogues_in and sample_dialogues_out MUST follow this structure (exa
    - Avoid repeating patterns from previous dialogues
    - Could be humor, vulnerability, expertise, philosophical musings, or anything that adds dimension`;
 
-	if (params.existingPresetContext?.trim()) {
-		prompt += `\n\nExisting Character Data (from uploaded card/preset):
+  if (params.existingPresetContext?.trim()) {
+    prompt += `\n\nExisting Character Data (from uploaded card/preset):
 Use this as reference material to transform, refine, or expand upon according to the user's description and instructions. Preserve the core character identity while incorporating requested changes.
 
 ${params.existingPresetContext.trim()}`;
-	}
+  }
 
-	if (params.useWebSearch) {
-		prompt += `\n\nWeb Search Instructions:
+  if (params.useWebSearch) {
+    prompt += `\n\nWeb Search Instructions:
 - Use the available web search tools to gather accurate, up-to-date details when helpful
 - If you cannot find reliable information, treat the character as original and rely on the user's description and image
 - Do not include citations, URLs, or sources in the JSON output`;
-	}
+  }
 
-	if (params.additionalInstructions?.trim()) {
-		prompt += `\n\nAdditional Instructions: ${params.additionalInstructions.trim()}`;
-	}
+  if (params.additionalInstructions?.trim()) {
+    prompt += `\n\nAdditional Instructions: ${params.additionalInstructions.trim()}`;
+  }
 
-	prompt += `\n\nIMPORTANT:
+  prompt += `\n\nIMPORTANT:
 - Respond with COMPLETE valid JSON only
 - Follow the exact schema provided with strict length limits
 - Exactly 6 items in attribute_list in the exact order specified above (each MAX 2000 characters)
@@ -201,7 +201,7 @@ ${params.existingPresetContext.trim()}`;
 - Use "{bot}" placeholder when character refers to themselves in their responses
 - All string lengths must not exceed 2000 characters per item`;
 
-	return prompt;
+  return prompt;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,26 +217,26 @@ ${params.existingPresetContext.trim()}`;
  * 3. Null/undefined → empty string
  */
 export function extractResponseText(content: unknown): string {
-	if (typeof content === "string") {
-		return content;
-	}
+  if (typeof content === "string") {
+    return content;
+  }
 
-	if (Array.isArray(content)) {
-		return content
-			.filter(
-				(part): part is { type: "text"; text: string } =>
-					typeof part === "object" &&
-					part !== null &&
-					"type" in part &&
-					(part as { type?: string }).type === "text" &&
-					"text" in part &&
-					typeof (part as { text?: unknown }).text === "string",
-			)
-			.map((part) => part.text)
-			.join("");
-	}
+  if (Array.isArray(content)) {
+    return content
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          (part as { type?: string }).type === "text" &&
+          "text" in part &&
+          typeof (part as { text?: unknown }).text === "string",
+      )
+      .map((part) => part.text)
+      .join("");
+  }
 
-	return "";
+  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -247,9 +247,9 @@ export function extractResponseText(content: unknown): string {
  * Build a standard ToolResult for tool-call errors.
  */
 export function buildToolErrorResult(message: string): ToolResult {
-	return {
-		success: false,
-		error: message,
-		message,
-	};
+  return {
+    success: false,
+    error: message,
+    message,
+  };
 }

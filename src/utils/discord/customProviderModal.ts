@@ -589,7 +589,10 @@ export async function promptOtherModelConfig(
         localizer(locale, "commands.config.model.text.other_model_model_label"),
       )
       .setPlaceholder(
-        localizer(locale, "commands.config.model.text.other_model_model_placeholder"),
+        localizer(
+          locale,
+          "commands.config.model.text.other_model_model_placeholder",
+        ),
       )
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
@@ -681,25 +684,42 @@ export function getCustomEndpointValidationMessage(
 } {
   switch (validation.failureCode) {
     case "INVALID_PROTOCOL":
-      return { descriptionKey: "commands.config.custom.endpoint_url_protocol_description" };
+      return {
+        descriptionKey:
+          "commands.config.custom.endpoint_url_protocol_description",
+      };
     case "PRODUCTION_HTTPS_REQUIRED":
-      return { descriptionKey: "commands.config.custom.endpoint_url_https_required_description" };
+      return {
+        descriptionKey:
+          "commands.config.custom.endpoint_url_https_required_description",
+      };
     case "REMOTE_HTTP_FORBIDDEN":
-      return { descriptionKey: "commands.config.custom.endpoint_url_http_localhost_only_description" };
+      return {
+        descriptionKey:
+          "commands.config.custom.endpoint_url_http_localhost_only_description",
+      };
     case "PRODUCTION_LOCALHOST_FORBIDDEN":
-      return { descriptionKey: "commands.config.custom.endpoint_url_localhost_blocked_description" };
+      return {
+        descriptionKey:
+          "commands.config.custom.endpoint_url_localhost_blocked_description",
+      };
     case "DNS_RESOLUTION_FAILED":
       return {
-        descriptionKey: "commands.config.custom.endpoint_url_dns_failed_description",
+        descriptionKey:
+          "commands.config.custom.endpoint_url_dns_failed_description",
         descriptionVars: { hostname: validation.hostname ?? "unknown" },
       };
     case "PRODUCTION_BLOCKED_ADDRESS":
       return {
-        descriptionKey: "commands.config.custom.endpoint_url_private_address_description",
+        descriptionKey:
+          "commands.config.custom.endpoint_url_private_address_description",
         descriptionVars: { address: validation.blockedAddress ?? "unknown" },
       };
     default:
       // INVALID_FORMAT or unexpected codes
-      return { descriptionKey: "commands.config.custom.endpoint_url_invalid_description" };
+      return {
+        descriptionKey:
+          "commands.config.custom.endpoint_url_invalid_description",
+      };
   }
 }

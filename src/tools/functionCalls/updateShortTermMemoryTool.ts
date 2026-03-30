@@ -177,21 +177,21 @@ export class UpdateShortTermMemoryTool extends BaseTool {
       const channelName =
         "name" in context.channel ? context.channel.name : undefined;
 
-			// 5. Update both the user-scoped STM and, in guilds, the shared server STM
-			const tomoriId = context.tomoriState?.tomori_id ?? null;
-			const personaLineageId = context.tomoriState?.persona_lineage_id ?? null;
-			const userCacheKey = tomoriId
-				? `shortterm:user:${triggeringUserId}:${channelId}:${tomoriId}`
-				: `shortterm:user:${triggeringUserId}:${channelId}`;
-			const serverCacheKey =
-				serverId === "DM"
-					? "n/a"
-					: tomoriId
-						? `shortterm:server:${serverId}:${channelId}:${tomoriId}`
-						: `shortterm:server:${serverId}:${channelId}`;
-			log.info(
-				`[updateShortTermMemoryTool] [TOOL_EXECUTE] Calling updateShortTermMemorySummary - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, summaryLength=${trimmedSummary.length}, serverId=${serverId}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
-			);
+      // 5. Update both the user-scoped STM and, in guilds, the shared server STM
+      const tomoriId = context.tomoriState?.tomori_id ?? null;
+      const personaLineageId = context.tomoriState?.persona_lineage_id ?? null;
+      const userCacheKey = tomoriId
+        ? `shortterm:user:${triggeringUserId}:${channelId}:${tomoriId}`
+        : `shortterm:user:${triggeringUserId}:${channelId}`;
+      const serverCacheKey =
+        serverId === "DM"
+          ? "n/a"
+          : tomoriId
+            ? `shortterm:server:${serverId}:${channelId}:${tomoriId}`
+            : `shortterm:server:${serverId}:${channelId}`;
+      log.info(
+        `[updateShortTermMemoryTool] [TOOL_EXECUTE] Calling updateShortTermMemorySummary - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, summaryLength=${trimmedSummary.length}, serverId=${serverId}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
+      );
 
       updateShortTermMemorySummary(
         triggeringUserId,
@@ -204,9 +204,9 @@ export class UpdateShortTermMemoryTool extends BaseTool {
         personaLineageId,
       );
 
-			log.success(
-				`[updateShortTermMemoryTool] [TOOL_EXECUTE] Updated short-term memory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, summaryLength=${Math.min(trimmedSummary.length, MAX_SUMMARY_LENGTH)}`,
-			);
+      log.success(
+        `[updateShortTermMemoryTool] [TOOL_EXECUTE] Updated short-term memory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, summaryLength=${Math.min(trimmedSummary.length, MAX_SUMMARY_LENGTH)}`,
+      );
 
       // 6. Return success with no user-facing message (silent operation)
       return {

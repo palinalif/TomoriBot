@@ -321,7 +321,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       if (serverIdNum) {
         try {
           const guildMcpManager = getGuildMcpManager();
-          const guildFunctionNames = await guildMcpManager.getGuildMCPFunctionNames(serverIdNum);
+          const guildFunctionNames =
+            await guildMcpManager.getGuildMCPFunctionNames(serverIdNum);
 
           if (guildFunctionNames.length > 0) {
             // Collision check: skip guild functions that shadow built-in or global MCP names
@@ -344,7 +345,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             );
           }
         } catch (error) {
-          log.warn("[GuildMCP] Failed to get guild MCP function names, continuing without", error);
+          log.warn(
+            "[GuildMCP] Failed to get guild MCP function names, continuing without",
+            error,
+          );
         }
       }
 
@@ -353,7 +357,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       // A guild server with server_type = 'url_fetcher' replaces the built-in 'fetch' MCP tool.
       if (serverIdNum) {
         try {
-          const enabledConfigs = await getCachedEnabledGuildMcpConfigs(serverIdNum);
+          const enabledConfigs =
+            await getCachedEnabledGuildMcpConfigs(serverIdNum);
           const guildServerTypes = new Set(
             enabledConfigs.map((c) => c.server_type).filter(Boolean),
           );
@@ -361,10 +366,17 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           if (guildServerTypes.has("web_search")) {
             const webSearchFunctions = [
               // Brave search functions
-              "brave_web_search", "brave_image_search", "brave_video_search",
-              "brave_news_search", "brave_local_search", "brave_summarizer",
+              "brave_web_search",
+              "brave_image_search",
+              "brave_video_search",
+              "brave_news_search",
+              "brave_local_search",
+              "brave_summarizer",
               // DuckDuckGo search functions
-              "web-search", "felo-search", "iask-search", "monica-search",
+              "web-search",
+              "felo-search",
+              "iask-search",
+              "monica-search",
               "url-metadata",
             ];
             const beforeCount = mcpFunctionNames.length;
@@ -393,7 +405,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             }
           }
         } catch (error) {
-          log.warn("[GuildMCP] Failed to check server types for deduplication, continuing without", error);
+          log.warn(
+            "[GuildMCP] Failed to check server types for deduplication, continuing without",
+            error,
+          );
         }
       }
 
@@ -590,9 +605,14 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     // 2. Check if it's a guild MCP function — also requires follow-up
     if (serverId) {
       try {
-        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(serverId, functionName);
+        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(
+          serverId,
+          functionName,
+        );
         if (isGuildMcp) return true;
-      } catch { /* fall through */ }
+      } catch {
+        /* fall through */
+      }
     }
 
     // 3. Check built-in tool property
@@ -626,10 +646,20 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     if (serverId) {
       try {
         const guildMcpManager = getGuildMcpManager();
-        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(serverId, toolName);
+        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(
+          serverId,
+          toolName,
+        );
         if (isGuildMcp) {
-          log.info(`Executing guild MCP function: ${toolName} for server ${serverId}`);
-          const result = await guildMcpManager.executeGuildMCPFunction(serverId, toolName, args, context);
+          log.info(
+            `Executing guild MCP function: ${toolName} for server ${serverId}`,
+          );
+          const result = await guildMcpManager.executeGuildMCPFunction(
+            serverId,
+            toolName,
+            args,
+            context,
+          );
           const executionTime = Date.now() - startTime;
 
           // Record execution event
@@ -645,15 +675,22 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           });
 
           if (result.success) {
-            log.success(`Guild MCP function executed successfully: ${toolName} (${executionTime}ms)`);
+            log.success(
+              `Guild MCP function executed successfully: ${toolName} (${executionTime}ms)`,
+            );
           } else {
-            log.warn(`Guild MCP function execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`);
+            log.warn(
+              `Guild MCP function execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`,
+            );
           }
 
           return result;
         }
       } catch (error) {
-        log.warn(`Error checking/executing guild MCP function '${toolName}':`, error as Error);
+        log.warn(
+          `Error checking/executing guild MCP function '${toolName}':`,
+          error as Error,
+        );
       }
     }
 

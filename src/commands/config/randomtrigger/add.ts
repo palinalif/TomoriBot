@@ -253,7 +253,8 @@ export async function execute(
           kind: "checkboxGroup" as const,
           customId: RESPOND_TO_SELF_ID,
           labelKey: "commands.config.randomtrigger.add.respond_to_self_label",
-          descriptionKey: "commands.config.randomtrigger.add.respond_to_self_description",
+          descriptionKey:
+            "commands.config.randomtrigger.add.respond_to_self_description",
           minValues: 0,
           required: false,
           options: [
@@ -309,7 +310,9 @@ export async function execute(
         : Number.parseInt(personaRawValue, 10);
 
     // Checkbox Group: "yes" present in multiValues = respond to self enabled
-    const respondToSelf = (modalResult.multiValues?.[RESPOND_TO_SELF_ID] ?? []).includes("yes");
+    const respondToSelf = (
+      modalResult.multiValues?.[RESPOND_TO_SELF_ID] ?? []
+    ).includes("yes");
 
     // Resolve display name for success/override embeds
     const personaDisplayName =

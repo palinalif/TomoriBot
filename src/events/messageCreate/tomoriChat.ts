@@ -618,7 +618,6 @@ function cacheUserImpersonationWebhook(
   cacheWebhookRelay(webhookId, userId, "user_impersonation");
 }
 
-
 function getCachedWebhookRelay(
   webhookId: string | null | undefined,
 ): CachedWebhookRelay | null {
@@ -639,7 +638,6 @@ function getCachedWebhookRelay(
   return cached;
 }
 
-
 function getCachedImpersonatedUserIdForWebhook(
   webhookId: string | null | undefined,
 ): string | null {
@@ -650,7 +648,6 @@ function getCachedImpersonatedUserIdForWebhook(
 
   return cachedRelay.userId;
 }
-
 
 function markAudioTranscriptionHandled(message: Message): void {
   (message as MessageWithInternalFlags)[AUDIO_TRANSCRIPTION_HANDLED_KEY] = true;
@@ -663,10 +660,7 @@ function hasHandledAudioTranscription(message: Message): boolean {
   );
 }
 
-function applyEffectiveMessageContent(
-  message: Message,
-  content: string,
-): void {
+function applyEffectiveMessageContent(message: Message, content: string): void {
   try {
     Object.defineProperty(message, "content", {
       value: content,
@@ -688,7 +682,9 @@ function applyEffectiveMessageContent(
   }
 }
 
-function isMatrixRelayMessage(message: Pick<Message, "webhookId" | "author">): boolean {
+function isMatrixRelayMessage(
+  message: Pick<Message, "webhookId" | "author">,
+): boolean {
   return (
     Boolean(message.webhookId) &&
     isMatrixBridgeWebhookUsername(message.author.username)
@@ -697,8 +693,7 @@ function isMatrixRelayMessage(message: Pick<Message, "webhookId" | "author">): b
 
 function isRealUserLikeMessage(message: Message): boolean {
   return (
-    (!message.author.bot && !message.webhookId) ||
-    isMatrixRelayMessage(message)
+    (!message.author.bot && !message.webhookId) || isMatrixRelayMessage(message)
   );
 }
 
@@ -1983,9 +1978,7 @@ export default async function tomoriChat(
     naiContinuationPrefill, // NAI GLM-4.6: carry trailing fragment into prompt for mid-sentence continuation
   };
 
-  const userDiscId =
-    manualTriggerInvoker?.userDiscId ??
-    message.author.id;
+  const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
   const triggererUsername =
     manualTriggerInvoker?.username ?? message.author.username;
   const queuedReplyDirective =
@@ -2171,11 +2164,7 @@ export default async function tomoriChat(
   // Guard: block replies to other bots' messages unless Tomori is directly addressed.
   // Placed here (after earlyAllPersonas load) so all persona/alter trigger words are
   // available for the check, not just BASE_TRIGGER_WORDS.
-  if (
-    !isManuallyTriggered &&
-    !isBotAuthor &&
-    message.reference?.messageId
-  ) {
+  if (!isManuallyTriggered && !isBotAuthor && message.reference?.messageId) {
     let referencedMessage = message.channel.messages.cache.get(
       message.reference.messageId,
     );
@@ -3106,7 +3095,7 @@ export default async function tomoriChat(
               contentParts.push(
                 field.name && field.value
                   ? `${field.name}: ${field.value}`
-                  : (field.name || field.value),
+                  : field.name || field.value,
               );
             }
           }
@@ -3872,14 +3861,19 @@ export default async function tomoriChat(
       // Only user messages are STT'd; bot/webhook messages are skipped.
       // Skip entirely in chat mode — transcripts are already posted as chat
       // messages and the cache is not used in that mode.
-      if (earlyTomoriState && !(earlyTomoriState.config?.voice_transcript_chat_mode ?? false)) {
+      if (
+        earlyTomoriState &&
+        !(earlyTomoriState.config?.voice_transcript_chat_mode ?? false)
+      ) {
         for (const msg of relevantMessagesArray) {
           // 1. Skip bots and webhooks — only user audio is STT'd
           if (msg.author.bot || msg.webhookId) continue;
           // 2. Skip if already cached (current-turn message was cached above)
           if (getCachedVoiceTranscript(msg.id)) continue;
           // 3. Run STT only if the message has at least one audio attachment
-          const hasAudio = [...msg.attachments.values()].some(isAudioAttachment);
+          const hasAudio = [...msg.attachments.values()].some(
+            isAudioAttachment,
+          );
           if (!hasAudio) continue;
 
           const result = await transcribeMessageAudioAttachment(
@@ -3918,7 +3912,8 @@ export default async function tomoriChat(
       if (isUserImpersonation && impersonatedUserId) {
         const impersonatedUserRow = await getCachedUserRow(impersonatedUserId);
         impersonatedUserDbNickname = impersonatedUserRow?.user_nickname;
-        impersonatedUserPrompt = impersonatedUserRow?.impersonation_prompt ?? undefined;
+        impersonatedUserPrompt =
+          impersonatedUserRow?.impersonation_prompt ?? undefined;
         const impersonatedIdentity = await resolveImpersonatedIdentity(
           client,
           guild,
@@ -5759,8 +5754,8 @@ export default async function tomoriChat(
               : undefined;
           const personaAvatarUrl = isUserImpersonation
             ? undefined
-            : resolvedPersonaIdentity?.avatarDataUri ??
-              resolvedPersonaIdentity?.avatarUrl;
+            : (resolvedPersonaIdentity?.avatarDataUri ??
+              resolvedPersonaIdentity?.avatarUrl);
 
           // For user impersonation: separate webhook display name from prefix stripping name
           let personaUsername: string | undefined;
@@ -5775,7 +5770,8 @@ export default async function tomoriChat(
           } else if (personaWebhook && currentPersona.is_alter) {
             // For alter personas, use persona nickname for both
             personaUsername =
-              resolvedPersonaIdentity?.username ?? currentPersona.tomori_nickname;
+              resolvedPersonaIdentity?.username ??
+              currentPersona.tomori_nickname;
             prefixStrippingName = undefined; // Will fall back to personaUsername
           } else {
             personaUsername = undefined;
@@ -7780,7 +7776,9 @@ export default async function tomoriChat(
               turnThoughtLog,
               personaThoughtLog,
             );
-            if (thoughtLogOwnersMatch(turnThoughtLogOwner, currentThoughtLogOwner)) {
+            if (
+              thoughtLogOwnersMatch(turnThoughtLogOwner, currentThoughtLogOwner)
+            ) {
               turnThoughtLogOwner = currentThoughtLogOwner;
             } else {
               turnThoughtLogOwner = { type: "default" };
@@ -8653,7 +8651,8 @@ export function shouldBotReply(
         // Log diagnostic for self-messages to trace cross-persona trigger chains
         if (isSelfMessage) {
           selfMsgTriggerDiag = {
-            matchedPersona: persona.tomori_nickname ?? `id:${persona.tomori_id}`,
+            matchedPersona:
+              persona.tomori_nickname ?? `id:${persona.tomori_id}`,
             matchedTrigger: trigger,
             triggerSource,
             senderPersona:

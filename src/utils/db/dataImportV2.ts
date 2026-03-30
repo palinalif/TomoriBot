@@ -288,9 +288,11 @@ export async function importServerConfig(
 
     // Build NAI tag array literals for safe insertion
     const naiStyleTagsLiteral = config.nai_style_tags
-      ? `{${config.nai_style_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}` : null;
+      ? `{${config.nai_style_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
+      : null;
     const naiNegativeTagsLiteral = config.nai_negative_tags
-      ? `{${config.nai_negative_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}` : null;
+      ? `{${config.nai_negative_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
+      : null;
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`

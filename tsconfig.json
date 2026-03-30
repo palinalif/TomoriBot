@@ -13,9 +13,8 @@
     "tsBuildInfoFile": "./node_modules/.cache/.tsbuildinfo",
     "typeRoots": ["./node_modules/@types"],
     "types": ["node", "bun"],
-    "baseUrl": "./src",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [

@@ -223,7 +223,11 @@ export async function checkTextQuota(
     }
 
     // 3. Check user daily quota first (most common limit)
-    const userCheck = await checkUserDailyTextQuota(serverId, userDiscId, config);
+    const userCheck = await checkUserDailyTextQuota(
+      serverId,
+      userDiscId,
+      config,
+    );
     if (!userCheck.allowed) {
       return userCheck;
     }
@@ -311,7 +315,9 @@ export async function cleanupOldTextQuotas(): Promise<number> {
  * Manually reset server-wide text quota (admin override)
  * Creates new quota period starting now
  */
-export async function resetTextServerwideQuota(serverId: number): Promise<void> {
+export async function resetTextServerwideQuota(
+  serverId: number,
+): Promise<void> {
   try {
     const config = await getTextQuotaConfig(serverId);
 

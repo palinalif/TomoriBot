@@ -200,7 +200,10 @@ export async function execute(
       if (!apiKey || !urlValidation.valid) {
         const validationMessage = apiKey
           ? getCustomEndpointValidationMessage(urlValidation)
-          : { descriptionKey: "commands.config.custom.endpoint_url_invalid_description" };
+          : {
+              descriptionKey:
+                "commands.config.custom.endpoint_url_invalid_description",
+            };
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.custom.endpoint_url_invalid_title",
           descriptionKey: validationMessage.descriptionKey,
@@ -264,7 +267,8 @@ export async function execute(
         const providerName = selectedProvider.toLowerCase();
 
         // Use factory to get provider instance directly by canonical name or alias
-        providerInstance = await ProviderFactory.getProviderByName(providerName);
+        providerInstance =
+          await ProviderFactory.getProviderByName(providerName);
 
         // Validate the API key with the provider
         validationResult = await providerInstance.validateApiKey(apiKey);
@@ -601,10 +605,9 @@ export async function execute(
     // 14.5. Success message (include model info if provider changed)
     // When switching specifically to NovelAI, use the dedicated key that also
     // notifies the user that emoji/sticker usage were automatically disabled.
-    const successDescriptionKey =
-      isCustomProvider(newProvider)
-        ? "commands.config.apikey.set.custom_success_with_model_description"
-        : currentProvider !== newProvider && newProvider === "novelai"
+    const successDescriptionKey = isCustomProvider(newProvider)
+      ? "commands.config.apikey.set.custom_success_with_model_description"
+      : currentProvider !== newProvider && newProvider === "novelai"
         ? "commands.config.apikey.set.novelai_success_with_model_description"
         : currentProvider !== newProvider
           ? "commands.config.apikey.set.success_with_model_description"

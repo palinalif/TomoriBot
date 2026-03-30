@@ -10,17 +10,18 @@
  */
 import { log } from "@/utils/misc/logger";
 import type {
-	CompactConversationResult,
-	CompactRoleplayResult,
-	ProviderCompactSummaryRequest,
+  CompactConversationResult,
+  CompactRoleplayResult,
+  ProviderCompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import { callDeepseekStructuredJSON } from "@/providers/deepseek/deepseekStructuredOutput";
 import {
-	buildRoleplaySchema,
-	CompactRoleplaySummarySchema,
+  buildRoleplaySchema,
+  CompactRoleplaySummarySchema,
 } from "@/providers/utils/compactCommon";
 
-const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_CHAT_COMPLETIONS_URL =
+  "https://api.deepseek.com/chat/completions";
 
 /**
  * Generate a plain-text conversation summary using the DeepSeek API.
@@ -29,81 +30,80 @@ const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions
  * @returns Plain-text summary or an error object
  */
 export async function generateConversationSummaryDeepseek(
-	request: ProviderCompactSummaryRequest,
+  request: ProviderCompactSummaryRequest,
 ): Promise<CompactConversationResult> {
-	try {
-		if (!request.apiKey || request.apiKey.trim().length < 10) {
-			return { error: "Invalid DeepSeek API key" };
-		}
+  try {
+    if (!request.apiKey || request.apiKey.trim().length < 10) {
+      return { error: "Invalid DeepSeek API key" };
+    }
 
-		// 1. Build the message array
-		const messages: Array<Record<string, unknown>> = [];
-		if (request.systemPrompt) {
-			messages.push({ role: "system", content: request.systemPrompt });
-		}
-		messages.push({ role: "user", content: request.userPrompt });
+    // 1. Build the message array
+    const messages: Array<Record<string, unknown>> = [];
+    if (request.systemPrompt) {
+      messages.push({ role: "system", content: request.systemPrompt });
+    }
+    messages.push({ role: "user", content: request.userPrompt });
 
-		// 2. Build the request body
-		const body: Record<string, unknown> = {
-			model: request.model,
-			messages,
-			max_tokens: 4096,
-			stream: false,
-		};
+    // 2. Build the request body
+    const body: Record<string, unknown> = {
+      model: request.model,
+      messages,
+      max_tokens: 4096,
+      stream: false,
+    };
 
-		// 3. Omit temperature for deepseek-reasoner (not supported by that model)
-		if (request.model !== "deepseek-reasoner") {
-			body.temperature = request.temperature ?? 0.7;
-		}
+    // 3. Omit temperature for deepseek-reasoner (not supported by that model)
+    if (request.model !== "deepseek-reasoner") {
+      body.temperature = request.temperature ?? 0.7;
+    }
 
-		// 4. Send the request
-		const response = await fetch(DEEPSEEK_CHAT_COMPLETIONS_URL, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${request.apiKey}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(body),
-		});
+    // 4. Send the request
+    const response = await fetch(DEEPSEEK_CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-		if (!response.ok) {
-			const errorBody = await response.text();
-			log.error(
-				"DeepSeek compact summary request failed",
-				new Error(errorBody),
-				{
-					errorType: "DeepseekCompactHttpError",
-					metadata: {
-						model: request.model,
-						status: response.status,
-						errorBody,
-					},
-				},
-			);
-			return {
-				error: `DeepSeek request failed (${response.status}): ${response.statusText}`,
-			};
-		}
+    if (!response.ok) {
+      const errorBody = await response.text();
+      log.error(
+        "DeepSeek compact summary request failed",
+        new Error(errorBody),
+        {
+          errorType: "DeepseekCompactHttpError",
+          metadata: {
+            model: request.model,
+            status: response.status,
+            errorBody,
+          },
+        },
+      );
+      return {
+        error: `DeepSeek request failed (${response.status}): ${response.statusText}`,
+      };
+    }
 
-		// 5. Extract the response text
-		const result = (await response.json()) as {
-			choices?: Array<{ message?: { content?: unknown } }>;
-		};
-		const content = result.choices?.[0]?.message?.content;
-		const responseText = typeof content === "string" ? content.trim() : "";
+    // 5. Extract the response text
+    const result = (await response.json()) as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = result.choices?.[0]?.message?.content;
+    const responseText = typeof content === "string" ? content.trim() : "";
 
-		if (!responseText) {
-			return { error: "DeepSeek returned an empty response." };
-		}
+    if (!responseText) {
+      return { error: "DeepSeek returned an empty response." };
+    }
 
-		return { summary: responseText };
-	} catch (error) {
-		log.error("DeepSeek compact summary failed", error as Error);
-		return {
-			error:
-				error instanceof Error ? error.message : "Unknown DeepSeek error",
-		};
-	}
+    return { summary: responseText };
+  } catch (error) {
+    log.error("DeepSeek compact summary failed", error as Error);
+    return {
+      error: error instanceof Error ? error.message : "Unknown DeepSeek error",
+    };
+  }
 }
 
 /**
@@ -116,24 +116,24 @@ export async function generateConversationSummaryDeepseek(
  * @returns Structured roleplay summary or an error object
  */
 export async function generateRoleplaySummaryDeepseek(
-	request: ProviderCompactSummaryRequest,
+  request: ProviderCompactSummaryRequest,
 ): Promise<CompactRoleplayResult> {
-	const result = await callDeepseekStructuredJSON(
-		{
-			apiKey: request.apiKey,
-			model: request.model,
-			systemPrompt: request.systemPrompt ?? "",
-			userPrompt: request.userPrompt,
-			temperature: request.temperature,
-			schemaName: "roleplay_summary",
-		},
-		buildRoleplaySchema(),
-		CompactRoleplaySummarySchema,
-	);
+  const result = await callDeepseekStructuredJSON(
+    {
+      apiKey: request.apiKey,
+      model: request.model,
+      systemPrompt: request.systemPrompt ?? "",
+      userPrompt: request.userPrompt,
+      temperature: request.temperature,
+      schemaName: "roleplay_summary",
+    },
+    buildRoleplaySchema(),
+    CompactRoleplaySummarySchema,
+  );
 
-	if (!result.success) {
-		return { error: result.error };
-	}
+  if (!result.success) {
+    return { error: result.error };
+  }
 
-	return { summary: result.data };
+  return { summary: result.data };
 }

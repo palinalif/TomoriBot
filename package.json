@@ -1,6 +1,6 @@
 {
   "name": "tomoribot",
-  "version": "0.7.910",
+  "version": "0.7.911",
   "description": "Customizable AI Assistant Discord Bot",
   "main": "./src/index.ts",
   "type": "module",
@@ -13,7 +13,7 @@
     "nuke-db": "bun run scripts/nukeDb.ts",
     "backup": "bun run scripts/backupData.ts --backup",
     "restore-backup": "bun run scripts/backupData.ts --restore",
-    "lint":"bunx @biomejs/biome lint --fix",
+    "lint": "bunx @biomejs/biome check --fix",
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/checkLocalizationKeys.ts",
     "check-limits": "bun run scripts/checkDiscordLimits.ts",

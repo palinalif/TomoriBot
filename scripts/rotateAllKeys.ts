@@ -14,8 +14,8 @@
 
 import { config } from "dotenv";
 import { sql } from "bun";
-import { keyManager } from "@/utils/security/keyManager";
-import { decryptApiKey, encryptApiKey } from "@/utils/security/crypto";
+import { keyManager } from "../src/utils/security/keyManager";
+import { decryptApiKey, encryptApiKey } from "../src/utils/security/crypto";
 
 config();
 
@@ -52,7 +52,7 @@ interface OldKeyRow {
   table: string;
   id: number;
   api_key: Buffer;
-  key_version: number | null;
+  key_version: number | undefined;
   identifier: string; // For logging (e.g., "server_id: 123, service: brave-search")
 }
 

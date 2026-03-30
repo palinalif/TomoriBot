@@ -5,18 +5,18 @@ import { OpenAICompatibleToolAdapter } from "@/providers/openaiCompatible/openai
  * Extends the shared OpenAI-compatible adapter with no overrides needed.
  */
 export class ZaiToolAdapter extends OpenAICompatibleToolAdapter {
-	private static instance: ZaiToolAdapter;
+  private static instance: ZaiToolAdapter;
 
-	private constructor() {
-		super("zai");
-	}
+  private constructor() {
+    super("zai");
+  }
 
-	static getInstance(): ZaiToolAdapter {
-		if (!ZaiToolAdapter.instance) {
-			ZaiToolAdapter.instance = new ZaiToolAdapter();
-		}
-		return ZaiToolAdapter.instance;
-	}
+  static getInstance(): ZaiToolAdapter {
+    if (!ZaiToolAdapter.instance) {
+      ZaiToolAdapter.instance = new ZaiToolAdapter();
+    }
+    return ZaiToolAdapter.instance;
+  }
 }
 
 /**
@@ -24,5 +24,5 @@ export class ZaiToolAdapter extends OpenAICompatibleToolAdapter {
  * @returns The Z.ai tool adapter
  */
 export function getZaiToolAdapter(): ZaiToolAdapter {
-	return ZaiToolAdapter.getInstance();
+  return ZaiToolAdapter.getInstance();
 }

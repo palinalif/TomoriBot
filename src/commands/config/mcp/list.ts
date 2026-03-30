@@ -13,8 +13,8 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 /** Map server_type values to locale keys for display labels */
 const SERVER_TYPE_LABEL_KEYS: Record<string, string> = {
-	web_search: "commands.config.mcp.add.web_search_option",
-	url_fetcher: "commands.config.mcp.add.url_fetcher_option",
+  web_search: "commands.config.mcp.add.web_search_option",
+  url_fetcher: "commands.config.mcp.add.url_fetcher_option",
 };
 
 /**
@@ -91,9 +91,10 @@ export async function execute(
 
       const statusEmoji = config.is_enabled ? "✅" : "❌";
       const hasAuth = config.auth_token ? "🔑" : "";
-      const typeLabel = config.server_type && SERVER_TYPE_LABEL_KEYS[config.server_type]
-        ? ` 🏷️ ${localizer(locale, SERVER_TYPE_LABEL_KEYS[config.server_type])}`
-        : "";
+      const typeLabel =
+        config.server_type && SERVER_TYPE_LABEL_KEYS[config.server_type]
+          ? ` 🏷️ ${localizer(locale, SERVER_TYPE_LABEL_KEYS[config.server_type])}`
+          : "";
       return `${statusEmoji} **${config.name}** ・ \`${maskedDomain}\` ${hasAuth}${typeLabel}`;
     });
 

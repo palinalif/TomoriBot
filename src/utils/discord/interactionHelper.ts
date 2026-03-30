@@ -35,9 +35,9 @@ import type {
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
 import {
-	resolvePersonaAvatarPublicUrl,
-	isLocalPersonaAvatarPath,
-	loadStoredPersonaAvatarBuffer,
+  resolvePersonaAvatarPublicUrl,
+  isLocalPersonaAvatarPath,
+  loadStoredPersonaAvatarBuffer,
 } from "@/utils/storage/avatarStorage";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 
@@ -218,7 +218,10 @@ function setupWebSocketInterception(client: any) {
               }
 
               if (Object.keys(checkboxGroupValues).length > 0) {
-                modalCheckboxGroupValues.set(interactionId, checkboxGroupValues);
+                modalCheckboxGroupValues.set(
+                  interactionId,
+                  checkboxGroupValues,
+                );
                 log.info(
                   `Stored ${Object.keys(checkboxGroupValues).length} checkbox group value set(s) for interaction`,
                 );
@@ -637,8 +640,7 @@ export async function replyInfoEmbed(
     getLastDbError(serverDiscId)
   ) {
     finalOptions.titleKey = "general.errors.tomori_updating_title";
-    finalOptions.descriptionKey =
-      "general.errors.tomori_updating_description";
+    finalOptions.descriptionKey = "general.errors.tomori_updating_description";
     finalOptions.color = ColorCode.WARN;
   }
 
@@ -968,44 +970,46 @@ function buildV2StatusComponents(
  * @param fallbackAvatarUrl - URL to use when no avatar can be resolved
  */
 async function resolvePersonaPageAvatarData(
-	pagePersonas: TomoriState[],
-	fallbackAvatarUrl: string,
+  pagePersonas: TomoriState[],
+  fallbackAvatarUrl: string,
 ): Promise<{ avatarUrls: Map<number, string>; files: AttachmentBuilder[] }> {
-	const avatarUrls = new Map<number, string>();
-	const files: AttachmentBuilder[] = [];
+  const avatarUrls = new Map<number, string>();
+  const files: AttachmentBuilder[] = [];
 
-	await Promise.all(
-		pagePersonas.map(async (persona, idx) => {
-			if (!persona.is_alter) {
-				avatarUrls.set(idx, fallbackAvatarUrl);
-				return;
-			}
+  await Promise.all(
+    pagePersonas.map(async (persona, idx) => {
+      if (!persona.is_alter) {
+        avatarUrls.set(idx, fallbackAvatarUrl);
+        return;
+      }
 
-			// 1. Try public URL resolution first (http/https refs or configured base URL)
-			const publicUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
-			if (publicUrl) {
-				avatarUrls.set(idx, publicUrl);
-				return;
-			}
+      // 1. Try public URL resolution first (http/https refs or configured base URL)
+      const publicUrl = resolvePersonaAvatarPublicUrl(
+        persona.webhook_avatar_url,
+      );
+      if (publicUrl) {
+        avatarUrls.set(idx, publicUrl);
+        return;
+      }
 
-			// 2. For local paths with no public URL, attach the file directly
-			const avatarRef = persona.webhook_avatar_url;
-			if (avatarRef && isLocalPersonaAvatarPath(avatarRef)) {
-				const buffer = await loadStoredPersonaAvatarBuffer(avatarRef);
-				if (buffer) {
-					const attachmentName = `avatar_${idx}.png`;
-					files.push(new AttachmentBuilder(buffer, { name: attachmentName }));
-					avatarUrls.set(idx, `attachment://${attachmentName}`);
-					return;
-				}
-			}
+      // 2. For local paths with no public URL, attach the file directly
+      const avatarRef = persona.webhook_avatar_url;
+      if (avatarRef && isLocalPersonaAvatarPath(avatarRef)) {
+        const buffer = await loadStoredPersonaAvatarBuffer(avatarRef);
+        if (buffer) {
+          const attachmentName = `avatar_${idx}.png`;
+          files.push(new AttachmentBuilder(buffer, { name: attachmentName }));
+          avatarUrls.set(idx, `attachment://${attachmentName}`);
+          return;
+        }
+      }
 
-			// 3. Nothing resolved — use fallback
-			avatarUrls.set(idx, fallbackAvatarUrl);
-		}),
-	);
+      // 3. Nothing resolved — use fallback
+      avatarUrls.set(idx, fallbackAvatarUrl);
+    }),
+  );
 
-	return { avatarUrls, files };
+  return { avatarUrls, files };
 }
 
 function buildPersonaPageComponents(
@@ -1890,10 +1894,19 @@ export async function promptWithRawModal(
               type: 21, // ComponentType.RadioGroup
               custom_id: nonceCustomId(c.customId),
               options: c.options.map((opt) => ({
-                value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
-                label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
+                value: safeSelectOptionText(
+                  opt.value,
+                  SELECT_OPTION_TEXT_MAX_LENGTH,
+                ),
+                label: safeSelectOptionText(
+                  opt.label,
+                  SELECT_OPTION_TEXT_MAX_LENGTH,
+                ),
                 description: opt.description
-                  ? safeSelectOptionText(opt.description, SELECT_OPTION_TEXT_MAX_LENGTH)
+                  ? safeSelectOptionText(
+                      opt.description,
+                      SELECT_OPTION_TEXT_MAX_LENGTH,
+                    )
                   : undefined,
                 default: opt.default,
               })),
@@ -1925,17 +1938,28 @@ export async function promptWithRawModal(
               type: 22, // ComponentType.CheckboxGroup
               custom_id: nonceCustomId(cg.customId),
               options: cg.options.map((opt) => ({
-                value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
-                label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
+                value: safeSelectOptionText(
+                  opt.value,
+                  SELECT_OPTION_TEXT_MAX_LENGTH,
+                ),
+                label: safeSelectOptionText(
+                  opt.label,
+                  SELECT_OPTION_TEXT_MAX_LENGTH,
+                ),
                 description: opt.description
-                  ? safeSelectOptionText(opt.description, SELECT_OPTION_TEXT_MAX_LENGTH)
+                  ? safeSelectOptionText(
+                      opt.description,
+                      SELECT_OPTION_TEXT_MAX_LENGTH,
+                    )
                   : undefined,
                 default: opt.default,
               })),
             };
 
-            if (cg.minValues !== undefined) rawComponent.min_values = cg.minValues;
-            if (cg.maxValues !== undefined) rawComponent.max_values = cg.maxValues;
+            if (cg.minValues !== undefined)
+              rawComponent.min_values = cg.minValues;
+            if (cg.maxValues !== undefined)
+              rawComponent.max_values = cg.maxValues;
             if (cg.required !== undefined) rawComponent.required = cg.required;
 
             // Wrap in Label component (type 18)
@@ -2154,7 +2178,8 @@ export async function promptWithRawModal(
       const submitted = await interaction.awaitModalSubmit({
         time: 600000, // 10 minutes - matches Discord's natural modal timeout
         filter: (i) =>
-          i.customId === noncedModalCustomId && i.user.id === interaction.user.id,
+          i.customId === noncedModalCustomId &&
+          i.user.id === interaction.user.id,
       });
 
       // Extract values using Discord.js methods and stored select values
@@ -2196,10 +2221,14 @@ export async function promptWithRawModal(
             } else {
               // If no values stored, treat as empty selection (user checked nothing)
               multiValues[cg.customId] = [];
-              log.warn(`No checkbox group values found for ${cg.customId}, defaulting to []`);
+              log.warn(
+                `No checkbox group values found for ${cg.customId}, defaulting to []`,
+              );
             }
           } catch (error) {
-            log.warn(`Failed to get checkbox group values for component: ${error}`);
+            log.warn(
+              `Failed to get checkbox group values for component: ${error}`,
+            );
           }
         } else if (isModalCheckboxField(component)) {
           try {
@@ -2212,7 +2241,9 @@ export async function promptWithRawModal(
             } else {
               // If not stored, infer from default (unchecked = "false")
               values[cb.customId] = cb.default ? "true" : "false";
-              log.warn(`No checkbox value found for ${cb.customId}, using default: ${values[cb.customId]}`);
+              log.warn(
+                `No checkbox value found for ${cb.customId}, using default: ${values[cb.customId]}`,
+              );
             }
           } catch (error) {
             log.warn(`Failed to get checkbox value for component: ${error}`);
@@ -2316,7 +2347,8 @@ export async function promptWithRawModal(
       return {
         outcome: "submit",
         values,
-        multiValues: Object.keys(multiValues).length > 0 ? multiValues : undefined,
+        multiValues:
+          Object.keys(multiValues).length > 0 ? multiValues : undefined,
         attachments,
         interaction: submitted,
       };

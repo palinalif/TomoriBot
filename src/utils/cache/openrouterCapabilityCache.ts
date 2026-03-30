@@ -464,7 +464,9 @@ export async function testAccountSettingModel(apiKey: string): Promise<
   | { error: string }
 > {
   try {
-    log.info("Testing account-setting model to detect actual OpenRouter default...");
+    log.info(
+      "Testing account-setting model to detect actual OpenRouter default...",
+    );
 
     // Make a minimal streaming request to account-setting to see which model OpenRouter picks
     // Using streaming because some models/configurations prefer it
@@ -585,9 +587,7 @@ export async function getOrFetchOpenRouterCapabilities(
 ): Promise<ModelCapabilities | undefined> {
   // 1. Cache not ready - cannot even fetch on-demand
   if (!cacheReady) {
-    log.warn(
-      `Cannot fetch capabilities for ${modelCodename}: cache not ready`,
-    );
+    log.warn(`Cannot fetch capabilities for ${modelCodename}: cache not ready`);
     return undefined;
   }
 
@@ -605,9 +605,7 @@ export async function getOrFetchOpenRouterCapabilities(
 
   // 4. Model not in either cache - fetch from OpenRouter API
   try {
-    log.info(
-      `Fetching capabilities on-demand for model: ${modelCodename}`,
-    );
+    log.info(`Fetching capabilities on-demand for model: ${modelCodename}`);
 
     // Fetch specific model from OpenRouter API
     const response = await fetch(
@@ -634,9 +632,7 @@ export async function getOrFetchOpenRouterCapabilities(
     const model: OpenRouterModel | undefined = data.data;
 
     if (!model) {
-      log.warn(
-        `OpenRouter API returned no model data for ${modelCodename}`,
-      );
+      log.warn(`OpenRouter API returned no model data for ${modelCodename}`);
       return undefined;
     }
 

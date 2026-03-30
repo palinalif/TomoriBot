@@ -28,7 +28,9 @@ export const configureSubcommand = (
 ) =>
   subcommand
     .setName("textgen")
-    .setDescription(localizer("en-US", "commands.server.quota.textgen.description"))
+    .setDescription(
+      localizer("en-US", "commands.server.quota.textgen.description"),
+    )
     .addIntegerOption((option) =>
       option
         .setName("daily_user_quota")
@@ -122,7 +124,9 @@ export async function execute(
   // 5. Get which options were provided
   const dailyUserQuota = interaction.options.getInteger("daily_user_quota");
   const serverwideQuota = interaction.options.getInteger("serverwide_quota");
-  const resetDays = interaction.options.getInteger("serverwide_quota_resets_in");
+  const resetDays = interaction.options.getInteger(
+    "serverwide_quota_resets_in",
+  );
 
   // 6. Check if at least one option was provided
   if (
@@ -144,7 +148,11 @@ export async function execute(
   try {
     // Process daily user quota if provided
     if (dailyUserQuota !== null) {
-      const result = await updateDailyUserQuota(serverId, dailyUserQuota, locale);
+      const result = await updateDailyUserQuota(
+        serverId,
+        dailyUserQuota,
+        locale,
+      );
       if (result) {
         updates.push(result);
       }
@@ -152,7 +160,11 @@ export async function execute(
 
     // Process serverwide quota if provided
     if (serverwideQuota !== null) {
-      const result = await updateServerwideQuota(serverId, serverwideQuota, locale);
+      const result = await updateServerwideQuota(
+        serverId,
+        serverwideQuota,
+        locale,
+      );
       if (result) {
         updates.push(result);
       }
@@ -209,7 +221,9 @@ async function updateDailyUserQuota(
 
   // 3. Format and return success message
   const limitText =
-    limit === 0 ? localizer(locale, "commands.server.quota.textgen.unlimited") : `${limit}`;
+    limit === 0
+      ? localizer(locale, "commands.server.quota.textgen.unlimited")
+      : `${limit}`;
 
   return localizer(
     locale,
@@ -265,7 +279,9 @@ async function updateServerwideQuota(
 
   // 4. Format and return success message
   const limitText =
-    limit === 0 ? localizer(locale, "commands.server.quota.textgen.unlimited") : `${limit}`;
+    limit === 0
+      ? localizer(locale, "commands.server.quota.textgen.unlimited")
+      : `${limit}`;
 
   return localizer(
     locale,

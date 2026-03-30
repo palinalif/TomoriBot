@@ -23,10 +23,7 @@ import {
   NovelaiStreamAdapter,
   type NovelaiStreamConfig,
 } from "./novelaiStreamAdapter";
-import type {
-  ProviderError,
-  StreamContext,
-} from "@/types/stream/interfaces";
+import type { ProviderError, StreamContext } from "@/types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
 import type { TomoriState } from "@/types/db/schema";

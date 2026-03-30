@@ -20,7 +20,10 @@ const MIN_THRESHOLD = 0; // 0 means always-reply in configured auto-chat channel
 const MIN_RANDOM_THRESHOLD = 1;
 const MAX_THRESHOLD = 100; // The absolute maximum value allowed
 
-function rollAutochatTarget(minThreshold: number, maxThreshold: number): number {
+function rollAutochatTarget(
+  minThreshold: number,
+  maxThreshold: number,
+): number {
   if (minThreshold <= 0 || maxThreshold <= 0) {
     return 0;
   }
@@ -30,8 +33,7 @@ function rollAutochatTarget(minThreshold: number, maxThreshold: number): number 
   }
 
   return (
-    Math.floor(Math.random() * (maxThreshold - minThreshold + 1)) +
-    minThreshold
+    Math.floor(Math.random() * (maxThreshold - minThreshold + 1)) + minThreshold
   );
 }
 
@@ -61,7 +63,10 @@ export const configureSubcommand = (
       option
         .setName("max")
         .setDescription(
-          localizer("en-US", "commands.server.autotrigger.threshold.max_description"),
+          localizer(
+            "en-US",
+            "commands.server.autotrigger.threshold.max_description",
+          ),
         )
         .setMinValue(MIN_THRESHOLD)
         .setMaxValue(MAX_THRESHOLD)

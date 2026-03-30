@@ -353,10 +353,13 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
 
                 for (const declaration of declarations) {
                   // Convert MCP schema format to OpenAI format
-                  const openAIDeclaration: Record<string, unknown> = { ...declaration };
+                  const openAIDeclaration: Record<string, unknown> = {
+                    ...declaration,
+                  };
                   if ("parametersJsonSchema" in declaration) {
                     delete openAIDeclaration.parametersJsonSchema;
-                    openAIDeclaration.parameters = declaration.parametersJsonSchema;
+                    openAIDeclaration.parameters =
+                      declaration.parametersJsonSchema;
                   }
 
                   allTools.push({
@@ -365,14 +368,22 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
                   });
                 }
 
-                log.info(`Added ${declarations.length} guild MCP tool(s) to OpenRouter format`);
+                log.info(
+                  `Added ${declarations.length} guild MCP tool(s) to OpenRouter format`,
+                );
               }
             } catch (error) {
-              log.warn("Failed to extract guild MCP tool declarations:", error as Error);
+              log.warn(
+                "Failed to extract guild MCP tool declarations:",
+                error as Error,
+              );
             }
           }
         } catch (error) {
-          log.warn("Failed to get guild MCP tools for OpenRouter format:", error as Error);
+          log.warn(
+            "Failed to get guild MCP tools for OpenRouter format:",
+            error as Error,
+          );
         }
       }
 
@@ -501,9 +512,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
   /**
    * Convert generic parameter type to OpenAI type
    */
-  private cloneParameterSchema(
-    schema: Tool["parameters"],
-  ): OpenAIObjectSchema {
+  private cloneParameterSchema(schema: Tool["parameters"]): OpenAIObjectSchema {
     return JSON.parse(JSON.stringify(schema)) as OpenAIObjectSchema;
   }
 

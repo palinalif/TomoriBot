@@ -47,7 +47,10 @@ import {
   type ToolStateForContext,
   getAvailableToolsWithMCP,
 } from "../../tools/toolRegistry";
-import type { StreamingContext, ToolContext } from "../../types/tool/interfaces";
+import type {
+  StreamingContext,
+  ToolContext,
+} from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
@@ -339,8 +342,7 @@ export class CustomProvider
 
     const searchTools = builtInTools.filter(
       (tool) =>
-        tool.category === "search" ||
-        tool.requiresFeatureFlag === "web_search",
+        tool.category === "search" || tool.requiresFeatureFlag === "web_search",
     );
 
     const customAdapter = getCustomToolAdapter();

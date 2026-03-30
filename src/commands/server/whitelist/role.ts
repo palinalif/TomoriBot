@@ -116,7 +116,8 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
         titleKey: "commands.server.whitelist.role.invalid_role_title",
-        descriptionKey: "commands.server.whitelist.role.invalid_role_description",
+        descriptionKey:
+          "commands.server.whitelist.role.invalid_role_description",
       });
       return;
     }
@@ -125,12 +126,16 @@ export async function execute(
 
     if (action === "add") {
       // 5a. Add role to whitelist
-      const alreadySet = await isRoleWhitelisted(tomoriState.server_id, role.id);
+      const alreadySet = await isRoleWhitelisted(
+        tomoriState.server_id,
+        role.id,
+      );
       if (alreadySet) {
         await replyInfoEmbed(interaction, locale, {
           color: ColorCode.WARN,
           titleKey: "commands.server.whitelist.role.already_set_title",
-          descriptionKey: "commands.server.whitelist.role.already_set_description",
+          descriptionKey:
+            "commands.server.whitelist.role.already_set_description",
           descriptionVars: {
             role_mention: roleMention,
           },
@@ -144,7 +149,8 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.SUCCESS,
         titleKey: "commands.server.whitelist.role.success_add_title",
-        descriptionKey: "commands.server.whitelist.role.success_add_description",
+        descriptionKey:
+          "commands.server.whitelist.role.success_add_description",
         descriptionVars: {
           role_mention: roleMention,
         },
@@ -175,7 +181,8 @@ export async function execute(
     await replyInfoEmbed(interaction, locale, {
       color: ColorCode.SUCCESS,
       titleKey: "commands.server.whitelist.role.success_remove_title",
-      descriptionKey: "commands.server.whitelist.role.success_remove_description",
+      descriptionKey:
+        "commands.server.whitelist.role.success_remove_description",
       descriptionVars: {
         role_mention: roleMention,
       },

@@ -110,19 +110,31 @@ export default async (): Promise<void> => {
       try {
         const allEnabled = await loadAllEnabledGuildMcpServers();
         if (allEnabled.length > 0) {
-          log.info(`[GuildMCP] Dev mode: eager-connecting ${allEnabled.length} enabled guild MCP server(s)...`);
+          log.info(
+            `[GuildMCP] Dev mode: eager-connecting ${allEnabled.length} enabled guild MCP server(s)...`,
+          );
           // Non-blocking — failures are logged but don't prevent startup
           guildMcpManager.eagerConnectAll(allEnabled).catch((err) => {
-            log.warn("[GuildMCP] Eager connect encountered errors (non-fatal)", err);
+            log.warn(
+              "[GuildMCP] Eager connect encountered errors (non-fatal)",
+              err,
+            );
           });
         } else {
-          log.info("[GuildMCP] No enabled guild MCP servers found for eager connect");
+          log.info(
+            "[GuildMCP] No enabled guild MCP servers found for eager connect",
+          );
         }
       } catch (error) {
-        log.warn("[GuildMCP] Failed to load guild MCP servers for eager connect (non-fatal)", error);
+        log.warn(
+          "[GuildMCP] Failed to load guild MCP servers for eager connect (non-fatal)",
+          error,
+        );
       }
     } else {
-      log.info("[GuildMCP] Production mode: guild MCP connections will be established on-demand");
+      log.info(
+        "[GuildMCP] Production mode: guild MCP connections will be established on-demand",
+      );
     }
   } catch (error) {
     // Use structured error context for consistent error handling

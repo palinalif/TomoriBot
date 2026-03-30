@@ -6,8 +6,8 @@
  * and show the appropriate user-facing message.
  */
 export class DatabaseUnavailableError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "DatabaseUnavailableError";
-	}
+  constructor(message: string) {
+    super(message);
+    this.name = "DatabaseUnavailableError";
+  }
 }

@@ -362,11 +362,7 @@ export class MCPExecutor {
       // Apply business rules for parameters before sending to MCP server
       mcpContext.modifiedArgs = this.applyBusinessRules(functionName, args);
 
-      if (
-        functionName === "fetch" &&
-        context?.channel &&
-        context.locale
-      ) {
+      if (functionName === "fetch" && context?.channel && context.locale) {
         await sendToolProgressNotice(
           context.channel,
           context.locale,

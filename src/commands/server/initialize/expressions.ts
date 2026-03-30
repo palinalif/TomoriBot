@@ -31,9 +31,7 @@ import { decryptApiKey } from "@/utils/security/crypto";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
 import { callExpressionInitializationForProvider } from "@/providers/utils/providerFeatureExecutors";
-import {
-  providerSupportsFeature,
-} from "@/utils/provider/providerInfoRegistry";
+import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { resolveStructuredOutputCapability } from "@/utils/provider/providerCapabilityResolver";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 
@@ -305,7 +303,9 @@ export async function execute(
       return;
     }
 
-    if (!providerSupportsFeature(llm.llm_provider, "expressionInitialization")) {
+    if (
+      !providerSupportsFeature(llm.llm_provider, "expressionInitialization")
+    ) {
       await interaction.editReply({
         embeds: [
           {
@@ -399,9 +399,8 @@ export async function execute(
     // Different providers have different token limits and cost constraints
     // User should re-run the command to process remaining expressions
     const provider = tomoriState.llm.llm_provider.toLowerCase();
-    const structuredOutputCapability = await resolveStructuredOutputCapability(
-      provider,
-    );
+    const structuredOutputCapability =
+      await resolveStructuredOutputCapability(provider);
     const expressionBatchSize =
       structuredOutputCapability?.getExpressionInitializationBatchSize?.() ??
       null;

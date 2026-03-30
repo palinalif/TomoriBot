@@ -51,10 +51,10 @@ export const configureSubcommand = (
     );
 
 function normalizeFrequencyPenalty(value: number): number {
-	return Math.max(
-		FREQUENCY_PENALTY_MIN,
-		Math.min(FREQUENCY_PENALTY_STORED_MAX, value),
-	);
+  return Math.max(
+    FREQUENCY_PENALTY_MIN,
+    Math.min(FREQUENCY_PENALTY_STORED_MAX, value),
+  );
 }
 
 /**

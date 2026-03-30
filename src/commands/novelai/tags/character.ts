@@ -140,8 +140,7 @@ export async function execute(
           labelKey: "commands.novelai.tags.character.tags_input_label",
           descriptionKey:
             "commands.novelai.tags.character.tags_input_description",
-          placeholder:
-            "commands.novelai.tags.character.tags_input_placeholder",
+          placeholder: "commands.novelai.tags.character.tags_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: false, // Empty input clears tags
           maxLength: TAGS_MODAL_MAX_LENGTH,

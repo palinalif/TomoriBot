@@ -189,64 +189,61 @@ const loggedGooglePenaltyNormalizations = new Set<string>();
 const loggedGooglePenaltySkips = new Set<string>();
 
 function isGemini3Model(model: string): boolean {
-	return model.trim().toLowerCase().startsWith("gemini-3");
+  return model.trim().toLowerCase().startsWith("gemini-3");
 }
 
 function isGooglePenaltyParamsEnabled(): boolean {
-	return process.env.GOOGLE_ENABLE_PENALTY_PARAMS?.toLowerCase() === "true";
+  return process.env.GOOGLE_ENABLE_PENALTY_PARAMS?.toLowerCase() === "true";
 }
 
 function sanitizeGooglePenalty(
-	value: number,
-	field: "frequencyPenalty" | "presencePenalty",
-	serverId?: number | null,
+  value: number,
+  field: "frequencyPenalty" | "presencePenalty",
+  serverId?: number | null,
 ): number {
-	const sanitizedValue = Math.max(
-		GOOGLE_PENALTY_MIN,
-		Math.min(GOOGLE_PENALTY_MAX, value),
-	);
-	if (sanitizedValue !== value) {
-		const warningKey = `${serverId ?? "unknown"}:${field}:${value}:${sanitizedValue}`;
-		if (!loggedGooglePenaltyNormalizations.has(warningKey)) {
-			loggedGooglePenaltyNormalizations.add(warningKey);
-			log.warn(
-				`Normalized Google ${field} from ${value} to ${sanitizedValue} because Gemini requires penalties in [-2.0, 2.0).`,
-				{
-					serverId: serverId ?? null,
-					field,
-					originalValue: value,
-					sanitizedValue,
-				},
-			);
-		}
-	}
+  const sanitizedValue = Math.max(
+    GOOGLE_PENALTY_MIN,
+    Math.min(GOOGLE_PENALTY_MAX, value),
+  );
+  if (sanitizedValue !== value) {
+    const warningKey = `${serverId ?? "unknown"}:${field}:${value}:${sanitizedValue}`;
+    if (!loggedGooglePenaltyNormalizations.has(warningKey)) {
+      loggedGooglePenaltyNormalizations.add(warningKey);
+      log.warn(
+        `Normalized Google ${field} from ${value} to ${sanitizedValue} because Gemini requires penalties in [-2.0, 2.0).`,
+        {
+          serverId: serverId ?? null,
+          field,
+          originalValue: value,
+          sanitizedValue,
+        },
+      );
+    }
+  }
 
-	return sanitizedValue;
+  return sanitizedValue;
 }
 
 function logSkippedGooglePenaltyParams(
-	model: string,
-	serverId: number,
-	reason: string,
-	frequencyPenalty?: number,
-	presencePenalty?: number,
+  model: string,
+  serverId: number,
+  reason: string,
+  frequencyPenalty?: number,
+  presencePenalty?: number,
 ): void {
-	const warningKey = `${serverId}:${model}:${reason}`;
-	if (loggedGooglePenaltySkips.has(warningKey)) {
-		return;
-	}
+  const warningKey = `${serverId}:${model}:${reason}`;
+  if (loggedGooglePenaltySkips.has(warningKey)) {
+    return;
+  }
 
-	loggedGooglePenaltySkips.add(warningKey);
-	log.warn(
-		`Skipping Google penalty params for model ${model}: ${reason}.`,
-		{
-			serverId,
-			model,
-			reason,
-			frequencyPenalty: frequencyPenalty ?? null,
-			presencePenalty: presencePenalty ?? null,
-		},
-	);
+  loggedGooglePenaltySkips.add(warningKey);
+  log.warn(`Skipping Google penalty params for model ${model}: ${reason}.`, {
+    serverId,
+    model,
+    reason,
+    frequencyPenalty: frequencyPenalty ?? null,
+    presencePenalty: presencePenalty ?? null,
+  });
 }
 
 /**

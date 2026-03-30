@@ -48,10 +48,10 @@ export const configureSubcommand = (
     );
 
 function normalizePresencePenalty(value: number): number {
-	return Math.max(
-		PRESENCE_PENALTY_MIN,
-		Math.min(PRESENCE_PENALTY_STORED_MAX, value),
-	);
+  return Math.max(
+    PRESENCE_PENALTY_MIN,
+    Math.min(PRESENCE_PENALTY_STORED_MAX, value),
+  );
 }
 
 /**

@@ -313,7 +313,9 @@ export async function execute(
       await replyInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.bot.respond.no_messages_title"))
+            .setTitle(
+              localizer(locale, "commands.bot.respond.no_messages_title"),
+            )
             .setDescription(
               localizer(locale, "commands.bot.respond.no_messages_description"),
             )

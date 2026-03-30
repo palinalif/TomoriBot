@@ -134,10 +134,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const llm = context.tomoriState.llm;
       const config = context.tomoriState.config;
       const provider = llm.llm_provider.toLowerCase();
-      const displayModelName = getLlmDisplayName(
-        llm,
-        config.custom_model_name,
-      );
+      const displayModelName = getLlmDisplayName(llm, config.custom_model_name);
       const seesImages = llm.sees_images ?? false;
       const seesVideos = llm.sees_videos ?? false;
       const seesYouTube = llm.sees_youtube ?? false;
@@ -283,7 +280,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       capabilitiesContent += "## Voice System\n\n";
       if (elevenlabsVoiceId && voiceEnabled) {
-        const voiceName = context.tomoriState.elevenlabs_voice_name || "Unknown";
+        const voiceName =
+          context.tomoriState.elevenlabs_voice_name || "Unknown";
         capabilitiesContent += "You CAN send and receive voice messages:\n";
         capabilitiesContent += `- **Voice**: ${voiceName} (ElevenLabs)\n`;
         capabilitiesContent +=
@@ -338,10 +336,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
         "- **Conversation history** (previous messages in context)\n";
       capabilitiesContent +=
         "- **Short-term memory** (recent conversations cached per channel for cross-channel context awareness)\n";
-		capabilitiesContent +=
-			"- Short-term memories expire automatically and can be summarized by you for efficiency\n";
-		capabilitiesContent +=
-			"- Cross-server short-term memory sharing is available when the user opts in via `/personal stm`\n\n";
+      capabilitiesContent +=
+        "- Short-term memories expire automatically and can be summarized by you for efficiency\n";
+      capabilitiesContent +=
+        "- Cross-server short-term memory sharing is available when the user opts in via `/personal stm`\n\n";
 
       // 6b. Document Knowledge Base section (conditional on embedding model)
       capabilitiesContent += "## Document Knowledge Base\n\n";
@@ -403,9 +401,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
         capabilitiesContent +=
           "- **select_sticker_for_response** (choose stickers)\n";
-        const voiceNote = elevenlabsVoiceId && voiceEnabled
-          ? "generate spoken voice messages via ElevenLabs TTS"
-          : "not configured (assign a voice with `/config voice elevenlabs`)";
+        const voiceNote =
+          elevenlabsVoiceId && voiceEnabled
+            ? "generate spoken voice messages via ElevenLabs TTS"
+            : "not configured (assign a voice with `/config voice elevenlabs`)";
         capabilitiesContent += `- **generate_voice_message** (${voiceNote})\n\n`;
       }
 
@@ -610,10 +609,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const llm = context.tomoriState.llm;
       const config = context.tomoriState.config;
       const serverId = context.tomoriState.server_id;
-      const displayModelName = getLlmDisplayName(
-        llm,
-        config.custom_model_name,
-      );
+      const displayModelName = getLlmDisplayName(llm, config.custom_model_name);
 
       // 2. Check API key status
       const braveApiKeySet = await getBraveApiKeyStatus(serverId);

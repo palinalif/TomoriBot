@@ -163,12 +163,7 @@ const YOUTUBE_URL_PATTERNS = [
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
 ];
 
-type LiveProvider =
-  | "google"
-  | "openrouter"
-  | "deepseek"
-  | "zai"
-  | "zaicoding";
+type LiveProvider = "google" | "openrouter" | "deepseek" | "zai" | "zaicoding";
 
 interface ZaiFamilyProviderConfig {
   model: string;
@@ -676,27 +671,17 @@ function resolveProvider(providerName: string): LiveProvider | null {
     normalizedProvider,
     "liveTokenCounting",
   );
-  if (
-    normalizedProvider === "google" &&
-    implementation === "google"
-  ) {
+  if (normalizedProvider === "google" && implementation === "google") {
     return "google";
   }
-  if (
-    normalizedProvider === "openrouter" &&
-    implementation === "openrouter"
-  ) {
+  if (normalizedProvider === "openrouter" && implementation === "openrouter") {
     return "openrouter";
   }
-  if (
-    normalizedProvider === "deepseek" &&
-    implementation === "deepseek"
-  ) {
+  if (normalizedProvider === "deepseek" && implementation === "deepseek") {
     return "deepseek";
   }
   if (
-    (normalizedProvider === "zai" ||
-      normalizedProvider === "zaicoding") &&
+    (normalizedProvider === "zai" || normalizedProvider === "zaicoding") &&
     implementation === "zai"
   ) {
     return normalizedProvider;
@@ -1220,9 +1205,7 @@ async function measureOpenRouterInputTokens(
   }
 
   if (providerConfig.model === "other-model") {
-    throw new Error(
-      "OpenRouter model pricing unavailable for other-model",
-    );
+    throw new Error("OpenRouter model pricing unavailable for other-model");
   }
 
   const pricing = getOpenRouterPricing(providerConfig.model);

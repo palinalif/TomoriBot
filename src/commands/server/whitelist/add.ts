@@ -44,7 +44,10 @@ export const configureSubcommand = (
       option
         .setName("cooldown_type")
         .setDescription(
-          localizer("en-US", "commands.server.whitelist.channel.type_description"),
+          localizer(
+            "en-US",
+            "commands.server.whitelist.channel.type_description",
+          ),
         )
         .setRequired(false)
         .addChoices(
@@ -199,7 +202,10 @@ export async function execute(
 
     // 7. Check if channel already has these exact settings
     const [existingEntry] = await sql<
-      Array<{ cooldown_type: CooldownType | null; cooldown_length: number | null }>
+      Array<{
+        cooldown_type: CooldownType | null;
+        cooldown_length: number | null;
+      }>
     >`
 			SELECT cooldown_type, cooldown_length
 			FROM channel_whitelist
@@ -239,7 +245,8 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
         titleKey: "commands.server.whitelist.channel.already_set_title",
-        descriptionKey: "commands.server.whitelist.channel.already_set_description",
+        descriptionKey:
+          "commands.server.whitelist.channel.already_set_description",
         descriptionVars: {
           channel_name: channel.name ?? "UNDEFINED_CH",
         },
@@ -304,7 +311,8 @@ export async function execute(
           {
             color: ColorCode.SUCCESS,
             titleKey: "commands.server.whitelist.channel.success_title",
-            descriptionKey: "commands.server.whitelist.channel.success_description",
+            descriptionKey:
+              "commands.server.whitelist.channel.success_description",
             descriptionVars: {
               channel_name: channel.name ?? "UNDEFINED_CH",
               cooldown_type: cooldownTypeName,

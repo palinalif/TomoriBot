@@ -288,7 +288,8 @@ async function resolvePersonaAvatar(
   let avatarUrl: string | null = null;
 
   if (persona.is_alter) {
-    avatarUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? null;
+    avatarUrl =
+      resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? null;
   } else {
     const guild = context.client.guilds.cache.get(guildId);
     avatarUrl =

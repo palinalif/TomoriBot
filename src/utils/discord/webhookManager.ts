@@ -142,10 +142,7 @@ function sanitizeAvatarUrl(url?: string | null): string | undefined {
 function isInvalidWebhookError(error: unknown): boolean {
   const code = (error as { code?: number | string })?.code;
   return (
-    code === 10015 ||
-    code === "10015" ||
-    code === 50027 ||
-    code === "50027"
+    code === 10015 || code === "10015" || code === 50027 || code === "50027"
   );
 }
 
@@ -189,10 +186,7 @@ async function normalizeAvatarToPng(
   try {
     return await convertToPNG(buffer);
   } catch (error) {
-    log.warn(
-      `[Webhook Manager] Failed to convert ${logLabel} to PNG`,
-      error,
-    );
+    log.warn(`[Webhook Manager] Failed to convert ${logLabel} to PNG`, error);
     return null;
   }
 }

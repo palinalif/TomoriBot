@@ -305,7 +305,8 @@ export async function execute(
 
     if (avatarUrl) {
       try {
-        const storedAvatarBuffer = await loadStoredPersonaAvatarBuffer(avatarUrl);
+        const storedAvatarBuffer =
+          await loadStoredPersonaAvatarBuffer(avatarUrl);
         if (storedAvatarBuffer) {
           const avatarBuffer = await convertToPNG(storedAvatarBuffer);
           selectedAlterAvatarBuffer = avatarBuffer;
