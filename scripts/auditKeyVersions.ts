@@ -33,9 +33,16 @@
 
 import { config } from "dotenv";
 import { sql } from "bun";
-import { keyManager } from "../src/utils/security/keyManager";
 
+// 1. Load .env before importing keyManager — ES module imports are hoisted
+//    above runtime code, so keyManager would read an empty process.env if
+//    we imported it statically at the top of this file.
 config();
+
+const { keyManager } = await import("../src/utils/security/keyManager");
+
+// 2. Populate the key manager's internal map from process.env (now loaded)
+keyManager.initialize();
 
 /**
  * Get PostgreSQL connection URL from environment variables
