@@ -332,27 +332,28 @@ Enable these capability flags for ChatMock:
 
 | Command | Description |
 |---|---|
-| `bun run backup` | Creates a bundle in `backups/` with your DB dump and `.env` |
+| `bun run backup` | Creates a bundle in `backups/` with your DB dump and `.env`, contains all of your data |
 | `bun run restore-backup` | Restores `.env` and database from a bundle, use the `--latest` or `--from backups/<bundle-dir>` flags |
-| `bun run backup:personas` | Export all personas (with server memories) across all servers to `backups/`. **Must be re-imported manually via `/persona import`, cannot be used with `restore-backup` (avoids primary key conflicts)** |
-| `bun run backup:memories` | Export all personal memories across all users to `backups/`. **Must be re-imported manually, cannot be used with `restore-backup` (avoids primary key conflicts)** |
+| `bun run backup:personas` | Export ONLY personas (with server memories) across all servers to `backups/`. **Must be re-imported manually via `/persona import`, cannot be used with `restore-backup` (avoids primary key conflicts)** |
+| `bun run backup:memories` | Export ONLY personal memories across all users to `backups/`. **Must be re-imported manually, cannot be used with `restore-backup` (avoids primary key conflicts)** |
 | `bun run nuke-db` | Drops all tables (start the bot afterwards to reinitialise). Usually used in conjunction with backups for clean installs |
 | `bun run purge-commands` | Clear all registered Discord slash commands |
 | `bun run rotate-keys` | Migrate all encrypted fields to the current key version |
 
 ### Updating TomoriBot
 
-> **Always back up before pulling a new version.**
-> ```sh
-> bun run backup
-> ```
-> The bundle is saved to `backups/` and includes both the database dump and your `.env`.
-> To restore: `bun run restore-backup --latest` or `--from backups/<bundle-dir>`
+**Always back up before pulling a new version.**
+```sh
+bun run backup
+```
+The bundle is saved to `backups/` and includes both the database dump and your `.env`.
+To restore: `bun run restore-backup --latest` or `--from backups/<bundle-dir>`
+**Note:** If `bun run backup` fails with "Script not found", run `git pull --rebase --autostash` first without running the bot after, it only updates code files and does not touch your database, so it is safe to do before backing up.
 
 **Manual (non-Docker) update:**
 ```sh
 # Stop your running bot process first (Ctrl+C / service stop / pm2 stop / etc.)
-git pull
+git pull --rebase --autostash  # Avoids merge commits and handles dirty working trees automatically
 bun install
 
 # If you run from dist/ (bun run start), rebuild:
@@ -361,7 +362,7 @@ bun run build
 
 **Docker Compose update:**
 ```sh
-git pull
+git pull --rebase --autostash  # Avoids merge commits and handles dirty working trees automatically
 docker compose build
 docker compose up -d
 ```

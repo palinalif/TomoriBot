@@ -606,7 +606,6 @@ export default {
           no_changes: `No changes made`,
           result_title: `Node Toggle Results`,
           result_description: `**{enabled}** / **{total}** nodes enabled.\n\n{changes}`,
-          comment_node_suffix: `[comment]`,
         },
       },
     },

@@ -79,35 +79,29 @@ function buildNodeDescription(content: string): string | undefined {
 }
 
 /**
+/**
  * Build a description for a comment-only node.
  * Extracts the text inside all `{{// ... }}` blocks so the author's
  * intent (e.g. `{{// Do not use without permission}}`) is still visible
- * in the toggle UI. Falls back to a localized indicator if no text is found.
- *
- * The `[comment]` suffix is always appended so users know the node never injects.
+ * in the toggle UI.
  *
  * @param content - Raw node content (expected to contain only comment macros)
- * @param locale - User's preferred locale for the fallback label
- * @returns Description string truncated to DESCRIPTION_MAX_LENGTH
+ * @returns Extracted comment text truncated to DESCRIPTION_MAX_LENGTH, or undefined if empty
  */
-function buildCommentNodeDescription(content: string, locale: string): string {
+function buildCommentNodeDescription(content: string): string | undefined {
   // Extract inner text from all {{// ... }} blocks and join with spaces
   const commentText = [...content.matchAll(/\{\{\/\/([^}]*)\}\}/g)]
     .map((m) => m[1].trim())
     .filter((t) => t.length > 0)
     .join(" ");
 
-  const suffix = localizer(locale, "commands.stpreset.node.toggle.comment_node_suffix");
+  if (commentText.length === 0) return undefined;
 
-  if (commentText.length === 0) {
-    return suffix;
+  if (commentText.length > DESCRIPTION_MAX_LENGTH) {
+    return `${commentText.slice(0, DESCRIPTION_MAX_LENGTH - 3)}...`;
   }
 
-  // Reserve space for the suffix + a separator
-  const maxTextLength = DESCRIPTION_MAX_LENGTH - suffix.length - 2;
-  const truncated = commentText.length > maxTextLength ? `${commentText.slice(0, maxTextLength - 3)}...` : commentText;
-
-  return `${truncated} ${suffix}`;
+  return commentText;
 }
 
 /**
@@ -124,11 +118,7 @@ function buildCommentNodeDescription(content: string, locale: string): string {
  * @param locale - User's preferred locale for comment node descriptions
  * @returns Array of checkbox group modal components
  */
-function buildCheckboxGroups(
-  pageNodes: StPresetNodeRow[],
-  pageOffset: number,
-  locale: string,
-): ModalCheckboxGroupField[] {
+function buildCheckboxGroups(pageNodes: StPresetNodeRow[], pageOffset: number): ModalCheckboxGroupField[] {
   const groups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < pageNodes.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -138,10 +128,8 @@ function buildCheckboxGroups(
     const options: CheckboxGroupOption[] = chunk.map((node) => ({
       label: node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
       value: node.identifier,
-      // Comment-only nodes show extracted comment text + a suffix indicating they never inject
-      description: node.is_comment
-        ? buildCommentNodeDescription(node.content, locale)
-        : buildNodeDescription(node.content),
+      // Comment-only nodes show extracted comment text from inside {{// ... }} blocks
+      description: node.is_comment ? buildCommentNodeDescription(node.content) : buildNodeDescription(node.content),
       default: node.is_enabled,
     }));
 
@@ -359,7 +347,7 @@ async function executeSinglePageToggle(
   presetId: number,
   dbNodes: StPresetNodeRow[],
 ): Promise<void> {
-  const checkboxGroups = buildCheckboxGroups(dbNodes, 0, locale);
+  const checkboxGroups = buildCheckboxGroups(dbNodes, 0);
 
   const modalResult = await promptWithRawModal(
     interaction,
@@ -478,7 +466,7 @@ async function executeMultiPageToggle(
     const pageNodes = currentNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
 
     // Show modal for this page
-    const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex, locale);
+    const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex);
 
     const modalResult = await promptWithRawModal(
       buttonInteraction,

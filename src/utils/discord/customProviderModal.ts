@@ -362,7 +362,7 @@ async function createCustomLLMEntry(
 			true,
 			${"Custom endpoint model configured by server admin"}
 		)
-		ON CONFLICT (llm_codename) DO UPDATE SET
+		ON CONFLICT (llm_provider, llm_codename) DO UPDATE SET
 			has_tools = EXCLUDED.has_tools,
 			sees_images = EXCLUDED.sees_images,
 			sees_videos = EXCLUDED.sees_videos,

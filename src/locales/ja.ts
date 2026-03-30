@@ -611,7 +611,6 @@ export default {
           no_changes: `変更なし`,
           result_title: `ノード切り替え結果`,
           result_description: `**{enabled}** / **{total}** ノードが有効。\n\n{changes}`,
-          comment_node_suffix: `[コメント]`,
         },
       },
     },
