@@ -170,7 +170,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           echo "Downloading tokenizer assets from HuggingFace..."
-          bun run scripts/download-tokenizers.ts
+          bun run scripts/downloadTokenizers.ts
           echo "Tokenizer families:"
           du -sh tokenizers/*/
 
