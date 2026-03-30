@@ -246,7 +246,10 @@ export async function uploadPersonaAvatarToS3(options: AvatarUploadOptions): Pro
     }
   }
 
-  // Non-production: store locally and return base64 data URI for Discord embeds
+  // Non-production: store under data/avatars/ and return the normalized local path.
+  // Callers store this path in webhook_avatar_url; downstream code resolves it to
+  // a public URL (if AVATAR_PUBLIC_BASE_URL is set) or loads the buffer directly
+  // to mutate the shared webhook avatar before each send.
   const storedPath = buildLocalStoredPath(options);
   const absolutePath = resolveLocalAvatarPath(storedPath);
   if (!absolutePath) {
@@ -256,12 +259,8 @@ export async function uploadPersonaAvatarToS3(options: AvatarUploadOptions): Pro
   try {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, options.buffer);
-
-    // Return as base64 data URI so Discord embeds can display it persistently
-    // Unlike attachment:// URLs, data URIs work anywhere and don't expire
-    const base64DataUri = `data:image/png;base64,${options.buffer.toString("base64")}`;
-    log.success(`[Avatar Storage] Stored persona avatar${label} locally (non-production)`);
-    return base64DataUri;
+    log.success(`[Avatar Storage] Stored persona avatar${label} at ${storedPath}`);
+    return normalizeStoredPath(storedPath);
   } catch (error) {
     log.warn(`[Avatar Storage] Failed to store persona avatar${label} locally`, error);
     return null;
