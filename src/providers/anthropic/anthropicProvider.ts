@@ -1,0 +1,474 @@
+/**
+ * Anthropic LLM provider implementation.
+ *
+ * Provides direct access to Claude models (claude-sonnet-4-6, claude-haiku-4-5,
+ * claude-opus-4-6) via the Anthropic Messages API.
+ *
+ * Key differences from OpenAI-compatible providers:
+ * - System prompt is a top-level parameter, not a message
+ * - Messages use content blocks (text, image, tool_use, tool_result)
+ * - Tool results are sent as user-role messages with tool_result content blocks
+ * - Strict user/assistant alternation is enforced
+ * - Extended thinking supported for reasoning models (Opus)
+ * - API key sent via `x-api-key` header with `anthropic-version` header
+ */
+
+import type {
+  AnyThreadChannel,
+  BaseGuildTextChannel,
+  BaseGuildVoiceChannel,
+  Client,
+  CommandInteraction,
+  DMChannel,
+  Message,
+} from "discord.js";
+import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
+import { anthropicProviderInfo } from "@/providers/anthropic/providerInfo";
+import { AnthropicStreamAdapter, type AnthropicStreamConfig } from "@/providers/anthropic/anthropicStreamAdapter";
+import { getAnthropicToolAdapter } from "@/providers/anthropic/anthropicToolAdapter";
+import { callAnthropicStructuredJSON } from "@/providers/anthropic/anthropicStructuredOutput";
+import {
+  generateConversationSummaryAnthropic,
+  generateRoleplaySummaryAnthropic,
+} from "@/providers/anthropic/compactGenerator";
+import { generatePresetFromPromptAnthropic } from "@/providers/anthropic/presetGenerator";
+import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchService";
+import { getMCPManager } from "@/utils/mcp/mcpManager";
+import type { TomoriState } from "@/types/db/schema";
+import type { StructuredContextItem } from "@/types/misc/context";
+import type {
+  CompactConversationResult,
+  CompactRoleplayResult,
+  PresetGenerationResult,
+  ProviderCompactSummaryRequest,
+  ProviderPresetGenerationRequest,
+  ProviderStructuredJsonRequest,
+  StructuredOutputResult,
+  SupportsConversationCompaction,
+  SupportsPresetGeneration,
+  SupportsStructuredOutput,
+} from "@/types/provider/featureInterfaces";
+import type { ZodType } from "zod";
+import type {
+  ApiKeyValidationResult,
+  FunctionCall,
+  FunctionResponseImageMetadata,
+  LLMProvider,
+  ProviderConfig,
+  ProviderInfo,
+  StreamResult,
+} from "@/types/provider/interfaces";
+import { BaseLLMProvider } from "@/types/provider/interfaces";
+import type { ProviderError, StreamContext } from "@/types/stream/interfaces";
+import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
+import type { StreamingContext } from "@/types/tool/interfaces";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
+import { log } from "@/utils/misc/logger";
+
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_API_VERSION = "2023-06-01";
+const ANTHROPIC_MAX_OUTPUT_TOKENS = parseInt(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS ?? "8192", 10);
+const ANTHROPIC_THINKING_BUDGET = parseInt(process.env.ANTHROPIC_THINKING_BUDGET_TOKENS ?? "8192", 10);
+
+/**
+ * Configuration for Anthropic provider requests
+ */
+export interface AnthropicProviderConfig extends ProviderConfig {
+  seesImages?: boolean;
+  isReasoning?: boolean;
+  thinkingBudget?: number;
+  topP?: number;
+  topK?: number;
+}
+
+export class AnthropicProvider
+  extends BaseLLMProvider
+  implements LLMProvider, SupportsStructuredOutput, SupportsConversationCompaction, SupportsPresetGeneration
+{
+  getInfo(): ProviderInfo {
+    return anthropicProviderInfo;
+  }
+
+  /**
+   * Validate an Anthropic API key by making a minimal Messages API request.
+   */
+  async validateApiKey(apiKey: string): Promise<ApiKeyValidationResult> {
+    try {
+      const response = await fetch(ANTHROPIC_MESSAGES_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": ANTHROPIC_API_VERSION,
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5",
+          max_tokens: 1,
+          messages: [{ role: "user", content: "ping" }],
+          stream: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        // 401 = invalid key, 403 = permission denied
+        if (response.status === 401 || response.status === 403) {
+          log.info("Anthropic API key validation failed: invalid credentials");
+          return {
+            valid: false,
+            error: {
+              type: "api_error",
+              message: `Authentication failed (${response.status}): ${errorText}`,
+              retryable: false,
+            },
+          };
+        }
+
+        // Other errors (400, 429, etc.) mean the key is valid but something else went wrong
+        log.info(`Anthropic API key validation: key accepted but got status ${response.status}`);
+      }
+
+      return { valid: true };
+    } catch (error) {
+      log.error("Anthropic API key validation failed", error as Error);
+      return {
+        valid: false,
+        error: {
+          type: "api_error",
+          message: error instanceof Error ? error.message : String(error),
+          retryable: false,
+        },
+      };
+    }
+  }
+
+  /**
+   * Format a provider error for display in embeds.
+   */
+  formatErrorDescription(error: ProviderError, locale: string): string | null {
+    const adapter = new AnthropicStreamAdapter();
+    return adapter.createErrorDescription(error, locale);
+  }
+
+  /**
+   * Call Anthropic with structured JSON output via forced tool use.
+   */
+  async callStructuredJSON<T>(
+    request: ProviderStructuredJsonRequest,
+    responseSchema: Record<string, unknown>,
+    zodSchema: ZodType<T>,
+  ): Promise<StructuredOutputResult<T>> {
+    return await callAnthropicStructuredJSON(request, responseSchema, zodSchema);
+  }
+
+  /**
+   * Get expression initialization batch size.
+   */
+  getExpressionInitializationBatchSize(): number | null {
+    return 50;
+  }
+
+  /**
+   * Get available tools for the Anthropic provider in Anthropic format.
+   */
+  async getTools(
+    tomoriState: TomoriState,
+    streamingContext?: StreamingContext,
+  ): Promise<Array<Record<string, unknown>>> {
+    if (!tomoriState.llm.has_tools) {
+      log.info("Anthropic provider: Model does not support tools (seeded capability)");
+      return [];
+    }
+
+    try {
+      const toolStateForContext: ToolStateForContext = {
+        server_id: tomoriState.server_id.toString(),
+        activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
+        llm: {
+          llm_codename: tomoriState.llm.llm_codename,
+          has_tools: tomoriState.llm.has_tools,
+          sees_images: tomoriState.llm.sees_images,
+          sees_videos: tomoriState.llm.sees_videos,
+          sees_youtube: tomoriState.llm.sees_youtube,
+          supports_structoutput: tomoriState.llm.supports_structoutput,
+        },
+        config: {
+          sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
+          web_search_enabled: tomoriState.config.web_search_enabled,
+          self_teaching_enabled: tomoriState.config.self_teaching_enabled,
+          pin_message_enabled: tomoriState.config.pin_message_enabled,
+          imagegen_enabled: tomoriState.config.imagegen_enabled,
+          nai_exclusive_imggen: tomoriState.config.nai_exclusive_imggen,
+          voice_message_enabled: tomoriState.config.voice_message_enabled,
+        },
+      };
+
+      const {
+        builtInTools: availableBuiltInTools,
+        mcpFunctionNames,
+        totalCount,
+      } = await getAvailableToolsWithMCP("anthropic", toolStateForContext);
+
+      let finalBuiltInTools = availableBuiltInTools;
+      if (streamingContext) {
+        const minimalContext = {
+          streamContext: streamingContext,
+          provider: "anthropic" as const,
+          channel: {} as BaseGuildTextChannel,
+          client: {} as Client,
+          tomoriState,
+          locale: "en-US",
+        };
+
+        finalBuiltInTools = availableBuiltInTools.filter((tool) => {
+          const isContextAvailable =
+            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
+              ? tool.isAvailableForContext("anthropic", minimalContext)
+              : true;
+
+          return isContextAvailable;
+        });
+
+        log.info(
+          `Applied Anthropic streaming context filtering: ${availableBuiltInTools.length} -> ${finalBuiltInTools.length} built-in tools`,
+        );
+      }
+
+      const adapter = getAnthropicToolAdapter();
+      const allToolsConfig = await adapter.getAllToolsInProviderFormat(
+        finalBuiltInTools,
+        tomoriState.server_id,
+        mcpFunctionNames,
+      );
+
+      log.info(
+        `Anthropic provider tools loaded: ${finalBuiltInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools`,
+      );
+
+      return allToolsConfig;
+    } catch (error) {
+      log.error(`Failed to get tools for Anthropic provider: ${tomoriState.llm.llm_codename}`, error as Error);
+      return [];
+    }
+  }
+
+  /**
+   * Get the default model codename for this provider.
+   */
+  async getDefaultModel(): Promise<string> {
+    return DEFAULT_ANTHROPIC_MODEL;
+  }
+
+  /**
+   * Create provider-specific configuration from TomoriState.
+   */
+  async createConfig(tomoriState: TomoriState, apiKey: string): Promise<AnthropicProviderConfig> {
+    const config: AnthropicProviderConfig = {
+      model: tomoriState.llm.llm_codename,
+      apiKey,
+      maxOutputTokens: ANTHROPIC_MAX_OUTPUT_TOKENS,
+      seesImages: tomoriState.llm.sees_images,
+      isReasoning: tomoriState.llm.is_reasoning,
+      thinkingBudget: ANTHROPIC_THINKING_BUDGET,
+      // Temperature is handled conditionally in the stream adapter
+      // (omitted for reasoning models)
+      temperature: tomoriState.config.llm_temperature,
+      ...(tomoriState.config.llm_top_p < 1.0 && {
+        topP: tomoriState.config.llm_top_p,
+      }),
+      ...(tomoriState.config.llm_top_k > 0 && {
+        topK: tomoriState.config.llm_top_k,
+      }),
+    };
+
+    if (tomoriState.llm.has_tools) {
+      config.tools = await this.getTools(tomoriState);
+    }
+
+    return config;
+  }
+
+  /**
+   * Stream a response from Anthropic to Discord.
+   */
+  async streamToDiscord(
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
+    client: Client,
+    tomoriState: TomoriState,
+    config: ProviderConfig,
+    contextItems: StructuredContextItem[],
+    currentTurnModelParts: Array<Record<string, unknown>>,
+    emojiStrings?: string[],
+    functionInteractionHistory?: Array<{
+      functionCall: FunctionCall;
+      functionResponse: Record<string, unknown>;
+      imageMetadata?: FunctionResponseImageMetadata;
+      preToolCallTextParts?: Array<Record<string, unknown>>;
+    }>,
+    initialInteraction?: CommandInteraction,
+    replyToMessage?: Message,
+    streamingContext?: StreamingContext,
+    userLocale?: string,
+    webhook?: import("discord.js").Webhook,
+    personaAvatarUrl?: string,
+    personaUsername?: string,
+    prefixStrippingName?: string,
+  ): Promise<StreamResult> {
+    log.info(`AnthropicProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`);
+
+    try {
+      const anthropicConfig = config as AnthropicProviderConfig;
+      const streamConfig: AnthropicStreamConfig = {
+        ...anthropicConfig,
+        maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
+        flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
+        flushBufferSizeCodeBlock: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+        inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
+        baseTypeSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+        maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
+        minVisibleTypingDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+        humanizerDegree: tomoriState.config.humanizer_degree,
+        emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
+        seesImages: tomoriState.llm.sees_images,
+        isReasoning: tomoriState.llm.is_reasoning,
+        thinkingBudget: anthropicConfig.thinkingBudget ?? ANTHROPIC_THINKING_BUDGET,
+        forceReason: streamingContext?.forceReason,
+        isManuallyTriggered: streamingContext?.isManuallyTriggered,
+      };
+
+      // Reload tools with streaming context for context-aware availability
+      if (streamingContext && tomoriState.llm.has_tools) {
+        log.info("AnthropicProvider: Reloading tools with streaming context for context-aware availability");
+        streamConfig.tools = await this.getTools(tomoriState, streamingContext);
+      }
+
+      const streamContext: StreamContext = {
+        channel,
+        client,
+        initialInteraction,
+        replyToMessage,
+        tomoriState,
+        contextItems,
+        currentTurnModelParts,
+        emojiStrings,
+        functionInteractionHistory,
+        provider: "anthropic",
+        locale: userLocale ?? "en-US",
+        suppressUserErrors: streamingContext?.suppressUserErrors,
+        rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
+        outputPrefill: streamingContext?.outputPrefill,
+        outputPrefillState: streamingContext?.outputPrefillState,
+        webhook,
+        personaAvatarUrl,
+        personaUsername,
+        prefixStrippingName,
+        forcedMentions: streamingContext?.forcedMentions,
+        abortSignal: streamingContext?.abortSignal,
+      };
+
+      const orchestrator = new StreamOrchestrator();
+      const adapter = new AnthropicStreamAdapter();
+      const result = await orchestrator.streamToDiscord(adapter, streamConfig, streamContext);
+
+      log.info(`AnthropicProvider: Streaming completed with status: ${result.status}`);
+      return result;
+    } catch (error) {
+      log.error(
+        `AnthropicProvider streaming error for server ${tomoriState.server_id}, model ${config.model}, channel ${channel.id}`,
+        error as Error,
+      );
+
+      return {
+        status: "error",
+        data: error as Error,
+      };
+    }
+  }
+
+  /**
+   * Resolve web-search tools for preset generation, or undefined if not needed.
+   */
+  private async getPresetGenerationTools(
+    request: ProviderPresetGenerationRequest,
+  ): Promise<Array<Record<string, unknown>> | undefined> {
+    if (!request.params.useWebSearch) {
+      return undefined;
+    }
+
+    if (!request.toolContext) {
+      log.warn("Anthropic preset generation skipped search tools: no tool context available.");
+      return undefined;
+    }
+
+    const hasBraveApiKey = await isBraveSearchAvailable(request.tomoriState.server_id);
+
+    if (!hasBraveApiKey) {
+      const mcpManager = getMCPManager();
+      if (!mcpManager.isReady()) {
+        await mcpManager.initializeMCPServers();
+      }
+    }
+
+    const toolStateForContext: ToolStateForContext = {
+      server_id: request.tomoriState.server_id.toString(),
+      activePersonaHasElevenlabsVoice: Boolean(request.tomoriState.elevenlabs_voice_id?.trim()),
+      llm: {
+        llm_codename: request.tomoriState.llm.llm_codename,
+        has_tools: request.tomoriState.llm.has_tools,
+        sees_images: request.tomoriState.llm.sees_images,
+        sees_videos: request.tomoriState.llm.sees_videos,
+        sees_youtube: request.tomoriState.llm.sees_youtube,
+        supports_structoutput: request.tomoriState.llm.supports_structoutput,
+      },
+      config: {
+        sticker_usage_enabled: false,
+        web_search_enabled: true,
+        self_teaching_enabled: false,
+        pin_message_enabled: false,
+        imagegen_enabled: false,
+        nai_exclusive_imggen: false,
+        voice_message_enabled: false,
+      },
+    };
+
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP("anthropic", toolStateForContext);
+
+    const searchTools = builtInTools.filter(
+      (tool) => tool.category === "search" || tool.requiresFeatureFlag === "web_search",
+    );
+
+    const adapter = getAnthropicToolAdapter();
+    return await adapter.getAllToolsInProviderFormat(searchTools, request.tomoriState.server_id, mcpFunctionNames);
+  }
+
+  /**
+   * Generate a character preset using the Anthropic API.
+   */
+  async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
+    const tools = await this.getPresetGenerationTools(request);
+
+    return await generatePresetFromPromptAnthropic(request.apiKey, request.params, request.locale, {
+      model: request.tomoriState.llm.llm_codename,
+      temperature: request.tomoriState.config.llm_temperature,
+      tools,
+      toolContext: request.toolContext,
+      maxToolRounds: request.maxToolRounds,
+    });
+  }
+
+  /**
+   * Generate a plain-text conversation summary using the Anthropic API.
+   */
+  async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
+    return await generateConversationSummaryAnthropic(request);
+  }
+
+  /**
+   * Generate a structured roleplay summary using the Anthropic API.
+   */
+  async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
+    return await generateRoleplaySummaryAnthropic(request);
+  }
+}

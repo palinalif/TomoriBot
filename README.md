@@ -103,17 +103,19 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 
 ### LLM Providers
 
-| Provider | Streaming | Tool Calling | Image Input |
-|----------|-----------|--------------|-------------|
-| **Google Gemini** | ✅ | ✅ | ✅ |
-| **OpenRouter** | ✅ | ✅ | ✅ |
-| **NovelAI** | ✅ | ✅ | ✅ |
-| **Nvidia** | ✅ | ✅ | ✅ |
-| **Deepseek** | ✅ | ✅ | ✅ |
-| **Z.ai** | ✅ | ✅ | ✅ |
-| **Z.ai Coding (Subscription)** | ✅ | ✅ | ✅ |
-| **Google Vertex AI** | ✅ | ✅ | ✅ |
-| **Custom (OpenAI-compatible)** | ✅ | ✅ | ✅ |
+| Provider | Streaming | Tool Calling | Image Input |Embeddings |Notes |
+|----------|-----------|--------------|-------------|-------|-------|
+| **Google Gemini** | ✅ | ✅ | ✅ | ✅ |Free Models Available |
+| **OpenRouter** | ✅ | ✅ | ✅ | ✅ |Free Models Available |
+| **Anthropic (API)** | ✅ | ✅ | ✅ |- | NOT Claude Code |
+| **NovelAI** | ✅ | ✅ | - |- | Only GLM 4.5 can use Tools |
+| **Nvidia** | ✅ | ✅ | ✅ | ✅ |Free Models Available | 
+| **Deepseek** | ✅ | ✅ | - | - |- |
+| **Z.ai** | ✅ | ✅ | ✅ | - |Free Models Available |
+| **Z.ai Coding** | ✅ | ✅ | ✅ | - |Subscription Plan |
+| **Google Vertex AI** | ✅ | ✅ | ✅ |✅ | - |
+| **Codex CLI (via ChatMock)** | ✅ | ✅ | ✅ | - |via ChatMock (README for Instructions)) |
+| **Custom (OpenAI-compatible)** | ✅ | ✅ | ✅ | - |KoboldCPP, etc.
 
 ### Image Generation
 

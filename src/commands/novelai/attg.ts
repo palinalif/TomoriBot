@@ -101,7 +101,7 @@ export async function execute(
       });
 
       if (!personaResult.success) {
-        if (personaResult.reason === "cancelled") return;
+        if (personaResult.reason === "cancelled" || personaResult.reason === "fatal") return;
         continue;
       }
       if (personaResult.selectedIndex === undefined || !personaResult.interaction) {

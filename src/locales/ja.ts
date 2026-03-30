@@ -493,6 +493,34 @@ export default {
       unknown_default_message: "Z.aiとの通信中に予期しないエラーが発生しました。",
     },
 
+    // Anthropicプロバイダー固有のエラーメッセージ
+    anthropic: {
+      connection_refused: "Anthropic APIエンドポイントに接続できませんでした。後でもう一度お試しください。",
+
+      "400_default_message":
+        "Anthropic APIへのリクエストが無効です。別のモデルを試すか、コンテキスト長を減らしてください。",
+
+      "401_default_message": "Anthropic APIキーが無効です。console.anthropic.comでキーを確認してください。",
+
+      "403_default_message": "Anthropic APIキーにこの操作の権限がありません。",
+
+      "404_default_message":
+        "リクエストされたAnthropicモデルが見つかりません。`/config model text`でモデルを切り替えてください。",
+
+      "408_default_message": "Anthropicリクエストがタイムアウトしました。",
+
+      "429_default_message": "Anthropicのレート制限に達しました。しばらく待ってから再試行してください。",
+
+      "500_default_message": "Anthropicで内部サーバーエラーが発生しました。",
+
+      "503_default_message": "Anthropicは現在利用できないか、過負荷状態です。",
+
+      overloaded_default_message:
+        "Anthropicは現在過負荷状態です。後でもう一度試すか、別のプロバイダーに切り替えてください。",
+
+      unknown_default_message: "Anthropicとの通信中に予期しないエラーが発生しました。",
+    },
+
     // カスタムプロバイダー固有のエラーメッセージ（セルフホスト型のOpenAI互換エンドポイント用）
     custom: {
       // 接続エラー
@@ -1661,6 +1689,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
         provider_choice_vertex: `Google Vertex AI`,
+        provider_choice_anthropic: `Anthropic`,
         provider_choice_elevenlabs: `ElevenLabs TTS`,
         zai_title: `Z.ai APIキーの設定`,
         zai_description: `Z.aiはGLMモデルファミリーへのアクセスを提供し、汎用APIと専用Codingエンドポイントの両方に対応しています。
@@ -1753,6 +1782,28 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - このプロバイダーはセルフホストまたは信頼できるプライベート環境を想定しています
 - チャット、ツール呼び出し、ストリーミング、構造化出力、圧縮、埋め込み、プリセット生成に対応`,
         vertex_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        // Anthropic
+        anthropic_title: `Anthropic APIキーの設定`,
+        anthropic_description: `Anthropicは高品質な推論と創作能力を持つClaudeモデルへのダイレクトアクセスを提供します。
+- チャット、ツール呼び出し、ストリーミング、構造化出力、圧縮、プリセット生成に対応
+- Claudeモデルはビジョン（画像入力）と複雑な推論向けの拡張思考をサポート
+- 従量課金制、サブスクリプション不要
+- [Anthropic API Documentation](https://docs.anthropic.com/en/docs)`,
+        anthropic_getting_key_title: `APIキーの取得:`,
+        anthropic_getting_key_description: `1. [Anthropic Console](https://console.anthropic.com/settings/keys)にアクセス
+2. サインインまたはAnthropicアカウントを作成
+3. 新しいAPIキーを作成
+4. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
+        anthropic_model_notes_title: `モデルについて:`,
+        anthropic_model_notes_description: `- \`claude-sonnet-4-6\`はデフォルトモデル — 品質、速度、コストの最適なバランス
+- \`claude-haiku-4-5\`は高速でコスト効率の良い汎用モデル
+- \`claude-opus-4-6\`は最高品質のモデル、複雑な推論に拡張思考を利用可能
+- セットアップ後に{configModel}で利用可能なClaudeモデルを切り替えられます`,
+        anthropic_pricing_title: `料金:`,
+        anthropic_pricing_description: `- トークン単位の従量課金、モデルにより異なる
+- 現在の料金は[Anthropic Pricing](https://www.anthropic.com/pricing)で確認
+- ほとんどの用途でSonnetが最もコストパフォーマンスに優れています`,
+        anthropic_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
       },
 
       // /help elevenlabs

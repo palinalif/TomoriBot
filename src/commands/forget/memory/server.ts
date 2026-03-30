@@ -173,7 +173,7 @@ export async function execute(
       });
 
       if (!personaSelection.success) {
-        if (personaSelection.reason === "cancelled") return;
+        if (personaSelection.reason === "cancelled" || personaSelection.reason === "fatal") return;
         continue;
       }
       if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {

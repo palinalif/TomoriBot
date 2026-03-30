@@ -124,6 +124,10 @@ VALUES
   ('zai', 'zai/glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する最も高性能なGLMモデル'),
   ('zai', 'zai/glm-5.1', false, false, true, false, false, true, false, false, false, false, true, 'Latest flagship GLM model from the general Z.ai API', '通常のZ.ai APIで利用する最新のフラッグシップGLMモデル'),
   ('zai', 'zai/glm-5-turbo', false, false, false, false, false, true, false, false, false, false, true, 'Fast variant of GLM-5 from the general Z.ai API', '通常のZ.ai APIで利用するGLM-5の高速版'),
+  -- Anthropic Models (vision + tools + structured output via forced tool use; no video/YouTube)
+  ('anthropic', 'claude-haiku-4-5', false, false, false, false, false, true, true, false, false, false, true, 'Fast and cost-efficient Claude model for general tasks', '汎用タスク向けの高速でコスト効率の良いClaudeモデル'),
+  ('anthropic', 'claude-sonnet-4-6', false, true, false, false, false, true, true, false, false, false, true, 'Balanced Claude model — best mix of quality, speed, and cost', '品質・速度・コストの最適なバランスを持つClaudeモデル'),
+  ('anthropic', 'claude-opus-4-6', true, false, true, false, false, true, true, false, false, false, true, 'Most capable Claude model with extended thinking for complex reasoning', '複雑な推論向けの拡張思考機能を持つ最高性能のClaudeモデル'),
   -- Custom Provider Bootstrap Entry (allows "custom" to appear in provider dropdown)
   -- Actual capabilities are configured per-server when users set up their custom endpoint
   ('custom', 'custom/bootstrap', false, false, false, false, true, false, false, false, false, true, false, 'Self-hosted OpenAI-compatible endpoint (Ollama, KoboldCPP, vLLM, LocalAI)', 'セルフホスト型OpenAI互換エンドポイント（Ollama、KoboldCPP、vLLM、LocalAI）')

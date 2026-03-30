@@ -489,6 +489,33 @@ export default {
       unknown_default_message: "An unexpected error occurred while communicating with Z.ai.",
     },
 
+    // Anthropic provider error messages
+    anthropic: {
+      connection_refused: "Could not connect to the Anthropic API endpoint. Please try again later.",
+
+      "400_default_message": "Invalid request to Anthropic API. Try a different model or reduce context length.",
+
+      "401_default_message": "Your Anthropic API key is invalid. Please check your key at console.anthropic.com",
+
+      "403_default_message": "Your Anthropic API key does not have permission for this operation.",
+
+      "404_default_message":
+        "The requested Anthropic model could not be found. Try switching models with `/config model text`.",
+
+      "408_default_message": "The Anthropic request timed out before the provider responded.",
+
+      "429_default_message": "Anthropic rate limit exceeded. Please wait a moment and try again.",
+
+      "500_default_message": "Anthropic returned an internal server error.",
+
+      "503_default_message": "Anthropic is currently unavailable or overloaded.",
+
+      overloaded_default_message:
+        "Anthropic is currently overloaded. Please try again later or switch to a different provider.",
+
+      unknown_default_message: "An unexpected error occurred while communicating with Anthropic.",
+    },
+
     // Custom provider error messages (self-hosted OpenAI-compatible endpoints)
     custom: {
       // Connection errors
@@ -1593,6 +1620,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_zai: `Z.ai`,
         provider_choice_zaicoding: `Z.ai (Coding)`,
         provider_choice_vertex: `Google Vertex AI`,
+        provider_choice_anthropic: `Anthropic`,
         provider_choice_elevenlabs: `ElevenLabs TTS`,
         // Brave Search
         brave_title: `Setting Up Brave Search API Key`,
@@ -1747,6 +1775,28 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - This provider is intended for self-hosted or trusted private deployments
 - Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation`,
         vertex_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        // Anthropic
+        anthropic_title: `Setting Up Anthropic API Key`,
+        anthropic_description: `Anthropic provides direct access to Claude models with high-quality reasoning and creative capabilities.
+- Supports chat, tool calling, streaming, structured output, compaction, and preset generation
+- Claude models support vision (image inputs) and extended thinking for complex reasoning
+- Pay-as-you-go pricing with no subscription required
+- [Anthropic API Documentation](https://docs.anthropic.com/en/docs)`,
+        anthropic_getting_key_title: `Getting Your API Key:`,
+        anthropic_getting_key_description: `1. Visit [Anthropic Console](https://console.anthropic.com/settings/keys)
+2. Sign in or create an Anthropic account
+3. Create a new API key
+4. Copy this API key into {configSetup} or {configApikeySet}`,
+        anthropic_model_notes_title: `Model Notes:`,
+        anthropic_model_notes_description: `- \`claude-sonnet-4-6\` is the default model — best balance of quality, speed, and cost
+- \`claude-haiku-4-5\` is fast and cost-efficient for general tasks
+- \`claude-opus-4-6\` is the highest quality model with extended thinking for complex reasoning
+- You can switch between available Claude models after setup with {configModel}`,
+        anthropic_pricing_title: `Pricing:`,
+        anthropic_pricing_description: `- Pricing is per-token, varies by model
+- Check [Anthropic Pricing](https://www.anthropic.com/pricing) for current rates
+- Sonnet offers the best value for most use cases`,
+        anthropic_footer: `After setting up this provider, you may change its default model with {configModel}`,
       },
 
       // /help elevenlabs

@@ -128,5 +128,5 @@ export interface PaginatedChoiceResult {
   selectedIndex?: number; // The index of the selected item (if success is true)
   selectedItem?: string; // The selected item value (if success is true)
   interaction?: ButtonInteraction; // Selected button interaction (when preserveSelectedInteraction=true)
-  reason?: "timeout" | "cancelled" | "error"; // Reason for failure if success is false
+  reason?: "timeout" | "cancelled" | "error" | "fatal"; // Reason for failure if success is false; "fatal" means the Discord interaction token is dead and retrying will loop
 }

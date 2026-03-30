@@ -781,6 +781,9 @@ export async function replySummaryEmbed(
 }
 
 const PAGINATION_TIMEOUT_MS = 120000; // 2 minute timeout for pagination interactions
+// Discord interaction tokens expire after 15 minutes. We cap the total session at
+// 14 minutes so there's always a 1-minute buffer to deliver the final reply.
+const PAGINATION_SESSION_MAX_MS = 14 * 60 * 1000;
 const PAGINATION_ITEMS_PER_PAGE = 9; // Number of items to show per page
 const NUMBER_EMOJIS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]; // Emojis for numbered selection
 const PERSONA_PAGINATION_ITEMS_PER_PAGE = 4;
@@ -1431,39 +1434,76 @@ export async function replyPaginatedPersonaChoicesV2(
     }) ??
     "https://cdn.discordapp.com/embed/avatars/0.png";
 
+  // Outer try catches only programming errors (e.g. bad options). It must NOT make
+  // Discord API calls — by the time an error escapes the inner try, the interaction
+  // token may already be dead and any recovery attempt just wastes rate-limit quota.
+  const sessionStart = Date.now();
   try {
     while (true) {
-      // Determine which personas are on the current page
-      const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
-      const endIdx = Math.min(startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE, options.personas.length);
-      const pagePersonas = options.personas.slice(startIdx, endIdx);
-
-      // Pre-resolve avatar URLs (and collect local file attachments when needed).
-      // In non-production without AVATAR_PUBLIC_BASE_URL, alter avatars stored as
-      // local paths are loaded from disk and attached directly to the message.
-      const { avatarUrls, files } = await resolvePersonaPageAvatarData(pagePersonas, fallbackAvatarUrl);
-
-      const components = buildPersonaPageComponents(interaction, locale, options, currentPage, totalPages, avatarUrls);
-      const baseReplyOptions: Omit<InteractionReplyOptions, "flags"> = {
-        components,
-        files,
-      };
-
-      let message: Message;
-      if (interaction.replied || interaction.deferred) {
-        message = await interaction.editReply({
-          ...baseReplyOptions,
-          flags: MessageFlags.IsComponentsV2,
-        });
-      } else {
-        await interaction.reply({
-          ...baseReplyOptions,
-          flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
-        });
-        message = await interaction.fetchReply();
-      }
-
+      // 1. Inner try wraps the ENTIRE loop body — setup, render, and button wait.
+      //    This ensures every Discord API error is caught here and returned cleanly
+      //    without propagating to the outer catch and triggering a second API call.
       try {
+        // 1a. Guard against the Discord 15-minute interaction token expiry.
+        //     awaitMessageComponent resets its per-iteration timeout on each loop
+        //     pass, so an active user clicking buttons can hold the session open
+        //     indefinitely — past the point where the token becomes invalid and all
+        //     editReply calls start throwing "Invalid Webhook Token".
+        if (Date.now() - sessionStart >= PAGINATION_SESSION_MAX_MS) {
+          try {
+            await interaction.editReply({
+              components: buildV2StatusComponents(
+                locale,
+                options.titleKey ?? "general.pagination.select_persona_title",
+                "general.pagination.timeout",
+                ColorCode.WARN,
+              ),
+              flags: MessageFlags.IsComponentsV2,
+            });
+          } catch {
+            // Swallow — token may already be expired at this boundary.
+          }
+          return { success: false, reason: "timeout" };
+        }
+
+        // 1b. Determine which personas are on the current page.
+        const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
+        const endIdx = Math.min(startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE, options.personas.length);
+        const pagePersonas = options.personas.slice(startIdx, endIdx);
+
+        // 1c. Pre-resolve avatar URLs (and collect local file attachments when needed).
+        //     In non-production without AVATAR_PUBLIC_BASE_URL, alter avatars stored as
+        //     local paths are loaded from disk and attached directly to the message.
+        const { avatarUrls, files } = await resolvePersonaPageAvatarData(pagePersonas, fallbackAvatarUrl);
+
+        const components = buildPersonaPageComponents(
+          interaction,
+          locale,
+          options,
+          currentPage,
+          totalPages,
+          avatarUrls,
+        );
+        const baseReplyOptions: Omit<InteractionReplyOptions, "flags"> = {
+          components,
+          files,
+        };
+
+        // 1d. Send or update the pagination message.
+        let message: Message;
+        if (interaction.replied || interaction.deferred) {
+          message = await interaction.editReply({
+            ...baseReplyOptions,
+            flags: MessageFlags.IsComponentsV2,
+          });
+        } else {
+          await interaction.reply({
+            ...baseReplyOptions,
+            flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+          });
+          message = await interaction.fetchReply();
+        }
+
         const buttonInteraction = await message.awaitMessageComponent({
           filter: (i) => i.user.id === interaction.user.id,
           componentType: ComponentType.Button,
@@ -1605,53 +1645,50 @@ export async function replyPaginatedPersonaChoicesV2(
             };
           }
         }
-      } catch (_error) {
-        log.warn(`Pagination interaction timed out for user ${interaction.user.id}`);
-        await interaction.editReply({
-          components: buildV2StatusComponents(
-            locale,
-            options.titleKey ?? "general.pagination.select_persona_title",
-            "general.pagination.timeout",
-            ColorCode.WARN,
-          ),
-          flags: MessageFlags.IsComponentsV2,
-        });
+      } catch (innerError) {
+        // Discord.js signals awaitMessageComponent timeout by rejecting with the
+        // string "time". Any other value is a real Discord API error (rate limit,
+        // expired token, lost permission, etc.).
+        const isTimeout = innerError === "time";
 
+        if (isTimeout) {
+          log.warn(`Pagination interaction timed out for user ${interaction.user.id}`);
+        } else {
+          log.warn(`Pagination interaction failed for user ${interaction.user.id}`, innerError);
+        }
+
+        // Best-effort: show a status message. We swallow any editReply failure
+        // here so it never escapes to the outer catch and triggers a second
+        // API call (which would worsen an ongoing rate-limit spiral).
+        try {
+          await interaction.editReply({
+            components: buildV2StatusComponents(
+              locale,
+              options.titleKey ?? "general.pagination.select_persona_title",
+              isTimeout ? "general.pagination.timeout" : "general.errors.unknown_error_description",
+              isTimeout ? ColorCode.WARN : ColorCode.ERROR,
+            ),
+            flags: MessageFlags.IsComponentsV2,
+          });
+        } catch {
+          // Swallow — interaction may already be dead (expired token, rate limit).
+          // Do not re-throw; the outer catch must stay clean of API calls.
+        }
+
+        // "fatal" signals callers that the interaction token is dead and they must
+        // NOT continue their own while(true) loop — doing so would call this
+        // function again on a dead interaction, creating an infinite API spam loop.
         return {
           success: false,
-          reason: "timeout",
+          reason: isTimeout ? "timeout" : "fatal",
         };
       }
     }
   } catch (error) {
+    // Only genuine programming errors reach here (e.g. bad options, sync throws).
+    // Do NOT make Discord API calls in this handler — the interaction state is
+    // unknown at this point and any attempt would just waste rate-limit quota.
     log.error("Unexpected error during replyPaginatedPersonaChoicesV2 setup:", error);
-
-    try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.editReply({
-          components: buildV2StatusComponents(
-            locale,
-            "general.errors.unknown_error_title",
-            "general.errors.unknown_error_description",
-            ColorCode.ERROR,
-          ),
-          flags: MessageFlags.IsComponentsV2,
-        });
-      } else {
-        await replyInfoEmbed(
-          interaction,
-          locale,
-          {
-            titleKey: "general.errors.unknown_error_title",
-            descriptionKey: "general.errors.unknown_error_description",
-            color: ColorCode.ERROR,
-          },
-          MessageFlags.Ephemeral,
-        );
-      }
-    } catch (finalErrorReplyError) {
-      log.error("Failed even to send final error message in replyPaginatedPersonaChoicesV2:", finalErrorReplyError);
-    }
 
     return {
       success: false,

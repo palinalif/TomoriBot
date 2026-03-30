@@ -215,7 +215,7 @@ export async function execute(
         });
 
         if (!personaSelection.success) {
-          if (personaSelection.reason === "cancelled") return;
+          if (personaSelection.reason === "cancelled" || personaSelection.reason === "fatal") return;
           continue;
         }
         if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
@@ -328,6 +328,87 @@ export async function execute(
           });
         }
         break;
+      }
+    } else {
+      // 4b. GLOBAL scope: load lineage-0 memories directly (no persona picker needed)
+      const globalMemories = userData.user_id
+        ? await loadPersonalMemoriesForUserLineage(userData.user_id, GLOBAL_PERSONAL_MEMORY_LINEAGE_ID, false)
+        : [];
+
+      // 5b. Check if there are any global memories to remove
+      if (globalMemories.length === 0) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.forget.memory.personal.no_memories_title",
+          descriptionKey: "commands.forget.memory.personal.no_memories",
+          color: ColorCode.WARN,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      // 6b. Create memory select options for the modal
+      const memorySelectOptions: SelectOption[] = globalMemories.map((memory, index) => ({
+        label: safeSelectOptionText(memory.content, 20),
+        value: index.toString(),
+        description: safeSelectOptionText(memory.content),
+      }));
+
+      // 7b. Show the paginated modal with memory selection (no back-navigation loop needed)
+      const modalResult = await promptWithPaginatedModal(interaction, locale, {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.forget.memory.personal.modal_title",
+        components: [
+          {
+            customId: MEMORY_SELECT_ID,
+            labelKey: "commands.forget.memory.personal.select_label",
+            descriptionKey: "commands.forget.memory.personal.select_description",
+            placeholder: "commands.forget.memory.personal.select_placeholder",
+            required: true,
+            options: memorySelectOptions,
+          },
+        ],
+      });
+
+      // 8b. Handle modal outcome
+      if (modalResult.outcome !== "submit") {
+        log.info(`Global personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
+        return;
+      }
+
+      // 9b. Extract selected memory index from modal
+      const modalSubmitInteraction = modalResult.interaction;
+      const selectedIndex = modalResult.values?.[MEMORY_SELECT_ID];
+
+      if (!modalSubmitInteraction || !selectedIndex) {
+        log.error("Modal result unexpectedly missing interaction or values");
+        return;
+      }
+
+      const selectedMemory = globalMemories[Number.parseInt(selectedIndex, 10)];
+      if (!selectedMemory) {
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey: "general.errors.operation_failed_title",
+          descriptionKey: "commands.forget.memory.personal.no_memories",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      // 10b. Perform deletion via shared helper
+      await performPersonalMemoryRemoval(selectedMemory, userData, modalSubmitInteraction, locale);
+
+      // 11b. If personalization is disabled, send a warning follow-up
+      if (personalizationDisabledWarning) {
+        await modalSubmitInteraction.followUp({
+          embeds: [
+            createStandardEmbed(locale, {
+              titleKey: "commands.forget.memory.personal.warning_disabled_title",
+              descriptionKey: "commands.forget.memory.personal.warning_disabled_description",
+              color: ColorCode.WARN,
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
       }
     }
   } catch (error) {

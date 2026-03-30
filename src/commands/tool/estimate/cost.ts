@@ -27,6 +27,8 @@ import { GoogleStreamAdapter } from "@/providers/google/googleStreamAdapter";
 import { OpenrouterProvider, type OpenrouterProviderConfig } from "@/providers/openrouter/openrouterProvider";
 import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
 import { DeepseekProvider, type DeepseekProviderConfig } from "@/providers/deepseek/deepseekProvider";
+import { AnthropicProvider, type AnthropicProviderConfig } from "@/providers/anthropic/anthropicProvider";
+import { AnthropicStreamAdapter } from "@/providers/anthropic/anthropicStreamAdapter";
 import { buildOpenAICompatibleMessages } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
 import {
   getProviderDisplayName,
@@ -90,6 +92,38 @@ const ZAICODING_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
   3.0,
   0,
 );
+// Anthropic Claude model-tier pricing (USD per million tokens).
+// Tier is detected from the model codename: opus > sonnet > haiku.
+const ANTHROPIC_OPUS_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ANTHROPIC_OPUS_INPUT_PRICE_PER_MILLION,
+  5.0,
+  0,
+);
+const ANTHROPIC_OPUS_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ANTHROPIC_OPUS_OUTPUT_PRICE_PER_MILLION,
+  25.0,
+  0,
+);
+const ANTHROPIC_SONNET_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ANTHROPIC_SONNET_INPUT_PRICE_PER_MILLION,
+  3.0,
+  0,
+);
+const ANTHROPIC_SONNET_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ANTHROPIC_SONNET_OUTPUT_PRICE_PER_MILLION,
+  15.0,
+  0,
+);
+const ANTHROPIC_HAIKU_INPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ANTHROPIC_HAIKU_INPUT_PRICE_PER_MILLION,
+  1.0,
+  0,
+);
+const ANTHROPIC_HAIKU_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
+  process.env.HELP_COST_ANTHROPIC_HAIKU_OUTPUT_PRICE_PER_MILLION,
+  5.0,
+  0,
+);
 
 const SUPPORTED_VIDEO_MIME_TYPES = [
   "video/mp4",
@@ -109,7 +143,7 @@ const YOUTUBE_URL_PATTERNS = [
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
 ];
 
-type LiveProvider = "google" | "openrouter" | "deepseek" | "zai" | "zaicoding";
+type LiveProvider = "google" | "openrouter" | "deepseek" | "zai" | "zaicoding" | "anthropic";
 
 interface ZaiFamilyProviderConfig {
   model: string;
@@ -579,6 +613,9 @@ function resolveProvider(providerName: string): LiveProvider | null {
   }
   if ((normalizedProvider === "zai" || normalizedProvider === "zaicoding") && implementation === "zai") {
     return normalizedProvider;
+  }
+  if (normalizedProvider === "anthropic" && implementation === "anthropic") {
+    return "anthropic";
   }
   return null;
 }
@@ -1169,6 +1206,88 @@ async function measureZaiInputTokens(
   };
 }
 
+const ANTHROPIC_COUNT_TOKENS_URL = "https://api.anthropic.com/v1/messages/count_tokens";
+const ANTHROPIC_API_VERSION = "2023-06-01";
+const ANTHROPIC_TOKEN_COUNTING_BETA = "token-counting-2024-11-01";
+
+/**
+ * Determine Anthropic model pricing tier from the model codename.
+ * Tier precedence: opus > haiku > sonnet (default).
+ */
+function getAnthropicModelPricing(model: string): { input: number; output: number } {
+  if (model.includes("opus")) {
+    return { input: ANTHROPIC_OPUS_INPUT_PRICE_PER_MILLION, output: ANTHROPIC_OPUS_OUTPUT_PRICE_PER_MILLION };
+  }
+  if (model.includes("haiku")) {
+    return { input: ANTHROPIC_HAIKU_INPUT_PRICE_PER_MILLION, output: ANTHROPIC_HAIKU_OUTPUT_PRICE_PER_MILLION };
+  }
+  // Default: sonnet (covers claude-sonnet-* and any unknown model)
+  return { input: ANTHROPIC_SONNET_INPUT_PRICE_PER_MILLION, output: ANTHROPIC_SONNET_OUTPUT_PRICE_PER_MILLION };
+}
+
+/**
+ * Use Anthropic's dedicated /v1/messages/count_tokens endpoint to measure exact
+ * input token usage for the current context without generating any output.
+ * @param tomoriState - Current server state
+ * @param apiKey - Decrypted API key
+ * @param contextItems - Structured context items for token measurement
+ * @returns Live cost measurement with Anthropic model-tier pricing
+ */
+async function measureAnthropicInputTokens(
+  tomoriState: TomoriState,
+  apiKey: string,
+  contextItems: StructuredContextItem[],
+): Promise<LiveCostMeasurement> {
+  const provider = new AnthropicProvider();
+  const providerConfig = (await provider.createConfig(tomoriState, apiKey)) as AnthropicProviderConfig;
+
+  // 1. Assemble context into Anthropic message format (same logic used during streaming)
+  const adapter = new AnthropicStreamAdapter();
+  const { system, messages } = await adapter.buildProbeMessages(contextItems, providerConfig.seesImages ?? true);
+
+  // 2. Build the count_tokens request body (same shape as /v1/messages, no stream/max_tokens)
+  const requestBody: Record<string, unknown> = {
+    model: providerConfig.model,
+    messages,
+  };
+  if (system) requestBody.system = system;
+  if (providerConfig.tools && providerConfig.tools.length > 0) requestBody.tools = providerConfig.tools;
+
+  // 3. Call the dedicated token counting endpoint
+  const response = await fetch(ANTHROPIC_COUNT_TOKENS_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": ANTHROPIC_API_VERSION,
+      "anthropic-beta": ANTHROPIC_TOKEN_COUNTING_BETA,
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic count_tokens failed (${response.status}): ${errorText.slice(0, 400)}`);
+  }
+
+  const data = (await response.json()) as { input_tokens?: number };
+  const inputTokens = data.input_tokens;
+  if (typeof inputTokens !== "number" || Number.isNaN(inputTokens) || inputTokens < 0) {
+    throw new Error("Anthropic count_tokens response missing input_tokens");
+  }
+
+  const pricing = getAnthropicModelPricing(providerConfig.model);
+
+  return {
+    provider: "anthropic",
+    providerLabel: "Anthropic",
+    model: providerConfig.model,
+    inputTokens,
+    inputPricePerMillion: pricing.input,
+    outputPricePerMillion: pricing.output,
+  };
+}
+
 async function sendLiveEstimateEmbed(
   interaction: ChatInputCommandInteraction,
   locale: string,
@@ -1456,7 +1575,9 @@ export async function execute(
             ? await measureOpenRouterInputTokens(tomoriState, decryptedApiKey, contextItems)
             : provider === "deepseek"
               ? await measureDeepseekInputTokens(tomoriState, decryptedApiKey, contextItems)
-              : await measureZaiInputTokens(provider, tomoriState, decryptedApiKey, contextItems);
+              : provider === "anthropic"
+                ? await measureAnthropicInputTokens(tomoriState, decryptedApiKey, contextItems)
+                : await measureZaiInputTokens(provider, tomoriState, decryptedApiKey, contextItems);
       await sendLiveEstimateEmbed(interaction, locale, measurement);
     } catch (countError) {
       await log.error(

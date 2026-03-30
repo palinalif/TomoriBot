@@ -8,6 +8,7 @@ import { novelaiProviderInfo } from "@/providers/novelai/providerInfo";
 import { nvidiaProviderInfo } from "@/providers/nvidia/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
 import { vertexProviderInfo } from "@/providers/vertex/providerInfo";
+import { anthropicProviderInfo } from "@/providers/anthropic/providerInfo";
 
 const providerInfos: readonly ProviderInfo[] = [
   googleProviderInfo,
@@ -19,6 +20,7 @@ const providerInfos: readonly ProviderInfo[] = [
   zaiProviderInfo,
   zaicodingProviderInfo,
   vertexProviderInfo,
+  anthropicProviderInfo,
 ] as const;
 
 const providerInfoByCanonicalName = new Map<string, ProviderInfo>(
@@ -43,7 +45,8 @@ export type ProviderFeatureImplementation =
   | "deepseek"
   | "nvidia"
   | "zai"
-  | "vertex";
+  | "vertex"
+  | "anthropic";
 
 const providerFeatureImplementations: Partial<
   Record<ProviderFeatureName, Partial<Record<string, ProviderFeatureImplementation>>>
@@ -61,6 +64,7 @@ const providerFeatureImplementations: Partial<
     deepseek: "deepseek",
     zai: "zai",
     zaicoding: "zai",
+    anthropic: "anthropic",
   },
 };
 

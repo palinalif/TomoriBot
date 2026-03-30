@@ -18,7 +18,7 @@ import type { StructuredContextItem } from "../misc/context";
 import type { StreamingContext } from "../tool/interfaces";
 import type { ProviderError } from "../stream/interfaces";
 
-export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "openai-compatible";
+export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "openai-compatible" | "anthropic";
 
 export interface ProviderFeatureSupport {
   nativeImageGeneration: boolean;
@@ -274,6 +274,10 @@ export abstract class BaseLLMProvider implements LLMProvider {
     replyToMessage?: Message,
     streamingContext?: StreamingContext,
     userLocale?: string,
+    webhook?: import("discord.js").Webhook,
+    personaAvatarUrl?: string,
+    personaUsername?: string,
+    prefixStrippingName?: string,
   ): Promise<StreamResult>;
   abstract getDefaultModel(): Promise<string>;
   abstract createConfig(tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig>;
