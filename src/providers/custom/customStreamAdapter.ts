@@ -35,7 +35,46 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
 
 				return mentionsStop && indicatesUnsupportedParam;
 			},
+			// Chatmock (used as a local proxy for Codex CLI) silently strips
+			// system-role turns before forwarding to the underlying model.
+			// Detect it by URL so the adapter falls back to an in-band user turn.
+			supportsSystemRole: (apiUrl) =>
+				!isChatmockEndpoint(apiUrl),
 		});
+	}
+}
+
+/**
+ * Port that ChatMock listens on by default.
+ * Override with the `CHATMOCK_PORT` environment variable if you run ChatMock
+ * on a non-standard port (e.g. `CHATMOCK_PORT=9000`).
+ */
+const CHATMOCK_PORT = process.env.CHATMOCK_PORT ?? "8000";
+
+/**
+ * Returns `true` when the resolved API URL looks like a ChatMock endpoint.
+ *
+ * ChatMock (github.com/RayBytes/ChatMock) is a local OpenAI-compatible proxy
+ * used to bridge Codex CLI.  It silently strips system-role messages, so the
+ * system prompt must be injected as an in-band user turn instead.
+ *
+ * Detection heuristic: ChatMock's documented default is `http://127.0.0.1:8000`
+ * (or `localhost:8000`), so we match any loopback address on the configured
+ * port.  The port defaults to `8000` but is overridable via `CHATMOCK_PORT`.
+ * This is intentionally narrow — other common local tools use different ports
+ * (Ollama: 11434, KoboldCPP: 5001, LM Studio: 1234).
+ */
+export function isChatmockEndpoint(apiUrl: string): boolean {
+	try {
+		const { hostname, port } = new URL(apiUrl);
+		const isLoopback =
+			hostname === "127.0.0.1" ||
+			hostname === "localhost" ||
+			hostname === "::1";
+		return isLoopback && port === CHATMOCK_PORT;
+	} catch {
+		// Malformed URL — don't assume ChatMock
+		return false;
 	}
 }
 

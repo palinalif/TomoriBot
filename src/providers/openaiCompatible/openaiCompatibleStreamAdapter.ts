@@ -83,12 +83,20 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 			this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
 		}
 
+		// Determine whether the resolved endpoint accepts system-role messages.
+		// The supportsSystemRole callback receives the final API URL and model so
+		// that adapters (e.g. Custom/Chatmock) can opt out of the system role on
+		// a per-request basis.  Defaults to true when not provided.
+		const supportsSystemRole =
+			this.options.supportsSystemRole?.(apiUrl, config.model ?? "") ?? true;
+
 		const messages = await buildOpenAICompatibleMessages({
 			adapterName: this.options.adapterName,
 			contextItems: context.contextItems,
 			currentTurnModelParts: context.currentTurnModelParts,
 			functionInteractionHistory: context.functionInteractionHistory,
 			seesImages: openAICompatibleConfig.seesImages ?? false,
+			supportsSystemRole,
 		});
 
 		if (!config.model) {

@@ -118,4 +118,14 @@ export interface OpenAICompatibleStreamAdapterOptions {
 		statusCode: number,
 		errorText: string,
 	) => boolean;
+	/**
+	 * Return `false` to signal that this endpoint does not accept OpenAI-style
+	 * `"system"` role messages and that the assembled system instruction should
+	 * be injected as an in-band `"user"` turn instead.
+	 *
+	 * Defaults to `true` (system role is supported) when omitted.
+	 * Used by the Custom provider to handle Chatmock endpoints, which strip
+	 * system-role turns from the message list before forwarding to Codex CLI.
+	 */
+	supportsSystemRole?: (apiUrl: string, model: string) => boolean;
 }
