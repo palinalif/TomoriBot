@@ -97,6 +97,48 @@ After adding her to your server through either method above, run the `/config se
 <h3 align="center">Lots of More Features, and Counting!</h3>
 <p align="center">A bunch of fun features that are easy to setup ranging from practical automatic greetings for new server members and cross-channel movement, to silly ones like user impersonations for some trolling. New ones are constantly in development, so please report through GitHub issues or the official Discord for any bugs (or to share any fun suggestions).</p>
 
+## Supported Providers
+
+TomoriBot supports a wide range of LLM providers, image generation APIs, voice services, and search tools for a complete multimodal AI experience.
+
+### LLM Providers
+
+| Provider | Streaming | Tool Calling | Image Input |
+|----------|-----------|--------------|-------------|
+| **Google Gemini** | ✅ | ✅ | ✅ |
+| **OpenRouter** | ✅ | ✅ | ✅ |
+| **NovelAI** | ✅ | ✅ | ✅ |
+| **Nvidia** | ✅ | ✅ | ✅ |
+| **Deepseek** | ✅ | ✅ | ✅ |
+| **Z.ai** | ✅ | ✅ | ✅ |
+| **Z.ai Coding (Subscription)** | ✅ | ✅ | ✅ |
+| **Google Vertex AI** | ✅ | ✅ | ✅ |
+| **Custom (OpenAI-compatible)** | ✅ | ✅ | ✅ |
+
+### Image Generation
+
+| Provider | Text-to-Image | Image-to-Image | Inpainting | Notes |
+|----------|---------------|----------------|-----------|-------|
+| **Google** | ✅ | ✅ | - | Veo, NanoBanana |
+| **OpenRouter** | ✅ | - | - | Multiple diffusion models |
+| **NovelAI** | ✅ | ✅ | ✅ | Diffusion with character references |
+| **Nvidia** | ✅ | - | - | Nvidia Edify suite |
+| **Z.ai** | ✅ | - | - | General & coding images |
+| **Z.ai Coding (Subscription)** | ✅ | - | - | Code-focused generation |
+
+### Voice & Audio
+
+| Provider | Text-to-Speech | Speech-to-Text |
+|----------|----------------|-----------------|
+| **ElevenLabs** | ✅ | ✅ |
+
+### Search & Web Tools
+
+| Provider | Search Type | MCP | Notes |
+|----------|-------------|-----|-------|
+| **Brave Search** | Web search, news, local | ✅ | REST API integration |
+| **DuckDuckGo/Felo Search** | Web search, instant answers | ✅ | MCP server integration |
+
 <!-- GETTING STARTED -->
 ## Self-Hosting
 
