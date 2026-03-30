@@ -79,16 +79,56 @@ function buildNodeDescription(content: string): string | undefined {
 }
 
 /**
+ * Build a description for a comment-only node.
+ * Extracts the text inside all `{{// ... }}` blocks so the author's
+ * intent (e.g. `{{// Do not use without permission}}`) is still visible
+ * in the toggle UI. Falls back to a localized indicator if no text is found.
+ *
+ * The `[comment]` suffix is always appended so users know the node never injects.
+ *
+ * @param content - Raw node content (expected to contain only comment macros)
+ * @param locale - User's preferred locale for the fallback label
+ * @returns Description string truncated to DESCRIPTION_MAX_LENGTH
+ */
+function buildCommentNodeDescription(content: string, locale: string): string {
+  // Extract inner text from all {{// ... }} blocks and join with spaces
+  const commentText = [...content.matchAll(/\{\{\/\/([^}]*)\}\}/g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t.length > 0)
+    .join(" ");
+
+  const suffix = localizer(locale, "commands.stpreset.node.toggle.comment_node_suffix");
+
+  if (commentText.length === 0) {
+    return suffix;
+  }
+
+  // Reserve space for the suffix + a separator
+  const maxTextLength = DESCRIPTION_MAX_LENGTH - suffix.length - 2;
+  const truncated = commentText.length > maxTextLength ? `${commentText.slice(0, maxTextLength - 3)}...` : commentText;
+
+  return `${truncated} ${suffix}`;
+}
+
+/**
  * Build checkbox groups for a page of nodes.
  * Chunks the given nodes into groups of MAX_OPTIONS_PER_GROUP and
  * creates up to MAX_GROUPS_PER_MODAL checkbox group components.
  *
+ * Comment-only nodes (`is_comment: true`) are shown with a localized
+ * description indicating they are never injected into the prompt.
+ *
  * @param pageNodes - The nodes for this page
  * @param pageOffset - The 0-based index of the first node on this page
  *                     (used to compute human-readable group labels)
+ * @param locale - User's preferred locale for comment node descriptions
  * @returns Array of checkbox group modal components
  */
-function buildCheckboxGroups(pageNodes: StPresetNodeRow[], pageOffset: number): ModalCheckboxGroupField[] {
+function buildCheckboxGroups(
+  pageNodes: StPresetNodeRow[],
+  pageOffset: number,
+  locale: string,
+): ModalCheckboxGroupField[] {
   const groups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < pageNodes.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -98,7 +138,10 @@ function buildCheckboxGroups(pageNodes: StPresetNodeRow[], pageOffset: number): 
     const options: CheckboxGroupOption[] = chunk.map((node) => ({
       label: node.name.length > 100 ? `${node.name.slice(0, 97)}...` : node.name,
       value: node.identifier,
-      description: buildNodeDescription(node.content),
+      // Comment-only nodes show extracted comment text + a suffix indicating they never inject
+      description: node.is_comment
+        ? buildCommentNodeDescription(node.content, locale)
+        : buildNodeDescription(node.content),
       default: node.is_enabled,
     }));
 
@@ -316,7 +359,7 @@ async function executeSinglePageToggle(
   presetId: number,
   dbNodes: StPresetNodeRow[],
 ): Promise<void> {
-  const checkboxGroups = buildCheckboxGroups(dbNodes, 0);
+  const checkboxGroups = buildCheckboxGroups(dbNodes, 0, locale);
 
   const modalResult = await promptWithRawModal(
     interaction,
@@ -435,7 +478,7 @@ async function executeMultiPageToggle(
     const pageNodes = currentNodes.slice(startIndex, startIndex + NODES_PER_PAGE);
 
     // Show modal for this page
-    const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex);
+    const checkboxGroups = buildCheckboxGroups(pageNodes, startIndex, locale);
 
     const modalResult = await promptWithRawModal(
       buttonInteraction,

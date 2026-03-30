@@ -132,8 +132,8 @@ function derivePresetName(filename: string): string {
 /** Result of parsing a preset, including nodes and filtering stats */
 interface ParseResult {
   nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[];
-  /** Number of comment-only nodes that were filtered out entirely */
-  commentOnlySkipped: number;
+  /** Number of comment-only nodes included (stored but never injected into the prompt) */
+  commentOnlyCount: number;
   /** Number of non-marker nodes disabled by the preset's prompt_order */
   disabledByPreset: number;
 }
@@ -145,7 +145,7 @@ interface ParseResult {
  * 1. Build a lookup map from the `prompts` array (identifier → node data)
  * 2. Walk the `prompt_order` for character_id 100001 (user-prompt order)
  *    to determine sequence and default enabled states
- * 3. Filter out comment-only nodes (no content after macro resolution)
+ * 3. Flag comment-only nodes with `is_comment: true` (stored but never injected)
  * 4. Return ordered nodes ready for DB insertion, plus filtering stats
  *
  * @param raw - Parsed SillyTavern preset JSON
@@ -187,7 +187,7 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
   // 4. Walk the order and build nodes, tracking filtering stats
   const nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[] = [];
   let nodeOrder = 0;
-  let commentOnlySkipped = 0;
+  let commentOnlyCount = 0;
   let disabledByPreset = 0;
 
   for (const entry of orderEntries) {
@@ -197,14 +197,15 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
     const content = prompt.content ?? "";
     const isMarker = prompt.marker === true;
 
-    // Skip comment-only nodes (no usable content after macro resolution)
-    if (!isMarker && isCommentOnly(content)) {
-      commentOnlySkipped++;
-      continue;
+    // Flag comment-only nodes — stored in DB and visible in the toggle UI,
+    // but never injected into the prompt regardless of enabled state
+    const isComment = !isMarker && isCommentOnly(content);
+    if (isComment) {
+      commentOnlyCount++;
     }
 
     // Track nodes disabled by the preset's prompt_order
-    if (!isMarker && !entry.enabled) {
+    if (!isMarker && !isComment && !entry.enabled) {
       disabledByPreset++;
     }
 
@@ -215,6 +216,7 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
       content,
       is_marker: isMarker,
       is_enabled: entry.enabled,
+      is_comment: isComment,
       node_order: nodeOrder++,
       injection_position: prompt.injection_position ?? 0,
       injection_depth: prompt.injection_depth ?? 4,
@@ -223,7 +225,7 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
   }
 
   if (nodes.length === 0) return null;
-  return { nodes, commentOnlySkipped, disabledByPreset };
+  return { nodes, commentOnlyCount, disabledByPreset };
 }
 
 // ─── Execution ───────────────────────────────────────────────────────
@@ -330,7 +332,7 @@ export async function execute(
       return;
     }
 
-    const { nodes, commentOnlySkipped, disabledByPreset } = parseResult;
+    const { nodes, commentOnlyCount, disabledByPreset } = parseResult;
 
     // 9. Derive preset name from filename
     const presetName = derivePresetName(attachment.name ?? "Unnamed Preset");
@@ -353,14 +355,15 @@ export async function execute(
     // 12. Count node types for the summary
     const markerCount = nodes.filter((n) => n.is_marker).length;
     const toggleableCount = nodes.filter((n) => !n.is_marker).length;
-    const enabledCount = nodes.filter((n) => n.is_enabled && !n.is_marker).length;
+    // Excludes comment-only nodes — they never inject regardless of enabled state
+    const enabledCount = nodes.filter((n) => n.is_enabled && !n.is_marker && !n.is_comment).length;
 
     // 13. Build filtering notes for the success embed
     const filterNotes: string[] = [];
-    if (commentOnlySkipped > 0) {
+    if (commentOnlyCount > 0) {
       filterNotes.push(
         localizer(locale, "commands.stpreset.upload.note_comment_only", {
-          count: commentOnlySkipped.toString(),
+          count: commentOnlyCount.toString(),
         }),
       );
     }
@@ -389,7 +392,7 @@ export async function execute(
     });
 
     log.success(
-      `[ST Preset Upload] "${presetName}" uploaded for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers, ${commentOnlySkipped} comment-only skipped, ${disabledByPreset} disabled by preset)`,
+      `[ST Preset Upload] "${presetName}" uploaded for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers, ${commentOnlyCount} comment-only, ${disabledByPreset} disabled by preset)`,
     );
   } catch (error) {
     const context: ErrorContext = {

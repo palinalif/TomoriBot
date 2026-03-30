@@ -217,6 +217,7 @@ export async function loadStoredPersonaAvatarDataUri(reference: string): Promise
 
 export async function uploadPersonaAvatarToS3(options: AvatarUploadOptions): Promise<string | null> {
   const label = options.label ? ` (${options.label})` : "";
+
   if (IS_PRODUCTION) {
     const config = getAvatarStorageConfig();
     if (!config) {
@@ -245,6 +246,7 @@ export async function uploadPersonaAvatarToS3(options: AvatarUploadOptions): Pro
     }
   }
 
+  // Non-production: store locally and return base64 data URI for Discord embeds
   const storedPath = buildLocalStoredPath(options);
   const absolutePath = resolveLocalAvatarPath(storedPath);
   if (!absolutePath) {
@@ -254,8 +256,12 @@ export async function uploadPersonaAvatarToS3(options: AvatarUploadOptions): Pro
   try {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, options.buffer);
-    log.success(`[Avatar Storage] Stored persona avatar${label} at ${storedPath}`);
-    return normalizeStoredPath(storedPath);
+
+    // Return as base64 data URI so Discord embeds can display it persistently
+    // Unlike attachment:// URLs, data URIs work anywhere and don't expire
+    const base64DataUri = `data:image/png;base64,${options.buffer.toString("base64")}`;
+    log.success(`[Avatar Storage] Stored persona avatar${label} locally (non-production)`);
+    return base64DataUri;
   } catch (error) {
     log.warn(`[Avatar Storage] Failed to store persona avatar${label} locally`, error);
     return null;

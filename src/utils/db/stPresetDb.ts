@@ -50,7 +50,7 @@ export async function insertPresetWithNodes(
         await tx`
 					INSERT INTO st_preset_nodes (
 						preset_id, identifier, name, role, content,
-						is_marker, is_enabled, node_order,
+						is_marker, is_enabled, is_comment, node_order,
 						injection_position, injection_depth, injection_order
 					)
 					VALUES (
@@ -61,6 +61,7 @@ export async function insertPresetWithNodes(
 						${node.content},
 						${node.is_marker},
 						${node.is_enabled},
+						${node.is_comment},
 						${node.node_order},
 						${node.injection_position},
 						${node.injection_depth},

@@ -877,6 +877,7 @@ export const stPresetNodeSchema = z.object({
   content: z.string().default(""),
   is_marker: z.boolean().default(false),
   is_enabled: z.boolean().default(true),
+  is_comment: z.boolean().default(false),
   node_order: z.number(),
   injection_position: z.number().default(0),
   injection_depth: z.number().default(4),

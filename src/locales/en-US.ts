@@ -579,7 +579,7 @@ export default {
         duplicate_name: `A preset named "{name}" already exists for this server. Remove it first or rename the file.`,
         success_title: `Preset Uploaded`,
         success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n{notes}\nUse \`/stpreset node toggle\` to adjust which nodes are active.\nUse \`/stpreset remove\` to revert to default behavior.`,
-        note_comment_only: `\n> **{count}** comment-only node(s) were skipped (contain only \`{{// comments}}\` and produce no output).`,
+        note_comment_only: `\n> **{count}** comment-only node(s) are visible in \`/stpreset node toggle\` but are never injected into the prompt.`,
         note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/stpreset node toggle\` to enable them.\n`,
       },
       remove: {
@@ -606,6 +606,7 @@ export default {
           no_changes: `No changes made`,
           result_title: `Node Toggle Results`,
           result_description: `**{enabled}** / **{total}** nodes enabled.\n\n{changes}`,
+          comment_node_suffix: `[comment]`,
         },
       },
     },

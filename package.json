@@ -13,6 +13,8 @@
     "nuke-db": "bun run scripts/nukeDb.ts",
     "backup": "bun run scripts/backupData.ts --backup",
     "restore-backup": "bun run scripts/backupData.ts --restore",
+    "backup:personas": "bun run scripts/backupPersonas.ts",
+    "backup:memories": "bun run scripts/backupMemories.ts",
     "lint": "bunx @biomejs/biome check --fix",
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/checkLocalizationKeys.ts",

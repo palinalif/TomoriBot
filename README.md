@@ -334,6 +334,8 @@ Enable these capability flags for ChatMock:
 |---|---|
 | `bun run backup` | Creates a bundle in `backups/` with your DB dump and `.env` |
 | `bun run restore-backup` | Restores `.env` and database from a bundle, use the `--latest` or `--from backups/<bundle-dir>` flags |
+| `bun run backup:personas` | Export all personas (with server memories) across all servers to `backups/`. **Must be re-imported manually via `/persona import`, cannot be used with `restore-backup` (avoids primary key conflicts)** |
+| `bun run backup:memories` | Export all personal memories across all users to `backups/`. **Must be re-imported manually, cannot be used with `restore-backup` (avoids primary key conflicts)** |
 | `bun run nuke-db` | Drops all tables (start the bot afterwards to reinitialise). Usually used in conjunction with backups for clean installs |
 | `bun run purge-commands` | Clear all registered Discord slash commands |
 | `bun run rotate-keys` | Migrate all encrypted fields to the current key version |

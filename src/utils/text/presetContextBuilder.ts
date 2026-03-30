@@ -309,7 +309,8 @@ export async function reassembleWithPreset(
   const depthNodes: ResolvedNode[] = [];
 
   for (const node of resolved) {
-    if (!node.is_enabled) continue;
+    // Skip disabled nodes and comment-only nodes (is_comment never injects regardless of enabled state)
+    if (!node.is_enabled || node.is_comment) continue;
 
     if (node.injection_position === 1) {
       depthNodes.push(node);

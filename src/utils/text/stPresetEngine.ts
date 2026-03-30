@@ -47,6 +47,7 @@ export interface ResolvedNode {
   content: string;
   is_marker: boolean;
   is_enabled: boolean;
+  is_comment: boolean;
   node_order: number;
   injection_position: number;
   injection_depth: number;
@@ -345,7 +346,7 @@ export function resolvePresetMacros(
   // Walk in node_order (already sorted from DB query).
   // If the same key is set by multiple nodes, the last one (highest node_order) wins.
   for (const node of nodes) {
-    if (!node.is_enabled || node.is_marker) continue;
+    if (!node.is_enabled || node.is_marker || node.is_comment) continue;
 
     // 1. Strip comments first so they don't interfere
     const commentStripped = stripComments(node.content);
@@ -379,6 +380,7 @@ export function resolvePresetMacros(
         content: "",
         is_marker: true,
         is_enabled: node.is_enabled,
+        is_comment: false,
         node_order: node.node_order,
         injection_position: node.injection_position,
         injection_depth: node.injection_depth,
@@ -388,15 +390,16 @@ export function resolvePresetMacros(
       continue;
     }
 
-    // Disabled nodes are included in output (for UI tracking) but not processed
-    if (!node.is_enabled) {
+    // Disabled or comment-only nodes are included in output (for UI tracking) but not processed
+    if (!node.is_enabled || node.is_comment) {
       resolved.push({
         identifier: node.identifier,
         name: node.name,
         role: mapStRole(node.role),
         content,
         is_marker: false,
-        is_enabled: false,
+        is_enabled: node.is_enabled,
+        is_comment: node.is_comment,
         node_order: node.node_order,
         injection_position: node.injection_position,
         injection_depth: node.injection_depth,
@@ -446,6 +449,7 @@ export function resolvePresetMacros(
       is_marker: false,
       // If trim resolved to empty, effectively disable the node
       is_enabled: !isEmpty,
+      is_comment: false,
       node_order: node.node_order,
       injection_position: node.injection_position,
       injection_depth: node.injection_depth,

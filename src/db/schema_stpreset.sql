@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS st_preset_nodes (
   content            TEXT NOT NULL DEFAULT '',
   is_marker          BOOLEAN DEFAULT false,
   is_enabled         BOOLEAN DEFAULT true,
+  is_comment         BOOLEAN DEFAULT false,
   node_order         INT NOT NULL,
   injection_position INT DEFAULT 0,
   injection_depth    INT DEFAULT 4,
@@ -44,3 +45,6 @@ CREATE INDEX IF NOT EXISTS idx_st_preset_nodes_preset_order
 -- Unique: one node per identifier per preset
 CREATE UNIQUE INDEX IF NOT EXISTS idx_st_preset_nodes_preset_identifier
   ON st_preset_nodes(preset_id, identifier);
+
+-- Add is_comment column for existing databases (comment-only nodes now stored rather than filtered)
+SELECT add_column_if_not_exists('st_preset_nodes', 'is_comment', 'BOOLEAN', 'false');

@@ -584,7 +584,7 @@ export default {
         duplicate_name: `"{name}"という名前のプリセットはこのサーバーに既に存在します。先に削除するか、ファイル名を変更してください。`,
         success_title: `プリセットをアップロードしました`,
         success_description: `**{name}**をインポートしました。\n\n• **{total}** 合計ノード\n• **{markers}** 構造マーカー\n• **{toggleable}** 切り替え可能ノード（**{enabled}** 有効）\n{notes}\n\`/stpreset node toggle\`でアクティブなノードを調整できます。\n\`/stpreset remove\`でデフォルトの動作に戻せます。`,
-        note_comment_only: `\n> **{count}** 個のコメントのみのノードが���キップされました（\`{{// コメント}}\`のみで出力がないため）。`,
+        note_comment_only: `\n> **{count}** 個のコメントのみのノードが\`/stpreset node toggle\`で表示されますが、プロンプトには挿入されません。`,
         note_disabled_by_preset: `\n> **{count}** 個のノードがこのプリセットでデフォルトで無効になっています。\`/stpreset node toggle\`で有効にできます。`,
       },
       remove: {
@@ -611,6 +611,7 @@ export default {
           no_changes: `変更なし`,
           result_title: `ノード切り替え結果`,
           result_description: `**{enabled}** / **{total}** ノードが有効。\n\n{changes}`,
+          comment_node_suffix: `[コメント]`,
         },
       },
     },
