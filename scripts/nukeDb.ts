@@ -4,69 +4,97 @@ import { config } from "dotenv";
 
 config();
 
-const tables = [
-  "error_logs",
-  "personalization_blacklist",
-  "tomori_configs",
-  "tomori_presets",
-  "server_emojis",
-  "server_stickers",
-  "server_memories",
-  "tomoris",
-  "users",
-  "llms",
-  "servers",
-  "cooldowns",
-];
+// Construct DATABASE_URL from individual POSTGRES_* vars if not explicitly set.
+// Bun's sql tag reads DATABASE_URL from the environment — without this, it falls
+// back to its default connection (postgres / no password) and fails.
+if (!process.env.DATABASE_URL) {
+	const host = process.env.POSTGRES_HOST || "localhost";
+	const port = process.env.POSTGRES_PORT || "5432";
+	const user = process.env.POSTGRES_USER || "postgres";
+	const password = process.env.POSTGRES_PASSWORD;
+	const database = process.env.POSTGRES_DB || "tomodb";
 
+	if (!password) {
+		log.error("POSTGRES_PASSWORD (or DATABASE_URL) is required but not set in .env");
+		process.exit(1);
+	}
+
+	process.env.DATABASE_URL = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+}
+
+/**
+ * Destroys the entire TomoriBot database by dynamically discovering and
+ * dropping all tables in the public schema.
+ *
+ * Uses pg_tables to enumerate tables at runtime so this script never goes
+ * stale when new tables are added to the schema.
+ *
+ * DANGER: This is irreversible. Run `bun run backup-db` first.
+ */
 async function nukeDatabase() {
-  log.section("⚠️ DATABASE DESTRUCTION SCRIPT ⚠️");
-  log.info(
-    "This will DELETE ALL TABLES and DATA in the connected PostgreSQL database.",
-  );
-  log.info(`Tables to be dropped: ${tables.join(", ")}`);
+	log.section("⚠️ DATABASE DESTRUCTION SCRIPT ⚠️");
+	log.info("This will DELETE ALL TABLES and DATA in the connected PostgreSQL database.");
+	log.info("Run `bun run backup` first if you want to preserve your data.");
 
-  console.log("\nType 'NUKE DATABASE' (all caps) to confirm deletion:");
+	// 1. Discover all tables in the public schema at runtime
+	const tableRows = await sql<{ tablename: string }[]>`
+		SELECT tablename
+		FROM pg_tables
+		WHERE schemaname = 'public'
+		ORDER BY tablename
+	`;
 
-  const response = await new Promise<string>((resolve) => {
-    process.stdin.resume();
-    process.stdin.once("data", (data) => {
-      resolve(data.toString().trim());
-      process.stdin.pause();
-    });
-  });
+	if (tableRows.length === 0) {
+		log.info("No tables found in the public schema. Database is already empty.");
+		process.exit(0);
+	}
 
-  if (response !== "NUKE DATABASE") {
-    log.info("Aborted. Your database is safe.");
-    process.exit(0);
-  }
+	const tableNames = tableRows.map((r) => r.tablename);
+	log.info(`Tables found (${tableNames.length}): ${tableNames.join(", ")}`);
 
-  log.info("Confirmation received. Starting database nuke process...");
+	log.info("Type 'NUKE DATABASE' (all caps) to confirm deletion:");
 
-  try {
-    // Disable foreign key checks temporarily
-    await sql`SET session_replication_role = 'replica';`;
+	// 2. Require explicit confirmation before proceeding
+	const response = await new Promise<string>((resolve) => {
+		process.stdin.resume();
+		process.stdin.once("data", (data) => {
+			resolve(data.toString().trim());
+			process.stdin.pause();
+		});
+	});
 
-    // Drop each table
-    for (const table of tables) {
-      try {
-        await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE;`;
-        log.success(`Dropped table: ${table}`);
-      } catch (err) {
-        log.error(`Failed to drop table ${table}:`, err);
-      }
-    }
+	if (response !== "NUKE DATABASE") {
+		log.info("Aborted. Your database is safe.");
+		process.exit(0);
+	}
 
-    // Re-enable foreign key checks
-    await sql`SET session_replication_role = 'origin';`;
+	log.info("Confirmation received. Starting database nuke process...");
 
-    log.section("Database successfully nuked! 💣");
-    log.info("You can now run the schema script to recreate empty tables.");
-  } catch (error) {
-    log.error("Error during database nuke process:", error);
-  } finally {
-    process.exit(0);
-  }
+	try {
+		// 3. Disable FK checks so tables can be dropped in any order
+		await sql`SET session_replication_role = 'replica';`;
+
+		// 4. Drop each discovered table
+		for (const table of tableNames) {
+			try {
+				await sql`DROP TABLE IF EXISTS ${sql(table)} CASCADE;`;
+				log.success(`Dropped table: ${table}`);
+			} catch (err) {
+				log.error(`Failed to drop table ${table}:`, err);
+			}
+		}
+
+		// 5. Re-enable FK checks
+		await sql`SET session_replication_role = 'origin';`;
+
+		log.section("Database successfully nuked! 💣");
+		log.info("To restore from a backup:  bun run restore-backup --latest");
+		log.info("To start completely fresh: bun run dev  (bot auto-initializes the schema)");
+	} catch (error) {
+		log.error("Error during database nuke process:", error);
+	} finally {
+		process.exit(0);
+	}
 }
 
 nukeDatabase();

@@ -3,6 +3,10 @@ nul
 *.backup
 .tmp
 
+# Script outputs
+backups/*
+.env.bak
+
 # Tokenizers (assets ignored; manifest tracked)
 tokenizers/*
 !tokenizers/manifest.json

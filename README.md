@@ -320,18 +320,32 @@ In Discord, configure TomoriBot's `custom` provider and use:
 
 Do **not** use bare `http://127.0.0.1:8000` because TomoriBot appends `/chat/completions` to the configured base URL
 
-Suggested capability flags for ChatMock:
-
+Enable these capability flags for ChatMock:
 - **Function Calling / Tools**: Yes
 - **Image Understanding**: Yes
 - **Video Understanding**: No
 - **Structured Output**: Yes
 
-With **Image Understanding** and **Structured Output** enabled, the ChatMock-backed `custom` provider can also power `/tool compact roleplay`, `/server initialize expressions`, `/teach history`, and `/persona generate`. If you want `/persona generate` to use web search, also enable **Function Calling / Tools**.
+**Note**: Codex CLI does not allow you to change its `system` prompt so TomoriBot's `system` prompt is turned into a `user` turn in context as a workaround. Please configure the `CHATMOCK_PORT` .env variable to match your actual ChatMock port so this workaround works properly (defaults to 8000).
+
+### Maintenance Scripts
+
+| Command | Description |
+|---|---|
+| `bun run backup` | Creates a bundle in `backups/` with your DB dump and `.env` |
+| `bun run restore-backup` | Restores `.env` and database from a bundle, use the `--latest` or `--from backups/<bundle-dir>` flags |
+| `bun run nuke-db` | Drops all tables (start the bot afterwards to reinitialise). Usually used in conjunction with backups for clean installs |
+| `bun run purge-commands` | Clear all registered Discord slash commands |
+| `bun run rotate-keys` | Migrate all encrypted fields to the current key version |
 
 ### Updating TomoriBot
 
-Before updating, consider backing up your database (`bun run backup-db`) and reviewing the release notes.
+> **Always back up before pulling a new version.**
+> ```sh
+> bun run backup
+> ```
+> The bundle is saved to `backups/` and includes both the database dump and your `.env`.
+> To restore: `bun run restore-backup --latest` or `--from backups/<bundle-dir>`
 
 **Manual (non-Docker) update:**
 ```sh

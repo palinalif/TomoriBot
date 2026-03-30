@@ -3,7 +3,7 @@ import { type ActivityOptions, ActivityType, type Client } from "discord.js";
 import _pkg from "../../../package.json";
 import { log } from "../../utils/misc/logger";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
-import { sql } from "@/utils/db/client";
+// import { sql } from "@/utils/db/client";
 
 // Cycle delay in milliseconds (1 minute)
 const CYCLE_DELAY = 60000;
@@ -27,6 +27,7 @@ function isTomoriBirthday(): boolean {
  * @param client - The Discord client instance for fallback count.
  * @returns {Promise<number>} The number of servers.
  */
+/*
 async function getServerCount(client: Client): Promise<number> {
   try {
     // Query database for total server count (includes DMs)
@@ -46,7 +47,7 @@ async function getServerCount(client: Client): Promise<number> {
     });
     return client.guilds.cache.size;
   }
-}
+}*/
 
 /**
  * Posts the current Discord guild count to Top.gg once during startup.
@@ -132,7 +133,7 @@ const handler = async (client: Client): Promise<void> => {
   const birthdayStatus: ActivityOptions = {
     name: "Celebrating my birthday!",
     type: ActivityType.Streaming,
-    url: "https://www.youtube.com/shorts/eS9g6cnF7Z8", // Required for Streaming type
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", // Required for Streaming type
   };
 
   /**
@@ -155,8 +156,9 @@ const handler = async (client: Client): Promise<void> => {
       // 3. Set birthday status
       client.user.setActivity(birthdayStatus);
     } else {
-      // 4. Get current server count from database
-      const serverCount = await getServerCount(client);
+      // 4. Use the same server count as Top.gg (actual Discord guild count)
+      const serverCount = client.guilds.cache.size;
+      // const serverCount = await getServerCount(client);
 
       // 5. Build normal status options with current server count
       const normalStatus: ActivityOptions[] = [
