@@ -81,8 +81,7 @@ export class MCPManager {
     process.stdout.write = ((chunk: any, ...args: any[]): boolean => {
       const output = chunk.toString();
       // Filter out advertisement boxes from MCP servers
-      const isAdvertisement =
-        output.includes("╔") || output.includes("║") || output.includes("╚");
+      const isAdvertisement = output.includes("╔") || output.includes("║") || output.includes("╚");
 
       // Pass through non-advertisement output
       if (!isAdvertisement) {
@@ -109,10 +108,7 @@ export class MCPManager {
     // Initialize each server concurrently with individual error handling
     const initPromises = serverConfigs.map((config) =>
       this.initializeServer(config).catch((error) => {
-        log.error(
-          `Failed to initialize MCP server '${config.displayName}':`,
-          error as Error,
-        );
+        log.error(`Failed to initialize MCP server '${config.displayName}':`, error as Error);
         return null; // Continue with other servers even if one fails
       }),
     );
@@ -127,9 +123,7 @@ export class MCPManager {
     const totalCount = serverConfigs.length;
 
     this.isInitialized = true;
-    log.success(
-      `MCP initialization completed in ${duration}ms: ${successCount}/${totalCount} servers connected`,
-    );
+    log.success(`MCP initialization completed in ${duration}ms: ${successCount}/${totalCount} servers connected`);
 
     // Log available tools
     if (this.mcpTools.size > 0) {
@@ -146,14 +140,10 @@ export class MCPManager {
     const enhancedConfigs = configManager.getConfigurationsByPriority(false); // Get all configs
 
     // Filter configs that should be initialized
-    const readyConfigs = enhancedConfigs.filter((config) =>
-      configManager.shouldInitializeServer(config),
-    );
+    const readyConfigs = enhancedConfigs.filter((config) => configManager.shouldInitializeServer(config));
 
     // Convert enhanced configs to manager format
-    return readyConfigs.map((config) =>
-      configManager.toManagerConfiguration(config),
-    );
+    return readyConfigs.map((config) => configManager.toManagerConfiguration(config));
   }
 
   /**
@@ -190,13 +180,7 @@ export class MCPManager {
       // Connect with timeout
       const connectPromise = client.connect(transport);
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(
-              new Error(`${displayName} connection timed out (${timeout}ms)`),
-            ),
-          timeout,
-        ),
+        setTimeout(() => reject(new Error(`${displayName} connection timed out (${timeout}ms)`)), timeout),
       );
 
       await Promise.race([connectPromise, timeoutPromise]);
@@ -215,40 +199,24 @@ export class MCPManager {
         const tool = await callableTool.tool();
         if (tool.functionDeclarations) {
           const functionNames = tool.functionDeclarations.map((f) => f.name);
-          log.info(
-            `${displayName} provides functions: ${functionNames.join(", ")}`,
-          );
+          log.info(`${displayName} provides functions: ${functionNames.join(", ")}`);
         }
       } catch (toolError) {
-        log.warn(
-          `Could not enumerate functions for ${displayName}:`,
-          toolError as Error,
-        );
+        log.warn(`Could not enumerate functions for ${displayName}:`, toolError as Error);
       }
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       if (errorMessage.includes("timed out")) {
         const usesPackageRunner = command === "npx" || command === "bunx";
 
         if (usesPackageRunner) {
-          log.warn(
-            `${displayName} connection timed out - this can happen during first install or cache warm-up`,
-          );
-          log.info(
-            "Try restarting TomoriBot after package installation/cache warm-up completes",
-          );
+          log.warn(`${displayName} connection timed out - this can happen during first install or cache warm-up`);
+          log.info("Try restarting TomoriBot after package installation/cache warm-up completes");
         } else {
-          log.error(
-            `${displayName} connection timed out while starting '${command}' (${timeout}ms)`,
-            error as Error,
-          );
+          log.error(`${displayName} connection timed out while starting '${command}' (${timeout}ms)`, error as Error);
         }
-      } else if (
-        errorMessage.includes("not recognized") ||
-        errorMessage.includes("not found")
-      ) {
+      } else if (errorMessage.includes("not recognized") || errorMessage.includes("not found")) {
         log.error(
           `${displayName} requires ${command} to be installed - functionality will not be available`,
           error as Error,
@@ -272,30 +240,22 @@ export class MCPManager {
   /**
    * Get MCP tools filtered by function names they provide
    */
-  async getToolsByFunctionNames(
-    functionNames: string[],
-  ): Promise<CallableTool[]> {
+  async getToolsByFunctionNames(functionNames: string[]): Promise<CallableTool[]> {
     const matchingTools: CallableTool[] = [];
 
     for (const [serverName, callableTool] of this.mcpTools) {
       try {
         const tool = await callableTool.tool();
-        const availableFunctions =
-          tool.functionDeclarations?.map((f) => f.name) || [];
+        const availableFunctions = tool.functionDeclarations?.map((f) => f.name) || [];
 
         // Check if this tool provides any of the requested functions
-        const hasMatchingFunction = functionNames.some((name) =>
-          availableFunctions.includes(name),
-        );
+        const hasMatchingFunction = functionNames.some((name) => availableFunctions.includes(name));
 
         if (hasMatchingFunction) {
           matchingTools.push(callableTool);
         }
       } catch (error) {
-        log.warn(
-          `Error checking functions for MCP server '${serverName}':`,
-          error as Error,
-        );
+        log.warn(`Error checking functions for MCP server '${serverName}':`, error as Error);
       }
     }
 
@@ -359,15 +319,13 @@ export class MCPManager {
   async cleanup(): Promise<void> {
     log.info("Cleaning up MCP connections...");
 
-    const cleanupPromises = Array.from(this.mcpClients.values()).map(
-      async (client) => {
-        try {
-          await client.close();
-        } catch (error) {
-          log.warn("Error closing MCP client:", error as Error);
-        }
-      },
-    );
+    const cleanupPromises = Array.from(this.mcpClients.values()).map(async (client) => {
+      try {
+        await client.close();
+      } catch (error) {
+        log.warn("Error closing MCP client:", error as Error);
+      }
+    });
 
     await Promise.all(cleanupPromises);
 

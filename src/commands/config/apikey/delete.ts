@@ -4,29 +4,16 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("delete")
-    .setDescription(
-      localizer("en-US", "commands.config.apikey.delete.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("delete").setDescription(localizer("en-US", "commands.config.apikey.delete.description"));
 
 /**
  * Removes API key from database
@@ -53,9 +40,7 @@ export async function execute(
 
   try {
     // 2. Load the Tomori state for this server - let helper functions manage interaction state
-    const tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -96,9 +81,7 @@ export async function execute(
         metadata: {
           command: "config apikeydelete",
           guildId: interaction.guild?.id ?? interaction.user.id,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -131,9 +114,7 @@ export async function execute(
     let serverIdForError: number | null = null;
     let tomoriIdForError: number | null = null;
     if (interaction.guild?.id) {
-      const state = await getCachedTomoriState(
-        interaction.guild?.id ?? interaction.user.id,
-      );
+      const state = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
       serverIdForError = state?.server_id ?? null;
       tomoriIdForError = state?.tomori_id ?? null;
     }
@@ -149,11 +130,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /config apikeydelete for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config apikeydelete for user ${userData.user_disc_id}`, error as Error, context);
 
     // 9. Inform user of unknown error
     // Use followUp since deferReply was used

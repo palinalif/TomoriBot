@@ -4,43 +4,25 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  replyInfoEmbed,
-  replySummaryEmbed,
-} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, replySummaryEmbed } from "@/utils/discord/interactionHelper";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { storeOptApiKey } from "@/utils/security/crypto";
-import {
-  ELEVENLABS_SERVICE_NAME,
-  validateElevenLabsApiKey,
-} from "@/utils/audio/elevenLabsAccount";
+import { ELEVENLABS_SERVICE_NAME, validateElevenLabsApiKey } from "@/utils/audio/elevenLabsAccount";
 import { localizer } from "@/utils/text/localizer";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 
 const MIN_KEY_LENGTH = 10;
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.elevenlabs.set.description"),
-    )
+    .setDescription(localizer("en-US", "commands.optionalkey.elevenlabs.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.optionalkey.elevenlabs.set.key_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.optionalkey.elevenlabs.set.key_description"))
         .setRequired(true),
     );
 
@@ -70,16 +52,13 @@ export async function execute(
     if (apiKey.length < MIN_KEY_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.elevenlabs.set.invalid_key_title",
-        descriptionKey:
-          "commands.optionalkey.elevenlabs.set.invalid_key_description",
+        descriptionKey: "commands.optionalkey.elevenlabs.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -95,20 +74,14 @@ export async function execute(
         `ElevenLabs API key validation failed for server ${tomoriState.server_id}: HTTP ${validationResult.statusCode ?? "?"} — ${validationResult.details ?? validationResult.errorKind ?? "unknown"}`,
       );
       await replyInfoEmbed(interaction, locale, {
-        titleKey:
-          "commands.optionalkey.elevenlabs.set.key_validation_failed_title",
-        descriptionKey:
-          "commands.optionalkey.elevenlabs.set.key_validation_failed_description",
+        titleKey: "commands.optionalkey.elevenlabs.set.key_validation_failed_title",
+        descriptionKey: "commands.optionalkey.elevenlabs.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    const isStored = await storeOptApiKey(
-      tomoriState.server_id,
-      ELEVENLABS_SERVICE_NAME,
-      apiKey,
-    );
+    const isStored = await storeOptApiKey(tomoriState.server_id, ELEVENLABS_SERVICE_NAME, apiKey);
     if (!isStored) {
       const context: ErrorContext = {
         tomoriId: tomoriState.tomori_id,
@@ -138,53 +111,36 @@ export async function execute(
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
     // Resolve command mentions for the next-steps fields
-    const configVoiceElevenlabsMention = commandRegistry.getCommandMention(
-      "config",
-      "voice",
-      "elevenlabs",
-    );
-    const configVoiceTranscriptsMention = commandRegistry.getCommandMention(
-      "config",
-      "voice",
-      "transcripts",
-    );
+    const configVoiceElevenlabsMention = commandRegistry.getCommandMention("config", "voice", "elevenlabs");
+    const configVoiceTranscriptsMention = commandRegistry.getCommandMention("config", "voice", "transcripts");
 
     await replySummaryEmbed(
       interaction,
       locale,
       {
         titleKey: "commands.optionalkey.elevenlabs.set.success_title",
-        descriptionKey:
-          "commands.optionalkey.elevenlabs.set.success_description",
+        descriptionKey: "commands.optionalkey.elevenlabs.set.success_description",
         color: ColorCode.SUCCESS,
         fields: [
           {
             nameKey: "commands.optionalkey.elevenlabs.set.success_voices_title",
-            value: localizer(
-              locale,
-              "commands.optionalkey.elevenlabs.set.success_voices_description",
-              { configVoiceElevenlabs: configVoiceElevenlabsMention },
-            ),
+            value: localizer(locale, "commands.optionalkey.elevenlabs.set.success_voices_description", {
+              configVoiceElevenlabs: configVoiceElevenlabsMention,
+            }),
             inline: false,
           },
           {
-            nameKey:
-              "commands.optionalkey.elevenlabs.set.success_custom_voices_title",
-            value: localizer(
-              locale,
-              "commands.optionalkey.elevenlabs.set.success_custom_voices_description",
-              { configVoiceElevenlabs: configVoiceElevenlabsMention },
-            ),
+            nameKey: "commands.optionalkey.elevenlabs.set.success_custom_voices_title",
+            value: localizer(locale, "commands.optionalkey.elevenlabs.set.success_custom_voices_description", {
+              configVoiceElevenlabs: configVoiceElevenlabsMention,
+            }),
             inline: false,
           },
           {
-            nameKey:
-              "commands.optionalkey.elevenlabs.set.success_transcript_mode_title",
-            value: localizer(
-              locale,
-              "commands.optionalkey.elevenlabs.set.success_transcript_mode_description",
-              { configVoiceTranscripts: configVoiceTranscriptsMention },
-            ),
+            nameKey: "commands.optionalkey.elevenlabs.set.success_transcript_mode_title",
+            value: localizer(locale, "commands.optionalkey.elevenlabs.set.success_transcript_mode_description", {
+              configVoiceTranscripts: configVoiceTranscriptsMention,
+            }),
             inline: false,
           },
         ],

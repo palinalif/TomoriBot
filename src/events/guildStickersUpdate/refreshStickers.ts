@@ -13,17 +13,11 @@ import { invalidateEmojiStickerCache } from "../../utils/cache/emojiStickerCache
  * @param _client - Discord client instance (unused)
  * @param args - Event arguments (expected: Sticker or [Sticker, Sticker])
  */
-const handleGuildStickersUpdate: EventFunction = async (
-  _client: Client,
-  ...args: EventArg[]
-): Promise<void> => {
+const handleGuildStickersUpdate: EventFunction = async (_client: Client, ...args: EventArg[]): Promise<void> => {
   // 1. Identify the Sticker and Guild from the event arguments
   const sticker = args[0];
   if (!(sticker instanceof Sticker) || !sticker.guild) {
-    log.warn(
-      "guildStickersUpdate event triggered without a valid Sticker or Guild.",
-      { args },
-    );
+    log.warn("guildStickersUpdate event triggered without a valid Sticker or Guild.", { args });
     return; // Cannot proceed without guild info
   }
   const guild: Guild = sticker.guild;
@@ -41,9 +35,7 @@ const handleGuildStickersUpdate: EventFunction = async (
         `;
 
     if (!serverRow || !serverRow.server_id) {
-      log.warn(
-        `Received sticker update for guild ${guild.id} but server is not registered in DB. Skipping refresh.`,
-      );
+      log.warn(`Received sticker update for guild ${guild.id} but server is not registered in DB. Skipping refresh.`);
       return; // Server not setup, nothing to refresh
     }
     // biome-ignore lint/style/noNonNullAssertion: Row existence guarantees server_id is present (Rule 8)
@@ -53,9 +45,7 @@ const handleGuildStickersUpdate: EventFunction = async (
     // CRITICAL: Must fetch() to ensure cache is complete - cache may be incomplete on startup
     await guild.stickers.fetch();
     const currentStickers = Array.from(guild.stickers.cache.values());
-    log.info(
-      `Fetched and cached ${currentStickers.length} stickers for guild ${guild.id}. Refreshing DB...`,
-    );
+    log.info(`Fetched and cached ${currentStickers.length} stickers for guild ${guild.id}. Refreshing DB...`);
 
     // 4. Sync stickers to database using shared helper
     await sql.transaction(async (tx) => {
@@ -67,9 +57,7 @@ const handleGuildStickersUpdate: EventFunction = async (
     // biome-ignore lint/style/noNonNullAssertion: serverId is guaranteed to exist after checks above
     invalidateEmojiStickerCache(serverId!);
 
-    log.success(
-      `Successfully refreshed stickers for guild ${guild.id} (Server ID: ${serverId}).`,
-    );
+    log.success(`Successfully refreshed stickers for guild ${guild.id} (Server ID: ${serverId}).`);
   } catch (error) {
     // Rule 22: Log error with context
     // serverId might be undefined if the initial SELECT failed
@@ -78,11 +66,7 @@ const handleGuildStickersUpdate: EventFunction = async (
       errorType: "StickerRefreshError",
       metadata: { guildId: guild.id, eventArgsCount: args.length },
     };
-    await log.error(
-      `Failed to refresh stickers for guild ${guild.id}`,
-      error,
-      context,
-    );
+    await log.error(`Failed to refresh stickers for guild ${guild.id}`, error, context);
   }
 };
 

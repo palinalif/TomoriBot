@@ -4,12 +4,7 @@
  */
 
 import { log } from "../../utils/misc/logger";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 
 /**
  * Tool for selecting Discord stickers based on conversational context
@@ -32,8 +27,7 @@ export class StickerTool extends BaseTool {
       },
       sticker_id: {
         type: "string",
-        description:
-          "Deprecated: The sticker ID. Use sticker_name instead (kept for compatibility).",
+        description: "Deprecated: The sticker ID. Use sticker_name instead (kept for compatibility).",
       },
     },
     required: ["sticker_name"],
@@ -69,9 +63,9 @@ export class StickerTool extends BaseTool {
       .trim();
   }
 
-  private static pickNewestSticker<
-    T extends { createdTimestamp?: number | null; id: string },
-  >(stickers: T[]): T | null {
+  private static pickNewestSticker<T extends { createdTimestamp?: number | null; id: string }>(
+    stickers: T[],
+  ): T | null {
     if (stickers.length === 0) return null;
     return stickers.sort((a, b) => {
       const aTime = a.createdTimestamp ?? 0;
@@ -109,9 +103,7 @@ export class StickerTool extends BaseTool {
 
     // Prefer strong partial matches when users omit separators/punctuation.
     if (candidate.includes(query) || query.includes(candidate)) {
-      const overlapRatio =
-        Math.min(query.length, candidate.length) /
-        Math.max(query.length, candidate.length);
+      const overlapRatio = Math.min(query.length, candidate.length) / Math.max(query.length, candidate.length);
       return 0.9 + overlapRatio * 0.08;
     }
 
@@ -156,16 +148,11 @@ export class StickerTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const rawStickerName = args.sticker_name;
     const rawStickerId = args.sticker_id;
-    const stickerName =
-      typeof rawStickerName === "string" ? rawStickerName.trim() : "";
-    const stickerId =
-      typeof rawStickerId === "string" ? rawStickerId.trim() : "";
+    const stickerName = typeof rawStickerName === "string" ? rawStickerName.trim() : "";
+    const stickerId = typeof rawStickerId === "string" ? rawStickerId.trim() : "";
     const hasStickerName = stickerName.length > 0;
     const hasStickerId = stickerId.length > 0;
 
@@ -221,14 +208,10 @@ export class StickerTool extends BaseTool {
       };
     }
 
-    const normalizedStickerName = hasStickerName
-      ? StickerTool.normalizeStickerNameForExact(stickerName)
-      : "";
+    const normalizedStickerName = hasStickerName ? StickerTool.normalizeStickerNameForExact(stickerName) : "";
 
     try {
-      log.info(
-        `Attempting to select sticker: ${normalizedStickerName || stickerId}`,
-      );
+      log.info(`Attempting to select sticker: ${normalizedStickerName || stickerId}`);
 
       // Get the guild from channel context
       const guild = context.channel.guild;
@@ -253,29 +236,21 @@ export class StickerTool extends BaseTool {
         fuzzySuggestions = [];
 
         if (normalizedStickerName) {
-          const stickers = guild.stickers.cache
-            .filter((sticker) => sticker.name?.trim())
-            .map((sticker) => sticker);
+          const stickers = guild.stickers.cache.filter((sticker) => sticker.name?.trim()).map((sticker) => sticker);
 
           // 1) Strict normalized exact match (case/whitespace tolerant).
           const exactMatches = stickers.filter(
-            (sticker) =>
-              StickerTool.normalizeStickerNameForExact(sticker.name) ===
-              normalizedStickerName,
+            (sticker) => StickerTool.normalizeStickerNameForExact(sticker.name) === normalizedStickerName,
           );
           const exactMatch = StickerTool.pickNewestSticker(exactMatches);
           if (exactMatch) return exactMatch;
 
           // 2) Loose normalized exact match (separator/quote tolerant).
-          const looseQuery = StickerTool.normalizeStickerNameForLoose(
-            normalizedStickerName,
-          );
+          const looseQuery = StickerTool.normalizeStickerNameForLoose(normalizedStickerName);
           if (!looseQuery) return null;
 
           const looseMatches = stickers.filter(
-            (sticker) =>
-              StickerTool.normalizeStickerNameForLoose(sticker.name) ===
-              looseQuery,
+            (sticker) => StickerTool.normalizeStickerNameForLoose(sticker.name) === looseQuery,
           );
           const looseMatch = StickerTool.pickNewestSticker(looseMatches);
           if (looseMatch) return looseMatch;
@@ -283,13 +258,8 @@ export class StickerTool extends BaseTool {
           // 3) Guarded fuzzy fallback.
           const scoredCandidates = stickers
             .map((sticker) => {
-              const looseName = StickerTool.normalizeStickerNameForLoose(
-                sticker.name,
-              );
-              const score = StickerTool.computeFuzzyScore(
-                looseQuery,
-                looseName,
-              );
+              const looseName = StickerTool.normalizeStickerNameForLoose(sticker.name);
+              const score = StickerTool.computeFuzzyScore(looseQuery, looseName);
               return { sticker, score };
             })
             .filter((entry) => entry.score > 0)
@@ -304,24 +274,18 @@ export class StickerTool extends BaseTool {
           fuzzySuggestions = scoredCandidates.slice(0, 5).map((entry) => ({
             id: entry.sticker.id,
             name: entry.sticker.name,
-            description:
-              entry.sticker.description || "No description available",
+            description: entry.sticker.description || "No description available",
             score: entry.score,
           }));
 
-          const threshold = StickerTool.getFuzzyScoreThreshold(
-            looseQuery.length,
-          );
+          const threshold = StickerTool.getFuzzyScoreThreshold(looseQuery.length);
           const best = scoredCandidates[0];
           if (!best || best.score < threshold) {
             return null;
           }
 
           const second = scoredCandidates[1];
-          const isAmbiguous =
-            !!second &&
-            second.score >= threshold &&
-            best.score - second.score < 0.08;
+          const isAmbiguous = !!second && second.score >= threshold && best.score - second.score < 0.08;
 
           if (isAmbiguous) {
             ambiguousMatches = scoredCandidates
@@ -330,8 +294,7 @@ export class StickerTool extends BaseTool {
               .map((entry) => ({
                 id: entry.sticker.id,
                 name: entry.sticker.name,
-                description:
-                  entry.sticker.description || "No description available",
+                description: entry.sticker.description || "No description available",
               }));
             log.warn(
               `Sticker name '${normalizedStickerName}' is ambiguous. Top matches: ${ambiguousMatches.map((s) => s.name).join(", ")}`,
@@ -354,9 +317,7 @@ export class StickerTool extends BaseTool {
 
       // 2. If not found, fetch fresh from Discord API and retry (handles race conditions)
       if (!selectedSticker) {
-        log.info(
-          `Sticker '${normalizedStickerName || stickerId}' not in cache. Fetching fresh from Discord API...`,
-        );
+        log.info(`Sticker '${normalizedStickerName || stickerId}' not in cache. Fetching fresh from Discord API...`);
 
         try {
           // Refresh cache from Discord API
@@ -367,20 +328,14 @@ export class StickerTool extends BaseTool {
           selectedSticker = lookupSticker();
 
           if (selectedSticker) {
-            log.success(
-              `Sticker '${selectedSticker.name}' (${selectedSticker.id}) found after cache refresh`,
-            );
+            log.success(`Sticker '${selectedSticker.name}' (${selectedSticker.id}) found after cache refresh`);
           }
         } catch (fetchError) {
-          log.warn(
-            `Failed to refresh sticker cache from Discord API: ${(fetchError as Error).message}`,
-          );
+          log.warn(`Failed to refresh sticker cache from Discord API: ${(fetchError as Error).message}`);
           // Continue to "not found" logic below
         }
       } else {
-        log.success(
-          `Sticker '${selectedSticker.name}' (${selectedSticker.id}) found in local cache`,
-        );
+        log.success(`Sticker '${selectedSticker.name}' (${selectedSticker.id}) found in local cache`);
       }
 
       // 3. Success case - sticker found
@@ -393,8 +348,7 @@ export class StickerTool extends BaseTool {
             status: "sticker_selected_successfully",
             sticker_id: selectedSticker.id,
             sticker_name: selectedSticker.name,
-            sticker_description:
-              selectedSticker.description || "No description available",
+            sticker_description: selectedSticker.description || "No description available",
             // Additional data for compatibility
             sticker: selectedSticker,
           },
@@ -464,19 +418,12 @@ export class StickerTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(
-        `Sticker selection failed for: ${normalizedStickerName || stickerId}`,
-        error as Error,
-      );
+      log.error(`Sticker selection failed for: ${normalizedStickerName || stickerId}`, error as Error);
 
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error occurred during sticker selection",
-        message:
-          "Failed to select the requested sticker. Please try with a different sticker.",
+        error: error instanceof Error ? error.message : "Unknown error occurred during sticker selection",
+        message: "Failed to select the requested sticker. Please try with a different sticker.",
         data: {
           status: "sticker_selection_failed_error",
           reason: error instanceof Error ? error.message : "Unknown error",
@@ -513,9 +460,7 @@ export class StickerTool extends BaseTool {
         }))
         .slice(0, 20); // Limit to prevent context bloat
     } catch (error) {
-      log.warn(
-        `Failed to get available stickers for context: ${(error as Error).message}`,
-      );
+      log.warn(`Failed to get available stickers for context: ${(error as Error).message}`);
       return [];
     }
   }

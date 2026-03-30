@@ -74,11 +74,7 @@ export function getCachedContextTokens(guildId: string): number | undefined {
  * @param contextLimit - Resolved context limit in tokens
  * @param tier - Raw tier number from the API
  */
-export function setCachedContextTokens(
-  guildId: string,
-  contextLimit: number,
-  tier: number,
-): void {
+export function setCachedContextTokens(guildId: string, contextLimit: number, tier: number): void {
   subscriptionCache.set(guildId, {
     contextLimit,
     tier,
@@ -100,17 +96,11 @@ export function setCachedContextTokens(
  * @param guildId - Discord guild (server) ID (used as cache key)
  * @param apiKey - Plaintext NovelAI API key
  */
-export async function refreshNovelAISubscription(
-  guildId: string,
-  apiKey: string,
-): Promise<number | undefined> {
+export async function refreshNovelAISubscription(guildId: string, apiKey: string): Promise<number | undefined> {
   // If the operator has explicitly set NAI_KAYRA_CONTEXT_LIMIT, trust it over
   // the tier lookup — skip the subscription API call entirely.
   if (process.env.NAI_KAYRA_CONTEXT_LIMIT !== undefined) {
-    const explicitLimit = Number.parseInt(
-      process.env.NAI_KAYRA_CONTEXT_LIMIT,
-      10,
-    );
+    const explicitLimit = Number.parseInt(process.env.NAI_KAYRA_CONTEXT_LIMIT, 10);
     if (!Number.isNaN(explicitLimit) && explicitLimit > 0) {
       log.info(
         `NovelAI: NAI_KAYRA_CONTEXT_LIMIT=${explicitLimit} explicitly set — skipping subscription fetch for guild ${guildId}`,
@@ -127,9 +117,7 @@ export async function refreshNovelAISubscription(
     const tier = subscription.tier;
     // Resolve the context limit from the tier map; fall back to the highest
     // known limit rather than undefined, so an unrecognized tier isn't punished.
-    const contextLimit =
-      KAYRA_CONTEXT_LIMIT_BY_TIER[tier] ??
-      Math.max(...Object.values(KAYRA_CONTEXT_LIMIT_BY_TIER));
+    const contextLimit = KAYRA_CONTEXT_LIMIT_BY_TIER[tier] ?? Math.max(...Object.values(KAYRA_CONTEXT_LIMIT_BY_TIER));
 
     setCachedContextTokens(guildId, contextLimit, tier);
     log.info(
@@ -137,10 +125,7 @@ export async function refreshNovelAISubscription(
     );
     return contextLimit;
   } catch (error) {
-    log.warn(
-      `Failed to refresh NovelAI subscription for guild ${guildId}`,
-      error,
-    );
+    log.warn(`Failed to refresh NovelAI subscription for guild ${guildId}`, error);
     return undefined;
   }
 }

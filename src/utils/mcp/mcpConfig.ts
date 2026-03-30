@@ -16,12 +16,7 @@ import type { EnhancedMCPServerConfig } from "../../types/tool/mcpTypes";
 export class MCPConfigManager {
   private static instance: MCPConfigManager;
   private configCache: Map<string, EnhancedMCPServerConfig> = new Map();
-  private readonly MCP_SERVERS_DIR = join(
-    process.cwd(),
-    "src",
-    "tools",
-    "mcpServers",
-  );
+  private readonly MCP_SERVERS_DIR = join(process.cwd(), "src", "tools", "mcpServers");
 
   /**
    * Get singleton instance
@@ -64,16 +59,11 @@ export class MCPConfigManager {
             loadedCount++;
           }
         } catch (error) {
-          log.warn(
-            `Failed to load configuration for MCP server '${serverDir}':`,
-            error as Error,
-          );
+          log.warn(`Failed to load configuration for MCP server '${serverDir}':`, error as Error);
         }
       }
 
-      log.info(
-        `MCP Config Manager loaded ${loadedCount}/${serverDirs.length} server configurations`,
-      );
+      log.info(`MCP Config Manager loaded ${loadedCount}/${serverDirs.length} server configurations`);
     } catch (error) {
       log.error("Failed to load MCP configurations:", error as Error);
     }
@@ -84,9 +74,7 @@ export class MCPConfigManager {
    * @param serverName - Name of the server directory
    * @returns Enhanced server configuration or null if not found/invalid
    */
-  private loadServerConfiguration(
-    serverName: string,
-  ): EnhancedMCPServerConfig | null {
+  private loadServerConfiguration(serverName: string): EnhancedMCPServerConfig | null {
     try {
       const configPath = join(this.MCP_SERVERS_DIR, serverName, "config.json");
 
@@ -96,10 +84,7 @@ export class MCPConfigManager {
       }
 
       const rawConfig = JSON.parse(readFileSync(configPath, "utf-8"));
-      const enhancedConfig = this.validateAndEnhanceConfig(
-        rawConfig,
-        serverName,
-      );
+      const enhancedConfig = this.validateAndEnhanceConfig(rawConfig, serverName);
 
       log.info(`Loaded configuration for MCP server: ${serverName}`);
       return enhancedConfig;
@@ -115,82 +100,51 @@ export class MCPConfigManager {
    * @param serverName - Name of the server (for validation)
    * @returns Enhanced and validated configuration
    */
-  private validateAndEnhanceConfig(
-    rawConfig: Record<string, unknown>,
-    serverName: string,
-  ): EnhancedMCPServerConfig {
+  private validateAndEnhanceConfig(rawConfig: Record<string, unknown>, serverName: string): EnhancedMCPServerConfig {
     // Validate required fields
     const requiredFields = ["name", "displayName", "description", "enabled"];
     for (const field of requiredFields) {
       if (!(field in rawConfig)) {
-        throw new Error(
-          `Missing required field '${field}' in config for ${serverName}`,
-        );
+        throw new Error(`Missing required field '${field}' in config for ${serverName}`);
       }
     }
 
     // Ensure arrays exist
-    const requiredEnvVars = Array.isArray(rawConfig.requiredEnvVars)
-      ? rawConfig.requiredEnvVars
-      : [];
-    const optionalEnvVars = Array.isArray(rawConfig.optionalEnvVars)
-      ? rawConfig.optionalEnvVars
-      : [];
+    const requiredEnvVars = Array.isArray(rawConfig.requiredEnvVars) ? rawConfig.requiredEnvVars : [];
+    const optionalEnvVars = Array.isArray(rawConfig.optionalEnvVars) ? rawConfig.optionalEnvVars : [];
 
     // Create enhanced configuration with defaults and proper type casting
     const enhancedConfig: EnhancedMCPServerConfig = {
       name: typeof rawConfig.name === "string" ? rawConfig.name : serverName,
-      displayName:
-        typeof rawConfig.displayName === "string"
-          ? rawConfig.displayName
-          : serverName,
-      description:
-        typeof rawConfig.description === "string" ? rawConfig.description : "",
+      displayName: typeof rawConfig.displayName === "string" ? rawConfig.displayName : serverName,
+      description: typeof rawConfig.description === "string" ? rawConfig.description : "",
       requiredEnvVars,
       optionalEnvVars,
       enabled: Boolean(rawConfig.enabled),
       category:
         typeof rawConfig.category === "string" &&
-        ["search", "utility", "media", "ai", "data"].includes(
-          rawConfig.category,
-        )
-          ? (rawConfig.category as
-              | "search"
-              | "utility"
-              | "media"
-              | "ai"
-              | "data")
+        ["search", "utility", "media", "ai", "data"].includes(rawConfig.category)
+          ? (rawConfig.category as "search" | "utility" | "media" | "ai" | "data")
           : "utility",
       priority: typeof rawConfig.priority === "number" ? rawConfig.priority : 5,
       transport:
-        typeof rawConfig.transport === "string" &&
-        ["stdio", "http", "websocket"].includes(rawConfig.transport)
+        typeof rawConfig.transport === "string" && ["stdio", "http", "websocket"].includes(rawConfig.transport)
           ? (rawConfig.transport as "stdio" | "http" | "websocket")
           : "stdio",
 
       // Optional fields
-      npmPackage:
-        typeof rawConfig.npmPackage === "string"
-          ? rawConfig.npmPackage
-          : undefined,
-      command:
-        typeof rawConfig.command === "string" ? rawConfig.command : undefined,
+      npmPackage: typeof rawConfig.npmPackage === "string" ? rawConfig.npmPackage : undefined,
+      command: typeof rawConfig.command === "string" ? rawConfig.command : undefined,
       args: Array.isArray(rawConfig.args) ? rawConfig.args : [],
-      timeout:
-        typeof rawConfig.timeout === "number" ? rawConfig.timeout : 30000,
+      timeout: typeof rawConfig.timeout === "number" ? rawConfig.timeout : 30000,
 
       // Handler configuration
       behaviorHandler: this.determineBehaviorHandler(serverName),
 
       // Capabilities (will be determined at runtime)
-      supportedFunctions: Array.isArray(rawConfig.supportedFunctions)
-        ? rawConfig.supportedFunctions
-        : [],
+      supportedFunctions: Array.isArray(rawConfig.supportedFunctions) ? rawConfig.supportedFunctions : [],
       requiresAuth: requiredEnvVars.length > 0,
-      rateLimited:
-        typeof rawConfig.rateLimited === "boolean"
-          ? rawConfig.rateLimited
-          : false,
+      rateLimited: typeof rawConfig.rateLimited === "boolean" ? rawConfig.rateLimited : false,
     };
 
     // Validate the configuration
@@ -223,17 +177,13 @@ export class MCPConfigManager {
     // Validate transport type
     const validTransports = ["stdio", "http", "websocket"];
     if (!validTransports.includes(config.transport)) {
-      throw new Error(
-        `Invalid transport '${config.transport}' for ${config.name}`,
-      );
+      throw new Error(`Invalid transport '${config.transport}' for ${config.name}`);
     }
 
     // Validate category
     const validCategories = ["search", "utility", "media", "ai", "data"];
     if (!validCategories.includes(config.category)) {
-      throw new Error(
-        `Invalid category '${config.category}' for ${config.name}`,
-      );
+      throw new Error(`Invalid category '${config.category}' for ${config.name}`);
     }
 
     // Validate priority
@@ -243,9 +193,7 @@ export class MCPConfigManager {
 
     // Validate command setup
     if (!config.npmPackage && !config.command) {
-      throw new Error(
-        `Either npmPackage or command must be specified for ${config.name}`,
-      );
+      throw new Error(`Either npmPackage or command must be specified for ${config.name}`);
     }
   }
 
@@ -273,9 +221,7 @@ export class MCPConfigManager {
    * @param enabledOnly - Whether to return only enabled servers
    * @returns Array of configurations sorted by priority (1 = highest priority)
    */
-  public getConfigurationsByPriority(
-    enabledOnly = false,
-  ): EnhancedMCPServerConfig[] {
+  public getConfigurationsByPriority(enabledOnly = false): EnhancedMCPServerConfig[] {
     const configs = this.getAllConfigurations(enabledOnly);
     return configs.sort((a, b) => a.priority - b.priority);
   }
@@ -285,9 +231,7 @@ export class MCPConfigManager {
    * @returns Array of configurations that require authentication
    */
   public getAuthRequiredConfigurations(): EnhancedMCPServerConfig[] {
-    return this.getAllConfigurations(true).filter(
-      (config) => config.requiresAuth,
-    );
+    return this.getAllConfigurations(true).filter((config) => config.requiresAuth);
   }
 
   /**
@@ -309,9 +253,7 @@ export class MCPConfigManager {
     let command: string;
     let args: string[];
 
-    const isProductionRuntime =
-      process.env.RUN_ENV === "production" ||
-      process.env.NODE_ENV === "production";
+    const isProductionRuntime = process.env.RUN_ENV === "production" || process.env.NODE_ENV === "production";
 
     if (isProductionRuntime && config.command) {
       // In production, prefer explicit binaries installed in the image
@@ -380,9 +322,7 @@ export class MCPConfigManager {
     // Check if required environment variables are present
     for (const envVar of config.requiredEnvVars) {
       if (!process.env[envVar]) {
-        log.info(
-          `Skipping ${config.displayName}: missing required environment variable ${envVar}`,
-        );
+        log.info(`Skipping ${config.displayName}: missing required environment variable ${envVar}`);
         return false;
       }
     }
@@ -403,18 +343,14 @@ export class MCPConfigManager {
   } {
     const allConfigs = this.getAllConfigurations();
     const enabledConfigs = allConfigs.filter((c) => c.enabled);
-    const readyConfigs = enabledConfigs.filter((c) =>
-      this.shouldInitializeServer(c),
-    );
+    const readyConfigs = enabledConfigs.filter((c) => this.shouldInitializeServer(c));
 
     const missingApiKeys = enabledConfigs
       .filter((c) => !this.shouldInitializeServer(c))
       .filter((c) => c.requiresAuth)
       .map((c) => c.name);
 
-    const disabledServers = allConfigs
-      .filter((c) => !c.enabled)
-      .map((c) => c.name);
+    const disabledServers = allConfigs.filter((c) => !c.enabled).map((c) => c.name);
 
     return {
       totalServers: allConfigs.length,

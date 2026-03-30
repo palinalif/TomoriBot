@@ -23,35 +23,17 @@ import { MessageFlags, EmbedBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  replyPaginatedPersonaChoicesV2,
-} from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  loadAllPersonasForServer,
-  loadEmbeddingModelById,
-} from "@/utils/db/dbRead";
+import { replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { loadAllPersonasForServer, loadEmbeddingModelById } from "@/utils/db/dbRead";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
-import {
-  memoryGuard,
-  reserveDocumentQuota,
-} from "@/utils/security/rateLimiter";
+import { memoryGuard, reserveDocumentQuota } from "@/utils/security/rateLimiter";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { insertDocumentWithChunks } from "@/utils/documents/documentService";
-import {
-  generateEmbeddingsBatched,
-  providerSupportsEmbeddingTaskType,
-} from "@/utils/embeddings/embeddingProvider";
+import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "@/utils/embeddings/embeddingProvider";
 import { fetchHistoryUntilMarker } from "@/utils/discord/historyFetcher";
 import { formatMessagesForExtraction } from "@/utils/discord/historyFormatter";
-import {
-  buildExtractionSystemPrompt,
-  buildExtractionUserPrompt,
-} from "@/utils/documents/historyExtractionPrompt";
+import { buildExtractionSystemPrompt, buildExtractionUserPrompt } from "@/utils/documents/historyExtractionPrompt";
 import type { HistoryMemoryEntry } from "@/providers/utils/historyExtractionSchema";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
@@ -63,10 +45,7 @@ import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 const MAX_DOCUMENT_NAME_LENGTH = 64;
 
 /** Number of messages per LLM extraction window */
-const HISTORY_EXTRACTION_WINDOW_SIZE = Number.parseInt(
-  process.env.HISTORY_EXTRACTION_WINDOW_SIZE || "40",
-  10,
-);
+const HISTORY_EXTRACTION_WINDOW_SIZE = Number.parseInt(process.env.HISTORY_EXTRACTION_WINDOW_SIZE || "40", 10);
 
 /** Number of previous restatements to pass as dedup context between windows */
 const DEDUP_CONTEXT_COUNT = 3;
@@ -76,47 +55,32 @@ type HistoryScope = "persona" | "automatic" | "global";
 /**
  * Configures the /teach history subcommand options.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("history")
     .setDescription(localizer("en-US", "commands.teach.history.description"))
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(
-          localizer("en-US", "commands.teach.history.name_description"),
-        )
+        .setDescription(localizer("en-US", "commands.teach.history.name_description"))
         .setRequired(true)
         .setMaxLength(MAX_DOCUMENT_NAME_LENGTH),
     )
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer("en-US", "commands.teach.history.scope_description"),
-        )
+        .setDescription(localizer("en-US", "commands.teach.history.scope_description"))
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.history.scope_choice_persona",
-            ),
+            name: localizer("en-US", "commands.teach.history.scope_choice_persona"),
             value: "persona",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.history.scope_choice_automatic",
-            ),
+            name: localizer("en-US", "commands.teach.history.scope_choice_automatic"),
             value: "automatic",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.history.scope_choice_global",
-            ),
+            name: localizer("en-US", "commands.teach.history.scope_choice_global"),
             value: "global",
           },
         )
@@ -158,10 +122,7 @@ async function extractWindow(
   endpointUrl?: string,
 ): Promise<HistoryMemoryEntry[]> {
   const systemPrompt = buildExtractionSystemPrompt();
-  const userPrompt = buildExtractionUserPrompt(
-    windowText,
-    previousRestatements,
-  );
+  const userPrompt = buildExtractionUserPrompt(windowText, previousRestatements);
   return await extractHistoryWindowForProvider({
     providerName: provider,
     apiKey,
@@ -195,42 +156,25 @@ async function runExtractionPipeline(params: {
   entries: HistoryMemoryEntry[];
   formattedResult: ReturnType<typeof formatMessagesForExtraction>;
 } | null> {
-  const {
-    channel,
-    provider,
-    model,
-    apiKey,
-    endpointUrl,
-    replyInteraction,
-    locale,
-  } = params;
+  const { channel, provider, model, apiKey, endpointUrl, replyInteraction, locale } = params;
 
   // 1. Update progress: fetching messages
   await replyInteraction.editReply({
     embeds: [
       new EmbedBuilder()
-        .setDescription(
-          localizer(locale, "commands.teach.history.progress_fetching"),
-        )
+        .setDescription(localizer(locale, "commands.teach.history.progress_fetching"))
         .setColor(ColorCode.INFO),
     ],
   });
 
   // 2. Fetch messages
-  const fetchResult = await fetchHistoryUntilMarker(
-    channel,
-    params.messageFetchLimit,
-  );
+  const fetchResult = await fetchHistoryUntilMarker(channel, params.messageFetchLimit);
   if (fetchResult.messages.length === 0) {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.teach.history.no_messages_title"),
-          )
-          .setDescription(
-            localizer(locale, "commands.teach.history.no_messages_description"),
-          )
+          .setTitle(localizer(locale, "commands.teach.history.no_messages_title"))
+          .setDescription(localizer(locale, "commands.teach.history.no_messages_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -238,20 +182,13 @@ async function runExtractionPipeline(params: {
   }
 
   // 3. Format messages for extraction
-  const formattedResult = formatMessagesForExtraction(
-    fetchResult.messages,
-    params.allPersonas,
-  );
+  const formattedResult = formatMessagesForExtraction(fetchResult.messages, params.allPersonas);
   if (formattedResult.messageCount === 0) {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.teach.history.no_messages_title"),
-          )
-          .setDescription(
-            localizer(locale, "commands.teach.history.no_messages_description"),
-          )
+          .setTitle(localizer(locale, "commands.teach.history.no_messages_title"))
+          .setDescription(localizer(locale, "commands.teach.history.no_messages_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -260,10 +197,7 @@ async function runExtractionPipeline(params: {
 
   // 4. Split into extraction windows
   const messageLines = formattedResult.text.split("\n");
-  const windows = splitIntoWindows(
-    messageLines,
-    HISTORY_EXTRACTION_WINDOW_SIZE,
-  );
+  const windows = splitIntoWindows(messageLines, HISTORY_EXTRACTION_WINDOW_SIZE);
 
   // 5. Extract facts from each window
   const allEntries: HistoryMemoryEntry[] = [];
@@ -285,22 +219,13 @@ async function runExtractionPipeline(params: {
       ],
     });
 
-    const windowEntries = await extractWindow(
-      windows[i],
-      previousRestatements,
-      provider,
-      model,
-      apiKey,
-      endpointUrl,
-    );
+    const windowEntries = await extractWindow(windows[i], previousRestatements, provider, model, apiKey, endpointUrl);
 
     allEntries.push(...windowEntries);
 
     // Update dedup context for next window
     if (windowEntries.length > 0) {
-      previousRestatements = windowEntries
-        .slice(-DEDUP_CONTEXT_COUNT)
-        .map((e) => e.lossless_restatement);
+      previousRestatements = windowEntries.slice(-DEDUP_CONTEXT_COUNT).map((e) => e.lossless_restatement);
     }
   }
 
@@ -309,18 +234,8 @@ async function runExtractionPipeline(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(
-              locale,
-              "commands.teach.history.no_facts_extracted_title",
-            ),
-          )
-          .setDescription(
-            localizer(
-              locale,
-              "commands.teach.history.no_facts_extracted_description",
-            ),
-          )
+          .setTitle(localizer(locale, "commands.teach.history.no_facts_extracted_title"))
+          .setDescription(localizer(locale, "commands.teach.history.no_facts_extracted_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -394,19 +309,13 @@ async function storeExtractedFacts(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.teach.history.limit_exceeded_title"),
-          )
+          .setTitle(localizer(locale, "commands.teach.history.limit_exceeded_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.teach.history.limit_exceeded_description",
-              {
-                current_count: docCount.toString(),
-                max_allowed: memoryLimits.maxDocumentsPerServer.toString(),
-                scope: scopeLabel,
-              },
-            ),
+            localizer(locale, "commands.teach.history.limit_exceeded_description", {
+              current_count: docCount.toString(),
+              max_allowed: memoryLimits.maxDocumentsPerServer.toString(),
+              scope: scopeLabel,
+            }),
           )
           .setColor(ColorCode.ERROR),
       ],
@@ -432,28 +341,16 @@ async function storeExtractedFacts(params: {
 				  AND d.tomori_id = ${tomoriId}
 			`;
   const currentChunkCount = Number(chunkCountRow?.chunk_count || 0);
-  if (
-    currentChunkCount + chunks.length >
-    memoryLimits.maxDocumentChunksPerServer
-  ) {
+  if (currentChunkCount + chunks.length > memoryLimits.maxDocumentChunksPerServer) {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(
-              locale,
-              "commands.teach.history.server_chunk_limit_title",
-            ),
-          )
+          .setTitle(localizer(locale, "commands.teach.history.server_chunk_limit_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.teach.history.server_chunk_limit_description",
-              {
-                max_chunks: memoryLimits.maxDocumentChunksPerServer.toString(),
-                scope: scopeLabel,
-              },
-            ),
+            localizer(locale, "commands.teach.history.server_chunk_limit_description", {
+              max_chunks: memoryLimits.maxDocumentChunksPerServer.toString(),
+              scope: scopeLabel,
+            }),
           )
           .setColor(ColorCode.ERROR),
       ],
@@ -480,9 +377,7 @@ async function storeExtractedFacts(params: {
     apiKey,
     model: embeddingCodename,
     inputs: chunks,
-    taskType: (await providerSupportsEmbeddingTaskType(embeddingProvider))
-      ? "RETRIEVAL_DOCUMENT"
-      : undefined,
+    taskType: (await providerSupportsEmbeddingTaskType(embeddingProvider)) ? "RETRIEVAL_DOCUMENT" : undefined,
     batchSize: 16,
   });
 
@@ -519,9 +414,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled =
-    process.env.RUN_ENV === "production" ||
-    process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
 
   // 1. Ensure command is run in a valid channel context
   if (!interaction.channel) {
@@ -555,12 +448,8 @@ export async function execute(
       await interaction.reply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "rate_limit.error_memory_critical_title"),
-            )
-            .setDescription(
-              localizer(locale, "rate_limit.error_memory_critical_description"),
-            )
+            .setTitle(localizer(locale, "rate_limit.error_memory_critical_title"))
+            .setDescription(localizer(locale, "rate_limit.error_memory_critical_description"))
             .setColor(ColorCode.ERROR),
         ],
         flags: MessageFlags.Ephemeral,
@@ -571,9 +460,7 @@ export async function execute(
     // 4. Reserve document quota
     const quotaReserve = reserveDocumentQuota(interaction.user.id);
     if (!quotaReserve.allowed) {
-      const resetTime = quotaReserve.resetAt
-        ? new Date(quotaReserve.resetAt).toLocaleString(locale)
-        : "unknown";
+      const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
       await replyInfoEmbed(interaction, locale, {
         titleKey: "rate_limit.error_quota_exceeded_title",
         descriptionKey: "rate_limit.error_quota_exceeded_description",
@@ -585,8 +472,7 @@ export async function execute(
     }
 
     // 5. Check ManageGuild permission
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
     if (!hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.history.no_permission_title",
@@ -621,12 +507,7 @@ export async function execute(
       return;
     }
 
-    if (
-      !providerSupportsFeature(
-        tomoriState.llm.llm_provider,
-        "historyExtraction",
-      )
-    ) {
+    if (!providerSupportsFeature(tomoriState.llm.llm_provider, "historyExtraction")) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.provider_not_supported_title",
         descriptionKey: "general.errors.provider_not_supported_description",
@@ -673,27 +554,15 @@ export async function execute(
     const nameInput = interaction.options.getString("name", true).trim();
     const scopeInput = interaction.options.getString("scope");
     const scope: HistoryScope =
-      scopeInput === "automatic"
-        ? "automatic"
-        : scopeInput === "global"
-          ? "global"
-          : "persona";
+      scopeInput === "automatic" ? "automatic" : scopeInput === "global" ? "global" : "persona";
 
     // 10. Decrypt API key
-    const decryptedKey = await decryptApiKey(
-      tomoriState.config.api_key,
-      tomoriState.config.key_version || 1,
-    );
+    const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
 
     const provider = tomoriState.llm.llm_provider.toLowerCase();
-    const model = getEffectiveLlmModelName(
-      tomoriState.llm,
-      tomoriState.config.custom_model_name,
-    );
+    const model = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
     const endpointUrl = tomoriState.config.custom_endpoint_url ?? undefined;
-    const messageFetchLimit = normalizeMessageFetchLimit(
-      tomoriState.config.message_fetch_limit,
-    );
+    const messageFetchLimit = normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit);
 
     // Load all personas for formatting and detection
     const allPersonas = await loadAllPersonasForServer(guildId);
@@ -713,28 +582,19 @@ export async function execute(
       }
 
       // Show persona selector (acknowledges interaction)
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
-      if (
-        !personaSelection.success ||
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (!personaSelection.success || personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
 
       personaSelectionInteraction = personaSelection.interaction;
-      const selectedPersona =
-        allPersonas[personaSelection.selectedIndex] ?? null;
+      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
         await replyInfoEmbed(personaSelectionInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -745,11 +605,9 @@ export async function execute(
       }
 
       const targetTomoriId = selectedPersona.tomori_id;
-      const scopeLabel = localizer(
-        locale,
-        "commands.teach.history.scope_label_persona",
-        { persona_name: selectedPersona.tomori_nickname },
-      );
+      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_persona", {
+        persona_name: selectedPersona.tomori_nickname,
+      });
 
       // Defer the button interaction for long processing
       await personaSelectionInteraction.deferReply({
@@ -768,16 +626,8 @@ export async function execute(
         await personaSelectionInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(locale, "commands.teach.history.duplicate_title"),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.teach.history.duplicate_description",
-                  { name: nameInput },
-                ),
-              )
+              .setTitle(localizer(locale, "commands.teach.history.duplicate_title"))
+              .setDescription(localizer(locale, "commands.teach.history.duplicate_description", { name: nameInput }))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -826,8 +676,7 @@ export async function execute(
             .setDescription(
               localizer(locale, "commands.teach.history.success_description", {
                 fact_count: pipelineResult.entries.length.toString(),
-                message_count:
-                  pipelineResult.formattedResult.messageCount.toString(),
+                message_count: pipelineResult.formattedResult.messageCount.toString(),
                 name: nameInput,
                 chunk_count: storeResult.chunkCount.toString(),
                 scope: scopeLabel,
@@ -845,10 +694,7 @@ export async function execute(
     if (scope === "global") {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      const scopeLabel = localizer(
-        locale,
-        "commands.teach.history.scope_label_global",
-      );
+      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_global");
 
       // Check duplicate name (serverwide scope = tomori_id IS NULL)
       const existing = await sql`
@@ -862,16 +708,8 @@ export async function execute(
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(locale, "commands.teach.history.duplicate_title"),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.teach.history.duplicate_description",
-                  { name: nameInput },
-                ),
-              )
+              .setTitle(localizer(locale, "commands.teach.history.duplicate_title"))
+              .setDescription(localizer(locale, "commands.teach.history.duplicate_description", { name: nameInput }))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -920,8 +758,7 @@ export async function execute(
             .setDescription(
               localizer(locale, "commands.teach.history.success_description", {
                 fact_count: pipelineResult.entries.length.toString(),
-                message_count:
-                  pipelineResult.formattedResult.messageCount.toString(),
+                message_count: pipelineResult.formattedResult.messageCount.toString(),
                 name: nameInput,
                 chunk_count: storeResult.chunkCount.toString(),
                 scope: scopeLabel,
@@ -959,10 +796,7 @@ export async function execute(
 
     // If no personas detected, fallback to global
     if (detectedTomoriIds.length === 0) {
-      const scopeLabel = localizer(
-        locale,
-        "commands.teach.history.scope_label_global",
-      );
+      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_global");
 
       // Check duplicate name in global scope
       const existing = await sql`
@@ -976,16 +810,8 @@ export async function execute(
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(locale, "commands.teach.history.duplicate_title"),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.teach.history.duplicate_description",
-                  { name: nameInput },
-                ),
-              )
+              .setTitle(localizer(locale, "commands.teach.history.duplicate_title"))
+              .setDescription(localizer(locale, "commands.teach.history.duplicate_description", { name: nameInput }))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -1015,11 +841,7 @@ export async function execute(
           new EmbedBuilder()
             .setTitle(localizer(locale, "commands.teach.history.success_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.teach.history.success_automatic_global_fallback",
-                { name: nameInput },
-              ),
+              localizer(locale, "commands.teach.history.success_automatic_global_fallback", { name: nameInput }),
             )
             .setColor(ColorCode.SUCCESS),
         ],
@@ -1035,11 +857,9 @@ export async function execute(
       if (!persona) continue;
 
       const docName = `${nameInput} (${persona.tomori_nickname})`;
-      const scopeLabel = localizer(
-        locale,
-        "commands.teach.history.scope_label_persona",
-        { persona_name: persona.tomori_nickname },
-      );
+      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_persona", {
+        persona_name: persona.tomori_nickname,
+      });
 
       // Check duplicate name for this persona
       const existing = await sql`
@@ -1050,9 +870,7 @@ export async function execute(
 				LIMIT 1
 			`;
       if (existing.length > 0) {
-        log.warn(
-          `Skipping duplicate document "${docName}" for persona ${tomoriId} during automatic scope`,
-        );
+        log.warn(`Skipping duplicate document "${docName}" for persona ${tomoriId} during automatic scope`);
         continue;
       }
 
@@ -1075,15 +893,11 @@ export async function execute(
 
       if (storeResult) {
         personaResults.push(
-          localizer(
-            locale,
-            "commands.teach.history.success_automatic_persona_line",
-            {
-              persona_name: persona.tomori_nickname,
-              doc_name: docName,
-              chunk_count: storeResult.chunkCount.toString(),
-            },
-          ),
+          localizer(locale, "commands.teach.history.success_automatic_persona_line", {
+            persona_name: persona.tomori_nickname,
+            doc_name: docName,
+            chunk_count: storeResult.chunkCount.toString(),
+          }),
         );
       }
     }
@@ -1094,15 +908,11 @@ export async function execute(
         new EmbedBuilder()
           .setTitle(localizer(locale, "commands.teach.history.success_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.teach.history.success_automatic_description",
-              {
-                fact_count: entries.length.toString(),
-                message_count: formattedResult.messageCount.toString(),
-                persona_list: personaResults.join("\n"),
-              },
-            ),
+            localizer(locale, "commands.teach.history.success_automatic_description", {
+              fact_count: entries.length.toString(),
+              message_count: formattedResult.messageCount.toString(),
+              persona_list: personaResults.join("\n"),
+            }),
           )
           .setColor(ColorCode.SUCCESS),
       ],
@@ -1122,9 +932,7 @@ export async function execute(
     await log.error("Error in /teach history command", error, context);
 
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      (personaSelectionInteraction.deferred ||
-        personaSelectionInteraction.replied)
+      personaSelectionInteraction && (personaSelectionInteraction.deferred || personaSelectionInteraction.replied)
         ? personaSelectionInteraction
         : interaction.deferred || interaction.replied
           ? interaction

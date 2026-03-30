@@ -1,20 +1,12 @@
 import type { Attachment, Message } from "discord.js";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { safeDownload } from "@/utils/security/safeDownload";
-import {
-  ELEVENLABS_SERVICE_NAME,
-  getElevenLabsSttConfig,
-} from "@/utils/audio/elevenLabsShared";
+import { ELEVENLABS_SERVICE_NAME, getElevenLabsSttConfig } from "@/utils/audio/elevenLabsShared";
 import { transcribeWithElevenLabs } from "@/utils/audio/elevenLabsStt";
 
-const AUDIO_EXTENSION_REGEX =
-  /\.(aac|flac|m4a|mp3|mp4|mpeg|mpga|oga|ogg|opus|wav|webm)$/i;
+const AUDIO_EXTENSION_REGEX = /\.(aac|flac|m4a|mp3|mp4|mpeg|mpga|oga|ogg|opus|wav|webm)$/i;
 
-export type AudioAttachmentFailureReason =
-  | "missing_api_key"
-  | "download_failed"
-  | "stt_failed"
-  | "empty_transcript";
+export type AudioAttachmentFailureReason = "missing_api_key" | "download_failed" | "stt_failed" | "empty_transcript";
 
 export interface AudioAttachmentTranscriptionResult {
   hasAudio: boolean;

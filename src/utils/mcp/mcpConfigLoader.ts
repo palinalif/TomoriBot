@@ -33,12 +33,7 @@ export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
 export async function loadMcpConfigs(): Promise<McpServerConfig[]> {
   try {
     // Get the path to the mcpServers directory
-    const mcpServersPath = path.join(
-      process.cwd(),
-      "src",
-      "tools",
-      "mcpServers",
-    );
+    const mcpServersPath = path.join(process.cwd(), "src", "tools", "mcpServers");
 
     log.info(`Loading MCP server configurations from: ${mcpServersPath}`);
 
@@ -67,26 +62,19 @@ export async function loadMcpConfigs(): Promise<McpServerConfig[]> {
         // Only include enabled configurations
         if (validatedConfig.enabled) {
           configs.push(validatedConfig);
-          log.info(
-            `Loaded MCP server config: ${validatedConfig.name} (${validatedConfig.displayName})`,
-          );
+          log.info(`Loaded MCP server config: ${validatedConfig.name} (${validatedConfig.displayName})`);
         } else {
           log.info(`Skipped disabled MCP server: ${validatedConfig.name}`);
         }
       } catch (error) {
-        log.error(
-          `Failed to load MCP config from ${configPath}`,
-          error as Error,
-        );
+        log.error(`Failed to load MCP config from ${configPath}`, error as Error);
       }
     }
 
     // Sort configs by priority (lower numbers = higher priority)
     configs.sort((a, b) => a.priority - b.priority);
 
-    log.success(
-      `Successfully loaded ${configs.length} MCP server configurations`,
-    );
+    log.success(`Successfully loaded ${configs.length} MCP server configurations`);
     return configs;
   } catch (error) {
     log.error("Failed to load MCP server configurations", error as Error);
@@ -99,9 +87,7 @@ export async function loadMcpConfigs(): Promise<McpServerConfig[]> {
  * @param name - MCP server name
  * @returns Promise<McpServerConfig | undefined> - Configuration if found
  */
-export async function getMcpConfigByName(
-  name: string,
-): Promise<McpServerConfig | undefined> {
+export async function getMcpConfigByName(name: string): Promise<McpServerConfig | undefined> {
   const configs = await loadMcpConfigs();
   return configs.find((config) => config.name === name);
 }
@@ -111,9 +97,7 @@ export async function getMcpConfigByName(
  * @param category - Category to filter by
  * @returns Promise<McpServerConfig[]> - Filtered configurations
  */
-export async function getMcpConfigsByCategory(
-  category: string,
-): Promise<McpServerConfig[]> {
+export async function getMcpConfigsByCategory(category: string): Promise<McpServerConfig[]> {
   const configs = await loadMcpConfigs();
   return configs.filter((config) => config.category === category);
 }

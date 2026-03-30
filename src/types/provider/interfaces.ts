@@ -18,11 +18,7 @@ import type { StructuredContextItem } from "../misc/context";
 import type { StreamingContext } from "../tool/interfaces";
 import type { ProviderError } from "../stream/interfaces";
 
-export type ProviderApiFamily =
-  | "google-genai"
-  | "openrouter"
-  | "novelai"
-  | "openai-compatible";
+export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "openai-compatible";
 
 export interface ProviderFeatureSupport {
   nativeImageGeneration: boolean;
@@ -212,11 +208,7 @@ export interface LLMProvider {
    * @returns Promise<StreamResult> - The outcome of the streaming operation
    */
   streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -252,10 +244,7 @@ export interface LLMProvider {
    * @param apiKey - The decrypted API key
    * @returns Provider-specific configuration object
    */
-  createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<ProviderConfig>;
+  createConfig(tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig>;
 }
 
 /**
@@ -264,19 +253,10 @@ export interface LLMProvider {
 export abstract class BaseLLMProvider implements LLMProvider {
   abstract getInfo(): ProviderInfo;
   abstract validateApiKey(apiKey: string): Promise<ApiKeyValidationResult>;
-  abstract formatErrorDescription(
-    error: ProviderError,
-    locale: string,
-  ): string | null;
-  abstract getTools(
-    tomoriState: TomoriState,
-  ): Promise<Array<Record<string, unknown>>>;
+  abstract formatErrorDescription(error: ProviderError, locale: string): string | null;
+  abstract getTools(tomoriState: TomoriState): Promise<Array<Record<string, unknown>>>;
   abstract streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -296,10 +276,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
     userLocale?: string,
   ): Promise<StreamResult>;
   abstract getDefaultModel(): Promise<string>;
-  abstract createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<ProviderConfig>;
+  abstract createConfig(tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig>;
 
   /**
    * Common helper method to check if a provider supports a given model

@@ -70,9 +70,7 @@ export async function initializeLLMCache(): Promise<void> {
       .map(([provider, count]) => `${provider}: ${count}`)
       .join(", ");
 
-    log.success(
-      `LLM cache initialized with ${llmCache.size} models (${providerStats})`,
-    );
+    log.success(`LLM cache initialized with ${llmCache.size} models (${providerStats})`);
   } catch (error) {
     log.error("Failed to initialize LLM configuration cache:", error as Error);
     // Don't throw - bot should still work with database queries as fallback
@@ -105,9 +103,7 @@ export function getAllCachedLLMs(): LlmRow[] {
 export function getCachedLLMsByProvider(provider: string): LlmRow[] {
   // Normalize provider name to lowercase for case-insensitive matching
   const normalizedProvider = provider.toLowerCase();
-  return Array.from(llmCache.values()).filter(
-    (llm) => llm.llm_provider.toLowerCase() === normalizedProvider,
-  );
+  return Array.from(llmCache.values()).filter((llm) => llm.llm_provider.toLowerCase() === normalizedProvider);
 }
 
 /**
@@ -119,8 +115,7 @@ export function getCachedDefaultLLM(provider: string): LlmRow | undefined {
   // Normalize provider name to lowercase for case-insensitive matching
   const normalizedProvider = provider.toLowerCase();
   return Array.from(llmCache.values()).find(
-    (llm) =>
-      llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_default,
+    (llm) => llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_default,
   );
 }
 
@@ -133,8 +128,7 @@ export function getCachedSmartestLLM(provider: string): LlmRow | undefined {
   // Normalize provider name to lowercase for case-insensitive matching
   const normalizedProvider = provider.toLowerCase();
   return Array.from(llmCache.values()).find(
-    (llm) =>
-      llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_smartest,
+    (llm) => llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_smartest,
   );
 }
 
@@ -147,8 +141,7 @@ export function getCachedReasoningLLMs(provider: string): LlmRow[] {
   // Normalize provider name to lowercase for case-insensitive matching
   const normalizedProvider = provider.toLowerCase();
   return Array.from(llmCache.values()).filter(
-    (llm) =>
-      llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_reasoning,
+    (llm) => llm.llm_provider.toLowerCase() === normalizedProvider && llm.is_reasoning,
   );
 }
 

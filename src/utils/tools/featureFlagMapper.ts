@@ -74,10 +74,7 @@ export function getRequiredFeatureFlag(toolName: string): string | undefined {
  * @param featureFlag - Feature flag to check against
  * @returns True if the tool requires this feature flag
  */
-export function toolRequiresFeatureFlag(
-  toolName: string,
-  featureFlag: string,
-): boolean {
+export function toolRequiresFeatureFlag(toolName: string, featureFlag: string): boolean {
   return ALL_TOOL_FEATURE_FLAGS[toolName] === featureFlag;
 }
 
@@ -98,10 +95,7 @@ export function getToolsRequiringFeatureFlag(featureFlag: string): string[] {
  * @param featureFlags - Object mapping feature flag names to their enabled state
  * @returns True if the tool should be filtered out (disabled)
  */
-export function shouldFilterTool(
-  toolName: string,
-  featureFlags: Record<string, boolean>,
-): boolean {
+export function shouldFilterTool(toolName: string, featureFlags: Record<string, boolean>): boolean {
   const requiredFlag = getRequiredFeatureFlag(toolName);
 
   // If no feature flag is required, don't filter
@@ -112,9 +106,7 @@ export function shouldFilterTool(
   // Filter out if the required feature flag is disabled
   const isEnabled = featureFlags[requiredFlag] ?? false;
   if (!isEnabled) {
-    log.info(
-      `Filtering out tool '${toolName}' (feature flag '${requiredFlag}' disabled)`,
-    );
+    log.info(`Filtering out tool '${toolName}' (feature flag '${requiredFlag}' disabled)`);
     return true;
   }
 
@@ -127,13 +119,8 @@ export function shouldFilterTool(
  * @param featureFlags - Object mapping feature flag names to their enabled state
  * @returns Array of tool names that should be available (not filtered)
  */
-export function filterToolsByFeatureFlags(
-  toolNames: string[],
-  featureFlags: Record<string, boolean>,
-): string[] {
-  return toolNames.filter(
-    (toolName) => !shouldFilterTool(toolName, featureFlags),
-  );
+export function filterToolsByFeatureFlags(toolNames: string[], featureFlags: Record<string, boolean>): string[] {
+  return toolNames.filter((toolName) => !shouldFilterTool(toolName, featureFlags));
 }
 
 /**

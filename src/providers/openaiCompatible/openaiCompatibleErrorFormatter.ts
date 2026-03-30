@@ -16,11 +16,7 @@ interface NormalizeProviderErrorOptions {
   errorMessagePrefix: string;
 }
 
-export function createOpenAICompatibleHttpError(
-  statusCode: number,
-  statusText: string,
-  errorText: string,
-): Error {
+export function createOpenAICompatibleHttpError(statusCode: number, statusText: string, errorText: string): Error {
   const parsed = parseOpenAICompatibleErrorPayload(errorText);
   const message = parsed.message || statusText || "Unknown error";
   return new Error(`HTTP ${statusCode}: ${message}`);
@@ -42,12 +38,7 @@ export function normalizeOpenAICompatibleProviderError(
       errorCode = statusMatch[1];
       const status = Number.parseInt(errorCode, 10);
 
-      if (
-        status === 401 ||
-        status === 403 ||
-        status === 400 ||
-        status === 404
-      ) {
+      if (status === 401 || status === 403 || status === 400 || status === 404) {
         errorType = "api_error";
       } else if (status === 429) {
         // Some providers (e.g. Z.ai) use 429 for billing/plan/access denial, not just rate limiting.
@@ -88,10 +79,7 @@ export function normalizeOpenAICompatibleProviderError(
   }
 
   const normalizedMessage = errorMessage.toLowerCase();
-  if (
-    normalizedMessage.includes("econnrefused") ||
-    normalizedMessage.includes("connection refused")
-  ) {
+  if (normalizedMessage.includes("econnrefused") || normalizedMessage.includes("connection refused")) {
     errorType = "api_error";
     errorCode = "ECONNREFUSED";
     retryable = false;
@@ -145,10 +133,7 @@ export function createOpenAICompatibleErrorDescription(
   let message = localizer(locale, localeKey);
 
   if (message === localeKey) {
-    message = localizer(
-      locale,
-      `${options.localeNamespace}.unknown_default_message`,
-    );
+    message = localizer(locale, `${options.localeNamespace}.unknown_default_message`);
 
     if (message === `${options.localeNamespace}.unknown_default_message`) {
       message = options.fallbackMessage;
@@ -156,18 +141,14 @@ export function createOpenAICompatibleErrorDescription(
 
     const maxErrorLength = 500;
     const errorSnippet =
-      error.message.length > maxErrorLength
-        ? `${error.message.substring(0, maxErrorLength)}...`
-        : error.message;
+      error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
     message += `\n\n**Details:**\n${errorSnippet}`;
   }
 
   return `Error Code ${errorCode}: ${message}`;
 }
 
-function parseOpenAICompatibleErrorPayload(
-  errorText: string,
-): ParsedOpenAICompatibleErrorPayload {
+function parseOpenAICompatibleErrorPayload(errorText: string): ParsedOpenAICompatibleErrorPayload {
   if (!errorText) {
     return { message: "" };
   }
@@ -175,9 +156,7 @@ function parseOpenAICompatibleErrorPayload(
   try {
     const parsed = JSON.parse(errorText) as Record<string, unknown>;
     const nestedError =
-      parsed.error && typeof parsed.error === "object"
-        ? (parsed.error as Record<string, unknown>)
-        : parsed;
+      parsed.error && typeof parsed.error === "object" ? (parsed.error as Record<string, unknown>) : parsed;
 
     const message =
       typeof nestedError.message === "string"
@@ -187,8 +166,7 @@ function parseOpenAICompatibleErrorPayload(
           : errorText;
 
     const codeValue =
-      typeof nestedError.code === "string" ||
-      typeof nestedError.code === "number"
+      typeof nestedError.code === "string" || typeof nestedError.code === "number"
         ? String(nestedError.code)
         : typeof parsed.code === "string" || typeof parsed.code === "number"
           ? String(parsed.code)

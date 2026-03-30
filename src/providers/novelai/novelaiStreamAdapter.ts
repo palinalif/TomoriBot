@@ -17,14 +17,8 @@
  * - Uses `stop_sequences` to prevent multi-speaker generation
  */
 
-import type {
-  FunctionCall,
-  ThoughtLogEntry,
-} from "@/types/provider/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "@/types/misc/context";
+import type { FunctionCall, ThoughtLogEntry } from "@/types/provider/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { escapeRegExp } from "@/utils/text/stringHelper";
@@ -50,8 +44,7 @@ import {
 import { buildPersonaSpeakerStopString } from "@/providers/utils/stopStrings";
 
 /** Whether GLM 4.6 thinking (reasoning) is enabled. When disabled, /nothink is appended to suppress internal reasoning. */
-const NAI_GLM_THINKING_ENABLED =
-  (process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
+const NAI_GLM_THINKING_ENABLED = (process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
 
 /**
  * Whether to include the bot's persona name as a "{char}:" prefix in GLM 4.6 assistant turns.
@@ -67,8 +60,7 @@ const NAI_GLM_THINKING_ENABLED =
  *
  * Only affects GLM 4.6 — Kayra already appends the bot name as a prefill at prompt assembly.
  */
-const NAI_GLM_CHAR_PREFIX_ENABLED =
-  (process.env.NAI_GLM_CHAR_PREFIX_ENABLED ?? "true").toLowerCase() === "true";
+const NAI_GLM_CHAR_PREFIX_ENABLED = (process.env.NAI_GLM_CHAR_PREFIX_ENABLED ?? "true").toLowerCase() === "true";
 
 /**
  * Characters-per-token ratio used to estimate GLM 4.6 input token count from prompt length.
@@ -81,9 +73,7 @@ const NAI_GLM_CHAR_PREFIX_ENABLED =
  * Configured via NAI_GLM_CHARS_PER_TOKEN env var (default: "2.5").
  * Lower values = more conservative, more clamping; higher values = less clamping.
  */
-const NAI_GLM_CHARS_PER_TOKEN = Number.parseFloat(
-  process.env.NAI_GLM_CHARS_PER_TOKEN ?? "2.5",
-);
+const NAI_GLM_CHARS_PER_TOKEN = Number.parseFloat(process.env.NAI_GLM_CHARS_PER_TOKEN ?? "2.5");
 
 /**
  * Hard context window ceiling (input + output tokens combined) for GLM 4.6.
@@ -101,9 +91,7 @@ const NAI_GLM_CHARS_PER_TOKEN = Number.parseFloat(
  *
  * Configured via NAI_KAYRA_CHARS_PER_TOKEN env var (default: "3.5").
  */
-const NAI_KAYRA_CHARS_PER_TOKEN = Number.parseFloat(
-  process.env.NAI_KAYRA_CHARS_PER_TOKEN ?? "3.5",
-);
+const NAI_KAYRA_CHARS_PER_TOKEN = Number.parseFloat(process.env.NAI_KAYRA_CHARS_PER_TOKEN ?? "3.5");
 
 /**
  * Hard context window ceiling (input + output tokens combined) for Kayra/Erato.
@@ -114,15 +102,9 @@ const NAI_KAYRA_CHARS_PER_TOKEN = Number.parseFloat(
  * Configured via NAI_KAYRA_CONTEXT_LIMIT env var (default: "8192" for Scroll tier).
  * Tablet users must set this to 4096. Used by the dynamic max_length cap below.
  */
-const NAI_KAYRA_CONTEXT_LIMIT = Number.parseInt(
-  process.env.NAI_KAYRA_CONTEXT_LIMIT ?? "8192",
-  10,
-);
+const NAI_KAYRA_CONTEXT_LIMIT = Number.parseInt(process.env.NAI_KAYRA_CONTEXT_LIMIT ?? "8192", 10);
 
-const NAI_GLM_CONTEXT_LIMIT = Number.parseInt(
-  process.env.NAI_GLM_CONTEXT_LIMIT ?? "12288",
-  10,
-);
+const NAI_GLM_CONTEXT_LIMIT = Number.parseInt(process.env.NAI_GLM_CONTEXT_LIMIT ?? "12288", 10);
 
 /**
  * Extracts non-schema preset parameters from a raw preset parameters record.
@@ -135,9 +117,7 @@ const NAI_GLM_CONTEXT_LIMIT = Number.parseInt(
  * @param params - Raw parameters record from NaiPresetRow.parameters
  * @returns Partial NovelAIParameters containing only non-schema fields
  */
-function extractNonSchemaPresetParams(
-  params: Record<string, unknown>,
-): Partial<NovelAIParameters> {
+function extractNonSchemaPresetParams(params: Record<string, unknown>): Partial<NovelAIParameters> {
   // These four keys are written to tomori_configs and applied via the existing
   // override logic in getParametersForModel — exclude them here to avoid conflicts.
   const schemaKeys = new Set(["temperature", "top_k", "top_p", "min_p"]);
@@ -218,8 +198,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
   private toolsEnabled = false;
   private toolDefinitions: NormalizedToolDefinition[] = [];
-  private toolCallMode: "disabled" | "undecided" | "text" | "tool_call" =
-    "disabled";
+  private toolCallMode: "disabled" | "undecided" | "text" | "tool_call" = "disabled";
   private toolPreludeBuffer = "";
   private toolCallBuffer = "";
   private insideThinkBlock = false;
@@ -233,8 +212,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    */
   private knownSpeakers: Set<string> = new Set();
   private static readonly TOOL_CALL_TAG = "<tool_call>";
-  private static readonly TOOL_CALL_TAG_LENGTH =
-    NovelaiStreamAdapter.TOOL_CALL_TAG.length;
+  private static readonly TOOL_CALL_TAG_LENGTH = NovelaiStreamAdapter.TOOL_CALL_TAG.length;
 
   /**
    * Whether the current stream is using GLM 4.6 (enables sentence-boundary buffering).
@@ -288,8 +266,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * "don't", "it's" are far more common than closing single quotes, causing
    * false positives that cut mid-word (e.g., "How'" instead of "How's it going?").
    */
-  private static readonly SENTENCE_BOUNDARY_PATTERN =
-    /[.!?*~)\]"\u300D\u2026\u2014]\s*$/;
+  private static readonly SENTENCE_BOUNDARY_PATTERN = /[.!?*~)\]"\u300D\u2026\u2014]\s*$/;
 
   private getSystemInstructionTags(includeTools: boolean): ContextItemTag[] {
     if (!includeTools) {
@@ -316,10 +293,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * - Uses generate_until_sentence for clean endings
    * - Uses regex speaker detection for turn boundaries
    */
-  async *startStream(
-    config: StreamConfig,
-    context: StreamContext,
-  ): AsyncGenerator<RawStreamChunk, void, unknown> {
+  async *startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown> {
     log.info("NovelAIStreamAdapter: Initializing NovelAI streaming");
 
     // Reset buffers for new stream
@@ -334,16 +308,12 @@ export class NovelaiStreamAdapter implements StreamProvider {
     this.toolsEnabled = this.toolDefinitions.length > 0;
     this.resetToolParsingState();
     if (this.toolsEnabled) {
-      log.info(
-        `NovelAIStreamAdapter: Tool calling enabled with ${this.toolDefinitions.length} tools`,
-      );
+      log.info(`NovelAIStreamAdapter: Tool calling enabled with ${this.toolDefinitions.length} tools`);
     }
 
     // Ensure model is provided
     if (!config.model) {
-      throw new Error(
-        "Model must be specified in config. Use NovelAIProvider.getDefaultModel() if needed.",
-      );
+      throw new Error("Model must be specified in config. Use NovelAIProvider.getDefaultModel() if needed.");
     }
 
     const isGlm = usesOpenAIEndpoint(config.model);
@@ -353,42 +323,28 @@ export class NovelaiStreamAdapter implements StreamProvider {
     let prompt: string;
     if (isGlm) {
       // GLM 4.6: Official chat template with role tags and forced thinking
-      prompt = this.assembleGlmChatPrompt(
-        context.contextItems,
-        context.tomoriState.tomori_nickname,
-        {
-          toolDefinitions: this.toolDefinitions,
-          functionInteractionHistory: context.functionInteractionHistory,
-        },
-      );
+      prompt = this.assembleGlmChatPrompt(context.contextItems, context.tomoriState.tomori_nickname, {
+        toolDefinitions: this.toolDefinitions,
+        functionInteractionHistory: context.functionInteractionHistory,
+      });
     } else {
       // Kayra: Flat text prompt with NAI prompt-convention formatting
       // Build ATTG block from persona metadata (null if not configured)
       const attgBlock = this.buildAttgBlock(context.tomoriState, config.model);
-      const basePrompt = this.assembleNovelAIPrompt(
-        context.contextItems,
-        context.tomoriState.tomori_nickname,
-        {
-          toolDefinitions: this.toolDefinitions,
-          functionInteractionHistory: context.functionInteractionHistory,
-          attgBlock,
-        },
-      );
+      const basePrompt = this.assembleNovelAIPrompt(context.contextItems, context.tomoriState.tomori_nickname, {
+        toolDefinitions: this.toolDefinitions,
+        functionInteractionHistory: context.functionInteractionHistory,
+        attgBlock,
+      });
       // Append bot name to signal it should generate the bot's response, unless
       // /bot respond already injected a final assistant prefill turn as the tail.
       // In that case, adding another "{botName}:" creates an extra empty turn and
       // breaks true continuation for Kayra/Erato.
       const outputPrefillTail = context.outputPrefill?.trim() ?? "";
-      const hasTailPrefill =
-        outputPrefillTail.length > 0 &&
-        basePrompt.trimEnd().endsWith(outputPrefillTail);
-      prompt = hasTailPrefill
-        ? basePrompt
-        : `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
+      const hasTailPrefill = outputPrefillTail.length > 0 && basePrompt.trimEnd().endsWith(outputPrefillTail);
+      prompt = hasTailPrefill ? basePrompt : `${basePrompt}\n${context.tomoriState.tomori_nickname}: `;
       if (hasTailPrefill) {
-        log.info(
-          "NovelAI Kayra: Detected assistant prefill at prompt tail; skipping trailing bot-name cue",
-        );
+        log.info("NovelAI Kayra: Detected assistant prefill at prompt tail; skipping trailing bot-name cue");
       }
     }
 
@@ -412,9 +368,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       );
     }
 
-    log.info(
-      `Assembled NovelAI prompt (${isGlm ? "GLM" : "Kayra"}). Length: ${prompt.length} characters`,
-    );
+    log.info(`Assembled NovelAI prompt (${isGlm ? "GLM" : "Kayra"}). Length: ${prompt.length} characters`);
 
     // Log the full prompt for debugging
     log.section("NovelAI Full Prompt");
@@ -425,9 +379,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // Non-schema NAI preset fields (order, TFS, phrase_rep_pen, etc.) are extracted
     // from the active preset and merged before DB schema overrides are applied.
     const { llm_top_k, llm_top_p, llm_min_p } = context.tomoriState.config;
-    const naiPresetOverrides = extractNonSchemaPresetParams(
-      context.tomoriState.nai_preset?.parameters ?? {},
-    );
+    const naiPresetOverrides = extractNonSchemaPresetParams(context.tomoriState.nai_preset?.parameters ?? {});
     const parameters = getParametersForModel(
       config.model,
       config.temperature,
@@ -448,12 +400,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // max_length if needed so that input + output ≤ NAI_GLM_CONTEXT_LIMIT × 0.95.
     // A floor of 50 ensures we always request at least a minimal response.
     if (isGlm) {
-      const estimatedInputTokens = Math.ceil(
-        prompt.length / NAI_GLM_CHARS_PER_TOKEN,
-      );
-      const maxAllowedOutput = Math.floor(
-        (NAI_GLM_CONTEXT_LIMIT - estimatedInputTokens) * 0.95,
-      );
+      const estimatedInputTokens = Math.ceil(prompt.length / NAI_GLM_CHARS_PER_TOKEN);
+      const maxAllowedOutput = Math.floor((NAI_GLM_CONTEXT_LIMIT - estimatedInputTokens) * 0.95);
       const clampedMaxLength = Math.max(50, maxAllowedOutput);
 
       // Only clamp when max_length is defined and exceeds the safe budget
@@ -480,12 +428,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
       // Prefer the subscription-derived limit threaded in from tomoriChat.ts; fall back
       // to the NAI_KAYRA_CONTEXT_LIMIT env var so the guard fires even when no cached
       // value is present (e.g. key set but bot restarted before first message).
-      const effectiveKayraLimit =
-        (config as NovelaiStreamConfig).kayraContextLimit ??
-        NAI_KAYRA_CONTEXT_LIMIT;
-      const estimatedInputTokens = Math.ceil(
-        prompt.length / NAI_KAYRA_CHARS_PER_TOKEN,
-      );
+      const effectiveKayraLimit = (config as NovelaiStreamConfig).kayraContextLimit ?? NAI_KAYRA_CONTEXT_LIMIT;
+      const estimatedInputTokens = Math.ceil(prompt.length / NAI_KAYRA_CHARS_PER_TOKEN);
       const maxAllowedOutput = effectiveKayraLimit - estimatedInputTokens;
       const currentMaxLength = parameters.max_length ?? 0;
       if (maxAllowedOutput <= 0) {
@@ -539,9 +483,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     }
 
     // Build request
-    const personaSpeakerStop = buildPersonaSpeakerStopString(
-      context.tomoriState.tomori_nickname,
-    );
+    const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
     const request: NovelAIGenerationRequest = {
       input: prompt,
       model: config.model,
@@ -613,16 +555,12 @@ export class NovelaiStreamAdapter implements StreamProvider {
     const novelaiChunk = chunk.data as NovelAIStreamChunk & {
       error?: ProviderError;
     };
-    const withThoughts = (result: ProcessedChunk): ProcessedChunk =>
-      this.attachPendingThoughts(result);
+    const withThoughts = (result: ProcessedChunk): ProcessedChunk => this.attachPendingThoughts(result);
 
     // Handle errors first
     if (novelaiChunk.error) {
       // If error is already a ProviderError (from startStream catch)
-      if (
-        typeof novelaiChunk.error === "object" &&
-        "type" in novelaiChunk.error
-      ) {
+      if (typeof novelaiChunk.error === "object" && "type" in novelaiChunk.error) {
         return withThoughts({
           type: "error",
           error: novelaiChunk.error as ProviderError,
@@ -647,18 +585,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
       // often cuts off the closing tag, so we synthesize it from the accumulated buffer.
       // Text preamble before the tool call is fine — it's already been emitted.
       if (this.toolCallMode === "tool_call" && this.toolCallBuffer.trim()) {
-        log.info(
-          "NovelAI GLM: Stream ended during tool call accumulation — attempting to parse without closing tag",
-        );
+        log.info("NovelAI GLM: Stream ended during tool call accumulation — attempting to parse without closing tag");
         // Append closing tag so extractToolCallBlock can match
         const patched = `${this.toolCallBuffer.trimEnd()}\n</tool_call>`;
         const toolCallBlock = this.extractToolCallBlock(patched);
         if (toolCallBlock) {
           const parsedCall = this.parseToolCallBlock(toolCallBlock);
           if (parsedCall) {
-            log.info(
-              `NovelAI GLM: Successfully parsed truncated tool call: ${parsedCall.name}`,
-            );
+            log.info(`NovelAI GLM: Successfully parsed truncated tool call: ${parsedCall.name}`);
             this.generationBuffer = "";
             this.sentenceTrailingBuffer = "";
             this.resetToolParsingState();
@@ -668,9 +602,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
             });
           }
         }
-        log.warn(
-          "NovelAI GLM: Failed to parse truncated tool call — treating as empty response",
-        );
+        log.warn("NovelAI GLM: Failed to parse truncated tool call — treating as empty response");
       }
 
       // GLM 4.6: If still in undecided mode with a prelude buffer that looks like
@@ -679,12 +611,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
       if (this.toolCallMode === "undecided" && this.toolPreludeBuffer.trim()) {
         const trimmedPrelude = this.toolPreludeBuffer.trim();
         const firstLine = trimmedPrelude.split("\n")[0].trim();
-        const normalizedName = firstLine
-          ? this.normalizeToolName(firstLine)
-          : "";
-        const matchedTool = normalizedName
-          ? this.toolDefinitions.find((t) => t.name === normalizedName)
-          : undefined;
+        const normalizedName = firstLine ? this.normalizeToolName(firstLine) : "";
+        const matchedTool = normalizedName ? this.toolDefinitions.find((t) => t.name === normalizedName) : undefined;
 
         if (matchedTool && trimmedPrelude.includes("<arg_key>")) {
           log.info(
@@ -695,9 +623,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
           if (toolCallBlock) {
             const parsedCall = this.parseToolCallBlock(toolCallBlock);
             if (parsedCall) {
-              log.info(
-                `NovelAI GLM: Successfully parsed truncated prelude tool call: ${parsedCall.name}`,
-              );
+              log.info(`NovelAI GLM: Successfully parsed truncated prelude tool call: ${parsedCall.name}`);
               this.generationBuffer = "";
               this.sentenceTrailingBuffer = "";
               this.resetToolParsingState();
@@ -715,11 +641,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       // If not (NAI cut off mid-sentence), silently drop it for a clean ending.
       let finalFlush = "";
       if (this.isGlmModel && this.sentenceTrailingBuffer.trim()) {
-        if (
-          NovelaiStreamAdapter.SENTENCE_BOUNDARY_PATTERN.test(
-            this.sentenceTrailingBuffer,
-          )
-        ) {
+        if (NovelaiStreamAdapter.SENTENCE_BOUNDARY_PATTERN.test(this.sentenceTrailingBuffer)) {
           // Trailing buffer ends at a sentence boundary — it's a complete thought
           finalFlush = this.sentenceTrailingBuffer;
         } else {
@@ -769,9 +691,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // Check for text content
     if (novelaiChunk.token) {
       if (this.toolsEnabled) {
-        return withThoughts(
-          this.processTokenWithToolParsing(novelaiChunk.token),
-        );
+        return withThoughts(this.processTokenWithToolParsing(novelaiChunk.token));
       }
 
       // GLM 4.6: Strip any <think>...</think> blocks before visible text processing.
@@ -867,15 +787,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
     //    from this.knownSpeakers to avoid false positives on mid-sentence proper nouns.
     const dinkusPattern = /\n\*\*\*/;
     const speakerPattern = /\n+([^\n:]+):\s*/;
-    let speakerMatch =
-      this.generationBuffer.match(dinkusPattern) ??
-      this.generationBuffer.match(speakerPattern);
+    let speakerMatch = this.generationBuffer.match(dinkusPattern) ?? this.generationBuffer.match(speakerPattern);
 
     if (!speakerMatch && this.knownSpeakers.size > 0) {
       const escaped = [...this.knownSpeakers].map(escapeRegExp).join("|");
-      speakerMatch = this.generationBuffer.match(
-        new RegExp(`\\n+(${escaped})\\s`),
-      );
+      speakerMatch = this.generationBuffer.match(new RegExp(`\\n+(${escaped})\\s`));
     }
 
     if (speakerMatch) {
@@ -958,9 +874,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     this.sentenceTrailingBuffer += text;
 
     // Find the last sentence boundary in the buffer
-    const lastBoundaryIndex = this.findLastSentenceBoundary(
-      this.sentenceTrailingBuffer,
-    );
+    const lastBoundaryIndex = this.findLastSentenceBoundary(this.sentenceTrailingBuffer);
 
     if (lastBoundaryIndex === -1) {
       // No sentence boundary found yet — hold everything
@@ -971,13 +885,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
     }
 
     // Emit text up to and including the boundary, keep the rest buffered
-    const emitText = this.sentenceTrailingBuffer.slice(
-      0,
-      lastBoundaryIndex + 1,
-    );
-    this.sentenceTrailingBuffer = this.sentenceTrailingBuffer.slice(
-      lastBoundaryIndex + 1,
-    );
+    const emitText = this.sentenceTrailingBuffer.slice(0, lastBoundaryIndex + 1);
+    this.sentenceTrailingBuffer = this.sentenceTrailingBuffer.slice(lastBoundaryIndex + 1);
 
     if (emitText.trim()) this.hasEmittedVisibleText = true;
     return {
@@ -1072,9 +981,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
         // Text + tool call is a valid pattern (model announces intent then acts).
         // Invalid tool calls (wrong name, no args) are handled at the executor level.
         if (this.hasEmittedVisibleText) {
-          log.info(
-            "NovelAI GLM: Tool call detected after visible text — accepting (text preamble pattern)",
-          );
+          log.info("NovelAI GLM: Tool call detected after visible text — accepting (text preamble pattern)");
         }
         this.toolCallMode = "tool_call";
         this.toolCallBuffer = decision.toolCallText ?? "";
@@ -1133,9 +1040,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     this.textScanBuffer += token;
 
     // 1. Check for wrapped <tool_call> tag
-    const tagIndex = this.textScanBuffer.indexOf(
-      NovelaiStreamAdapter.TOOL_CALL_TAG,
-    );
+    const tagIndex = this.textScanBuffer.indexOf(NovelaiStreamAdapter.TOOL_CALL_TAG);
 
     if (tagIndex !== -1) {
       const visiblePart = this.textScanBuffer.slice(0, tagIndex);
@@ -1149,9 +1054,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       this.toolCallBuffer = toolPart;
 
       if (this.hasEmittedVisibleText || visiblePart.trim().length > 0) {
-        log.info(
-          "NovelAI GLM: <tool_call> found after visible text — accepting as text+tool pattern",
-        );
+        log.info("NovelAI GLM: <tool_call> found after visible text — accepting as text+tool pattern");
       }
 
       if (visiblePart.trim().length > 0) {
@@ -1191,14 +1094,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
     //    GLM sometimes outputs text then switches to a tool call without <tool_call> wrapper.
     //    Scan for "\n{tool_name}\n<arg_key>" pattern in the buffer.
     if (this.isGlmModel && this.textScanBuffer.includes("<arg_key>")) {
-      const unwrappedMatch = this.detectUnwrappedToolCallInText(
-        this.textScanBuffer,
-      );
+      const unwrappedMatch = this.detectUnwrappedToolCallInText(this.textScanBuffer);
       if (unwrappedMatch) {
-        const visiblePart = this.textScanBuffer.slice(
-          0,
-          unwrappedMatch.startIndex,
-        );
+        const visiblePart = this.textScanBuffer.slice(0, unwrappedMatch.startIndex);
         const toolPart = this.textScanBuffer.slice(unwrappedMatch.startIndex);
         this.textScanBuffer = "";
 
@@ -1235,13 +1133,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
       return { type: "text", content: "" };
     }
 
-    const flushText = this.textScanBuffer.slice(
-      0,
-      this.textScanBuffer.length - holdLength,
-    );
-    this.textScanBuffer = this.textScanBuffer.slice(
-      this.textScanBuffer.length - holdLength,
-    );
+    const flushText = this.textScanBuffer.slice(0, this.textScanBuffer.length - holdLength);
+    this.textScanBuffer = this.textScanBuffer.slice(this.textScanBuffer.length - holdLength);
 
     const cleaned = this.stripThinkBlocks(flushText);
     if (!cleaned) {
@@ -1260,9 +1153,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * @param buffer - Text scan buffer to search
    * @returns Object with startIndex and toolName, or null if no match
    */
-  private detectUnwrappedToolCallInText(
-    buffer: string,
-  ): { startIndex: number; toolName: string } | null {
+  private detectUnwrappedToolCallInText(buffer: string): { startIndex: number; toolName: string } | null {
     // Split into lines and check if any line matches a tool name with <arg_key> after it.
     // Track position through buffer using cumulative line lengths (no indexOf needed).
     const lines = buffer.split("\n");
@@ -1272,9 +1163,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       const line = lines[i].trim();
       if (line) {
         const normalizedName = this.normalizeToolName(line);
-        const matchedTool = this.toolDefinitions.find(
-          (t) => t.name === normalizedName,
-        );
+        const matchedTool = this.toolDefinitions.find((t) => t.name === normalizedName);
 
         if (matchedTool) {
           // Check if <arg_key> appears somewhere after this line
@@ -1282,8 +1171,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
           if (remainingText.includes("<arg_key>")) {
             // currentIndex points to the start of lines[i].
             // Walk back one char to include the preceding newline separator.
-            const startIndex =
-              currentIndex > 0 ? currentIndex - 1 : currentIndex;
+            const startIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex;
             return { startIndex, toolName: matchedTool.name };
           }
         }
@@ -1353,9 +1241,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       const firstLine = trimmedStart.split("\n")[0].trim();
       if (firstLine) {
         const normalizedName = this.normalizeToolName(firstLine);
-        const matchedTool = this.toolDefinitions.find(
-          (t) => t.name === normalizedName,
-        );
+        const matchedTool = this.toolDefinitions.find((t) => t.name === normalizedName);
 
         if (matchedTool) {
           if (trimmedStart.includes("<arg_key>")) {
@@ -1420,9 +1306,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       .replace(/<\/arg_key>?\s*$/, "</arg_key>");
 
     // 1. Primary format: XML <arg_key>/<arg_value> pairs (standard GLM tool format)
-    const argMatches = normalizedInner.matchAll(
-      /<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g,
-    );
+    const argMatches = normalizedInner.matchAll(/<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g);
 
     for (const match of argMatches) {
       const rawArgKey = match[1]?.trim();
@@ -1519,11 +1403,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * @param body - Raw text after the function name line, without XML wrapper tags
    * @param args - Args object to populate (mutated in-place)
    */
-  private parseToolCallArgsFallback(
-    functionName: string,
-    body: string,
-    args: Record<string, unknown>,
-  ): void {
+  private parseToolCallArgsFallback(functionName: string, body: string, args: Record<string, unknown>): void {
     // Strategy A: Try JSON object parse — e.g. {"query": "LCK LoL schedule", "count": 5}
     const jsonMatch = body.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -1559,9 +1439,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       if (!trimmedLine) continue;
 
       // Match "key: value" or "key = value" or "key=value"
-      const kvMatch = trimmedLine.match(
-        /^([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*(.+)$/,
-      );
+      const kvMatch = trimmedLine.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*(.+)$/);
       if (kvMatch) {
         const rawKey = kvMatch[1].trim();
         let rawValue = kvMatch[2].trim();
@@ -1626,14 +1504,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
     //    Also try with underscore/hyphen normalization on both sides.
     const candidates = [rawName, hyphenName, underscoreName];
     const suffixMatches = this.toolDefinitions.filter((tool) =>
-      candidates.some(
-        (candidate) => tool.name.endsWith(candidate) && candidate.length >= 4,
-      ),
+      candidates.some((candidate) => tool.name.endsWith(candidate) && candidate.length >= 4),
     );
     if (suffixMatches.length === 1) {
-      log.info(
-        `NovelAI GLM: Fuzzy-matched tool name "${rawName}" → "${suffixMatches[0].name}" (suffix match)`,
-      );
+      log.info(`NovelAI GLM: Fuzzy-matched tool name "${rawName}" → "${suffixMatches[0].name}" (suffix match)`);
       return suffixMatches[0].name;
     }
 
@@ -1644,9 +1518,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     let secondBestDist = Number.POSITIVE_INFINITY;
     for (const tool of this.toolDefinitions) {
       // Try all normalized variants against each tool name
-      const minDist = Math.min(
-        ...candidates.map((c) => this.levenshteinDistance(c, tool.name)),
-      );
+      const minDist = Math.min(...candidates.map((c) => this.levenshteinDistance(c, tool.name)));
       const maxLen = Math.max(rawName.length, tool.name.length);
       if (minDist < bestLevDist && minDist <= Math.ceil(maxLen * 0.4)) {
         secondBestDist = bestLevDist;
@@ -1656,10 +1528,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
         secondBestDist = minDist;
       }
     }
-    if (
-      bestLevMatch &&
-      (secondBestDist - bestLevDist >= 2 || this.toolDefinitions.length <= 2)
-    ) {
+    if (bestLevMatch && (secondBestDist - bestLevDist >= 2 || this.toolDefinitions.length <= 2)) {
       log.info(
         `NovelAI GLM: Fuzzy-matched tool name "${rawName}" → "${bestLevMatch.name}" (edit distance: ${bestLevDist})`,
       );
@@ -1684,10 +1553,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * @param rawParamName - Parameter name as generated by the model
    * @returns Normalized parameter name, or rawParamName if no match
    */
-  private normalizeParamName(
-    functionName: string,
-    rawParamName: string,
-  ): string {
+  private normalizeParamName(functionName: string, rawParamName: string): string {
     const tool = this.toolDefinitions.find((t) => t.name === functionName);
     if (!tool?.parameters?.properties) return rawParamName;
 
@@ -1699,22 +1565,16 @@ export class NovelaiStreamAdapter implements StreamProvider {
     }
 
     // 2. Suffix match — "uery" matches "query", "ount" matches "count"
-    const suffixMatches = knownParams.filter(
-      (p) => p.endsWith(rawParamName) && rawParamName.length >= 3,
-    );
+    const suffixMatches = knownParams.filter((p) => p.endsWith(rawParamName) && rawParamName.length >= 3);
     if (suffixMatches.length === 1) {
-      log.info(
-        `NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${suffixMatches[0]}" (suffix match)`,
-      );
+      log.info(`NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${suffixMatches[0]}" (suffix match)`);
       return suffixMatches[0];
     }
 
     // 3. Containment match — raw name contains a known param or vice versa
     //    Handles cases like "ave_wuery" where the model garbles across the name.
     //    Find the known param with the longest common subsequence in the raw name.
-    const containmentMatches = knownParams.filter(
-      (p) => rawParamName.includes(p) || p.includes(rawParamName),
-    );
+    const containmentMatches = knownParams.filter((p) => rawParamName.includes(p) || p.includes(rawParamName));
     if (containmentMatches.length === 1) {
       log.info(
         `NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${containmentMatches[0]}" (containment match)`,
@@ -1770,10 +1630,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       }
     }
     // Only accept if there's a clear winner (best is at least 2 edits better than runner-up)
-    if (
-      bestLevMatch &&
-      (secondBestDistance - bestLevDistance >= 2 || knownParams.length <= 2)
-    ) {
+    if (bestLevMatch && (secondBestDistance - bestLevDistance >= 2 || knownParams.length <= 2)) {
       log.info(
         `NovelAI GLM: Fuzzy-matched param name "${rawParamName}" → "${bestLevMatch}" (edit distance: ${bestLevDistance})`,
       );
@@ -1819,20 +1676,12 @@ export class NovelaiStreamAdapter implements StreamProvider {
     return prev[n];
   }
 
-  private getToolParamType(
-    functionName: string,
-    argKey: string,
-  ): ToolParamType | undefined {
-    const tool = this.toolDefinitions.find(
-      (definition) => definition.name === functionName,
-    );
+  private getToolParamType(functionName: string, argKey: string): ToolParamType | undefined {
+    const tool = this.toolDefinitions.find((definition) => definition.name === functionName);
     return tool?.parameters?.properties?.[argKey]?.type;
   }
 
-  private coerceArgValue(
-    rawValue: string,
-    expectedType?: ToolParamType,
-  ): unknown {
+  private coerceArgValue(rawValue: string, expectedType?: ToolParamType): unknown {
     const trimmed = rawValue.trim();
     const parsed = this.tryParseJson(trimmed);
     if (parsed.success) {
@@ -1857,10 +1706,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       if (trimmed === "false") return false;
     }
 
-    if (
-      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))
-    ) {
+    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
       return trimmed.slice(1, -1);
     }
 
@@ -1955,9 +1801,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     const pendingThoughts = this.consumePendingThinkBlockThoughts();
     const chunkThoughts = chunk.thoughts ?? [];
     const thoughts =
-      chunkThoughts.length > 0 || pendingThoughts.length > 0
-        ? [...chunkThoughts, ...pendingThoughts]
-        : undefined;
+      chunkThoughts.length > 0 || pendingThoughts.length > 0 ? [...chunkThoughts, ...pendingThoughts] : undefined;
 
     if (!thoughts) {
       return chunk;
@@ -1969,9 +1813,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     };
   }
 
-  private normalizeToolDefinitions(
-    tools: Array<Record<string, unknown>>,
-  ): NormalizedToolDefinition[] {
+  private normalizeToolDefinitions(tools: Array<Record<string, unknown>>): NormalizedToolDefinition[] {
     const normalized: NormalizedToolDefinition[] = [];
 
     for (const tool of tools) {
@@ -1997,14 +1839,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
       if (typeof toolObj.name === "string") {
         normalized.push({
           name: toolObj.name,
-          description:
-            typeof toolObj.description === "string"
-              ? toolObj.description
-              : undefined,
-          parameters:
-            typeof toolObj.parameters === "object"
-              ? (toolObj.parameters as ToolParameterSchema)
-              : undefined,
+          description: typeof toolObj.description === "string" ? toolObj.description : undefined,
+          parameters: typeof toolObj.parameters === "object" ? (toolObj.parameters as ToolParameterSchema) : undefined,
         });
       }
     }
@@ -2019,9 +1855,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * @param toolDefinitions - Normalized tool definitions to include
    * @returns Formatted tool guide string, or null if no tools
    */
-  private buildToolCallingGuide(
-    toolDefinitions: NormalizedToolDefinition[],
-  ): string | null {
+  private buildToolCallingGuide(toolDefinitions: NormalizedToolDefinition[]): string | null {
     if (!toolDefinitions.length) return null;
 
     const lines: string[] = [
@@ -2049,9 +1883,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
     lines.push("</tools>");
     lines.push("");
-    lines.push(
-      "For each function call, output the function name and arguments within the following XML format:",
-    );
+    lines.push("For each function call, output the function name and arguments within the following XML format:");
     lines.push("<tool_call>{function-name}");
     lines.push("<arg_key>{arg-key-1}</arg_key>");
     lines.push("<arg_value>{arg-value-1}</arg_value>");
@@ -2070,13 +1902,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * @param obj - The tool response object to sanitize
    * @returns A deep copy with agentInstructions and fetchCapabilityReminder removed
    */
-  private stripFetchReminderFields(
-    obj: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const keysToStrip = new Set([
-      "agentInstructions",
-      "fetchCapabilityReminder",
-    ]);
+  private stripFetchReminderFields(obj: Record<string, unknown>): Record<string, unknown> {
+    const keysToStrip = new Set(["agentInstructions", "fetchCapabilityReminder"]);
 
     const strip = (value: unknown): unknown => {
       if (Array.isArray(value)) {
@@ -2101,9 +1928,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * Build tool interaction history in flat text format (Kayra).
    * Uses simple [Tool Result] labels without GLM role tags.
    */
-  private buildToolHistoryFlat(
-    history: StreamContext["functionInteractionHistory"] = [],
-  ): string | null {
+  private buildToolHistoryFlat(history: StreamContext["functionInteractionHistory"] = []): string | null {
     if (!history.length) return null;
 
     const lines: string[] = ["[System: Tool Call History]"];
@@ -2112,15 +1937,11 @@ export class NovelaiStreamAdapter implements StreamProvider {
       lines.push(this.formatToolCallForPrompt(item.functionCall));
 
       // Strip fetch capability reminder fields recursively to save tokens
-      const sanitizedResponse = this.stripFetchReminderFields(
-        item.functionResponse,
-      );
+      const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
       lines.push(`[Tool Result] ${JSON.stringify(sanitizedResponse)}`);
 
       if (item.imageMetadata?.messageIds?.length) {
-        lines.push(
-          `[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`,
-        );
+        lines.push(`[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`);
       }
     }
 
@@ -2176,9 +1997,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       // Observation turn with tool response
       // Strip fetch capability reminder fields recursively to save tokens —
       // GLM 4.6 has a strict prompt budget, and fetch MCP is disabled for NovelAI.
-      const sanitizedResponse = this.stripFetchReminderFields(
-        item.functionResponse,
-      );
+      const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
       const responseLines: string[] = ["<tool_response>"];
       responseLines.push(JSON.stringify(sanitizedResponse));
       responseLines.push("</tool_response>");
@@ -2203,9 +2022,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     const args = functionCall.args ?? {};
 
     for (const [key, value] of Object.entries(args)) {
-      lines.push(
-        `<arg_key>${key}</arg_key><arg_value>${JSON.stringify(value)}</arg_value>`,
-      );
+      lines.push(`<arg_key>${key}</arg_key><arg_value>${JSON.stringify(value)}</arg_value>`);
     }
 
     lines.push("</tool_call>");
@@ -2249,22 +2066,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
     if (statusCode === 400) {
       errorType = "api_error";
       retryable = false;
-    } else if (
-      statusCode === 401 ||
-      isNovelAIApiKeyError(errorMessage, statusCode)
-    ) {
+    } else if (statusCode === 401 || isNovelAIApiKeyError(errorMessage, statusCode)) {
       errorType = "api_error";
       retryable = false;
-    } else if (
-      statusCode === 402 ||
-      isNovelAICreditsError(errorMessage, statusCode)
-    ) {
+    } else if (statusCode === 402 || isNovelAICreditsError(errorMessage, statusCode)) {
       errorType = "api_error";
       retryable = false;
-    } else if (
-      statusCode === 429 ||
-      isNovelAIRateLimitError(errorMessage, statusCode)
-    ) {
+    } else if (statusCode === 429 || isNovelAIRateLimitError(errorMessage, statusCode)) {
       errorType = "rate_limit";
       retryable = true;
     } else if (statusCode === 500 || statusCode === 502) {
@@ -2273,10 +2081,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     } else if (statusCode === 503) {
       errorType = "provider_overloaded";
       retryable = true;
-    } else if (
-      statusCode === 504 ||
-      errorMessage.toLowerCase().includes("timeout")
-    ) {
+    } else if (statusCode === 504 || errorMessage.toLowerCase().includes("timeout")) {
       errorType = "timeout";
       retryable = true;
     } else {
@@ -2303,11 +2108,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
     // Check for specific trial account / recaptcha error
     const errorMessage = error.message.toLowerCase();
-    if (
-      errorCode === "400" &&
-      (errorMessage.includes("recaptcha") ||
-        errorMessage.includes("trial generation"))
-    ) {
+    if (errorCode === "400" && (errorMessage.includes("recaptcha") || errorMessage.includes("trial generation"))) {
       messageKey = "400_trial_message";
     } else {
       // Map error types to locale keys
@@ -2347,9 +2148,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
         // Truncate error message to avoid Discord embed limits (max description is 4096, leave room for other text)
         const maxErrorLength = 1000;
         const apiErrorSnippet =
-          error.message.length > maxErrorLength
-            ? `${error.message.substring(0, maxErrorLength)}...`
-            : error.message;
+          error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
         return `Error Code ${errorCode}: ${novelaiMessage}\n\n**API Response:**\n${apiErrorSnippet}`;
       }
 
@@ -2394,20 +2193,13 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * @param model - NAI model codename (e.g. 'llama-3-erato-v1')
    * @returns Formatted ATTG string or null
    */
-  private buildAttgBlock(
-    tomoriState: import("@/types/db/schema").TomoriState,
-    model: string,
-  ): string | null {
+  private buildAttgBlock(tomoriState: import("@/types/db/schema").TomoriState, model: string): string | null {
     // 1. Collect non-empty main ATTG fields into a semicolon-separated block
     const parts: string[] = [];
-    if (tomoriState.nai_attg_author?.trim())
-      parts.push(`Author: ${tomoriState.nai_attg_author.trim()}`);
-    if (tomoriState.nai_attg_title?.trim())
-      parts.push(`Title: ${tomoriState.nai_attg_title.trim()}`);
-    if (tomoriState.nai_attg_tags?.trim())
-      parts.push(`Tags: ${tomoriState.nai_attg_tags.trim()}`);
-    if (tomoriState.nai_attg_genre?.trim())
-      parts.push(`Genre: ${tomoriState.nai_attg_genre.trim()}`);
+    if (tomoriState.nai_attg_author?.trim()) parts.push(`Author: ${tomoriState.nai_attg_author.trim()}`);
+    if (tomoriState.nai_attg_title?.trim()) parts.push(`Title: ${tomoriState.nai_attg_title.trim()}`);
+    if (tomoriState.nai_attg_tags?.trim()) parts.push(`Tags: ${tomoriState.nai_attg_tags.trim()}`);
+    if (tomoriState.nai_attg_genre?.trim()) parts.push(`Genre: ${tomoriState.nai_attg_genre.trim()}`);
 
     // 2. Build the main block only if at least one field is populated
     const mainBlock = parts.length > 0 ? `[ ${parts.join("; ")} ]` : "";
@@ -2415,10 +2207,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // 3. Stars block is Erato-exclusive — inject only for llama-3-erato-v1
     const isErato = model === "llama-3-erato-v1";
     const stars = tomoriState.nai_attg_stars;
-    const starsBlock =
-      isErato && stars != null && stars >= 1 && stars <= 5
-        ? `[ S: ${stars} ]`
-        : "";
+    const starsBlock = isErato && stars != null && stars >= 1 && stars <= 5 ? `[ S: ${stars} ]` : "";
 
     // 4. Concatenate and return null when nothing is configured
     const full = `${mainBlock}${starsBlock}`;
@@ -2485,10 +2274,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // so DIALOGUE_SAMPLE user turns can be labeled consistently (e.g. "Ellen: message").
     let defaultSpeakerLabel = "User";
     for (const scanItem of contextItems) {
-      if (
-        scanItem.metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
-        scanItem.role === "user"
-      ) {
+      if (scanItem.metadataTag === ContextItemTag.DIALOGUE_HISTORY && scanItem.role === "user") {
         const scanText = scanItem.parts
           .filter((p) => p.type === "text")
           .map((p) => (p as { type: "text"; text: string }).text)
@@ -2557,14 +2343,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
     // 4. Append tool guide and history into the general instruction block
     if (includeTools) {
-      const toolGuide = this.buildToolCallingGuide(
-        options?.toolDefinitions ?? [],
-      );
+      const toolGuide = this.buildToolCallingGuide(options?.toolDefinitions ?? []);
       if (toolGuide) instructionParts.push(toolGuide);
 
-      const toolHistory = this.buildToolHistoryFlat(
-        options?.functionInteractionHistory ?? [],
-      );
+      const toolHistory = this.buildToolHistoryFlat(options?.functionInteractionHistory ?? []);
       if (toolHistory) instructionParts.push(toolHistory);
     }
 
@@ -2590,10 +2372,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
     // 6. Build the full system header: ATTG block + formatted sections
     const attgPrefix = options?.attgBlock ? `${options.attgBlock}\n` : "";
-    const systemHeader =
-      systemBlocks.length > 0
-        ? `${attgPrefix}${systemBlocks.join("\n")}`
-        : attgPrefix.trimEnd();
+    const systemHeader = systemBlocks.length > 0 ? `${attgPrefix}${systemBlocks.join("\n")}` : attgPrefix.trimEnd();
 
     // 7. Combine: system header + context + [ Style: chat ] + samples + *** + [ Style: chat ] + history.
     //    Context injections (e.g. [System: users in conversation]) sit with the system header
@@ -2605,22 +2384,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
     const historyText = historyParts.join("\n");
 
     // 7a. System section: ATTG + character/instruction blocks + context injections (pre-dialogue).
-    const systemSection = [systemHeader, contextText]
-      .filter((p) => p?.trim())
-      .join("\n***\n");
+    const systemSection = [systemHeader, contextText].filter((p) => p?.trim()).join("\n***\n");
 
     // 7b. Each dialogue block gets its own [ Style: chat ] tag so the model treats both
     //     reference samples and live history as chat-format exchanges.
-    const styledSampleText = sampleText.trim()
-      ? `[ Style: chat ]\n${sampleText}`
-      : "";
-    const styledHistoryText = historyText.trim()
-      ? `[ Style: chat ]\n${historyText}`
-      : "";
+    const styledSampleText = sampleText.trim() ? `[ Style: chat ]\n${sampleText}` : "";
+    const styledHistoryText = historyText.trim() ? `[ Style: chat ]\n${historyText}` : "";
 
-    const parts = [systemSection, styledSampleText, styledHistoryText].filter(
-      (p) => p?.trim(),
-    );
+    const parts = [systemSection, styledSampleText, styledHistoryText].filter((p) => p?.trim());
     return parts.join("\n***\n");
   }
 
@@ -2701,8 +2472,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
       // Dialogue turns (user/model items not in system tags)
       if ((item.role === "user" || item.role === "model") && textContent) {
-        const isInSystemTags =
-          item.metadataTag && systemTags.includes(item.metadataTag);
+        const isInSystemTags = item.metadataTag && systemTags.includes(item.metadataTag);
 
         if (!isInSystemTags) {
           dialogueTurns.push({
@@ -2715,9 +2485,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
     // 2. Add tool calling guide to system instructions
     if (includeTools) {
-      const toolGuide = this.buildToolCallingGuide(
-        options?.toolDefinitions ?? [],
-      );
+      const toolGuide = this.buildToolCallingGuide(options?.toolDefinitions ?? []);
       if (toolGuide) {
         systemInstructionParts.push(toolGuide);
       }
@@ -2726,9 +2494,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // 3. Build the prompt using GLM 4.6 chat template
     // Thinking directive: <think></think> seeds the expected format when thinking is enabled;
     // /nothink explicitly disables internal reasoning when thinking is turned off.
-    const thinkDirective = NAI_GLM_THINKING_ENABLED
-      ? "<think></think>"
-      : "/nothink";
+    const thinkDirective = NAI_GLM_THINKING_ENABLED ? "<think></think>" : "/nothink";
     const promptParts: string[] = [];
 
     // Header: [gMASK]<sop>
@@ -2748,10 +2514,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // When NAI_GLM_CHAR_PREFIX_ENABLED is enabled, the prefix is kept to mirror how other
     // providers format context (sample dialogues + history both include "{char}: message"),
     // which may help the model adopt the persona voice more consistently.
-    const botNamePrefixPattern = new RegExp(
-      `^${escapeRegExp(botName)}:\\s*`,
-      "i",
-    );
+    const botNamePrefixPattern = new RegExp(`^${escapeRegExp(botName)}:\\s*`, "i");
 
     for (const turn of dialogueTurns) {
       if (turn.role === "user") {
@@ -2776,9 +2539,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     //    the model needs to see prior tool calls (and failures) plus any text
     //    it already streamed, so it doesn't repeat itself.
     if (options?.functionInteractionHistory?.length) {
-      const toolTurns = this.buildToolHistoryGlm(
-        options.functionInteractionHistory,
-      );
+      const toolTurns = this.buildToolHistoryGlm(options.functionInteractionHistory);
       for (const toolTurn of toolTurns) {
         if (toolTurn.role === "assistant") {
           promptParts.push("<|assistant|>");
@@ -2809,17 +2570,12 @@ export class NovelaiStreamAdapter implements StreamProvider {
   /**
    * Log sanitized request configuration for debugging
    */
-  private logSanitizedRequest(
-    request: NovelAIGenerationRequest,
-    promptLength: number,
-  ): void {
+  private logSanitizedRequest(request: NovelAIGenerationRequest, promptLength: number): void {
     log.section("NovelAIStreamAdapter: Request Details");
 
     log.info(`Model: ${request.model}`);
     log.info(`Prompt Length: ${promptLength} characters`);
-    log.info(
-      `Parameters: temperature=${request.parameters.temperature}, max_length=${request.parameters.max_length}`,
-    );
+    log.info(`Parameters: temperature=${request.parameters.temperature}, max_length=${request.parameters.max_length}`);
     if (this.toolsEnabled) {
       log.info(`Tool calling enabled (tools=${this.toolDefinitions.length})`);
     }

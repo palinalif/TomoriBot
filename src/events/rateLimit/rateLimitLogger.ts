@@ -7,10 +7,7 @@ import { log } from "@/utils/misc/logger";
  * @param _client - The Discord client instance (unused but required by event signature).
  * @param rateLimitData - Rate limit information from Discord API.
  */
-export default async (
-  _client: Client,
-  rateLimitData: RateLimitData,
-): Promise<void> => {
+export default async (_client: Client, rateLimitData: RateLimitData): Promise<void> => {
   // Log rate limit event with all relevant details
   log.rateLimit("Discord API rate limit hit", {
     timeToReset: `${rateLimitData.timeToReset}ms`,

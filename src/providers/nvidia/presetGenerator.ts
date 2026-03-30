@@ -9,10 +9,7 @@
 import { log } from "@/utils/misc/logger";
 import { executeTool } from "@/tools/toolRegistry";
 import type { ToolContext, ToolResult } from "@/types/tool/interfaces";
-import type {
-  GeneratePresetParams,
-  PresetGenerationResult,
-} from "@/types/provider/featureInterfaces";
+import type { GeneratePresetParams, PresetGenerationResult } from "@/types/provider/featureInterfaces";
 import { getNvidiaToolAdapter } from "@/providers/nvidia/nvidiaToolAdapter";
 import { NVIDIA_CHAT_COMPLETIONS_URL } from "@/providers/nvidia/nvidiaConstants";
 import { sanitizeSampleDialogueText } from "@/providers/google/presetGenerator";
@@ -39,10 +36,7 @@ interface NvidiaPresetGenerationOptions {
  * Determine whether an HTTP error indicates that the response_format
  * parameter is not supported by the model, warranting a json_object fallback.
  */
-function shouldFallbackResponseFormat(
-  status: number,
-  errorBody: string,
-): boolean {
+function shouldFallbackResponseFormat(status: number, errorBody: string): boolean {
   if (status !== 400 && status !== 422) {
     return false;
   }
@@ -102,9 +96,7 @@ export async function generatePresetFromPromptNvidia(
   const toolsEnabled = tools.length > 0 && toolContext;
 
   // 1. Build the initial user message content (text + optional image)
-  const contentParts: PresetContentPart[] = [
-    { type: "text", text: buildPresetPrompt(params) },
-  ];
+  const contentParts: PresetContentPart[] = [{ type: "text", text: buildPresetPrompt(params) }];
 
   if (params.imageBase64 && params.imageMimeType) {
     contentParts.push({
@@ -117,9 +109,7 @@ export async function generatePresetFromPromptNvidia(
   }
 
   const userContent =
-    contentParts.length === 1 && contentParts[0].type === "text"
-      ? contentParts[0].text
-      : contentParts;
+    contentParts.length === 1 && contentParts[0].type === "text" ? contentParts[0].text : contentParts;
 
   // Messages start with just the user prompt; system message is prepended
   // on each request when in json_object fallback mode
@@ -150,10 +140,7 @@ export async function generatePresetFromPromptNvidia(
     // 4. Prepend schema-steered system prompt for json_object fallback mode
     const requestMessages: PresetMessage[] =
       formatMode === "json_object"
-        ? [
-            { role: "system", content: buildNvidiaPresetSystemPrompt() },
-            ...messages,
-          ]
+        ? [{ role: "system", content: buildNvidiaPresetSystemPrompt() }, ...messages]
         : messages;
 
     const body: Record<string, unknown> = {
@@ -189,27 +176,23 @@ export async function generatePresetFromPromptNvidia(
         formatMode === "json_schema" &&
         shouldFallbackResponseFormat(response.status, errorBody)
       ) {
-        log.warn(
-          "NVIDIA preset generation: json_schema unsupported, retrying with json_object.",
-          { model: options.model, status: response.status },
-        );
+        log.warn("NVIDIA preset generation: json_schema unsupported, retrying with json_object.", {
+          model: options.model,
+          status: response.status,
+        });
         formatMode = "json_object";
         formatFallbackDone = true;
         continue;
       }
 
-      log.error(
-        "NVIDIA preset generation request failed",
-        new Error(errorBody),
-        {
-          errorType: "NvidiaPresetHttpError",
-          metadata: {
-            model: options.model,
-            status: response.status,
-            errorBody,
-          },
+      log.error("NVIDIA preset generation request failed", new Error(errorBody), {
+        errorType: "NvidiaPresetHttpError",
+        metadata: {
+          model: options.model,
+          status: response.status,
+          errorBody,
         },
-      );
+      });
       return {
         error: `NVIDIA request failed (${response.status}): ${response.statusText}`,
         errorType: "CONNECTION",
@@ -275,25 +258,14 @@ export async function generatePresetFromPromptNvidia(
             try {
               parsedArgs = JSON.parse(rawArgs);
             } catch (parseError) {
-              log.warn(
-                `NVIDIA tool call args parse failed for ${functionName}: ${rawArgs}`,
-                parseError as Error,
-              );
-              toolResult = buildToolErrorResult(
-                `Invalid tool arguments for ${functionName}`,
-              );
+              log.warn(`NVIDIA tool call args parse failed for ${functionName}: ${rawArgs}`, parseError as Error);
+              toolResult = buildToolErrorResult(`Invalid tool arguments for ${functionName}`);
             }
           }
 
           if (!toolResult) {
-            log.info(
-              `Executing NVIDIA preset tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
-            );
-            toolResult = await executeTool(
-              functionName,
-              parsedArgs,
-              toolContext,
-            );
+            log.info(`Executing NVIDIA preset tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`);
+            toolResult = await executeTool(functionName, parsedArgs, toolContext);
           }
         }
 
@@ -333,65 +305,43 @@ export async function generatePresetFromPromptNvidia(
     try {
       parsedResponse = JSON.parse(responseText);
     } catch (parseError) {
-      log.error(
-        "NVIDIA preset generation JSON parse failed",
-        parseError as Error,
-      );
+      log.error("NVIDIA preset generation JSON parse failed", parseError as Error);
       return {
         error: "Invalid JSON response from NVIDIA.",
         errorType: "INVALID_JSON",
       };
     }
 
-    if (
-      !parsedResponse.attribute_list ||
-      !parsedResponse.sample_dialogues_in ||
-      !parsedResponse.sample_dialogues_out
-    ) {
+    if (!parsedResponse.attribute_list || !parsedResponse.sample_dialogues_in || !parsedResponse.sample_dialogues_out) {
       return {
         error: "Generated character data is incomplete. Please try again.",
         errorType: "INVALID_JSON",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.attribute_list) ||
-      parsedResponse.attribute_list.length !== 6
-    ) {
+    if (!Array.isArray(parsedResponse.attribute_list) || parsedResponse.attribute_list.length !== 6) {
       return {
-        error:
-          "Generated attribute list must contain exactly 6 items. Please try again.",
+        error: "Generated attribute list must contain exactly 6 items. Please try again.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.sample_dialogues_in) ||
-      parsedResponse.sample_dialogues_in.length !== 5
-    ) {
+    if (!Array.isArray(parsedResponse.sample_dialogues_in) || parsedResponse.sample_dialogues_in.length !== 5) {
       return {
         error: "Generated sample dialogues must contain exactly 5 user inputs.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.sample_dialogues_out) ||
-      parsedResponse.sample_dialogues_out.length !== 5
-    ) {
+    if (!Array.isArray(parsedResponse.sample_dialogues_out) || parsedResponse.sample_dialogues_out.length !== 5) {
       return {
-        error:
-          "Generated sample dialogues must contain exactly 5 character responses.",
+        error: "Generated sample dialogues must contain exactly 5 character responses.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(
-      sanitizeSampleDialogueText,
-    );
-    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(
-      sanitizeSampleDialogueText,
-    );
+    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(sanitizeSampleDialogueText);
+    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(sanitizeSampleDialogueText);
 
     const preset = {
       tomori_nickname: params.characterName,
@@ -401,9 +351,7 @@ export async function generatePresetFromPromptNvidia(
       sample_dialogues_out: sanitizedDialoguesOut,
     };
 
-    log.success(
-      `NVIDIA preset generation successful for ${params.characterName}`,
-    );
+    log.success(`NVIDIA preset generation successful for ${params.characterName}`);
     return { preset };
   }
 }

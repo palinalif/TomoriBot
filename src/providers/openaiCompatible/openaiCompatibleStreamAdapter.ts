@@ -15,10 +15,7 @@ import type {
   OpenAICompatibleStreamConfig,
   OpenAICompatibleToolCallDelta,
 } from "@/providers/openaiCompatible/openaiCompatibleTypes";
-import type {
-  FunctionCall,
-  ThoughtLogEntry,
-} from "@/types/provider/interfaces";
+import type { FunctionCall, ThoughtLogEntry } from "@/types/provider/interfaces";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -38,10 +35,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
   private static readonly STREAM_TEXT_TAIL_CHARS = 4096;
   private static readonly STREAM_TEXT_MIN_DEDUP_CHARS = 8;
 
-  private readonly toolCallAccumulator = new Map<
-    number,
-    OpenAICompatibleAccumulatedToolCall
-  >();
+  private readonly toolCallAccumulator = new Map<number, OpenAICompatibleAccumulatedToolCall>();
   private speakerGuardPendingTail = "";
   private streamedTextTail = "";
   private accumulatedReasoningContent = "";
@@ -53,14 +47,9 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 
   constructor(private readonly options: OpenAICompatibleStreamAdapterOptions) {}
 
-  async *startStream(
-    config: StreamConfig,
-    context: StreamContext,
-  ): AsyncGenerator<RawStreamChunk, void, unknown> {
+  async *startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown> {
     const openAICompatibleConfig = config as OpenAICompatibleStreamConfig;
-    log.info(
-      `${this.options.adapterName}: Initializing OpenAI-compatible streaming`,
-    );
+    log.info(`${this.options.adapterName}: Initializing OpenAI-compatible streaming`);
 
     this.toolCallAccumulator.clear();
     this.streamedTextTail = "";
@@ -76,12 +65,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     log.info(`${this.options.adapterName}: Using API URL: ${apiUrl}`);
 
     this.speakerGuardPendingTail = "";
-    this.activePersonaNameLower = (
-      context.tomoriState.tomori_nickname ?? ""
-    ).toLowerCase();
-    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
-      context.contextItems,
-    );
+    this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
+    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
     if (this.activePersonaNameLower) {
       this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
     }
@@ -90,8 +75,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     // The supportsSystemRole callback receives the final API URL and model so
     // that adapters (e.g. Custom/Chatmock) can opt out of the system role on
     // a per-request basis.  Defaults to true when not provided.
-    const supportsSystemRole =
-      this.options.supportsSystemRole?.(apiUrl, config.model ?? "") ?? true;
+    const supportsSystemRole = this.options.supportsSystemRole?.(apiUrl, config.model ?? "") ?? true;
 
     const messages = await buildOpenAICompatibleMessages({
       adapterName: this.options.adapterName,
@@ -107,14 +91,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     }
 
     log.info(`${this.options.adapterName}: Using model ${config.model}`);
-    if (
-      config.tools &&
-      Array.isArray(config.tools) &&
-      config.tools.length > 0
-    ) {
-      log.info(
-        `${this.options.adapterName}: Tools:\n${JSON.stringify(config.tools, null, 2)}`,
-      );
+    if (config.tools && Array.isArray(config.tools) && config.tools.length > 0) {
+      log.info(`${this.options.adapterName}: Tools:\n${JSON.stringify(config.tools, null, 2)}`);
     }
 
     logSanitizedOpenAICompatibleRequest(this.options.adapterName, messages);
@@ -127,16 +105,10 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         stream: true,
       };
 
-      const personaSpeakerStop = buildPersonaSpeakerStopString(
-        context.tomoriState.tomori_nickname,
-      );
-      this.speakerGuardEnabled =
-        this.options.enableSpeakerGuard !== false &&
-        Boolean(personaSpeakerStop);
+      const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
+      this.speakerGuardEnabled = this.options.enableSpeakerGuard !== false && Boolean(personaSpeakerStop);
       if (this.speakerGuardEnabled) {
-        log.info(
-          `${this.options.adapterName}: Speaker-boundary fallback guard enabled`,
-        );
+        log.info(`${this.options.adapterName}: Speaker-boundary fallback guard enabled`);
       }
       if (personaSpeakerStop) {
         requestBody.stop = [personaSpeakerStop];
@@ -161,8 +133,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         requestBody.presence_penalty = openAICompatibleConfig.presencePenalty;
       }
       if (openAICompatibleConfig.repetitionPenalty !== undefined) {
-        requestBody.repetition_penalty =
-          openAICompatibleConfig.repetitionPenalty;
+        requestBody.repetition_penalty = openAICompatibleConfig.repetitionPenalty;
       }
       if (openAICompatibleConfig.minP !== undefined) {
         requestBody.min_p = openAICompatibleConfig.minP;
@@ -181,11 +152,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
       };
-      if (
-        config.apiKey &&
-        config.apiKey.trim() !== "" &&
-        config.apiKey !== this.options.placeholderApiKey
-      ) {
+      if (config.apiKey && config.apiKey.trim() !== "" && config.apiKey !== this.options.placeholderApiKey) {
         headers.Authorization = `Bearer ${config.apiKey}`;
       }
 
@@ -205,11 +172,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         if (context.abortSignal.aborted) {
           controller.abort();
         } else {
-          context.abortSignal.addEventListener(
-            "abort",
-            () => controller.abort(),
-            { once: true },
-          );
+          context.abortSignal.addEventListener("abort", () => controller.abort(), { once: true });
         }
       }
 
@@ -224,16 +187,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       if (!response.ok) {
         responseErrorText = await response.text();
 
-        if (
-          requestBody.stop &&
-          this.options.shouldRetryWithoutStop?.(
-            response.status,
-            responseErrorText,
-          )
-        ) {
-          log.warn(
-            `${this.options.adapterName}: Endpoint rejected stop parameter; retrying request without stop`,
-          );
+        if (requestBody.stop && this.options.shouldRetryWithoutStop?.(response.status, responseErrorText)) {
+          log.warn(`${this.options.adapterName}: Endpoint rejected stop parameter; retrying request without stop`);
 
           const retryBody = { ...requestBody };
           delete retryBody.stop;
@@ -250,29 +205,18 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       }
 
       if (!response.ok) {
-        throw createOpenAICompatibleHttpError(
-          response.status,
-          response.statusText,
-          responseErrorText ?? "",
-        );
+        throw createOpenAICompatibleHttpError(response.status, response.statusText, responseErrorText ?? "");
       }
 
       for await (const chunk of streamOpenAICompatibleSseChunks(response)) {
         const sanitizedChunk = this.stripThinkBlocksFromChunkContent(chunk);
-        const chunksToEmit =
-          this.splitChunkWithTextAndToolSignals(sanitizedChunk);
+        const chunksToEmit = this.splitChunkWithTextAndToolSignals(sanitizedChunk);
 
         for (const chunkToEmit of chunksToEmit) {
-          const deduplicatedChunk =
-            this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
-          const guardResult =
-            this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
+          const deduplicatedChunk = this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
+          const guardResult = this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
 
-          if (
-            this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-              guardResult.chunk,
-            )
-          ) {
+          if (this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(guardResult.chunk)) {
             yield this.wrapChunk(
               {
                 choices: [
@@ -292,8 +236,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
           const hasMeaningfulData = Boolean(
             guardResult.chunk.error ||
               guardResult.chunk.usage ||
-              (guardResult.chunk.choices &&
-                guardResult.chunk.choices.length > 0),
+              (guardResult.chunk.choices && guardResult.chunk.choices.length > 0),
           );
           if (!hasMeaningfulData) {
             if (guardResult.stopTriggered) {
@@ -371,13 +314,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         type: "error",
         error: {
           type: "api_error",
-          message:
-            openAIChunk.error.message ||
-            `${this.options.errorMessagePrefix}: provider API error`,
-          code:
-            openAIChunk.error.code !== undefined
-              ? String(openAIChunk.error.code)
-              : "unknown",
+          message: openAIChunk.error.message || `${this.options.errorMessagePrefix}: provider API error`,
+          code: openAIChunk.error.code !== undefined ? String(openAIChunk.error.code) : "unknown",
           retryable: false,
           originalError: openAIChunk.error,
         },
@@ -396,9 +334,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     const thoughts: ThoughtLogEntry[] = [];
     if (openAIChunk.usage) {
       metadata.usage = openAIChunk.usage;
-      log.info(
-        `${this.options.adapterName}: Usage ${openAIChunk.usage.total_tokens ?? "unknown"} total tokens`,
-      );
+      log.info(`${this.options.adapterName}: Usage ${openAIChunk.usage.total_tokens ?? "unknown"} total tokens`);
     }
 
     const reasoningContent = choice.delta?.reasoning_content;
@@ -420,9 +356,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 
       const accumulated = this.toolCallAccumulator.get(0);
       if (!accumulated || !accumulated.functionName) {
-        log.warn(
-          `${this.options.adapterName}: finish_reason was 'tool_calls' but no tool call was accumulated`,
-        );
+        log.warn(`${this.options.adapterName}: finish_reason was 'tool_calls' but no tool call was accumulated`);
         return this.attachPendingThoughts({
           type: "done",
           thoughts,
@@ -446,12 +380,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         name: accumulated.functionName,
         args: parsedArgs,
       };
-      if (
-        this.options.preserveReasoningContent &&
-        this.accumulatedReasoningContent.length > 0
-      ) {
-        functionCall.deepseekReasoningContent =
-          this.accumulatedReasoningContent;
+      if (this.options.preserveReasoningContent && this.accumulatedReasoningContent.length > 0) {
+        functionCall.deepseekReasoningContent = this.accumulatedReasoningContent;
         log.info(
           `${this.options.adapterName}: Preserving ${this.accumulatedReasoningContent.length} chars of reasoning_content for tool continuation`,
         );
@@ -484,9 +414,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     }
 
     if (choice.finish_reason === "length") {
-      log.warn(
-        `${this.options.adapterName}: Response truncated due to max_tokens`,
-      );
+      log.warn(`${this.options.adapterName}: Response truncated due to max_tokens`);
       return this.attachPendingThoughts({
         type: "done",
         thoughts,
@@ -535,9 +463,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
 
     return {
       name: toolCall.function.name || "",
-      args: toolCall.function.arguments
-        ? JSON.parse(toolCall.function.arguments)
-        : {},
+      args: toolCall.function.arguments ? JSON.parse(toolCall.function.arguments) : {},
     };
   }
 
@@ -551,14 +477,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
   createErrorDescription(error: ProviderError, locale: string): string | null {
     return createOpenAICompatibleErrorDescription(error, locale, {
       localeNamespace: this.options.localeNamespace,
-      fallbackMessage: localizer(
-        locale,
-        `${this.options.localeNamespace}.unknown_default_message`,
-      ),
-      connectionRefusedMessage: localizer(
-        locale,
-        `${this.options.localeNamespace}.connection_refused`,
-      ),
+      fallbackMessage: localizer(locale, `${this.options.localeNamespace}.unknown_default_message`),
+      connectionRefusedMessage: localizer(locale, `${this.options.localeNamespace}.connection_refused`),
     });
   }
 
@@ -576,10 +496,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     };
   }
 
-  private wrapChunk(
-    chunk: OpenAICompatibleStreamChunk,
-    model: string,
-  ): RawStreamChunk {
+  private wrapChunk(chunk: OpenAICompatibleStreamChunk, model: string): RawStreamChunk {
     return {
       data: chunk,
       provider: this.options.providerName,
@@ -590,9 +507,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     };
   }
 
-  private collectKnownSpeakerNames(
-    contextItems: StructuredContextItem[],
-  ): Set<string> {
+  private collectKnownSpeakerNames(contextItems: StructuredContextItem[]): Set<string> {
     const names = new Set<string>();
 
     for (const item of contextItems) {
@@ -623,20 +538,14 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     return names;
   }
 
-  private stripThinkBlocksFromChunkContent(
-    chunk: OpenAICompatibleStreamChunk,
-  ): OpenAICompatibleStreamChunk {
+  private stripThinkBlocksFromChunkContent(chunk: OpenAICompatibleStreamChunk): OpenAICompatibleStreamChunk {
     if (this.options.stripThinkBlocksFromContent === false) {
       return chunk;
     }
 
     const firstChoice = chunk.choices?.[0];
     const content = firstChoice?.delta?.content;
-    if (
-      !firstChoice?.delta ||
-      typeof content !== "string" ||
-      content.length === 0
-    ) {
+    if (!firstChoice?.delta || typeof content !== "string" || content.length === 0) {
       return chunk;
     }
 
@@ -733,9 +642,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     const pendingThoughts = this.consumePendingThinkBlockThoughts();
     const chunkThoughts = chunk.thoughts ?? [];
     const thoughts =
-      chunkThoughts.length > 0 || pendingThoughts.length > 0
-        ? [...chunkThoughts, ...pendingThoughts]
-        : undefined;
+      chunkThoughts.length > 0 || pendingThoughts.length > 0 ? [...chunkThoughts, ...pendingThoughts] : undefined;
 
     if (!thoughts) {
       return chunk;
@@ -747,16 +654,10 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     };
   }
 
-  private deduplicateChunkTextAgainstRecentStream(
-    chunk: OpenAICompatibleStreamChunk,
-  ): OpenAICompatibleStreamChunk {
+  private deduplicateChunkTextAgainstRecentStream(chunk: OpenAICompatibleStreamChunk): OpenAICompatibleStreamChunk {
     const firstChoice = chunk.choices?.[0];
     const content = firstChoice?.delta?.content;
-    if (
-      !firstChoice?.delta ||
-      typeof content !== "string" ||
-      content.length === 0
-    ) {
+    if (!firstChoice?.delta || typeof content !== "string" || content.length === 0) {
       return chunk;
     }
 
@@ -793,8 +694,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
   private getTextDelta(chunkText: string): string {
     if (
       !chunkText ||
-      chunkText.length <
-        OpenAICompatibleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS ||
+      chunkText.length < OpenAICompatibleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS ||
       !this.streamedTextTail
     ) {
       return chunkText;
@@ -806,15 +706,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     }
 
     const maxOverlap = Math.min(seenTail.length, chunkText.length);
-    for (
-      let overlap = maxOverlap;
-      overlap >= OpenAICompatibleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS;
-      overlap--
-    ) {
-      if (
-        seenTail.slice(seenTail.length - overlap) ===
-        chunkText.slice(0, overlap)
-      ) {
+    for (let overlap = maxOverlap; overlap >= OpenAICompatibleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS; overlap--) {
+      if (seenTail.slice(seenTail.length - overlap) === chunkText.slice(0, overlap)) {
         return chunkText.slice(overlap);
       }
     }
@@ -828,19 +721,12 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     }
 
     this.streamedTextTail += text;
-    if (
-      this.streamedTextTail.length >
-      OpenAICompatibleStreamAdapter.STREAM_TEXT_TAIL_CHARS
-    ) {
-      this.streamedTextTail = this.streamedTextTail.slice(
-        -OpenAICompatibleStreamAdapter.STREAM_TEXT_TAIL_CHARS,
-      );
+    if (this.streamedTextTail.length > OpenAICompatibleStreamAdapter.STREAM_TEXT_TAIL_CHARS) {
+      this.streamedTextTail = this.streamedTextTail.slice(-OpenAICompatibleStreamAdapter.STREAM_TEXT_TAIL_CHARS);
     }
   }
 
-  private applySpeakerBoundaryFallbackGuard(
-    chunk: OpenAICompatibleStreamChunk,
-  ): {
+  private applySpeakerBoundaryFallbackGuard(chunk: OpenAICompatibleStreamChunk): {
     chunk: OpenAICompatibleStreamChunk;
     stopTriggered: boolean;
     matchedSpeaker?: string;
@@ -868,20 +754,12 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       }
 
       const rawLabel = match[1].trim();
-      if (
-        !isRegisteredOrReservedSpeakerLabel(
-          rawLabel,
-          this.knownSpeakerNamesLower,
-        )
-      ) {
+      if (!isRegisteredOrReservedSpeakerLabel(rawLabel, this.knownSpeakerNamesLower)) {
         continue;
       }
 
       const normalizedLabel = rawLabel.toLowerCase();
-      if (
-        this.activePersonaNameLower &&
-        normalizedLabel === this.activePersonaNameLower
-      ) {
+      if (this.activePersonaNameLower && normalizedLabel === this.activePersonaNameLower) {
         continue;
       }
 
@@ -891,8 +769,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     }
 
     if (transitionIndex === -1) {
-      const holdback =
-        OpenAICompatibleStreamAdapter.SPEAKER_GUARD_HOLDBACK_CHARS;
+      const holdback = OpenAICompatibleStreamAdapter.SPEAKER_GUARD_HOLDBACK_CHARS;
       if (combined.length <= holdback) {
         this.speakerGuardPendingTail = combined;
         firstChoice.delta.content = "";
@@ -914,9 +791,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     };
   }
 
-  private splitChunkWithTextAndToolSignals(
-    chunk: OpenAICompatibleStreamChunk,
-  ): OpenAICompatibleStreamChunk[] {
+  private splitChunkWithTextAndToolSignals(chunk: OpenAICompatibleStreamChunk): OpenAICompatibleStreamChunk[] {
     const firstChoice = chunk.choices?.[0];
     if (!firstChoice?.delta) {
       return [chunk];
@@ -929,9 +804,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     }
 
     const hasToolSignal =
-      Boolean(
-        firstChoice.delta.tool_calls && firstChoice.delta.tool_calls.length > 0,
-      ) || firstChoice.finish_reason === "tool_calls";
+      Boolean(firstChoice.delta.tool_calls && firstChoice.delta.tool_calls.length > 0) ||
+      firstChoice.finish_reason === "tool_calls";
     if (!hasToolSignal) {
       return [chunk];
     }
@@ -966,13 +840,8 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     ];
   }
 
-  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-    chunk: OpenAICompatibleStreamChunk,
-  ): boolean {
-    if (
-      !this.speakerGuardEnabled ||
-      this.speakerGuardPendingTail.length === 0
-    ) {
+  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(chunk: OpenAICompatibleStreamChunk): boolean {
+    if (!this.speakerGuardEnabled || this.speakerGuardPendingTail.length === 0) {
       return false;
     }
 
@@ -986,19 +855,14 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       return true;
     }
 
-    if (
-      firstChoice?.delta?.tool_calls &&
-      firstChoice.delta.tool_calls.length > 0
-    ) {
+    if (firstChoice?.delta?.tool_calls && firstChoice.delta.tool_calls.length > 0) {
       return true;
     }
 
     return Boolean(firstChoice?.finish_reason);
   }
 
-  private accumulateToolCalls(
-    toolCalls: OpenAICompatibleToolCallDelta[] | undefined,
-  ): void {
+  private accumulateToolCalls(toolCalls: OpenAICompatibleToolCallDelta[] | undefined): void {
     for (const deltaToolCall of toolCalls ?? []) {
       const index = deltaToolCall.index ?? 0;
       let accumulated = this.toolCallAccumulator.get(index);

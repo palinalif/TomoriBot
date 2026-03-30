@@ -1,9 +1,4 @@
-import type {
-  Client,
-  ChatInputCommandInteraction,
-  TextChannel,
-  UserSelectMenuInteraction,
-} from "discord.js";
+import type { Client, ChatInputCommandInteraction, TextChannel, UserSelectMenuInteraction } from "discord.js";
 import {
   MessageFlags,
   type SlashCommandSubcommandBuilder,
@@ -15,11 +10,7 @@ import {
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode, log } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { loadAllPersonasForServer, loadTomoriState } from "@/utils/db/dbRead";
 import {
   getOrCreateWebhook,
@@ -42,18 +33,14 @@ import { sendCooldownDM } from "@/utils/discord/cooldownDM";
  * @param subcommand - The slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) => {
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) => {
   return subcommand
     .setName("impersonate")
     .setDescription(localizer("en-US", "commands.bot.impersonate.description"))
     .addStringOption((option) =>
       option
         .setName("target")
-        .setDescription(
-          localizer("en-US", "commands.bot.impersonate.target_description"),
-        )
+        .setDescription(localizer("en-US", "commands.bot.impersonate.target_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -85,24 +72,18 @@ async function handleTargetUserImpersonation(
 ): Promise<void> {
   const userSelect = new UserSelectMenuBuilder()
     .setCustomId("impersonate_target_user_select")
-    .setPlaceholder(
-      localizer(locale, "commands.bot.impersonate.user_select_placeholder"),
-    )
+    .setPlaceholder(localizer(locale, "commands.bot.impersonate.user_select_placeholder"))
     .setMinValues(1)
     .setMaxValues(1);
 
   const selectEmbed = new EmbedBuilder()
     .setTitle(localizer(locale, "commands.bot.impersonate.user_select_title"))
-    .setDescription(
-      localizer(locale, "commands.bot.impersonate.user_select_description"),
-    )
+    .setDescription(localizer(locale, "commands.bot.impersonate.user_select_description"))
     .setColor(ColorCode.INFO);
 
   await interaction.reply({
     embeds: [selectEmbed],
-    components: [
-      new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(userSelect),
-    ],
+    components: [new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(userSelect)],
     flags: MessageFlags.Ephemeral,
   });
 
@@ -112,14 +93,11 @@ async function handleTargetUserImpersonation(
   try {
     userSelectInteraction = await promptMessage.awaitMessageComponent({
       componentType: ComponentType.UserSelect,
-      filter: (i: UserSelectMenuInteraction) =>
-        i.user.id === interaction.user.id,
+      filter: (i: UserSelectMenuInteraction) => i.user.id === interaction.user.id,
       time: 60_000,
     });
   } catch (_error) {
-    log.warn(
-      `[/bot impersonate user] User select prompt timed out for user ${interaction.user.id}`,
-    );
+    log.warn(`[/bot impersonate user] User select prompt timed out for user ${interaction.user.id}`);
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.interaction.timeout_title",
       descriptionKey: "general.interaction.timeout_description",
@@ -135,19 +113,9 @@ async function handleTargetUserImpersonation(
   const selectedUser = userSelectInteraction.users.get(selectedUserId);
   const selectedMember = interaction.guild?.members.cache.get(selectedUserId);
   const selectedDisplayName =
-    selectedMember?.displayName ||
-    selectedUser?.displayName ||
-    selectedUser?.username ||
-    "User";
+    selectedMember?.displayName || selectedUser?.displayName || selectedUser?.username || "User";
 
-  await handleUserImpersonation(
-    client,
-    interaction,
-    locale,
-    selectedUserId,
-    selectedDisplayName,
-    "user",
-  );
+  await handleUserImpersonation(client, interaction, locale, selectedUserId, selectedDisplayName, "user");
 }
 
 /**
@@ -164,8 +132,7 @@ async function handlePersonaImpersonation(
   if (!interaction.guild || !interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.impersonate.missing_permissions_description",
+      descriptionKey: "commands.bot.impersonate.missing_permissions_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -176,8 +143,7 @@ async function handlePersonaImpersonation(
   if (interaction.channel.type !== ChannelType.GuildText) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.impersonate.missing_permissions_description",
+      descriptionKey: "commands.bot.impersonate.missing_permissions_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -200,13 +166,11 @@ async function handlePersonaImpersonation(
   }
 
   // 2. Build select options for modal
-  const personaSelectOptions: SelectOption[] = allPersonas.map(
-    (persona, index) => ({
-      label: safeSelectOptionText(persona.tomori_nickname),
-      value: index.toString(), // Use index to avoid ID truncation issues
-      description: persona.is_alter ? "Alter Persona" : "Main Persona",
-    }),
-  );
+  const personaSelectOptions: SelectOption[] = allPersonas.map((persona, index) => ({
+    label: safeSelectOptionText(persona.tomori_nickname),
+    value: index.toString(), // Use index to avoid ID truncation issues
+    description: persona.is_alter ? "Alter Persona" : "Main Persona",
+  }));
 
   // 3. Show modal with persona select + message text area
   // DO NOT defer before modal - Pattern 3
@@ -217,20 +181,14 @@ async function handlePersonaImpersonation(
       {
         customId: "persona_select",
         labelKey: "commands.bot.impersonate.persona_select_label",
-        placeholder: localizer(
-          locale,
-          "commands.bot.impersonate.persona_select_placeholder",
-        ),
+        placeholder: localizer(locale, "commands.bot.impersonate.persona_select_placeholder"),
         required: true,
         options: personaSelectOptions,
       },
       {
         customId: "message_content",
         labelKey: "commands.bot.impersonate.persona_message_label",
-        placeholder: localizer(
-          locale,
-          "commands.bot.impersonate.persona_message_placeholder",
-        ),
+        placeholder: localizer(locale, "commands.bot.impersonate.persona_message_placeholder"),
         required: true,
         minLength: 1,
         maxLength: 2000,
@@ -240,11 +198,7 @@ async function handlePersonaImpersonation(
   });
 
   // 4. Process modal submission
-  if (
-    modalResult.outcome !== "submit" ||
-    !modalResult.values ||
-    !modalResult.interaction
-  ) {
+  if (modalResult.outcome !== "submit" || !modalResult.values || !modalResult.interaction) {
     return;
   }
 
@@ -253,17 +207,12 @@ async function handlePersonaImpersonation(
     await modalResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
-  const selectedIndex = Number.parseInt(
-    modalResult.values.persona_select || "0",
-    10,
-  );
+  const selectedIndex = Number.parseInt(modalResult.values.persona_select || "0", 10);
   const messageContent = modalResult.values.message_content || "";
 
   const selectedPersona = allPersonas[selectedIndex];
   if (!selectedPersona || !selectedPersona.tomori_id) {
-    log.error(
-      `Selected persona at index ${selectedIndex} not found in persona list`,
-    );
+    log.error(`Selected persona at index ${selectedIndex} not found in persona list`);
     await replyInfoEmbed(modalResult.interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
@@ -276,16 +225,13 @@ async function handlePersonaImpersonation(
   try {
     // 5. Check hide_impersonation_embeds permission
     const tomoriState = allPersonas[0]; // Main persona has config
-    const shouldHideEmbed =
-      tomoriState?.config?.hide_impersonation_embeds ?? false;
+    const shouldHideEmbed = tomoriState?.config?.hide_impersonation_embeds ?? false;
 
     // 6. Build impersonation notice embed if needed
     const embeds: EmbedBuilder[] = [];
     if (!shouldHideEmbed) {
       const invokerAvatarUrl = interaction.member
-        ? (
-            interaction.member as import("discord.js").GuildMember
-          ).displayAvatarURL({
+        ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
             size: 64,
             extension: "png",
             forceStatic: true,
@@ -297,18 +243,11 @@ async function handlePersonaImpersonation(
           });
 
       const noticeEmbed = new EmbedBuilder()
-        .setDescription(
-          localizer(
-            locale,
-            "commands.bot.impersonate.persona_impersonation_notice_description",
-          ),
-        )
+        .setDescription(localizer(locale, "commands.bot.impersonate.persona_impersonation_notice_description"))
         .setFooter({
-          text: localizer(
-            locale,
-            "commands.bot.impersonate.persona_impersonation_notice_footer",
-            { user: interaction.user.username },
-          ),
+          text: localizer(locale, "commands.bot.impersonate.persona_impersonation_notice_footer", {
+            user: interaction.user.username,
+          }),
           iconURL: invokerAvatarUrl,
         })
         .setColor(ColorCode.INFO);
@@ -335,10 +274,7 @@ async function handlePersonaImpersonation(
         return;
       }
 
-      const identity = await resolvePersonaWebhookIdentity(
-        selectedPersona,
-        interaction.guild,
-      );
+      const identity = await resolvePersonaWebhookIdentity(selectedPersona, interaction.guild);
       await sendWebhookMessageWithIdentity(
         webhook,
         {
@@ -390,8 +326,7 @@ async function handleUserImpersonation(
   if (!interaction.guild || !interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.impersonate.missing_permissions_description",
+      descriptionKey: "commands.bot.impersonate.missing_permissions_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -402,8 +337,7 @@ async function handleUserImpersonation(
   if (interaction.channel.type !== ChannelType.GuildText) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.impersonate.missing_permissions_description",
+      descriptionKey: "commands.bot.impersonate.missing_permissions_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -507,19 +441,13 @@ async function handleUserImpersonation(
     }
 
     const member = interaction.guild.members.cache.get(impersonatedUserId);
-    const displayName =
-      impersonatedDisplayName ||
-      member?.displayName ||
-      member?.user.displayName ||
-      "User";
+    const displayName = impersonatedDisplayName || member?.displayName || member?.user.displayName || "User";
 
     // 5. Show public impersonation notice if enabled in permissions
     if (!(tomoriState.config.hide_impersonation_embeds ?? false)) {
       try {
         const invokerAvatarUrl = interaction.member
-          ? (
-              interaction.member as import("discord.js").GuildMember
-            ).displayAvatarURL({
+          ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
               size: 64,
               extension: "png",
               forceStatic: true,
@@ -531,25 +459,17 @@ async function handleUserImpersonation(
             });
 
         const noticeEmbed = new EmbedBuilder()
-          .setDescription(
-            localizer(
-              locale,
-              "commands.bot.impersonate.user_impersonation_notice_description",
-            ),
-          )
+          .setDescription(localizer(locale, "commands.bot.impersonate.user_impersonation_notice_description"))
           .setFooter({
-            text: localizer(
-              locale,
-              "commands.bot.impersonate.user_impersonation_notice_footer",
-              { user: interaction.user.username, target: displayName },
-            ),
+            text: localizer(locale, "commands.bot.impersonate.user_impersonation_notice_footer", {
+              user: interaction.user.username,
+              target: displayName,
+            }),
             iconURL: invokerAvatarUrl,
           })
           .setColor(ColorCode.INFO);
 
-        const impersonatedUser =
-          member?.user ||
-          (await client.users.fetch(impersonatedUserId).catch(() => null));
+        const impersonatedUser = member?.user || (await client.users.fetch(impersonatedUserId).catch(() => null));
         const impersonatedAvatarUrl =
           member?.displayAvatarURL({
             size: 1024,
@@ -570,14 +490,11 @@ async function handleUserImpersonation(
             avatarURL: impersonatedAvatarUrl,
           });
         } else {
-          log.warn(
-            "Skipping user impersonation notice embed because no webhook was available",
-            {
-              channelId: interaction.channel.id,
-              guildId: interaction.guild.id,
-              impersonatedUserId,
-            },
-          );
+          log.warn("Skipping user impersonation notice embed because no webhook was available", {
+            channelId: interaction.channel.id,
+            guildId: interaction.guild.id,
+            impersonatedUserId,
+          });
         }
       } catch (noticeError) {
         log.warn("Failed to send user impersonation notice embed", {
@@ -644,16 +561,8 @@ async function handleUserImpersonation(
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.bot.impersonate.me_success_title"),
-          )
-          .setDescription(
-            localizer(
-              locale,
-              "commands.bot.impersonate.me_success_description",
-              { user: displayName },
-            ),
-          )
+          .setTitle(localizer(locale, "commands.bot.impersonate.me_success_title"))
+          .setDescription(localizer(locale, "commands.bot.impersonate.me_success_description", { user: displayName }))
           .setColor(ColorCode.SUCCESS),
       ],
     });
@@ -667,24 +576,17 @@ async function handleUserImpersonation(
 
     // Check if interaction is still valid before replying
     if (interaction.deferred || interaction.replied) {
-      const isTimeoutError =
-        error instanceof Error && /timed?\s*out|timeout/i.test(error.message);
+      const isTimeoutError = error instanceof Error && /timed?\s*out|timeout/i.test(error.message);
       const description = isTimeoutError
         ? localizer(locale, "genai.error_stream_timeout_description")
         : localizer(locale, "genai.generic_error_description", {
-            error_message:
-              error instanceof Error ? error.message : "Unknown error",
+            error_message: error instanceof Error ? error.message : "Unknown error",
           });
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle(
-              localizer(
-                locale,
-                isTimeoutError
-                  ? "genai.error_stream_timeout_title"
-                  : "genai.generic_error_title",
-              ),
+              localizer(locale, isTimeoutError ? "genai.error_stream_timeout_title" : "genai.generic_error_title"),
             )
             .setDescription(description)
             .setColor(ColorCode.ERROR),
@@ -699,15 +601,11 @@ async function handleUserImpersonation(
  * @param interaction - Command interaction
  * @param locale - User's locale
  */
-async function handleSystemImpersonation(
-  interaction: ChatInputCommandInteraction,
-  locale: string,
-): Promise<void> {
+async function handleSystemImpersonation(interaction: ChatInputCommandInteraction, locale: string): Promise<void> {
   if (!interaction.guild || !interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.impersonate.missing_permissions_description",
+      descriptionKey: "commands.bot.impersonate.missing_permissions_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -718,8 +616,7 @@ async function handleSystemImpersonation(
   if (interaction.channel.type !== ChannelType.GuildText) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.impersonate.missing_permissions_description",
+      descriptionKey: "commands.bot.impersonate.missing_permissions_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -737,10 +634,7 @@ async function handleSystemImpersonation(
       {
         customId: "system_content",
         labelKey: "commands.bot.impersonate.system_content_label",
-        placeholder: localizer(
-          locale,
-          "commands.bot.impersonate.system_content_placeholder",
-        ),
+        placeholder: localizer(locale, "commands.bot.impersonate.system_content_placeholder"),
         required: true,
         minLength: 1,
         maxLength: 4000,
@@ -750,11 +644,7 @@ async function handleSystemImpersonation(
   });
 
   // 2. Process modal submission
-  if (
-    modalResult.outcome !== "submit" ||
-    !modalResult.values ||
-    !modalResult.interaction
-  ) {
+  if (modalResult.outcome !== "submit" || !modalResult.values || !modalResult.interaction) {
     return;
   }
 
@@ -773,13 +663,11 @@ async function handleSystemImpersonation(
 
   // Add footer showing who injected the prompt
   const invokerAvatarUrl = interaction.member
-    ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL(
-        {
-          size: 64,
-          extension: "png",
-          forceStatic: true,
-        },
-      )
+    ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
+        size: 64,
+        extension: "png",
+        forceStatic: true,
+      })
     : interaction.user.displayAvatarURL({
         size: 64,
         extension: "png",

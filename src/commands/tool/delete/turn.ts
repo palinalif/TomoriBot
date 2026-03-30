@@ -1,28 +1,10 @@
-import type {
-  ButtonInteraction,
-  ChatInputCommandInteraction,
-  Client,
-  Message,
-} from "discord.js";
-import {
-  BaseGuildTextChannel,
-  EmbedBuilder,
-  MessageFlags,
-  type SlashCommandSubcommandBuilder,
-} from "discord.js";
-import tomoriChat, {
-  suppressNextSelfReply,
-} from "@/events/messageCreate/tomoriChat";
+import type { ButtonInteraction, ChatInputCommandInteraction, Client, Message } from "discord.js";
+import { BaseGuildTextChannel, EmbedBuilder, MessageFlags, type SlashCommandSubcommandBuilder } from "discord.js";
+import tomoriChat, { suppressNextSelfReply } from "@/events/messageCreate/tomoriChat";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 import { isMatrixBridgeWebhookUsername } from "@/utils/bridge";
-import {
-  getCachedAllPersonas,
-  getCachedMainPersona,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  replyInfoEmbed,
-  replyPaginatedPersonaChoicesV2,
-} from "@/utils/discord/interactionHelper";
+import { getCachedAllPersonas, getCachedMainPersona } from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
@@ -41,32 +23,20 @@ const BULK_DELETE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
  * @param subcommand - SlashCommandSubcommandBuilder
  * @returns Configured builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("turn")
     .setDescription(localizer("en-US", "commands.tool.delete.turn.description"))
     .addBooleanOption((option) =>
       option
         .setName("regenerate")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.tool.delete.turn.regenerate_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.tool.delete.turn.regenerate_description"))
         .setRequired(false),
     )
     .addBooleanOption((option) =>
       option
         .setName("select_persona")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.tool.delete.turn.select_persona_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.tool.delete.turn.select_persona_description"))
         .setRequired(false),
     );
 
@@ -109,8 +79,7 @@ export async function execute(
   const channelId = interaction.channelId;
   const channel = interaction.channel;
   const regenerate = interaction.options.getBoolean("regenerate") ?? false;
-  const selectPersona =
-    interaction.options.getBoolean("select_persona") ?? false;
+  const selectPersona = interaction.options.getBoolean("select_persona") ?? false;
 
   // 2. Load main persona state — needed for permission check and config values
   const tomoriState = await getCachedMainPersona(guildId);
@@ -124,8 +93,7 @@ export async function execute(
   }
 
   // 3. Permission check: requires ManageGuild OR use in a designated RP channel
-  const hasManageGuild =
-    interaction.memberPermissions?.has("ManageGuild") ?? false;
+  const hasManageGuild = interaction.memberPermissions?.has("ManageGuild") ?? false;
   const isRpChannel = tomoriState.config.rp_channel_ids.includes(channelId);
   if (!hasManageGuild && !isRpChannel) {
     await replyInfoEmbed(interaction, locale, {
@@ -151,8 +119,7 @@ export async function execute(
 
   // activeInteraction is mutable: starts as the slash interaction but may be
   // reassigned to the ButtonInteraction returned by the paginated picker.
-  let activeInteraction: ChatInputCommandInteraction | ButtonInteraction =
-    interaction;
+  let activeInteraction: ChatInputCommandInteraction | ButtonInteraction = interaction;
 
   try {
     // 6. Load all personas and build a lookup map by lowercased nickname
@@ -171,8 +138,7 @@ export async function execute(
         // No personas configured — nothing to select or auto-detect
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.tool.delete.turn.no_persona_found_title",
-          descriptionKey:
-            "commands.tool.delete.turn.no_persona_found_description",
+          descriptionKey: "commands.tool.delete.turn.no_persona_found_description",
           color: ColorCode.WARN,
         });
         return;
@@ -180,22 +146,14 @@ export async function execute(
 
       // Show paginated picker; preserveSelectedInteraction=true so we can
       // defer on the returned ButtonInteraction ourselves (Pattern 4)
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
-      if (
-        !personaSelection.success ||
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (!personaSelection.success || personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         // Picker was cancelled or timed out — the picker already showed the
         // appropriate UI; just release the lock via finally and return.
         return;
@@ -218,9 +176,7 @@ export async function execute(
     }
 
     // 8. Fetch recent messages from the channel
-    const fetchLimit = normalizeMessageFetchLimit(
-      tomoriState.config.message_fetch_limit,
-    );
+    const fetchLimit = normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit);
     const fetched = await channel.messages.fetch({ limit: fetchLimit });
 
     // Discord returns messages newest-first; reverse to chronological order
@@ -301,44 +257,27 @@ export async function execute(
       await activeInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.tool.delete.turn.no_persona_found_title",
-              ),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.tool.delete.turn.no_persona_found_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.tool.delete.turn.no_persona_found_title"))
+            .setDescription(localizer(locale, "commands.tool.delete.turn.no_persona_found_description"))
             .setColor(ColorCode.WARN),
         ],
       });
       return;
     }
 
-    const displayName =
-      resolvedPersona?.tomori_nickname ?? targetPersonaKey ?? "Unknown";
+    const displayName = resolvedPersona?.tomori_nickname ?? targetPersonaKey ?? "Unknown";
     const totalCount = blockMessages.length;
 
     // 11. Inform user that deletion is in progress
     await activeInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.tool.delete.turn.deleting_title"),
-          )
+          .setTitle(localizer(locale, "commands.tool.delete.turn.deleting_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.tool.delete.turn.deleting_description",
-              {
-                count: String(totalCount),
-                persona_name: displayName,
-              },
-            ),
+            localizer(locale, "commands.tool.delete.turn.deleting_description", {
+              count: String(totalCount),
+              persona_name: displayName,
+            }),
           )
           .setColor(ColorCode.INFO),
       ],
@@ -378,10 +317,7 @@ export async function execute(
               deletedCount++;
             }
           } catch (indivError) {
-            log.warn(
-              `[deleteTurn] Failed to individually delete messageId=${id}`,
-              indivError,
-            );
+            log.warn(`[deleteTurn] Failed to individually delete messageId=${id}`, indivError);
           }
         }
       }
@@ -395,10 +331,7 @@ export async function execute(
             deletedCount++;
           }
         } catch (singleError) {
-          log.warn(
-            `[deleteTurn] Failed to delete messageId=${id}`,
-            singleError,
-          );
+          log.warn(`[deleteTurn] Failed to delete messageId=${id}`, singleError);
         }
       }
     }
@@ -409,10 +342,7 @@ export async function execute(
         await msg.delete();
         deletedCount++;
       } catch (oldError) {
-        log.warn(
-          `[deleteTurn] Failed to delete old messageId=${msg.id}`,
-          oldError,
-        );
+        log.warn(`[deleteTurn] Failed to delete old messageId=${msg.id}`, oldError);
       }
     }
 
@@ -493,10 +423,7 @@ export async function execute(
           );
         }
       } catch (regenError) {
-        log.warn(
-          `[deleteTurn] Failed to set up regenerate for persona="${displayName}"`,
-          regenError,
-        );
+        log.warn(`[deleteTurn] Failed to set up regenerate for persona="${displayName}"`, regenError);
       }
     }
   } catch (error) {
@@ -513,9 +440,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unexpected_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unexpected_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unexpected_description"))
             .setColor(ColorCode.ERROR),
         ],
       });

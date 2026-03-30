@@ -32,9 +32,7 @@ function parseNumberEnv(
 }
 
 function isTruthyEnv(value: string | undefined): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    (value ?? "").trim().toLowerCase(),
-  );
+  return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
 
 export function getElevenLabsSttConfig(): {
@@ -44,19 +42,9 @@ export function getElevenLabsSttConfig(): {
   maxTranscriptChars: number;
 } {
   return {
-    modelId: (
-      process.env.ELEVENLABS_STT_MODEL_ID ?? DEFAULT_STT_MODEL_ID
-    ).trim(),
-    timeoutMs: parseNumberEnv(
-      process.env.ELEVENLABS_STT_TIMEOUT_MS,
-      DEFAULT_STT_TIMEOUT_MS,
-      { min: 1_000 },
-    ),
-    maxSizeMb: parseNumberEnv(
-      process.env.ELEVENLABS_STT_MAX_SIZE_MB,
-      DEFAULT_STT_MAX_SIZE_MB,
-      { min: 1 },
-    ),
+    modelId: (process.env.ELEVENLABS_STT_MODEL_ID ?? DEFAULT_STT_MODEL_ID).trim(),
+    timeoutMs: parseNumberEnv(process.env.ELEVENLABS_STT_TIMEOUT_MS, DEFAULT_STT_TIMEOUT_MS, { min: 1_000 }),
+    maxSizeMb: parseNumberEnv(process.env.ELEVENLABS_STT_MAX_SIZE_MB, DEFAULT_STT_MAX_SIZE_MB, { min: 1 }),
     maxTranscriptChars: parseNumberEnv(
       process.env.ELEVENLABS_STT_MAX_TRANSCRIPT_CHARS,
       DEFAULT_STT_MAX_TRANSCRIPT_CHARS,
@@ -73,25 +61,11 @@ export function getElevenLabsTtsConfig(): {
   stripUnsupportedTags: boolean;
 } {
   return {
-    modelId: (
-      process.env.ELEVENLABS_TTS_MODEL_ID ?? DEFAULT_TTS_MODEL_ID
-    ).trim(),
-    timeoutMs: parseNumberEnv(
-      process.env.ELEVENLABS_TTS_TIMEOUT_MS,
-      DEFAULT_TTS_TIMEOUT_MS,
-      { min: 1_000 },
-    ),
-    maxChars: parseNumberEnv(
-      process.env.ELEVENLABS_TTS_MAX_CHARS,
-      DEFAULT_TTS_MAX_CHARS,
-      { min: 50 },
-    ),
-    outputFormat: (
-      process.env.ELEVENLABS_TTS_OUTPUT_FORMAT ?? DEFAULT_TTS_OUTPUT_FORMAT
-    ).trim(),
-    stripUnsupportedTags: isTruthyEnv(
-      process.env.ELEVENLABS_TTS_STRIP_UNSUPPORTED_TAGS,
-    ),
+    modelId: (process.env.ELEVENLABS_TTS_MODEL_ID ?? DEFAULT_TTS_MODEL_ID).trim(),
+    timeoutMs: parseNumberEnv(process.env.ELEVENLABS_TTS_TIMEOUT_MS, DEFAULT_TTS_TIMEOUT_MS, { min: 1_000 }),
+    maxChars: parseNumberEnv(process.env.ELEVENLABS_TTS_MAX_CHARS, DEFAULT_TTS_MAX_CHARS, { min: 50 }),
+    outputFormat: (process.env.ELEVENLABS_TTS_OUTPUT_FORMAT ?? DEFAULT_TTS_OUTPUT_FORMAT).trim(),
+    stripUnsupportedTags: isTruthyEnv(process.env.ELEVENLABS_TTS_STRIP_UNSUPPORTED_TAGS),
   };
 }
 
@@ -103,10 +77,7 @@ function clampTextLength(text: string, maxChars: number): string {
   return text.slice(0, maxChars).trimEnd();
 }
 
-export function normalizeTranscriptText(
-  text: string,
-  maxChars: number,
-): string {
+export function normalizeTranscriptText(text: string, maxChars: number): string {
   const normalized = text
     .replace(/\r\n/g, "\n")
     .replace(/[^\S\n]+/g, " ")
@@ -128,10 +99,7 @@ export function stripElevenLabsExpressionTags(text: string): string {
     .trim();
 }
 
-function normalizeTaggedScript(
-  script: string,
-  stripUnsupportedTags: boolean,
-): string {
+function normalizeTaggedScript(script: string, stripUnsupportedTags: boolean): string {
   const normalized = script.replace(/\r\n/g, "\n").trim();
   if (!stripUnsupportedTags) {
     return normalized;
@@ -151,14 +119,8 @@ export function sanitizeElevenLabsTaggedScript(
   rawScript: string;
   captionText: string;
 } {
-  const normalizedScript = clampTextLength(
-    normalizeTaggedScript(script, stripUnsupportedTags),
-    maxChars,
-  );
-  const captionText = clampTextLength(
-    stripElevenLabsExpressionTags(normalizedScript),
-    DISCORD_MESSAGE_MAX_CHARS,
-  );
+  const normalizedScript = clampTextLength(normalizeTaggedScript(script, stripUnsupportedTags), maxChars);
+  const captionText = clampTextLength(stripElevenLabsExpressionTags(normalizedScript), DISCORD_MESSAGE_MAX_CHARS);
 
   return {
     rawScript: normalizedScript,

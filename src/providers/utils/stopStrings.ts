@@ -12,9 +12,7 @@
  * Newline prefix is intentional so an initial "Tomori:" at the very beginning
  * of a response is not blocked.
  */
-export function buildPersonaSpeakerStopString(
-  personaName?: string | null,
-): string | null {
+export function buildPersonaSpeakerStopString(personaName?: string | null): string | null {
   if (!personaName) return null;
 
   const normalizedName = personaName

@@ -18,20 +18,9 @@ import {
 import { registerUser } from "../db/dbWrite";
 import { resolvePreferredDiscordDisplayName } from "../discord/displayName";
 import { log } from "../misc/logger";
-import {
-  replaceTemplateVariables,
-  humanizeString,
-  normalizeCustomEmojisForLlm,
-} from "./stringHelper";
-import {
-  applyUncensorInputTransforms,
-  buildUncensorInjectionText,
-} from "./uncensor";
-import {
-  getCurrentTimeWithOffset,
-  formatUTCOffset,
-  getTimeOfDayPhrase,
-} from "./timezoneHelper";
+import { replaceTemplateVariables, humanizeString, normalizeCustomEmojisForLlm } from "./stringHelper";
+import { applyUncensorInputTransforms, buildUncensorInjectionText } from "./uncensor";
+import { getCurrentTimeWithOffset, formatUTCOffset, getTimeOfDayPhrase } from "./timezoneHelper";
 import {
   HumanizerDegree,
   PrivacyLevel,
@@ -43,10 +32,7 @@ import { UNPAIRED_SAMPLE_DIALOGUE_SENTINEL } from "@/types/preset/presetExport";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { memoryGuard } from "../security/rateLimiter";
 import { decryptApiKey } from "../security/crypto";
-import {
-  formatRetrievedChunksForPrompt,
-  retrieveRelevantDocumentChunks,
-} from "../documents/documentService";
+import { formatRetrievedChunksForPrompt, retrieveRelevantDocumentChunks } from "../documents/documentService";
 import {
   getShortTermMemoriesForServer,
   getShortTermMemoriesForUser,
@@ -72,14 +58,8 @@ const DISCORD_CHANNEL_LINK_REPLACE_PATTERN =
   /https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/(\d{17,19})(?:\/(\d{17,19}))?/gi;
 
 // Environment variables for short-term memory configuration
-const MIN_MESSAGES_FOR_SUMMARY = Number.parseInt(
-  process.env.SHORT_TERM_MEMORY_MIN_MESSAGES_FOR_SUMMARY || "6",
-  10,
-);
-const MAX_OTHER_CHANNEL_MEMORIES = Number.parseInt(
-  process.env.SHORT_TERM_MEMORY_MAX_OTHER_CHANNELS || "3",
-  10,
-);
+const MIN_MESSAGES_FOR_SUMMARY = Number.parseInt(process.env.SHORT_TERM_MEMORY_MIN_MESSAGES_FOR_SUMMARY || "6", 10);
+const MAX_OTHER_CHANNEL_MEMORIES = Number.parseInt(process.env.SHORT_TERM_MEMORY_MAX_OTHER_CHANNELS || "3", 10);
 
 const DOCUMENT_CONTEXT_MAX_CHARS = 2000;
 const DOCUMENT_QUERY_MAX_LENGTH = 1000;
@@ -89,10 +69,7 @@ const DOCUMENT_MIN_SIMILARITY = 0.2;
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const ENABLE_LOCAL_RAG = process.env.ACTIVATE_LOCAL_RAG === "true";
 const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
-  const parsed = Number.parseInt(
-    process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3",
-    10,
-  );
+  const parsed = Number.parseInt(process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3", 10);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
 })();
 
@@ -146,19 +123,12 @@ function needsConversion(text: string): boolean {
 }
 
 function normalizeDiscordChannelLinks(text: string): string {
-  return text.replace(
-    DISCORD_CHANNEL_LINK_REPLACE_PATTERN,
-    (_match, channelId: string, messageId?: string) =>
-      messageId
-        ? `<#${channelId}> (message ID: ${messageId})`
-        : `<#${channelId}>`,
+  return text.replace(DISCORD_CHANNEL_LINK_REPLACE_PATTERN, (_match, channelId: string, messageId?: string) =>
+    messageId ? `<#${channelId}> (message ID: ${messageId})` : `<#${channelId}>`,
   );
 }
 
-function formatDiscordChannelReference(
-  channelId: string | undefined,
-  fallbackText: string,
-): string {
+function formatDiscordChannelReference(channelId: string | undefined, fallbackText: string): string {
   return channelId ? `<#${channelId}>` : fallbackText;
 }
 
@@ -199,10 +169,8 @@ export async function convertMentions(
   let currentTomoriNickname = tomoriNickname;
   if (!currentTomoriNickname) {
     // Use snapshot if available, otherwise load from DB
-    const tomoriState =
-      snapshot?.tomoriState ?? (await loadTomoriState(serverId));
-    currentTomoriNickname =
-      tomoriState?.tomori_nickname || process.env.DEFAULT_BOTNAME || "Tomori";
+    const tomoriState = snapshot?.tomoriState ?? (await loadTomoriState(serverId));
+    currentTomoriNickname = tomoriState?.tomori_nickname || process.env.DEFAULT_BOTNAME || "Tomori";
   }
 
   // 2. First handle Discord mentions
@@ -233,34 +201,24 @@ export async function convertMentions(
             }
 
             // Check if this is the triggerer and we have snapshot data
-            const isTriggererId =
-              snapshot?.triggererUserRow?.user_disc_id === id;
+            const isTriggererId = snapshot?.triggererUserRow?.user_disc_id === id;
             const isUserBlacklisted = isTriggererId
               ? (snapshot?.isTriggererBlacklisted ?? false)
               : await isBlacklisted(serverId, id);
-            const userData = isTriggererId
-              ? snapshot?.triggererUserRow
-              : await loadUserRow(id);
-            const serverPersonalizationDisabled =
-              personalMemoriesEnabled === false;
+            const userData = isTriggererId ? snapshot?.triggererUserRow : await loadUserRow(id);
+            const serverPersonalizationDisabled = personalMemoriesEnabled === false;
 
             // Use custom nickname only if user is not blacklisted AND personalization is enabled
-            if (
-              !isUserBlacklisted &&
-              !serverPersonalizationDisabled &&
-              userData?.user_nickname
-            ) {
+            if (!isUserBlacklisted && !serverPersonalizationDisabled && userData?.user_nickname) {
               mentionCache.set(id, userData.user_nickname);
               return `${userData.user_nickname}`;
             }
 
             // Fallback chain for non-custom naming:
             // server nickname -> account username
-            const guild =
-              serverId === "DM" ? null : client.guilds.cache.get(serverId);
+            const guild = serverId === "DM" ? null : client.guilds.cache.get(serverId);
             const member = guild
-              ? (guild.members.cache.get(id) ??
-                (await guild.members.fetch(id).catch(() => null)))
+              ? (guild.members.cache.get(id) ?? (await guild.members.fetch(id).catch(() => null)))
               : null;
             const serverNickname = member?.nickname ?? null;
 
@@ -275,22 +233,16 @@ export async function convertMentions(
               return `${username}`;
             }
 
-            const user =
-              client.users.cache.get(id) ||
-              (await client.users.fetch(id).catch(() => null));
+            const user = client.users.cache.get(id) || (await client.users.fetch(id).catch(() => null));
             if (user) {
               mentionCache.set(id, user.username);
               return `${user.username}`;
             }
           } catch (error) {
-            log.error(
-              `Error resolving nickname for user ${id} in convertMentions:`,
-              error,
-              {
-                errorType: "MentionResolutionError",
-                metadata: { userIdToResolve: id, guildDiscordId: serverId },
-              },
-            );
+            log.error(`Error resolving nickname for user ${id} in convertMentions:`, error, {
+              errorType: "MentionResolutionError",
+              metadata: { userIdToResolve: id, guildDiscordId: serverId },
+            });
           }
           log.warn(`Could not resolve user mention: ${match}`);
           return match; // Return original mention if resolution fails
@@ -300,21 +252,15 @@ export async function convertMentions(
         if (match.startsWith("<#")) {
           try {
             const guild = client.guilds.cache.get(serverId);
-            const channel =
-              guild?.channels.cache.get(id) ||
-              (await client.channels.fetch(id).catch(() => null));
+            const channel = guild?.channels.cache.get(id) || (await client.channels.fetch(id).catch(() => null));
             if (channel?.isTextBased() && !channel.isDMBased()) {
               return `#${channel.name} (ID: ${id})`;
             }
           } catch (error) {
-            log.error(
-              `Error resolving channel mention ${id} in convertMentions:`,
-              error,
-              {
-                errorType: "MentionResolutionError",
-                metadata: { channelIdToResolve: id, guildDiscordId: serverId },
-              },
-            );
+            log.error(`Error resolving channel mention ${id} in convertMentions:`, error, {
+              errorType: "MentionResolutionError",
+              metadata: { channelIdToResolve: id, guildDiscordId: serverId },
+            });
           }
           log.warn(`Could not resolve channel mention: ${match}`);
           return match;
@@ -324,21 +270,15 @@ export async function convertMentions(
         if (match.startsWith("<@&")) {
           try {
             const guild = client.guilds.cache.get(serverId);
-            const role =
-              guild?.roles.cache.get(id) ||
-              (await guild?.roles.fetch(id).catch(() => null));
+            const role = guild?.roles.cache.get(id) || (await guild?.roles.fetch(id).catch(() => null));
             if (role) {
               return `@${role.name}`;
             }
           } catch (error) {
-            log.error(
-              `Error resolving role mention ${id} in convertMentions:`,
-              error,
-              {
-                errorType: "MentionResolutionError",
-                metadata: { roleIdToResolve: id, guildDiscordId: serverId },
-              },
-            );
+            log.error(`Error resolving role mention ${id} in convertMentions:`, error, {
+              errorType: "MentionResolutionError",
+              metadata: { roleIdToResolve: id, guildDiscordId: serverId },
+            });
           }
           log.warn(`Could not resolve role mention: ${match}`);
           return match;
@@ -358,12 +298,9 @@ export async function convertMentions(
         start < result.length &&
         end <= result.length
       ) {
-        result =
-          result.substring(0, start) + replacements[i] + result.substring(end);
+        result = result.substring(0, start) + replacements[i] + result.substring(end);
       } else {
-        log.warn(
-          `Invalid mention indices for replacement: start=${start}, end=${end}, match=${mentionsData[i].match}`,
-        );
+        log.warn(`Invalid mention indices for replacement: start=${start}, end=${end}, match=${mentionsData[i].match}`);
       }
     }
   }
@@ -394,9 +331,7 @@ export async function convertMentions(
 function buildMediaDescription(msg: SimplifiedMessageForContext): string {
   const imageCount = msg.imageAttachments.length;
   const videoCount = msg.videoAttachments.length;
-  const hasGif = msg.imageAttachments.some((att) =>
-    att.mimeType?.includes("gif"),
-  );
+  const hasGif = msg.imageAttachments.some((att) => att.mimeType?.includes("gif"));
 
   const mediaParts: string[] = [];
 
@@ -407,9 +342,7 @@ function buildMediaDescription(msg: SimplifiedMessageForContext): string {
       mediaParts.push("1 GIF");
     } else if (hasGif) {
       // Multiple images including at least one GIF
-      mediaParts.push(
-        `${imageCount} image${imageCount > 1 ? "s" : ""} (including GIF)`,
-      );
+      mediaParts.push(`${imageCount} image${imageCount > 1 ? "s" : ""} (including GIF)`);
     } else {
       // Regular images only
       mediaParts.push(`${imageCount} image${imageCount > 1 ? "s" : ""}`);
@@ -433,15 +366,10 @@ function buildMediaDescription(msg: SimplifiedMessageForContext): string {
  * @param authorName - Resolved display name of the sender
  * @returns Attribution string (e.g., "Misuzu sent this image", "Misuzu sent these 2 images and a video")
  */
-function buildMediaAttributionText(
-  msg: SimplifiedMessageForContext,
-  authorName: string,
-): string {
+function buildMediaAttributionText(msg: SimplifiedMessageForContext, authorName: string): string {
   const imageCount = msg.imageAttachments.length;
   const videoCount = msg.videoAttachments.length;
-  const hasGif = msg.imageAttachments.some((att) =>
-    att.mimeType?.includes("gif"),
-  );
+  const hasGif = msg.imageAttachments.some((att) => att.mimeType?.includes("gif"));
   const isMixed = imageCount > 0 && videoCount > 0;
 
   const mediaParts: string[] = [];
@@ -464,9 +392,7 @@ function buildMediaAttributionText(
     if (isMixed) {
       mediaParts.push(videoCount === 1 ? "a video" : `${videoCount} videos`);
     } else {
-      mediaParts.push(
-        videoCount === 1 ? "this video" : `these ${videoCount} videos`,
-      );
+      mediaParts.push(videoCount === 1 ? "this video" : `these ${videoCount} videos`);
     }
   }
 
@@ -474,13 +400,8 @@ function buildMediaAttributionText(
   return `${authorName} sent ${mediaDescription}`;
 }
 
-function isStickerImageAttachment(
-  attachment: SimplifiedMessageForContext["imageAttachments"][number],
-): boolean {
-  return (
-    attachment.proxyUrl.includes("/stickers/") ||
-    attachment.url.includes("/stickers/")
-  );
+function isStickerImageAttachment(attachment: SimplifiedMessageForContext["imageAttachments"][number]): boolean {
+  return attachment.proxyUrl.includes("/stickers/") || attachment.url.includes("/stickers/");
 }
 
 function isCountedRenderedImageAttachment(
@@ -504,9 +425,7 @@ function getRenderedImageMessageIdsWithinWindow(
     }
 
     const message = simplifiedMessageHistory[i];
-    const hasCountedImages = message.imageAttachments.some(
-      isCountedRenderedImageAttachment,
-    );
+    const hasCountedImages = message.imageAttachments.some(isCountedRenderedImageAttachment);
     if (!hasCountedImages) {
       continue;
     }
@@ -575,9 +494,7 @@ function getLastImageOccurrenceIndices(
   return lastOccurrence;
 }
 
-function getLatestUserQuery(
-  messages: SimplifiedMessageForContext[],
-): string | null {
+function getLatestUserQuery(messages: SimplifiedMessageForContext[]): string | null {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const msg = messages[i];
     if (msg.authorType !== "user") continue;
@@ -631,24 +548,15 @@ async function buildShortTermMemoryContext(
   try {
     // 1. Check if user has cross-server opt-in enabled
     const userRow = await getCachedUserRow(triggeringUserId);
-    const crossServerOptIn =
-      userRow?.shortterm_cache_crossserver_opt_in ?? false;
+    const crossServerOptIn = userRow?.shortterm_cache_crossserver_opt_in ?? false;
 
     const personaLineageId = tomoriState?.persona_lineage_id;
     let otherChannelMemories =
       currentServerId === "DM"
-        ? getShortTermMemoriesForUser(
-            triggeringUserId,
-            currentChannelId,
-            personaLineageId,
-          ).filter(
+        ? getShortTermMemoriesForUser(triggeringUserId, currentChannelId, personaLineageId).filter(
             (memory) => crossServerOptIn || memory.serverId === currentServerId,
           )
-        : getShortTermMemoriesForServer(
-            currentServerId,
-            currentChannelId,
-            personaLineageId,
-          );
+        : getShortTermMemoriesForServer(currentServerId, currentChannelId, personaLineageId);
 
     if (currentServerId !== "DM" && crossServerOptIn) {
       const crossServerUserMemories = getShortTermMemoriesForUser(
@@ -657,19 +565,13 @@ async function buildShortTermMemoryContext(
         personaLineageId,
       ).filter((memory) => memory.serverId !== currentServerId);
 
-      otherChannelMemories = [
-        ...otherChannelMemories,
-        ...crossServerUserMemories,
-      ];
+      otherChannelMemories = [...otherChannelMemories, ...crossServerUserMemories];
     }
 
     otherChannelMemories.sort((a, b) => b.lastUpdated - a.lastUpdated);
 
     // 2. Limit to max number of other-channel memories (most recent first)
-    const limitedMemories = otherChannelMemories.slice(
-      0,
-      MAX_OTHER_CHANNEL_MEMORIES,
-    );
+    const limitedMemories = otherChannelMemories.slice(0, MAX_OTHER_CHANNEL_MEMORIES);
 
     // 3. Build OTHER-CHANNEL MEMORIES context (Phase 2)
     // Show summaries when available, fall back to crude conversations
@@ -678,17 +580,14 @@ async function buildShortTermMemoryContext(
 
       for (const memory of limitedMemories) {
         const relativeTime = getRelativeTimestamp(memory.lastUpdated);
-        const isSameServerSharedMemory =
-          currentServerId !== "DM" && memory.serverId === currentServerId;
+        const isSameServerSharedMemory = currentServerId !== "DM" && memory.serverId === currentServerId;
 
         // Determine channel reference (privacy-safe)
         let channelReference: string;
         if (memory.serverId === currentServerId) {
           channelReference = formatDiscordChannelReference(
             memory.channelId,
-            memory.channelName
-              ? `#${memory.channelName}`
-              : "another channel in this server",
+            memory.channelName ? `#${memory.channelName}` : "another channel in this server",
           );
         } else {
           channelReference = "a channel in another server";
@@ -717,11 +616,7 @@ async function buildShortTermMemoryContext(
           for (const msg of memory.messages) {
             const speaker =
               msg.speakerName ||
-              (msg.role === "user"
-                ? isSameServerSharedMemory
-                  ? "Someone"
-                  : triggererName
-                : botName);
+              (msg.role === "user" ? (isSameServerSharedMemory ? "Someone" : triggererName) : botName);
             otherChannelText += `${speaker}: "${msg.content}"\n`;
           }
 
@@ -758,22 +653,12 @@ async function buildShortTermMemoryContext(
     // budget (~2800 tokens) makes the update_short_term_memory tool impractical. The
     // summary data itself is still included as context when available.
     if (tomoriState?.llm?.has_tools) {
-      const isStmToolAvailable =
-        tomoriState.llm.llm_provider !== "novelai" &&
-        !explicitLongTermMemoryIntent;
+      const isStmToolAvailable = tomoriState.llm.llm_provider !== "novelai" && !explicitLongTermMemoryIntent;
 
       const sameChannelMemory =
         currentServerId === "DM"
-          ? getShortTermMemoryForUserChannel(
-              triggeringUserId,
-              currentChannelId,
-              tomoriState?.tomori_id,
-            )
-          : getShortTermMemoryForServerChannel(
-              currentServerId,
-              currentChannelId,
-              tomoriState?.tomori_id,
-            );
+          ? getShortTermMemoryForUserChannel(triggeringUserId, currentChannelId, tomoriState?.tomori_id)
+          : getShortTermMemoryForServerChannel(currentServerId, currentChannelId, tomoriState?.tomori_id);
 
       if (sameChannelMemory?.summary) {
         // EXISTING SUMMARY - Add to memoryItems (middle of context, with other memories)
@@ -859,20 +744,7 @@ async function buildShortTermMemoryContext(
 }
 
 // Month abbreviations for timestamp formatting (avoids locale-sensitive toLocaleString)
-const UTC_MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
+const UTC_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 /**
  * Format a millisecond duration as a human-readable relative time string.
@@ -968,10 +840,7 @@ export interface BuildContextParams {
   /** Matrix bridge users: Matrix user ID → stripped display name. */
   matrixUsers?: Map<string, string>;
   /** Synthetic participants surfaced as user-like entries. */
-  syntheticUsers?: Map<
-    string,
-    { displayName: string; type: "persona" | "webhook" }
-  >;
+  syntheticUsers?: Map<string, { displayName: string; type: "persona" | "webhook" }>;
   includeTimestamps?: boolean;
   seesImages?: boolean;
   seesVideos?: boolean;
@@ -1002,9 +871,7 @@ type BuildContextResult = {
  *
  * All callers use this function; the preset check is transparent.
  */
-export async function buildContext(
-  params: BuildContextParams,
-): Promise<BuildContextResult> {
+export async function buildContext(params: BuildContextParams): Promise<BuildContextResult> {
   // Skip preset routing for user impersonation
   if (!params.isUserImpersonation) {
     const serverId = params.snapshot?.tomoriState?.server_id;
@@ -1014,8 +881,7 @@ export async function buildContext(
         // 1. Build native context (produces tagged items in fixed order).
         // Suppress the DEFAULT_SYSTEM_PROMPT fallback when the preset is active
         // and the user has NOT set a custom /sysprompt — the preset owns the system prompt.
-        const suppressDefaultSystemPrompt =
-          !params.tomoriConfig.system_prompt?.trim();
+        const suppressDefaultSystemPrompt = !params.tomoriConfig.system_prompt?.trim();
         const nativeOutput = await buildContextNative({
           ...params,
           suppressDefaultSystemPrompt,
@@ -1023,13 +889,9 @@ export async function buildContext(
 
         // 2. Extract macro context from params
         const lastUserMsg =
-          params.simplifiedMessageHistory
-            .filter((m) => m.authorType === "user")
-            .at(-1)?.content ?? "";
+          params.simplifiedMessageHistory.filter((m) => m.authorType === "user").at(-1)?.content ?? "";
 
-        const tomoriStateForPreset =
-          params.snapshot?.tomoriState ??
-          (await loadTomoriState(params.guildId));
+        const tomoriStateForPreset = params.snapshot?.tomoriState ?? (await loadTomoriState(params.guildId));
 
         // 3. Rearrange native output according to preset node order
         return reassembleWithPreset(
@@ -1041,8 +903,7 @@ export async function buildContext(
             tomoriAttributes: params.tomoriAttributes,
             personaPrompt: params.personaPrompt,
             sampleDialoguesIn: tomoriStateForPreset?.sample_dialogues_in ?? [],
-            sampleDialoguesOut:
-              tomoriStateForPreset?.sample_dialogues_out ?? [],
+            sampleDialoguesOut: tomoriStateForPreset?.sample_dialogues_out ?? [],
             lastUserMessage: lastUserMsg,
           },
           {
@@ -1050,8 +911,7 @@ export async function buildContext(
             guildId: params.guildId,
             triggererName: params.triggererName,
             botName: params.tomoriNickname,
-            personalMemoriesEnabled:
-              params.tomoriConfig.personal_memories_enabled ?? true,
+            personalMemoriesEnabled: params.tomoriConfig.personal_memories_enabled ?? true,
           },
         );
       }
@@ -1117,10 +977,7 @@ async function buildContextNative({
       ? client.guilds.cache.get(guildId)?.members.cache.get(impersonatedUserId)
       : null;
   const impersonatedIdentityName =
-    impersonatedMember?.displayName ||
-    impersonatedMember?.user.displayName ||
-    impersonatedUserNickname ||
-    null;
+    impersonatedMember?.displayName || impersonatedMember?.user.displayName || impersonatedUserNickname || null;
   const uncensorInputOptions = {
     unicodeSpacesEnabled: tomoriConfig.uncensor_unicode_space_enabled,
     sanitizeEnabled: tomoriConfig.uncensor_sanitize_enabled,
@@ -1128,22 +985,16 @@ async function buildContextNative({
   const explicitLongTermMemoryIntent =
     explicitLongTermMemoryIntentOverride ??
     hasExplicitLongTermMemoryIntent(
-      simplifiedMessageHistory
-        .filter((message) => message.authorType === "user")
-        .at(-1)?.content,
+      simplifiedMessageHistory.filter((message) => message.authorType === "user").at(-1)?.content,
     );
 
   // 1. System prompt + Humanizer rules (comes FIRST for prompt optimization)
   // Skip system prompt for user impersonation (bot-specific personality should not leak)
-  if (
-    !isUserImpersonation &&
-    tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT
-  ) {
+  if (!isUserImpersonation && tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT) {
     // When a SillyTavern preset is active and no custom /sysprompt is set,
     // skip the DEFAULT_SYSTEM_PROMPT fallback — the preset fully owns the system prompt.
     const systemPrompt =
-      tomoriConfig.system_prompt?.trim() ||
-      (suppressDefaultSystemPrompt ? null : DEFAULT_SYSTEM_PROMPT);
+      tomoriConfig.system_prompt?.trim() || (suppressDefaultSystemPrompt ? null : DEFAULT_SYSTEM_PROMPT);
 
     if (systemPrompt) {
       let humanizerText = systemPrompt;
@@ -1287,9 +1138,7 @@ async function buildContextNative({
 
     let serverMemoryLines: string[] = [];
     try {
-      const serverMemoryRows = await sql<
-        Array<{ server_memory_id: number; content: string }>
-      >`
+      const serverMemoryRows = await sql<Array<{ server_memory_id: number; content: string }>>`
 				SELECT server_memory_id, content
 				FROM server_memories
 				WHERE server_id = ${tomoriState.server_id}
@@ -1297,9 +1146,7 @@ async function buildContextNative({
 				ORDER BY created_at DESC
 			`;
 
-      serverMemoryLines = serverMemoryRows.map((row) =>
-        formatMemoryWithId(row.server_memory_id, row.content),
-      );
+      serverMemoryLines = serverMemoryRows.map((row) => formatMemoryWithId(row.server_memory_id, row.content));
     } catch (error) {
       log.warn("Failed to load server memories with IDs for context", error);
       serverMemoryLines = tomoriState.server_memories;
@@ -1357,20 +1204,13 @@ async function buildContextNative({
 			`;
 
       // 2. Create emoji metadata map by name (case-insensitive), prefer the latest with metadata
-      const emojiMetadataByName = new Map<
-        string,
-        (typeof emojiMetadata)[number]
-      >();
+      const emojiMetadataByName = new Map<string, (typeof emojiMetadata)[number]>();
       const hasEmojiMetadata = (metadata: (typeof emojiMetadata)[number]) => {
-        const hasEmotionKey =
-          metadata.emotion_key && metadata.emotion_key !== "unset";
-        const hasDescription =
-          metadata.emoji_desc && metadata.emoji_desc.trim().length > 0;
+        const hasEmotionKey = metadata.emotion_key && metadata.emotion_key !== "unset";
+        const hasDescription = metadata.emoji_desc && metadata.emoji_desc.trim().length > 0;
         return hasEmotionKey || hasDescription;
       };
-      const getMetadataTimestamp = (
-        metadata: (typeof emojiMetadata)[number],
-      ) => {
+      const getMetadataTimestamp = (metadata: (typeof emojiMetadata)[number]) => {
         const updated = metadata.updated_at?.getTime() ?? 0;
         const created = metadata.created_at?.getTime() ?? 0;
         return Math.max(updated, created);
@@ -1401,19 +1241,14 @@ async function buildContextNative({
       }
 
       // 3. Sort emojis by creation date (deterministic, oldest first for caching stability)
-      const sortedEmojis = Array.from(guildEmojisCache.values()).sort(
-        (a, b) => {
-          const aTime = a.createdTimestamp || 0;
-          const bTime = b.createdTimestamp || 0;
-          return aTime - bTime; // Ascending order (oldest first)
-        },
-      );
+      const sortedEmojis = Array.from(guildEmojisCache.values()).sort((a, b) => {
+        const aTime = a.createdTimestamp || 0;
+        const bTime = b.createdTimestamp || 0;
+        return aTime - bTime; // Ascending order (oldest first)
+      });
 
       // 4. Deduplicate by name (case-insensitive) while keeping latest
-      const latestEmojiByName = new Map<
-        string,
-        (typeof sortedEmojis)[number]
-      >();
+      const latestEmojiByName = new Map<string, (typeof sortedEmojis)[number]>();
       for (const emoji of sortedEmojis) {
         if (!emoji.name) continue;
         latestEmojiByName.set(emoji.name.toLowerCase(), emoji);
@@ -1430,10 +1265,7 @@ async function buildContextNative({
         const metadata = emojiMetadataByName.get(emoji.name.toLowerCase());
         if (!emoji.name) continue;
         const emojiCode = `:${emoji.name}:`;
-        const emotionKey =
-          metadata?.emotion_key === "unset"
-            ? null
-            : (metadata?.emotion_key ?? null);
+        const emotionKey = metadata?.emotion_key === "unset" ? null : (metadata?.emotion_key ?? null);
 
         // Graceful degradation: if no metadata, just show code
         if (!metadata || (!metadata.emoji_desc && !emotionKey)) {
@@ -1476,20 +1308,14 @@ async function buildContextNative({
         metadataTag: ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
       });
 
-      log.info(
-        `Loaded ${sortedEmojis.length} emoji descriptions for server ${serverName}`,
-      );
+      log.info(`Loaded ${sortedEmojis.length} emoji descriptions for server ${serverName}`);
     }
   }
 
   // 6. Stickers with Semantic Metadata (only available in guild channels, not DMs)
   // CRITICAL: Text-based format with LLM-generated descriptions and emotion keys for efficient caching
   // Skip during user impersonation (stickers require select_sticker_for_response tool)
-  if (
-    tomoriConfig.sticker_usage_enabled &&
-    !isDMChannel &&
-    !isUserImpersonation
-  ) {
+  if (tomoriConfig.sticker_usage_enabled && !isDMChannel && !isUserImpersonation) {
     const guild = client.guilds.cache.get(guildId);
     const guildStickersCache = guild?.stickers.cache;
 
@@ -1515,22 +1341,13 @@ async function buildContextNative({
 			`;
 
       // 2. Create sticker metadata map by name (case-insensitive), prefer the latest with metadata
-      const stickerMetadataByName = new Map<
-        string,
-        (typeof stickerMetadata)[number]
-      >();
-      const hasStickerMetadata = (
-        metadata: (typeof stickerMetadata)[number],
-      ) => {
-        const hasEmotionKey =
-          metadata.emotion_key && metadata.emotion_key !== "unset";
-        const hasDescription =
-          metadata.sticker_desc && metadata.sticker_desc.trim().length > 0;
+      const stickerMetadataByName = new Map<string, (typeof stickerMetadata)[number]>();
+      const hasStickerMetadata = (metadata: (typeof stickerMetadata)[number]) => {
+        const hasEmotionKey = metadata.emotion_key && metadata.emotion_key !== "unset";
+        const hasDescription = metadata.sticker_desc && metadata.sticker_desc.trim().length > 0;
         return hasEmotionKey || hasDescription;
       };
-      const getStickerMetadataTimestamp = (
-        metadata: (typeof stickerMetadata)[number],
-      ) => {
+      const getStickerMetadataTimestamp = (metadata: (typeof stickerMetadata)[number]) => {
         const updated = metadata.updated_at?.getTime() ?? 0;
         const created = metadata.created_at?.getTime() ?? 0;
         return Math.max(updated, created);
@@ -1561,19 +1378,14 @@ async function buildContextNative({
       }
 
       // 3. Sort stickers by creation date (deterministic, oldest first for caching stability)
-      const sortedStickers = Array.from(guildStickersCache.values()).sort(
-        (a, b) => {
-          const aTime = a.createdTimestamp || 0;
-          const bTime = b.createdTimestamp || 0;
-          return aTime - bTime; // Ascending order (oldest first)
-        },
-      );
+      const sortedStickers = Array.from(guildStickersCache.values()).sort((a, b) => {
+        const aTime = a.createdTimestamp || 0;
+        const bTime = b.createdTimestamp || 0;
+        return aTime - bTime; // Ascending order (oldest first)
+      });
 
       // 4. Deduplicate by name (case-insensitive) while keeping latest
-      const latestStickerByName = new Map<
-        string,
-        (typeof sortedStickers)[number]
-      >();
+      const latestStickerByName = new Map<string, (typeof sortedStickers)[number]>();
       for (const sticker of sortedStickers) {
         if (!sticker.name) continue;
         latestStickerByName.set(sticker.name.toLowerCase(), sticker);
@@ -1581,9 +1393,7 @@ async function buildContextNative({
 
       const dedupedStickers = sortedStickers.filter((sticker) => {
         if (!sticker.name) return false;
-        return (
-          latestStickerByName.get(sticker.name.toLowerCase())?.id === sticker.id
-        );
+        return latestStickerByName.get(sticker.name.toLowerCase())?.id === sticker.id;
       });
 
       // 5. Build sticker list with descriptions and emotion keys
@@ -1592,10 +1402,7 @@ async function buildContextNative({
       for (const sticker of dedupedStickers) {
         if (!sticker.name) continue;
         const metadata = stickerMetadataByName.get(sticker.name.toLowerCase());
-        const emotionKey =
-          metadata?.emotion_key === "unset"
-            ? null
-            : (metadata?.emotion_key ?? null);
+        const emotionKey = metadata?.emotion_key === "unset" ? null : (metadata?.emotion_key ?? null);
 
         // Build sticker entry
         let stickerEntry = `- "${sticker.name}"`;
@@ -1641,17 +1448,14 @@ async function buildContextNative({
         metadataTag: ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
       });
 
-      log.info(
-        `Loaded ${sortedStickers.length} sticker descriptions for server ${serverName}`,
-      );
+      log.info(`Loaded ${sortedStickers.length} sticker descriptions for server ${serverName}`);
     }
   }
 
   // 7. Users in Conversation (ALL user-specific dynamic data)
   // This section combines: time/date, channel, user status, memories, and reminders
   if (userList.length > 0) {
-    let usersInConversationText =
-      "[System: The following users are having a conversation:\n\n";
+    let usersInConversationText = "[System: The following users are having a conversation:\n\n";
 
     if (isUserImpersonation) {
       usersInConversationText += `To ping users, prepend an "@" symbol to their mention handle, like @{username} (case-insensitive). If a name is duplicated, use the handle with the user ID suffix (e.g., @{name|123456789012345678}). Use only if it's an important message, otherwise do not ping users.\n\n`;
@@ -1680,11 +1484,8 @@ async function buildContextNative({
       const key = alias.toLowerCase();
       aliasCounts.set(key, (aliasCounts.get(key) ?? 0) + 1);
     };
-    const normalizeImageAppearanceTags = (
-      tags: string[] | null | undefined,
-    ): string[] | undefined => {
-      const normalizedTags =
-        tags?.map((tag) => tag.trim()).filter((tag) => tag.length > 0) ?? [];
+    const normalizeImageAppearanceTags = (tags: string[] | null | undefined): string[] | undefined => {
+      const normalizedTags = tags?.map((tag) => tag.trim()).filter((tag) => tag.length > 0) ?? [];
       return normalizedTags.length > 0 ? normalizedTags : undefined;
     };
 
@@ -1695,9 +1496,7 @@ async function buildContextNative({
         userEntries.push({
           userId: userIdToProcess,
           displayName: botName,
-          detailLines: [
-            "- Status: Online - Currently active and responding to messages",
-          ],
+          detailLines: ["- Status: Online - Currently active and responding to messages"],
           imageAppearanceTags:
             !isUserImpersonation && tomoriConfig.imagegen_enabled
               ? normalizeImageAppearanceTags(tomoriState?.nai_tags)
@@ -1714,9 +1513,7 @@ async function buildContextNative({
       if (!userRow) {
         // Try to register if not found (same logic as current implementation)
         const guild = client.guilds.cache.get(guildId);
-        const member = guild
-          ? await guild.members.fetch(userIdToProcess).catch(() => null)
-          : null;
+        const member = guild ? await guild.members.fetch(userIdToProcess).catch(() => null) : null;
         if (guild && member) {
           const serverLocale = guild.preferredLocale;
           const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en-US";
@@ -1724,11 +1521,7 @@ async function buildContextNative({
             memberDisplayName: member.displayName,
             user: member.user,
           });
-          userRow = await registerUser(
-            userIdToProcess,
-            registrationDisplayName,
-            userLanguage,
-          );
+          userRow = await registerUser(userIdToProcess, registrationDisplayName, userLanguage);
         }
       }
 
@@ -1755,16 +1548,10 @@ async function buildContextNative({
 
       // 6. Determine display name (respecting personalization settings)
       const guild = client.guilds.cache.get(guildId);
-      const member = guild
-        ? await guild.members.fetch(userIdToProcess).catch(() => null)
-        : null;
-      const fallbackUser = member
-        ? null
-        : await client.users.fetch(userIdToProcess).catch(() => null);
-      const serverPersonalizationEnabled =
-        tomoriConfig.personal_memories_enabled ?? true;
-      const isTriggererId =
-        snapshot?.triggererUserRow?.user_disc_id === userRow.user_disc_id;
+      const member = guild ? await guild.members.fetch(userIdToProcess).catch(() => null) : null;
+      const fallbackUser = member ? null : await client.users.fetch(userIdToProcess).catch(() => null);
+      const serverPersonalizationEnabled = tomoriConfig.personal_memories_enabled ?? true;
+      const isTriggererId = snapshot?.triggererUserRow?.user_disc_id === userRow.user_disc_id;
       const userIsBlacklisted = isTriggererId
         ? (snapshot?.isTriggererBlacklisted ?? false)
         : await isBlacklisted(guildId, userRow.user_disc_id);
@@ -1776,13 +1563,9 @@ async function buildContextNative({
       const customNickname = userRow.user_nickname;
       const serverNickname = member?.nickname;
       const username = member?.user.username ?? fallbackUser?.username ?? null;
-      const globalName =
-        member?.user.globalName ?? fallbackUser?.globalName ?? null;
+      const globalName = member?.user.globalName ?? fallbackUser?.globalName ?? null;
       const canUseCustomNickname =
-        customNickname &&
-        serverPersonalizationEnabled &&
-        !userIsBlacklisted &&
-        userPrivacyLevel !== PrivacyLevel.FULL; // Allow MINIMAL and PARTIAL
+        customNickname && serverPersonalizationEnabled && !userIsBlacklisted && userPrivacyLevel !== PrivacyLevel.FULL; // Allow MINIMAL and PARTIAL
       const shouldIncludeCustomNicknameAlias =
         customNickname &&
         serverPersonalizationEnabled &&
@@ -1790,20 +1573,14 @@ async function buildContextNative({
         (!serverNickname || canUseCustomNickname);
 
       if (canUseCustomNickname) {
-        displayName = serverNickname
-          ? `${customNickname} (Server Nickname: "${serverNickname}")`
-          : customNickname;
+        displayName = serverNickname ? `${customNickname} (Server Nickname: "${serverNickname}")` : customNickname;
       } else if (serverNickname) {
         displayName = serverNickname;
       } else {
         displayName = `<@${userRow.user_disc_id}>`;
       }
 
-      if (
-        isUserImpersonation &&
-        userRow.user_disc_id === impersonatedUserId &&
-        impersonatedIdentityName
-      ) {
+      if (isUserImpersonation && userRow.user_disc_id === impersonatedUserId && impersonatedIdentityName) {
         displayName = impersonatedIdentityName;
       }
 
@@ -1812,9 +1589,7 @@ async function buildContextNative({
       // 8. Add status (only for Level 0 MINIMAL privacy)
       // Only include if GuildPresences intent is available (non-production)
       if (userPrivacyLevel === PrivacyLevel.MINIMAL) {
-        const hasPresenceIntent = client.options.intents?.has(
-          GatewayIntentBits.GuildPresences,
-        );
+        const hasPresenceIntent = client.options.intents?.has(GatewayIntentBits.GuildPresences);
 
         if (isDMChannel) {
           // DMs always show online
@@ -1822,17 +1597,8 @@ async function buildContextNative({
         } else if (hasPresenceIntent) {
           // Only fetch presence data if intent is available
           const presenceInfo = isTriggererId
-            ? await getUserPresenceDetails(
-                client,
-                userRow.user_disc_id,
-                guildId,
-                snapshot?.preloadedMember,
-              )
-            : await getUserPresenceDetails(
-                client,
-                userRow.user_disc_id,
-                guildId,
-              );
+            ? await getUserPresenceDetails(client, userRow.user_disc_id, guildId, snapshot?.preloadedMember)
+            : await getUserPresenceDetails(client, userRow.user_disc_id, guildId);
 
           detailLines.push(`- Status: ${presenceInfo}`);
         }
@@ -1854,8 +1620,7 @@ async function buildContextNative({
       // 9. Add personal memories (only for Level 0 MINIMAL privacy)
       // For user impersonation: only include memories about the impersonated user (so AI knows facts about them)
       const shouldIncludePersonalMemories =
-        !isUserImpersonation ||
-        (isUserImpersonation && userRow.user_disc_id === impersonatedUserId);
+        !isUserImpersonation || (isUserImpersonation && userRow.user_disc_id === impersonatedUserId);
 
       if (
         shouldIncludePersonalMemories &&
@@ -1865,15 +1630,8 @@ async function buildContextNative({
       ) {
         if (userRow.user_id) {
           const activeLineageId =
-            personaLineageId ??
-            snapshot?.tomoriState?.persona_lineage_id ??
-            tomoriState?.persona_lineage_id ??
-            0;
-          const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
-            userRow.user_id,
-            activeLineageId,
-            true,
-          );
+            personaLineageId ?? snapshot?.tomoriState?.persona_lineage_id ?? tomoriState?.persona_lineage_id ?? 0;
+          const personalMemoryRows = await loadPersonalMemoriesForUserLineage(userRow.user_id, activeLineageId, true);
           if (personalMemoryRows.length > 0) {
             const processedMemories = await Promise.all(
               personalMemoryRows.map(async (memoryRow, index) => {
@@ -1895,10 +1653,7 @@ async function buildContextNative({
       }
 
       // 10. Add pending reminders
-      const pendingReminders = await getPendingRemindersForUser(
-        userRow.user_disc_id,
-        guildId,
-      );
+      const pendingReminders = await getPendingRemindersForUser(userRow.user_disc_id, guildId);
       if (pendingReminders && pendingReminders.length > 0) {
         detailLines.push("- Reminders:");
         for (const reminder of pendingReminders) {
@@ -1912,18 +1667,12 @@ async function buildContextNative({
             minute: "2-digit",
             timeZoneName: "short",
           });
-          detailLines.push(
-            `  • "${reminder.reminder_purpose}" (scheduled for ${formattedTime})`,
-          );
+          detailLines.push(`  • "${reminder.reminder_purpose}" (scheduled for ${formattedTime})`);
         }
       }
 
       const aliasSet = new Set<string>();
-      if (
-        isUserImpersonation &&
-        userRow.user_disc_id === impersonatedUserId &&
-        impersonatedIdentityName
-      ) {
+      if (isUserImpersonation && userRow.user_disc_id === impersonatedUserId && impersonatedIdentityName) {
         addAlias(aliasSet, impersonatedIdentityName);
       }
       if (shouldIncludeCustomNicknameAlias) addAlias(aliasSet, customNickname);
@@ -1932,11 +1681,7 @@ async function buildContextNative({
       if (username) addAlias(aliasSet, username);
 
       let primaryAlias: string | null = null;
-      if (
-        isUserImpersonation &&
-        userRow.user_disc_id === impersonatedUserId &&
-        impersonatedIdentityName
-      ) {
+      if (isUserImpersonation && userRow.user_disc_id === impersonatedUserId && impersonatedIdentityName) {
         primaryAlias = impersonatedIdentityName;
       } else if (canUseCustomNickname) primaryAlias = customNickname;
       else if (serverNickname) primaryAlias = serverNickname;
@@ -1962,25 +1707,13 @@ async function buildContextNative({
       });
     }
 
-    if (
-      !isUserImpersonation &&
-      tomoriConfig.imagegen_enabled &&
-      syntheticUsers &&
-      syntheticUsers.size > 0
-    ) {
-      const hasSyntheticPersonas = Array.from(syntheticUsers.values()).some(
-        (entry) => entry.type === "persona",
-      );
+    if (!isUserImpersonation && tomoriConfig.imagegen_enabled && syntheticUsers && syntheticUsers.size > 0) {
+      const hasSyntheticPersonas = Array.from(syntheticUsers.values()).some((entry) => entry.type === "persona");
       if (hasSyntheticPersonas) {
-        const allPersonas = await getCachedAllPersonas(guildId).catch(
-          (error) => {
-            log.warn(
-              "Failed to load personas for image profile context",
-              error,
-            );
-            return [];
-          },
-        );
+        const allPersonas = await getCachedAllPersonas(guildId).catch((error) => {
+          log.warn("Failed to load personas for image profile context", error);
+          return [];
+        });
         const personaById = new Map(
           allPersonas
             .filter((persona) => persona.tomori_id != null)
@@ -1988,10 +1721,7 @@ async function buildContextNative({
         );
 
         for (const [syntheticId, syntheticEntry] of syntheticUsers.entries()) {
-          if (
-            syntheticEntry.type !== "persona" ||
-            !/^\d{1,10}$/.test(syntheticId)
-          ) {
+          if (syntheticEntry.type !== "persona" || !/^\d{1,10}$/.test(syntheticId)) {
             continue;
           }
 
@@ -2005,13 +1735,9 @@ async function buildContextNative({
             continue;
           }
 
-          const targetEntry = userEntries.find(
-            (entry) => entry.userId === syntheticId,
-          );
+          const targetEntry = userEntries.find((entry) => entry.userId === syntheticId);
           if (targetEntry) {
-            targetEntry.imageAppearanceTags = normalizeImageAppearanceTags(
-              persona.nai_tags,
-            );
+            targetEntry.imageAppearanceTags = normalizeImageAppearanceTags(persona.nai_tags);
           }
         }
       }
@@ -2040,8 +1766,7 @@ async function buildContextNative({
           mentionParts.push(`Aliases: ${aliasHandles.join(", ")}`);
         }
 
-        const mentionInfo =
-          mentionParts.length > 0 ? ` (${mentionParts.join("; ")})` : "";
+        const mentionInfo = mentionParts.length > 0 ? ` (${mentionParts.join("; ")})` : "";
         usersInConversationText += `${entry.displayName} (User ID: ${entry.userId})${mentionInfo}\n`;
       }
 
@@ -2105,28 +1830,26 @@ async function buildContextNative({
   // Store same-channel prompt separately to be added at the very end
   try {
     // Determine the triggering user ID (impersonation takes precedence)
-    const actualTriggeringUserId =
-      impersonatedUserId ?? snapshot?.triggererUserRow?.user_disc_id;
+    const actualTriggeringUserId = impersonatedUserId ?? snapshot?.triggererUserRow?.user_disc_id;
 
     // Determine locale (from snapshot if available)
     const actualLocale = snapshot?.triggererUserRow?.language_pref ?? "en-US";
 
     // Only build short-term memory context if we have a valid user ID
     if (actualTriggeringUserId) {
-      const { memoryItems, createPromptText } =
-        await buildShortTermMemoryContext(
-          actualTriggeringUserId,
-          channelId,
-          guildId,
-          tomoriState,
-          actualLocale,
-          triggererName,
-          botName,
-          tomoriConfig.personal_memories_enabled,
-          client,
-          isUserImpersonation,
-          explicitLongTermMemoryIntent,
-        );
+      const { memoryItems, createPromptText } = await buildShortTermMemoryContext(
+        actualTriggeringUserId,
+        channelId,
+        guildId,
+        tomoriState,
+        actualLocale,
+        triggererName,
+        botName,
+        tomoriConfig.personal_memories_enabled,
+        client,
+        isUserImpersonation,
+        explicitLongTermMemoryIntent,
+      );
       // Push memory items now (goes in middle of context)
       // Includes: other-channel memories + same-channel summary (if exists)
       contextItems.push(...memoryItems);
@@ -2175,14 +1898,9 @@ async function buildContextNative({
 						`;
 
         if (documentRow?.document_id) {
-          const embeddingModel = await loadEmbeddingModelById(
-            tomoriState.config.embedding_model_id,
-          );
+          const embeddingModel = await loadEmbeddingModelById(tomoriState.config.embedding_model_id);
           if (embeddingModel) {
-            const decryptedKey = await decryptApiKey(
-              tomoriState.config.api_key,
-              tomoriState.config.key_version || 1,
-            );
+            const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
 
             const chunks = await retrieveRelevantDocumentChunks({
               serverId: tomoriState.server_id,
@@ -2194,10 +1912,7 @@ async function buildContextNative({
               minSimilarity: DOCUMENT_MIN_SIMILARITY,
             });
 
-            const documentContext = formatRetrievedChunksForPrompt(
-              chunks,
-              DOCUMENT_CONTEXT_MAX_CHARS,
-            );
+            const documentContext = formatRetrievedChunksForPrompt(chunks, DOCUMENT_CONTEXT_MAX_CHARS);
 
             if (documentContext) {
               contextItems.push({
@@ -2220,8 +1935,7 @@ async function buildContextNative({
     tomoriState &&
     tomoriState.sample_dialogues_in.length > 0 &&
     tomoriState.sample_dialogues_out.length > 0 &&
-    tomoriState.sample_dialogues_in.length ===
-      tomoriState.sample_dialogues_out.length
+    tomoriState.sample_dialogues_in.length === tomoriState.sample_dialogues_out.length
   ) {
     // 8. Sample Dialogues (Request 3: Changed to alternating user/model turns)
     // 8.0. Add introductory system message for sample dialogues
@@ -2242,8 +1956,7 @@ async function buildContextNative({
       // 8.a. User's part of the sample dialogue
       // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
       let userSampleText = tomoriState!.sample_dialogues_in[i];
-      const isUnpairedSample =
-        userSampleText === UNPAIRED_SAMPLE_DIALOGUE_SENTINEL;
+      const isUnpairedSample = userSampleText === UNPAIRED_SAMPLE_DIALOGUE_SENTINEL;
       if (!isUnpairedSample) {
         // No username prefix - prevents associating examples with the triggerer
         if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY) {
@@ -2331,24 +2044,12 @@ async function buildContextNative({
   // 9. Conversation History (Main Dialogue)
   // Calculate media windowing boundaries
   const totalMessages = simplifiedMessageHistory.length;
-  const configuredMessageFetchLimit = normalizeMessageFetchLimit(
-    tomoriConfig.message_fetch_limit,
-  );
-  const requestedMediaWindow =
-    mediaContextWindow ?? memoryGuard.getMediaWindow();
-  const effectiveMediaWindow = Math.min(
-    requestedMediaWindow,
-    configuredMessageFetchLimit,
-  );
-  const maxExtendBy = Math.max(
-    0,
-    configuredMessageFetchLimit - effectiveMediaWindow,
-  );
+  const configuredMessageFetchLimit = normalizeMessageFetchLimit(tomoriConfig.message_fetch_limit);
+  const requestedMediaWindow = mediaContextWindow ?? memoryGuard.getMediaWindow();
+  const effectiveMediaWindow = Math.min(requestedMediaWindow, configuredMessageFetchLimit);
+  const maxExtendBy = Math.max(0, configuredMessageFetchLimit - effectiveMediaWindow);
   const mediaWindowCutoff = totalMessages - effectiveMediaWindow;
-  const renderedImageMessageIds = getRenderedImageMessageIdsWithinWindow(
-    simplifiedMessageHistory,
-    mediaWindowCutoff,
-  );
+  const renderedImageMessageIds = getRenderedImageMessageIdsWithinWindow(simplifiedMessageHistory, mediaWindowCutoff);
 
   // Pre-compute duplicate image detection: when the same image (by proxyUrl)
   // appears in multiple rendered messages (e.g. original + reply reference),
@@ -2362,8 +2063,7 @@ async function buildContextNative({
   const botNameLower = botName.toLowerCase();
   for (const [index, msg] of simplifiedMessageHistory.entries()) {
     const isPersonaMessage = msg.authorType === "persona" && !!msg.personaName;
-    const isCurrentPersonaMessage =
-      isPersonaMessage && msg.personaName?.toLowerCase() === botNameLower;
+    const isCurrentPersonaMessage = isPersonaMessage && msg.personaName?.toLowerCase() === botNameLower;
 
     // Role reversal for user impersonation (February 2026)
     let role: "user" | "model";
@@ -2401,17 +2101,14 @@ async function buildContextNative({
     // Prefer the caller-supplied override (resolved from the provider capability cache) so
     // the context builder stays in sync with what the stream adapter will actually send.
     // Fall back to the DB flag when no override is provided (e.g. non-OpenRouter providers).
-    const seesImages =
-      seesImagesOverride ?? tomoriState?.llm.sees_images ?? false;
-    const seesVideos =
-      seesVideosOverride ?? tomoriState?.llm.sees_videos ?? false;
+    const seesImages = seesImagesOverride ?? tomoriState?.llm.sees_images ?? false;
+    const seesVideos = seesVideosOverride ?? tomoriState?.llm.sees_videos ?? false;
 
     // If message has significant media but is outside window, add placeholder.
     // Only shown if the model actually supports the relevant media type — no point
     // suggesting increase_media_context if the model cannot see the media anyway.
     // Messages with only emojis are not flagged, but messages with emojis + real media ARE flagged
-    const hasViewableMediaOutsideWindow =
-      (hasNonEmojiImages && seesImages) || (hasVideos && seesVideos);
+    const hasViewableMediaOutsideWindow = (hasNonEmojiImages && seesImages) || (hasVideos && seesVideos);
     if (hasViewableMediaOutsideWindow && !isWithinMediaWindow) {
       // Calculate extend_by needed to reach this message, capped at maxExtendBy
       const extendByNeeded = Math.min(mediaWindowCutoff - index, maxExtendBy);
@@ -2431,18 +2128,14 @@ async function buildContextNative({
       // 9.a. Add image parts if attachments exist
       if (msg.imageAttachments.length > 0) {
         if (seesImages) {
-          const hasCountedImages = msg.imageAttachments.some(
-            isCountedRenderedImageAttachment,
-          );
-          const shouldRenderCountedImages =
-            !hasCountedImages || renderedImageMessageIds.has(msg.id);
+          const hasCountedImages = msg.imageAttachments.some(isCountedRenderedImageAttachment);
+          const shouldRenderCountedImages = !hasCountedImages || renderedImageMessageIds.has(msg.id);
           let skippedCountedImageCount = 0;
 
           // Model supports images - add them normally
           let skippedDuplicateImageCount = 0;
           for (const attachment of msg.imageAttachments) {
-            const countsTowardRenderedImageLimit =
-              isCountedRenderedImageAttachment(attachment);
+            const countsTowardRenderedImageLimit = isCountedRenderedImageAttachment(attachment);
             if (countsTowardRenderedImageLimit && !shouldRenderCountedImages) {
               skippedCountedImageCount++;
               continue;
@@ -2451,11 +2144,7 @@ async function buildContextNative({
             // Skip duplicate images that will be rendered later in a more recent message
             // (e.g. original message image also appears in a reply that merged the reference)
             const lastIndex = duplicateImageLastIndex.get(attachment.proxyUrl);
-            if (
-              lastIndex !== undefined &&
-              countsTowardRenderedImageLimit &&
-              lastIndex !== index
-            ) {
+            if (lastIndex !== undefined && countsTowardRenderedImageLimit && lastIndex !== index) {
               skippedDuplicateImageCount++;
               continue;
             }
@@ -2495,9 +2184,7 @@ async function buildContextNative({
         } else {
           // Model doesn't support images - add placeholder text
           const imageCount = msg.imageAttachments.length;
-          const hasGif = msg.imageAttachments.some((att) =>
-            att.mimeType?.includes("gif"),
-          );
+          const hasGif = msg.imageAttachments.some((att) => att.mimeType?.includes("gif"));
           let imageDescription: string;
 
           if (hasGif && imageCount === 1) {
@@ -2535,9 +2222,7 @@ async function buildContextNative({
             if (attachment.mimeType) {
               parts.push({
                 type: "video",
-                uri: attachment.isYouTubeLink
-                  ? attachment.url
-                  : attachment.proxyUrl,
+                uri: attachment.isYouTubeLink ? attachment.url : attachment.proxyUrl,
                 mimeType: attachment.mimeType,
                 isYouTubeLink: attachment.isYouTubeLink,
               });
@@ -2550,16 +2235,13 @@ async function buildContextNative({
         } else {
           // Model doesn't support videos - add placeholder text
           const videoCount = msg.videoAttachments.length;
-          const videoDescription =
-            videoCount === 1 ? "a video" : `${videoCount} videos`;
+          const videoDescription = videoCount === 1 ? "a video" : `${videoCount} videos`;
 
           detachedSystemParts.push({
             type: "text",
             text: `[System: This message contains ${videoDescription}. Current model cannot see videos, please do not describe or claim to see the video contents.]`,
           });
-          log.info(
-            `Videos skipped for message ${msg.id} - model does not support videos`,
-          );
+          log.info(`Videos skipped for message ${msg.id} - model does not support videos`);
         }
       }
     }
@@ -2571,9 +2253,7 @@ async function buildContextNative({
     let mediaAttributionHint: string | null = null;
     if (hasSignificantMedia && !mediaIdHintAdded) {
       const mediaMessageIds = msg.mediaSourceMessageIds ?? [msg.id];
-      const nonEmojiImageCount = msg.imageAttachments.filter(
-        (a) => !a.isEmoji,
-      ).length;
+      const nonEmojiImageCount = msg.imageAttachments.filter((a) => !a.isEmoji).length;
       const videoCount = msg.videoAttachments.length;
       const totalMediaCount = nonEmojiImageCount + videoCount;
 
@@ -2625,15 +2305,9 @@ async function buildContextNative({
       let processedContent: string;
       if (normalizedContent.startsWith("[System:")) {
         const replyBoundaryIndex = normalizedContent.indexOf("]\n");
-        if (
-          replyBoundaryIndex !== -1 &&
-          replyBoundaryIndex + 2 < normalizedContent.length
-        ) {
+        if (replyBoundaryIndex !== -1 && replyBoundaryIndex + 2 < normalizedContent.length) {
           // Reply reference: insert author prefix after the [System: ...] block
-          const systemBlock = normalizedContent.slice(
-            0,
-            replyBoundaryIndex + 2,
-          );
+          const systemBlock = normalizedContent.slice(0, replyBoundaryIndex + 2);
           const userContent = normalizedContent.slice(replyBoundaryIndex + 2);
           processedContent = `${systemBlock}${msg.authorName}: ${userContent}`;
         } else {
@@ -2643,10 +2317,7 @@ async function buildContextNative({
         processedContent = `${msg.authorName}: ${normalizedContent}`; // Add author prefix
       }
 
-      if (
-        tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY &&
-        role === "model"
-      ) {
+      if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY && role === "model") {
         processedContent = humanizeString(processedContent);
       }
       // convertMentions will handle {user} and {bot} replacements.
@@ -2660,10 +2331,7 @@ async function buildContextNative({
         tomoriConfig.personal_memories_enabled,
       );
       if (!processedContent.startsWith("[System:")) {
-        processedContent = applyUncensorInputTransforms(
-          processedContent,
-          uncensorInputOptions,
-        );
+        processedContent = applyUncensorInputTransforms(processedContent, uncensorInputOptions);
       }
       // Append media attribution hint at the end of the user's message so the model
       // knows both who sent the media and its tool-use ID after reading the utterance.
@@ -2687,10 +2355,7 @@ async function buildContextNative({
       if (mediaAttributionHint) {
         parts.push({ type: "text", text: mediaAttributionHint });
       } else {
-        const mediaAttributionText = buildMediaAttributionText(
-          msg,
-          msg.authorName,
-        );
+        const mediaAttributionText = buildMediaAttributionText(msg, msg.authorName);
         const resolvedMediaAttributionText = await convertMentions(
           mediaAttributionText,
           client,
@@ -2708,30 +2373,13 @@ async function buildContextNative({
     // by remaining system hints, then the attributed text. For model-authored turns,
     // keep system hints as a separate user turn to prevent the model from treating them
     // as its own dialogue.
-    if (
-      role === "user" &&
-      (parts.length > 0 || detachedSystemParts.length > 0)
-    ) {
+    if (role === "user" && (parts.length > 0 || detachedSystemParts.length > 0)) {
       const mediaParts = parts.filter((p) => p.type !== "text");
       const textParts = parts.filter((p) => p.type === "text");
-      const combinedParts = [
-        ...mediaParts,
-        ...detachedSystemParts,
-        ...textParts,
-      ];
-      pushDialogueHistoryContextItem(
-        contextItems,
-        "user",
-        combinedParts,
-        msg.id,
-      );
+      const combinedParts = [...mediaParts, ...detachedSystemParts, ...textParts];
+      pushDialogueHistoryContextItem(contextItems, "user", combinedParts, msg.id);
     } else {
-      pushDialogueHistoryContextItem(
-        contextItems,
-        "user",
-        detachedSystemParts,
-        msg.id,
-      );
+      pushDialogueHistoryContextItem(contextItems, "user", detachedSystemParts, msg.id);
       pushDialogueHistoryContextItem(contextItems, role, parts, msg.id);
     }
   }
@@ -2740,9 +2388,7 @@ async function buildContextNative({
   if (isUserImpersonation && impersonatedUserId) {
     const nameToUse = impersonatedIdentityName || "User";
 
-    tailDirectives.push(
-      `Imitate ${nameToUse}, start your message with ${nameToUse}:`,
-    );
+    tailDirectives.push(`Imitate ${nameToUse}, start your message with ${nameToUse}:`);
   }
 
   // Add same-channel memory prompt at the very end (if it exists)
@@ -2766,9 +2412,7 @@ async function buildContextNative({
     }
   }
 
-  log.info(
-    `Built ${contextItems.length} structured context items for guild ${guildId}.`,
-  );
+  log.info(`Built ${contextItems.length} structured context items for guild ${guildId}.`);
   return { contextItems, tailDirectives, uncensorDirective };
 }
 
@@ -2802,20 +2446,14 @@ async function getUserPresenceDetails(
     // Note: Fetching requires GUILD_PRESENCES intent to be enabled
     let member: import("discord.js").GuildMember | null = null;
     if (preloadedMember && preloadedMember.id === userId) {
-      log.info(
-        `Using preloaded member data for ${userId} in guild ${guild.name}`,
-      );
+      log.info(`Using preloaded member data for ${userId} in guild ${guild.name}`);
       member = preloadedMember;
     } else {
-      log.info(
-        `Fetching member data for ${userId} in guild ${guild.name} (development mode)`,
-      );
-      member = await guild.members
-        .fetch({ user: userId, force: true })
-        .catch((error) => {
-          log.warn(`Failed to fetch member ${userId}: ${error}`);
-          return null;
-        });
+      log.info(`Fetching member data for ${userId} in guild ${guild.name} (development mode)`);
+      member = await guild.members.fetch({ user: userId, force: true }).catch((error) => {
+        log.warn(`Failed to fetch member ${userId}: ${error}`);
+        return null;
+      });
     }
 
     if (!member) {
@@ -2826,9 +2464,7 @@ async function getUserPresenceDetails(
     log.info(`Member found: ${member.user.username} (${member.id})`);
 
     if (!member.presence) {
-      log.warn(
-        `No presence data available for ${member.user.username} (${member.id})`,
-      );
+      log.warn(`No presence data available for ${member.user.username} (${member.id})`);
       log.info(
         `Presence permission check: GUILD_PRESENCES intent enabled: ${Boolean(client.options.intents?.has(GatewayIntentBits.GuildPresences))}`,
       );
@@ -2851,9 +2487,7 @@ async function getUserPresenceDetails(
 
     // 4. Format activities if present
     if (member.presence.activities && member.presence.activities.length > 0) {
-      log.info(
-        `User ${member.user.username} has ${member.presence.activities.length} activities`,
-      );
+      log.info(`User ${member.user.username} has ${member.presence.activities.length} activities`);
 
       const activityDetails = member.presence.activities.map((activity) => {
         log.info(
@@ -2867,11 +2501,7 @@ async function getUserPresenceDetails(
           case 1: // Streaming
             return `Streaming ${activity.name}${getTimeSpent(activity.timestamps?.start, activity.timestamps?.end)}`;
           case 2: // Listening
-            if (
-              activity.name === "Spotify" &&
-              activity.details &&
-              activity.state
-            ) {
+            if (activity.name === "Spotify" && activity.details && activity.state) {
               return `Listening to ${activity.details} by ${activity.state} on Spotify${getTimeSpent(activity.timestamps?.start, activity.timestamps?.end)}`;
             }
 
@@ -2909,21 +2539,14 @@ async function getUserPresenceDetails(
  * @param endTimestamp - The activity end timestamp (as Date or number, optional)
  * @returns Formatted string with time duration (e.g., "2 hours, 15 minutes")
  */
-function getTimeSpent(
-  startTimestamp?: Date | null | number,
-  endTimestamp?: Date | null | number,
-): string {
+function getTimeSpent(startTimestamp?: Date | null | number, endTimestamp?: Date | null | number): string {
   if (!startTimestamp) {
     return "";
   }
 
   // Convert Date objects to timestamps if needed
   const startTime =
-    startTimestamp instanceof Date
-      ? startTimestamp.getTime()
-      : typeof startTimestamp === "number"
-        ? startTimestamp
-        : 0;
+    startTimestamp instanceof Date ? startTimestamp.getTime() : typeof startTimestamp === "number" ? startTimestamp : 0;
 
   // If no valid start time, return empty string
   if (startTime === 0) {
@@ -2933,11 +2556,7 @@ function getTimeSpent(
   // If no end timestamp is provided, use current time
   const now = Date.now();
   const endTime =
-    endTimestamp instanceof Date
-      ? endTimestamp.getTime()
-      : typeof endTimestamp === "number"
-        ? endTimestamp
-        : now;
+    endTimestamp instanceof Date ? endTimestamp.getTime() : typeof endTimestamp === "number" ? endTimestamp : now;
 
   // Calculate time difference in milliseconds
   const timeDiff = endTime - startTime;

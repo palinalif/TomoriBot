@@ -48,9 +48,7 @@ export async function generateVoiceMessageMetadata(
     const metadata = await parseBuffer(audioBuffer, { mimeType });
     const durationSecs = metadata.format.duration;
     if (!durationSecs || durationSecs <= 0) {
-      log.warn(
-        "[VoiceWaveform] Could not determine audio duration from header",
-      );
+      log.warn("[VoiceWaveform] Could not determine audio duration from header");
       return null;
     }
 
@@ -84,12 +82,8 @@ export async function generateVoiceMessageMetadata(
     );
 
     // 3. Race subprocess exit against a timeout to avoid hanging
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), FFMPEG_TIMEOUT_MS),
-    );
-    const exitPromise = proc.exited.then(() =>
-      new Response(proc.stdout).arrayBuffer(),
-    );
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), FFMPEG_TIMEOUT_MS));
+    const exitPromise = proc.exited.then(() => new Response(proc.stdout).arrayBuffer());
 
     const result = await Promise.race([exitPromise, timeoutPromise]);
     if (!result) {
@@ -122,19 +116,14 @@ export async function generateVoiceMessageMetadata(
       waveformBytes[i] = Math.round((peak / 32767) * 255);
     }
 
-    log.info(
-      `[VoiceWaveform] Generated waveform | duration=${durationSecs.toFixed(2)}s | samples=${WAVEFORM_SAMPLES}`,
-    );
+    log.info(`[VoiceWaveform] Generated waveform | duration=${durationSecs.toFixed(2)}s | samples=${WAVEFORM_SAMPLES}`);
 
     return {
       waveform: Buffer.from(waveformBytes).toString("base64"),
       durationSecs,
     };
   } catch (error) {
-    log.warn(
-      "[VoiceWaveform] Failed to generate voice message metadata",
-      error,
-    );
+    log.warn("[VoiceWaveform] Failed to generate voice message metadata", error);
     return null;
   }
 }

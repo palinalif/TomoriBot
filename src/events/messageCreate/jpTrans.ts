@@ -3,10 +3,7 @@ import type { Client, Message } from "discord.js";
 import { translate as googleTranslate } from "google-translate-api-x";
 import { log } from "../../utils/misc/logger";
 import { sendTranslationEmbed } from "../../utils/discord/embedHelper";
-import type {
-  BingResponse,
-  GoogleResponse,
-} from "../../types/misc/translation";
+import type { BingResponse, GoogleResponse } from "../../types/misc/translation";
 import { TranslationProvider } from "../../types/discord/embed";
 
 /**
@@ -23,8 +20,7 @@ const handler = async (_client: Client, message: Message): Promise<void> => {
     if (
       message.content.includes("><") ||
       message.author.bot ||
-      (message.guildId !== process.env.TESTSRV_ID &&
-        message.guildId !== process.env.HAVENSRV_ID) ||
+      (message.guildId !== process.env.TESTSRV_ID && message.guildId !== process.env.HAVENSRV_ID) ||
       message.channelId === process.env.TESTCH_ID
     ) {
       return;

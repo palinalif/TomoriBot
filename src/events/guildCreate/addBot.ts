@@ -40,22 +40,14 @@ const handler = async (client: Client, guild: Guild): Promise<void> => {
     if (channel) {
       try {
         await sendStandardEmbed(channel, serverLocale, {
-          titleKey: tomoriExists
-            ? "events.addBot.rejoin_title"
-            : "events.addBot.setup_prompt_title",
-          descriptionKey: tomoriExists
-            ? "events.addBot.rejoin_description"
-            : "events.addBot.setup_prompt_description",
+          titleKey: tomoriExists ? "events.addBot.rejoin_title" : "events.addBot.setup_prompt_title",
+          descriptionKey: tomoriExists ? "events.addBot.rejoin_description" : "events.addBot.setup_prompt_description",
           color: tomoriExists ? ColorCode.INFO : ColorCode.WARN,
         });
         sentSuccessfully = true;
-        log.success(
-          `Sent welcome message to system channel ${channel.name} in ${guild.name}`,
-        );
+        log.success(`Sent welcome message to system channel ${channel.name} in ${guild.name}`);
       } catch (_error) {
-        log.warn(
-          `Failed to send to system channel in ${guild.name}, trying fallback`,
-        );
+        log.warn(`Failed to send to system channel in ${guild.name}, trying fallback`);
       }
     }
 
@@ -63,25 +55,17 @@ const handler = async (client: Client, guild: Guild): Promise<void> => {
     if (!sentSuccessfully) {
       channel = await findBestChannel(guild, client);
       if (!channel) {
-        log.error(
-          `No suitable text channel found in guild ${guild.name} (${guild.id})`,
-        );
+        log.error(`No suitable text channel found in guild ${guild.name} (${guild.id})`);
         return;
       }
 
       await sendStandardEmbed(channel, serverLocale, {
-        titleKey: tomoriExists
-          ? "events.addBot.rejoin_title"
-          : "events.addBot.setup_prompt_title",
-        descriptionKey: tomoriExists
-          ? "events.addBot.rejoin_description"
-          : "events.addBot.setup_prompt_description",
+        titleKey: tomoriExists ? "events.addBot.rejoin_title" : "events.addBot.setup_prompt_title",
+        descriptionKey: tomoriExists ? "events.addBot.rejoin_description" : "events.addBot.setup_prompt_description",
         color: tomoriExists ? ColorCode.INFO : ColorCode.WARN,
       });
 
-      log.success(
-        `Sent welcome message to fallback channel ${channel.name} in ${guild.name}`,
-      );
+      log.success(`Sent welcome message to fallback channel ${channel.name} in ${guild.name}`);
     }
   } catch (error) {
     log.error(`Error handling guild join for ${guild.id}:`, error);

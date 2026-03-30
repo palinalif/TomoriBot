@@ -5,21 +5,12 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import {
-  getCachedGuildMcpConfigs,
-  invalidateGuildMcpConfigCache,
-} from "@/utils/cache/guildMcpConfigCache";
+import { getCachedGuildMcpConfigs, invalidateGuildMcpConfigCache } from "@/utils/cache/guildMcpConfigCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type {
-  CheckboxGroupOption,
-  ModalCheckboxGroupField,
-} from "@/types/discord/modal";
+import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
 import { deleteGuildMcpServer } from "@/utils/db/guildMcpDb";
 import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
 
@@ -38,14 +29,8 @@ const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
  * No options needed — server selection happens via modal string select.
  * @param subcommand - The subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.config.mcp.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.config.mcp.remove.description"));
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -133,9 +118,7 @@ export async function execute(
     );
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `[MCP Remove] Modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`[MCP Remove] Modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -148,19 +131,14 @@ export async function execute(
     // 5. Collect checked server names across checkbox groups
     const checkedServerNames = new Set<string>();
     for (let groupIndex = 0; groupIndex < serverGroupCount; groupIndex++) {
-      const groupValues =
-        modalResult.multiValues?.[
-          `${SERVER_CHECKBOX_ID_PREFIX}_${groupIndex}`
-        ] ?? [];
+      const groupValues = modalResult.multiValues?.[`${SERVER_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
       for (const serverName of groupValues) {
         checkedServerNames.add(serverName);
       }
     }
 
     // 6. Resolve unchecked entries as removals
-    const configsToRemove = configs.filter(
-      (config) => !checkedServerNames.has(config.name),
-    );
+    const configsToRemove = configs.filter((config) => !checkedServerNames.has(config.name));
     if (configsToRemove.length === 0) {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.config.mcp.remove.no_removals_title",
@@ -177,23 +155,14 @@ export async function execute(
         deleted: await deleteGuildMcpServer(tomoriState.server_id, config.name),
       })),
     );
-    const removedConfigs = deletionResults
-      .filter((result) => result.deleted)
-      .map((result) => result.config);
-    const failedConfigs = deletionResults
-      .filter((result) => !result.deleted)
-      .map((result) => result.config);
+    const removedConfigs = deletionResults.filter((result) => result.deleted).map((result) => result.config);
+    const failedConfigs = deletionResults.filter((result) => !result.deleted).map((result) => result.config);
 
     // 8. Invalidate cache and disconnect only after successful DB writes
     if (removedConfigs.length > 0) {
       invalidateGuildMcpConfigCache(tomoriState.server_id);
       await Promise.all(
-        removedConfigs.map((config) =>
-          getGuildMcpManager().disconnectGuildServer(
-            tomoriState.server_id,
-            config.name,
-          ),
-        ),
+        removedConfigs.map((config) => getGuildMcpManager().disconnectGuildServer(tomoriState.server_id, config.name)),
       );
     }
 
@@ -210,9 +179,7 @@ export async function execute(
       };
       await log.error(
         "Failed to delete one or more MCP servers",
-        new Error(
-          "deleteGuildMcpServer returned false for one or more entries",
-        ),
+        new Error("deleteGuildMcpServer returned false for one or more entries"),
         context,
       );
       await replyInfoEmbed(replyInteraction, locale, {
@@ -228,9 +195,7 @@ export async function execute(
       titleKey: "commands.config.mcp.remove.success_title",
       descriptionKey: "commands.config.mcp.remove.success_description",
       descriptionVars: {
-        servers_removed: formatRemovedNames(
-          removedConfigs.map((config) => `\`${config.name}\``),
-        ),
+        servers_removed: formatRemovedNames(removedConfigs.map((config) => `\`${config.name}\``)),
       },
       color: ColorCode.SUCCESS,
     });
@@ -246,11 +211,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "config mcp remove" },
     };
-    await log.error(
-      "Error executing /config mcp remove",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /config mcp remove", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),
@@ -259,9 +220,7 @@ export async function execute(
   }
 }
 
-function buildServerCheckboxGroups(
-  configs: { name: string; url: string }[],
-): ModalCheckboxGroupField[] {
+function buildServerCheckboxGroups(configs: { name: string; url: string }[]): ModalCheckboxGroupField[] {
   const checkboxGroups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < configs.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -281,10 +240,7 @@ function buildServerCheckboxGroups(
         groupIndex === 0
           ? "commands.config.mcp.remove.checkbox_label"
           : "commands.config.mcp.remove.checkbox_label_continued",
-      descriptionKey:
-        groupIndex === 0
-          ? "commands.config.mcp.remove.checkbox_description"
-          : undefined,
+      descriptionKey: groupIndex === 0 ? "commands.config.mcp.remove.checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,

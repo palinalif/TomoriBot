@@ -1,21 +1,9 @@
-import type {
-  ChatInputCommandInteraction,
-  ButtonInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, ButtonInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 // Import sql
 import { sql } from "@/utils/db/client";
-import {
-  loadAvailableModelsForProvider,
-  loadNaiPresetsForModel,
-} from "../../../utils/db/dbRead";
-import {
-  setChannelLlmOverride,
-  setPersonaLlmOverride,
-  applyNaiPreset,
-} from "../../../utils/db/dbWrite";
+import { loadAvailableModelsForProvider, loadNaiPresetsForModel } from "../../../utils/db/dbRead";
+import { setChannelLlmOverride, setPersonaLlmOverride, applyNaiPreset } from "../../../utils/db/dbWrite";
 import {
   getCachedTomoriState,
   getCachedAllPersonas,
@@ -33,12 +21,7 @@ import {
   replyPaginatedPersonaChoicesV2,
 } from "../../../utils/discord/interactionHelper";
 // Import TomoriConfigRow for validation and LlmRow for type hints
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-  type LlmRow,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema, type LlmRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import {
   isCustomProvider,
@@ -70,8 +53,7 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
   }
 
   // Fallback chain: locale-specific -> default -> provider fallback
-  const baseDescription =
-    description || model.llm_description || `${model.llm_provider} model`;
+  const baseDescription = description || model.llm_description || `${model.llm_provider} model`;
 
   // Skip flags for other-model (don't show TOOLS+IMG+VID+etc. for this special model)
   if (model.llm_codename === "other-model") {
@@ -93,20 +75,14 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
 }
 
 // Configure the subcommand (Rule #21)
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("text")
-    .setDescription(
-      localizer("en-US", "commands.config.model.text.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.model.text.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer("en-US", "commands.config.model.text.scope_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.model.text.scope_description"))
         .setRequired(false)
         .addChoices(
           {
@@ -114,17 +90,11 @@ export const configureSubcommand = (
             value: "global",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.config.model.text.scope_channel",
-            ),
+            name: localizer("en-US", "commands.config.model.text.scope_channel"),
             value: "channel",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.config.model.text.scope_persona",
-            ),
+            name: localizer("en-US", "commands.config.model.text.scope_persona"),
             value: "persona",
           },
         ),
@@ -154,9 +124,7 @@ export async function execute(
   }
 
   // 2. Load the Tomori state for this server
-  const tomoriState = await getCachedTomoriState(
-    interaction.guild?.id ?? interaction.user.id,
-  );
+  const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
   if (!tomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.tomori_not_setup_title",
@@ -199,9 +167,7 @@ export async function execute(
       if (!capabilitiesResult.success) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.operation_failed_title",
-          description:
-            capabilitiesResult.error ||
-            localizer(locale, "commands.config.custom.capabilities_timeout"),
+          description: capabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
           color: ColorCode.ERROR,
         });
         return;
@@ -240,33 +206,19 @@ export async function execute(
       // Build capability flags for display
       const enabledCapabilities: string[] = [];
       if (capabilitiesResult.hasTools)
-        enabledCapabilities.push(
-          localizer(locale, "commands.config.custom.capability_tools_label"),
-        );
+        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_tools_label"));
       if (capabilitiesResult.seesImages)
-        enabledCapabilities.push(
-          localizer(locale, "commands.config.custom.capability_images_label"),
-        );
+        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_images_label"));
       if (capabilitiesResult.seesVideos)
-        enabledCapabilities.push(
-          localizer(locale, "commands.config.custom.capability_videos_label"),
-        );
+        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_videos_label"));
       if (capabilitiesResult.supportsStructOutput)
-        enabledCapabilities.push(
-          localizer(
-            locale,
-            "commands.config.custom.capability_structoutput_label",
-          ),
-        );
+        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_structoutput_label"));
 
       const capabilitiesDisplay =
-        enabledCapabilities.length > 0
-          ? enabledCapabilities.join(", ")
-          : localizer(locale, "general.none");
+        enabledCapabilities.length > 0 ? enabledCapabilities.join(", ") : localizer(locale, "general.none");
 
       // Show the actual model name if provided, otherwise show placeholder
-      const displayModelName =
-        capabilitiesResult.modelName || DEFAULT_CUSTOM_MODEL_NAME;
+      const displayModelName = capabilitiesResult.modelName || DEFAULT_CUSTOM_MODEL_NAME;
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.model.text.custom_updated_title",
@@ -289,11 +241,7 @@ export async function execute(
           guildId: interaction.guild?.id ?? interaction.user.id,
         },
       };
-      await log.error(
-        `Error reconfiguring custom model for user ${userData.user_disc_id}`,
-        error as Error,
-        context,
-      );
+      await log.error(`Error reconfiguring custom model for user ${userData.user_disc_id}`, error as Error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.unknown_error_title",
@@ -310,8 +258,7 @@ export async function execute(
 
   // 4a. Channel-scope: show model picker, then write channel override
   if (scope === "channel") {
-    const channelAvailableModels =
-      await loadAvailableModelsForProvider(currentProvider);
+    const channelAvailableModels = await loadAvailableModelsForProvider(currentProvider);
     if (!channelAvailableModels || channelAvailableModels.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.model.text.no_models_title",
@@ -324,37 +271,28 @@ export async function execute(
     const channelModelOptions = channelAvailableModels.map((m) => ({
       label: safeSelectOptionText(m.llm_codename),
       value: safeSelectOptionText(m.llm_codename),
-      description: safeSelectOptionText(
-        getLocalizedDescription(m, userData.language_pref),
-      ),
+      description: safeSelectOptionText(getLocalizedDescription(m, userData.language_pref)),
     }));
-    const channelModalResult = await promptWithPaginatedModal(
-      interaction,
-      locale,
-      {
-        modalCustomId: "config_model_text_channel_modal",
-        modalTitleKey: "commands.config.model.text.modal_title",
-        components: [
-          {
-            customId: MODEL_SELECT_ID,
-            labelKey: "commands.config.model.text.select_label",
-            descriptionKey: "commands.config.model.text.select_description",
-            placeholder: "commands.config.model.text.select_placeholder",
-            required: true,
-            options: channelModelOptions,
-          },
-        ],
-      },
-    );
+    const channelModalResult = await promptWithPaginatedModal(interaction, locale, {
+      modalCustomId: "config_model_text_channel_modal",
+      modalTitleKey: "commands.config.model.text.modal_title",
+      components: [
+        {
+          customId: MODEL_SELECT_ID,
+          labelKey: "commands.config.model.text.select_label",
+          descriptionKey: "commands.config.model.text.select_description",
+          placeholder: "commands.config.model.text.select_placeholder",
+          required: true,
+          options: channelModelOptions,
+        },
+      ],
+    });
     if (channelModalResult.outcome !== "submit") return;
     // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
     const channelModalInteraction = channelModalResult.interaction!;
     // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
     const selectedChannelCodename = channelModalResult.values![MODEL_SELECT_ID];
-    const selectedChannelModel =
-      channelAvailableModels.find(
-        (m) => m.llm_codename === selectedChannelCodename,
-      ) ?? null;
+    const selectedChannelModel = channelAvailableModels.find((m) => m.llm_codename === selectedChannelCodename) ?? null;
     if (!selectedChannelModel?.llm_id) {
       await replyInfoEmbed(channelModalInteraction, locale, {
         titleKey: "commands.config.model.text.invalid_model_title",
@@ -378,11 +316,7 @@ export async function execute(
       return;
     }
     // Update cache immediately so next message uses the new model
-    setChannelLlmCache(
-      tomoriState.server_id,
-      interaction.channelId,
-      selectedChannelModel,
-    );
+    setChannelLlmCache(tomoriState.server_id, interaction.channelId, selectedChannelModel);
     await replyInfoEmbed(channelModalInteraction, locale, {
       titleKey: "commands.config.model.text.success_title",
       descriptionKey: "commands.config.model.text.scope_set_channel_success",
@@ -397,9 +331,7 @@ export async function execute(
 
   // 4b. Persona-scope: persona picker → model picker → write persona override
   if (scope === "persona") {
-    const allPersonas = await getCachedAllPersonas(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await getCachedAllPersonas(interaction.guild?.id ?? interaction.user.id);
     if (!allPersonas.length) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -411,30 +343,21 @@ export async function execute(
     }
     while (true) {
       // Show persona picker — preserveSelectedInteraction returns unacknowledged ButtonInteraction
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
       if (!personaSelection.success) {
         if (personaSelection.reason === "cancelled") return;
         continue;
       }
-      if (
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
-      const personaButtonInteraction: ButtonInteraction =
-        personaSelection.interaction;
-      const selectedPersona =
-        allPersonas[personaSelection.selectedIndex] ?? null;
+      const personaButtonInteraction: ButtonInteraction = personaSelection.interaction;
+      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
         await replyInfoEmbed(personaButtonInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -444,8 +367,7 @@ export async function execute(
         return;
       }
       // Show model picker (ButtonInteraction → modal is valid in Discord)
-      const personaAvailableModels =
-        await loadAvailableModelsForProvider(currentProvider);
+      const personaAvailableModels = await loadAvailableModelsForProvider(currentProvider);
       if (!personaAvailableModels || personaAvailableModels.length === 0) {
         await replyInfoEmbed(personaButtonInteraction, locale, {
           titleKey: "commands.config.model.text.no_models_title",
@@ -457,51 +379,38 @@ export async function execute(
       const personaModelOptions = personaAvailableModels.map((m) => ({
         label: safeSelectOptionText(m.llm_codename),
         value: safeSelectOptionText(m.llm_codename),
-        description: safeSelectOptionText(
-          getLocalizedDescription(m, userData.language_pref),
-        ),
+        description: safeSelectOptionText(getLocalizedDescription(m, userData.language_pref)),
       }));
-      const personaModalResult = await promptWithPaginatedModal(
-        personaButtonInteraction,
-        locale,
-        {
-          modalCustomId: "config_model_text_persona_modal",
-          modalTitleKey: "commands.config.model.text.modal_title",
-          components: [
-            {
-              customId: MODEL_SELECT_ID,
-              labelKey: "commands.config.model.text.select_label",
-              descriptionKey: "commands.config.model.text.select_description",
-              placeholder: "commands.config.model.text.select_placeholder",
-              required: true,
-              options: personaModelOptions,
-            },
-          ],
-        },
-      );
+      const personaModalResult = await promptWithPaginatedModal(personaButtonInteraction, locale, {
+        modalCustomId: "config_model_text_persona_modal",
+        modalTitleKey: "commands.config.model.text.modal_title",
+        components: [
+          {
+            customId: MODEL_SELECT_ID,
+            labelKey: "commands.config.model.text.select_label",
+            descriptionKey: "commands.config.model.text.select_description",
+            placeholder: "commands.config.model.text.select_placeholder",
+            required: true,
+            options: personaModelOptions,
+          },
+        ],
+      });
       if (personaModalResult.outcome !== "submit") continue;
       // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
       const personaModalInteraction = personaModalResult.interaction!;
-      const selectedPersonaCodename =
-        personaModalResult.values?.[MODEL_SELECT_ID];
+      const selectedPersonaCodename = personaModalResult.values?.[MODEL_SELECT_ID];
       const selectedPersonaModel =
-        personaAvailableModels.find(
-          (m) => m.llm_codename === selectedPersonaCodename,
-        ) ?? null;
+        personaAvailableModels.find((m) => m.llm_codename === selectedPersonaCodename) ?? null;
       if (!selectedPersonaModel?.llm_id) {
         await replyInfoEmbed(personaModalInteraction, locale, {
           titleKey: "commands.config.model.text.invalid_model_title",
-          descriptionKey:
-            "commands.config.model.text.invalid_model_description",
+          descriptionKey: "commands.config.model.text.invalid_model_description",
           color: ColorCode.ERROR,
         });
         return;
       }
       // Write the persona override to DB
-      const personaWriteOk = await setPersonaLlmOverride(
-        selectedPersona.tomori_id,
-        selectedPersonaModel.llm_id,
-      );
+      const personaWriteOk = await setPersonaLlmOverride(selectedPersona.tomori_id, selectedPersonaModel.llm_id);
       if (!personaWriteOk) {
         await replyInfoEmbed(personaModalInteraction, locale, {
           titleKey: "general.errors.update_failed_title",
@@ -541,9 +450,7 @@ export async function execute(
   }
 
   // Track modal submit interaction and selected model for error handling in catch block
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: LlmRow | null = null; // For error context and logic
 
   try {
@@ -551,9 +458,7 @@ export async function execute(
     const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
       label: safeSelectOptionText(model.llm_codename), // Use codename as display label
       value: safeSelectOptionText(model.llm_codename), // Use codename as value
-      description: safeSelectOptionText(
-        getLocalizedDescription(model, userData.language_pref),
-      ), // Use locale-specific description
+      description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)), // Use locale-specific description
     }));
 
     // 5. Show the modal with model selection
@@ -574,9 +479,7 @@ export async function execute(
 
     // 6. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Model selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Model selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -587,10 +490,7 @@ export async function execute(
     const selectedModelCodename = modalResult.values![MODEL_SELECT_ID];
 
     // 7. Find the selected model details (including llm_id) by codename - let helper functions manage interaction state
-    selectedModel =
-      availableModels.find(
-        (model) => model.llm_codename === selectedModelCodename,
-      ) ?? null;
+    selectedModel = availableModels.find((model) => model.llm_codename === selectedModelCodename) ?? null;
 
     if (!selectedModel?.llm_id) {
       const context: ErrorContext = {
@@ -624,12 +524,8 @@ export async function execute(
     // Uses button → modal pattern (modal → modal is not allowed by Discord)
     if (selectedModel.llm_codename === "other-model") {
       try {
-        const { promptOtherModelConfig } = await import(
-          "../../../utils/discord/customProviderModal"
-        );
-        const { getOrFetchOpenRouterCapabilities } = await import(
-          "../../../utils/cache/openrouterCapabilityCache"
-        );
+        const { promptOtherModelConfig } = await import("../../../utils/discord/customProviderModal");
+        const { getOrFetchOpenRouterCapabilities } = await import("../../../utils/cache/openrouterCapabilityCache");
 
         // Defer first — required before editReply in promptAccountSettingModel
         // (same pattern as custom provider flow)
@@ -638,10 +534,7 @@ export async function execute(
         });
 
         // 1. Show button prompt → user clicks → modal appears for model name input
-        const promptResult = await promptOtherModelConfig(
-          modalSubmitInteraction,
-          locale,
-        );
+        const promptResult = await promptOtherModelConfig(modalSubmitInteraction, locale);
 
         if (!promptResult.success || !promptResult.modelName) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -657,21 +550,17 @@ export async function execute(
         // 2. Validate and fetch real capabilities from OpenRouter API
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.model.text.other_model_validating_title",
-          descriptionKey:
-            "commands.config.model.text.other_model_validating_description",
+          descriptionKey: "commands.config.model.text.other_model_validating_description",
           descriptionVars: { model_name: enteredModelName },
           color: ColorCode.INFO,
         });
 
-        const capabilities =
-          await getOrFetchOpenRouterCapabilities(enteredModelName);
+        const capabilities = await getOrFetchOpenRouterCapabilities(enteredModelName);
 
         if (!capabilities) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey:
-              "commands.config.model.text.other_model_validation_failed_title",
-            descriptionKey:
-              "commands.config.model.text.other_model_validation_failed_description",
+            titleKey: "commands.config.model.text.other_model_validation_failed_title",
+            descriptionKey: "commands.config.model.text.other_model_validation_failed_description",
             descriptionVars: { model_name: enteredModelName },
             color: ColorCode.ERROR,
           });
@@ -693,26 +582,20 @@ export async function execute(
         `;
 
         // 4. Invalidate cache so next message uses fresh capabilities
-        invalidateTomoriStateCache(
-          interaction.guild?.id ?? interaction.user.id,
-        );
+        invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
         // 5. Build capability flags display
         const capabilityFlags: string[] = [];
         if (capabilities.hasTools) capabilityFlags.push("TOOLS");
         if (capabilities.seesImages) capabilityFlags.push("IMG");
         if (capabilities.seesVideos) capabilityFlags.push("VID");
-        if (capabilities.supportsStructuredOutput)
-          capabilityFlags.push("STRUCT");
+        if (capabilities.supportsStructuredOutput) capabilityFlags.push("STRUCT");
         const capabilitiesDisplay =
-          capabilityFlags.length > 0
-            ? capabilityFlags.join(" + ")
-            : localizer(locale, "general.none");
+          capabilityFlags.length > 0 ? capabilityFlags.join(" + ") : localizer(locale, "general.none");
 
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.model.text.other_model_configured_title",
-          descriptionKey:
-            "commands.config.model.text.other_model_configured_description",
+          descriptionKey: "commands.config.model.text.other_model_configured_description",
           descriptionVars: {
             model_name: enteredModelName,
             capabilities: capabilitiesDisplay,
@@ -721,10 +604,7 @@ export async function execute(
         });
         return;
       } catch (error) {
-        await log.error(
-          `Error configuring other-model for user ${userData.user_disc_id}`,
-          error as Error,
-        );
+        await log.error(`Error configuring other-model for user ${userData.user_disc_id}`, error as Error);
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.unknown_error_title",
           descriptionKey: "general.errors.unknown_error_description",
@@ -738,8 +618,7 @@ export async function execute(
     if (selectedModel.llm_id === tomoriState.config.llm_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.text.already_selected_title",
-        descriptionKey:
-          "commands.config.model.text.already_selected_description",
+        descriptionKey: "commands.config.model.text.already_selected_description",
         descriptionVars: {
           model_name: selectedModel.llm_codename,
         },
@@ -755,35 +634,24 @@ export async function execute(
     if (currentModelProvider !== newModelProvider) {
       // Show validation message
       await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey:
-          "commands.config.model.text.validating_api_key_compatibility_title",
-        descriptionKey:
-          "commands.config.model.text.validating_api_key_compatibility",
+        titleKey: "commands.config.model.text.validating_api_key_compatibility_title",
+        descriptionKey: "commands.config.model.text.validating_api_key_compatibility",
         color: ColorCode.INFO,
       });
 
       try {
         // Decrypt and validate the API key with the new provider
-        const { decryptApiKey } = await import(
-          "../../../utils/security/crypto"
-        );
+        const { decryptApiKey } = await import("../../../utils/security/crypto");
         const keyVersion = tomoriState.config.key_version || 1; // Default to V1 for backward compatibility
-        const decryptedApiKey = await decryptApiKey(
-          tomoriState.config.api_key,
-          keyVersion,
-        );
+        const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key, keyVersion);
 
         // Create provider instance for validation using factory
         let isKeyCompatible = false;
         try {
-          const { ProviderFactory } = await import(
-            "../../../utils/provider/providerFactory"
-          );
-          const provider =
-            await ProviderFactory.getProviderByName(newModelProvider);
+          const { ProviderFactory } = await import("../../../utils/provider/providerFactory");
+          const provider = await ProviderFactory.getProviderByName(newModelProvider);
 
-          const validationResult =
-            await provider.validateApiKey(decryptedApiKey);
+          const validationResult = await provider.validateApiKey(decryptedApiKey);
           isKeyCompatible = validationResult.valid;
         } catch (providerError) {
           // Provider not found or other error
@@ -797,27 +665,20 @@ export async function execute(
         if (!isKeyCompatible) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.model.text.api_key_incompatible_title",
-            descriptionKey:
-              "commands.config.model.text.api_key_incompatible_description",
+            descriptionKey: "commands.config.model.text.api_key_incompatible_description",
             descriptionVars: {
               model_name: selectedModel.llm_codename,
-              provider:
-                newModelProvider.charAt(0).toUpperCase() +
-                newModelProvider.slice(1),
+              provider: newModelProvider.charAt(0).toUpperCase() + newModelProvider.slice(1),
             },
             color: ColorCode.ERROR,
           });
           return;
         }
       } catch (error) {
-        log.error(
-          `Error validating API key compatibility for provider ${newModelProvider}`,
-          error as Error,
-        );
+        log.error(`Error validating API key compatibility for provider ${newModelProvider}`, error as Error);
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.model.text.validation_error_title",
-          descriptionKey:
-            "commands.config.model.text.validation_error_description",
+          descriptionKey: "commands.config.model.text.validation_error_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -828,13 +689,9 @@ export async function execute(
     // Clear custom_model_name when switching to a non-custom provider.
     // Also clear fallback_llm_ids when the provider changes — fallback models are
     // provider-scoped and become invalid after a provider switch.
-    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(
-      tomoriState.config.llm_logit_biases ?? [],
-      selectedModel,
-    );
+    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(tomoriState.config.llm_logit_biases ?? [], selectedModel);
     const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
-    const clearFallbacks =
-      tomoriState.llm.llm_provider !== selectedModel.llm_provider;
+    const clearFallbacks = tomoriState.llm.llm_provider !== selectedModel.llm_provider;
     const queryResult = clearFallbacks
       ? await sql`
             UPDATE tomori_configs
@@ -869,9 +726,7 @@ export async function execute(
           guildId: interaction.guild?.id ?? interaction.user.id,
           selectedModelCodename,
           targetLlmId: selectedModel.llm_id,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -895,28 +750,17 @@ export async function execute(
 
     // 11.5. Auto-apply the default NAI preset when switching to Kayra or Erato
     // (global scope only — channel/persona overrides do not carry preset state)
-    const naiDefaultPresets: Record<
-      string,
-      { name: string; target: "kayra" | "erato" }
-    > = {
+    const naiDefaultPresets: Record<string, { name: string; target: "kayra" | "erato" }> = {
       "kayra-v1": { name: "Carefree-Kayra", target: "kayra" },
       "llama-3-erato-v1": { name: "Erato-Shosetsu", target: "erato" },
     };
     const defaultPresetEntry = naiDefaultPresets[selectedModel.llm_codename];
     if (defaultPresetEntry) {
       // Load presets and find the default, then apply silently
-      const naiPresets = await loadNaiPresetsForModel(
-        defaultPresetEntry.target,
-      );
-      const defaultPreset = naiPresets.find(
-        (p) => p.preset_name === defaultPresetEntry.name,
-      );
+      const naiPresets = await loadNaiPresetsForModel(defaultPresetEntry.target);
+      const defaultPreset = naiPresets.find((p) => p.preset_name === defaultPresetEntry.name);
       if (defaultPreset) {
-        await applyNaiPreset(
-          tomoriState.server_id,
-          defaultPreset,
-          selectedModel.llm_codename,
-        );
+        await applyNaiPreset(tomoriState.server_id, defaultPreset, selectedModel.llm_codename);
         // Cache already invalidated above; applyNaiPreset only writes to DB
       } else {
         log.warn(
@@ -928,17 +772,14 @@ export async function execute(
 
     // 12. Success message
     // Find previous model name
-    const previousModel = availableModels.find(
-      (model) => model.llm_id === tomoriState.config.llm_id,
-    );
+    const previousModel = availableModels.find((model) => model.llm_id === tomoriState.config.llm_id);
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.text.success_title",
       descriptionKey: "commands.config.model.text.success_description",
       descriptionVars: {
         model_name: selectedModel.llm_codename,
-        previous_model:
-          previousModel?.llm_codename ?? localizer(locale, "general.unknown"),
+        previous_model: previousModel?.llm_codename ?? localizer(locale, "general.unknown"),
       },
       color: ColorCode.SUCCESS,
     });
@@ -964,11 +805,7 @@ export async function execute(
         targetLlmIdAttempted: selectedModel?.llm_id,
       },
     };
-    await log.error(
-      `Error executing /config model for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config model for user ${userData.user_disc_id}`, error as Error, context);
 
     // 13. Inform user of unknown error
     // Use modalSubmitInteraction if available (error after modal), otherwise interaction (error during modal)

@@ -1,13 +1,6 @@
-import {
-  ELEVENLABS_API_BASE_URL,
-  getElevenLabsTtsConfig,
-} from "@/utils/audio/elevenLabsShared";
+import { ELEVENLABS_API_BASE_URL, getElevenLabsTtsConfig } from "@/utils/audio/elevenLabsShared";
 
-export type ElevenLabsVoiceCatalogErrorKind =
-  | "missing_api_key"
-  | "timeout"
-  | "request_failed"
-  | "invalid_response";
+export type ElevenLabsVoiceCatalogErrorKind = "missing_api_key" | "timeout" | "request_failed" | "invalid_response";
 
 export interface ElevenLabsVoiceCatalogEntry {
   voiceId: string;
@@ -26,9 +19,7 @@ export interface ElevenLabsVoiceCatalogResult {
   details?: string;
 }
 
-export async function fetchElevenLabsVoiceCatalog(
-  apiKey: string,
-): Promise<ElevenLabsVoiceCatalogResult> {
+export async function fetchElevenLabsVoiceCatalog(apiKey: string): Promise<ElevenLabsVoiceCatalogResult> {
   if (!apiKey.trim()) {
     return {
       success: false,
@@ -65,10 +56,7 @@ export async function fetchElevenLabsVoiceCatalog(
         success: false,
         errorKind: "request_failed",
         statusCode: response.status,
-        details:
-          typeof responseJson?.detail === "string"
-            ? responseJson.detail
-            : `HTTP ${response.status}`,
+        details: typeof responseJson?.detail === "string" ? responseJson.detail : `HTTP ${response.status}`,
       };
     }
 
@@ -78,8 +66,7 @@ export async function fetchElevenLabsVoiceCatalog(
         success: false,
         errorKind: "invalid_response",
         statusCode: response.status,
-        details:
-          "ElevenLabs voice list response did not include a voices array.",
+        details: "ElevenLabs voice list response did not include a voices array.",
       };
     }
 
@@ -90,40 +77,25 @@ export async function fetchElevenLabsVoiceCatalog(
         }
 
         const voiceRecord = voice as Record<string, unknown>;
-        const voiceId =
-          typeof voiceRecord.voice_id === "string"
-            ? voiceRecord.voice_id
-            : null;
+        const voiceId = typeof voiceRecord.voice_id === "string" ? voiceRecord.voice_id : null;
         if (!voiceId) {
           return [];
         }
         const labelsSource = voiceRecord.labels;
         const labels: Record<string, string> = {};
         if (labelsSource && typeof labelsSource === "object") {
-          for (const [key, value] of Object.entries(
-            labelsSource as Record<string, unknown>,
-          )) {
+          for (const [key, value] of Object.entries(labelsSource as Record<string, unknown>)) {
             if (typeof value === "string") {
               labels[key] = value;
             }
           }
         }
 
-        const name =
-          typeof voiceRecord.name === "string" ? voiceRecord.name.trim() : "";
+        const name = typeof voiceRecord.name === "string" ? voiceRecord.name.trim() : "";
 
-        const category =
-          typeof voiceRecord.category === "string"
-            ? voiceRecord.category
-            : null;
-        const description =
-          typeof voiceRecord.description === "string"
-            ? voiceRecord.description
-            : null;
-        const previewUrl =
-          typeof voiceRecord.preview_url === "string"
-            ? voiceRecord.preview_url
-            : null;
+        const category = typeof voiceRecord.category === "string" ? voiceRecord.category : null;
+        const description = typeof voiceRecord.description === "string" ? voiceRecord.description : null;
+        const previewUrl = typeof voiceRecord.preview_url === "string" ? voiceRecord.preview_url : null;
 
         return [
           {

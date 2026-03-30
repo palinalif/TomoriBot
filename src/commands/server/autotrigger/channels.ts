@@ -6,10 +6,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { tomoriConfigSchema } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -17,35 +14,21 @@ import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../../types/db/schema";
 
 // Configure the subcommand (no changes needed here)
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("channels")
-    .setDescription(
-      localizer("en-US", "commands.server.autotrigger.channels.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.autotrigger.channels.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.autotrigger.channels.channel_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.autotrigger.channels.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("action")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.autotrigger.channels.action_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.autotrigger.channels.action_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -94,8 +77,7 @@ export async function execute(
     if (channel.type !== ChannelType.GuildText) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.autotrigger.channels.invalid_channel_title",
-        descriptionKey:
-          "commands.server.autotrigger.channels.invalid_channel_description",
+        descriptionKey: "commands.server.autotrigger.channels.invalid_channel_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -119,8 +101,7 @@ export async function execute(
     if (action === "add" && currentChannels.includes(channel.id)) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.autotrigger.channels.already_added_title",
-        descriptionKey:
-          "commands.server.autotrigger.channels.already_added_description",
+        descriptionKey: "commands.server.autotrigger.channels.already_added_description",
         descriptionVars: {
           channel_name: channel.name ?? "UNDEFINED_CH",
         },
@@ -133,8 +114,7 @@ export async function execute(
     if (action === "remove" && !currentChannels.includes(channel.id)) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.autotrigger.channels.not_in_list_title",
-        descriptionKey:
-          "commands.server.autotrigger.channels.not_in_list_description",
+        descriptionKey: "commands.server.autotrigger.channels.not_in_list_description",
         descriptionVars: {
           channel_name: channel.name ?? "UNDEFINED_CH",
         },
@@ -145,14 +125,10 @@ export async function execute(
 
     // Update the channels array based on the action
     const updatedChannels =
-      action === "add"
-        ? [...currentChannels, channel.id]
-        : currentChannels.filter((id) => id !== channel.id);
+      action === "add" ? [...currentChannels, channel.id] : currentChannels.filter((id) => id !== channel.id);
 
     // Convert the array to a properly escaped PostgreSQL array literal
-    const channelsArrayLiteral = `{${updatedChannels
-      .map((id) => `"${id.replace(/(["\\])/g, "\\$1")}"`)
-      .join(",")}}`;
+    const channelsArrayLiteral = `{${updatedChannels.map((id) => `"${id.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
     // Update the config in the database with direct SQL
     const [updatedRow] = await sql`
@@ -173,11 +149,7 @@ export async function execute(
           action,
         },
       };
-      await log.error(
-        "Failed to update autoch_disc_ids config",
-        new Error("Database update failed"),
-        context,
-      );
+      await log.error("Failed to update autoch_disc_ids config", new Error("Database update failed"), context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -198,11 +170,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",

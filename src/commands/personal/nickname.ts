@@ -1,16 +1,7 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  userSchema,
-  type UserRow,
-  type ErrorContext,
-  type TomoriState,
-} from "../../types/db/schema";
+import { userSchema, type UserRow, type ErrorContext, type TomoriState } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
@@ -22,20 +13,14 @@ const NICKNAME_MIN_LENGTH = 2;
 const NICKNAME_MAX_LENGTH = 32;
 
 // Rule 21: Configure the subcommand (Using updated localization keys)
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("nickname") // Keep name simple as per refactor
-    .setDescription(
-      localizer("en-US", "commands.personal.nickname.description"),
-    )
+    .setDescription(localizer("en-US", "commands.personal.nickname.description"))
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(
-          localizer("en-US", "commands.personal.nickname.option_description"),
-        )
+        .setDescription(localizer("en-US", "commands.personal.nickname.option_description"))
         .setRequired(true)
         .setMinLength(NICKNAME_MIN_LENGTH)
         .setMaxLength(NICKNAME_MAX_LENGTH),
@@ -74,10 +59,7 @@ export async function execute(
 
     // 2. Validate nickname length (redundant check, Discord handles this, but good for safety)
     // Let helper functions manage interaction state
-    if (
-      newNickname.length < NICKNAME_MIN_LENGTH ||
-      newNickname.length > NICKNAME_MAX_LENGTH
-    ) {
+    if (newNickname.length < NICKNAME_MIN_LENGTH || newNickname.length > NICKNAME_MAX_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.personal.nickname.invalid_length_title",
         descriptionKey: "commands.personal.nickname.invalid_length",
@@ -92,9 +74,7 @@ export async function execute(
     }
 
     // 4. Load server's Tomori state to check personalization setting
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
 
     // 5. Check if Tomori is set up (needed for config check)
     if (!tomoriState) {
@@ -134,11 +114,7 @@ export async function execute(
           validationErrors: validationResult.error.issues,
         },
       };
-      await log.error(
-        "Failed to validate updated user data for user_nickname",
-        validationResult.error,
-        context,
-      );
+      await log.error("Failed to validate updated user data for user_nickname", validationResult.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -159,8 +135,7 @@ export async function execute(
     // Assuming 'personalization_enabled' is the single config key
     // biome-ignore lint/style/noNonNullAssertion: tomoriState checked earlier
     if (!tomoriState!.config.personal_memories_enabled) {
-      descriptionKey =
-        "commands.personal.nickname.success_but_disabled_description"; // Use the warning description
+      descriptionKey = "commands.personal.nickname.success_but_disabled_description"; // Use the warning description
       embedColor = ColorCode.WARN; // Use warning color
     }
 
@@ -196,24 +171,15 @@ export async function execute(
       try {
         await interaction.followUp({
           // Use followUp
-          content: localizer(
-            locale,
-            "general.errors.unknown_error_description",
-          ),
+          content: localizer(locale, "general.errors.unknown_error_description"),
           flags: MessageFlags.Ephemeral,
         });
       } catch (followUpError) {
-        log.error(
-          "Failed to send follow-up error message in nickname catch block",
-          followUpError,
-        );
+        log.error("Failed to send follow-up error message in nickname catch block", followUpError);
       }
     } else {
       // This case should be rare after initial deferReply
-      log.warn(
-        "Interaction was not replied or deferred in nickname catch block, cannot send error message.",
-        context,
-      );
+      log.warn("Interaction was not replied or deferred in nickname catch block, cannot send error message.", context);
     }
   }
 }

@@ -5,22 +5,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-  type TomoriConfigRow,
-} from "../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriConfigSchema, type TomoriConfigRow } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import type { CheckboxGroupOption } from "@/types/discord/modal";
 
@@ -31,14 +20,10 @@ import type { CheckboxGroupOption } from "@/types/discord/modal";
 const MEMBERPERMISSIONS_CHECKBOX_ID = "memberpermissions_checkbox";
 
 // Configure the subcommand — no options needed, UI is a checkbox modal
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("memberpermissions")
-    .setDescription(
-      localizer("en-US", "commands.server.memberpermissions.description"),
-    );
+    .setDescription(localizer("en-US", "commands.server.memberpermissions.description"));
 
 /**
  * Defines all configurable member teaching permissions for the checkbox modal.
@@ -120,13 +105,12 @@ export async function execute(
     }
 
     // 3. Build checkbox options, pre-checking currently-allowed permissions
-    const checkboxOptions: CheckboxGroupOption[] =
-      MEMBER_PERMISSION_DEFINITIONS.map((def) => ({
-        label: localizer(locale, def.labelKey),
-        value: def.value,
-        description: localizer(locale, def.descKey),
-        default: def.getState(tomoriState.config),
-      }));
+    const checkboxOptions: CheckboxGroupOption[] = MEMBER_PERMISSION_DEFINITIONS.map((def) => ({
+      label: localizer(locale, def.labelKey),
+      value: def.value,
+      description: localizer(locale, def.descKey),
+      default: def.getState(tomoriState.config),
+    }));
 
     // 4. Show the checkbox modal — first interaction acknowledgment
     const modalResult = await promptWithRawModal(
@@ -140,8 +124,7 @@ export async function execute(
             kind: "checkboxGroup",
             customId: MEMBERPERMISSIONS_CHECKBOX_ID,
             labelKey: "commands.server.memberpermissions.select_placeholder",
-            descriptionKey:
-              "commands.server.memberpermissions.select_embed_description",
+            descriptionKey: "commands.server.memberpermissions.select_embed_description",
             minValues: 0,
             required: false,
             options: checkboxOptions,
@@ -160,9 +143,7 @@ export async function execute(
     const modalInteraction = modalResult.interaction;
 
     // 5. Determine which permissions changed
-    const newlyEnabled = new Set(
-      modalResult.multiValues?.[MEMBERPERMISSIONS_CHECKBOX_ID] ?? [],
-    );
+    const newlyEnabled = new Set(modalResult.multiValues?.[MEMBERPERMISSIONS_CHECKBOX_ID] ?? []);
     const changes: Array<{
       dbColumn: string;
       isEnabled: boolean;
@@ -185,8 +166,7 @@ export async function execute(
     if (changes.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "commands.server.memberpermissions.no_changes_title",
-        descriptionKey:
-          "commands.server.memberpermissions.no_changes_description",
+        descriptionKey: "commands.server.memberpermissions.no_changes_description",
         color: ColorCode.WARN,
       });
       return;
@@ -214,9 +194,7 @@ export async function execute(
             guildId: interaction.guild.id,
             dbColumn: change.dbColumn,
             isEnabled: change.isEnabled,
-            validationErrors: validatedConfig.success
-              ? null
-              : validatedConfig.error.flatten(),
+            validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
           },
         };
         await log.error(
@@ -240,18 +218,12 @@ export async function execute(
     invalidateTomoriStateCache(interaction.guild.id);
 
     // 9. Build the success result embed
-    const enabledLabels = changes
-      .filter((c) => c.isEnabled)
-      .map((c) => `\`${c.label}\``);
-    const disabledLabels = changes
-      .filter((c) => !c.isEnabled)
-      .map((c) => `\`${c.label}\``);
+    const enabledLabels = changes.filter((c) => c.isEnabled).map((c) => `\`${c.label}\``);
+    const disabledLabels = changes.filter((c) => !c.isEnabled).map((c) => `\`${c.label}\``);
 
-    let resultDescription = localizer(
-      locale,
-      "commands.server.memberpermissions.success_description",
-      { count: changes.length },
-    );
+    let resultDescription = localizer(locale, "commands.server.memberpermissions.success_description", {
+      count: changes.length,
+    });
     if (enabledLabels.length > 0) {
       resultDescription += `\n✅ **Enabled:** ${enabledLabels.join(", ")}`;
     }
@@ -262,12 +234,7 @@ export async function execute(
     await modalInteraction.reply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(
-              locale,
-              "commands.server.memberpermissions.success_title",
-            ),
-          )
+          .setTitle(localizer(locale, "commands.server.memberpermissions.success_title"))
           .setDescription(resultDescription)
           .setColor(ColorCode.SUCCESS),
       ],

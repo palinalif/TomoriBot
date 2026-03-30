@@ -3,19 +3,11 @@
  * Removes an alter persona from the server
  */
 
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import type { UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
@@ -34,12 +26,8 @@ function isDuplicateTaggedName(name: string): boolean {
 /**
  * Configure the 'remove' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(localizer("en-US", "commands.persona.remove.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.persona.remove.description"));
 
 /**
  * Executes the 'remove' command
@@ -68,8 +56,7 @@ export async function execute(
     }
 
     // 2. Check permissions (ManageGuild required)
-    const hasPermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
     if (!hasPermission) {
       await replyInfoEmbed(interaction, locale, {
@@ -87,9 +74,7 @@ export async function execute(
     // 4. Filter to removable personas:
     // - all alters
     // - duplicate-tagged personas created by schema migration cleanup, even if marked as main
-    const removablePersonas = allPersonas.filter(
-      (p) => p.is_alter || isDuplicateTaggedName(p.tomori_nickname),
-    );
+    const removablePersonas = allPersonas.filter((p) => p.is_alter || isDuplicateTaggedName(p.tomori_nickname));
 
     // 5. Error if no alters exist
     if (removablePersonas.length === 0) {
@@ -103,12 +88,10 @@ export async function execute(
     }
 
     // 6. Build select options for modal
-    const alterSelectOptions: SelectOption[] = removablePersonas.map(
-      (persona, index) => ({
-        label: safeSelectOptionText(persona.tomori_nickname),
-        value: index.toString(), // Use index to avoid truncation issues
-      }),
-    );
+    const alterSelectOptions: SelectOption[] = removablePersonas.map((persona, index) => ({
+      label: safeSelectOptionText(persona.tomori_nickname),
+      value: index.toString(), // Use index to avoid truncation issues
+    }));
 
     // 7. Show modal with alter selection
     const modalResult = await promptWithPaginatedModal(interaction, locale, {
@@ -127,9 +110,7 @@ export async function execute(
 
     // Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Persona removal modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Persona removal modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -154,9 +135,7 @@ export async function execute(
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
-      log.warn(
-        "Persona removal failed due to missing tomori_id for selected alter.",
-      );
+      log.warn("Persona removal failed due to missing tomori_id for selected alter.");
       return;
     }
     const personaId = personaToRemove.tomori_id;
@@ -197,13 +176,9 @@ export async function execute(
     // 10. Show success embed with deleted persona's nickname
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.persona.remove.success_title",
-      description: localizer(
-        locale,
-        "commands.persona.remove.success_description",
-        {
-          nickname: personaToRemove.tomori_nickname,
-        },
-      ),
+      description: localizer(locale, "commands.persona.remove.success_description", {
+        nickname: personaToRemove.tomori_nickname,
+      }),
       color: ColorCode.SUCCESS,
     });
 
@@ -229,9 +204,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });

@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import type { ErrorContext } from "@/types/db/schema";
@@ -15,12 +11,8 @@ import { version } from "../../../package.json";
  * Configure the /help features subcommand
  * Shows users what TomoriBot can do based on chatCapabilities.md
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("features")
-    .setDescription(localizer("en-US", "commands.help.features.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("features").setDescription(localizer("en-US", "commands.help.features.description"));
 
 /**
  * Execute the /help features command
@@ -49,34 +41,22 @@ export async function execute(
         fields: [
           {
             nameKey: "commands.help.features.vision_title",
-            value: localizer(
-              locale,
-              "commands.help.features.vision_description",
-            ),
+            value: localizer(locale, "commands.help.features.vision_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.search_title",
-            value: localizer(
-              locale,
-              "commands.help.features.search_description",
-            ),
+            value: localizer(locale, "commands.help.features.search_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.personality_title",
-            value: localizer(
-              locale,
-              "commands.help.features.personality_description",
-            ),
+            value: localizer(locale, "commands.help.features.personality_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.memory_title",
-            value: localizer(
-              locale,
-              "commands.help.features.memory_description",
-            ),
+            value: localizer(locale, "commands.help.features.memory_description"),
             inline: false,
           },
           {
@@ -86,42 +66,27 @@ export async function execute(
           },
           {
             nameKey: "commands.help.features.alter_title",
-            value: localizer(
-              locale,
-              "commands.help.features.alter_description",
-            ),
+            value: localizer(locale, "commands.help.features.alter_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.expressions_title",
-            value: localizer(
-              locale,
-              "commands.help.features.expressions_description",
-            ),
+            value: localizer(locale, "commands.help.features.expressions_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.documents_title",
-            value: localizer(
-              locale,
-              "commands.help.features.documents_description",
-            ),
+            value: localizer(locale, "commands.help.features.documents_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.impersonation_title",
-            value: localizer(
-              locale,
-              "commands.help.features.impersonation_description",
-            ),
+            value: localizer(locale, "commands.help.features.impersonation_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.features.imagegen_title",
-            value: localizer(
-              locale,
-              "commands.help.features.imagegen_description",
-            ),
+            value: localizer(locale, "commands.help.features.imagegen_description"),
             inline: false,
           },
         ],
@@ -139,17 +104,10 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help features command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help features command", error as Error, context);
 
     // Inform user of error (ephemeral)
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -164,11 +122,7 @@ export async function execute(
       }
     } catch (replyError) {
       // Log if even the error reply fails
-      log.error(
-        "Failed to send error reply for /help features",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help features", replyError, context);
     }
   }
 }

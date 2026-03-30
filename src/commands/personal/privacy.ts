@@ -7,15 +7,8 @@ import {
 import { setPrivacyLevel } from "../../utils/db/dbWrite";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  PrivacyLevel,
-} from "../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, PrivacyLevel } from "../../types/db/schema";
 import type { RadioGroupOption } from "../../types/discord/modal";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 
@@ -63,22 +56,14 @@ function getPrivacyLevelLabel(locale: string, level: PrivacyLevel): string {
     case PrivacyLevel.FULL:
       return localizer(locale, "commands.personal.privacy.choice_full");
     default:
-      log.warn(
-        `Unexpected privacy level encountered in getPrivacyLevelLabel: ${level}`,
-      );
+      log.warn(`Unexpected privacy level encountered in getPrivacyLevelLabel: ${level}`);
       return localizer(locale, "commands.personal.privacy.choice_minimal");
   }
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("privacy")
-    .setDescription(
-      localizer("en-US", "commands.personal.privacy.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("privacy").setDescription(localizer("en-US", "commands.personal.privacy.description"));
 
 /**
  * Manages user's global privacy settings for personalization.
@@ -101,9 +86,7 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   // Declare modalSubmitInteraction outside try-catch for catch block access
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
 
   try {
     // 1. Get current privacy level
@@ -127,9 +110,7 @@ export async function execute(
 
     // 3. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Privacy level selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Privacy level selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -143,9 +124,7 @@ export async function execute(
     // 4. Validate the parsed value
     if (
       Number.isNaN(requestedLevel) ||
-      ![PrivacyLevel.MINIMAL, PrivacyLevel.PARTIAL, PrivacyLevel.FULL].includes(
-        requestedLevel,
-      )
+      ![PrivacyLevel.MINIMAL, PrivacyLevel.PARTIAL, PrivacyLevel.FULL].includes(requestedLevel)
     ) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.operation_failed_title",
@@ -172,10 +151,7 @@ export async function execute(
     await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // 7. Update privacy level in database
-    const updatedUser = await setPrivacyLevel(
-      interaction.user.id,
-      requestedLevel,
-    );
+    const updatedUser = await setPrivacyLevel(interaction.user.id, requestedLevel);
 
     if (!updatedUser) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -215,11 +191,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /personal privacy for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /personal privacy for user ${userData.user_disc_id}`, error as Error, context);
 
     // 11. Inform user of unknown error
     const replyTarget = modalSubmitInteraction ?? interaction;

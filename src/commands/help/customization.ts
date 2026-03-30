@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { ChannelType, MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import type { ErrorContext } from "@/types/db/schema";
@@ -16,14 +12,8 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
  * Configure the /help customization subcommand
  * Comprehensive guide to customizing TomoriBot's behavior and personality
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("customization")
-    .setDescription(
-      localizer("en-US", "commands.help.customization.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("customization").setDescription(localizer("en-US", "commands.help.customization.description"));
 
 /**
  * Execute the /help customization command
@@ -41,199 +31,51 @@ export async function execute(
 ): Promise<void> {
   try {
     // Get command mentions for cross-references
-    const helpMemoryMention = commandRegistry.getCommandMention(
-      "help",
-      "memory",
-    );
-    const personaCreateMention = commandRegistry.getCommandMention(
-      "persona",
-      "create",
-    );
-    const personaGenerateMention = commandRegistry.getCommandMention(
-      "persona",
-      "generate",
-    );
-    const personaDefaultMention = commandRegistry.getCommandMention(
-      "persona",
-      "default",
-    );
-    const personaExportMention = commandRegistry.getCommandMention(
-      "persona",
-      "export",
-    );
-    const personaImportMention = commandRegistry.getCommandMention(
-      "persona",
-      "import",
-    );
+    const helpMemoryMention = commandRegistry.getCommandMention("help", "memory");
+    const personaCreateMention = commandRegistry.getCommandMention("persona", "create");
+    const personaGenerateMention = commandRegistry.getCommandMention("persona", "generate");
+    const personaDefaultMention = commandRegistry.getCommandMention("persona", "default");
+    const personaExportMention = commandRegistry.getCommandMention("persona", "export");
+    const personaImportMention = commandRegistry.getCommandMention("persona", "import");
     const teachMention = commandRegistry.getCommandMention("teach");
-    const serverAvatarMention = commandRegistry.getCommandMention(
-      "server",
-      "avatar",
-    );
-    const teachAttributeMention = commandRegistry.getCommandMention(
-      "teach",
-      "attribute",
-    );
-    const teachSampledialogueMention = commandRegistry.getCommandMention(
-      "teach",
-      "sampledialogue",
-    );
-    const configRenameMention = commandRegistry.getCommandMention(
-      "config",
-      "rename",
-    );
-    const forgetAttributeMention = commandRegistry.getCommandMention(
-      "forget",
-      "attribute",
-    );
-    const forgetSampledialogueMention = commandRegistry.getCommandMention(
-      "forget",
-      "sampledialogue",
-    );
-    const serverMemberpermissionsMention = commandRegistry.getCommandMention(
-      "server",
-      "memberpermissions",
-    );
-    const serverBlacklistMention = commandRegistry.getCommandMention(
-      "server",
-      "blacklist",
-    );
-    const serverAutotriggerChannelsMention = commandRegistry.getCommandMention(
-      "server",
-      "autotrigger",
-      "channels",
-    );
-    const serverAutotriggerThresholdMention = commandRegistry.getCommandMention(
-      "server",
-      "autotrigger",
-      "threshold",
-    );
-    const serverTriggerAddMention = commandRegistry.getCommandMention(
-      "server",
-      "trigger",
-      "add",
-    );
-    const serverTriggerDeleteMention = commandRegistry.getCommandMention(
-      "server",
-      "trigger",
-      "delete",
-    );
-    const configModelMention = commandRegistry.getCommandMention(
-      "config",
-      "model",
-      "text",
-    );
-    const configTemperatureMention = commandRegistry.getCommandMention(
-      "config",
-      "temperature",
-    );
-    const configHumanizerMention = commandRegistry.getCommandMention(
-      "config",
-      "humanizer",
-    );
-    const configApikeySetMention = commandRegistry.getCommandMention(
-      "config",
-      "apikey",
-      "set",
-    );
-    const configApikeyDeleteMention = commandRegistry.getCommandMention(
-      "config",
-      "apikey",
-      "delete",
-    );
-    const configBraveapiSetMention = commandRegistry.getCommandMention(
-      "config",
-      "braveapi",
-      "set",
-    );
-    const configBraveapiDeleteMention = commandRegistry.getCommandMention(
-      "config",
-      "braveapi",
-      "delete",
-    );
-    const configTimezoneMention = commandRegistry.getCommandMention(
-      "config",
-      "timezone",
-    );
-    const configPermissionsMention = commandRegistry.getCommandMention(
-      "config",
-      "permissions",
-    );
-    const personaRemoveMention = commandRegistry.getCommandMention(
-      "persona",
-      "remove",
-    );
-    const serverWhitelistChannelMention = commandRegistry.getCommandMention(
-      "server",
-      "whitelist",
-      "channel",
-    );
-    const serverWhitelistRoleMention = commandRegistry.getCommandMention(
-      "server",
-      "whitelist",
-      "role",
-    );
-    const serverWhitelistRemoveMention = commandRegistry.getCommandMention(
-      "server",
-      "whitelist",
-      "remove",
-    );
-    const teachDocumentMention = commandRegistry.getCommandMention(
-      "teach",
-      "document",
-    );
-    const forgetDocumentMention = commandRegistry.getCommandMention(
-      "forget",
-      "document",
-    );
-    const configApikeyRotationMention = commandRegistry.getCommandMention(
-      "config",
-      "apikey",
-      "rotation",
-    );
-    const configUncensorsMention = commandRegistry.getCommandMention(
-      "config",
-      "uncensors",
-    );
-    const configModelEmbeddingMention = commandRegistry.getCommandMention(
-      "config",
-      "model",
-      "embedding",
-    );
-    const configModelImageMention = commandRegistry.getCommandMention(
-      "config",
-      "model",
-      "image",
-    );
-    const configPromptChangeMention = commandRegistry.getCommandMention(
-      "config",
-      "prompt",
-      "change",
-    );
-    const configPromptPresetMention = commandRegistry.getCommandMention(
-      "config",
-      "prompt",
-      "preset",
-    );
-    const configPromptClearMention = commandRegistry.getCommandMention(
-      "config",
-      "prompt",
-      "clear",
-    );
-    const serverInitializeExpressionsMention =
-      commandRegistry.getCommandMention("server", "initialize", "expressions");
-    const personalPrivacyMention = commandRegistry.getCommandMention(
-      "personal",
-      "privacy",
-    );
-    const configCooldownMention = commandRegistry.getCommandMention(
-      "config",
-      "cooldown",
-    );
-    const generateImageMention = commandRegistry.getCommandMention(
-      "generate",
-      "image",
-    );
+    const serverAvatarMention = commandRegistry.getCommandMention("server", "avatar");
+    const teachAttributeMention = commandRegistry.getCommandMention("teach", "attribute");
+    const teachSampledialogueMention = commandRegistry.getCommandMention("teach", "sampledialogue");
+    const configRenameMention = commandRegistry.getCommandMention("config", "rename");
+    const forgetAttributeMention = commandRegistry.getCommandMention("forget", "attribute");
+    const forgetSampledialogueMention = commandRegistry.getCommandMention("forget", "sampledialogue");
+    const serverMemberpermissionsMention = commandRegistry.getCommandMention("server", "memberpermissions");
+    const serverBlacklistMention = commandRegistry.getCommandMention("server", "blacklist");
+    const serverAutotriggerChannelsMention = commandRegistry.getCommandMention("server", "autotrigger", "channels");
+    const serverAutotriggerThresholdMention = commandRegistry.getCommandMention("server", "autotrigger", "threshold");
+    const serverTriggerAddMention = commandRegistry.getCommandMention("server", "trigger", "add");
+    const serverTriggerDeleteMention = commandRegistry.getCommandMention("server", "trigger", "delete");
+    const configModelMention = commandRegistry.getCommandMention("config", "model", "text");
+    const configTemperatureMention = commandRegistry.getCommandMention("config", "temperature");
+    const configHumanizerMention = commandRegistry.getCommandMention("config", "humanizer");
+    const configApikeySetMention = commandRegistry.getCommandMention("config", "apikey", "set");
+    const configApikeyDeleteMention = commandRegistry.getCommandMention("config", "apikey", "delete");
+    const configBraveapiSetMention = commandRegistry.getCommandMention("config", "braveapi", "set");
+    const configBraveapiDeleteMention = commandRegistry.getCommandMention("config", "braveapi", "delete");
+    const configTimezoneMention = commandRegistry.getCommandMention("config", "timezone");
+    const configPermissionsMention = commandRegistry.getCommandMention("config", "permissions");
+    const personaRemoveMention = commandRegistry.getCommandMention("persona", "remove");
+    const serverWhitelistChannelMention = commandRegistry.getCommandMention("server", "whitelist", "channel");
+    const serverWhitelistRoleMention = commandRegistry.getCommandMention("server", "whitelist", "role");
+    const serverWhitelistRemoveMention = commandRegistry.getCommandMention("server", "whitelist", "remove");
+    const teachDocumentMention = commandRegistry.getCommandMention("teach", "document");
+    const forgetDocumentMention = commandRegistry.getCommandMention("forget", "document");
+    const configApikeyRotationMention = commandRegistry.getCommandMention("config", "apikey", "rotation");
+    const configUncensorsMention = commandRegistry.getCommandMention("config", "uncensors");
+    const configModelEmbeddingMention = commandRegistry.getCommandMention("config", "model", "embedding");
+    const configModelImageMention = commandRegistry.getCommandMention("config", "model", "image");
+    const configPromptChangeMention = commandRegistry.getCommandMention("config", "prompt", "change");
+    const configPromptPresetMention = commandRegistry.getCommandMention("config", "prompt", "preset");
+    const configPromptClearMention = commandRegistry.getCommandMention("config", "prompt", "clear");
+    const serverInitializeExpressionsMention = commandRegistry.getCommandMention("server", "initialize", "expressions");
+    const personalPrivacyMention = commandRegistry.getCommandMention("personal", "privacy");
+    const configCooldownMention = commandRegistry.getCommandMention("config", "cooldown");
+    const generateImageMention = commandRegistry.getCommandMention("generate", "image");
 
     // EMBED 1: Overview + Personality Personas (reply with first embed)
     await replySummaryEmbed(
@@ -249,29 +91,21 @@ export async function execute(
         fields: [
           {
             nameKey: "commands.help.customization.embed1_personas_title",
-            value: localizer(
-              locale,
-              "commands.help.customization.embed1_personas_description",
-              {
-                personaCreate: personaCreateMention,
-                personaGenerate: personaGenerateMention,
-                personaDefault: personaDefaultMention,
-                personaExport: personaExportMention,
-                personaImport: personaImportMention,
-                personaRemove: personaRemoveMention,
-                teach: teachMention,
-                serverAvatar: serverAvatarMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.customization.embed1_personas_description", {
+              personaCreate: personaCreateMention,
+              personaGenerate: personaGenerateMention,
+              personaDefault: personaDefaultMention,
+              personaExport: personaExportMention,
+              personaImport: personaImportMention,
+              personaRemove: personaRemoveMention,
+              teach: teachMention,
+              serverAvatar: serverAvatarMention,
+            }),
             inline: false,
           },
           {
-            nameKey:
-              "commands.help.customization.embed1_what_personas_include_title",
-            value: localizer(
-              locale,
-              "commands.help.customization.embed1_what_personas_include_description",
-            ),
+            nameKey: "commands.help.customization.embed1_what_personas_include_title",
+            value: localizer(locale, "commands.help.customization.embed1_what_personas_include_description"),
             inline: false,
           },
         ],
@@ -378,17 +212,10 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help customization command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help customization command", error as Error, context);
 
     // Inform user of error (ephemeral)
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -403,11 +230,7 @@ export async function execute(
       }
     } catch (replyError) {
       // Log if even the error reply fails
-      log.error(
-        "Failed to send error reply for /help customization",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help customization", replyError, context);
     }
   }
 }

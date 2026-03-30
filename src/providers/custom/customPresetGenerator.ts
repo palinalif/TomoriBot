@@ -1,9 +1,6 @@
 import { executeTool } from "@/tools/toolRegistry";
 import type { ToolContext, ToolResult } from "@/types/tool/interfaces";
-import type {
-  GeneratePresetParams,
-  PresetGenerationResult,
-} from "@/types/provider/featureInterfaces";
+import type { GeneratePresetParams, PresetGenerationResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { sanitizeSampleDialogueText } from "@/providers/google/presetGenerator";
 import { getCustomToolAdapter } from "@/providers/custom/customToolAdapter";
@@ -64,9 +61,7 @@ export async function generatePresetFromPromptCustom(
   }
 
   const userContent =
-    contentParts.length === 1 && contentParts[0].type === "text"
-      ? contentParts[0].text
-      : contentParts;
+    contentParts.length === 1 && contentParts[0].type === "text" ? contentParts[0].text : contentParts;
 
   const messages: CustomMessage[] = [
     {
@@ -102,18 +97,14 @@ export async function generatePresetFromPromptCustom(
     });
 
     if (!response.success) {
-      log.error(
-        "Custom preset generation request failed",
-        new Error(response.error.errorBody),
-        {
-          errorType: "CustomPresetGenerationHttpError",
-          metadata: {
-            model: options.model,
-            status: response.error.status,
-            errorBody: response.error.errorBody,
-          },
+      log.error("Custom preset generation request failed", new Error(response.error.errorBody), {
+        errorType: "CustomPresetGenerationHttpError",
+        metadata: {
+          model: options.model,
+          status: response.error.status,
+          errorBody: response.error.errorBody,
         },
-      );
+      });
       return {
         error:
           response.error.status === 0
@@ -141,8 +132,7 @@ export async function generatePresetFromPromptCustom(
     if (toolCalls.length > 0) {
       if (!toolsEnabled || !toolContext) {
         return {
-          error:
-            "Custom endpoint requested tool calls but tools are not available.",
+          error: "Custom endpoint requested tool calls but tools are not available.",
           errorType: "MODEL_ERROR",
         };
       }
@@ -180,13 +170,8 @@ export async function generatePresetFromPromptCustom(
             try {
               parsedArgs = JSON.parse(rawArgs);
             } catch (parseError) {
-              log.warn(
-                `Custom tool call args parse failed for ${functionName}: ${rawArgs}`,
-                parseError as Error,
-              );
-              toolResult = buildToolErrorResult(
-                `Invalid tool arguments for ${functionName}`,
-              );
+              log.warn(`Custom tool call args parse failed for ${functionName}: ${rawArgs}`, parseError as Error);
+              toolResult = buildToolErrorResult(`Invalid tool arguments for ${functionName}`);
             }
           }
 
@@ -194,11 +179,7 @@ export async function generatePresetFromPromptCustom(
             log.info(
               `Executing custom preset-generation tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
             );
-            toolResult = await executeTool(
-              functionName,
-              parsedArgs,
-              toolContext,
-            );
+            toolResult = await executeTool(functionName, parsedArgs, toolContext);
           }
         }
 
@@ -242,65 +223,43 @@ export async function generatePresetFromPromptCustom(
         sample_dialogues_out?: string[];
       };
     } catch (parseError) {
-      log.error(
-        "Custom preset generation JSON parse failed",
-        parseError as Error,
-      );
+      log.error("Custom preset generation JSON parse failed", parseError as Error);
       return {
         error: "Invalid JSON response from custom endpoint.",
         errorType: "INVALID_JSON",
       };
     }
 
-    if (
-      !parsedResponse.attribute_list ||
-      !parsedResponse.sample_dialogues_in ||
-      !parsedResponse.sample_dialogues_out
-    ) {
+    if (!parsedResponse.attribute_list || !parsedResponse.sample_dialogues_in || !parsedResponse.sample_dialogues_out) {
       return {
         error: "Generated character data is incomplete. Please try again.",
         errorType: "INVALID_JSON",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.attribute_list) ||
-      parsedResponse.attribute_list.length !== 6
-    ) {
+    if (!Array.isArray(parsedResponse.attribute_list) || parsedResponse.attribute_list.length !== 6) {
       return {
-        error:
-          "Generated attribute list must contain exactly 6 items. Please try again.",
+        error: "Generated attribute list must contain exactly 6 items. Please try again.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.sample_dialogues_in) ||
-      parsedResponse.sample_dialogues_in.length !== 5
-    ) {
+    if (!Array.isArray(parsedResponse.sample_dialogues_in) || parsedResponse.sample_dialogues_in.length !== 5) {
       return {
         error: "Generated sample dialogues must contain exactly 5 user inputs.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.sample_dialogues_out) ||
-      parsedResponse.sample_dialogues_out.length !== 5
-    ) {
+    if (!Array.isArray(parsedResponse.sample_dialogues_out) || parsedResponse.sample_dialogues_out.length !== 5) {
       return {
-        error:
-          "Generated sample dialogues must contain exactly 5 character responses.",
+        error: "Generated sample dialogues must contain exactly 5 character responses.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(
-      sanitizeSampleDialogueText,
-    );
-    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(
-      sanitizeSampleDialogueText,
-    );
+    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(sanitizeSampleDialogueText);
+    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(sanitizeSampleDialogueText);
 
     const preset = {
       tomori_nickname: params.characterName,
@@ -310,9 +269,7 @@ export async function generatePresetFromPromptCustom(
       sample_dialogues_out: sanitizedDialoguesOut,
     };
 
-    log.success(
-      `Custom preset generation successful for ${params.characterName}`,
-    );
+    log.success(`Custom preset generation successful for ${params.characterName}`);
     return { preset };
   }
 }

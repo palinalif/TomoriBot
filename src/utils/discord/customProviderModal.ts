@@ -78,68 +78,44 @@ export async function promptCustomCapabilities(
     // Create select menus for each capability with descriptive labels
     const toolsSelect = new StringSelectMenuBuilder()
       .setCustomId("cap_tools")
-      .setPlaceholder(
-        localizer(locale, "commands.config.custom.capability_tools_label"),
-      )
+      .setPlaceholder(localizer(locale, "commands.config.custom.capability_tools_label"))
       .addOptions([
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_tools_yes",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_tools_yes"),
           value: "true",
           default: true,
         },
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_tools_no",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_tools_no"),
           value: "false",
         },
       ]);
 
     const imagesSelect = new StringSelectMenuBuilder()
       .setCustomId("cap_images")
-      .setPlaceholder(
-        localizer(locale, "commands.config.custom.capability_images_label"),
-      )
+      .setPlaceholder(localizer(locale, "commands.config.custom.capability_images_label"))
       .addOptions([
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_images_yes",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_images_yes"),
           value: "true",
           default: true,
         },
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_images_no",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_images_no"),
           value: "false",
         },
       ]);
 
     const videosSelect = new StringSelectMenuBuilder()
       .setCustomId("cap_videos")
-      .setPlaceholder(
-        localizer(locale, "commands.config.custom.capability_videos_label"),
-      )
+      .setPlaceholder(localizer(locale, "commands.config.custom.capability_videos_label"))
       .addOptions([
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_videos_yes",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_videos_yes"),
           value: "true",
         },
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_videos_no",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_videos_no"),
           value: "false",
           default: true,
         },
@@ -147,25 +123,14 @@ export async function promptCustomCapabilities(
 
     const structOutputSelect = new StringSelectMenuBuilder()
       .setCustomId("cap_structoutput")
-      .setPlaceholder(
-        localizer(
-          locale,
-          "commands.config.custom.capability_structoutput_label",
-        ),
-      )
+      .setPlaceholder(localizer(locale, "commands.config.custom.capability_structoutput_label"))
       .addOptions([
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_structoutput_yes",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_structoutput_yes"),
           value: "true",
         },
         {
-          label: localizer(
-            locale,
-            "commands.config.custom.capability_structoutput_no",
-          ),
+          label: localizer(locale, "commands.config.custom.capability_structoutput_no"),
           value: "false",
           default: true,
         },
@@ -183,26 +148,11 @@ export async function promptCustomCapabilities(
       .setStyle(ButtonStyle.Primary);
 
     // Build rows
-    const toolsRow =
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        toolsSelect,
-      );
-    const imagesRow =
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        imagesSelect,
-      );
-    const videosRow =
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        videosSelect,
-      );
-    const structOutputRow =
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        structOutputSelect,
-      );
-    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      modelNameButton,
-      confirmButton,
-    );
+    const toolsRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(toolsSelect);
+    const imagesRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(imagesSelect);
+    const videosRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(videosSelect);
+    const structOutputRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(structOutputSelect);
+    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(modelNameButton, confirmButton);
 
     // Track selected values (defaults match the select menu defaults)
     let hasTools = true;
@@ -213,9 +163,7 @@ export async function promptCustomCapabilities(
 
     // Helper function to update the message content with current model name
     const updateMessageContent = () => {
-      const modelNameDisplay =
-        customModelName ||
-        localizer(locale, "commands.config.custom.model_name_placeholder");
+      const modelNameDisplay = customModelName || localizer(locale, "commands.config.custom.model_name_placeholder");
       return `${localizer(locale, "commands.config.custom.capabilities_prompt")}\n\n**${localizer(locale, "commands.config.custom.model_name_label")}:** \`${modelNameDisplay}\``;
     };
 
@@ -258,21 +206,12 @@ export async function promptCustomCapabilities(
           // Show modal for model name input
           const modal = new ModalBuilder()
             .setCustomId("model_name_modal")
-            .setTitle(
-              localizer(locale, "commands.config.custom.model_name_label"),
-            );
+            .setTitle(localizer(locale, "commands.config.custom.model_name_label"));
 
           const modelNameInput = new TextInputBuilder()
             .setCustomId("model_name_input")
-            .setLabel(
-              localizer(locale, "commands.config.custom.model_name_label"),
-            )
-            .setPlaceholder(
-              localizer(
-                locale,
-                "commands.config.custom.model_name_placeholder",
-              ),
-            )
+            .setLabel(localizer(locale, "commands.config.custom.model_name_label"))
+            .setPlaceholder(localizer(locale, "commands.config.custom.model_name_placeholder"))
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(100);
@@ -282,9 +221,7 @@ export async function promptCustomCapabilities(
             modelNameInput.setValue(customModelName);
           }
 
-          const row = new ActionRowBuilder<TextInputBuilder>().addComponents(
-            modelNameInput,
-          );
+          const row = new ActionRowBuilder<TextInputBuilder>().addComponents(modelNameInput);
           modal.addComponents(row);
 
           await i.showModal(modal);
@@ -292,16 +229,12 @@ export async function promptCustomCapabilities(
           // Wait for modal submission (with timeout)
           try {
             const modalSubmit = await i.awaitModalSubmit({
-              filter: (modalI) =>
-                modalI.customId === "model_name_modal" &&
-                modalI.user.id === i.user.id,
+              filter: (modalI) => modalI.customId === "model_name_modal" && modalI.user.id === i.user.id,
               time: 300000, // 5 minutes
             });
 
             // Update the model name
-            customModelName = modalSubmit.fields
-              .getTextInputValue("model_name_input")
-              .trim();
+            customModelName = modalSubmit.fields.getTextInputValue("model_name_input").trim();
 
             // Acknowledge the modal submission
             await modalSubmit.deferUpdate();
@@ -309,13 +242,7 @@ export async function promptCustomCapabilities(
             // Update the message to show the new model name
             await interaction.editReply({
               content: updateMessageContent(),
-              components: [
-                toolsRow,
-                imagesRow,
-                videosRow,
-                structOutputRow,
-                buttonRow,
-              ],
+              components: [toolsRow, imagesRow, videosRow, structOutputRow, buttonRow],
             });
           } catch (modalError) {
             // Timeout or error - just log and continue
@@ -324,10 +251,7 @@ export async function promptCustomCapabilities(
         } else if (i.isButton() && i.customId === "confirm_capabilities") {
           if (!customModelName.trim()) {
             await i.reply({
-              content: localizer(
-                locale,
-                "commands.config.custom.model_name_required_description",
-              ),
+              content: localizer(locale, "commands.config.custom.model_name_required_description"),
               ephemeral: true,
             });
             return;
@@ -339,13 +263,7 @@ export async function promptCustomCapabilities(
           await i.deferUpdate();
 
           // Create the llms row for this custom model
-          const llmId = await createCustomLLMEntry(
-            serverId,
-            hasTools,
-            seesImages,
-            seesVideos,
-            supportsStructOutput,
-          );
+          const llmId = await createCustomLLMEntry(serverId, hasTools, seesImages, seesVideos, supportsStructOutput);
 
           resolve({
             success: true,
@@ -368,10 +286,7 @@ export async function promptCustomCapabilities(
             seesImages: false,
             seesVideos: false,
             supportsStructOutput: false,
-            error: localizer(
-              locale,
-              "commands.config.custom.capabilities_timeout",
-            ),
+            error: localizer(locale, "commands.config.custom.capabilities_timeout"),
           });
         }
       });
@@ -468,9 +383,7 @@ async function createCustomLLMEntry(
  *
  * @param serverId - Server ID to find and delete the custom model for
  */
-export async function deleteCustomLLMEntry(
-  serverId: string | number,
-): Promise<void> {
+export async function deleteCustomLLMEntry(serverId: string | number): Promise<void> {
   const codename = `custom/${serverId}`;
 
   const result = await sql`
@@ -543,19 +456,12 @@ export async function promptOtherModelConfig(
     // 1. Build the "Enter Model" button and edit the deferred reply
     const enterModelButton = new ButtonBuilder()
       .setCustomId("enter_model_name")
-      .setLabel(
-        localizer(locale, "commands.config.model.text.other_model_model_label"),
-      )
+      .setLabel(localizer(locale, "commands.config.model.text.other_model_model_label"))
       .setStyle(ButtonStyle.Primary);
 
     const message = await interaction.editReply({
-      content: localizer(
-        locale,
-        "commands.config.model.text.other_model_prompt_description",
-      ),
-      components: [
-        new ActionRowBuilder<ButtonBuilder>().addComponents(enterModelButton),
-      ],
+      content: localizer(locale, "commands.config.model.text.other_model_prompt_description"),
+      components: [new ActionRowBuilder<ButtonBuilder>().addComponents(enterModelButton)],
     });
 
     // 2. Await button click using awaitMessageComponent (more reliable than collector on ephemeral replies)
@@ -563,9 +469,7 @@ export async function promptOtherModelConfig(
     try {
       buttonInteraction = await message.awaitMessageComponent({
         componentType: ComponentType.Button,
-        filter: (i) =>
-          i.user.id === interaction.user.id &&
-          i.customId === "enter_model_name",
+        filter: (i) => i.user.id === interaction.user.id && i.customId === "enter_model_name",
         time: 300000, // 5 minutes
       });
     } catch {
@@ -579,29 +483,18 @@ export async function promptOtherModelConfig(
     // 3. Show modal from button click (button → modal is Discord-allowed)
     const modal = new ModalBuilder()
       .setCustomId("other_model_modal")
-      .setTitle(
-        localizer(locale, "commands.config.model.text.other_model_modal_title"),
-      );
+      .setTitle(localizer(locale, "commands.config.model.text.other_model_modal_title"));
 
     const modelInput = new TextInputBuilder()
       .setCustomId("model_name_input")
-      .setLabel(
-        localizer(locale, "commands.config.model.text.other_model_model_label"),
-      )
-      .setPlaceholder(
-        localizer(
-          locale,
-          "commands.config.model.text.other_model_model_placeholder",
-        ),
-      )
+      .setLabel(localizer(locale, "commands.config.model.text.other_model_model_label"))
+      .setPlaceholder(localizer(locale, "commands.config.model.text.other_model_model_placeholder"))
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setMinLength(3)
       .setMaxLength(100);
 
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(modelInput),
-    );
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(modelInput));
 
     await buttonInteraction.showModal(modal);
 
@@ -609,9 +502,7 @@ export async function promptOtherModelConfig(
     let modalSubmit: ModalSubmitInteraction;
     try {
       modalSubmit = await buttonInteraction.awaitModalSubmit({
-        filter: (m) =>
-          m.customId === "other_model_modal" &&
-          m.user.id === buttonInteraction.user.id,
+        filter: (m) => m.customId === "other_model_modal" && m.user.id === buttonInteraction.user.id,
         time: 300000,
       });
     } catch {
@@ -622,9 +513,7 @@ export async function promptOtherModelConfig(
       };
     }
 
-    const enteredModel = modalSubmit.fields
-      .getTextInputValue("model_name_input")
-      .trim();
+    const enteredModel = modalSubmit.fields.getTextInputValue("model_name_input").trim();
 
     // Defer the modal so the caller can use editReply for follow-up messages
     await modalSubmit.deferUpdate();
@@ -676,50 +565,41 @@ export function validateEndpointUrl(url: string): boolean {
  * @param validation - The failed validation result from validateRemoteMcpUrl()
  * @returns Locale key and optional variable substitutions for replyInfoEmbed
  */
-export function getCustomEndpointValidationMessage(
-  validation: McpUrlValidationResult,
-): {
+export function getCustomEndpointValidationMessage(validation: McpUrlValidationResult): {
   descriptionKey: string;
   descriptionVars?: Record<string, string>;
 } {
   switch (validation.failureCode) {
     case "INVALID_PROTOCOL":
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_protocol_description",
+        descriptionKey: "commands.config.custom.endpoint_url_protocol_description",
       };
     case "PRODUCTION_HTTPS_REQUIRED":
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_https_required_description",
+        descriptionKey: "commands.config.custom.endpoint_url_https_required_description",
       };
     case "REMOTE_HTTP_FORBIDDEN":
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_http_localhost_only_description",
+        descriptionKey: "commands.config.custom.endpoint_url_http_localhost_only_description",
       };
     case "PRODUCTION_LOCALHOST_FORBIDDEN":
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_localhost_blocked_description",
+        descriptionKey: "commands.config.custom.endpoint_url_localhost_blocked_description",
       };
     case "DNS_RESOLUTION_FAILED":
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_dns_failed_description",
+        descriptionKey: "commands.config.custom.endpoint_url_dns_failed_description",
         descriptionVars: { hostname: validation.hostname ?? "unknown" },
       };
     case "PRODUCTION_BLOCKED_ADDRESS":
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_private_address_description",
+        descriptionKey: "commands.config.custom.endpoint_url_private_address_description",
         descriptionVars: { address: validation.blockedAddress ?? "unknown" },
       };
     default:
       // INVALID_FORMAT or unexpected codes
       return {
-        descriptionKey:
-          "commands.config.custom.endpoint_url_invalid_description",
+        descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
       };
   }
 }

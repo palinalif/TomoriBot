@@ -21,10 +21,7 @@ import {
   promptWithPaginatedModal,
   safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import type { SelectOption } from "../../../types/discord/modal";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
@@ -44,10 +41,7 @@ async function performServerMemoryRemoval(
   tomoriState: TomoriState,
   memoryToDelete: { server_memory_id: number; content: string },
   userData: UserRow,
-  replyInteraction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
 ): Promise<void> {
   // Delete the memory from the database using Bun SQL
@@ -71,9 +65,7 @@ async function performServerMemoryRemoval(
         command: "forget servermemory",
         table: "server_memories",
         deletedMemoryId: memoryToDelete.server_memory_id,
-        validationErrors: validatedMemory.success
-          ? null
-          : validatedMemory.error.flatten(),
+        validationErrors: validatedMemory.success ? null : validatedMemory.error.flatten(),
       },
     };
 
@@ -107,24 +99,15 @@ async function performServerMemoryRemoval(
     titleKey: "commands.forget.memory.server.success_title",
     descriptionKey: "commands.forget.memory.server.success_description",
     descriptionVars: {
-      memory:
-        memoryToDelete.content.length > 50
-          ? `${memoryToDelete.content.slice(0, 50)}...`
-          : memoryToDelete.content,
+      memory: memoryToDelete.content.length > 50 ? `${memoryToDelete.content.slice(0, 50)}...` : memoryToDelete.content,
     },
     color: ColorCode.SUCCESS,
   });
 }
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("server")
-    .setDescription(
-      localizer("en-US", "commands.forget.memory.server.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("server").setDescription(localizer("en-US", "commands.forget.memory.server.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -158,9 +141,7 @@ export async function execute(
 
   try {
     // 2. Load server's Tomori state (Rule 17) - Needed for server_id and config checks
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -172,9 +153,7 @@ export async function execute(
     }
 
     // Select target persona via paginated selector
-    const allPersonas = await loadAllPersonasForServer(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
     if (allPersonas.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -186,25 +165,18 @@ export async function execute(
     }
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
       if (!personaSelection.success) {
         if (personaSelection.reason === "cancelled") return;
         continue;
       }
-      if (
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
 
@@ -220,8 +192,7 @@ export async function execute(
       }
 
       // 4. Check permissions and if teaching is enabled
-      const hasManagePermission =
-        interaction.memberPermissions?.has("ManageGuild") ?? false;
+      const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
       // NOTE: Check the correct config key name from tomori_configs table
       if (
         !tomoriState.config.server_memteaching_enabled && // Assuming this is the correct key
@@ -229,8 +200,7 @@ export async function execute(
       ) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.teach.memory.server.teaching_disabled_title",
-          descriptionKey:
-            "commands.teach.memory.server.teaching_disabled_description",
+          descriptionKey: "commands.teach.memory.server.teaching_disabled_description",
           color: ColorCode.ERROR,
           flags: MessageFlags.Ephemeral,
         });
@@ -275,39 +245,30 @@ export async function execute(
       }
 
       // 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
-      const memorySelectOptions: SelectOption[] = memories.map(
-        (memory: { content: string }, index: number) => ({
-          label: safeSelectOptionText(memory.content, 20),
-          value: index.toString(), // Use index to avoid truncation issues
-          description: safeSelectOptionText(memory.content),
-        }),
-      );
+      const memorySelectOptions: SelectOption[] = memories.map((memory: { content: string }, index: number) => ({
+        label: safeSelectOptionText(memory.content, 20),
+        value: index.toString(), // Use index to avoid truncation issues
+        description: safeSelectOptionText(memory.content),
+      }));
 
-      const modalResult = await promptWithPaginatedModal(
-        personaSelectionInteraction,
-        locale,
-        {
-          modalCustomId: MODAL_CUSTOM_ID,
-          modalTitleKey: "commands.forget.memory.server.modal_title",
-          components: [
-            {
-              customId: MEMORY_SELECT_ID,
-              labelKey: "commands.forget.memory.server.select_label",
-              descriptionKey:
-                "commands.forget.memory.server.select_description",
-              placeholder: "commands.forget.memory.server.select_placeholder",
-              required: true,
-              options: memorySelectOptions,
-            },
-          ],
-        },
-      );
+      const modalResult = await promptWithPaginatedModal(personaSelectionInteraction, locale, {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.forget.memory.server.modal_title",
+        components: [
+          {
+            customId: MEMORY_SELECT_ID,
+            labelKey: "commands.forget.memory.server.select_label",
+            descriptionKey: "commands.forget.memory.server.select_description",
+            placeholder: "commands.forget.memory.server.select_placeholder",
+            required: true,
+            options: memorySelectOptions,
+          },
+        ],
+      });
 
       // Handle modal outcome - loop back to persona picker on dismiss
       if (modalResult.outcome !== "submit") {
-        log.info(
-          `Server memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-        );
+        log.info(`Server memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
         continue;
       }
 
@@ -335,13 +296,7 @@ export async function execute(
       }
 
       // Perform the database update using the helper function - let helper manage interaction state
-      await performServerMemoryRemoval(
-        selectedPersona,
-        selectedMemory,
-        userData,
-        modalSubmitInteraction,
-        locale,
-      );
+      await performServerMemoryRemoval(selectedPersona, selectedMemory, userData, modalSubmitInteraction, locale);
       break;
     }
   } catch (error) {
@@ -365,9 +320,7 @@ export async function execute(
 
     // 15. Inform user of unknown error, prioritizing unacknowledged button interaction
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      !personaSelectionInteraction.deferred &&
-      !personaSelectionInteraction.replied
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
         ? personaSelectionInteraction
         : interaction;
     await replyInfoEmbed(errorReplyTarget, locale, {

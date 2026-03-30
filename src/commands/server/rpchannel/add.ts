@@ -6,10 +6,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { tomoriConfigSchema } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -21,23 +18,14 @@ import type { UserRow, ErrorContext } from "../../../types/db/schema";
  * @param subcommand - The subcommand builder to configure
  * @returns The configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("add")
-    .setDescription(
-      localizer("en-US", "commands.server.rpchannel.add.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.rpchannel.add.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.rpchannel.add.channel_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.rpchannel.add.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     );
@@ -87,8 +75,7 @@ export async function execute(
     if (currentChannels.includes(channel.id)) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.rpchannel.add.already_added_title",
-        descriptionKey:
-          "commands.server.rpchannel.add.already_added_description",
+        descriptionKey: "commands.server.rpchannel.add.already_added_description",
         descriptionVars: {
           channel_name: channel.name ?? "UNDEFINED_CH",
         },
@@ -99,9 +86,7 @@ export async function execute(
 
     // 4. Build the updated channel array and convert to PostgreSQL array literal
     const updatedChannels = [...currentChannels, channel.id];
-    const channelsArrayLiteral = `{${updatedChannels
-      .map((id) => `"${id.replace(/(["\\])/g, "\\$1")}"`)
-      .join(",")}}`;
+    const channelsArrayLiteral = `{${updatedChannels.map((id) => `"${id.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
     // 5. Persist to database
     const [updatedRow] = await sql`
@@ -121,11 +106,7 @@ export async function execute(
           channelId: channel.id,
         },
       };
-      await log.error(
-        "Failed to update rp_channel_ids config",
-        new Error("Database update failed"),
-        context,
-      );
+      await log.error("Failed to update rp_channel_ids config", new Error("Database update failed"), context);
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
@@ -145,11 +126,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config after rpchannel add",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config after rpchannel add", validatedConfig.error, context);
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",

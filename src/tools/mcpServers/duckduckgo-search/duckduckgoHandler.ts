@@ -75,12 +75,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       }
 
       // Fallback for any unhandled functions
-      return this.processStandardDuckDuckGoResult(
-        functionName,
-        mcpResult,
-        context,
-        args,
-      );
+      return this.processStandardDuckDuckGoResult(functionName, mcpResult, context, args);
     } catch (error) {
       log.error(`Failed to process ${functionName} result:`, error as Error);
       return {
@@ -132,19 +127,12 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
           },
         );
       } catch (embedError) {
-        log.warn(
-          "Failed to send DuckDuckGo search status embed (non-fatal)",
-          embedError as Error,
-        );
+        log.warn("Failed to send DuckDuckGo search status embed (non-fatal)", embedError as Error);
       }
 
       const fallbackReason = this.getFeloFallbackReason(mcpResult);
       if (fallbackReason) {
-        const fallbackResult = await this.tryFeloSearchFallback(
-          query,
-          context,
-          fallbackReason,
-        );
+        const fallbackResult = await this.tryFeloSearchFallback(query, context, fallbackReason);
         if (fallbackResult) {
           return fallbackResult;
         }
@@ -202,9 +190,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       const prefixMessage = `[DuckDuckGo Web Search Results]\n\n${originalText}`;
 
       // Log the search response
-      log.info(
-        `DuckDuckGo search response: ${prefixMessage.substring(0, 200)}...`,
-      );
+      log.info(`DuckDuckGo search response: ${prefixMessage.substring(0, 200)}...`);
       log.info(`DuckDuckGo search - Found ${urlCount} URLs`);
 
       return {
@@ -223,16 +209,11 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
         },
       };
     } catch (error) {
-      log.error(
-        "Error processing DuckDuckGo web search result:",
-        error as Error,
-      );
+      log.error("Error processing DuckDuckGo web search result:", error as Error);
       // Fall back to original behavior
       return {
         success: true,
-        message:
-          this.extractResultText(mcpResult) ||
-          "DuckDuckGo web search completed successfully",
+        message: this.extractResultText(mcpResult) || "DuckDuckGo web search completed successfully",
         data: {
           source: "mcp",
           functionName: "web-search",
@@ -266,9 +247,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       const prefixMessage = `[URL Metadata for: ${url}]\n\n${metadataContent}`;
 
       // Log the metadata result
-      log.info(
-        `URL metadata for ${url}: ${metadataContent.substring(0, 150)}...`,
-      );
+      log.info(`URL metadata for ${url}: ${metadataContent.substring(0, 150)}...`);
 
       return {
         success: true,
@@ -288,8 +267,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       log.error("Error processing URL metadata result:", error as Error);
       return {
         success: true,
-        message:
-          mcpResult.text || "URL metadata extraction completed successfully",
+        message: mcpResult.text || "URL metadata extraction completed successfully",
         data: {
           source: "mcp",
           functionName: "url-metadata",
@@ -313,12 +291,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
     args: Record<string, unknown>,
     context: MCPExecutionContext,
   ): TypedMCPToolResult {
-    const baseResult = this.processStandardDuckDuckGoResult(
-      "felo-search",
-      mcpResult,
-      context,
-      args,
-    );
+    const baseResult = this.processStandardDuckDuckGoResult("felo-search", mcpResult, context, args);
     if (!baseResult.success) {
       return baseResult;
     }
@@ -366,38 +339,25 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       const mcpTools = mcpManager.getMCPTools();
       for (const mcpTool of mcpTools) {
         const geminiTool = await mcpTool.tool();
-        const functionNames =
-          geminiTool.functionDeclarations?.map(
-            (declaration) => declaration.name,
-          ) || [];
+        const functionNames = geminiTool.functionDeclarations?.map((declaration) => declaration.name) || [];
 
         if (!functionNames.includes("felo-search")) {
           continue;
         }
 
-        log.warn(
-          `DuckDuckGo web-search fallback triggered (${reason}) for "${query}". Retrying with felo-search.`,
-        );
+        log.warn(`DuckDuckGo web-search fallback triggered (${reason}) for "${query}". Retrying with felo-search.`);
 
         const fallbackArgs = {
           query,
           stream: false,
         };
-        const fallbackResult = await mcpTool.callTool([
-          { name: "felo-search", args: fallbackArgs },
-        ]);
+        const fallbackResult = await mcpTool.callTool([{ name: "felo-search", args: fallbackArgs }]);
         if (!fallbackResult || fallbackResult.length === 0) {
-          log.warn(
-            `Felo fallback returned no results after DuckDuckGo web-search fallback (${reason}).`,
-          );
+          log.warn(`Felo fallback returned no results after DuckDuckGo web-search fallback (${reason}).`);
           return null;
         }
 
-        const processedResult = this.processFeloSearch(
-          fallbackResult[0],
-          fallbackArgs,
-          context,
-        );
+        const processedResult = this.processFeloSearch(fallbackResult[0], fallbackArgs, context);
         if (!processedResult.success) {
           log.warn(
             `Felo fallback failed after DuckDuckGo fallback (${reason}): ${processedResult.error || processedResult.message || "unknown error"}`,
@@ -409,18 +369,13 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
           processedResult.data.fallbackReason = reason;
         }
 
-        log.info(
-          `Felo fallback succeeded for DuckDuckGo query "${query}" after ${reason}.`,
-        );
+        log.info(`Felo fallback succeeded for DuckDuckGo query "${query}" after ${reason}.`);
         return processedResult;
       }
     } catch (error) {
-      log.warn(
-        `Felo fallback execution failed after DuckDuckGo fallback (${reason}).`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
+      log.warn(`Felo fallback execution failed after DuckDuckGo fallback (${reason}).`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return null;
@@ -429,9 +384,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
   /**
    * Send the standard DuckDuckGo rate-limit embed when all fallbacks are exhausted.
    */
-  private async sendDuckDuckGoRateLimitEmbed(
-    context: MCPExecutionContext,
-  ): Promise<void> {
+  private async sendDuckDuckGoRateLimitEmbed(context: MCPExecutionContext): Promise<void> {
     await sendStandardEmbed(
       context.channel,
       context.locale,
@@ -499,10 +452,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
         },
       };
     } catch (error) {
-      log.error(
-        `Error processing standard DuckDuckGo result for ${functionName}:`,
-        error as Error,
-      );
+      log.error(`Error processing standard DuckDuckGo result for ${functionName}:`, error as Error);
       return {
         success: false,
         message: `Failed to process ${functionName} result`,
@@ -569,12 +519,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
     }
 
     const resultText = this.extractResultText(mcpResult).trim();
-    if (
-      !resultText ||
-      resultText === "{}" ||
-      resultText === "[]" ||
-      resultText === "null"
-    ) {
+    if (!resultText || resultText === "{}" || resultText === "[]" || resultText === "null") {
       return true;
     }
 
@@ -591,9 +536,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       "did not return any results",
     ];
 
-    if (
-      noResultIndicators.some((indicator) => normalizedText.includes(indicator))
-    ) {
+    if (noResultIndicators.some((indicator) => normalizedText.includes(indicator))) {
       return true;
     }
 

@@ -10,9 +10,7 @@ import { log } from "../utils/misc/logger";
 import { getDueRandomTriggers } from "../utils/db/dbRead";
 import { rescheduleRandomTrigger } from "../utils/db/dbWrite";
 import type { RandomTriggerRow, TomoriState } from "../types/db/schema";
-import tomoriChat, {
-  suppressNextSelfReply,
-} from "../events/messageCreate/tomoriChat";
+import tomoriChat, { suppressNextSelfReply } from "../events/messageCreate/tomoriChat";
 import { getCachedAllPersonas } from "../utils/cache/tomoriStateCache";
 
 /**
@@ -46,10 +44,7 @@ export class RandomTriggerTimer {
 
     // Run immediately on start to catch any triggers that fired while offline
     this.checkTriggers().catch((error) => {
-      log.error(
-        "Error during initial random trigger check on timer start:",
-        error,
-      );
+      log.error("Error during initial random trigger check on timer start:", error);
     });
 
     // Set up regular polling interval
@@ -122,8 +117,7 @@ export class RandomTriggerTimer {
 
     try {
       const failureThreshold = trigger.failure_threshold ?? null;
-      const isForced =
-        failureThreshold !== null && consecutiveFailures >= failureThreshold;
+      const isForced = failureThreshold !== null && consecutiveFailures >= failureThreshold;
 
       log.info(
         `Evaluating random trigger ${triggerId} (channel=${trigger.channel_disc_id}, chance=${trigger.chance_percent}%${failureThreshold !== null ? `, failures=${consecutiveFailures}/${failureThreshold}` : ""})`,
@@ -154,14 +148,10 @@ export class RandomTriggerTimer {
       }
 
       // ── Step 2: Fetch and validate target channel ────────────────────────
-      const rawChannel = await this.client.channels
-        .fetch(trigger.channel_disc_id)
-        .catch(() => null);
+      const rawChannel = await this.client.channels.fetch(trigger.channel_disc_id).catch(() => null);
 
       if (!rawChannel) {
-        log.warn(
-          `Random trigger ${triggerId}: channel ${trigger.channel_disc_id} not found — rescheduling`,
-        );
+        log.warn(`Random trigger ${triggerId}: channel ${trigger.channel_disc_id} not found — rescheduling`);
         await this.rescheduleTrigger(
           triggerId,
           trigger.timer_hours,
@@ -172,11 +162,7 @@ export class RandomTriggerTimer {
       }
 
       // Must be a text-based guild channel to proceed
-      if (
-        !rawChannel.isTextBased() ||
-        rawChannel.type === ChannelType.DM ||
-        rawChannel.type === ChannelType.GroupDM
-      ) {
+      if (!rawChannel.isTextBased() || rawChannel.type === ChannelType.DM || rawChannel.type === ChannelType.GroupDM) {
         log.warn(
           `Random trigger ${triggerId}: channel ${trigger.channel_disc_id} is not a guild text channel — rescheduling`,
         );
@@ -198,16 +184,11 @@ export class RandomTriggerTimer {
           const messages = await rawChannel.messages.fetch({ limit: 1 });
           lastMessage = messages.first();
         } catch {
-          log.warn(
-            `Random trigger ${triggerId}: failed to fetch last message from channel`,
-          );
+          log.warn(`Random trigger ${triggerId}: failed to fetch last message from channel`);
         }
       }
 
-      if (
-        trigger.silence_threshold_hours !== null &&
-        trigger.silence_threshold_hours !== undefined
-      ) {
+      if (trigger.silence_threshold_hours !== null && trigger.silence_threshold_hours !== undefined) {
         if (lastMessage) {
           const ageMs = Date.now() - lastMessage.createdTimestamp;
           const ageHours = ageMs / (1000 * 60 * 60);
@@ -231,9 +212,7 @@ export class RandomTriggerTimer {
       let chosenPersona: TomoriState | null = null;
 
       if (!("guild" in rawChannel) || !rawChannel.guild) {
-        log.warn(
-          `Random trigger ${triggerId}: channel has no guild reference — rescheduling`,
-        );
+        log.warn(`Random trigger ${triggerId}: channel has no guild reference — rescheduling`);
         await this.rescheduleTrigger(
           triggerId,
           trigger.timer_hours,
@@ -247,9 +226,7 @@ export class RandomTriggerTimer {
       const allPersonas = await getCachedAllPersonas(guildDiscId);
 
       if (allPersonas.length === 0) {
-        log.warn(
-          `Random trigger ${triggerId}: no personas found for guild ${guildDiscId} — rescheduling`,
-        );
+        log.warn(`Random trigger ${triggerId}: no personas found for guild ${guildDiscId} — rescheduling`);
         await this.rescheduleTrigger(
           triggerId,
           trigger.timer_hours,
@@ -265,8 +242,7 @@ export class RandomTriggerTimer {
         chosenPersona = allPersonas[randomIndex] ?? null;
       } else {
         // Named persona: look up by tomori_id
-        chosenPersona =
-          allPersonas.find((p) => p.tomori_id === trigger.tomori_id) ?? null;
+        chosenPersona = allPersonas.find((p) => p.tomori_id === trigger.tomori_id) ?? null;
       }
 
       if (!chosenPersona) {
@@ -288,8 +264,7 @@ export class RandomTriggerTimer {
       if (!trigger.respond_to_self && lastMessage) {
         // Webhook-based persona messages: check username against persona nickname
         const isPersonaLastSpeaker =
-          lastMessage.webhookId !== null &&
-          lastMessage.author.username === chosenPersona.tomori_nickname;
+          lastMessage.webhookId !== null && lastMessage.author.username === chosenPersona.tomori_nickname;
 
         if (isPersonaLastSpeaker) {
           log.info(
@@ -327,9 +302,7 @@ export class RandomTriggerTimer {
 
       // If still no message, we cannot drive tomoriChat
       if (!lastMessage) {
-        log.warn(
-          `Random trigger ${triggerId}: no messages in channel and seeding failed — rescheduling`,
-        );
+        log.warn(`Random trigger ${triggerId}: no messages in channel and seeding failed — rescheduling`);
         await this.rescheduleTrigger(
           triggerId,
           trigger.timer_hours,
@@ -373,9 +346,7 @@ export class RandomTriggerTimer {
         trigger.custom_prompt ?? undefined, // manualSystemPrompt
       );
 
-      log.success(
-        `Random trigger ${triggerId} fired successfully for persona "${chosenPersona.tomori_nickname}"`,
-      );
+      log.success(`Random trigger ${triggerId} fired successfully for persona "${chosenPersona.tomori_nickname}"`);
     } catch (error) {
       log.error(`Error executing random trigger ${triggerId}:`, error);
     } finally {
@@ -403,16 +374,9 @@ export class RandomTriggerTimer {
     randomOffsetRange: number | null,
     consecutiveFailures: number,
   ): Promise<void> {
-    const rescheduled = await rescheduleRandomTrigger(
-      triggerId,
-      timerHours,
-      randomOffsetRange,
-      consecutiveFailures,
-    );
+    const rescheduled = await rescheduleRandomTrigger(triggerId, timerHours, randomOffsetRange, consecutiveFailures);
     if (!rescheduled) {
-      log.error(
-        `Failed to reschedule random trigger ${triggerId} — it may fire repeatedly until rescheduled`,
-      );
+      log.error(`Failed to reschedule random trigger ${triggerId} — it may fire repeatedly until rescheduled`);
     }
   }
 
@@ -468,9 +432,7 @@ export function getRandomTriggerTimerStatus(): {
   isRunning: boolean;
   intervalMs: number;
 } | null {
-  return randomTriggerTimerInstance
-    ? randomTriggerTimerInstance.getStatus()
-    : null;
+  return randomTriggerTimerInstance ? randomTriggerTimerInstance.getStatus() : null;
 }
 
 /**

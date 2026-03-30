@@ -10,10 +10,7 @@ import type {
   ProviderCompactSummaryRequest as CompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-import {
-  buildRoleplaySchema,
-  CompactRoleplaySummarySchema,
-} from "@/providers/utils/compactCommon";
+import { buildRoleplaySchema, CompactRoleplaySummarySchema } from "@/providers/utils/compactCommon";
 
 export async function generateConversationSummaryCustom(
   request: CompactSummaryRequest,
@@ -42,18 +39,14 @@ export async function generateConversationSummaryCustom(
     });
 
     if (!response.success) {
-      log.error(
-        "Custom compact summary request failed",
-        new Error(response.error.errorBody),
-        {
-          errorType: "CustomCompactSummaryHttpError",
-          metadata: {
-            model: request.model,
-            status: response.error.status,
-            statusText: response.error.statusText,
-          },
+      log.error("Custom compact summary request failed", new Error(response.error.errorBody), {
+        errorType: "CustomCompactSummaryHttpError",
+        metadata: {
+          model: request.model,
+          status: response.error.status,
+          statusText: response.error.statusText,
         },
-      );
+      });
       return {
         error:
           response.error.status === 0
@@ -62,9 +55,7 @@ export async function generateConversationSummaryCustom(
       };
     }
 
-    const responseText = extractCustomResponseText(
-      response.data.choices?.[0]?.message?.content,
-    );
+    const responseText = extractCustomResponseText(response.data.choices?.[0]?.message?.content);
     if (!responseText) {
       return {
         error: "Custom endpoint returned an empty response.",
@@ -77,17 +68,12 @@ export async function generateConversationSummaryCustom(
   } catch (error) {
     log.error("Custom compact summary failed", error as Error);
     return {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unknown custom endpoint error",
+      error: error instanceof Error ? error.message : "Unknown custom endpoint error",
     };
   }
 }
 
-export async function generateRoleplaySummaryCustom(
-  request: CompactSummaryRequest,
-): Promise<CompactRoleplayResult> {
+export async function generateRoleplaySummaryCustom(request: CompactSummaryRequest): Promise<CompactRoleplayResult> {
   const result = await callCustomStructuredJSON(
     {
       ...request,

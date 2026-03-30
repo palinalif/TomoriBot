@@ -5,10 +5,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { tomoriConfigSchema, tomoriSchema } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -20,10 +17,7 @@ const MIN_THRESHOLD = 0; // 0 means always-reply in configured auto-chat channel
 const MIN_RANDOM_THRESHOLD = 1;
 const MAX_THRESHOLD = 100; // The absolute maximum value allowed
 
-function rollAutochatTarget(
-  minThreshold: number,
-  maxThreshold: number,
-): number {
+function rollAutochatTarget(minThreshold: number, maxThreshold: number): number {
   if (minThreshold <= 0 || maxThreshold <= 0) {
     return 0;
   }
@@ -32,29 +26,18 @@ function rollAutochatTarget(
     return minThreshold;
   }
 
-  return (
-    Math.floor(Math.random() * (maxThreshold - minThreshold + 1)) + minThreshold
-  );
+  return Math.floor(Math.random() * (maxThreshold - minThreshold + 1)) + minThreshold;
 }
 
 // Configure the subcommand (Rule #21)
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("threshold")
-    .setDescription(
-      localizer("en-US", "commands.server.autotrigger.threshold.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.autotrigger.threshold.description"))
     .addIntegerOption((option) =>
       option
         .setName("threshold")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.autotrigger.threshold.threshold_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.autotrigger.threshold.threshold_description"))
         .setMinValue(MIN_THRESHOLD)
         .setMaxValue(MAX_THRESHOLD)
         .setRequired(true),
@@ -62,12 +45,7 @@ export const configureSubcommand = (
     .addIntegerOption((option) =>
       option
         .setName("max")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.autotrigger.threshold.max_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.autotrigger.threshold.max_description"))
         .setMinValue(MIN_THRESHOLD)
         .setMaxValue(MAX_THRESHOLD)
         .setRequired(false),
@@ -104,10 +82,8 @@ Positive values use a shared fixed or random range.
     // Get the threshold values from options
     const threshold = interaction.options.getInteger("threshold", true);
     const maxThreshold = interaction.options.getInteger("max") ?? threshold;
-    const isAlwaysReplyMode =
-      threshold === MIN_THRESHOLD && maxThreshold === MIN_THRESHOLD;
-    const isRangeMode =
-      threshold >= MIN_RANDOM_THRESHOLD && maxThreshold > threshold;
+    const isAlwaysReplyMode = threshold === MIN_THRESHOLD && maxThreshold === MIN_THRESHOLD;
+    const isRangeMode = threshold >= MIN_RANDOM_THRESHOLD && maxThreshold > threshold;
 
     // Validate the threshold/range against the allowed values.
     const isValidThreshold =
@@ -120,8 +96,7 @@ Positive values use a shared fixed or random range.
     if (!isValidThreshold) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.autotrigger.threshold.invalid_range_title",
-        descriptionKey:
-          "commands.server.autotrigger.threshold.invalid_range_specific_description",
+        descriptionKey: "commands.server.autotrigger.threshold.invalid_range_specific_description",
         descriptionVars: {
           always: MIN_THRESHOLD.toString(),
           min: MIN_RANDOM_THRESHOLD.toString(),
@@ -143,14 +118,11 @@ Positive values use a shared fixed or random range.
       return;
     }
 
-    const nextTarget = isAlwaysReplyMode
-      ? 0
-      : rollAutochatTarget(threshold, maxThreshold);
+    const nextTarget = isAlwaysReplyMode ? 0 : rollAutochatTarget(threshold, maxThreshold);
 
     // Update config and reset the shared cycle atomically.
-    const { updatedConfigRow, updatedTomoriRow } = await sql.transaction(
-      async (tx) => {
-        const [configRow] = await tx`
+    const { updatedConfigRow, updatedTomoriRow } = await sql.transaction(async (tx) => {
+      const [configRow] = await tx`
           UPDATE tomori_configs
           SET autoch_threshold = ${threshold},
               autoch_threshold_max = ${maxThreshold}
@@ -158,7 +130,7 @@ Positive values use a shared fixed or random range.
           RETURNING *
         `;
 
-        const [tomoriRow] = await tx`
+      const [tomoriRow] = await tx`
           UPDATE tomoris
           SET autoch_counter = 0,
               autoch_next_target = ${nextTarget}
@@ -166,12 +138,11 @@ Positive values use a shared fixed or random range.
           RETURNING *
         `;
 
-        return {
-          updatedConfigRow: configRow ?? null,
-          updatedTomoriRow: tomoriRow ?? null,
-        };
-      },
-    );
+      return {
+        updatedConfigRow: configRow ?? null,
+        updatedTomoriRow: tomoriRow ?? null,
+      };
+    });
 
     if (!updatedConfigRow || !updatedTomoriRow) {
       const context: ErrorContext = {
@@ -213,11 +184,7 @@ Positive values use a shared fixed or random range.
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -238,11 +205,7 @@ Positive values use a shared fixed or random range.
           validationErrors: validatedTomori.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated Tomori auto-chat state",
-        validatedTomori.error,
-        context,
-      );
+      await log.error("Failed to validate updated Tomori auto-chat state", validatedTomori.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -284,11 +247,7 @@ Positive values use a shared fixed or random range.
         options: interaction.options?.data,
       },
     };
-    await log.error(
-      "Error in /server autotrigger threshold command",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /server autotrigger threshold command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

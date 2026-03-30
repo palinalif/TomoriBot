@@ -14,9 +14,7 @@ import type { ToolResult } from "@/types/tool/interfaces";
 // ---------------------------------------------------------------------------
 
 /** A text or image_url content part in an OpenAI-compatible message. */
-export type PresetContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+export type PresetContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 /** Message shape used inside the preset generation tool-calling loop. */
 export type PresetMessage =

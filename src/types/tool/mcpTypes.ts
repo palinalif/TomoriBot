@@ -369,52 +369,31 @@ export interface TypedMCPToolResult extends ToolResult {
  * Type guard functions for MCP response type checking
  */
 export const MCPTypeGuards = {
-  isBraveWebSearchResponse: (
-    response: MCPServerResponse,
-  ): response is BraveWebSearchResponse => {
-    return (
-      "web_results" in response ||
-      (response.text?.includes("web search") ?? false)
-    );
+  isBraveWebSearchResponse: (response: MCPServerResponse): response is BraveWebSearchResponse => {
+    return "web_results" in response || (response.text?.includes("web search") ?? false);
   },
 
-  isBraveImageSearchResponse: (
-    response: MCPServerResponse,
-  ): response is BraveImageSearchResponse => {
+  isBraveImageSearchResponse: (response: MCPServerResponse): response is BraveImageSearchResponse => {
     return (
       "image_results" in response ||
-      (Array.isArray(response.content) &&
-        response.content.some((item) => item.type === "image"))
+      (Array.isArray(response.content) && response.content.some((item) => item.type === "image"))
     );
   },
 
-  isBraveVideoSearchResponse: (
-    response: MCPServerResponse,
-  ): response is BraveVideoSearchResponse => {
-    return (
-      "video_results" in response ||
-      (response.text?.includes("video search") ?? false)
-    );
+  isBraveVideoSearchResponse: (response: MCPServerResponse): response is BraveVideoSearchResponse => {
+    return "video_results" in response || (response.text?.includes("video search") ?? false);
   },
 
-  isFetchResponse: (
-    response: MCPServerResponse,
-  ): response is FetchMCPResponse => {
-    return (
-      "url" in response || "markdown" in response || "status_code" in response
-    );
+  isFetchResponse: (response: MCPServerResponse): response is FetchMCPResponse => {
+    return "url" in response || "markdown" in response || "status_code" in response;
   },
 
   hasImageContent: (response: MCPServerResponse): boolean => {
     if (Array.isArray(response.content)) {
-      return response.content.some(
-        (item) => item.type === "image" || item.image_url,
-      );
+      return response.content.some((item) => item.type === "image" || item.image_url);
     }
     if (Array.isArray(response.functionResponse?.response?.content)) {
-      return response.functionResponse.response.content.some(
-        (item) => item.type === "image" || item.image_url,
-      );
+      return response.functionResponse.response.content.some((item) => item.type === "image" || item.image_url);
     }
     return false;
   },
@@ -433,23 +412,16 @@ export const MCPTypeGuards = {
         if (item?.type === "text" && item.text) {
           try {
             const imageData = JSON.parse(item.text);
-            if (
-              imageData.image_url &&
-              typeof imageData.image_url === "string"
-            ) {
+            if (imageData.image_url && typeof imageData.image_url === "string") {
               imageUrls.push(imageData.image_url);
             }
           } catch {
             // Skip malformed JSON
           }
         } else if (item?.type === "image") {
-          const possibleUrls = [
-            item.image_url,
-            item.url,
-            item.source_url,
-            item.original_url,
-            item.src,
-          ].filter((url): url is string => typeof url === "string");
+          const possibleUrls = [item.image_url, item.url, item.source_url, item.original_url, item.src].filter(
+            (url): url is string => typeof url === "string",
+          );
           imageUrls.push(...possibleUrls);
         }
       }

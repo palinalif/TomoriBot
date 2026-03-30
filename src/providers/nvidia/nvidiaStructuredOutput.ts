@@ -14,13 +14,9 @@ import {
 
 type NvidiaStructuredOutputRequest = ProviderStructuredJsonRequest;
 
-type NvidiaMessage =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string | NvidiaUserContentPart[] };
+type NvidiaMessage = { role: "system"; content: string } | { role: "user"; content: string | NvidiaUserContentPart[] };
 
-type NvidiaUserContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+type NvidiaUserContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 function buildExampleJsonFromSchema(schema: unknown): unknown {
   if (!schema || typeof schema !== "object") {
@@ -44,9 +40,7 @@ function buildExampleJsonFromSchema(schema: unknown): unknown {
   const schemaType = record.type;
   if (schemaType === "object") {
     const properties =
-      record.properties && typeof record.properties === "object"
-        ? (record.properties as Record<string, unknown>)
-        : {};
+      record.properties && typeof record.properties === "object" ? (record.properties as Record<string, unknown>) : {};
     const example: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(properties)) {
       example[key] = buildExampleJsonFromSchema(value);
@@ -59,10 +53,7 @@ function buildExampleJsonFromSchema(schema: unknown): unknown {
   }
 
   if (schemaType === "integer" || schemaType === "number") {
-    const minimum =
-      typeof record.minimum === "number" && Number.isFinite(record.minimum)
-        ? record.minimum
-        : 0;
+    const minimum = typeof record.minimum === "number" && Number.isFinite(record.minimum) ? record.minimum : 0;
     return minimum;
   }
 
@@ -99,10 +90,7 @@ function buildNvidiaStructuredSystemPrompt(
     .join("\n\n");
 }
 
-function shouldFallbackStructuredMode(
-  status: number,
-  errorBody: string,
-): boolean {
+function shouldFallbackStructuredMode(status: number, errorBody: string): boolean {
   if (status !== 400 && status !== 422) {
     return false;
   }
@@ -191,9 +179,7 @@ async function buildNvidiaUserContent(
     return userPrompt;
   }
 
-  const contentParts: NvidiaUserContentPart[] = [
-    { type: "text", text: userPrompt },
-  ];
+  const contentParts: NvidiaUserContentPart[] = [{ type: "text", text: userPrompt }];
 
   for (const image of images) {
     try {
@@ -205,17 +191,13 @@ async function buildNvidiaUserContent(
         },
       });
     } catch (fetchError) {
-      log.error(
-        `Error fetching NVIDIA structured-output image ${image.name ?? image.url}`,
-        fetchError as Error,
-        {
-          errorType: "NvidiaStructuredOutputImageFetchError",
-          metadata: {
-            imageName: image.name ?? null,
-            imageUrl: image.url,
-          },
+      log.error(`Error fetching NVIDIA structured-output image ${image.name ?? image.url}`, fetchError as Error, {
+        errorType: "NvidiaStructuredOutputImageFetchError",
+        metadata: {
+          imageName: image.name ?? null,
+          imageUrl: image.url,
         },
-      );
+      });
     }
   }
 
@@ -275,17 +257,14 @@ async function executeStructuredJsonRequest<T>(params: {
   }
 
   try {
-    const response = await fetch(
-      params.request.endpointUrl || NVIDIA_CHAT_COMPLETIONS_URL,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${params.request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(params.request.endpointUrl || NVIDIA_CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -299,10 +278,7 @@ async function executeStructuredJsonRequest<T>(params: {
       });
       return {
         success: false,
-        error:
-          response.status === 0
-            ? errorBody
-            : `NVIDIA request failed: ${response.status} ${response.statusText}`,
+        error: response.status === 0 ? errorBody : `NVIDIA request failed: ${response.status} ${response.statusText}`,
         status: response.status,
         statusText: response.statusText,
         errorBody,
@@ -312,9 +288,7 @@ async function executeStructuredJsonRequest<T>(params: {
     const result = (await response.json()) as {
       choices?: Array<{ message?: { content?: unknown } }>;
     };
-    const responseText = extractResponseText(
-      result.choices?.[0]?.message?.content,
-    );
+    const responseText = extractResponseText(result.choices?.[0]?.message?.content);
     if (!responseText) {
       return {
         success: false,
@@ -335,26 +309,19 @@ async function executeStructuredJsonRequest<T>(params: {
       });
       return {
         success: false,
-        error:
-          parseError instanceof Error
-            ? parseError.message
-            : "Invalid JSON response from NVIDIA.",
+        error: parseError instanceof Error ? parseError.message : "Invalid JSON response from NVIDIA.",
       };
     }
 
     const validationResult = params.zodSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        `${params.logLabel} validation failed`,
-        validationResult.error,
-        {
-          errorType: "NvidiaStructuredJSONValidationError",
-          metadata: {
-            model: params.request.model,
-            responsePreview: responseText.slice(0, 1000),
-          },
+      log.error(`${params.logLabel} validation failed`, validationResult.error, {
+        errorType: "NvidiaStructuredJSONValidationError",
+        metadata: {
+          model: params.request.model,
+          responsePreview: responseText.slice(0, 1000),
         },
-      );
+      });
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,
@@ -392,10 +359,7 @@ export async function callNvidiaStructuredJSON<T>(
   }
 
   const images = request.images ?? [];
-  if (
-    images.length > 0 &&
-    !NVIDIA_STRUCTURED_OUTPUT_VISION_MODELS.has(request.model)
-  ) {
+  if (images.length > 0 && !NVIDIA_STRUCTURED_OUTPUT_VISION_MODELS.has(request.model)) {
     return {
       success: false,
       error: `NVIDIA structured output with images is only supported on ${Array.from(NVIDIA_STRUCTURED_OUTPUT_VISION_MODELS).join(", ")}. Current model: ${request.model}`,
@@ -426,31 +390,19 @@ export async function callNvidiaStructuredJSON<T>(
     };
   }
 
-  if (
-    !shouldFallbackStructuredMode(
-      jsonSchemaResult.status ?? 0,
-      jsonSchemaResult.errorBody ?? "",
-    )
-  ) {
+  if (!shouldFallbackStructuredMode(jsonSchemaResult.status ?? 0, jsonSchemaResult.errorBody ?? "")) {
     return {
       success: false,
       error: jsonSchemaResult.error,
     };
   }
 
-  log.warn(
-    "NVIDIA structured JSON schema mode unsupported, retrying with json_object fallback.",
-    {
-      model: request.model,
-      status: jsonSchemaResult.status ?? null,
-    },
-  );
+  log.warn("NVIDIA structured JSON schema mode unsupported, retrying with json_object fallback.", {
+    model: request.model,
+    status: jsonSchemaResult.status ?? null,
+  });
 
-  const promptSteeredSystemPrompt = buildNvidiaStructuredSystemPrompt(
-    request.systemPrompt,
-    responseSchema,
-    schemaName,
-  );
+  const promptSteeredSystemPrompt = buildNvidiaStructuredSystemPrompt(request.systemPrompt, responseSchema, schemaName);
 
   const jsonObjectResult = await executeStructuredJsonRequest({
     request,
@@ -470,25 +422,17 @@ export async function callNvidiaStructuredJSON<T>(
     };
   }
 
-  if (
-    !shouldFallbackStructuredMode(
-      jsonObjectResult.status ?? 0,
-      jsonObjectResult.errorBody ?? "",
-    )
-  ) {
+  if (!shouldFallbackStructuredMode(jsonObjectResult.status ?? 0, jsonObjectResult.errorBody ?? "")) {
     return {
       success: false,
       error: jsonObjectResult.error,
     };
   }
 
-  log.warn(
-    "NVIDIA json_object mode unsupported, retrying without response_format.",
-    {
-      model: request.model,
-      status: jsonObjectResult.status ?? null,
-    },
-  );
+  log.warn("NVIDIA json_object mode unsupported, retrying without response_format.", {
+    model: request.model,
+    status: jsonObjectResult.status ?? null,
+  });
 
   const plainJsonResult = await executeStructuredJsonRequest({
     request,

@@ -37,8 +37,7 @@ const DB_ERROR_STALENESS_MS = 2 * 60 * 1000;
  * Cache duration: configurable via env, default 10 minutes.
  * Longer TTL than emoji cache since config changes are less frequent.
  */
-const TOMORI_STATE_CACHE_DURATION_MS =
-  (Number(process.env.TOMORI_STATE_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
+const TOMORI_STATE_CACHE_DURATION_MS = (Number(process.env.TOMORI_STATE_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
 
 /**
  * Cache statistics for monitoring
@@ -60,8 +59,7 @@ const botStartTimestamp = Date.now();
  * How long after process start to treat empty persona results as "updating"
  * rather than "not set up". Configurable via env (default 3 minutes).
  */
-const STARTUP_GRACE_PERIOD_MS =
-  (Number(process.env.STARTUP_GRACE_PERIOD_MINUTES) || 3) * 60 * 1000;
+const STARTUP_GRACE_PERIOD_MS = (Number(process.env.STARTUP_GRACE_PERIOD_MINUTES) || 3) * 60 * 1000;
 
 /**
  * Checks whether the current "not set up" state is likely a transient
@@ -78,9 +76,7 @@ const STARTUP_GRACE_PERIOD_MS =
  * @returns The error entry if fresh (within staleness threshold) or within
  *          startup grace period, or null if this is genuinely "not set up"
  */
-export function getLastDbError(
-  serverDiscId: string,
-): { message: string; timestamp: number } | null {
+export function getLastDbError(serverDiscId: string): { message: string; timestamp: number } | null {
   // 1. Check for a real DB error recorded by getCachedAllPersonas
   const entry = lastDbError.get(serverDiscId);
   if (entry) {
@@ -119,9 +115,7 @@ export function getLastDbError(
  * @param serverDiscId - Discord server ID
  * @returns Array of TomoriState objects (main first, then alters), or empty array if not found
  */
-export async function getCachedAllPersonas(
-  serverDiscId: string,
-): Promise<TomoriState[]> {
+export async function getCachedAllPersonas(serverDiscId: string): Promise<TomoriState[]> {
   // 1. Check in-memory cache
   const now = Date.now();
   const cachedEntry = cache.get(serverDiscId);
@@ -139,16 +133,12 @@ export async function getCachedAllPersonas(
     }
 
     // Cache stale - fall through to refresh
-    log.info(
-      `[TomoriState Cache] STALE for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s)`,
-    );
+    log.info(`[TomoriState Cache] STALE for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // 2. Cache miss or stale - refresh from DB
   cacheMisses++;
-  log.info(
-    `[TomoriState Cache] MISS for server ${serverDiscId} - loading all personas from DB`,
-  );
+  log.info(`[TomoriState Cache] MISS for server ${serverDiscId} - loading all personas from DB`);
 
   try {
     // 3. Load fresh data from database (all personas)
@@ -161,9 +151,7 @@ export async function getCachedAllPersonas(
       // Find main persona (is_alter=false)
       const mainPersona = personas.find((p) => !p.is_alter);
       if (!mainPersona) {
-        log.error(
-          `[TomoriState Cache] No main persona found for server ${serverDiscId}`,
-        );
+        log.error(`[TomoriState Cache] No main persona found for server ${serverDiscId}`);
         return personas; // Return alters anyway, but log error
       }
 
@@ -188,21 +176,14 @@ export async function getCachedAllPersonas(
         message: error.message,
         timestamp: Date.now(),
       });
-      log.warn(
-        `[TomoriState Cache] DB unavailable for server ${serverDiscId}, recorded for UI differentiation`,
-      );
+      log.warn(`[TomoriState Cache] DB unavailable for server ${serverDiscId}, recorded for UI differentiation`);
     }
 
-    log.error(
-      `[TomoriState Cache] Error loading personas for server ${serverDiscId}:`,
-      error,
-    );
+    log.error(`[TomoriState Cache] Error loading personas for server ${serverDiscId}:`, error);
 
     // Return stale cache if available (graceful fallback)
     if (cachedEntry) {
-      log.warn(
-        `[TomoriState Cache] Returning stale cache for server ${serverDiscId} due to error`,
-      );
+      log.warn(`[TomoriState Cache] Returning stale cache for server ${serverDiscId} due to error`);
       return cachedEntry.personas;
     }
 
@@ -218,9 +199,7 @@ export async function getCachedAllPersonas(
  * @param serverDiscId - Discord server ID
  * @returns Main TomoriState or null if not found
  */
-export async function getCachedMainPersona(
-  serverDiscId: string,
-): Promise<TomoriState | null> {
+export async function getCachedMainPersona(serverDiscId: string): Promise<TomoriState | null> {
   // 1. Check in-memory cache first for quick lookup
   const cachedEntry = cache.get(serverDiscId);
   if (cachedEntry) {
@@ -250,9 +229,7 @@ export async function getCachedMainPersona(
  *
  * @deprecated Use getCachedMainPersona() for main persona only, or getCachedAllPersonas() for all personas.
  */
-export async function getCachedTomoriState(
-  serverDiscId: string,
-): Promise<TomoriState | null> {
+export async function getCachedTomoriState(serverDiscId: string): Promise<TomoriState | null> {
   return getCachedMainPersona(serverDiscId);
 }
 
@@ -268,9 +245,7 @@ export function invalidateTomoriStateCache(serverDiscId: string): void {
   lastDbError.delete(serverDiscId);
 
   if (hadCache) {
-    log.info(
-      `[TomoriState Cache] Invalidated cache for server ${serverDiscId}`,
-    );
+    log.info(`[TomoriState Cache] Invalidated cache for server ${serverDiscId}`);
   }
 }
 
@@ -285,9 +260,7 @@ export function clearTomoriStateCache(): void {
   cacheHits = 0;
   cacheMisses = 0;
 
-  log.info(
-    `[TomoriState Cache] Cleared entire cache (${previousSize} entries)`,
-  );
+  log.info(`[TomoriState Cache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**
@@ -302,8 +275,7 @@ export function getTomoriStateCacheStats(): {
   cacheSize: number;
 } {
   const total = cacheHits + cacheMisses;
-  const hitRate =
-    total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
+  const hitRate = total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
 
   return {
     hits: cacheHits,

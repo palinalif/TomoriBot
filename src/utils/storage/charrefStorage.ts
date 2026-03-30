@@ -1,8 +1,4 @@
-import {
-  DeleteObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { log } from "@/utils/misc/logger";
@@ -23,11 +19,7 @@ type CharRefStorageConfig = {
 };
 
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
-const LOCAL_CHARREF_BASE_DIR = path.resolve(
-  process.cwd(),
-  "data",
-  "charreferences",
-);
+const LOCAL_CHARREF_BASE_DIR = path.resolve(process.cwd(), "data", "charreferences");
 let cachedClient: S3Client | null = null;
 let cachedRegion: string | null = null;
 
@@ -45,9 +37,7 @@ function getCharRefStorageConfig(): CharRefStorageConfig | null {
     return null;
   }
 
-  const bucket =
-    process.env.CHARREF_S3_BUCKET?.trim() ||
-    process.env.AVATAR_S3_BUCKET?.trim();
+  const bucket = process.env.CHARREF_S3_BUCKET?.trim() || process.env.AVATAR_S3_BUCKET?.trim();
   if (!bucket) {
     log.warn(
       "[CharRef Storage] No CHARREF_S3_BUCKET or AVATAR_S3_BUCKET configured; character reference upload disabled in production.",
@@ -60,12 +50,8 @@ function getCharRefStorageConfig(): CharRefStorageConfig | null {
     process.env.AVATAR_S3_REGION?.trim() ||
     process.env.AWS_REGION?.trim() ||
     "us-east-1";
-  const prefix = (process.env.CHARREF_S3_PREFIX || "charreferences")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-  const publicBaseUrl =
-    process.env.CHARREF_PUBLIC_BASE_URL?.trim() ||
-    `https://${bucket}.s3.${region}.amazonaws.com`;
+  const prefix = (process.env.CHARREF_S3_PREFIX || "charreferences").replace(/^\/+/, "").replace(/\/+$/, "");
+  const publicBaseUrl = process.env.CHARREF_PUBLIC_BASE_URL?.trim() || `https://${bucket}.s3.${region}.amazonaws.com`;
 
   return {
     bucket,
@@ -80,23 +66,14 @@ function buildPublicUrl(config: CharRefStorageConfig, key: string): string {
   return `${baseUrl}/${key}`;
 }
 
-function buildObjectKey(
-  config: CharRefStorageConfig,
-  options: CharRefUploadOptions,
-): string {
+function buildObjectKey(config: CharRefStorageConfig, options: CharRefUploadOptions): string {
   const timestamp = Date.now();
   return `${config.prefix}/${options.entityType}/${String(options.entityId)}/${timestamp}.png`;
 }
 
 function buildLocalStoredPath(options: CharRefUploadOptions): string {
   const timestamp = Date.now();
-  return path.posix.join(
-    "data",
-    "charreferences",
-    options.entityType,
-    String(options.entityId),
-    `${timestamp}.png`,
-  );
+  return path.posix.join("data", "charreferences", options.entityType, String(options.entityId), `${timestamp}.png`);
 }
 
 function resolveLocalCharRefPath(storedPath: string): string | null {
@@ -104,23 +81,15 @@ function resolveLocalCharRefPath(storedPath: string): string | null {
   const resolvedPath = path.resolve(process.cwd(), normalizedPath);
   const relativePath = path.relative(LOCAL_CHARREF_BASE_DIR, resolvedPath);
 
-  if (
-    relativePath === "" ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-  ) {
+  if (relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))) {
     return resolvedPath;
   }
 
-  log.warn(
-    `[CharRef Storage] Rejected path outside data/charreferences: ${storedPath}`,
-  );
+  log.warn(`[CharRef Storage] Rejected path outside data/charreferences: ${storedPath}`);
   return null;
 }
 
-function extractKeyFromRemoteUrl(
-  config: CharRefStorageConfig,
-  url: string,
-): string | null {
+function extractKeyFromRemoteUrl(config: CharRefStorageConfig, url: string): string | null {
   try {
     const parsedUrl = new URL(url);
     const baseHost = new URL(config.publicBaseUrl).hostname;
@@ -145,9 +114,7 @@ function extractKeyFromRemoteUrl(
   }
 }
 
-export async function uploadCharRef(
-  options: CharRefUploadOptions,
-): Promise<string | null> {
+export async function uploadCharRef(options: CharRefUploadOptions): Promise<string | null> {
   if (IS_PRODUCTION) {
     const config = getCharRefStorageConfig();
     if (!config) {
@@ -169,15 +136,10 @@ export async function uploadCharRef(
       );
 
       const publicUrl = buildPublicUrl(config, key);
-      log.success(
-        `[CharRef Storage] Uploaded ${options.entityType} character reference to ${publicUrl}`,
-      );
+      log.success(`[CharRef Storage] Uploaded ${options.entityType} character reference to ${publicUrl}`);
       return publicUrl;
     } catch (error) {
-      log.warn(
-        `[CharRef Storage] Failed to upload ${options.entityType} character reference to S3`,
-        error,
-      );
+      log.warn(`[CharRef Storage] Failed to upload ${options.entityType} character reference to S3`, error);
       return null;
     }
   }
@@ -191,15 +153,10 @@ export async function uploadCharRef(
   try {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, options.buffer);
-    log.success(
-      `[CharRef Storage] Stored ${options.entityType} character reference at ${storedPath}`,
-    );
+    log.success(`[CharRef Storage] Stored ${options.entityType} character reference at ${storedPath}`);
     return storedPath.replace(/\\/g, "/");
   } catch (error) {
-    log.warn(
-      `[CharRef Storage] Failed to store ${options.entityType} character reference locally`,
-      error,
-    );
+    log.warn(`[CharRef Storage] Failed to store ${options.entityType} character reference locally`, error);
     return null;
   }
 }
@@ -231,10 +188,7 @@ export async function deleteCharRef(urlOrPath: string): Promise<boolean> {
       log.info(`[CharRef Storage] Deleted remote character reference ${key}`);
       return true;
     } catch (error) {
-      log.warn(
-        `[CharRef Storage] Failed to delete remote character reference ${key}`,
-        error,
-      );
+      log.warn(`[CharRef Storage] Failed to delete remote character reference ${key}`, error);
       return false;
     }
   }
@@ -246,31 +200,19 @@ export async function deleteCharRef(urlOrPath: string): Promise<boolean> {
 
   try {
     await fs.unlink(absolutePath);
-    log.info(
-      `[CharRef Storage] Deleted local character reference ${target.replace(/\\/g, "/")}`,
-    );
+    log.info(`[CharRef Storage] Deleted local character reference ${target.replace(/\\/g, "/")}`);
     return true;
   } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
       return false;
     }
 
-    log.warn(
-      `[CharRef Storage] Failed to delete local character reference ${target}`,
-      error,
-    );
+    log.warn(`[CharRef Storage] Failed to delete local character reference ${target}`, error);
     return false;
   }
 }
 
-export async function loadCharRefAsBase64(
-  urlOrPath: string,
-): Promise<string | null> {
+export async function loadCharRefAsBase64(urlOrPath: string): Promise<string | null> {
   const target = urlOrPath.trim();
   if (!target) {
     return null;
@@ -289,10 +231,7 @@ export async function loadCharRefAsBase64(
       const buffer = Buffer.from(await response.arrayBuffer());
       return buffer.toString("base64");
     } catch (error) {
-      log.warn(
-        `[CharRef Storage] Failed to load remote character reference ${target}`,
-        error,
-      );
+      log.warn(`[CharRef Storage] Failed to load remote character reference ${target}`, error);
       return null;
     }
   }
@@ -306,10 +245,7 @@ export async function loadCharRefAsBase64(
     const buffer = await fs.readFile(absolutePath);
     return buffer.toString("base64");
   } catch (error) {
-    log.warn(
-      `[CharRef Storage] Failed to load local character reference ${target}`,
-      error,
-    );
+    log.warn(`[CharRef Storage] Failed to load local character reference ${target}`, error);
     return null;
   }
 }

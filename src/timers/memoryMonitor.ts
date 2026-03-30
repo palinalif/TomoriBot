@@ -4,11 +4,7 @@
  */
 
 import { log } from "../utils/misc/logger";
-import {
-  memoryGuard,
-  getMemoryStatusSummary,
-  type MemoryStatus,
-} from "../utils/security/rateLimiter";
+import { memoryGuard, getMemoryStatusSummary, type MemoryStatus } from "../utils/security/rateLimiter";
 
 /**
  * Class to manage the memory monitoring system
@@ -32,9 +28,7 @@ export class MemoryMonitor {
       return;
     }
 
-    log.info(
-      `Starting memory monitor (polling every ${this.POLL_INTERVAL_MS / 1000}s)`,
-    );
+    log.info(`Starting memory monitor (polling every ${this.POLL_INTERVAL_MS / 1000}s)`);
     this.isRunning = true;
 
     // Run immediately on start
@@ -131,9 +125,7 @@ export function initializeMemoryMonitor(pollIntervalMs?: number): void {
     return;
   }
 
-  const intervalMs =
-    pollIntervalMs ||
-    Number.parseInt(process.env.MEMORY_MONITOR_INTERVAL_MS || "30000", 10);
+  const intervalMs = pollIntervalMs || Number.parseInt(process.env.MEMORY_MONITOR_INTERVAL_MS || "30000", 10);
 
   memoryMonitorInstance = new MemoryMonitor(intervalMs);
   memoryMonitorInstance.start();

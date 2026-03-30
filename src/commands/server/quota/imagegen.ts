@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
@@ -23,35 +19,21 @@ const MAX_RESET_DAYS = 365;
  * Configure the subcommand for /server quota imagegen.
  * Users select ONE of three options: daily_user_quota, serverwide_quota, or serverwide_quota_resets_in.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("imagegen")
-    .setDescription(
-      localizer("en-US", "commands.server.quota.imagegen.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.quota.imagegen.description"))
     .addIntegerOption((option) =>
       option
         .setName("daily_user_quota")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.quota.imagegen.daily_user_quota_limit_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.quota.imagegen.daily_user_quota_limit_description"))
         .setMinValue(MIN_USER_QUOTA)
         .setMaxValue(MAX_USER_QUOTA),
     )
     .addIntegerOption((option) =>
       option
         .setName("serverwide_quota")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.quota.imagegen.serverwide_quota_limit_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.quota.imagegen.serverwide_quota_limit_description"))
         .setMinValue(MIN_SERVERWIDE_QUOTA)
         .setMaxValue(MAX_SERVERWIDE_QUOTA),
     )
@@ -59,10 +41,7 @@ export const configureSubcommand = (
       option
         .setName("serverwide_quota_resets_in")
         .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.quota.imagegen.serverwide_quota_resets_in_days_description",
-          ),
+          localizer("en-US", "commands.server.quota.imagegen.serverwide_quota_resets_in_days_description"),
         )
         .setMinValue(MIN_RESET_DAYS)
         .setMaxValue(MAX_RESET_DAYS),
@@ -124,16 +103,10 @@ export async function execute(
   // 5. Get which options were provided
   const dailyUserQuota = interaction.options.getInteger("daily_user_quota");
   const serverwideQuota = interaction.options.getInteger("serverwide_quota");
-  const resetDays = interaction.options.getInteger(
-    "serverwide_quota_resets_in",
-  );
+  const resetDays = interaction.options.getInteger("serverwide_quota_resets_in");
 
   // 6. Check if at least one option was provided
-  if (
-    dailyUserQuota === null &&
-    serverwideQuota === null &&
-    resetDays === null
-  ) {
+  if (dailyUserQuota === null && serverwideQuota === null && resetDays === null) {
     await replyInfoEmbed(interaction, userData.language_pref, {
       titleKey: "general.errors.generic_error_title",
       descriptionKey: "general.errors.generic_error_description",
@@ -148,11 +121,7 @@ export async function execute(
   try {
     // Process daily user quota if provided
     if (dailyUserQuota !== null) {
-      const result = await updateDailyUserQuota(
-        serverId,
-        dailyUserQuota,
-        locale,
-      );
+      const result = await updateDailyUserQuota(serverId, dailyUserQuota, locale);
       if (result) {
         updates.push(result);
       }
@@ -160,11 +129,7 @@ export async function execute(
 
     // Process serverwide quota if provided
     if (serverwideQuota !== null) {
-      const result = await updateServerwideQuota(
-        serverId,
-        serverwideQuota,
-        locale,
-      );
+      const result = await updateServerwideQuota(serverId, serverwideQuota, locale);
       if (result) {
         updates.push(result);
       }
@@ -204,11 +169,7 @@ export async function execute(
  * @param locale - User's locale for formatting
  * @returns Success message string
  */
-async function updateDailyUserQuota(
-  serverId: number,
-  limit: number,
-  locale: string,
-): Promise<string> {
+async function updateDailyUserQuota(serverId: number, limit: number, locale: string): Promise<string> {
   // 1. Ensure quota config exists (creates default if not exists)
   await getQuotaConfig(serverId);
 
@@ -220,16 +181,9 @@ async function updateDailyUserQuota(
 	`;
 
   // 3. Format and return success message
-  const limitText =
-    limit === 0
-      ? localizer(locale, "commands.server.quota.imagegen.unlimited")
-      : `${limit}`;
+  const limitText = limit === 0 ? localizer(locale, "commands.server.quota.imagegen.unlimited") : `${limit}`;
 
-  return localizer(
-    locale,
-    "commands.server.quota.imagegen.daily_user_quota_success_description",
-    { limit: limitText },
-  );
+  return localizer(locale, "commands.server.quota.imagegen.daily_user_quota_success_description", { limit: limitText });
 }
 
 /**
@@ -239,11 +193,7 @@ async function updateDailyUserQuota(
  * @param locale - User's locale for formatting
  * @returns Success message string
  */
-async function updateServerwideQuota(
-  serverId: number,
-  limit: number,
-  locale: string,
-): Promise<string> {
+async function updateServerwideQuota(serverId: number, limit: number, locale: string): Promise<string> {
   // 1. Get current quota config (creates default if not exists)
   const currentConfig = await getQuotaConfig(serverId);
 
@@ -278,16 +228,9 @@ async function updateServerwideQuota(
   }
 
   // 4. Format and return success message
-  const limitText =
-    limit === 0
-      ? localizer(locale, "commands.server.quota.imagegen.unlimited")
-      : `${limit}`;
+  const limitText = limit === 0 ? localizer(locale, "commands.server.quota.imagegen.unlimited") : `${limit}`;
 
-  return localizer(
-    locale,
-    "commands.server.quota.imagegen.serverwide_quota_success_description",
-    { limit: limitText },
-  );
+  return localizer(locale, "commands.server.quota.imagegen.serverwide_quota_success_description", { limit: limitText });
 }
 
 /**
@@ -297,11 +240,7 @@ async function updateServerwideQuota(
  * @param locale - User's locale for formatting
  * @returns Success message string
  */
-async function updateResetDays(
-  serverId: number,
-  days: number,
-  locale: string,
-): Promise<string> {
+async function updateResetDays(serverId: number, days: number, locale: string): Promise<string> {
   // 1. Get current quota config (creates default if not exists)
   const currentConfig = await getQuotaConfig(serverId);
 
@@ -322,9 +261,7 @@ async function updateResetDays(
   }
 
   // 4. Format and return success message
-  return localizer(
-    locale,
-    "commands.server.quota.imagegen.serverwide_quota_resets_in_success_description",
-    { days: `${days}` },
-  );
+  return localizer(locale, "commands.server.quota.imagegen.serverwide_quota_resets_in_success_description", {
+    days: `${days}`,
+  });
 }

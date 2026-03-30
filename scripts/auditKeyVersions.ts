@@ -62,9 +62,7 @@ function getPostgresUrl(): string {
   const database = process.env.POSTGRES_DB || "tomodb";
 
   if (!password) {
-    throw new Error(
-      "Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL",
-    );
+    throw new Error("Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL");
   }
 
   return `postgresql://${user}:${password}@${host}:${port}/${database}`;
@@ -93,9 +91,7 @@ async function auditKeyVersions() {
 
   console.log("📋 Environment Configuration:");
   console.log(`   Current Version: V${currentVersion}`);
-  console.log(
-    `   Available Versions: ${availableVersions.map((v) => `V${v}`).join(", ")}`,
-  );
+  console.log(`   Available Versions: ${availableVersions.map((v) => `V${v}`).join(", ")}`);
   console.log();
 
   // 2. Get key version usage from both tables
@@ -110,10 +106,7 @@ async function auditKeyVersions() {
 			ORDER BY key_version
 		`) as VersionStats[];
 
-    const optApiKeysTotal = optApiKeysStats.reduce(
-      (sum, s) => sum + Number(s.count),
-      0,
-    );
+    const optApiKeysTotal = optApiKeysStats.reduce((sum, s) => sum + Number(s.count), 0);
 
     tables.push({
       tableName: "opt_api_keys",
@@ -134,10 +127,7 @@ async function auditKeyVersions() {
 			ORDER BY key_version
 		`) as VersionStats[];
 
-    const tomoriConfigsTotal = tomoriConfigsStats.reduce(
-      (sum, s) => sum + Number(s.count),
-      0,
-    );
+    const tomoriConfigsTotal = tomoriConfigsStats.reduce((sum, s) => sum + Number(s.count), 0);
 
     tables.push({
       tableName: "tomori_configs",
@@ -171,9 +161,7 @@ async function auditKeyVersions() {
         const hasKey = keyManager.hasVersion(version);
         const status = hasKey ? "✅" : "❌ MISSING";
 
-        console.log(
-          `      V${version}: ${count} keys (${percentage}%) ${status}`,
-        );
+        console.log(`      V${version}: ${count} keys (${percentage}%) ${status}`);
       }
 
       console.log(`      Total: ${table.total} keys`);
@@ -182,17 +170,13 @@ async function auditKeyVersions() {
     console.log();
 
     // 4. Identify missing keys (data exists but key not in env)
-    const missingKeys = Array.from(versionsInUse).filter(
-      (v) => !keyManager.hasVersion(v),
-    );
+    const missingKeys = Array.from(versionsInUse).filter((v) => !keyManager.hasVersion(v));
     if (missingKeys.length > 0) {
       console.log("⚠️  CRITICAL WARNINGS:");
       for (const version of missingKeys) {
         let keysAffected = 0;
         for (const table of tables) {
-          const stat = table.stats.find(
-            (s) => (s.key_version || 1) === version,
-          );
+          const stat = table.stats.find((s) => (s.key_version || 1) === version);
           if (stat) keysAffected += Number(stat.count);
         }
         console.log(`   - CRYPTO_SECRET_V${version} missing from environment`);
@@ -207,13 +191,9 @@ async function auditKeyVersions() {
       console.log("✅ Safe to Remove:");
       for (const version of unusedKeys) {
         if (version === currentVersion) {
-          console.log(
-            `   - CRYPTO_SECRET_V${version} (current version, keep for new encryptions)`,
-          );
+          console.log(`   - CRYPTO_SECRET_V${version} (current version, keep for new encryptions)`);
         } else {
-          console.log(
-            `   - CRYPTO_SECRET_V${version} (no data using this version)`,
-          );
+          console.log(`   - CRYPTO_SECRET_V${version} (no data using this version)`);
         }
       }
       console.log();
@@ -221,9 +201,7 @@ async function auditKeyVersions() {
 
     // 6. Rotation progress (if multiple versions in use)
     if (versionsInUse.size > 1) {
-      const oldVersions = Array.from(versionsInUse).filter(
-        (v) => v !== currentVersion,
-      );
+      const oldVersions = Array.from(versionsInUse).filter((v) => v !== currentVersion);
       let oldKeyCount = 0;
       let totalKeys = 0;
 
@@ -241,9 +219,7 @@ async function auditKeyVersions() {
       const progress = ((newKeyCount / totalKeys) * 100).toFixed(1);
 
       console.log("🔄 Rotation Progress:");
-      console.log(
-        `   ${newKeyCount}/${totalKeys} keys migrated to V${currentVersion} (${progress}%)`,
-      );
+      console.log(`   ${newKeyCount}/${totalKeys} keys migrated to V${currentVersion} (${progress}%)`);
       console.log(`   ${oldKeyCount} keys still on old versions`);
       console.log();
     }
@@ -252,9 +228,7 @@ async function auditKeyVersions() {
     console.log("💡 Recommendations:");
 
     if (missingKeys.length > 0) {
-      console.log(
-        "   1. ❌ URGENT: Add missing key versions to .env immediately",
-      );
+      console.log("   1. ❌ URGENT: Add missing key versions to .env immediately");
       console.log("      Your bot cannot decrypt some API keys!");
     } else if (versionsInUse.size === 1 && versionsInUse.has(currentVersion)) {
       console.log("   1. ✅ All keys are on the current version");
@@ -270,9 +244,7 @@ async function auditKeyVersions() {
         console.log("   2. ✅ No cleanup needed");
       }
     } else if (versionsInUse.size > 1) {
-      const oldVersions = Array.from(versionsInUse).filter(
-        (v) => v !== currentVersion,
-      );
+      const oldVersions = Array.from(versionsInUse).filter((v) => v !== currentVersion);
       let oldKeyCount = 0;
 
       for (const table of tables) {
@@ -284,9 +256,7 @@ async function auditKeyVersions() {
         }
       }
 
-      console.log(
-        `   1. 🔄 Rotation in progress: ${oldKeyCount} keys need migration`,
-      );
+      console.log(`   1. 🔄 Rotation in progress: ${oldKeyCount} keys need migration`);
       console.log("   2. ⏳ Wait for lazy rotation, or run:");
       console.log("      bun run rotate-keys");
       console.log("   3. ⚠️  Keep old key versions until migration completes");

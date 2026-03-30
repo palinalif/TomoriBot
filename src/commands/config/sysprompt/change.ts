@@ -4,42 +4,23 @@
  * using a 4-part modal (4000 chars each, first part required)
  */
 
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  ModalSubmitInteraction,
-} from "discord.js";
-import {
-  MessageFlags,
-  SlashCommandSubcommandBuilder,
-  TextInputStyle,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, ModalSubmitInteraction } from "discord.js";
+import { MessageFlags, SlashCommandSubcommandBuilder, TextInputStyle } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 
 const MODAL_CUSTOM_ID = "config_prompt_change_modal";
 const PROMPT_PART_MAX_LENGTH = 4000;
 const PROMPT_PART_COUNT = 4;
 
-function splitPromptIntoModalParts(
-  prompt: string | null | undefined,
-): string[] {
+function splitPromptIntoModalParts(prompt: string | null | undefined): string[] {
   const promptValue = prompt ?? "";
 
   return Array.from({ length: PROMPT_PART_COUNT }, (_, index) =>
-    promptValue.slice(
-      index * PROMPT_PART_MAX_LENGTH,
-      (index + 1) * PROMPT_PART_MAX_LENGTH,
-    ),
+    promptValue.slice(index * PROMPT_PART_MAX_LENGTH, (index + 1) * PROMPT_PART_MAX_LENGTH),
   );
 }
 
@@ -98,9 +79,7 @@ export async function execute(
   let modalSubmitInteraction: ModalSubmitInteraction | undefined;
 
   try {
-    const existingPromptParts = splitPromptIntoModalParts(
-      tomoriState.config.system_prompt,
-    );
+    const existingPromptParts = splitPromptIntoModalParts(tomoriState.config.system_prompt);
 
     // 4. Show modal with 4 text fields (first required, others optional)
     const modalResult = await promptWithRawModal(
@@ -161,9 +140,7 @@ export async function execute(
 
     // 6. Safety check for modalSubmitInteraction
     if (!modalSubmitInteraction) {
-      log.error(
-        "Modal submit interaction is undefined after successful submit",
-      );
+      log.error("Modal submit interaction is undefined after successful submit");
       return;
     }
 
@@ -178,8 +155,7 @@ export async function execute(
     if (!systemPrompt) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.prompt.change.empty_prompt_title",
-        descriptionKey:
-          "commands.config.prompt.change.empty_prompt_description",
+        descriptionKey: "commands.config.prompt.change.empty_prompt_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -206,9 +182,7 @@ export async function execute(
       flags: MessageFlags.Ephemeral,
     });
 
-    log.info(
-      `System prompt updated for server ${serverId} (${systemPrompt.length} chars)`,
-    );
+    log.info(`System prompt updated for server ${serverId} (${systemPrompt.length} chars)`);
   } catch (error) {
     log.error("Failed to set custom system prompt:", error as Error);
 

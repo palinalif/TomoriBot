@@ -13,24 +13,14 @@ import {
   setMessageTriggerCooldownWithWhitelist,
 } from "@/utils/db/cooldownManager";
 import { sendCooldownDM } from "@/utils/discord/cooldownDM";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { loadTomoriState } from "@/utils/db/dbRead";
 import { sql } from "@/utils/db/client";
-import {
-  getOrCreateWebhook,
-  resolvePersonaWebhookIdentity,
-} from "@/utils/discord/webhookManager";
+import { getOrCreateWebhook, resolvePersonaWebhookIdentity } from "@/utils/discord/webhookManager";
 import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { checkImageQuota } from "@/utils/quota/imageQuotaManager";
 import { hasOptApiKey } from "@/utils/security/crypto";
-import {
-  CooldownType,
-  type TomoriState,
-  type UserRow,
-} from "@/types/db/schema";
+import { CooldownType, type TomoriState, type UserRow } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
@@ -77,8 +67,7 @@ const SCENE_SETTING_PRESETS: Record<SceneSettingId, SceneSettingPreset> = {
   snapshot: {
     aspectRatio: "1:1",
     plannerLabel: "Square Snapshot",
-    plannerInstruction:
-      "Create a balanced square composition that still shows the current moment clearly.",
+    plannerInstruction: "Create a balanced square composition that still shows the current moment clearly.",
     novelAiOrientation: "square",
   },
   vertical: {
@@ -118,62 +107,32 @@ type ImageQuotaCheckResult = Awaited<ReturnType<typeof checkImageQuota>>;
 
 // ─── Subcommand registration ──────────────────────────────────────────────────
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("image")
-    .setDescription(
-      localizer("en-US", "commands.bot.generate.image.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("image").setDescription(localizer("en-US", "commands.bot.generate.image.description"));
 
 // ─── Locale helpers ───────────────────────────────────────────────────────────
 
 function getSettingOptions(locale: string) {
   return [
     {
-      label: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_storybeat_label",
-      ),
+      label: localizer(locale, "commands.bot.generate.image.modal.setting_storybeat_label"),
       value: "storybeat",
-      description: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_storybeat_description",
-      ),
+      description: localizer(locale, "commands.bot.generate.image.modal.setting_storybeat_description"),
     },
     {
-      label: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_character_label",
-      ),
+      label: localizer(locale, "commands.bot.generate.image.modal.setting_character_label"),
       value: "character",
-      description: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_character_description",
-      ),
+      description: localizer(locale, "commands.bot.generate.image.modal.setting_character_description"),
     },
     {
-      label: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_snapshot_label",
-      ),
+      label: localizer(locale, "commands.bot.generate.image.modal.setting_snapshot_label"),
       value: "snapshot",
-      description: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_snapshot_description",
-      ),
+      description: localizer(locale, "commands.bot.generate.image.modal.setting_snapshot_description"),
     },
     {
-      label: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_vertical_label",
-      ),
+      label: localizer(locale, "commands.bot.generate.image.modal.setting_vertical_label"),
       value: "vertical",
-      description: localizer(
-        locale,
-        "commands.bot.generate.image.modal.setting_vertical_description",
-      ),
+      description: localizer(locale, "commands.bot.generate.image.modal.setting_vertical_description"),
     },
   ];
 }
@@ -181,27 +140,16 @@ function getSettingOptions(locale: string) {
 function getBackendOptions(locale: string, providerName: string) {
   return [
     {
-      label: localizer(
-        locale,
-        "commands.bot.generate.image.modal.backend_current_label",
-      ),
+      label: localizer(locale, "commands.bot.generate.image.modal.backend_current_label"),
       value: "current_provider",
-      description: localizer(
-        locale,
-        "commands.bot.generate.image.modal.backend_current_description",
-        { provider: providerName },
-      ),
+      description: localizer(locale, "commands.bot.generate.image.modal.backend_current_description", {
+        provider: providerName,
+      }),
     },
     {
-      label: localizer(
-        locale,
-        "commands.bot.generate.image.modal.backend_novelai_label",
-      ),
+      label: localizer(locale, "commands.bot.generate.image.modal.backend_novelai_label"),
       value: "novelai",
-      description: localizer(
-        locale,
-        "commands.bot.generate.image.modal.backend_novelai_description",
-      ),
+      description: localizer(locale, "commands.bot.generate.image.modal.backend_novelai_description"),
     },
   ];
 }
@@ -215,9 +163,7 @@ function getBackendOptions(locale: string, providerName: string) {
  * Returns main persona first (is_alter=false), then alters ordered by recency.
  * @param serverId - Numeric DB server ID from tomoriState
  */
-async function loadServerPersonaSummaries(
-  serverId: number,
-): Promise<PersonaSummary[]> {
+async function loadServerPersonaSummaries(serverId: number): Promise<PersonaSummary[]> {
   return await sql<PersonaSummary[]>`
 		SELECT
 			t.tomori_id,
@@ -240,10 +186,7 @@ async function loadServerPersonaSummaries(
  * @param personas - List of persona summaries from loadServerPersonaSummaries
  * @param activeTomoriId - The currently active persona's tomori_id
  */
-function getPersonaSelectOptions(
-  personas: PersonaSummary[],
-  activeTomoriId: number,
-) {
+function getPersonaSelectOptions(personas: PersonaSummary[], activeTomoriId: number) {
   return personas.map((p) => ({
     label: p.tomori_nickname,
     value: p.tomori_id.toString(),
@@ -259,24 +202,16 @@ async function resolveSceneImageBackendAvailability(params: {
   serverId: string;
 }): Promise<SceneImageBackendAvailability> {
   const serverIdNumber = Number.parseInt(params.serverId, 10);
-  const hasNovelAiOptKey = Number.isNaN(serverIdNumber)
-    ? false
-    : await hasOptApiKey(serverIdNumber, "novelai");
+  const hasNovelAiOptKey = Number.isNaN(serverIdNumber) ? false : await hasOptApiKey(serverIdNumber, "novelai");
   const novelAiAvailable =
-    hasNovelAiOptKey ||
-    (params.provider === "novelai" &&
-      Boolean(params.tomoriState.config.api_key));
+    hasNovelAiOptKey || (params.provider === "novelai" && Boolean(params.tomoriState.config.api_key));
   const currentProviderAvailable =
     params.provider !== "novelai" &&
     providerSupportsFeature(params.provider, "nativeImageGeneration") &&
     Boolean(params.tomoriState.config.api_key) &&
     Boolean(params.tomoriState.config.diffusion_model_id) &&
     !(hasNovelAiOptKey && params.tomoriState.config.nai_exclusive_imggen);
-  const defaultBackend = currentProviderAvailable
-    ? "current_provider"
-    : novelAiAvailable
-      ? "novelai"
-      : null;
+  const defaultBackend = currentProviderAvailable ? "current_provider" : novelAiAvailable ? "novelai" : null;
 
   return {
     currentProvider: currentProviderAvailable,
@@ -289,44 +224,33 @@ async function resolveSceneImageBackendAvailability(params: {
 // ─── Quota error reply ────────────────────────────────────────────────────────
 
 async function replyQuotaExceeded(
-  replyTarget:
-    | ChatInputCommandInteraction
-    | import("discord.js").ModalSubmitInteraction,
+  replyTarget: ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction,
   locale: string,
   quotaCheck: ImageQuotaCheckResult,
 ): Promise<void> {
   const errorTitleKey = "commands.generate.image.quota_exceeded_title";
-  let errorDescriptionKey =
-    "commands.generate.image.quota_exceeded_description";
+  let errorDescriptionKey = "commands.generate.image.quota_exceeded_description";
   const descriptionVars: Record<string, string> = {};
 
   if (quotaCheck.resetTime) {
     const now = new Date();
-    const hoursUntilReset = Math.ceil(
-      (quotaCheck.resetTime.getTime() - now.getTime()) / (1000 * 60 * 60),
-    );
+    const hoursUntilReset = Math.ceil((quotaCheck.resetTime.getTime() - now.getTime()) / (1000 * 60 * 60));
 
     if (hoursUntilReset < 24) {
-      descriptionVars.reset_info = localizer(
-        locale,
-        "commands.generate.image.quota_resets_in_hours",
-        { hours: hoursUntilReset.toString() },
-      );
+      descriptionVars.reset_info = localizer(locale, "commands.generate.image.quota_resets_in_hours", {
+        hours: hoursUntilReset.toString(),
+      });
     } else {
-      descriptionVars.reset_info = localizer(
-        locale,
-        "commands.generate.image.quota_resets_in_days",
-        { days: Math.ceil(hoursUntilReset / 24).toString() },
-      );
+      descriptionVars.reset_info = localizer(locale, "commands.generate.image.quota_resets_in_days", {
+        days: Math.ceil(hoursUntilReset / 24).toString(),
+      });
     }
   }
 
   if (quotaCheck.reason === "user_quota_exceeded") {
-    errorDescriptionKey =
-      "commands.generate.image.user_quota_exceeded_description";
+    errorDescriptionKey = "commands.generate.image.user_quota_exceeded_description";
   } else if (quotaCheck.reason === "serverwide_quota_exceeded") {
-    errorDescriptionKey =
-      "commands.generate.image.serverwide_quota_exceeded_description";
+    errorDescriptionKey = "commands.generate.image.serverwide_quota_exceeded_description";
   }
 
   await replyInfoEmbed(replyTarget, locale, {
@@ -348,11 +272,7 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   // 1. Guild-only guard — the command targets a specific channel.
-  if (
-    !interaction.guild ||
-    !interaction.channel ||
-    !("messages" in interaction.channel)
-  ) {
+  if (!interaction.guild || !interaction.channel || !("messages" in interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.guild_only_title",
       descriptionKey: "general.errors.guild_only_description",
@@ -375,9 +295,7 @@ export async function execute(
   }
 
   // 3. Validate bot channel permissions.
-  const guildChannel =
-    interaction.guild.channels.cache.get(interaction.channel.id) ??
-    interaction.channel;
+  const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
   if (!("permissionsFor" in guildChannel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -390,9 +308,7 @@ export async function execute(
 
   const permissions = guildChannel.permissionsFor(botMember);
   const requiresThreadSendPermission =
-    "isThread" in guildChannel &&
-    typeof guildChannel.isThread === "function" &&
-    guildChannel.isThread();
+    "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
   const canSendMessages = requiresThreadSendPermission
     ? permissions?.has(PermissionFlagsBits.SendMessagesInThreads)
     : permissions?.has(PermissionFlagsBits.SendMessages);
@@ -405,8 +321,7 @@ export async function execute(
   ) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.generate.image.missing_permissions_title",
-      descriptionKey:
-        "commands.bot.generate.image.missing_permissions_description",
+      descriptionKey: "commands.bot.generate.image.missing_permissions_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -426,9 +341,7 @@ export async function execute(
   }
 
   // 4a. Load all persona summaries for the sender selector.
-  const personaSummaries = await loadServerPersonaSummaries(
-    tomoriState.server_id,
-  );
+  const personaSummaries = await loadServerPersonaSummaries(tomoriState.server_id);
 
   // 5. Cooldown check.
   const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
@@ -485,8 +398,7 @@ export async function execute(
   if (!tomoriState.llm.has_tools) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.generate.image.planner_unavailable_title",
-      descriptionKey:
-        "commands.bot.generate.image.planner_unavailable_description",
+      descriptionKey: "commands.bot.generate.image.planner_unavailable_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -525,10 +437,7 @@ export async function execute(
   }
 
   // 10. Quota check before showing the modal (avoids wasting user interaction).
-  const quotaCheck = await checkImageQuota(
-    tomoriState.server_id,
-    interaction.user.id,
-  );
+  const quotaCheck = await checkImageQuota(tomoriState.server_id, interaction.user.id);
   if (!quotaCheck.allowed) {
     await replyQuotaExceeded(interaction, locale, quotaCheck);
     return;
@@ -545,23 +454,15 @@ export async function execute(
         {
           customId: PERSONA_INPUT_ID,
           labelKey: "commands.bot.generate.image.modal.persona_label",
-          descriptionKey:
-            "commands.bot.generate.image.modal.persona_description",
+          descriptionKey: "commands.bot.generate.image.modal.persona_description",
           required: true,
-          options: getPersonaSelectOptions(
-            personaSummaries,
-            tomoriState.tomori_id ?? -1,
-          ),
+          options: getPersonaSelectOptions(personaSummaries, tomoriState.tomori_id ?? -1),
         },
         {
           customId: PROMPT_INPUT_ID,
           labelKey: "commands.bot.generate.image.modal.prompt_label",
-          descriptionKey:
-            "commands.bot.generate.image.modal.prompt_description",
-          placeholder: localizer(
-            locale,
-            "commands.bot.generate.image.modal.prompt_placeholder",
-          ),
+          descriptionKey: "commands.bot.generate.image.modal.prompt_description",
+          placeholder: localizer(locale, "commands.bot.generate.image.modal.prompt_placeholder"),
           required: false,
           style: TextInputStyle.Paragraph,
           maxLength: 1000,
@@ -570,8 +471,7 @@ export async function execute(
           kind: "radioGroup" as const,
           customId: SETTING_INPUT_ID,
           labelKey: "commands.bot.generate.image.modal.setting_label",
-          descriptionKey:
-            "commands.bot.generate.image.modal.setting_description",
+          descriptionKey: "commands.bot.generate.image.modal.setting_description",
           required: true,
           options: getSettingOptions(locale),
         },
@@ -581,13 +481,9 @@ export async function execute(
                 kind: "radioGroup" as const,
                 customId: BACKEND_INPUT_ID,
                 labelKey: "commands.bot.generate.image.modal.backend_label",
-                descriptionKey:
-                  "commands.bot.generate.image.modal.backend_description",
+                descriptionKey: "commands.bot.generate.image.modal.backend_description",
                 required: true,
-                options: getBackendOptions(
-                  locale,
-                  tomoriState.llm.llm_provider,
-                ),
+                options: getBackendOptions(locale, tomoriState.llm.llm_provider),
               },
             ]
           : []),
@@ -604,20 +500,14 @@ export async function execute(
 
   try {
     // 12. Read modal values.
-    const selectedSetting =
-      (modalResult.values?.[SETTING_INPUT_ID] as SceneSettingId | undefined) ??
-      "storybeat";
-    const settingPreset =
-      SCENE_SETTING_PRESETS[selectedSetting] ?? SCENE_SETTING_PRESETS.storybeat;
+    const selectedSetting = (modalResult.values?.[SETTING_INPUT_ID] as SceneSettingId | undefined) ?? "storybeat";
+    const settingPreset = SCENE_SETTING_PRESETS[selectedSetting] ?? SCENE_SETTING_PRESETS.storybeat;
 
-    const selectedBackendValue = modalResult.values?.[BACKEND_INPUT_ID] as
-      | SceneImageBackend
-      | undefined;
+    const selectedBackendValue = modalResult.values?.[BACKEND_INPUT_ID] as SceneImageBackend | undefined;
     const selectedBackend: SceneImageBackend | null =
       backendAvailability.showBackendSelector &&
       selectedBackendValue &&
-      ((selectedBackendValue === "current_provider" &&
-        backendAvailability.currentProvider) ||
+      ((selectedBackendValue === "current_provider" && backendAvailability.currentProvider) ||
         (selectedBackendValue === "novelai" && backendAvailability.novelAi))
         ? selectedBackendValue
         : backendAvailability.defaultBackend;
@@ -638,12 +528,8 @@ export async function execute(
 
     // 13. Resolve the selected sender persona and its webhook identity.
     const selectedPersonaIdStr = modalResult.values?.[PERSONA_INPUT_ID];
-    const selectedPersonaId = selectedPersonaIdStr
-      ? Number.parseInt(selectedPersonaIdStr, 10)
-      : tomoriState.tomori_id;
-    const selectedPersona =
-      personaSummaries.find((p) => p.tomori_id === selectedPersonaId) ??
-      personaSummaries[0];
+    const selectedPersonaId = selectedPersonaIdStr ? Number.parseInt(selectedPersonaIdStr, 10) : tomoriState.tomori_id;
+    const selectedPersona = personaSummaries.find((p) => p.tomori_id === selectedPersonaId) ?? personaSummaries[0];
 
     let senderWebhook: import("discord.js").Webhook | undefined;
     let senderPersonaUsername: string | undefined;
@@ -654,15 +540,11 @@ export async function execute(
 
       // Attempt to get or create the channel webhook for persona-identity posting.
       // Threads and channels without ManageWebhooks permission fall back to a direct bot message.
-      const webhookChannel =
-        interaction.guild.channels.cache.get(interaction.channel.id) ??
-        interaction.channel;
+      const webhookChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
 
       if ("fetchWebhooks" in webhookChannel) {
         try {
-          const webhookResult = await getOrCreateWebhook(
-            webhookChannel as TextChannel | BaseGuildTextChannel,
-          );
+          const webhookResult = await getOrCreateWebhook(webhookChannel as TextChannel | BaseGuildTextChannel);
           if (webhookResult.webhook) {
             senderWebhook = webhookResult.webhook;
             // Resolve avatar URL using the same identity path as normal persona messages.
@@ -670,8 +552,7 @@ export async function execute(
               selectedPersona as unknown as TomoriState,
               interaction.guild,
             );
-            senderPersonaAvatarUrl =
-              identity.avatarUrl ?? identity.avatarDataUri;
+            senderPersonaAvatarUrl = identity.avatarUrl ?? identity.avatarDataUri;
           }
         } catch (webhookError) {
           log.warn(
@@ -703,9 +584,7 @@ export async function execute(
         : undefined;
 
     const agentResult = await runHiddenImageTurn({
-      channel: interaction.channel as Parameters<
-        typeof runHiddenImageTurn
-      >[0]["channel"],
+      channel: interaction.channel as Parameters<typeof runHiddenImageTurn>[0]["channel"],
       client,
       guild: interaction.guild,
       tomoriState,
@@ -726,8 +605,7 @@ export async function execute(
     if (!agentResult.success) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.bot.generate.image.planner_failed_title",
-        descriptionKey:
-          "commands.bot.generate.image.planner_failed_description",
+        descriptionKey: "commands.bot.generate.image.planner_failed_description",
         descriptionVars: {
           error: agentResult.error ?? "Unknown image generation error",
         },
@@ -766,12 +644,10 @@ export async function execute(
       },
     });
 
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.generate.image.error_generation_failed_title",
-      descriptionKey:
-        "commands.generate.image.error_generation_failed_description",
+      descriptionKey: "commands.generate.image.error_generation_failed_description",
       descriptionVars: { error: errorMessage },
       color: ColorCode.ERROR,
     });

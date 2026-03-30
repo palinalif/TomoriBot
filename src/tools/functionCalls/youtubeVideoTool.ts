@@ -7,16 +7,8 @@
 import { log, ColorCode } from "../../utils/misc/logger";
 import type { EnhancedVideoContent } from "@/types/tool/enhancedContextTypes";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "../../types/misc/context";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 
 /**
  * Tool for processing YouTube videos on-demand using Google's Gemini API
@@ -83,9 +75,7 @@ export class YouTubeVideoTool extends BaseTool {
 
     // Require context with tomoriState
     if (!context?.tomoriState) {
-      log.warn(
-        "YouTubeVideoTool: No tomoriState in context, defaulting to unavailable",
-      );
+      log.warn("YouTubeVideoTool: No tomoriState in context, defaulting to unavailable");
       return false;
     }
 
@@ -101,9 +91,7 @@ export class YouTubeVideoTool extends BaseTool {
 
     // Check for YouTube processing disable flag in context
     if (context?.streamContext?.disableYouTubeProcessing) {
-      log.info(
-        "YouTubeVideoTool: Temporarily disabled during enhanced context restart",
-      );
+      log.info("YouTubeVideoTool: Temporarily disabled during enhanced context restart");
       return false;
     }
 
@@ -116,10 +104,7 @@ export class YouTubeVideoTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result with processed video data
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Check if YouTube processing is temporarily disabled during enhanced context restart
     if (context.streamContext?.disableYouTubeProcessing) {
       log.info(
@@ -128,8 +113,7 @@ export class YouTubeVideoTool extends BaseTool {
       return {
         success: false,
         error: "YouTube processing is temporarily disabled",
-        message:
-          "YouTube video processing is temporarily disabled while analyzing another video.",
+        message: "YouTube video processing is temporarily disabled while analyzing another video.",
         data: {
           status: "temporarily_disabled",
           reason: "Enhanced context restart in progress",
@@ -193,9 +177,7 @@ export class YouTubeVideoTool extends BaseTool {
         };
       }
 
-      log.success(
-        `YouTube video validated for enhanced context restart: ${youtubeUrl} (ID: ${videoId})`,
-      );
+      log.success(`YouTube video validated for enhanced context restart: ${youtubeUrl} (ID: ${videoId})`);
 
       // Create artificial user message containing the YouTube video Part
       // This will be added to the context for the restart
@@ -221,8 +203,7 @@ export class YouTubeVideoTool extends BaseTool {
       // Return restart signal with enhanced context
       return {
         success: true,
-        message:
-          "YouTube video processing initiated - restarting with enhanced context",
+        message: "YouTube video processing initiated - restarting with enhanced context",
         data: {
           type: "context_restart_with_video",
           video_id: videoId,
@@ -233,17 +214,11 @@ export class YouTubeVideoTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(
-        `YouTube video processing failed for URL: ${youtubeUrl}`,
-        error as Error,
-      );
+      log.error(`YouTube video processing failed for URL: ${youtubeUrl}`, error as Error);
 
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error occurred during YouTube video processing",
+        error: error instanceof Error ? error.message : "Unknown error occurred during YouTube video processing",
         message:
           "Failed to process the YouTube video. This could be due to an invalid URL, network issues, or the video being unavailable. Please try with a different video URL.",
         data: {
@@ -276,9 +251,7 @@ export class YouTubeVideoTool extends BaseTool {
    * @returns True if the URL matches YouTube patterns
    */
   static isValidYouTubeUrl(url: string): boolean {
-    return YouTubeVideoTool.YOUTUBE_URL_PATTERNS.some((pattern) =>
-      pattern.test(url),
-    );
+    return YouTubeVideoTool.YOUTUBE_URL_PATTERNS.some((pattern) => pattern.test(url));
   }
 
   /**
@@ -289,9 +262,7 @@ export class YouTubeVideoTool extends BaseTool {
   static extractAllVideoIds(text: string): string[] {
     const videoIds: string[] = [];
     for (const pattern of YouTubeVideoTool.YOUTUBE_URL_PATTERNS) {
-      const matches = text.matchAll(
-        new RegExp(pattern.source, `${pattern.flags}g`),
-      );
+      const matches = text.matchAll(new RegExp(pattern.source, `${pattern.flags}g`));
       for (const match of matches) {
         if (match[1]) {
           videoIds.push(match[1]);

@@ -1,36 +1,21 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  type ErrorContext,
-  type UserRow,
-  tomoriConfigSchema,
-} from "@/types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { type ErrorContext, type UserRow, tomoriConfigSchema } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("selfdebug")
     .setDescription(localizer("en-US", "commands.config.selfdebug.description"))
     .addStringOption((option) =>
       option
         .setName("set")
-        .setDescription(
-          localizer("en-US", "commands.config.selfdebug.set_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.selfdebug.set_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -138,11 +123,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
@@ -170,11 +151,7 @@ export async function execute(
         options: interaction.options?.data,
       },
     };
-    await log.error(
-      "Error in /config selfdebug command",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config selfdebug command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

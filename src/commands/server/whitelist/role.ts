@@ -6,11 +6,7 @@ import {
 } from "discord.js";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { invalidateWhitelistCache } from "@/utils/cache/channelWhitelistCache";
-import {
-  isRoleWhitelisted,
-  removeRoleWhitelist,
-  upsertRoleWhitelist,
-} from "@/utils/db/roleWhitelist";
+import { isRoleWhitelisted, removeRoleWhitelist, upsertRoleWhitelist } from "@/utils/db/roleWhitelist";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
@@ -20,45 +16,28 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
  * Configure the /server whitelist role subcommand
  * Allows server managers to add/remove role-based trigger whitelist entries.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("role")
-    .setDescription(
-      localizer("en-US", "commands.server.whitelist.role.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.whitelist.role.description"))
     .addRoleOption((option) =>
       option
         .setName("role")
-        .setDescription(
-          localizer("en-US", "commands.server.whitelist.role.role_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.whitelist.role.role_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("action")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.whitelist.role.action_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.whitelist.role.action_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.server.whitelist.role.action_add",
-            ),
+            name: localizer("en-US", "commands.server.whitelist.role.action_add"),
             value: "add",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.server.whitelist.role.action_remove",
-            ),
+            name: localizer("en-US", "commands.server.whitelist.role.action_remove"),
             value: "remove",
           },
         ),
@@ -116,8 +95,7 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
         titleKey: "commands.server.whitelist.role.invalid_role_title",
-        descriptionKey:
-          "commands.server.whitelist.role.invalid_role_description",
+        descriptionKey: "commands.server.whitelist.role.invalid_role_description",
       });
       return;
     }
@@ -126,16 +104,12 @@ export async function execute(
 
     if (action === "add") {
       // 5a. Add role to whitelist
-      const alreadySet = await isRoleWhitelisted(
-        tomoriState.server_id,
-        role.id,
-      );
+      const alreadySet = await isRoleWhitelisted(tomoriState.server_id, role.id);
       if (alreadySet) {
         await replyInfoEmbed(interaction, locale, {
           color: ColorCode.WARN,
           titleKey: "commands.server.whitelist.role.already_set_title",
-          descriptionKey:
-            "commands.server.whitelist.role.already_set_description",
+          descriptionKey: "commands.server.whitelist.role.already_set_description",
           descriptionVars: {
             role_mention: roleMention,
           },
@@ -149,16 +123,13 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.SUCCESS,
         titleKey: "commands.server.whitelist.role.success_add_title",
-        descriptionKey:
-          "commands.server.whitelist.role.success_add_description",
+        descriptionKey: "commands.server.whitelist.role.success_add_description",
         descriptionVars: {
           role_mention: roleMention,
         },
       });
 
-      log.info(
-        `Role ${role.name} (${role.id}) added to whitelist in server ${interaction.guildId}`,
-      );
+      log.info(`Role ${role.name} (${role.id}) added to whitelist in server ${interaction.guildId}`);
       return;
     }
 
@@ -181,22 +152,15 @@ export async function execute(
     await replyInfoEmbed(interaction, locale, {
       color: ColorCode.SUCCESS,
       titleKey: "commands.server.whitelist.role.success_remove_title",
-      descriptionKey:
-        "commands.server.whitelist.role.success_remove_description",
+      descriptionKey: "commands.server.whitelist.role.success_remove_description",
       descriptionVars: {
         role_mention: roleMention,
       },
     });
 
-    log.info(
-      `Role ${role.name} (${role.id}) removed from whitelist in server ${interaction.guildId}`,
-    );
+    log.info(`Role ${role.name} (${role.id}) removed from whitelist in server ${interaction.guildId}`);
   } catch (error) {
-    log.error(
-      "Error executing /server whitelist role command",
-      error,
-      errorContext,
-    );
+    log.error("Error executing /server whitelist role command", error, errorContext);
 
     await replyInfoEmbed(interaction, locale, {
       color: ColorCode.ERROR,

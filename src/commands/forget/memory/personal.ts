@@ -7,12 +7,7 @@ import type {
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  personalMemorySchema,
-  type UserRow,
-  type ErrorContext,
-  type TomoriState,
-} from "../../../types/db/schema";
+import { personalMemorySchema, type UserRow, type ErrorContext, type TomoriState } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
@@ -47,10 +42,7 @@ const GLOBAL_PERSONAL_MEMORY_LINEAGE_ID = 0;
 async function performPersonalMemoryRemoval(
   memoryToRemove: { personal_memory_id?: number; content: string },
   userData: UserRow,
-  replyInteraction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
 ): Promise<void> {
   if (!memoryToRemove.personal_memory_id) {
@@ -86,9 +78,7 @@ async function performPersonalMemoryRemoval(
         column: "content",
         operation: "DELETE",
         memoryToRemove,
-        validationErrors: validationResult.success
-          ? null
-          : validationResult.error.flatten(),
+        validationErrors: validationResult.success ? null : validationResult.error.flatten(),
       },
     };
 
@@ -120,47 +110,29 @@ async function performPersonalMemoryRemoval(
     titleKey: "commands.forget.memory.personal.success_title",
     descriptionKey: "commands.forget.memory.personal.success_description",
     descriptionVars: {
-      memory:
-        memoryToRemove.content.length > 50
-          ? `${memoryToRemove.content.slice(0, 50)}...`
-          : memoryToRemove.content,
+      memory: memoryToRemove.content.length > 50 ? `${memoryToRemove.content.slice(0, 50)}...` : memoryToRemove.content,
     },
     color: ColorCode.SUCCESS,
   });
 }
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("personal")
-    .setDescription(
-      localizer("en-US", "commands.forget.memory.personal.description"),
-    )
+    .setDescription(localizer("en-US", "commands.forget.memory.personal.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.forget.memory.personal.scope_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.forget.memory.personal.scope_description"))
         .setRequired(false)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.forget.memory.personal.scope_choice_persona",
-            ),
+            name: localizer("en-US", "commands.forget.memory.personal.scope_choice_persona"),
             value: PERSONAL_SCOPE_VALUE,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.forget.memory.personal.scope_choice_global",
-            ),
+            name: localizer("en-US", "commands.forget.memory.personal.scope_choice_global"),
             value: GLOBAL_SCOPE_VALUE,
           },
         ),
@@ -199,14 +171,10 @@ export async function execute(
 
   try {
     // 2. Load server's Tomori state to check personalization setting (Rule 17)
-    tomoriState = await loadTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
     const memoryScope =
-      (interaction.options.getString("scope") as
-        | typeof PERSONAL_SCOPE_VALUE
-        | typeof GLOBAL_SCOPE_VALUE
-        | null) ?? PERSONAL_SCOPE_VALUE;
+      (interaction.options.getString("scope") as typeof PERSONAL_SCOPE_VALUE | typeof GLOBAL_SCOPE_VALUE | null) ??
+      PERSONAL_SCOPE_VALUE;
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title", // Corrected key
@@ -225,12 +193,9 @@ export async function execute(
 
     // 4. Resolve scope + target lineage
     let targetLineageId = GLOBAL_PERSONAL_MEMORY_LINEAGE_ID;
-    let selectionInteraction: ChatInputCommandInteraction | ButtonInteraction =
-      interaction;
+    let selectionInteraction: ChatInputCommandInteraction | ButtonInteraction = interaction;
     if (memoryScope === PERSONAL_SCOPE_VALUE) {
-      const allPersonas = await loadAllPersonasForServer(
-        interaction.guild?.id ?? interaction.user.id,
-      );
+      const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
       if (allPersonas.length === 0) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.tomori_not_setup_title",
@@ -242,25 +207,18 @@ export async function execute(
       }
 
       while (true) {
-        const personaSelection = await replyPaginatedPersonaChoicesV2(
-          interaction,
-          locale,
-          {
-            personas: allPersonas,
-            color: ColorCode.INFO,
-            preserveSelectedInteraction: true,
-            onSelect: async () => {},
-          },
-        );
+        const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        });
 
         if (!personaSelection.success) {
           if (personaSelection.reason === "cancelled") return;
           continue;
         }
-        if (
-          personaSelection.selectedIndex === undefined ||
-          !personaSelection.interaction
-        ) {
+        if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
           return;
         }
 
@@ -289,15 +247,9 @@ export async function execute(
         // 5. Get current personal memories from lineage-scoped table
         // (Inside PERSONAL_SCOPE_VALUE block, so always persona-scoped)
         const fetchedMemories = userData.user_id
-          ? await loadPersonalMemoriesForUserLineage(
-              userData.user_id,
-              targetLineageId,
-              false,
-            )
+          ? await loadPersonalMemoriesForUserLineage(userData.user_id, targetLineageId, false)
           : [];
-        const currentMemories = fetchedMemories.filter(
-          (memory) => memory.persona_lineage_id === targetLineageId,
-        );
+        const currentMemories = fetchedMemories.filter((memory) => memory.persona_lineage_id === targetLineageId);
 
         // 6. Check if there are any memories to remove
         if (currentMemories.length === 0) {
@@ -310,41 +262,31 @@ export async function execute(
         }
 
         // 7. Create memory select options for the modal
-        const memorySelectOptions: SelectOption[] = currentMemories.map(
-          (memory, index) => ({
-            label: safeSelectOptionText(memory.content, 20),
-            value: index.toString(), // Use index to avoid truncation issues
-            description: safeSelectOptionText(memory.content),
-          }),
-        );
+        const memorySelectOptions: SelectOption[] = currentMemories.map((memory, index) => ({
+          label: safeSelectOptionText(memory.content, 20),
+          value: index.toString(), // Use index to avoid truncation issues
+          description: safeSelectOptionText(memory.content),
+        }));
 
         // 8. Show the paginated modal with memory selection
-        const modalResult = await promptWithPaginatedModal(
-          selectionInteraction,
-          locale,
-          {
-            modalCustomId: MODAL_CUSTOM_ID,
-            modalTitleKey: "commands.forget.memory.personal.modal_title",
-            components: [
-              {
-                customId: MEMORY_SELECT_ID,
-                labelKey: "commands.forget.memory.personal.select_label",
-                descriptionKey:
-                  "commands.forget.memory.personal.select_description",
-                placeholder:
-                  "commands.forget.memory.personal.select_placeholder",
-                required: true,
-                options: memorySelectOptions,
-              },
-            ],
-          },
-        );
+        const modalResult = await promptWithPaginatedModal(selectionInteraction, locale, {
+          modalCustomId: MODAL_CUSTOM_ID,
+          modalTitleKey: "commands.forget.memory.personal.modal_title",
+          components: [
+            {
+              customId: MEMORY_SELECT_ID,
+              labelKey: "commands.forget.memory.personal.select_label",
+              descriptionKey: "commands.forget.memory.personal.select_description",
+              placeholder: "commands.forget.memory.personal.select_placeholder",
+              required: true,
+              options: memorySelectOptions,
+            },
+          ],
+        });
 
         // 9. Handle modal outcome - loop back to persona picker on dismiss
         if (modalResult.outcome !== "submit") {
-          log.info(
-            `Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-          );
+          log.info(`Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
           continue;
         }
 
@@ -359,8 +301,7 @@ export async function execute(
         }
 
         // Get the full memory row from the original array
-        const selectedMemory =
-          currentMemories[Number.parseInt(selectedIndex, 10)];
+        const selectedMemory = currentMemories[Number.parseInt(selectedIndex, 10)];
         if (!selectedMemory) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "general.errors.operation_failed_title",
@@ -371,22 +312,15 @@ export async function execute(
         }
 
         // 11. Perform the database update using the helper function
-        await performPersonalMemoryRemoval(
-          selectedMemory,
-          userData,
-          modalSubmitInteraction,
-          locale,
-        );
+        await performPersonalMemoryRemoval(selectedMemory, userData, modalSubmitInteraction, locale);
 
         // 12. If personalization is disabled, send a warning follow-up
         if (personalizationDisabledWarning) {
           await modalSubmitInteraction.followUp({
             embeds: [
               createStandardEmbed(locale, {
-                titleKey:
-                  "commands.forget.memory.personal.warning_disabled_title",
-                descriptionKey:
-                  "commands.forget.memory.personal.warning_disabled_description",
+                titleKey: "commands.forget.memory.personal.warning_disabled_title",
+                descriptionKey: "commands.forget.memory.personal.warning_disabled_description",
                 color: ColorCode.WARN,
               }),
             ],
@@ -417,9 +351,7 @@ export async function execute(
 
     // 17. Inform user of unknown error, prioritizing unacknowledged button interaction
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      !personaSelectionInteraction.deferred &&
-      !personaSelectionInteraction.replied
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
         ? personaSelectionInteraction
         : interaction;
     await replyInfoEmbed(errorReplyTarget, locale, {

@@ -8,10 +8,7 @@ export const NAI_DEFAULT_NEGATIVE_PROMPT =
   process.env.NAI_IMAGE_NEGATIVE_PROMPT ||
   "blurry, lowres, upscaled, artistic error, film grain, scan artifacts, bad anatomy, bad hands, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, @_@, mismatched pupils, glowing eyes, negative space, blank page";
 
-function parseCharRefStrength(
-  rawValue: string | undefined,
-  fallback: number,
-): number {
+function parseCharRefStrength(rawValue: string | undefined, fallback: number): number {
   const parsedValue = Number.parseFloat(rawValue ?? "");
   if (!Number.isFinite(parsedValue) || parsedValue < 0 || parsedValue > 1) {
     return fallback;
@@ -20,20 +17,10 @@ function parseCharRefStrength(
   return parsedValue;
 }
 
-export const NAI_CHAR_REF_STRENGTH = parseCharRefStrength(
-  process.env.NAI_CHAR_REF_STRENGTH,
-  0.6,
-);
-export const NAI_CHAR_REF_INFO_EXTRACTED = parseCharRefStrength(
-  process.env.NAI_CHAR_REF_INFO_EXTRACTED,
-  1.0,
-);
-export const NAI_CHAR_REF_SECONDARY_STRENGTH = parseCharRefStrength(
-  process.env.NAI_CHAR_REF_SECONDARY_STRENGTH,
-  0.0,
-);
-export const NAI_CHAR_REF_DESCRIPTION =
-  process.env.NAI_CHAR_REF_DESCRIPTION?.trim() || "character&style";
+export const NAI_CHAR_REF_STRENGTH = parseCharRefStrength(process.env.NAI_CHAR_REF_STRENGTH, 0.6);
+export const NAI_CHAR_REF_INFO_EXTRACTED = parseCharRefStrength(process.env.NAI_CHAR_REF_INFO_EXTRACTED, 1.0);
+export const NAI_CHAR_REF_SECONDARY_STRENGTH = parseCharRefStrength(process.env.NAI_CHAR_REF_SECONDARY_STRENGTH, 0.0);
+export const NAI_CHAR_REF_DESCRIPTION = process.env.NAI_CHAR_REF_DESCRIPTION?.trim() || "character&style";
 
 const ORIENTATION_PRESETS: Record<string, { width: number; height: number }> = {
   portrait: { width: 832, height: 1216 },
@@ -109,9 +96,7 @@ export function classifyNaiImageError(error: unknown): NaiImageErrorKind {
 async function extractPngFromZipResponse(response: Response): Promise<Buffer> {
   const zipBuffer = Buffer.from(await response.arrayBuffer());
   const zip = await JSZip.loadAsync(zipBuffer);
-  const pngFileName = Object.keys(zip.files).find((name) =>
-    name.toLowerCase().endsWith(".png"),
-  );
+  const pngFileName = Object.keys(zip.files).find((name) => name.toLowerCase().endsWith(".png"));
 
   if (!pngFileName) {
     throw new Error("NovelAI response ZIP did not contain a PNG file");
@@ -130,18 +115,9 @@ export async function generateNovelAiImage(options: {
   imageParams: EffectiveNaiImageParams;
   characterPayload?: NaiGenerationCharacterPayload;
 }): Promise<Buffer> {
-  const {
-    apiKey,
-    model,
-    prompt,
-    negativePrompt,
-    orientation,
-    imageParams,
-    characterPayload,
-  } = options;
+  const { apiKey, model, prompt, negativePrompt, orientation, imageParams, characterPayload } = options;
 
-  const dimensions =
-    ORIENTATION_PRESETS[orientation] || ORIENTATION_PRESETS.portrait;
+  const dimensions = ORIENTATION_PRESETS[orientation] || ORIENTATION_PRESETS.portrait;
   const seed = Math.floor(Math.random() * 2147483647);
   const charCaptions = characterPayload?.charCaptions ?? [];
   const negativeCharCaptions = characterPayload?.negativeCharCaptions ?? [];
@@ -164,14 +140,10 @@ export async function generateNovelAiImage(options: {
       }));
     const buildDirectorReferenceSecondaryStrengths = (count: number) =>
       Array.from({ length: count }, () => NAI_CHAR_REF_SECONDARY_STRENGTH);
-    const buildV4RequestPayload = (
-      includeReferences: boolean,
-    ): Record<string, unknown> => {
+    const buildV4RequestPayload = (includeReferences: boolean): Record<string, unknown> => {
       const refsForRequest = includeReferences ? referenceImages : [];
       const directorRefCount = refsForRequest.length;
-      const refStrengthsForRequest = includeReferences
-        ? referenceStrengths
-        : [];
+      const refStrengthsForRequest = includeReferences ? referenceStrengths : [];
       const refInfoForRequest = includeReferences ? referenceInfoExtracted : [];
 
       return {
@@ -192,28 +164,17 @@ export async function generateNovelAiImage(options: {
           sampler: imageParams.sampler,
           noise_schedule: imageParams.noiseSchedule,
           legacy_v3_extend: false,
-          characterPrompts:
-            characterPrompts.length > 0 ? characterPrompts : undefined,
+          characterPrompts: characterPrompts.length > 0 ? characterPrompts : undefined,
           use_coords: useCoords,
           legacy_uc: false,
-          normalize_reference_strength_multiple:
-            directorRefCount > 0 ? true : undefined,
+          normalize_reference_strength_multiple: directorRefCount > 0 ? true : undefined,
           director_reference_descriptions:
-            directorRefCount > 0
-              ? buildDirectorReferenceDescriptions(directorRefCount)
-              : undefined,
-          director_reference_information_extracted:
-            refInfoForRequest.length > 0 ? refInfoForRequest : undefined,
-          director_reference_strength_values:
-            refStrengthsForRequest.length > 0
-              ? refStrengthsForRequest
-              : undefined,
+            directorRefCount > 0 ? buildDirectorReferenceDescriptions(directorRefCount) : undefined,
+          director_reference_information_extracted: refInfoForRequest.length > 0 ? refInfoForRequest : undefined,
+          director_reference_strength_values: refStrengthsForRequest.length > 0 ? refStrengthsForRequest : undefined,
           director_reference_secondary_strength_values:
-            directorRefCount > 0
-              ? buildDirectorReferenceSecondaryStrengths(directorRefCount)
-              : undefined,
-          director_reference_images:
-            refsForRequest.length > 0 ? refsForRequest : undefined,
+            directorRefCount > 0 ? buildDirectorReferenceSecondaryStrengths(directorRefCount) : undefined,
+          director_reference_images: refsForRequest.length > 0 ? refsForRequest : undefined,
           v4_prompt: {
             caption: {
               base_caption: prompt,
@@ -343,9 +304,7 @@ export async function generateNovelAiImage(options: {
     },
   };
 
-  log.info(
-    `[NAI] Generating image with model "${model}" (${dimensions.width}x${dimensions.height}, seed: ${seed})`,
-  );
+  log.info(`[NAI] Generating image with model "${model}" (${dimensions.width}x${dimensions.height}, seed: ${seed})`);
 
   const response = await fetch(`${NAI_IMAGE_BASE_URL}/ai/generate-image`, {
     method: "POST",

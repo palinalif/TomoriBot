@@ -105,10 +105,7 @@ export async function extractGifKeyframes(
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
 
   const startTime = Date.now();
-  const sourceDesc =
-    typeof gifSource === "string"
-      ? gifSource
-      : `Buffer (${gifSource.length} bytes)`;
+  const sourceDesc = typeof gifSource === "string" ? gifSource : `Buffer (${gifSource.length} bytes)`;
   log.info(
     `GIF Processor: Starting keyframe extraction - Source: ${sourceDesc}, Config: ${JSON.stringify(finalConfig)}`,
   );
@@ -117,9 +114,7 @@ export async function extractGifKeyframes(
     // 2. Create timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
-        reject(
-          new Error(`GIF processing timeout after ${finalConfig.timeoutMs}ms`),
-        );
+        reject(new Error(`GIF processing timeout after ${finalConfig.timeoutMs}ms`));
       }, finalConfig.timeoutMs);
     });
 
@@ -128,17 +123,12 @@ export async function extractGifKeyframes(
     const frames = await Promise.race([extractionPromise, timeoutPromise]);
 
     const processingTime = Date.now() - startTime;
-    log.success(
-      `GIF Processor: Extracted ${frames.length} keyframes in ${processingTime}ms`,
-    );
+    log.success(`GIF Processor: Extracted ${frames.length} keyframes in ${processingTime}ms`);
 
     return frames;
   } catch (error) {
     const processingTime = Date.now() - startTime;
-    log.error(
-      `GIF Processor: Failed to extract keyframes after ${processingTime}ms`,
-      error as Error,
-    );
+    log.error(`GIF Processor: Failed to extract keyframes after ${processingTime}ms`, error as Error);
     throw error;
   }
 }
@@ -157,9 +147,7 @@ async function extractFramesInternal(
     log.info(`GIF Processor: Fetching GIF from URL: ${gifSource}`);
     const response = await fetch(gifSource);
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch GIF: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Failed to fetch GIF: ${response.status} ${response.statusText}`);
     }
     const arrayBuffer = await response.arrayBuffer();
     gifBuffer = Buffer.from(arrayBuffer);
@@ -179,44 +167,22 @@ async function extractFramesInternal(
 
   // 3. Handle single-frame GIF (static image)
   if (totalFrames === 1) {
-    log.info(
-      "GIF Processor: Single-frame GIF detected, processing as static image",
-    );
-    const processedFrame = await processFrame(
-      allFramesData[0],
-      0,
-      1,
-      0,
-      totalFrames,
-      config,
-    );
+    log.info("GIF Processor: Single-frame GIF detected, processing as static image");
+    const processedFrame = await processFrame(allFramesData[0], 0, 1, 0, totalFrames, config);
     return [processedFrame];
   }
 
   // 4. Calculate which frames to extract
-  const frameIndices = calculateKeyframeIndices(
-    totalFrames,
-    config.frameInterval,
-    config.maxKeyframes,
-  );
+  const frameIndices = calculateKeyframeIndices(totalFrames, config.frameInterval, config.maxKeyframes);
 
-  log.info(
-    `GIF Processor: Selected ${frameIndices.length} keyframes: [${frameIndices.join(", ")}]`,
-  );
+  log.info(`GIF Processor: Selected ${frameIndices.length} keyframes: [${frameIndices.join(", ")}]`);
 
   // 5. Process selected frames
   const processedFrames: ProcessedGifFrame[] = [];
   for (let i = 0; i < frameIndices.length; i++) {
     const frameIndex = frameIndices[i];
     const frameData = allFramesData[frameIndex];
-    const processedFrame = await processFrame(
-      frameData,
-      i,
-      frameIndices.length,
-      frameIndex,
-      totalFrames,
-      config,
-    );
+    const processedFrame = await processFrame(frameData, i, frameIndices.length, frameIndex, totalFrames, config);
     processedFrames.push(processedFrame);
   }
 
@@ -232,11 +198,7 @@ async function extractFramesInternal(
  * @param maxFrames - Maximum number of keyframes to return
  * @returns Array of frame indices to extract (sorted)
  */
-function calculateKeyframeIndices(
-  totalFrames: number,
-  interval: number,
-  maxFrames: number,
-): number[] {
+function calculateKeyframeIndices(totalFrames: number, interval: number, maxFrames: number): number[] {
   const indices = new Set<number>();
 
   // Always include first frame
@@ -323,9 +285,7 @@ async function processFrame(
   // 4. Log compression stats
   const originalSize = frameBuffer.length;
   const compressedSize = processedBuffer.length;
-  const compressionRatio = ((1 - compressedSize / originalSize) * 100).toFixed(
-    1,
-  );
+  const compressionRatio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
 
   log.info(
     `GIF Processor: Processed frame ${frameNumber + 1}/${totalOutputFrames} ` +

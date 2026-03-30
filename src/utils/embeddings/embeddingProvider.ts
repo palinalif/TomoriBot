@@ -8,16 +8,12 @@ export type {
   EmbeddingRequest,
 } from "@/types/provider/featureInterfaces";
 
-export async function providerSupportsEmbeddingTaskType(
-  providerName: string,
-): Promise<boolean> {
+export async function providerSupportsEmbeddingTaskType(providerName: string): Promise<boolean> {
   const capability = await resolveEmbeddingsCapability(providerName);
   return capability?.supportsEmbeddingTaskType() ?? false;
 }
 
-async function generateEmbeddingsOnce(
-  request: EmbeddingRequest,
-): Promise<number[][]> {
+async function generateEmbeddingsOnce(request: EmbeddingRequest): Promise<number[][]> {
   if (request.inputs.length === 0) {
     return [];
   }
@@ -30,22 +26,15 @@ async function generateEmbeddingsOnce(
   return await capability.generateEmbeddings(request);
 }
 
-export async function generateEmbeddings(
-  request: EmbeddingRequest,
-): Promise<number[][]> {
+export async function generateEmbeddings(request: EmbeddingRequest): Promise<number[][]> {
   try {
     const embeddings = await generateEmbeddingsOnce(request);
     if (embeddings.length !== request.inputs.length) {
-      throw new Error(
-        `Embedding count mismatch: expected ${request.inputs.length}, got ${embeddings.length}`,
-      );
+      throw new Error(`Embedding count mismatch: expected ${request.inputs.length}, got ${embeddings.length}`);
     }
     return embeddings;
   } catch (error) {
-    log.error(
-      `Failed to generate embeddings for provider ${request.provider} model ${request.model}`,
-      error,
-    );
+    log.error(`Failed to generate embeddings for provider ${request.provider} model ${request.model}`, error);
     throw error;
   }
 }

@@ -86,10 +86,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
 
       return openaiFunction;
     } catch (error) {
-      log.error(
-        `Failed to convert tool '${tool.name}' (${tool.category}) to OpenAI format`,
-        error as Error,
-      );
+      log.error(`Failed to convert tool '${tool.name}' (${tool.category}) to OpenAI format`, error as Error);
       throw error;
     }
   }
@@ -114,10 +111,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
             resultText = data.summary;
           } else if (data.message && typeof data.message === "string") {
             resultText = data.message;
-          } else if (
-            data.selectionReason &&
-            typeof data.selectionReason === "string"
-          ) {
+          } else if (data.selectionReason && typeof data.selectionReason === "string") {
             resultText = data.selectionReason;
           } else {
             // Include relevant data in the result text
@@ -134,8 +128,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
       }
 
       // Failed execution - provide error information
-      const errorText =
-        result.message || result.error || "Tool execution failed";
+      const errorText = result.message || result.error || "Tool execution failed";
 
       return {
         content: `Error: ${errorText}`,
@@ -191,11 +184,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
     serverId?: number,
     allowedMCPFunctions?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    return this.getAllToolsInOpenrouterFormat(
-      builtInTools,
-      serverId,
-      allowedMCPFunctions,
-    );
+    return this.getAllToolsInOpenrouterFormat(builtInTools, serverId, allowedMCPFunctions);
   }
 
   /**
@@ -231,25 +220,18 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
       let filteredBuiltInTools = builtInTools;
       if (!hasBraveApiKey) {
         // No Brave API key - exclude Brave search tools
-        filteredBuiltInTools = builtInTools.filter(
-          (tool) => !braveSearchToolNames.includes(tool.name),
-        );
+        filteredBuiltInTools = builtInTools.filter((tool) => !braveSearchToolNames.includes(tool.name));
         const excludedCount = builtInTools.length - filteredBuiltInTools.length;
         if (excludedCount > 0) {
-          log.info(
-            `Excluded ${excludedCount} Brave search tools (no API key available)`,
-          );
+          log.info(`Excluded ${excludedCount} Brave search tools (no API key available)`);
         }
       }
 
       // Convert filtered built-in tools
       if (filteredBuiltInTools.length > 0) {
-        const builtInToolsFormatted =
-          this.convertToolsArray(filteredBuiltInTools);
+        const builtInToolsFormatted = this.convertToolsArray(filteredBuiltInTools);
         allTools.push(...builtInToolsFormatted);
-        log.info(
-          `Converted ${filteredBuiltInTools.length} built-in tools to OpenAI format`,
-        );
+        log.info(`Converted ${filteredBuiltInTools.length} built-in tools to OpenAI format`);
       }
 
       // Add MCP tools if available (using pre-filtered list or legacy filtering)
@@ -262,13 +244,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
         // iask-search / monica-search: unsupported or low-quality search modes
         // fetch-url: Use dedicated Fetch MCP server instead
         // url-metadata: Redundant with Fetch MCP server
-        const disabledDDGFunctions = [
-          "felo-search",
-          "iask-search",
-          "monica-search",
-          "fetch-url",
-          "url-metadata",
-        ];
+        const disabledDDGFunctions = ["felo-search", "iask-search", "monica-search", "fetch-url", "url-metadata"];
         let disabledFunctionsCount = 0;
 
         if (allowedMCPFunctions) {
@@ -281,19 +257,19 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
               const geminiTool = await mcpTool.tool();
               if (geminiTool.functionDeclarations) {
                 // Filter declarations to only include allowed functions and exclude disabled DDG functions
-                const declarations = (
-                  geminiTool.functionDeclarations as Record<string, unknown>[]
-                ).filter((declaration) => {
-                  const functionName = declaration.name as string;
+                const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter(
+                  (declaration) => {
+                    const functionName = declaration.name as string;
 
-                  // Exclude disabled DuckDuckGo functions
-                  if (disabledDDGFunctions.includes(functionName)) {
-                    disabledFunctionsCount++;
-                    return false;
-                  }
+                    // Exclude disabled DuckDuckGo functions
+                    if (disabledDDGFunctions.includes(functionName)) {
+                      disabledFunctionsCount++;
+                      return false;
+                    }
 
-                  return allowedFunctionSet.has(functionName);
-                });
+                    return allowedFunctionSet.has(functionName);
+                  },
+                );
 
                 if (declarations.length > 0) {
                   // Wrap each MCP function in OpenAI tool format
@@ -305,8 +281,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
                     };
                     if ("parametersJsonSchema" in declaration) {
                       delete openAIDeclaration.parametersJsonSchema;
-                      openAIDeclaration.parameters =
-                        declaration.parametersJsonSchema;
+                      openAIDeclaration.parameters = declaration.parametersJsonSchema;
                     }
 
                     allTools.push({
@@ -318,10 +293,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
                 }
               }
             } catch (error) {
-              log.warn(
-                "Failed to extract functions from MCP tool:",
-                error as Error,
-              );
+              log.warn("Failed to extract functions from MCP tool:", error as Error);
             }
           }
 
@@ -347,9 +319,9 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
             try {
               const geminiTool = await guildTool.tool();
               if (geminiTool.functionDeclarations) {
-                const declarations = (
-                  geminiTool.functionDeclarations as Record<string, unknown>[]
-                ).filter((decl) => allowedFunctionSet.has(decl.name as string));
+                const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter((decl) =>
+                  allowedFunctionSet.has(decl.name as string),
+                );
 
                 for (const declaration of declarations) {
                   // Convert MCP schema format to OpenAI format
@@ -358,8 +330,7 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
                   };
                   if ("parametersJsonSchema" in declaration) {
                     delete openAIDeclaration.parametersJsonSchema;
-                    openAIDeclaration.parameters =
-                      declaration.parametersJsonSchema;
+                    openAIDeclaration.parameters = declaration.parametersJsonSchema;
                   }
 
                   allTools.push({
@@ -368,32 +339,21 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
                   });
                 }
 
-                log.info(
-                  `Added ${declarations.length} guild MCP tool(s) to OpenRouter format`,
-                );
+                log.info(`Added ${declarations.length} guild MCP tool(s) to OpenRouter format`);
               }
             } catch (error) {
-              log.warn(
-                "Failed to extract guild MCP tool declarations:",
-                error as Error,
-              );
+              log.warn("Failed to extract guild MCP tool declarations:", error as Error);
             }
           }
         } catch (error) {
-          log.warn(
-            "Failed to get guild MCP tools for OpenRouter format:",
-            error as Error,
-          );
+          log.warn("Failed to get guild MCP tools for OpenRouter format:", error as Error);
         }
       }
 
       log.info(`Total tools for OpenRouter: ${allTools.length}`);
       return allTools;
     } catch (error) {
-      log.error(
-        `Failed to get all tools in OpenRouter format (${builtInTools.length} built-in tools)`,
-        error as Error,
-      );
+      log.error(`Failed to get all tools in OpenRouter format (${builtInTools.length} built-in tools)`, error as Error);
       return [];
     }
   }
@@ -414,9 +374,9 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
       for (const mcpTool of mcpTools) {
         const geminiTool = await mcpTool.tool();
         if (geminiTool.functionDeclarations) {
-          const hasFunction = (
-            geminiTool.functionDeclarations as Record<string, unknown>[]
-          ).some((declaration) => declaration.name === functionName);
+          const hasFunction = (geminiTool.functionDeclarations as Record<string, unknown>[]).some(
+            (declaration) => declaration.name === functionName,
+          );
           if (hasFunction) {
             return true;
           }
@@ -445,27 +405,16 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
     context?: ToolContext,
   ): Promise<TypedMCPToolResult> {
     try {
-      log.info(
-        `Executing MCP function: ${functionName} with args: ${JSON.stringify(args)}`,
-      );
+      log.info(`Executing MCP function: ${functionName} with args: ${JSON.stringify(args)}`);
 
       const executor = getMCPExecutor();
-      const result = await executor.executeMCPFunction(
-        functionName,
-        args,
-        context,
-      );
+      const result = await executor.executeMCPFunction(functionName, args, context);
 
-      log.info(
-        `MCP function ${functionName} completed successfully (imagesSent: ${result.data?.imagesSent || 0})`,
-      );
+      log.info(`MCP function ${functionName} completed successfully (imagesSent: ${result.data?.imagesSent || 0})`);
 
       return result;
     } catch (error) {
-      log.error(
-        `Failed to execute MCP function ${functionName}`,
-        error as Error,
-      );
+      log.error(`Failed to execute MCP function ${functionName}`, error as Error);
 
       // Return typed error result matching TypedMCPToolResult structure
       return {
@@ -491,13 +440,9 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
       }
 
       // Validate parameter types are supported
-      for (const [paramName, paramSchema] of Object.entries(
-        tool.parameters.properties,
-      )) {
+      for (const [paramName, paramSchema] of Object.entries(tool.parameters.properties)) {
         if (!this.isSupportedParameterSchema(paramSchema)) {
-          log.warn(
-            `Tool '${tool.name}' has unsupported parameter schema (param: ${paramName})`,
-          );
+          log.warn(`Tool '${tool.name}' has unsupported parameter schema (param: ${paramName})`);
           return false;
         }
       }
@@ -516,16 +461,8 @@ export class OpenrouterToolAdapter implements MCPCapableToolAdapter {
     return JSON.parse(JSON.stringify(schema)) as OpenAIObjectSchema;
   }
 
-  private isSupportedParameterSchema(
-    schema: ToolParameterPropertySchema,
-  ): boolean {
-    const supportedTypes: ToolParameterType[] = [
-      "string",
-      "number",
-      "boolean",
-      "array",
-      "object",
-    ];
+  private isSupportedParameterSchema(schema: ToolParameterPropertySchema): boolean {
+    const supportedTypes: ToolParameterType[] = ["string", "number", "boolean", "array", "object"];
 
     if (!supportedTypes.includes(schema.type)) {
       return false;

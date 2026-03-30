@@ -6,11 +6,7 @@ import type {
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import { sql } from "@/utils/db/client";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
@@ -18,26 +14,12 @@ import {
   promptWithPaginatedModal,
   safeSelectOptionText,
 } from "../../../utils/discord/interactionHelper";
-import {
-  isBlacklisted,
-  loadAllPersonasForServer,
-} from "../../../utils/db/dbRead";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { isBlacklisted, loadAllPersonasForServer } from "../../../utils/db/dbRead";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import type { ModalResult, SelectOption } from "../../../types/discord/modal";
-import {
-  validateMemoryContent,
-  checkServerMemoryLimit,
-  getMemoryLimits,
-} from "../../../utils/db/memoryLimits";
+import { validateMemoryContent, checkServerMemoryLimit, getMemoryLimits } from "../../../utils/db/memoryLimits";
 import { addServerMemoryByTomori } from "../../../utils/db/dbWrite";
-import {
-  dedupeCaseInsensitive,
-  getNonEmptyNumberedLines,
-  readTxtUpload,
-} from "../../../utils/teach/batchUploadUtils";
+import { dedupeCaseInsensitive, getNonEmptyNumberedLines, readTxtUpload } from "../../../utils/teach/batchUploadUtils";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_servermemory_add_modal";
@@ -48,14 +30,8 @@ const MEMORY_FILE_UPLOAD_ID = "server_memory_file_upload";
 const memoryLimits = getMemoryLimits();
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("server")
-    .setDescription(
-      localizer("en-US", "commands.teach.memory.server.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("server").setDescription(localizer("en-US", "commands.teach.memory.server.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -91,15 +67,12 @@ export async function execute(
 
   try {
     // 2. Check if user has Manage Server permission - used for blacklist and teaching restriction bypass
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
     // 3. Check blacklisting only for guild contexts
     // Users with Manage Server permission can bypass blacklist (they can unblacklist themselves anyway)
     if (interaction.guild) {
-      const blacklisted =
-        (await isBlacklisted(interaction.guild.id, interaction.user.id)) ??
-        false;
+      const blacklisted = (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
       if (blacklisted && !hasManagePermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.user_blacklisted_title",
@@ -112,9 +85,7 @@ export async function execute(
     }
 
     // 4. Load server's Tomori state (Rule 17) - Still needed for server_id and config checks
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
 
     // 5. Check if Tomori is set up
     if (!tomoriState) {
@@ -128,9 +99,7 @@ export async function execute(
     }
 
     // 6. Resolve target persona (default: current main persona)
-    const allPersonas = await loadAllPersonasForServer(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
     if (allPersonas.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -147,14 +116,8 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.teach.memory.server.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.teach.memory.server.main_persona_description",
-            ),
+          ? localizer(locale, "commands.teach.memory.server.alter_persona_description")
+          : localizer(locale, "commands.teach.memory.server.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
 
@@ -166,8 +129,7 @@ export async function execute(
     ) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.memory.server.teaching_disabled_title",
-        descriptionKey:
-          "commands.teach.memory.server.teaching_disabled_description",
+        descriptionKey: "commands.teach.memory.server.teaching_disabled_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -182,18 +144,15 @@ export async function execute(
         {
           customId: "persona_select",
           labelKey: "commands.teach.memory.server.persona_select_label",
-          descriptionKey:
-            "commands.teach.memory.server.persona_select_description",
-          placeholder:
-            "commands.teach.memory.server.persona_select_placeholder",
+          descriptionKey: "commands.teach.memory.server.persona_select_description",
+          placeholder: "commands.teach.memory.server.persona_select_placeholder",
           required: true,
           options: personaSelectOptions,
         },
         {
           customId: MEMORY_INPUT_ID,
           labelKey: "commands.teach.memory.server.memory_input_label",
-          descriptionKey:
-            "commands.teach.memory.server.memory_input_description",
+          descriptionKey: "commands.teach.memory.server.memory_input_description",
           placeholder: "commands.teach.memory.server.memory_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: false,
@@ -212,9 +171,7 @@ export async function execute(
 
     // 10. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Server memory add modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Server memory add modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -226,10 +183,7 @@ export async function execute(
     const typedMemory = modalResult.values?.[MEMORY_INPUT_ID]?.trim() ?? "";
     const uploadedTextFile = modalResult.attachments?.[MEMORY_FILE_UPLOAD_ID];
     const selectedPersonaId = modalResult.values?.persona_select;
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -278,9 +232,7 @@ export async function execute(
         return;
       }
 
-      const importedMemories = getNonEmptyNumberedLines(uploadResult.text).map(
-        (line) => line.content,
-      );
+      const importedMemories = getNonEmptyNumberedLines(uploadResult.text).map((line) => line.content);
       pendingMemories.push(...importedMemories);
     }
 
@@ -302,8 +254,7 @@ export async function execute(
       if (!contentValidation.isValid) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.memory.server.content_too_long_title",
-          descriptionKey:
-            "commands.teach.memory.server.content_too_long_description",
+          descriptionKey: "commands.teach.memory.server.content_too_long_description",
           descriptionVars: { max_length: memoryLimits.maxMemoryLength },
           color: ColorCode.ERROR,
         });
@@ -319,16 +270,10 @@ export async function execute(
 		`;
     const existingMemories = new Set(
       existingRows
-        .map((row: { content?: unknown }) =>
-          typeof row.content === "string"
-            ? row.content.trim().toLowerCase()
-            : "",
-        )
+        .map((row: { content?: unknown }) => (typeof row.content === "string" ? row.content.trim().toLowerCase() : ""))
         .filter((content: string) => content.length > 0),
     );
-    const memoriesToAdd = dedupedMemories.filter(
-      (memory) => !existingMemories.has(memory.toLowerCase()),
-    );
+    const memoriesToAdd = dedupedMemories.filter((memory) => !existingMemories.has(memory.toLowerCase()));
 
     if (memoriesToAdd.length === 0) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -343,13 +288,9 @@ export async function execute(
     }
 
     // 13.5 Check server memory limit after final persona resolution
-    const serverLimitCheck = await checkServerMemoryLimit(
-      targetServerId,
-      targetPersonaLineageId,
-    );
+    const serverLimitCheck = await checkServerMemoryLimit(targetServerId, targetPersonaLineageId);
     const currentCount = serverLimitCheck.currentCount ?? existingRows.length;
-    const maxAllowed =
-      serverLimitCheck.maxAllowed ?? memoryLimits.maxServerMemories;
+    const maxAllowed = serverLimitCheck.maxAllowed ?? memoryLimits.maxServerMemories;
     const availableSlots = Math.max(0, maxAllowed - currentCount);
     if (memoriesToAdd.length > availableSlots) {
       const removeCount = memoriesToAdd.length - availableSlots;
@@ -399,21 +340,17 @@ export async function execute(
         });
       } catch (insertError) {
         insertSuccess = false;
-        await log.error(
-          "Batch insert failed for server memories",
-          insertError,
-          {
-            userId: userData.user_id,
-            serverId: targetServerId,
-            tomoriId: targetTomoriId,
-            errorType: "DatabaseValidationError",
-            metadata: {
-              command: "teach servermemory",
-              insertCount: memoriesToAdd.length,
-              targetTomoriId: targetTomoriId,
-            },
+        await log.error("Batch insert failed for server memories", insertError, {
+          userId: userData.user_id,
+          serverId: targetServerId,
+          tomoriId: targetTomoriId,
+          errorType: "DatabaseValidationError",
+          metadata: {
+            command: "teach servermemory",
+            insertCount: memoriesToAdd.length,
+            targetTomoriId: targetTomoriId,
           },
-        );
+        });
       }
     }
 
@@ -433,11 +370,7 @@ export async function execute(
           targetTomoriId: targetTomoriId,
         },
       };
-      await log.error(
-        "Failed to insert server memory data",
-        new Error("Insert returned null"),
-        context,
-      );
+      await log.error("Failed to insert server memory data", new Error("Insert returned null"), context);
 
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.update_failed_title", // Re-use generic failure message
@@ -452,8 +385,7 @@ export async function execute(
 
     // 16. Success! Confirm addition (Rule 12, 19)
     const firstMemory = memoriesToAdd[0] ?? "";
-    const memoryPreview =
-      firstMemory.length > 96 ? `${firstMemory.slice(0, 96)}...` : firstMemory;
+    const memoryPreview = firstMemory.length > 96 ? `${firstMemory.slice(0, 96)}...` : firstMemory;
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey:
@@ -492,8 +424,7 @@ export async function execute(
     // Rule 12, 19: Reply with unknown error embed
     // Determine which interaction to use (Rule 25)
     const errorReplyInteraction =
-      modalSubmitInteraction &&
-      (modalSubmitInteraction.replied || modalSubmitInteraction.deferred)
+      modalSubmitInteraction && (modalSubmitInteraction.replied || modalSubmitInteraction.deferred)
         ? modalSubmitInteraction
         : interaction.replied || interaction.deferred
           ? interaction
@@ -508,11 +439,10 @@ export async function execute(
           flags: MessageFlags.Ephemeral,
         });
       } catch (replyError) {
-        log.error(
-          "Failed to send error reply in servermemory catch block",
-          replyError,
-          { ...context, errorType: "ErrorReplyFailed" },
-        );
+        log.error("Failed to send error reply in servermemory catch block", replyError, {
+          ...context,
+          errorType: "ErrorReplyFailed",
+        });
       }
     } else {
       log.warn(

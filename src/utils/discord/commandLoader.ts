@@ -37,10 +37,7 @@ export type CommandExecuteFunction = (
  *   - For flat subcommands: 'subcommand' (e.g., 'model')
  *   - For grouped subcommands: 'group.subcommand' (e.g., 'apikey.set')
  */
-export type CommandExecutionMap = Map<
-  string,
-  Map<string, CommandExecuteFunction>
->;
+export type CommandExecutionMap = Map<string, Map<string, CommandExecuteFunction>>;
 
 /**
  * Map for command cooldowns (category -> duration)
@@ -79,9 +76,7 @@ function applySubcommandLocalizations(
   }
 
   if (Object.keys(subcommandLocalizationsMap).length > 0) {
-    configuredSubcommand.setDescriptionLocalizations(
-      subcommandLocalizationsMap,
-    );
+    configuredSubcommand.setDescriptionLocalizations(subcommandLocalizationsMap);
   }
 
   // 2. Apply option description localizations
@@ -102,11 +97,7 @@ function applySubcommandLocalizations(
           }
 
           // Apply if valid translation found (not the key itself)
-          if (
-            localizedDesc &&
-            localizedDesc !== optionLocalizationKey &&
-            localizedDesc !== fallbackKey
-          ) {
+          if (localizedDesc && localizedDesc !== optionLocalizationKey && localizedDesc !== fallbackKey) {
             optionLocalizationsMap[locale] = localizedDesc;
           }
         }
@@ -117,11 +108,7 @@ function applySubcommandLocalizations(
         }
 
         // 3. Apply choice name localizations
-        if (
-          "choices" in option &&
-          Array.isArray(option.choices) &&
-          option.choices.length > 0
-        ) {
+        if ("choices" in option && Array.isArray(option.choices) && option.choices.length > 0) {
           for (const choice of option.choices) {
             if (choice.value === undefined || choice.value === null) continue;
 
@@ -179,9 +166,7 @@ export async function loadCommandData(): Promise<{
 
   try {
     // Get available locales for auto-localization (exclude en-US as it's the base locale)
-    const availableLocales = getSupportedLocales().filter(
-      (locale) => locale !== "en-US",
-    );
+    const availableLocales = getSupportedLocales().filter((locale) => locale !== "en-US");
     // 1. Get all command category directories
     const commandsPath = path.join(process.cwd(), "src", "commands");
     const categoryDirs = getAllFiles(commandsPath, true);
@@ -197,27 +182,18 @@ export async function loadCommandData(): Promise<{
         // Initialize a new builder for this category
         // Get category description from localizations (try to find 'commands.<category>.description')
         const categoryDescription =
-          localizer("en-US", `commands.${categoryName}.description`) ||
-          `${categoryName} commands`; // Fallback if no localization exists
+          localizer("en-US", `commands.${categoryName}.description`) || `${categoryName} commands`; // Fallback if no localization exists
 
         const categoryLocalizationsMap: { [key: string]: string } = {};
         // Check all available locales for category description
         for (const locale of availableLocales) {
-          const localizedDesc = localizer(
-            locale,
-            `commands.${categoryName}.description`,
-          );
-          if (
-            localizedDesc &&
-            localizedDesc !== `commands.${categoryName}.description`
-          ) {
+          const localizedDesc = localizer(locale, `commands.${categoryName}.description`);
+          if (localizedDesc && localizedDesc !== `commands.${categoryName}.description`) {
             categoryLocalizationsMap[locale] = localizedDesc;
           }
         }
 
-        categoryBuilder = new SlashCommandBuilder()
-          .setName(categoryName)
-          .setDescription(categoryDescription);
+        categoryBuilder = new SlashCommandBuilder().setName(categoryName).setDescription(categoryDescription);
 
         // Apply specific settings for guild-only categories
         if (GUILD_ONLY_CATEGORIES.includes(categoryName)) {
@@ -225,12 +201,8 @@ export async function loadCommandData(): Promise<{
           log.info(`Applied Guild Only Restriction to /${categoryName}`);
         }
         if (MANAGER_ONLY_CATEGORIES.includes(categoryName)) {
-          categoryBuilder.setDefaultMemberPermissions(
-            PermissionsBitField.Flags.ManageGuild,
-          ); // Require Manage Guild permission
-          log.info(
-            `Applied ManageGuild permission requirement to /${categoryName}`,
-          );
+          categoryBuilder.setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild); // Require Manage Guild permission
+          log.info(`Applied ManageGuild permission requirement to /${categoryName}`);
         }
 
         // Add localizations if we have any
@@ -259,117 +231,92 @@ export async function loadCommandData(): Promise<{
 
           try {
             // Add subcommand group to category
-            categoryBuilder.addSubcommandGroup(
-              (group: SlashCommandSubcommandGroupBuilder) => {
-                // Get group description from localizations
-                const groupLocalizationKey = `commands.${categoryName}.${groupName}.description`;
-                const groupDescription =
-                  localizer("en-US", groupLocalizationKey) ||
-                  `${groupName} commands`;
+            categoryBuilder.addSubcommandGroup((group: SlashCommandSubcommandGroupBuilder) => {
+              // Get group description from localizations
+              const groupLocalizationKey = `commands.${categoryName}.${groupName}.description`;
+              const groupDescription = localizer("en-US", groupLocalizationKey) || `${groupName} commands`;
 
-                group.setName(groupName).setDescription(groupDescription);
+              group.setName(groupName).setDescription(groupDescription);
 
-                // Apply group description localizations
-                const groupLocalizationsMap: { [key: string]: string } = {};
-                for (const locale of availableLocales) {
-                  const localizedDesc = localizer(locale, groupLocalizationKey);
-                  if (localizedDesc && localizedDesc !== groupLocalizationKey) {
-                    groupLocalizationsMap[locale] = localizedDesc;
+              // Apply group description localizations
+              const groupLocalizationsMap: { [key: string]: string } = {};
+              for (const locale of availableLocales) {
+                const localizedDesc = localizer(locale, groupLocalizationKey);
+                if (localizedDesc && localizedDesc !== groupLocalizationKey) {
+                  groupLocalizationsMap[locale] = localizedDesc;
+                }
+              }
+              if (Object.keys(groupLocalizationsMap).length > 0) {
+                group.setDescriptionLocalizations(groupLocalizationsMap);
+              }
+
+              // Get all command files in this group
+              const groupCommandFiles = getAllFiles(itemPath);
+
+              // Process each command in the group
+              for (const commandFile of groupCommandFiles) {
+                try {
+                  // Import the command module (needs to be sync for builder pattern)
+                  // We'll use dynamic import but handle it carefully
+                  const commandModule = require(commandFile);
+
+                  // Validate exports
+                  if (!commandModule.configureSubcommand || !commandModule.execute) {
+                    log.warn(`Command at ${commandFile} is missing required exports`);
+                    continue;
                   }
-                }
-                if (Object.keys(groupLocalizationsMap).length > 0) {
-                  group.setDescriptionLocalizations(groupLocalizationsMap);
-                }
 
-                // Get all command files in this group
-                const groupCommandFiles = getAllFiles(itemPath);
+                  let subcommandName = "";
 
-                // Process each command in the group
-                for (const commandFile of groupCommandFiles) {
-                  try {
-                    // Import the command module (needs to be sync for builder pattern)
-                    // We'll use dynamic import but handle it carefully
-                    const commandModule = require(commandFile);
+                  // Add subcommand to group
+                  group.addSubcommand((subcommand: SlashCommandSubcommandBuilder) => {
+                    const configuredSubcommand = commandModule.configureSubcommand(subcommand);
+                    subcommandName = configuredSubcommand.name;
 
-                    // Validate exports
-                    if (
-                      !commandModule.configureSubcommand ||
-                      !commandModule.execute
-                    ) {
-                      log.warn(
-                        `Command at ${commandFile} is missing required exports`,
-                      );
-                      continue;
-                    }
-
-                    let subcommandName = "";
-
-                    // Add subcommand to group
-                    group.addSubcommand(
-                      (subcommand: SlashCommandSubcommandBuilder) => {
-                        const configuredSubcommand =
-                          commandModule.configureSubcommand(subcommand);
-                        subcommandName = configuredSubcommand.name;
-
-                        // Apply subcommand localizations
-                        if (subcommandName) {
-                          applySubcommandLocalizations(
-                            configuredSubcommand,
-                            categoryName,
-                            `${groupName}.${subcommandName}`,
-                            availableLocales,
-                          );
-                        }
-
-                        return configuredSubcommand;
-                      },
-                    );
-
-                    if (!subcommandName) {
-                      log.warn(
-                        `Subcommand in ${commandFile} did not set a name`,
-                      );
-                      continue;
-                    }
-
-                    // Store execute function with group.subcommand format
-                    const executionKey = `${groupName}.${subcommandName}`;
-                    executionMap
-                      .get(categoryName)
-                      ?.set(executionKey, commandModule.execute);
-
-                    // Store cooldown if defined
-                    if (
-                      commandModule.cooldown &&
-                      typeof commandModule.cooldown === "number"
-                    ) {
-                      cooldownMap.set(categoryName, commandModule.cooldown);
-                    }
-
-                    commandCount++;
-                    log.info(
-                      `Loaded grouped subcommand: ${categoryName} ${executionKey}`,
-                    );
-                  } catch (error) {
-                    const context: ErrorContext = {
-                      errorType: "CommandLoadingError",
-                      metadata: {
-                        commandFile,
+                    // Apply subcommand localizations
+                    if (subcommandName) {
+                      applySubcommandLocalizations(
+                        configuredSubcommand,
                         categoryName,
-                        groupName,
-                      },
-                    };
-                    log.error(
-                      `Failed to load grouped command from ${commandFile}:`,
-                      error,
-                      context,
-                    );
-                  }
-                }
+                        `${groupName}.${subcommandName}`,
+                        availableLocales,
+                      );
+                    }
 
-                return group;
-              },
-            );
+                    return configuredSubcommand;
+                  });
+
+                  if (!subcommandName) {
+                    log.warn(`Subcommand in ${commandFile} did not set a name`);
+                    continue;
+                  }
+
+                  // Store execute function with group.subcommand format
+                  const executionKey = `${groupName}.${subcommandName}`;
+                  executionMap.get(categoryName)?.set(executionKey, commandModule.execute);
+
+                  // Store cooldown if defined
+                  if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
+                    cooldownMap.set(categoryName, commandModule.cooldown);
+                  }
+
+                  commandCount++;
+                  log.info(`Loaded grouped subcommand: ${categoryName} ${executionKey}`);
+                } catch (error) {
+                  const context: ErrorContext = {
+                    errorType: "CommandLoadingError",
+                    metadata: {
+                      commandFile,
+                      categoryName,
+                      groupName,
+                    },
+                  };
+                  log.error(`Failed to load grouped command from ${commandFile}:`, error, context);
+                }
+              }
+
+              return group;
+            });
           } catch (error) {
             const context: ErrorContext = {
               errorType: "CommandGroupLoadingError",
@@ -378,11 +325,7 @@ export async function loadCommandData(): Promise<{
                 groupName,
               },
             };
-            await log.error(
-              `Failed to load command group ${groupName}:`,
-              error,
-              context,
-            );
+            await log.error(`Failed to load command group ${groupName}:`, error, context);
           }
         }
         // 7. Handle flat subcommands (direct .ts files)
@@ -395,9 +338,7 @@ export async function loadCommandData(): Promise<{
 
             // Validate exports: must have configureSubcommand and execute
             if (!commandModule.configureSubcommand || !commandModule.execute) {
-              log.warn(
-                `Command at ${commandFile} is missing required exports (configureSubcommand or execute)`,
-              );
+              log.warn(`Command at ${commandFile} is missing required exports (configureSubcommand or execute)`);
               continue;
             }
 
@@ -405,27 +346,19 @@ export async function loadCommandData(): Promise<{
             let subcommandName = "";
 
             // Add the subcommand to the category builder
-            categoryBuilder.addSubcommand(
-              (subcommand: SlashCommandSubcommandBuilder) => {
-                // Call the module's configureSubcommand function and capture its result
-                const configuredSubcommand =
-                  commandModule.configureSubcommand(subcommand);
-                // Get the name that was set
-                subcommandName = configuredSubcommand.name;
+            categoryBuilder.addSubcommand((subcommand: SlashCommandSubcommandBuilder) => {
+              // Call the module's configureSubcommand function and capture its result
+              const configuredSubcommand = commandModule.configureSubcommand(subcommand);
+              // Get the name that was set
+              subcommandName = configuredSubcommand.name;
 
-                // Apply subcommand localizations
-                if (subcommandName) {
-                  applySubcommandLocalizations(
-                    configuredSubcommand,
-                    categoryName,
-                    subcommandName,
-                    availableLocales,
-                  );
-                }
+              // Apply subcommand localizations
+              if (subcommandName) {
+                applySubcommandLocalizations(configuredSubcommand, categoryName, subcommandName, availableLocales);
+              }
 
-                return configuredSubcommand;
-              },
-            );
+              return configuredSubcommand;
+            });
 
             if (!subcommandName) {
               log.warn(`Subcommand in ${commandFile} did not set a name`);
@@ -433,15 +366,10 @@ export async function loadCommandData(): Promise<{
             }
 
             // Store the execute function in the map
-            executionMap
-              .get(categoryName)
-              ?.set(subcommandName, commandModule.execute);
+            executionMap.get(categoryName)?.set(subcommandName, commandModule.execute);
 
             // Store cooldown if defined (optional feature)
-            if (
-              commandModule.cooldown &&
-              typeof commandModule.cooldown === "number"
-            ) {
+            if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
               cooldownMap.set(categoryName, commandModule.cooldown);
             }
 
@@ -455,24 +383,16 @@ export async function loadCommandData(): Promise<{
                 categoryName,
               },
             };
-            await log.error(
-              `Failed to load command from ${commandFile}:`,
-              error,
-              context,
-            );
+            await log.error(`Failed to load command from ${commandFile}:`, error, context);
           }
         }
       }
     }
 
     // Convert builders to the registration data array
-    const registrationData = Array.from(builders.values()).map(
-      (builder) => builder.toJSON() as ApplicationCommandData,
-    );
+    const registrationData = Array.from(builders.values()).map((builder) => builder.toJSON() as ApplicationCommandData);
 
-    log.success(
-      `Successfully loaded ${commandCount} subcommands in ${builders.size} categories`,
-    );
+    log.success(`Successfully loaded ${commandCount} subcommands in ${builders.size} categories`);
     return { registrationData, executionMap, cooldownMap };
   } catch (error) {
     const context: ErrorContext = {

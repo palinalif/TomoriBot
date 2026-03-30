@@ -6,12 +6,7 @@
  * are identical — only the provider name differs.
  */
 
-import type {
-  Tool,
-  MCPCapableToolAdapter,
-  ToolContext,
-  ToolResult,
-} from "../../types/tool/interfaces";
+import type { Tool, MCPCapableToolAdapter, ToolContext, ToolResult } from "../../types/tool/interfaces";
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { GoogleToolAdapter } from "../google/googleToolAdapter";
 
@@ -75,11 +70,7 @@ export class VertexToolAdapter implements MCPCapableToolAdapter {
     serverId?: number,
     allowedMCPFunctions?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    return this.googleAdapter.getAllToolsInGoogleFormat(
-      builtInTools,
-      serverId,
-      allowedMCPFunctions,
-    );
+    return this.googleAdapter.getAllToolsInGoogleFormat(builtInTools, serverId, allowedMCPFunctions);
   }
 
   /**

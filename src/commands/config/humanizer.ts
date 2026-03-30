@@ -4,21 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../types/db/schema";
 import type { RadioGroupOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
 
@@ -62,14 +52,8 @@ function createHumanizerOptions(locale: string): RadioGroupOption[] {
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("humanizer")
-    .setDescription(
-      localizer("en-US", "commands.config.humanizer.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("humanizer").setDescription(localizer("en-US", "commands.config.humanizer.description"));
 
 /**
  * Configures the humanizer degree setting for Tomori.
@@ -101,9 +85,7 @@ export async function execute(
 
   try {
     // 2. Load the Tomori state for this server (Rule #17)
-    const tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -132,9 +114,7 @@ export async function execute(
 
     // 4. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Humanizer degree selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Humanizer degree selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -149,11 +129,7 @@ export async function execute(
     const humanizerValue = Number.parseInt(selectedValue, 10);
 
     // 5b. Validate the parsed value (additional safety check)
-    if (
-      Number.isNaN(humanizerValue) ||
-      humanizerValue < HUMANIZER_MIN ||
-      humanizerValue > HUMANIZER_MAX
-    ) {
+    if (Number.isNaN(humanizerValue) || humanizerValue < HUMANIZER_MIN || humanizerValue > HUMANIZER_MAX) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.operation_failed_title",
         descriptionKey: "commands.config.humanizer.invalid_value_description",
@@ -167,8 +143,7 @@ export async function execute(
     }
 
     // 6. Check if this is the same as the current humanizer value
-    const currentHumanizer =
-      tomoriState.config.humanizer_degree ?? HUMANIZER_DEFAULT;
+    const currentHumanizer = tomoriState.config.humanizer_degree ?? HUMANIZER_DEFAULT;
     if (humanizerValue === currentHumanizer) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.humanizer.already_set_title",
@@ -202,9 +177,7 @@ export async function execute(
           command: "config humanizer",
           guildId: interaction.guild?.id ?? interaction.user.id,
           humanizerValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(), // Include Zod errors if validation failed
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(), // Include Zod errors if validation failed
         },
       };
       await log.error(
@@ -259,11 +232,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /config humanizer for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config humanizer for user ${userData.user_disc_id}`, error as Error, context);
 
     // 11. Inform user of unknown error
     // Check if the interaction has already been replied to or deferred
@@ -299,9 +268,7 @@ function getHumanizerLabel(locale: string, value: number): string {
       return localizer(locale, "commands.config.humanizer.choice_heavy");
     default:
       // Default to light if value is somehow unexpected, though validation should prevent this
-      log.warn(
-        `Unexpected humanizer value encountered in getHumanizerLabel: ${value}`,
-      );
+      log.warn(`Unexpected humanizer value encountered in getHumanizerLabel: ${value}`);
       return localizer(locale, "commands.config.humanizer.choice_light");
   }
 }

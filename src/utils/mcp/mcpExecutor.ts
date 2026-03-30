@@ -12,11 +12,7 @@ import type {
   MCPServerResponse,
   TypedMCPToolResult,
 } from "../../types/tool/mcpTypes";
-import {
-  MCPExecutionError,
-  MCPFunctionNotFoundError,
-  MCPServerNotFoundError,
-} from "../../types/tool/mcpTypes";
+import { MCPExecutionError, MCPFunctionNotFoundError, MCPServerNotFoundError } from "../../types/tool/mcpTypes";
 import type { ToolContext } from "../../types/tool/interfaces";
 import { getBraveSearchHandler } from "../../tools/mcpServers/brave-search/braveSearchHandler";
 import { getFetchHandler } from "../../tools/mcpServers/fetch/fetchHandler";
@@ -30,9 +26,7 @@ import { FETCH_LIMITS, memoryGuard } from "../security/rateLimiter";
  * @param url - URL to validate
  * @returns Validation result with size information
  */
-async function validateFetchSize(
-  url: string,
-): Promise<{ allowed: boolean; reason?: string; sizeMB?: number }> {
+async function validateFetchSize(url: string): Promise<{ allowed: boolean; reason?: string; sizeMB?: number }> {
   try {
     const maxSizeMB = FETCH_LIMITS.MAX_FETCH_SIZE_MB;
 
@@ -47,9 +41,7 @@ async function validateFetchSize(
 
     if (!contentLengthHeader) {
       // If no Content-Length header, allow but log warning
-      log.warn(
-        `No Content-Length header for URL: ${url}. Proceeding with fetch but size is unknown.`,
-      );
+      log.warn(`No Content-Length header for URL: ${url}. Proceeding with fetch but size is unknown.`);
       return { allowed: true };
     }
 
@@ -58,9 +50,7 @@ async function validateFetchSize(
 
     // Check if size exceeds limit
     if (contentLengthMB > maxSizeMB) {
-      log.warn(
-        `Fetch size validation failed: ${contentLengthMB.toFixed(2)} MB > ${maxSizeMB} MB for URL: ${url}`,
-      );
+      log.warn(`Fetch size validation failed: ${contentLengthMB.toFixed(2)} MB > ${maxSizeMB} MB for URL: ${url}`);
       return {
         allowed: false,
         reason: `Content size (${contentLengthMB.toFixed(2)} MB) exceeds maximum allowed size (${maxSizeMB} MB)`,
@@ -69,9 +59,7 @@ async function validateFetchSize(
     }
 
     // Size is acceptable
-    log.info(
-      `Fetch size validated: ${contentLengthMB.toFixed(2)} MB (limit: ${maxSizeMB} MB)`,
-    );
+    log.info(`Fetch size validated: ${contentLengthMB.toFixed(2)} MB (limit: ${maxSizeMB} MB)`);
     return { allowed: true, sizeMB: contentLengthMB };
   } catch (error) {
     // If HEAD request fails, allow fetch to proceed (might be a server issue, not size issue)
@@ -144,9 +132,7 @@ class MCPHandlerRegistry {
    * @param functionName - Name of the function to find handler for
    * @returns The handler that supports the function or null
    */
-  public findHandlerForFunction(
-    functionName: string,
-  ): MCPServerBehaviorHandler | null {
+  public findHandlerForFunction(functionName: string): MCPServerBehaviorHandler | null {
     for (const handler of this.handlers.values()) {
       if (handler.supportsFunction(functionName)) {
         return handler;
@@ -195,10 +181,7 @@ export class MCPExecutor {
    * @param args - Original arguments
    * @returns Modified arguments with business rules applied
    */
-  private applyBusinessRules(
-    functionName: string,
-    args: Record<string, unknown>,
-  ): Record<string, unknown> {
+  private applyBusinessRules(functionName: string, args: Record<string, unknown>): Record<string, unknown> {
     const modifiedArgs = { ...args };
 
     // Apply business rules based on function name
@@ -231,10 +214,7 @@ export class MCPExecutor {
 
       // DuckDuckGo Search functions
       case "web-search":
-        modifiedArgs.numResults = Math.min(
-          Number(modifiedArgs.numResults) || 12,
-          20,
-        ); // Default 12, max 20
+        modifiedArgs.numResults = Math.min(Number(modifiedArgs.numResults) || 12, 20); // Default 12, max 20
         modifiedArgs.page = 1; // Always start from first page
         break;
 
@@ -247,20 +227,14 @@ export class MCPExecutor {
         const dynamicCharLimit = memoryGuard.getFetchCharLimit();
 
         // Apply dynamic limit with AI's request as a suggested value
-        modifiedArgs.maxLength = Math.min(
-          Number(modifiedArgs.maxLength) || dynamicCharLimit,
-          dynamicCharLimit,
-        );
+        modifiedArgs.maxLength = Math.min(Number(modifiedArgs.maxLength) || dynamicCharLimit, dynamicCharLimit);
 
         // Log if memory pressure is reducing the limit
         const memoryStatus = memoryGuard.getStatus();
         if (memoryStatus !== "safe") {
-          log.warn(
-            `Fetch character limit reduced to ${dynamicCharLimit} due to ${memoryStatus} memory status`,
-          );
+          log.warn(`Fetch character limit reduced to ${dynamicCharLimit} due to ${memoryStatus} memory status`);
         }
-        modifiedArgs.extractMainContent =
-          modifiedArgs.extractMainContent !== false; // Default true
+        modifiedArgs.extractMainContent = modifiedArgs.extractMainContent !== false; // Default true
         modifiedArgs.includeLinks = modifiedArgs.includeLinks !== false; // Default true
         modifiedArgs.includeImages = modifiedArgs.includeImages !== false; // Default true
         break;
@@ -291,8 +265,7 @@ export class MCPExecutor {
       for (const mcpTool of mcpTools) {
         try {
           const geminiTool = await mcpTool.tool();
-          const mcpFunctionNames =
-            geminiTool.functionDeclarations?.map((f) => f.name) || [];
+          const mcpFunctionNames = geminiTool.functionDeclarations?.map((f) => f.name) || [];
           if (mcpFunctionNames.includes(functionName)) {
             return true;
           }
@@ -325,19 +298,13 @@ export class MCPExecutor {
     try {
       const mcpManager = getMCPManager();
       if (!mcpManager.isReady()) {
-        throw new MCPExecutionError(
-          "MCP manager not ready",
-          functionName,
-          "unknown",
-        );
+        throw new MCPExecutionError("MCP manager not ready", functionName, "unknown");
       }
 
       // Find the appropriate behavior handler for this function
       const handler = this.handlerRegistry.findHandlerForFunction(functionName);
       if (!handler) {
-        log.warn(
-          `No behavior handler found for function '${functionName}', using default processing`,
-        );
+        log.warn(`No behavior handler found for function '${functionName}', using default processing`);
       }
 
       // Create MCP execution context
@@ -389,8 +356,7 @@ export class MCPExecutor {
       for (const mcpTool of mcpTools) {
         try {
           const geminiTool = await mcpTool.tool();
-          const mcpFunctionNames =
-            geminiTool.functionDeclarations?.map((f) => f.name) || [];
+          const mcpFunctionNames = geminiTool.functionDeclarations?.map((f) => f.name) || [];
 
           if (mcpFunctionNames.includes(functionName)) {
             // Execute the MCP function
@@ -398,9 +364,7 @@ export class MCPExecutor {
 
             // Validate fetch URL size before executing (HEAD request check)
             if (functionName === "fetch-url" && mcpContext.modifiedArgs.url) {
-              const fetchValidation = await validateFetchSize(
-                mcpContext.modifiedArgs.url as string,
-              );
+              const fetchValidation = await validateFetchSize(mcpContext.modifiedArgs.url as string);
 
               if (!fetchValidation.allowed) {
                 throw new MCPExecutionError(
@@ -411,9 +375,7 @@ export class MCPExecutor {
               }
             }
 
-            const mcpResult = await mcpTool.callTool([
-              { name: functionName, args: mcpContext.modifiedArgs },
-            ]);
+            const mcpResult = await mcpTool.callTool([{ name: functionName, args: mcpContext.modifiedArgs }]);
 
             // Process the result
             if (mcpResult && mcpResult.length > 0) {
@@ -431,18 +393,13 @@ export class MCPExecutor {
                 // Cast to TypedMCPToolResult and ensure execution time is set correctly
                 const typedResult = processedResult as TypedMCPToolResult;
                 if (typedResult.data) {
-                  typedResult.data.executionTime =
-                    Date.now() - executionStartTime;
+                  typedResult.data.executionTime = Date.now() - executionStartTime;
                 }
                 return typedResult;
               }
 
               // Default processing if no handler
-              return this.processDefaultMCPResult(
-                functionName,
-                firstResult,
-                mcpContext,
-              );
+              return this.processDefaultMCPResult(functionName, firstResult, mcpContext);
             } else {
               throw new MCPExecutionError(
                 "MCP function returned no results",
@@ -456,10 +413,7 @@ export class MCPExecutor {
             throw error;
           }
           // Critical: Log MCP execution errors as errors, not warnings (for CloudWatch visibility)
-          log.error(
-            `Error executing MCP function '${functionName}':`,
-            error as Error,
-          );
+          log.error(`Error executing MCP function '${functionName}':`, error as Error);
         }
       }
 
@@ -489,10 +443,7 @@ export class MCPExecutor {
         };
       }
 
-      log.error(
-        `Failed to execute MCP function '${functionName}':`,
-        error as Error,
-      );
+      log.error(`Failed to execute MCP function '${functionName}':`, error as Error);
       return {
         success: false,
         message: "MCP function execution failed",
@@ -568,10 +519,7 @@ export class MCPExecutor {
         };
       }
     } catch (error) {
-      log.error(
-        `Error in default MCP result processing for ${functionName}:`,
-        error as Error,
-      );
+      log.error(`Error in default MCP result processing for ${functionName}:`, error as Error);
       return {
         success: false,
         message: `Failed to process ${functionName} result`,

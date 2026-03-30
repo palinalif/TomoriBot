@@ -1,20 +1,9 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import type { UserRow, TomoriState } from "@/types/db/schema";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { sql } from "@/utils/db/client";
 import { localizer } from "@/utils/text/localizer";
@@ -24,14 +13,8 @@ const MODAL_CUSTOM_ID = "teach_personaprompt_modal";
 const PERSONA_SELECT_ID = "persona_select";
 const PERSONA_PROMPT_INPUT_ID = "persona_prompt_input";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("personaprompt")
-    .setDescription(
-      localizer("en-US", "commands.teach.personaprompt.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("personaprompt").setDescription(localizer("en-US", "commands.teach.personaprompt.description"));
 
 export async function execute(
   _client: Client,
@@ -50,13 +33,11 @@ export async function execute(
   }
 
   if (interaction.guild) {
-    const hasPermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
     if (!hasPermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.personaprompt.no_permission_title",
-        descriptionKey:
-          "commands.teach.personaprompt.no_permission_description",
+        descriptionKey: "commands.teach.personaprompt.no_permission_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -85,14 +66,8 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.teach.personaprompt.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.teach.personaprompt.main_persona_description",
-            ),
+          ? localizer(locale, "commands.teach.personaprompt.alter_persona_description")
+          : localizer(locale, "commands.teach.personaprompt.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
 
@@ -113,10 +88,8 @@ export async function execute(
         {
           customId: PERSONA_SELECT_ID,
           labelKey: "commands.teach.personaprompt.persona_select_label",
-          descriptionKey:
-            "commands.teach.personaprompt.persona_select_description",
-          placeholder:
-            "commands.teach.personaprompt.persona_select_placeholder",
+          descriptionKey: "commands.teach.personaprompt.persona_select_description",
+          placeholder: "commands.teach.personaprompt.persona_select_placeholder",
           required: true,
           options: personaSelectOptions,
         },
@@ -133,9 +106,7 @@ export async function execute(
     });
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Teach personaprompt modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Teach personaprompt modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -146,10 +117,7 @@ export async function execute(
       return;
     }
 
-    const selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    const selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",

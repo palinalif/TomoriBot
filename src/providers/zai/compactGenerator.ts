@@ -16,15 +16,8 @@ import type {
   ProviderCompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import { callZaiStructuredJSON } from "@/providers/zai/zaiStructuredOutput";
-import {
-  toZaiApiModelName,
-  ZAI_GENERAL_CHAT_COMPLETIONS_URL,
-  ZAI_REASONING_MODELS,
-} from "@/providers/zai/zaiShared";
-import {
-  buildRoleplaySchema,
-  CompactRoleplaySummarySchema,
-} from "@/providers/utils/compactCommon";
+import { toZaiApiModelName, ZAI_GENERAL_CHAT_COMPLETIONS_URL, ZAI_REASONING_MODELS } from "@/providers/zai/zaiShared";
+import { buildRoleplaySchema, CompactRoleplaySummarySchema } from "@/providers/utils/compactCommon";
 
 /**
  * Generate a plain-text conversation summary using the Z.ai API.
@@ -66,17 +59,14 @@ export async function generateConversationSummaryZai(
     }
 
     // 4. Send the request
-    const response = await fetch(
-      endpointUrl ?? ZAI_GENERAL_CHAT_COMPLETIONS_URL,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(endpointUrl ?? ZAI_GENERAL_CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();

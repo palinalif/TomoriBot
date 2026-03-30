@@ -5,10 +5,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { tomoriConfigSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
@@ -20,14 +17,8 @@ import type { UserRow, ErrorContext } from "../../types/db/schema";
  * Toggles whether the main persona always replies to user messages,
  * even when no trigger word is present.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("alwaysreply")
-    .setDescription(
-      localizer("en-US", "commands.server.alwaysreply.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("alwaysreply").setDescription(localizer("en-US", "commands.server.alwaysreply.description"));
 
 /**
  * Toggles the always-reply mode for the main persona.
@@ -111,11 +102,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -130,9 +117,7 @@ export async function execute(
 
     // 7. Send success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: newValue
-        ? "commands.server.alwaysreply.enabled_title"
-        : "commands.server.alwaysreply.disabled_title",
+      titleKey: newValue ? "commands.server.alwaysreply.enabled_title" : "commands.server.alwaysreply.disabled_title",
       descriptionKey: newValue
         ? "commands.server.alwaysreply.enabled_description"
         : "commands.server.alwaysreply.disabled_description",
@@ -151,11 +136,7 @@ export async function execute(
         options: interaction.options?.data,
       },
     };
-    await log.error(
-      `Error in /server alwaysreply command`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error in /server alwaysreply command`, error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

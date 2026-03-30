@@ -8,11 +8,7 @@
  * 2. Clear all short-term memories
  */
 
-import type {
-  Client,
-  ChatInputCommandInteraction,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { Client, ChatInputCommandInteraction, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import { toggleCrossServerShortTermMemoryOptIn } from "@/utils/db/dbWrite";
@@ -25,25 +21,18 @@ import { localizer } from "@/utils/text/localizer";
 /**
  * Configure the subcommand structure
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("stm")
     .setDescription(localizer("en-US", "commands.personal.stm.description"))
     .addStringOption((option) =>
       option
         .setName("setting")
-        .setDescription(
-          localizer("en-US", "commands.personal.stm.option_description"),
-        )
+        .setDescription(localizer("en-US", "commands.personal.stm.option_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.personal.stm.crossserver_option",
-            ),
+            name: localizer("en-US", "commands.personal.stm.crossserver_option"),
             value: "crossserver",
           },
           {
@@ -70,9 +59,7 @@ export async function execute(
   try {
     if (setting === "crossserver") {
       // Toggle cross-server opt-in
-      const newValue = await toggleCrossServerShortTermMemoryOptIn(
-        interaction.user.id,
-      );
+      const newValue = await toggleCrossServerShortTermMemoryOptIn(interaction.user.id);
 
       // Invalidate user cache to ensure fresh data on next access
       invalidateUserCache(interaction.user.id);
@@ -93,9 +80,7 @@ export async function execute(
       // Clear all short-term memories for user
       clearShortTermMemoryForUser(interaction.user.id);
 
-      log.success(
-        `[personalStmCommand] Cleared all short-term memories for user - userId=${interaction.user.id}`,
-      );
+      log.success(`[personalStmCommand] Cleared all short-term memories for user - userId=${interaction.user.id}`);
 
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.SUCCESS,
@@ -104,9 +89,7 @@ export async function execute(
       });
     } else {
       // Unknown setting (should not happen due to choices validation)
-      log.warn(
-        `[personalStmCommand] Unknown setting value - setting=${setting}, userId=${interaction.user.id}`,
-      );
+      log.warn(`[personalStmCommand] Unknown setting value - setting=${setting}, userId=${interaction.user.id}`);
 
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,

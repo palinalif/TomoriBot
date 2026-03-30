@@ -9,26 +9,13 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  type ErrorContext,
-  type UserRow,
-  tomoriConfigSchema,
-} from "@/types/db/schema";
-import type {
-  CheckboxGroupOption,
-  ModalCheckboxGroupField,
-} from "@/types/discord/modal";
+import { type ErrorContext, type UserRow, tomoriConfigSchema } from "@/types/db/schema";
+import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
 import type { LogitBiasEntry } from "@/types/provider/logitBias";
 import { formatLogitBiasValue } from "@/types/provider/logitBias";
 
@@ -43,9 +30,7 @@ function truncateCheckboxLabel(text: string): string {
   return text.length > 100 ? `${text.slice(0, 97)}...` : text;
 }
 
-function buildCheckboxGroups(
-  pageEntries: LogitBiasEntry[],
-): ModalCheckboxGroupField[] {
+function buildCheckboxGroups(pageEntries: LogitBiasEntry[]): ModalCheckboxGroupField[] {
   const groups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < pageEntries.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -65,10 +50,7 @@ function buildCheckboxGroups(
         groupIndex === 0
           ? "commands.config.logitbias.remove.checkbox_label"
           : "commands.config.logitbias.remove.checkbox_label_continued",
-      descriptionKey:
-        groupIndex === 0
-          ? "commands.config.logitbias.remove.checkbox_description"
-          : undefined,
+      descriptionKey: groupIndex === 0 ? "commands.config.logitbias.remove.checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,
@@ -78,10 +60,7 @@ function buildCheckboxGroups(
   return groups;
 }
 
-function collectSelectedIds(
-  multiValues: Record<string, string[]> | undefined,
-  groupCount: number,
-): Set<string> {
+function collectSelectedIds(multiValues: Record<string, string[]> | undefined, groupCount: number): Set<string> {
   const selectedIds = new Set<string>();
 
   for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
@@ -94,23 +73,14 @@ function collectSelectedIds(
   return selectedIds;
 }
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.config.logitbias.remove.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.logitbias.remove.description"))
     .addBooleanOption((option) =>
       option
         .setName("clearall")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.logitbias.remove.clearall_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.logitbias.remove.clearall_description"))
         .setRequired(false),
     );
 
@@ -166,9 +136,7 @@ export async function execute(
           metadata: {
             command: "config logitbias remove",
             clearAll,
-            validationErrors: validatedConfig.success
-              ? null
-              : validatedConfig.error.flatten(),
+            validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
           },
         };
         await log.error(
@@ -190,8 +158,7 @@ export async function execute(
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.remove.clearall_success_title",
-        descriptionKey:
-          "commands.config.logitbias.remove.clearall_success_description",
+        descriptionKey: "commands.config.logitbias.remove.clearall_success_description",
         descriptionVars: {
           removed_count: logitBiasEntries.length.toString(),
         },
@@ -216,15 +183,13 @@ export async function execute(
       return;
     }
 
-    let modalSource: ChatInputCommandInteraction | ButtonInteraction =
-      interaction;
+    let modalSource: ChatInputCommandInteraction | ButtonInteraction = interaction;
     let pageEntries = logitBiasEntries;
 
     if (totalPages > 1) {
       const pageSelectEmbed = createStandardEmbed(locale, {
         titleKey: "commands.config.logitbias.remove.select_page_title",
-        descriptionKey:
-          "commands.config.logitbias.remove.select_page_description",
+        descriptionKey: "commands.config.logitbias.remove.select_page_description",
         descriptionVars: {
           total_entries: logitBiasEntries.length.toString(),
           total_pages: totalPages.toString(),
@@ -235,10 +200,7 @@ export async function execute(
       const pageButtons: ButtonBuilder[] = [];
       for (let page = 1; page <= totalPages; page++) {
         const startEntry = (page - 1) * ENTRIES_PER_PAGE + 1;
-        const endEntry = Math.min(
-          page * ENTRIES_PER_PAGE,
-          logitBiasEntries.length,
-        );
+        const endEntry = Math.min(page * ENTRIES_PER_PAGE, logitBiasEntries.length);
         pageButtons.push(
           new ButtonBuilder()
             .setCustomId(`config_logitbias_page_${page}`)
@@ -247,9 +209,7 @@ export async function execute(
         );
       }
 
-      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        ...pageButtons,
-      );
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);
 
       const pageSelectMessage = await interaction.reply({
         embeds: [pageSelectEmbed],
@@ -270,15 +230,9 @@ export async function execute(
         return;
       }
 
-      const selectedPage = Number.parseInt(
-        pageButtonInteraction.customId.replace("config_logitbias_page_", ""),
-        10,
-      );
+      const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("config_logitbias_page_", ""), 10);
       const startIndex = (selectedPage - 1) * ENTRIES_PER_PAGE;
-      pageEntries = logitBiasEntries.slice(
-        startIndex,
-        startIndex + ENTRIES_PER_PAGE,
-      );
+      pageEntries = logitBiasEntries.slice(startIndex, startIndex + ENTRIES_PER_PAGE);
       modalSource = pageButtonInteraction;
     }
 
@@ -301,23 +255,17 @@ export async function execute(
     }
 
     const modalInteraction = modalResult.interaction;
-    const selectedIds = collectSelectedIds(
-      modalResult.multiValues,
-      checkboxGroups.length,
-    );
+    const selectedIds = collectSelectedIds(modalResult.multiValues, checkboxGroups.length);
     const pageEntryIds = new Set(pageEntries.map((entry) => entry.id));
     const remainingEntries = logitBiasEntries.filter(
       (entry) => !pageEntryIds.has(entry.id) || selectedIds.has(entry.id),
     );
-    const removedEntries = pageEntries.filter(
-      (entry) => !selectedIds.has(entry.id),
-    );
+    const removedEntries = pageEntries.filter((entry) => !selectedIds.has(entry.id));
 
     if (removedEntries.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "commands.config.logitbias.remove.no_removals_title",
-        descriptionKey:
-          "commands.config.logitbias.remove.no_removals_description",
+        descriptionKey: "commands.config.logitbias.remove.no_removals_description",
         color: ColorCode.INFO,
       });
       return;
@@ -340,9 +288,7 @@ export async function execute(
         metadata: {
           command: "config logitbias remove",
           removedCount: removedEntries.length,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -385,11 +331,7 @@ export async function execute(
         clearAll,
       },
     };
-    await log.error(
-      "Error executing /config logitbias remove",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /config logitbias remove", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {

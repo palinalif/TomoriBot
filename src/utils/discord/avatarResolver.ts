@@ -52,9 +52,7 @@ function normalizeAvatarTargetId(id: string, context: ToolContext): string {
 
   const botUserId = context.client.user?.id;
   if (botUserId && trimmed === botUserId) {
-    log.info(
-      `[Avatar Resolver] Remapped bot user ID ${trimmed} to active persona persona:${activePersonaId}`,
-    );
+    log.info(`[Avatar Resolver] Remapped bot user ID ${trimmed} to active persona persona:${activePersonaId}`);
     return `persona:${activePersonaId}`;
   }
 
@@ -63,14 +61,10 @@ function normalizeAvatarTargetId(id: string, context: ToolContext): string {
 
 type WebhookFetchCapableChannel = {
   id: string;
-  fetchWebhooks: () => Promise<
-    import("discord.js").Collection<string, Webhook>
-  >;
+  fetchWebhooks: () => Promise<import("discord.js").Collection<string, Webhook>>;
 };
 
-function isWebhookFetchCapableChannel(
-  channel: unknown,
-): channel is WebhookFetchCapableChannel {
+function isWebhookFetchCapableChannel(channel: unknown): channel is WebhookFetchCapableChannel {
   if (typeof channel !== "object" || channel === null) {
     return false;
   }
@@ -79,9 +73,7 @@ function isWebhookFetchCapableChannel(
     return false;
   }
 
-  return (
-    typeof (channel as { fetchWebhooks?: unknown }).fetchWebhooks === "function"
-  );
+  return typeof (channel as { fetchWebhooks?: unknown }).fetchWebhooks === "function";
 }
 
 function buildWebhookAvatarData(
@@ -168,10 +160,7 @@ async function resolveWebhookAvatarFromChannel(
     const webhooks = await channel.fetchWebhooks();
     return webhooks.get(id) ?? null;
   } catch (error) {
-    log.warn(
-      `[Avatar Resolver] Failed to fetch webhooks for channel ${channel.id} while resolving ${id}`,
-      error,
-    );
+    log.warn(`[Avatar Resolver] Failed to fetch webhooks for channel ${channel.id} while resolving ${id}`, error);
     return null;
   }
 }
@@ -200,10 +189,7 @@ async function resolveWebhookAvatar(
   }
 
   if (isWebhookFetchCapableChannel(context.channel)) {
-    const channelWebhook = await resolveWebhookAvatarFromChannel(
-      context.channel,
-      id,
-    );
+    const channelWebhook = await resolveWebhookAvatarFromChannel(context.channel, id);
     if (channelWebhook) {
       const fromChannel = buildWebhookAvatarData(
         channelWebhook,
@@ -288,8 +274,7 @@ async function resolvePersonaAvatar(
   let avatarUrl: string | null = null;
 
   if (persona.is_alter) {
-    avatarUrl =
-      resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? null;
+    avatarUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? null;
   } else {
     const guild = context.client.guilds.cache.get(guildId);
     avatarUrl =
@@ -306,11 +291,7 @@ async function resolvePersonaAvatar(
     avatarUrl = context.personaAvatarUrl ?? null;
   }
 
-  if (
-    !avatarUrl &&
-    context.webhook &&
-    context.personaUsername === persona.tomori_nickname
-  ) {
+  if (!avatarUrl && context.webhook && context.personaUsername === persona.tomori_nickname) {
     avatarUrl =
       context.webhook.avatarURL({
         size: 1024,
@@ -352,15 +333,9 @@ export async function resolveAvatarByDiscordId(
 
   const personaId = parsePersonaIdentifier(normalizedId);
   if (personaId !== null) {
-    const personaAvatar = await resolvePersonaAvatar(
-      personaId,
-      context,
-      resolvedOptions,
-    );
+    const personaAvatar = await resolvePersonaAvatar(personaId, context, resolvedOptions);
     if (personaAvatar) {
-      log.info(
-        `[Avatar Resolver] Resolved ID ${id} as persona avatar (${personaAvatar.username}) via ${normalizedId}`,
-      );
+      log.info(`[Avatar Resolver] Resolved ID ${id} as persona avatar (${personaAvatar.username}) via ${normalizedId}`);
       return personaAvatar;
     }
     throw new Error(`No persona found with tomori_id ${personaId}`);
@@ -370,26 +345,16 @@ export async function resolveAvatarByDiscordId(
     return await resolveUserAvatar(normalizedId, context, resolvedOptions);
   } catch (userError) {
     const userErrorObj =
-      userError instanceof Error
-        ? userError
-        : new Error("Unknown error while resolving user avatar");
-    const webhookAvatar = await resolveWebhookAvatar(
-      normalizedId,
-      context,
-      resolvedOptions,
-    );
+      userError instanceof Error ? userError : new Error("Unknown error while resolving user avatar");
+    const webhookAvatar = await resolveWebhookAvatar(normalizedId, context, resolvedOptions);
 
     if (webhookAvatar) {
-      log.info(
-        `[Avatar Resolver] Resolved ID ${id} as webhook avatar (${webhookAvatar.username}) via ${normalizedId}`,
-      );
+      log.info(`[Avatar Resolver] Resolved ID ${id} as webhook avatar (${webhookAvatar.username}) via ${normalizedId}`);
       return webhookAvatar;
     }
 
     if (!isNotFoundError(userErrorObj)) {
-      throw new Error(
-        `${userErrorObj.message} (and no matching webhook was found for ID ${normalizedId})`,
-      );
+      throw new Error(`${userErrorObj.message} (and no matching webhook was found for ID ${normalizedId})`);
     }
 
     throw new Error(`No Discord user or webhook found with ID ${normalizedId}`);

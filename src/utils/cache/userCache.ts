@@ -24,8 +24,7 @@ const cache = new Map<string, UserCacheEntry>();
  * Cache duration: configurable via env, default 30 minutes.
  * Longer TTL for user data since it changes even less frequently than server config.
  */
-const USER_CACHE_DURATION_MS =
-  (Number(process.env.USER_CACHE_TTL_MINUTES) || 30) * 60 * 1000;
+const USER_CACHE_DURATION_MS = (Number(process.env.USER_CACHE_TTL_MINUTES) || 30) * 60 * 1000;
 
 /**
  * Cache statistics for monitoring
@@ -42,9 +41,7 @@ let blacklistCacheMisses = 0;
  * @param userDiscId - Discord user ID
  * @returns UserCacheEntry (never null, creates entry with defaults if user not found)
  */
-async function getOrCreateCacheEntry(
-  userDiscId: string,
-): Promise<UserCacheEntry> {
+async function getOrCreateCacheEntry(userDiscId: string): Promise<UserCacheEntry> {
   const now = Date.now();
   const cachedEntry = cache.get(userDiscId);
 
@@ -53,16 +50,12 @@ async function getOrCreateCacheEntry(
     const cacheAge = now - cachedEntry.cachedAt;
     if (cacheAge < USER_CACHE_DURATION_MS) {
       cacheHits++;
-      log.info(
-        `[User Cache] HIT for user ${userDiscId} (age: ${Math.round(cacheAge / 1000)}s)`,
-      );
+      log.info(`[User Cache] HIT for user ${userDiscId} (age: ${Math.round(cacheAge / 1000)}s)`);
       return cachedEntry;
     }
 
     // Cache stale - fall through to refresh
-    log.info(
-      `[User Cache] STALE for user ${userDiscId} (age: ${Math.round(cacheAge / 1000)}s)`,
-    );
+    log.info(`[User Cache] STALE for user ${userDiscId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // Cache miss or stale - refresh from DB
@@ -71,10 +64,7 @@ async function getOrCreateCacheEntry(
 
   try {
     // Load user row and privacy level in parallel
-    const [userRow, privacyLevel] = await Promise.all([
-      loadUserRow(userDiscId),
-      getPrivacyLevel(userDiscId),
-    ]);
+    const [userRow, privacyLevel] = await Promise.all([loadUserRow(userDiscId), getPrivacyLevel(userDiscId)]);
 
     // Create new cache entry (preserve existing blacklist entries if available)
     const newEntry: UserCacheEntry = {
@@ -96,9 +86,7 @@ async function getOrCreateCacheEntry(
 
     // Return stale cache if available (graceful fallback)
     if (cachedEntry) {
-      log.warn(
-        `[User Cache] Returning stale cache for user ${userDiscId} due to error`,
-      );
+      log.warn(`[User Cache] Returning stale cache for user ${userDiscId} due to error`);
       return cachedEntry;
     }
 
@@ -121,9 +109,7 @@ async function getOrCreateCacheEntry(
  * @param userDiscId - Discord user ID
  * @returns UserRow or null if not found
  */
-export async function getCachedUserRow(
-  userDiscId: string,
-): Promise<UserRow | null> {
+export async function getCachedUserRow(userDiscId: string): Promise<UserRow | null> {
   const entry = await getOrCreateCacheEntry(userDiscId);
   return entry.userRow;
 }
@@ -134,9 +120,7 @@ export async function getCachedUserRow(
  * @param userDiscId - Discord user ID
  * @returns PrivacyLevel (defaults to MINIMAL if not found)
  */
-export async function getCachedPrivacyLevel(
-  userDiscId: string,
-): Promise<PrivacyLevel> {
+export async function getCachedPrivacyLevel(userDiscId: string): Promise<PrivacyLevel> {
   const entry = await getOrCreateCacheEntry(userDiscId);
   return entry.privacyLevel;
 }
@@ -151,27 +135,20 @@ export async function getCachedPrivacyLevel(
  * @param userDiscId - Discord user ID
  * @returns boolean indicating if user is blacklisted in this server
  */
-export async function getCachedBlacklistStatus(
-  serverDiscId: string,
-  userDiscId: string,
-): Promise<boolean> {
+export async function getCachedBlacklistStatus(serverDiscId: string, userDiscId: string): Promise<boolean> {
   const entry = await getOrCreateCacheEntry(userDiscId);
 
   // Check if we have blacklist status cached for this server
   if (entry.blacklistStatus.has(serverDiscId)) {
     blacklistCacheHits++;
-    log.info(
-      `[User Cache] Blacklist HIT for user ${userDiscId} in server ${serverDiscId}`,
-    );
+    log.info(`[User Cache] Blacklist HIT for user ${userDiscId} in server ${serverDiscId}`);
     // biome-ignore lint/style/noNonNullAssertion: has() check guarantees existence
     return entry.blacklistStatus.get(serverDiscId)!;
   }
 
   // Blacklist status not cached for this server - query DB
   blacklistCacheMisses++;
-  log.info(
-    `[User Cache] Blacklist MISS for user ${userDiscId} in server ${serverDiscId} - querying DB`,
-  );
+  log.info(`[User Cache] Blacklist MISS for user ${userDiscId} in server ${serverDiscId} - querying DB`);
 
   try {
     const isUserBlacklisted = await isBlacklisted(serverDiscId, userDiscId);
@@ -183,10 +160,7 @@ export async function getCachedBlacklistStatus(
 
     return isUserBlacklisted;
   } catch (error) {
-    log.error(
-      `[User Cache] Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`,
-      error,
-    );
+    log.error(`[User Cache] Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`, error);
     // Default to false on error to avoid blocking personalization unintentionally
     return false;
   }
@@ -214,19 +188,14 @@ export function invalidateUserCache(userDiscId: string): void {
  * @param serverDiscId - Discord server ID
  * @param userDiscId - Discord user ID
  */
-export function invalidateUserBlacklistCache(
-  serverDiscId: string,
-  userDiscId: string,
-): void {
+export function invalidateUserBlacklistCache(serverDiscId: string, userDiscId: string): void {
   const entry = cache.get(userDiscId);
   if (entry) {
     const hadBlacklist = entry.blacklistStatus.has(serverDiscId);
     entry.blacklistStatus.delete(serverDiscId);
 
     if (hadBlacklist) {
-      log.info(
-        `[User Cache] Invalidated blacklist for user ${userDiscId} in server ${serverDiscId}`,
-      );
+      log.info(`[User Cache] Invalidated blacklist for user ${userDiscId} in server ${serverDiscId}`);
     }
   }
 }
@@ -261,14 +230,10 @@ export function getUserCacheStats(): {
   blacklistHitRate: string;
 } {
   const total = cacheHits + cacheMisses;
-  const hitRate =
-    total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
+  const hitRate = total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
 
   const blacklistTotal = blacklistCacheHits + blacklistCacheMisses;
-  const blacklistHitRate =
-    blacklistTotal > 0
-      ? `${((blacklistCacheHits / blacklistTotal) * 100).toFixed(2)}%`
-      : "N/A";
+  const blacklistHitRate = blacklistTotal > 0 ? `${((blacklistCacheHits / blacklistTotal) * 100).toFixed(2)}%` : "N/A";
 
   return {
     hits: cacheHits,

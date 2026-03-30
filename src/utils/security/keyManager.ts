@@ -40,10 +40,7 @@ class CryptoKeyManager {
 
     if (process.env.CRYPTO_SECRET_CURRENT) {
       // Determine current version: explicit override or auto-detect highest
-      this.currentVersion = Number.parseInt(
-        process.env.CRYPTO_SECRET_CURRENT,
-        10,
-      );
+      this.currentVersion = Number.parseInt(process.env.CRYPTO_SECRET_CURRENT, 10);
       log.info(`Using explicit current version: V${this.currentVersion}`);
     } else {
       this.currentVersion = Math.max(...versions);
@@ -60,15 +57,11 @@ class CryptoKeyManager {
       );
     }
 
-    log.info(
-      `Crypto key manager initialized with ${this.keys.size} key version(s)`,
-    );
+    log.info(`Crypto key manager initialized with ${this.keys.size} key version(s)`);
 
     if (this.keys.size === 1) {
       // Warn if only one version (no rotation capability)
-      log.warn(
-        "Only one key version available - rotation not possible until additional version added",
-      );
+      log.warn("Only one key version available - rotation not possible until additional version added");
     }
   }
 
@@ -91,9 +84,7 @@ class CryptoKeyManager {
     // 2. Backward compatibility: CRYPTO_SECRET maps to V1
     if (!this.keys.has(1) && process.env.CRYPTO_SECRET) {
       this.keys.set(1, process.env.CRYPTO_SECRET);
-      log.info(
-        "Using CRYPTO_SECRET as version 1 (backward compatibility mode)",
-      );
+      log.info("Using CRYPTO_SECRET as version 1 (backward compatibility mode)");
     }
 
     // 3. Validation: At least one key must be available
@@ -113,9 +104,7 @@ class CryptoKeyManager {
   getCurrentKey(): string {
     const key = this.keys.get(this.currentVersion);
     if (!key) {
-      throw new Error(
-        `Current key version ${this.currentVersion} not available in memory - this should never happen`,
-      );
+      throw new Error(`Current key version ${this.currentVersion} not available in memory - this should never happen`);
     }
     return key;
   }

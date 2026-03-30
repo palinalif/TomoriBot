@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import { formatUTCOffset } from "../../utils/text/timezoneHelper";
 
@@ -29,18 +22,14 @@ const TIMEZONE_DEFAULT = 0; // UTC
  * @param subcommand - The subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("timezone")
     .setDescription(localizer("en-US", "commands.config.timezone.description"))
     .addNumberOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer("en-US", "commands.config.timezone.value_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.timezone.value_description"))
         .setMinValue(TIMEZONE_MIN)
         .setMaxValue(TIMEZONE_MAX)
         .setRequired(true),
@@ -103,8 +92,7 @@ export async function execute(
     }
 
     // 5. Check if this is the same as the current timezone offset
-    const currentTimezone =
-      tomoriState.config.timezone_offset ?? TIMEZONE_DEFAULT;
+    const currentTimezone = tomoriState.config.timezone_offset ?? TIMEZONE_DEFAULT;
     if (timezoneValue === currentTimezone) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.timezone.already_set_title",
@@ -138,9 +126,7 @@ export async function execute(
           command: "config timezone",
           guildId: interaction.guild?.id,
           timezoneValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -194,11 +180,7 @@ export async function execute(
         valueAttempted: interaction.options.getNumber("value"),
       },
     };
-    await log.error(
-      `Error executing /config timezone for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config timezone for user ${userData.user_disc_id}`, error as Error, context);
 
     // 10. Inform user of unknown error
     if (interaction.deferred && !interaction.replied) {

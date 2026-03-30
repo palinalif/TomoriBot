@@ -1,8 +1,5 @@
 export const MAX_TAGS = Number.parseInt(process.env.NAI_MAX_TAGS || "100", 10);
-export const MAX_TAG_LENGTH = Number.parseInt(
-  process.env.NAI_MAX_TAG_LENGTH || "200",
-  10,
-);
+export const MAX_TAG_LENGTH = Number.parseInt(process.env.NAI_MAX_TAG_LENGTH || "200", 10);
 export const TAGS_MODAL_MAX_LENGTH = 4000;
 
 export type NaiTagValidationResult =
@@ -22,9 +19,7 @@ export function formatTextArrayLiteral(items: string[]): string {
 /**
  * Formats stored tag arrays back into the comma-separated modal format.
  */
-export function formatNaiTagsForModalValue(
-  tags: string[] | null | undefined,
-): string | undefined {
+export function formatNaiTagsForModalValue(tags: string[] | null | undefined): string | undefined {
   const modalValue =
     tags
       ?.map((tag) => tag.trim())
@@ -38,9 +33,7 @@ export function formatNaiTagsForModalValue(
  * Splits a comma-separated tag input, trims whitespace, and preserves first-seen order
  * while removing duplicates.
  */
-export function parseAndValidateNaiTags(
-  tagsInput: string,
-): NaiTagValidationResult {
+export function parseAndValidateNaiTags(tagsInput: string): NaiTagValidationResult {
   const parsedTags = tagsInput
     .split(/[,\u3001]/)
     .map((tag) => tag.trim())

@@ -9,21 +9,12 @@ import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { invalidateGuildMcpConfigCache } from "@/utils/cache/guildMcpConfigCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { RadioGroupOption } from "@/types/discord/modal";
-import {
-  insertGuildMcpServer,
-  countGuildMcpServers,
-} from "@/utils/db/guildMcpDb";
+import { insertGuildMcpServer, countGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
-import {
-  type McpUrlValidationResult,
-  validateRemoteMcpUrl,
-} from "@/utils/mcp/mcpUrlSecurity";
+import { type McpUrlValidationResult, validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -34,8 +25,7 @@ const AUTH_TOKEN_INPUT_ID = "mcp_auth_token";
 const SERVER_TYPE_SELECT_ID = "mcp_server_type";
 
 /** Max guild MCP servers per guild (configurable via env) */
-const MAX_SERVERS_PER_GUILD =
-  Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 5;
+const MAX_SERVERS_PER_GUILD = Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 5;
 
 /** Name format: alphanumeric + hyphens, 1-32 chars */
 const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,31}$/;
@@ -47,12 +37,8 @@ const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,31}$/;
  * Shows a modal for name, URL, optional auth token, and optional server type.
  * @param subcommand - The subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("add")
-    .setDescription(localizer("en-US", "commands.config.mcp.add.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("add").setDescription(localizer("en-US", "commands.config.mcp.add.description"));
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -100,26 +86,17 @@ export async function execute(
       {
         label: localizer(locale, "commands.config.mcp.add.none_option"),
         value: "none",
-        description: localizer(
-          locale,
-          "commands.config.mcp.add.none_option_description",
-        ),
+        description: localizer(locale, "commands.config.mcp.add.none_option_description"),
       },
       {
         label: localizer(locale, "commands.config.mcp.add.web_search_option"),
         value: "web_search",
-        description: localizer(
-          locale,
-          "commands.config.mcp.add.web_search_option_description",
-        ),
+        description: localizer(locale, "commands.config.mcp.add.web_search_option_description"),
       },
       {
         label: localizer(locale, "commands.config.mcp.add.url_fetcher_option"),
         value: "url_fetcher",
-        description: localizer(
-          locale,
-          "commands.config.mcp.add.url_fetcher_option_description",
-        ),
+        description: localizer(locale, "commands.config.mcp.add.url_fetcher_option_description"),
       },
     ];
 
@@ -169,22 +146,16 @@ export async function execute(
     );
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `[MCP Add] Modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`[MCP Add] Modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
-    const name = modalResult.values?.[NAME_INPUT_ID]
-      ?.trim()
-      .replace(/\s+/g, "-");
+    const name = modalResult.values?.[NAME_INPUT_ID]?.trim().replace(/\s+/g, "-");
     const url = modalResult.values?.[URL_INPUT_ID]?.trim();
-    const authToken =
-      modalResult.values?.[AUTH_TOKEN_INPUT_ID]?.trim() || undefined;
+    const authToken = modalResult.values?.[AUTH_TOKEN_INPUT_ID]?.trim() || undefined;
     const serverTypeRaw = modalResult.values?.[SERVER_TYPE_SELECT_ID]?.trim();
     // "none" or empty means no type — store as null
-    const serverType =
-      serverTypeRaw && serverTypeRaw !== "none" ? serverTypeRaw : null;
+    const serverType = serverTypeRaw && serverTypeRaw !== "none" ? serverTypeRaw : null;
 
     if (!modalResult.interaction) {
       log.error("[MCP Add] Modal submit interaction is undefined");
@@ -251,13 +222,7 @@ export async function execute(
     }
 
     // 8. Persist to database (token is encrypted inline, server_type for tool deduplication)
-    const insertedRow = await insertGuildMcpServer(
-      tomoriState.server_id,
-      name,
-      url,
-      authToken,
-      serverType,
-    );
+    const insertedRow = await insertGuildMcpServer(tomoriState.server_id, name, url, authToken, serverType);
 
     if (!insertedRow) {
       await replyInfoEmbed(replyInteraction, locale, {
@@ -332,49 +297,41 @@ function getUrlValidationMessage(
   switch (validation.failureCode) {
     case "INVALID_FORMAT":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_invalid_format_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_invalid_format_description",
       };
     case "INVALID_PROTOCOL":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_protocol_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_protocol_description",
       };
     case "REMOTE_HTTP_FORBIDDEN":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_http_localhost_only_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_http_localhost_only_description",
       };
     case "PRODUCTION_HTTPS_REQUIRED":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_https_required_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_https_required_description",
       };
     case "PRODUCTION_LOCALHOST_FORBIDDEN":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_localhost_blocked_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_localhost_blocked_description",
       };
     case "DNS_RESOLUTION_FAILED":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_dns_failed_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_dns_failed_description",
         descriptionVars: {
           hostname: validation.hostname ?? "unknown",
         },
       };
     case "PRODUCTION_BLOCKED_ADDRESS":
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_private_address_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_private_address_description",
         descriptionVars: {
           address: validation.blockedAddress ?? "unknown",
         },
       };
     default:
       return {
-        descriptionKey:
-          "commands.config.mcp.add.invalid_url_invalid_format_description",
+        descriptionKey: "commands.config.mcp.add.invalid_url_invalid_format_description",
       };
   }
 }

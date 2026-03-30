@@ -10,17 +10,7 @@
  * passed to database queries. This includes primitive types, complex types,
  * and PostgreSQL-specific types.
  */
-export type SqlValue =
-  | string
-  | number
-  | boolean
-  | Date
-  | string[]
-  | number[]
-  | boolean[]
-  | Buffer
-  | null
-  | undefined;
+export type SqlValue = string | number | boolean | Date | string[] | number[] | boolean[] | Buffer | null | undefined;
 
 /**
  * Array type for SQL query parameters used with sql.unsafe spread operations.

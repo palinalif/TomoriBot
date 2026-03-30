@@ -8,9 +8,7 @@ import { keyManager } from "./keyManager";
  * @param apiKey - The raw API key to encrypt
  * @returns Promise<{encrypted: Buffer, version: number}> - The encrypted API key and the version used
  */
-export const encryptApiKey = async (
-  apiKey: string,
-): Promise<{ encrypted: Buffer; version: number }> => {
+export const encryptApiKey = async (apiKey: string): Promise<{ encrypted: Buffer; version: number }> => {
   if (!apiKey) {
     log.warn("Empty API key provided for encryption");
     return {
@@ -37,9 +35,7 @@ export const encryptApiKey = async (
       throw new Error("Encryption failed");
     }
 
-    log.success(
-      `API key encrypted successfully with version ${currentVersion}`,
-    );
+    log.success(`API key encrypted successfully with version ${currentVersion}`);
 
     // PostgreSQL already returns bytea as Buffer - don't convert to string first
     return {
@@ -59,10 +55,7 @@ export const encryptApiKey = async (
  * @param keyVersion - The version of the key used to encrypt (defaults to 1 for backward compatibility)
  * @returns Promise<string> - The decrypted API key
  */
-export const decryptApiKey = async (
-  encryptedKey: Buffer,
-  keyVersion: number = 1,
-): Promise<string> => {
+export const decryptApiKey = async (encryptedKey: Buffer, keyVersion: number = 1): Promise<string> => {
   if (!encryptedKey || encryptedKey.length === 0) {
     log.warn("Empty encrypted key provided for decryption");
     return "";
@@ -111,9 +104,7 @@ export const reencryptApiKey = async (
   // Encrypt with current key version
   const result = await encryptApiKey(plaintext);
 
-  log.info(
-    `Re-encrypted API key from version ${oldVersion} to ${result.version}`,
-  );
+  log.info(`Re-encrypted API key from version ${oldVersion} to ${result.version}`);
   return result;
 };
 
@@ -124,20 +115,14 @@ export const reencryptApiKey = async (
  * @param apiKey - The raw API key to encrypt and store
  * @returns Promise<boolean> - True if stored successfully
  */
-export const storeOptApiKey = async (
-  serverId: number,
-  serviceName: string,
-  apiKey: string,
-): Promise<boolean> => {
+export const storeOptApiKey = async (serverId: number, serviceName: string, apiKey: string): Promise<boolean> => {
   if (!apiKey || !serviceName || !serverId) {
     log.warn("Missing required parameters for optional API key storage");
     return false;
   }
 
   try {
-    log.info(
-      `Storing encrypted optional API key for server ${serverId}, service: ${serviceName}`,
-    );
+    log.info(`Storing encrypted optional API key for server ${serverId}, service: ${serviceName}`);
 
     // Encrypt the API key using the current key version
     const { encrypted, version } = await encryptApiKey(apiKey);
@@ -153,15 +138,10 @@ export const storeOptApiKey = async (
 				updated_at = CURRENT_TIMESTAMP
 		`;
 
-    log.success(
-      `Optional API key stored with version ${version} for ${serviceName} on server ${serverId}`,
-    );
+    log.success(`Optional API key stored with version ${version} for ${serviceName} on server ${serverId}`);
     return true;
   } catch (error) {
-    log.error(
-      `Failed to store optional API key for ${serviceName}`,
-      error as Error,
-    );
+    log.error(`Failed to store optional API key for ${serviceName}`, error as Error);
     return false;
   }
 };
@@ -174,19 +154,14 @@ export const storeOptApiKey = async (
  * @param serviceName - Name of the service
  * @returns Promise<string | null> - Decrypted API key or null if not found
  */
-export const getOptApiKey = async (
-  serverId: number,
-  serviceName: string,
-): Promise<string | null> => {
+export const getOptApiKey = async (serverId: number, serviceName: string): Promise<string | null> => {
   if (!serviceName || !serverId) {
     log.warn("Missing required parameters for optional API key retrieval");
     return null;
   }
 
   try {
-    log.info(
-      `Retrieving optional API key for server ${serverId}, service: ${serviceName}`,
-    );
+    log.info(`Retrieving optional API key for server ${serverId}, service: ${serviceName}`);
 
     const [result] = await sql`
 			SELECT api_key, key_version
@@ -195,9 +170,7 @@ export const getOptApiKey = async (
 		`;
 
     if (!result || !result.api_key) {
-      log.info(
-        `No optional API key found for ${serviceName} on server ${serverId}`,
-      );
+      log.info(`No optional API key found for ${serviceName} on server ${serverId}`);
       return null;
     }
 
@@ -210,9 +183,7 @@ export const getOptApiKey = async (
 
     // LAZY ROTATION: If using old key version, re-encrypt with current
     if (keyVersion !== currentVersion) {
-      log.info(
-        `Rotating key from version ${keyVersion} to ${currentVersion} for ${serviceName}`,
-      );
+      log.info(`Rotating key from version ${keyVersion} to ${currentVersion} for ${serviceName}`);
 
       const { encrypted, version } = await encryptApiKey(decryptedKey);
 
@@ -229,10 +200,7 @@ export const getOptApiKey = async (
 
     return decryptedKey;
   } catch (error) {
-    log.error(
-      `Failed to retrieve optional API key for ${serviceName}`,
-      error as Error,
-    );
+    log.error(`Failed to retrieve optional API key for ${serviceName}`, error as Error);
     return null;
   }
 };
@@ -244,9 +212,7 @@ export const getOptApiKey = async (
  * @param serverId - Server ID to look up
  * @returns Promise<Record<string, string>> - Map of service names to decrypted API keys
  */
-export const getAllOptApiKeysForServer = async (
-  serverId: number,
-): Promise<Record<string, string>> => {
+export const getAllOptApiKeysForServer = async (serverId: number): Promise<Record<string, string>> => {
   if (!serverId) {
     log.warn("Missing serverId for optional API key retrieval");
     return {};
@@ -273,9 +239,7 @@ export const getAllOptApiKeysForServer = async (
 
           // LAZY ROTATION: Re-encrypt if using old version
           if (keyVersion !== currentVersion) {
-            log.info(
-              `Rotating key from version ${keyVersion} to ${currentVersion} for ${result.service_name}`,
-            );
+            log.info(`Rotating key from version ${keyVersion} to ${currentVersion} for ${result.service_name}`);
 
             const { encrypted, version } = await encryptApiKey(decryptedKey);
 
@@ -290,23 +254,15 @@ export const getAllOptApiKeysForServer = async (
             log.success(`Key rotation completed for ${result.service_name}`);
           }
         } catch (error) {
-          log.warn(
-            `Failed to decrypt API key for service: ${result.service_name}`,
-            error as Error,
-          );
+          log.warn(`Failed to decrypt API key for service: ${result.service_name}`, error as Error);
         }
       }
     }
 
-    log.success(
-      `Retrieved ${Object.keys(apiKeys).length} optional API keys for server ${serverId}`,
-    );
+    log.success(`Retrieved ${Object.keys(apiKeys).length} optional API keys for server ${serverId}`);
     return apiKeys;
   } catch (error) {
-    log.error(
-      `Failed to retrieve optional API keys for server ${serverId}`,
-      error as Error,
-    );
+    log.error(`Failed to retrieve optional API keys for server ${serverId}`, error as Error);
     return {};
   }
 };
@@ -317,34 +273,24 @@ export const getAllOptApiKeysForServer = async (
  * @param serviceName - Name of the service
  * @returns Promise<boolean> - True if deleted successfully
  */
-export const deleteOptApiKey = async (
-  serverId: number,
-  serviceName: string,
-): Promise<boolean> => {
+export const deleteOptApiKey = async (serverId: number, serviceName: string): Promise<boolean> => {
   if (!serviceName || !serverId) {
     log.warn("Missing required parameters for optional API key deletion");
     return false;
   }
 
   try {
-    log.info(
-      `Deleting optional API key for server ${serverId}, service: ${serviceName}`,
-    );
+    log.info(`Deleting optional API key for server ${serverId}, service: ${serviceName}`);
 
     await sql`
 			DELETE FROM opt_api_keys
 			WHERE server_id = ${serverId} AND service_name = ${serviceName}
 		`;
 
-    log.success(
-      `Optional API key deleted successfully for ${serviceName} on server ${serverId}`,
-    );
+    log.success(`Optional API key deleted successfully for ${serviceName} on server ${serverId}`);
     return true;
   } catch (error) {
-    log.error(
-      `Failed to delete optional API key for ${serviceName}`,
-      error as Error,
-    );
+    log.error(`Failed to delete optional API key for ${serviceName}`, error as Error);
     return false;
   }
 };
@@ -355,10 +301,7 @@ export const deleteOptApiKey = async (
  * @param serviceName - Name of the service
  * @returns Promise<boolean> - True if key exists
  */
-export const hasOptApiKey = async (
-  serverId: number,
-  serviceName: string,
-): Promise<boolean> => {
+export const hasOptApiKey = async (serverId: number, serviceName: string): Promise<boolean> => {
   if (!serviceName || !serverId) {
     return false;
   }
@@ -372,10 +315,7 @@ export const hasOptApiKey = async (
 
     return !!result;
   } catch (error) {
-    log.error(
-      `Failed to check optional API key existence for ${serviceName}`,
-      error as Error,
-    );
+    log.error(`Failed to check optional API key existence for ${serviceName}`, error as Error);
     return false;
   }
 };

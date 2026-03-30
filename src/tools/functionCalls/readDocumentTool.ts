@@ -6,29 +6,15 @@
  */
 
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  isExtractableDocument,
-  extractTextFromUrl,
-} from "@/utils/documents/textExtractor";
+import { isExtractableDocument, extractTextFromUrl } from "@/utils/documents/textExtractor";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "@/types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "@/types/tool/interfaces";
 
 /** Max file size for inline document reading (in bytes) */
-const CHAT_DOCUMENT_MAX_SIZE_BYTES =
-  Number.parseInt(process.env.CHAT_DOCUMENT_MAX_SIZE_MB || "8", 10) *
-  1024 *
-  1024;
+const CHAT_DOCUMENT_MAX_SIZE_BYTES = Number.parseInt(process.env.CHAT_DOCUMENT_MAX_SIZE_MB || "8", 10) * 1024 * 1024;
 
 /** Max extracted text length per document (characters) */
-const CHAT_DOCUMENT_MAX_TEXT_LENGTH = Number.parseInt(
-  process.env.CHAT_DOCUMENT_MAX_TEXT_LENGTH || "100000",
-  10,
-);
+const CHAT_DOCUMENT_MAX_TEXT_LENGTH = Number.parseInt(process.env.CHAT_DOCUMENT_MAX_TEXT_LENGTH || "100000", 10);
 
 /**
  * Tool for reading document attachments (PDF, TXT, MD) from Discord messages.
@@ -84,10 +70,7 @@ export class ReadDocumentTool extends BaseTool {
    * @param context - Tool execution context with Discord client access
    * @returns Promise resolving to tool result with extracted text
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // 1. Validate required parameters
     const messageId = args.message_id as string;
     const filenameFilter = args.filename as string | undefined;
@@ -115,9 +98,7 @@ export class ReadDocumentTool extends BaseTool {
       // 3. Find the target message by ID
       const targetMessage = recentMessages.get(messageId);
       if (!targetMessage) {
-        log.warn(
-          `ReadDocumentTool: Message ${messageId} not found in recent 100 messages`,
-        );
+        log.warn(`ReadDocumentTool: Message ${messageId} not found in recent 100 messages`);
         return {
           success: false,
           error: "Message not found",
@@ -144,10 +125,7 @@ export class ReadDocumentTool extends BaseTool {
         }
 
         // If a filename filter is provided, match against it
-        if (
-          filenameFilter &&
-          !attachName.toLowerCase().includes(filenameFilter.toLowerCase())
-        ) {
+        if (filenameFilter && !attachName.toLowerCase().includes(filenameFilter.toLowerCase())) {
           continue;
         }
 
@@ -161,12 +139,8 @@ export class ReadDocumentTool extends BaseTool {
       }
 
       if (!docAttachment) {
-        const filterNote = filenameFilter
-          ? ` matching "${filenameFilter}"`
-          : "";
-        log.warn(
-          `ReadDocumentTool: No document attachment${filterNote} found in message ${messageId}`,
-        );
+        const filterNote = filenameFilter ? ` matching "${filenameFilter}"` : "";
+        log.warn(`ReadDocumentTool: No document attachment${filterNote} found in message ${messageId}`);
         return {
           success: false,
           error: "No document found",
@@ -198,17 +172,12 @@ export class ReadDocumentTool extends BaseTool {
       );
 
       // 6. Download and extract text
-      const result = await extractTextFromUrl(
-        docAttachment.url,
-        docAttachment.name,
-        docAttachment.contentType,
-        {
-          maxSizeBytes: CHAT_DOCUMENT_MAX_SIZE_BYTES,
-          maxTextLength: CHAT_DOCUMENT_MAX_TEXT_LENGTH,
-          knownSize: docAttachment.size,
-          timeoutMs: 15000,
-        },
-      );
+      const result = await extractTextFromUrl(docAttachment.url, docAttachment.name, docAttachment.contentType, {
+        maxSizeBytes: CHAT_DOCUMENT_MAX_SIZE_BYTES,
+        maxTextLength: CHAT_DOCUMENT_MAX_TEXT_LENGTH,
+        knownSize: docAttachment.size,
+        timeoutMs: 15000,
+      });
 
       // 7. Handle extraction result
       if (!result.success) {
@@ -217,21 +186,16 @@ export class ReadDocumentTool extends BaseTool {
             "Document reading is temporarily unavailable due to memory pressure. Please try again later.",
           size_exceeded: `The document "${docAttachment.name}" is too large to read inline. Maximum size is ${CHAT_DOCUMENT_MAX_SIZE_BYTES / (1024 * 1024)} MB.`,
           timeout: "The document download timed out. Please try again later.",
-          download_failed:
-            "Failed to download the document. The file might be unavailable.",
+          download_failed: "Failed to download the document. The file might be unavailable.",
           extraction_failed:
             "Failed to extract text from the document. The file might be corrupted or in an unsupported format.",
-          empty_document:
-            "The document appears to be empty or contains no extractable text.",
+          empty_document: "The document appears to be empty or contains no extractable text.",
         };
 
         const errorMessage =
-          errorMessages[result.error ?? ""] ??
-          "An unexpected error occurred while reading the document.";
+          errorMessages[result.error ?? ""] ?? "An unexpected error occurred while reading the document.";
 
-        log.warn(
-          `ReadDocumentTool: Extraction failed for ${docAttachment.name}: ${result.error}`,
-        );
+        log.warn(`ReadDocumentTool: Extraction failed for ${docAttachment.name}: ${result.error}`);
 
         return {
           success: false,
@@ -253,10 +217,7 @@ export class ReadDocumentTool extends BaseTool {
       const truncationNote = result.truncated
         ? ` (truncated from ${result.originalLength?.toLocaleString()} to ${result.text?.length.toLocaleString()} characters)`
         : "";
-      const authorName =
-        targetMessage.author?.displayName ||
-        targetMessage.author?.username ||
-        "unknown user";
+      const authorName = targetMessage.author?.displayName || targetMessage.author?.username || "unknown user";
 
       // Build contextual header + document text for the LLM
       const documentContent = [
@@ -280,16 +241,12 @@ export class ReadDocumentTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(
-        `ReadDocumentTool: Failed to read document for message ${messageId}`,
-        error as Error,
-      );
+      log.error(`ReadDocumentTool: Failed to read document for message ${messageId}`, error as Error);
 
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
-        message:
-          "Failed to read the document due to an unexpected error. Please try again.",
+        message: "Failed to read the document due to an unexpected error. Please try again.",
         data: {
           status: "read_document_failed",
           message_id: messageId,

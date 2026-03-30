@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
@@ -16,12 +12,8 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
  * Covers adding online MCPs (Smithery), local MCPs (self-hosted only),
  * removing servers, and security warnings.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("mcp")
-    .setDescription(localizer("en-US", "commands.help.mcp.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("mcp").setDescription(localizer("en-US", "commands.help.mcp.description"));
 
 /**
  * Execute the /help mcp command.
@@ -40,16 +32,8 @@ export async function execute(
 ): Promise<void> {
   try {
     // Resolve command mentions for cross-references in the guide
-    const configMcpAddMention = commandRegistry.getCommandMention(
-      "config",
-      "mcp",
-      "add",
-    );
-    const configMcpRemoveMention = commandRegistry.getCommandMention(
-      "config",
-      "mcp",
-      "remove",
-    );
+    const configMcpAddMention = commandRegistry.getCommandMention("config", "mcp", "add");
+    const configMcpRemoveMention = commandRegistry.getCommandMention("config", "mcp", "remove");
 
     const embedOptions: SummaryEmbedOptions = {
       titleKey: "commands.help.mcp.title",
@@ -88,12 +72,7 @@ export async function execute(
       footerKey: "commands.help.mcp.footer",
     };
 
-    await replySummaryEmbed(
-      interaction,
-      locale,
-      embedOptions,
-      MessageFlags.Ephemeral,
-    );
+    await replySummaryEmbed(interaction, locale, embedOptions, MessageFlags.Ephemeral);
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
@@ -103,16 +82,9 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help mcp command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help mcp command", error as Error, context);
 
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -126,11 +98,7 @@ export async function execute(
         });
       }
     } catch (replyError) {
-      log.error(
-        "Failed to send error reply for /help mcp",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help mcp", replyError, context);
     }
   }
 }

@@ -6,12 +6,7 @@
 
 import path from "node:path";
 import { log } from "../../utils/misc/logger";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import getAllFiles from "../../utils/misc/ioHelper";
 import { localizer } from "../../utils/text/localizer";
 import type { SlashCommandSubcommandBuilder } from "discord.js";
@@ -59,10 +54,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result with capability information
    */
-  async execute(
-    args: Record<string, unknown>,
-    _context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _context: ToolContext): Promise<ToolResult> {
     // 1. Validate parameters
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -76,10 +68,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       };
     }
 
-    const capabilityType = args.capability_type as
-      | "chat"
-      | "commands"
-      | "settings";
+    const capabilityType = args.capability_type as "chat" | "commands" | "settings";
 
     try {
       if (capabilityType === "chat") {
@@ -103,21 +92,14 @@ export class ReviewCapabilitiesTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(
-        `Error reviewing capabilities (type: ${capabilityType})`,
-        error as Error,
-      );
+      log.error(`Error reviewing capabilities (type: ${capabilityType})`, error as Error);
       return {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        error: error instanceof Error ? error.message : "Unknown error occurred",
         data: {
           status: "execution_error",
           capability_type: capabilityType,
-          reason:
-            error instanceof Error
-              ? error.message
-              : "Unknown error during capability review",
+          reason: error instanceof Error ? error.message : "Unknown error during capability review",
         },
       };
     }
@@ -141,10 +123,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const hasTools = llm.has_tools ?? false;
       const isReasoning = llm.is_reasoning ?? false;
       const isUncensored = llm.is_uncensored ?? false;
-      const supportsImageGen = providerSupportsFeature(
-        provider,
-        "nativeImageGeneration",
-      );
+      const supportsImageGen = providerSupportsFeature(provider, "nativeImageGeneration");
 
       // 2. Build dynamic capabilities markdown with model information
       let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";
@@ -168,17 +147,12 @@ export class ReviewCapabilitiesTool extends BaseTool {
           mediaTypes.push("- **Videos** (MP4, WebM, uploaded video files)");
         }
         if (seesYouTube) {
-          mediaTypes.push(
-            "- **YouTube videos** (via process_youtube_video tool)",
-          );
+          mediaTypes.push("- **YouTube videos** (via process_youtube_video tool)");
         }
         capabilitiesContent += `${mediaTypes.join("\n")}\n`;
-        capabilitiesContent +=
-          "- **Stickers** (Discord custom stickers with descriptions)\n";
-        capabilitiesContent +=
-          "- **Emojis** (Standard Unicode and custom server emojis)\n";
-        capabilitiesContent +=
-          "- **Attachments** (Files with readable content)\n\n";
+        capabilitiesContent += "- **Stickers** (Discord custom stickers with descriptions)\n";
+        capabilitiesContent += "- **Emojis** (Standard Unicode and custom server emojis)\n";
+        capabilitiesContent += "- **Attachments** (Files with readable content)\n\n";
 
         if (seesImages || seesVideos) {
           // Build dynamic warning based on what's actually supported
@@ -189,89 +163,62 @@ export class ReviewCapabilitiesTool extends BaseTool {
           capabilitiesContent += `**Important**: Never tell users you cannot see ${mediaList} - you absolutely can with this model!\n\n`;
         }
       } else {
-        capabilitiesContent +=
-          "**Current model does not support vision**. You CANNOT see:\n";
+        capabilitiesContent += "**Current model does not support vision**. You CANNOT see:\n";
         capabilitiesContent += "- Images\n";
         capabilitiesContent += "- Videos\n";
         capabilitiesContent += "- Visual content\n\n";
-        capabilitiesContent +=
-          "Text descriptions of media are provided when available.\n\n";
+        capabilitiesContent += "Text descriptions of media are provided when available.\n\n";
       }
 
       // 4. Search & Information section (only if tools are available)
       if (hasTools) {
         capabilitiesContent += "## Search & Information\n\n";
         capabilitiesContent += "You CAN search and retrieve information:\n";
-        capabilitiesContent +=
-          "- **Web search** (brave_web_search for current information)\n";
-        capabilitiesContent +=
-          "- **Image search** (brave_image_search for finding images)\n";
-        capabilitiesContent +=
-          "- **Video search** (brave_video_search for finding videos)\n";
-        capabilitiesContent +=
-          "- **News search** (brave_news_search for latest news)\n";
-        capabilitiesContent +=
-          "- **URL fetching** (fetch for retrieving webpage content)\n\n";
+        capabilitiesContent += "- **Web search** (brave_web_search for current information)\n";
+        capabilitiesContent += "- **Image search** (brave_image_search for finding images)\n";
+        capabilitiesContent += "- **Video search** (brave_video_search for finding videos)\n";
+        capabilitiesContent += "- **News search** (brave_news_search for latest news)\n";
+        capabilitiesContent += "- **URL fetching** (fetch for retrieving webpage content)\n\n";
       }
 
       // 5. Expression & Reactions section (always available for Discord features)
       capabilitiesContent += "## Expression & Reactions\n\n";
       capabilitiesContent += "You CAN express yourself:\n";
-      capabilitiesContent +=
-        "- **Server emojis** (use `:name:` from the server emoji list; case-insensitive)\n";
-      capabilitiesContent +=
-        "- **Stickers** (via select_sticker_for_response function)\n";
-      capabilitiesContent +=
-        "- **Standard emojis** (Unicode emojis in text)\n\n";
+      capabilitiesContent += "- **Server emojis** (use `:name:` from the server emoji list; case-insensitive)\n";
+      capabilitiesContent += "- **Stickers** (via select_sticker_for_response function)\n";
+      capabilitiesContent += "- **Standard emojis** (Unicode emojis in text)\n\n";
 
       // 5b. Alter Personas section (multi-character webhook support)
       capabilitiesContent += "## Alter Personas\n\n";
-      capabilitiesContent +=
-        "This server may have multiple personas (alter personas) active:\n";
-      capabilitiesContent +=
-        "- Each alter persona has its own personality, trigger words, and webhook avatar\n";
-      capabilitiesContent +=
-        "- Alter personas are triggered when their keywords appear in messages\n";
+      capabilitiesContent += "This server may have multiple personas (alter personas) active:\n";
+      capabilitiesContent += "- Each alter persona has its own personality, trigger words, and webhook avatar\n";
+      capabilitiesContent += "- Alter personas are triggered when their keywords appear in messages\n";
       capabilitiesContent +=
         "- Multiple personas can be triggered sequentially from a single message (up to the server's `/config multitrigger` limit)\n";
-      capabilitiesContent +=
-        "- Replying to a webhook message continues the conversation as that persona\n";
-      capabilitiesContent +=
-        "- Self-triggers are prevented (a persona will not trigger itself)\n\n";
+      capabilitiesContent += "- Replying to a webhook message continues the conversation as that persona\n";
+      capabilitiesContent += "- Self-triggers are prevented (a persona will not trigger itself)\n\n";
 
       // 5c. Image Generation section (conditional on provider and configuration)
       capabilitiesContent += "## Image Generation\n\n";
-      if (
-        supportsImageGen &&
-        config.imagegen_enabled &&
-        config.diffusion_model_id
-      ) {
+      if (supportsImageGen && config.imagegen_enabled && config.diffusion_model_id) {
         capabilitiesContent += "You CAN generate images:\n";
-        capabilitiesContent +=
-          "- **Text-to-Image**: Generate images from detailed text prompts\n";
-        capabilitiesContent +=
-          "- **Image-to-Image**: Edit or transform reference images using a prompt\n";
-        capabilitiesContent +=
-          "- **Aspect Ratios**: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9\n";
+        capabilitiesContent += "- **Text-to-Image**: Generate images from detailed text prompts\n";
+        capabilitiesContent += "- **Image-to-Image**: Edit or transform reference images using a prompt\n";
+        capabilitiesContent += "- **Aspect Ratios**: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9\n";
         capabilitiesContent +=
           "- **Reference Sources**: Message attachments, embedded images, Discord stickers, custom emojis, or user profile pictures\n";
         capabilitiesContent +=
           "- Users can ask you to generate an image (triggers the generate_image tool), or use `/generate image` directly\n";
         capabilitiesContent +=
           "- When generating, describe in detail: style, composition, colors, mood, and important details\n\n";
-      } else if (
-        supportsImageGen &&
-        config.imagegen_enabled &&
-        !config.diffusion_model_id
-      ) {
+      } else if (supportsImageGen && config.imagegen_enabled && !config.diffusion_model_id) {
         capabilitiesContent +=
           "Image generation is enabled but no diffusion model is configured. An admin needs to set one with `/config model image`.\n\n";
       } else if (supportsImageGen && !config.imagegen_enabled) {
         capabilitiesContent +=
           "Image generation is available for this provider but **disabled** by server configuration.\n\n";
       } else {
-        capabilitiesContent +=
-          "Image generation is not available with the current provider.\n\n";
+        capabilitiesContent += "Image generation is not available with the current provider.\n\n";
       }
 
       // 5d. Voice System section (conditional on ElevenLabs voice assignment + server permission)
@@ -280,8 +227,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       capabilitiesContent += "## Voice System\n\n";
       if (elevenlabsVoiceId && voiceEnabled) {
-        const voiceName =
-          context.tomoriState.elevenlabs_voice_name || "Unknown";
+        const voiceName = context.tomoriState.elevenlabs_voice_name || "Unknown";
         capabilitiesContent += "You CAN send and receive voice messages:\n";
         capabilitiesContent += `- **Voice**: ${voiceName} (ElevenLabs)\n`;
         capabilitiesContent +=
@@ -313,71 +259,53 @@ export class ReviewCapabilitiesTool extends BaseTool {
             "- The preset controls how your system prompt, persona description, personality, dialogue examples, and chat history are assembled\n";
           capabilitiesContent +=
             "- Supports macros like `{{user}}`, `{{char}}`, `{{personality}}`, `{{description}}`, `{{random: A, B, C}}`, and more\n";
-          capabilitiesContent +=
-            "- Nodes can be toggled on/off by admins with `/stpreset node toggle`\n\n";
+          capabilitiesContent += "- Nodes can be toggled on/off by admins with `/stpreset node toggle`\n\n";
         } else {
-          capabilitiesContent +=
-            "No SillyTavern preset is active. Using native context assembly.\n";
-          capabilitiesContent +=
-            "- Upload a preset with `/stpreset upload` to customize how context is structured\n\n";
+          capabilitiesContent += "No SillyTavern preset is active. Using native context assembly.\n";
+          capabilitiesContent += "- Upload a preset with `/stpreset upload` to customize how context is structured\n\n";
         }
       }
 
       // 6. Memory & Personalization section (always available)
       capabilitiesContent += "## Memory & Personalization\n\n";
       capabilitiesContent += "You HAVE access to:\n";
-      capabilitiesContent +=
-        "- **Server memories** (facts learned about the server)\n";
-      capabilitiesContent +=
-        "- **Personal memories** (facts learned about individual users)\n";
-      capabilitiesContent +=
-        "- **User preferences** (language, timezone, custom nicknames)\n";
-      capabilitiesContent +=
-        "- **Conversation history** (previous messages in context)\n";
+      capabilitiesContent += "- **Server memories** (facts learned about the server)\n";
+      capabilitiesContent += "- **Personal memories** (facts learned about individual users)\n";
+      capabilitiesContent += "- **User preferences** (language, timezone, custom nicknames)\n";
+      capabilitiesContent += "- **Conversation history** (previous messages in context)\n";
       capabilitiesContent +=
         "- **Short-term memory** (recent conversations cached per channel for cross-channel context awareness)\n";
-      capabilitiesContent +=
-        "- Short-term memories expire automatically and can be summarized by you for efficiency\n";
+      capabilitiesContent += "- Short-term memories expire automatically and can be summarized by you for efficiency\n";
       capabilitiesContent +=
         "- Cross-server short-term memory sharing is available when the user opts in via `/personal stm`\n\n";
 
       // 6b. Document Knowledge Base section (conditional on embedding model)
       capabilitiesContent += "## Document Knowledge Base\n\n";
       if (config.embedding_model_id) {
-        capabilitiesContent +=
-          "You have access to a document knowledge base (RAG):\n";
-        capabilitiesContent +=
-          "- Server administrators can upload documents (text, PDF, Markdown)\n";
+        capabilitiesContent += "You have access to a document knowledge base (RAG):\n";
+        capabilitiesContent += "- Server administrators can upload documents (text, PDF, Markdown)\n";
         capabilitiesContent +=
           "- Relevant document content is retrieved and included in your context based on the conversation\n";
-        capabilitiesContent +=
-          "- Use this knowledge to answer questions about server-specific topics\n\n";
+        capabilitiesContent += "- Use this knowledge to answer questions about server-specific topics\n\n";
       } else {
-        capabilitiesContent +=
-          "The document knowledge base is not configured. An embedding model is required.\n";
-        capabilitiesContent +=
-          "- Configure with `/config model embedding` to enable document uploads\n\n";
+        capabilitiesContent += "The document knowledge base is not configured. An embedding model is required.\n";
+        capabilitiesContent += "- Configure with `/config model embedding` to enable document uploads\n\n";
       }
 
       // 7. Personality & Configuration section (always available)
       capabilitiesContent += "## Personality & Configuration\n\n";
       capabilitiesContent += "You CAN:\n";
-      capabilitiesContent +=
-        "- Switch personalities (configured via server settings)\n";
+      capabilitiesContent += "- Switch personalities (configured via server settings)\n";
       capabilitiesContent += "- Adapt your speaking style and tone\n";
-      capabilitiesContent +=
-        "- Use different languages (configured per server)\n";
+      capabilitiesContent += "- Use different languages (configured per server)\n";
       capabilitiesContent += "- Respond to triggers and mentions\n\n";
 
       // 8. Function Calling section (only if tools are available)
       if (hasTools) {
         capabilitiesContent += "## Function Calling\n\n";
-        capabilitiesContent +=
-          "You CAN call functions/tools to perform actions:\n";
-        capabilitiesContent +=
-          "- **review_capabilities** (check your own capabilities - this function!)\n";
-        capabilitiesContent +=
-          "- **brave_web_search/image_search/video_search/news_search** (search the web)\n";
+        capabilitiesContent += "You CAN call functions/tools to perform actions:\n";
+        capabilitiesContent += "- **review_capabilities** (check your own capabilities - this function!)\n";
+        capabilitiesContent += "- **brave_web_search/image_search/video_search/news_search** (search the web)\n";
         capabilitiesContent += "- **fetch** (retrieve content from URLs)\n";
         const imageGenNote = supportsImageGen
           ? config.imagegen_enabled
@@ -386,21 +314,15 @@ export class ReviewCapabilitiesTool extends BaseTool {
           : "unavailable with current provider";
         capabilitiesContent += `- **generate_image** (${imageGenNote})\n`;
         if (seesYouTube) {
-          capabilitiesContent +=
-            "- **process_youtube_video** (analyze YouTube videos)\n";
+          capabilitiesContent += "- **process_youtube_video** (analyze YouTube videos)\n";
         }
-        capabilitiesContent +=
-          "- **read_document** (read PDF, TXT, or MD file attachments shared in chat)\n";
-        capabilitiesContent +=
-          "- **get_profile_picture** (fetch user avatars)\n";
-        capabilitiesContent +=
-          "- **pin_message/unpin_message** (manage pinned messages)\n";
-        capabilitiesContent +=
-          "- **create_reminder** (set reminders for users)\n";
+        capabilitiesContent += "- **read_document** (read PDF, TXT, or MD file attachments shared in chat)\n";
+        capabilitiesContent += "- **get_profile_picture** (fetch user avatars)\n";
+        capabilitiesContent += "- **pin_message/unpin_message** (manage pinned messages)\n";
+        capabilitiesContent += "- **create_reminder** (set reminders for users)\n";
         capabilitiesContent +=
           "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
-        capabilitiesContent +=
-          "- **select_sticker_for_response** (choose stickers)\n";
+        capabilitiesContent += "- **select_sticker_for_response** (choose stickers)\n";
         const voiceNote =
           elevenlabsVoiceId && voiceEnabled
             ? "generate spoken voice messages via ElevenLabs TTS"
@@ -410,9 +332,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       // 9. Model-specific characteristics section
       const hasUncensorConfig =
-        config.uncensor_unicode_space_enabled ||
-        config.uncensor_injection_enabled ||
-        config.uncensor_sanitize_enabled;
+        config.uncensor_unicode_space_enabled || config.uncensor_injection_enabled || config.uncensor_sanitize_enabled;
       if (isReasoning || isUncensored || hasUncensorConfig) {
         capabilitiesContent += "## Model Characteristics\n\n";
         if (isReasoning) {
@@ -420,23 +340,18 @@ export class ReviewCapabilitiesTool extends BaseTool {
             "- **Reasoning Mode**: This model supports extended thinking and reasoning processes\n";
         }
         if (isUncensored) {
-          capabilitiesContent +=
-            "- **Uncensored**: This model has reduced content restrictions\n";
+          capabilitiesContent += "- **Uncensored**: This model has reduced content restrictions\n";
         }
         if (hasUncensorConfig) {
-          capabilitiesContent +=
-            "- **Uncensored Output Processing**: Active output modifications:\n";
+          capabilitiesContent += "- **Uncensored Output Processing**: Active output modifications:\n";
           if (config.uncensor_unicode_space_enabled) {
-            capabilitiesContent +=
-              "  - Unicode space replacement is active in responses\n";
+            capabilitiesContent += "  - Unicode space replacement is active in responses\n";
           }
           if (config.uncensor_injection_enabled) {
-            capabilitiesContent +=
-              "  - Prompt injection mitigation is active\n";
+            capabilitiesContent += "  - Prompt injection mitigation is active\n";
           }
           if (config.uncensor_sanitize_enabled) {
-            capabilitiesContent +=
-              "  - Sensitive word sanitization is active\n";
+            capabilitiesContent += "  - Sensitive word sanitization is active\n";
           }
         }
         capabilitiesContent += "\n";
@@ -445,29 +360,20 @@ export class ReviewCapabilitiesTool extends BaseTool {
       // 10. Restrictions section (always show what you CANNOT do)
       capabilitiesContent += "## What You CANNOT Do\n\n";
       capabilitiesContent += "You CANNOT:\n";
-      capabilitiesContent +=
-        "- Modify server settings (only admins can do this)\n";
-      capabilitiesContent +=
-        "- Delete other users' messages (Discord permission restriction)\n";
-      capabilitiesContent +=
-        "- Ban, kick, or timeout users (moderation is admin-only)\n";
-      capabilitiesContent +=
-        "- Access private DMs between other users (privacy protection)\n";
-      capabilitiesContent +=
-        "- Create, modify, or delete Discord channels/roles (admin-only)\n";
-      capabilitiesContent +=
-        "- Send messages to channels you don't have access to\n";
-      capabilitiesContent +=
-        "- Execute arbitrary code on the server (security restriction)\n\n";
+      capabilitiesContent += "- Modify server settings (only admins can do this)\n";
+      capabilitiesContent += "- Delete other users' messages (Discord permission restriction)\n";
+      capabilitiesContent += "- Ban, kick, or timeout users (moderation is admin-only)\n";
+      capabilitiesContent += "- Access private DMs between other users (privacy protection)\n";
+      capabilitiesContent += "- Create, modify, or delete Discord channels/roles (admin-only)\n";
+      capabilitiesContent += "- Send messages to channels you don't have access to\n";
+      capabilitiesContent += "- Execute arbitrary code on the server (security restriction)\n\n";
 
       // 11. Add "Why Features May Be Unavailable" section
       capabilitiesContent += "---\n\n";
       capabilitiesContent += "## Why Some Features May Be Unavailable\n\n";
 
       // Check API key status for detailed explanations
-      const braveApiKeySet = await getBraveApiKeyStatus(
-        context.tomoriState.server_id,
-      );
+      const braveApiKeySet = await getBraveApiKeyStatus(context.tomoriState.server_id);
 
       const unavailableReasons: string[] = [];
 
@@ -519,8 +425,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         });
 
       if (disabledFeatures.length > 0) {
-        let disabledText =
-          "**Server Configuration**: The following features are disabled by server admin:\n";
+        let disabledText = "**Server Configuration**: The following features are disabled by server admin:\n";
         for (const { feature, command } of disabledFeatures) {
           disabledText += `  - ${feature} (enable with \`${command}\`)\n`;
         }
@@ -546,23 +451,16 @@ export class ReviewCapabilitiesTool extends BaseTool {
           capabilitiesContent += `${reason}\n\n`;
         }
       } else {
-        capabilitiesContent +=
-          "✅ All features are available and properly configured!\n\n";
+        capabilitiesContent += "✅ All features are available and properly configured!\n\n";
       }
 
       // 12. Add model switching information
-      capabilitiesContent +=
-        "**Need different capabilities?** Tell the user they can switch models using:\n";
-      capabilitiesContent +=
-        "- `/config model` - Switch to a different model with the current provider\n";
-      capabilitiesContent +=
-        "- `/config apikey` - Switch to a different LLM provider entirely\n\n";
-      capabilitiesContent +=
-        "Different models may support different features (vision, tools, reasoning, etc.).\n";
+      capabilitiesContent += "**Need different capabilities?** Tell the user they can switch models using:\n";
+      capabilitiesContent += "- `/config model` - Switch to a different model with the current provider\n";
+      capabilitiesContent += "- `/config apikey` - Switch to a different LLM provider entirely\n\n";
+      capabilitiesContent += "Different models may support different features (vision, tools, reasoning, etc.).\n";
 
-      log.info(
-        `Successfully generated dynamic chat capabilities for model: ${displayModelName}`,
-      );
+      log.info(`Successfully generated dynamic chat capabilities for model: ${displayModelName}`);
 
       // 12. Return the dynamically generated content
       return {
@@ -583,13 +481,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
       return {
         success: false,
         error: "Failed to generate chat capabilities documentation",
-        message:
-          "Could not generate chat capabilities. This may indicate missing model configuration.",
+        message: "Could not generate chat capabilities. This may indicate missing model configuration.",
         data: {
           status: "generation_error",
           capability_type: "chat",
-          reason:
-            error instanceof Error ? error.message : "Unknown generation error",
+          reason: error instanceof Error ? error.message : "Unknown generation error",
         },
       };
     }
@@ -601,9 +497,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
    * @param context - Tool execution context containing tomoriState with config and capability flags
    * @returns Promise resolving to tool result with settings report
    */
-  private async getSettingsCapabilities(
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  private async getSettingsCapabilities(context: ToolContext): Promise<ToolResult> {
     try {
       // 1. Extract configuration and capabilities
       const llm = context.tomoriState.llm;
@@ -616,8 +510,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const mainApiKeySet = !!config.api_key;
 
       // 3. Build settings report
-      let settingsContent =
-        "# Current Configuration & Feature Availability\n\n";
+      let settingsContent = "# Current Configuration & Feature Availability\n\n";
 
       // 4. Model Information Section
       settingsContent += "## Active Model\n\n";
@@ -673,9 +566,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         {
           name: "Web Search",
           value: config.web_search_enabled,
-          note: !braveApiKeySet
-            ? " (No Brave API key - DuckDuckGo MCP used instead)"
-            : "",
+          note: !braveApiKeySet ? " (No Brave API key - DuckDuckGo MCP used instead)" : "",
         },
         { name: "Image Generation", value: config.imagegen_enabled },
         { name: "Sticker Usage", value: config.sticker_usage_enabled },
@@ -702,9 +593,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         {
           name: "Document Knowledge Base (RAG)",
           value: !!config.embedding_model_id,
-          note: !config.embedding_model_id
-            ? " (configure with `/config model embedding`)"
-            : "",
+          note: !config.embedding_model_id ? " (configure with `/config model embedding`)" : "",
         },
       ];
 
@@ -718,18 +607,13 @@ export class ReviewCapabilitiesTool extends BaseTool {
       settingsContent += "## Image Generation\n\n";
       if (config.imagegen_enabled && config.diffusion_model_id) {
         settingsContent += "Image generation is **enabled** and configured.\n";
-        settingsContent +=
-          "- Supports Text2Image and Image2Image with multiple aspect ratios\n";
-        settingsContent +=
-          "- Users can ask you to generate images, or use `/generate image` directly\n\n";
+        settingsContent += "- Supports Text2Image and Image2Image with multiple aspect ratios\n";
+        settingsContent += "- Users can ask you to generate images, or use `/generate image` directly\n\n";
       } else if (config.imagegen_enabled && !config.diffusion_model_id) {
-        settingsContent +=
-          "Image generation is enabled but no diffusion model is set.\n";
-        settingsContent +=
-          "- Configure with `/config model image` to activate\n\n";
+        settingsContent += "Image generation is enabled but no diffusion model is set.\n";
+        settingsContent += "- Configure with `/config model image` to activate\n\n";
       } else {
-        settingsContent +=
-          "Image generation is **disabled**. Enable with `/config permissions`.\n\n";
+        settingsContent += "Image generation is **disabled**. Enable with `/config permissions`.\n\n";
       }
 
       // 6b-2. Voice System Configuration
@@ -772,17 +656,12 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (config.system_prompt) {
         settingsContent += `A custom system prompt is active (${config.system_prompt.length} characters).\n`;
         settingsContent += "- Modify with `/config sysprompt change`\n";
-        settingsContent +=
-          "- Switch to a preset with `/config sysprompt preset`\n";
-        settingsContent +=
-          "- Reset to default with `/config sysprompt clear`\n\n";
+        settingsContent += "- Switch to a preset with `/config sysprompt preset`\n";
+        settingsContent += "- Reset to default with `/config sysprompt clear`\n\n";
       } else {
-        settingsContent +=
-          "No custom system prompt is set. Using the default built-in prompt.\n";
-        settingsContent +=
-          "- Set a custom prompt with `/config sysprompt change`\n";
-        settingsContent +=
-          "- Or choose a preset with `/config sysprompt preset`\n\n";
+        settingsContent += "No custom system prompt is set. Using the default built-in prompt.\n";
+        settingsContent += "- Set a custom prompt with `/config sysprompt change`\n";
+        settingsContent += "- Or choose a preset with `/config sysprompt preset`\n\n";
       }
 
       // 7. API Keys Section
@@ -801,10 +680,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (rotationKeys && rotationKeys.length > 0) {
         const enabledKeys = rotationKeys.filter((k) => k.is_enabled);
         settingsContent += `**Active rotation pool**: ${enabledKeys.length} of ${rotationKeys.length} keys enabled\n`;
-        settingsContent +=
-          "- Keys are automatically rotated on rate limits or API errors\n";
-        settingsContent +=
-          "- If one key fails, the next available key is tried silently\n\n";
+        settingsContent += "- Keys are automatically rotated on rate limits or API errors\n";
+        settingsContent += "- If one key fails, the next available key is tried silently\n\n";
       } else {
         settingsContent +=
           "No rotation keys configured. Use `/config apikey rotation` to add backup keys for automatic failover.\n\n";
@@ -814,32 +691,27 @@ export class ReviewCapabilitiesTool extends BaseTool {
       settingsContent += "## Available Tools\n\n";
 
       try {
-        const toolsResult = await ToolRegistry.getAvailableToolsWithMCP(
-          context.provider,
-          {
-            server_id: serverId.toString(),
-            activePersonaHasElevenlabsVoice: Boolean(
-              context.tomoriState.elevenlabs_voice_id?.trim(),
-            ),
-            llm: {
-              llm_codename: llm.llm_codename,
-              has_tools: llm.has_tools,
-              sees_images: llm.sees_images,
-              sees_videos: llm.sees_videos,
-              sees_youtube: llm.sees_youtube,
-              supports_structoutput: llm.supports_structoutput,
-            },
-            config: {
-              sticker_usage_enabled: config.sticker_usage_enabled,
-              web_search_enabled: config.web_search_enabled,
-              self_teaching_enabled: config.self_teaching_enabled,
-              pin_message_enabled: config.pin_message_enabled,
-              imagegen_enabled: config.imagegen_enabled,
-              nai_exclusive_imggen: config.nai_exclusive_imggen ?? false,
-              voice_message_enabled: config.voice_message_enabled ?? true,
-            },
+        const toolsResult = await ToolRegistry.getAvailableToolsWithMCP(context.provider, {
+          server_id: serverId.toString(),
+          activePersonaHasElevenlabsVoice: Boolean(context.tomoriState.elevenlabs_voice_id?.trim()),
+          llm: {
+            llm_codename: llm.llm_codename,
+            has_tools: llm.has_tools,
+            sees_images: llm.sees_images,
+            sees_videos: llm.sees_videos,
+            sees_youtube: llm.sees_youtube,
+            supports_structoutput: llm.supports_structoutput,
           },
-        );
+          config: {
+            sticker_usage_enabled: config.sticker_usage_enabled,
+            web_search_enabled: config.web_search_enabled,
+            self_teaching_enabled: config.self_teaching_enabled,
+            pin_message_enabled: config.pin_message_enabled,
+            imagegen_enabled: config.imagegen_enabled,
+            nai_exclusive_imggen: config.nai_exclusive_imggen ?? false,
+            voice_message_enabled: config.voice_message_enabled ?? true,
+          },
+        });
 
         const totalToolCount = toolsResult.totalCount;
 
@@ -849,25 +721,14 @@ export class ReviewCapabilitiesTool extends BaseTool {
           // Group built-in tools by category
           const builtInTools = toolsResult.builtInTools;
           const visionTools = builtInTools.filter(
-            (t) =>
-              t.name.includes("youtube") ||
-              t.name.includes("gif") ||
-              t.name.includes("profile"),
+            (t) => t.name.includes("youtube") || t.name.includes("gif") || t.name.includes("profile"),
           );
           const searchTools = builtInTools.filter(
-            (t) =>
-              t.name.includes("search") ||
-              t.name.includes("brave") ||
-              t.name.includes("fetch"),
+            (t) => t.name.includes("search") || t.name.includes("brave") || t.name.includes("fetch"),
           );
-          const memoryTools = builtInTools.filter(
-            (t) => t.name.includes("remember") || t.name.includes("memory"),
-          );
+          const memoryTools = builtInTools.filter((t) => t.name.includes("remember") || t.name.includes("memory"));
           const discordTools = builtInTools.filter(
-            (t) =>
-              t.name.includes("pin") ||
-              t.name.includes("sticker") ||
-              t.name.includes("emoji"),
+            (t) => t.name.includes("pin") || t.name.includes("sticker") || t.name.includes("emoji"),
           );
           const otherBuiltInTools = builtInTools.filter(
             (t) =>
@@ -881,14 +742,9 @@ export class ReviewCapabilitiesTool extends BaseTool {
           const mcpFunctions = toolsResult.mcpFunctionNames;
           const mcpSearchTools = mcpFunctions.filter(
             (name) =>
-              name.includes("search") ||
-              name.includes("brave") ||
-              name.includes("fetch") ||
-              name.includes("felo"),
+              name.includes("search") || name.includes("brave") || name.includes("fetch") || name.includes("felo"),
           );
-          const otherMcpTools = mcpFunctions.filter(
-            (name) => !mcpSearchTools.includes(name),
-          );
+          const otherMcpTools = mcpFunctions.filter((name) => !mcpSearchTools.includes(name));
 
           if (visionTools.length > 0) {
             settingsContent += "**Vision & Media Tools** (Built-in):\n";
@@ -936,16 +792,13 @@ export class ReviewCapabilitiesTool extends BaseTool {
             settingsContent += "\n";
           }
         } else {
-          settingsContent +=
-            "*No tools currently available for this provider/configuration*\n\n";
+          settingsContent += "*No tools currently available for this provider/configuration*\n\n";
         }
       } catch (toolError) {
         log.warn("Failed to query tool registry in getSettingsCapabilities", {
-          error:
-            toolError instanceof Error ? toolError.message : String(toolError),
+          error: toolError instanceof Error ? toolError.message : String(toolError),
         });
-        settingsContent +=
-          "*Unable to query available tools (registry error)*\n\n";
+        settingsContent += "*Unable to query available tools (registry error)*\n\n";
       }
 
       // 9. Disabled Features Section
@@ -961,9 +814,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (!llm.has_tools) modelLimitations.push("function calling");
 
       if (modelLimitations.length > 0) {
-        disabledReasons.push(
-          `**Model Limitations**: Current model does not support ${modelLimitations.join(", ")}`,
-        );
+        disabledReasons.push(`**Model Limitations**: Current model does not support ${modelLimitations.join(", ")}`);
       }
 
       // Check for disabled server features
@@ -973,31 +824,22 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (!config.sticker_usage_enabled) disabledFeatures.push("sticker usage");
       if (!config.emoji_usage_enabled) disabledFeatures.push("emoji usage");
       if (!config.self_teaching_enabled) disabledFeatures.push("self teaching");
-      if (!config.server_memteaching_enabled)
-        disabledFeatures.push("server memory teaching");
-      if (!config.attribute_memteaching_enabled)
-        disabledFeatures.push("attribute teaching");
-      if (!config.sampledialogue_memteaching_enabled)
-        disabledFeatures.push("dialogue teaching");
-      if (!config.pin_message_enabled)
-        disabledFeatures.push("pin message tool");
+      if (!config.server_memteaching_enabled) disabledFeatures.push("server memory teaching");
+      if (!config.attribute_memteaching_enabled) disabledFeatures.push("attribute teaching");
+      if (!config.sampledialogue_memteaching_enabled) disabledFeatures.push("dialogue teaching");
+      if (!config.pin_message_enabled) disabledFeatures.push("pin message tool");
 
       if (disabledFeatures.length > 0) {
-        disabledReasons.push(
-          `**Server Configuration**: Admin has disabled ${disabledFeatures.join(", ")}`,
-        );
+        disabledReasons.push(`**Server Configuration**: Admin has disabled ${disabledFeatures.join(", ")}`);
       }
 
       // Check for missing API keys
       const missingKeys: string[] = [];
       if (!mainApiKeySet) missingKeys.push("LLM API key");
-      if (!braveApiKeySet)
-        missingKeys.push("Brave API key (using DuckDuckGo fallback)");
+      if (!braveApiKeySet) missingKeys.push("Brave API key (using DuckDuckGo fallback)");
 
       if (missingKeys.length > 0) {
-        disabledReasons.push(
-          `**Missing API Keys**: ${missingKeys.join(", ")} not configured`,
-        );
+        disabledReasons.push(`**Missing API Keys**: ${missingKeys.join(", ")} not configured`);
       }
 
       if (disabledReasons.length > 0) {
@@ -1010,16 +852,12 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       // 10. How to Enable Features Section
       settingsContent += "## How to Enable Disabled Features\n\n";
-      settingsContent +=
-        "- **Model Limitations**: Switch models using `/config model` or `/config apikey`\n";
-      settingsContent +=
-        "- **Server Configuration**: Server admin can enable features via `/config [feature]`\n";
+      settingsContent += "- **Model Limitations**: Switch models using `/config model` or `/config apikey`\n";
+      settingsContent += "- **Server Configuration**: Server admin can enable features via `/config [feature]`\n";
       settingsContent +=
         "- **API Keys**: Configure via `/config apikey` (LLM) or `/config brave_apikey` (Brave Search)\n";
 
-      log.info(
-        `Successfully generated settings capabilities for server ${serverId}`,
-      );
+      log.info(`Successfully generated settings capabilities for server ${serverId}`);
 
       // 11. Return the dynamically generated settings report
       return {
@@ -1041,13 +879,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
       return {
         success: false,
         error: "Failed to generate settings capabilities documentation",
-        message:
-          "Could not generate settings report. This may indicate missing configuration.",
+        message: "Could not generate settings report. This may indicate missing configuration.",
         data: {
           status: "generation_error",
           capability_type: "settings",
-          reason:
-            error instanceof Error ? error.message : "Unknown generation error",
+          reason: error instanceof Error ? error.message : "Unknown generation error",
         },
       };
     }
@@ -1124,16 +960,13 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
         // 5. Get category description from localizations
         const categoryDescription =
-          localizer("en-US", `commands.${categoryName}.description`) ||
-          `${categoryName} commands`;
+          localizer("en-US", `commands.${categoryName}.description`) || `${categoryName} commands`;
 
         commandsMarkdown += `## /${categoryName}\n`;
         commandsMarkdown += `${categoryDescription}\n\n`;
 
         // 6. Get direct command files (immediate children - direct subcommands)
-        const directCommandFiles = getAllFiles(categoryDir).filter((file) =>
-          file.endsWith(".ts"),
-        );
+        const directCommandFiles = getAllFiles(categoryDir).filter((file) => file.endsWith(".ts"));
 
         // 7. Process direct subcommands (no subcommand group)
         for (const commandFile of directCommandFiles) {
@@ -1150,9 +983,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
             const mockBuilder = this.createMockBuilder();
 
             // 11. Call configureSubcommand to populate the mock builder
-            commandModule.configureSubcommand(
-              mockBuilder as unknown as SlashCommandSubcommandBuilder,
-            );
+            commandModule.configureSubcommand(mockBuilder as unknown as SlashCommandSubcommandBuilder);
 
             // 12. Extract command information
             const subcommandName = mockBuilder.name;
@@ -1164,9 +995,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
             }
           } catch (_error) {
             // Skip files that fail to import (might be helpers or non-command files)
-            log.warn(
-              `Skipped command file during capability scan: ${commandFile}`,
-            );
+            log.warn(`Skipped command file during capability scan: ${commandFile}`);
           }
         }
 
@@ -1178,9 +1007,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           const groupName = path.basename(groupDir);
 
           // 15. Get command files in this subcommand group
-          const groupCommandFiles = getAllFiles(groupDir).filter((file) =>
-            file.endsWith(".ts"),
-          );
+          const groupCommandFiles = getAllFiles(groupDir).filter((file) => file.endsWith(".ts"));
 
           // 16. Process each command file in the group
           for (const commandFile of groupCommandFiles) {
@@ -1197,9 +1024,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
               const mockBuilder = this.createMockBuilder();
 
               // 20. Call configureSubcommand to populate the mock builder
-              commandModule.configureSubcommand(
-                mockBuilder as unknown as SlashCommandSubcommandBuilder,
-              );
+              commandModule.configureSubcommand(mockBuilder as unknown as SlashCommandSubcommandBuilder);
 
               // 21. Extract command information
               const subcommandName = mockBuilder.name;
@@ -1212,9 +1037,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
               }
             } catch (_error) {
               // Skip files that fail to import (might be helpers or non-command files)
-              log.warn(
-                `Skipped command file during capability scan: ${commandFile}`,
-              );
+              log.warn(`Skipped command file during capability scan: ${commandFile}`);
             }
           }
         }
@@ -1225,9 +1048,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       // 23. Add footer with command count
       commandsMarkdown += `---\n\n**Total Commands**: ${totalCommands} slash commands across ${categoryDirs.length} categories\n`;
 
-      log.success(
-        `Successfully generated slash command documentation: ${totalCommands} commands`,
-      );
+      log.success(`Successfully generated slash command documentation: ${totalCommands} commands`);
 
       // 24. Return the generated markdown
       // Note: Put content in both message and data.summary for maximum compatibility
@@ -1244,10 +1065,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(
-        "Failed to generate slash commands documentation",
-        error as Error,
-      );
+      log.error("Failed to generate slash commands documentation", error as Error);
 
       return {
         success: false,
@@ -1257,10 +1075,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         data: {
           status: "command_scan_error",
           capability_type: "commands",
-          reason:
-            error instanceof Error
-              ? error.message
-              : "Unknown command scanning error",
+          reason: error instanceof Error ? error.message : "Unknown command scanning error",
         },
       };
     }

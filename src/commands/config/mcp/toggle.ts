@@ -5,17 +5,10 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import {
-  getCachedGuildMcpConfigs,
-  invalidateGuildMcpConfigCache,
-} from "@/utils/cache/guildMcpConfigCache";
+import { getCachedGuildMcpConfigs, invalidateGuildMcpConfigCache } from "@/utils/cache/guildMcpConfigCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
 import { updateGuildMcpServerEnabled } from "@/utils/db/guildMcpDb";
@@ -34,14 +27,8 @@ const STATE_SELECT_ID = "mcp_enabled_select";
  * No options needed — server and state selection happen via modal string selects.
  * @param subcommand - The subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("toggle")
-    .setDescription(
-      localizer("en-US", "commands.config.mcp.toggle.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("toggle").setDescription(localizer("en-US", "commands.config.mcp.toggle.description"));
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -133,15 +120,9 @@ export async function execute(
             required: false,
             options: [
               {
-                label: localizer(
-                  locale,
-                  "commands.config.mcp.toggle.enable_option",
-                ),
+                label: localizer(locale, "commands.config.mcp.toggle.enable_option"),
                 value: "enable",
-                description: localizer(
-                  locale,
-                  "commands.config.mcp.toggle.enable_option_description",
-                ),
+                description: localizer(locale, "commands.config.mcp.toggle.enable_option_description"),
               },
             ],
           },
@@ -151,9 +132,7 @@ export async function execute(
     );
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `[MCP Toggle] Modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`[MCP Toggle] Modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -175,16 +154,10 @@ export async function execute(
     }
 
     // Checkbox Group: "enable" in multiValues = enabled, absent = disabled
-    const enabled = (modalResult.multiValues?.[STATE_SELECT_ID] ?? []).includes(
-      "enable",
-    );
+    const enabled = (modalResult.multiValues?.[STATE_SELECT_ID] ?? []).includes("enable");
 
     // 5. Update DB
-    const updated = await updateGuildMcpServerEnabled(
-      tomoriState.server_id,
-      name,
-      enabled,
-    );
+    const updated = await updateGuildMcpServerEnabled(tomoriState.server_id, name, enabled);
     if (!updated) {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.config.mcp.toggle.not_found_title",
@@ -200,10 +173,7 @@ export async function execute(
 
     // 7. If disabling, disconnect from pool
     if (!enabled) {
-      await getGuildMcpManager().disconnectGuildServer(
-        tomoriState.server_id,
-        name,
-      );
+      await getGuildMcpManager().disconnectGuildServer(tomoriState.server_id, name);
     }
 
     // 8. Success
@@ -221,9 +191,7 @@ export async function execute(
       color: enabled ? ColorCode.SUCCESS : ColorCode.WARN,
     });
 
-    log.success(
-      `[MCP Toggle] Server "${name}" ${enabled ? "enabled" : "disabled"} for guild ${serverId}`,
-    );
+    log.success(`[MCP Toggle] Server "${name}" ${enabled ? "enabled" : "disabled"} for guild ${serverId}`);
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
@@ -232,11 +200,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "config mcp toggle" },
     };
-    await log.error(
-      "Error executing /config mcp toggle",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /config mcp toggle", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),

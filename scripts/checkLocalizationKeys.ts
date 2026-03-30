@@ -8,10 +8,8 @@ import { Glob } from "bun";
  */
 const log = {
   info: (msg: string) => console.log(`ℹ️  ${msg}`),
-  warn: (msg: string, error?: unknown) =>
-    console.warn(`⚠️  ${msg}`, error ? `| ${error}` : ""),
-  error: (msg: string, error?: unknown) =>
-    console.error(`❌ ${msg}`, error ? `| ${error}` : ""),
+  warn: (msg: string, error?: unknown) => console.warn(`⚠️  ${msg}`, error ? `| ${error}` : ""),
+  error: (msg: string, error?: unknown) => console.error(`❌ ${msg}`, error ? `| ${error}` : ""),
 };
 
 /**
@@ -141,11 +139,7 @@ function _extractStringLengthViolations(
   if (typeof obj === "object" && obj !== null) {
     for (const [key, value] of Object.entries(obj)) {
       const currentPath = prefix ? `${prefix}.${key}` : key;
-      const nestedViolations = _extractStringLengthViolations(
-        value,
-        currentPath,
-        maxLength,
-      );
+      const nestedViolations = _extractStringLengthViolations(value, currentPath, maxLength);
       for (const [nestedKey, violation] of nestedViolations) {
         violations.set(nestedKey, violation);
       }
@@ -331,9 +325,7 @@ function extractStringValues(obj: unknown, prefix = ""): Map<string, string> {
  * @param localeKeys - Map of locale names to their key sets
  * @returns Array of modal title length violations
  */
-async function checkModalTitleLengths(
-  localeKeys: Map<string, Set<string>>,
-): Promise<ModalTitleViolation[]> {
+async function checkModalTitleLengths(localeKeys: Map<string, Set<string>>): Promise<ModalTitleViolation[]> {
   const violations: ModalTitleViolation[] = [];
   const localesPath = join(process.cwd(), "src", "locales");
 
@@ -428,10 +420,7 @@ async function checkModalDescriptionLengths(
         }
       }
     } catch (error) {
-      log.error(
-        `Failed to check modal descriptions in locale: ${localeName}`,
-        error,
-      );
+      log.error(`Failed to check modal descriptions in locale: ${localeName}`, error);
     }
   }
 
@@ -455,9 +444,7 @@ async function checkCommandDescriptionLengths(
 
   for (const [localeName, keys] of localeKeys) {
     // Filter to only command description keys
-    const commandDescriptionKeys = Array.from(keys).filter(
-      isCommandDescriptionKey,
-    );
+    const commandDescriptionKeys = Array.from(keys).filter(isCommandDescriptionKey);
 
     if (commandDescriptionKeys.length === 0) continue;
 
@@ -488,10 +475,7 @@ async function checkCommandDescriptionLengths(
         }
       }
     } catch (error) {
-      log.error(
-        `Failed to check command descriptions in locale: ${localeName}`,
-        error,
-      );
+      log.error(`Failed to check command descriptions in locale: ${localeName}`, error);
     }
   }
 
@@ -507,10 +491,7 @@ async function checkCommandDescriptionLengths(
 function isInSetDeclaration(content: string, matchIndex: number): boolean {
   // Look backwards from the match to find if it's in a Set declaration
   const lookbackDistance = 300;
-  const beforeMatch = content.substring(
-    Math.max(0, matchIndex - lookbackDistance),
-    matchIndex,
-  );
+  const beforeMatch = content.substring(Math.max(0, matchIndex - lookbackDistance), matchIndex);
 
   // Check for Set initialization patterns
   // These patterns look for: new Set([... or Set([... with optional type parameters
@@ -546,10 +527,7 @@ function isInSetDeclaration(content: string, matchIndex: number): boolean {
  * @param availableKeys - Set of all available locale keys to match against
  * @returns Array of matched keys
  */
-function extractDynamicTemplateKeys(
-  content: string,
-  availableKeys: Set<string>,
-): string[] {
+function extractDynamicTemplateKeys(content: string, availableKeys: Set<string>): string[] {
   const matchedKeys: string[] = [];
 
   // Pattern to find template literals with locale key prefixes
@@ -568,10 +546,7 @@ function extractDynamicTemplateKeys(
 
     // Look for string assignments to this variable in the same file
     // Patterns like: errorKey = "invalid_image_description"
-    const assignmentPattern = new RegExp(
-      `${variableName}\\s*=\\s*["']([a-zA-Z0-9._]+)["']`,
-      "g",
-    );
+    const assignmentPattern = new RegExp(`${variableName}\\s*=\\s*["']([a-zA-Z0-9._]+)["']`, "g");
 
     let assignmentMatch = assignmentPattern.exec(content);
     while (assignmentMatch !== null) {
@@ -600,16 +575,12 @@ function extractDynamicTemplateKeys(
  * @param availableKeys - Set of all available locale keys to match against
  * @returns Array of matched keys
  */
-function extractLocalizerTemplateKeys(
-  content: string,
-  availableKeys: Set<string>,
-): string[] {
+function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string>): string[] {
   const matchedKeys: string[] = [];
 
   // Pattern: localizer() with template literal as second argument
   // Matches: localizer(locale, `genai.google.${messageKey}`)
-  const localizerTemplatePattern =
-    /localizer\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`\)/g;
+  const localizerTemplatePattern = /localizer\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`\)/g;
 
   let match = localizerTemplatePattern.exec(content);
   while (match !== null) {
@@ -622,10 +593,7 @@ function extractLocalizerTemplateKeys(
 
     // Look for string literal assignments to this variable in the same file
     // Patterns like: messageKey = "429_default_message"
-    const assignmentPattern = new RegExp(
-      `${variableName}\\s*=\\s*["'\`]([a-zA-Z0-9._]+)["'\`]`,
-      "g",
-    );
+    const assignmentPattern = new RegExp(`${variableName}\\s*=\\s*["'\`]([a-zA-Z0-9._]+)["'\`]`, "g");
 
     let assignmentMatch = assignmentPattern.exec(content);
     while (assignmentMatch !== null) {
@@ -654,10 +622,7 @@ function extractLocalizerTemplateKeys(
  * @param availableKeys - Set of all available locale keys to match against
  * @returns Array of matched keys
  */
-function extractErrorCodeKeys(
-  content: string,
-  availableKeys: Set<string>,
-): string[] {
+function extractErrorCodeKeys(content: string, availableKeys: Set<string>): string[] {
   const matchedKeys: string[] = [];
 
   // Pattern 1: Template literals with variable + suffix
@@ -674,23 +639,10 @@ function extractErrorCodeKeys(
 
     // Look for all available keys that match this pattern
     // Common error codes and status codes
-    const commonCodes = [
-      "400",
-      "401",
-      "403",
-      "404",
-      "429",
-      "500",
-      "503",
-      "504",
-      "unknown",
-    ];
+    const commonCodes = ["400", "401", "403", "404", "429", "500", "503", "504", "unknown"];
 
     // Also search for numeric assignments in the file
-    const numericAssignPattern = new RegExp(
-      `${variableName}\\s*===?\\s*(\\d+|["']\\d+["'])`,
-      "g",
-    );
+    const numericAssignPattern = new RegExp(`${variableName}\\s*===?\\s*(\\d+|["']\\d+["'])`, "g");
     let numMatch = numericAssignPattern.exec(content);
     while (numMatch !== null) {
       const code = numMatch[1].replace(/["']/g, "");
@@ -711,8 +663,7 @@ function extractErrorCodeKeys(
 
   // Pattern 2: Template literals with prefix + variable
   // Matches: `genai.google.${errorCode}_default_message`
-  const templateWithPrefixPattern =
-    /`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`/g;
+  const templateWithPrefixPattern = /`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`/g;
 
   let prefixMatch = templateWithPrefixPattern.exec(content);
   while (prefixMatch !== null) {
@@ -724,23 +675,10 @@ function extractErrorCodeKeys(
     // (those have titleKey/descriptionKey before the backtick)
     const variableName = variable.split(/[.[]/)[0];
 
-    const commonCodes = [
-      "400",
-      "401",
-      "403",
-      "404",
-      "429",
-      "500",
-      "503",
-      "504",
-      "unknown",
-    ];
+    const commonCodes = ["400", "401", "403", "404", "429", "500", "503", "504", "unknown"];
 
     // Also search for numeric assignments in the file
-    const numericAssignPattern = new RegExp(
-      `${variableName}\\s*===?\\s*(\\d+|["']\\d+["'])`,
-      "g",
-    );
+    const numericAssignPattern = new RegExp(`${variableName}\\s*===?\\s*(\\d+|["']\\d+["'])`, "g");
     let numMatch = numericAssignPattern.exec(content);
     while (numMatch !== null) {
       const code = numMatch[1].replace(/["']/g, "");
@@ -767,9 +705,7 @@ function extractErrorCodeKeys(
  * @param availableKeys - Set of all available locale keys for dynamic key matching
  * @returns Map of referenced keys to files that reference them
  */
-async function extractReferencedKeys(
-  availableKeys: Set<string>,
-): Promise<Map<string, Set<string>>> {
+async function extractReferencedKeys(availableKeys: Set<string>): Promise<Map<string, Set<string>>> {
   const referencedKeys = new Map<string, Set<string>>();
   const srcPath = join(process.cwd(), "src");
 
@@ -833,10 +769,7 @@ async function extractReferencedKeys(
         }
 
         // Extract localizer template literal keys
-        const localizerTemplateKeys = extractLocalizerTemplateKeys(
-          content,
-          availableKeys,
-        );
+        const localizerTemplateKeys = extractLocalizerTemplateKeys(content, availableKeys);
         for (const key of localizerTemplateKeys) {
           if (!referencedKeys.has(key)) {
             referencedKeys.set(key, new Set());
@@ -869,9 +802,7 @@ async function extractReferencedKeys(
  * @param localeKeys - Map of locale names to their key sets
  * @returns Array of parity issues found
  */
-function checkLocaleParity(
-  localeKeys: Map<string, Set<string>>,
-): LocaleParityIssue[] {
+function checkLocaleParity(localeKeys: Map<string, Set<string>>): LocaleParityIssue[] {
   const parityIssues: LocaleParityIssue[] = [];
   const allLocales = Array.from(localeKeys.keys());
 
@@ -926,13 +857,11 @@ async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
 
   // Check modal description lengths
   log.info("📏 Checking modal description lengths...");
-  const modalDescriptionViolations =
-    await checkModalDescriptionLengths(localeKeys);
+  const modalDescriptionViolations = await checkModalDescriptionLengths(localeKeys);
 
   // Check command description lengths
   log.info("📏 Checking command description lengths...");
-  const commandDescriptionViolations =
-    await checkCommandDescriptionLengths(localeKeys);
+  const commandDescriptionViolations = await checkCommandDescriptionLengths(localeKeys);
 
   // Extract referenced keys from source code
   log.info("🔎 Scanning source code for referenced keys...");
@@ -981,9 +910,7 @@ function displayResults(results: AnalysisResult): void {
     console.log("\n🌐 LOCALE PARITY ISSUES (Keys missing in some locales):");
     console.log("-".repeat(60));
 
-    for (const { key, missingIn, presentIn } of results.parityIssues.sort(
-      (a, b) => a.key.localeCompare(b.key),
-    )) {
+    for (const { key, missingIn, presentIn } of results.parityIssues.sort((a, b) => a.key.localeCompare(b.key))) {
       console.log(`  ⚠️  ${key}`);
       console.log(`     ✅ Present in: ${presentIn.join(", ")}`);
       console.log(`     ❌ Missing in: ${missingIn.join(", ")}`);
@@ -994,17 +921,10 @@ function displayResults(results: AnalysisResult): void {
 
   // Modal title length violations section
   if (results.modalTitleViolations.length > 0) {
-    console.log(
-      "\n📏 MODAL TITLE LENGTH VIOLATIONS (Must be 5-45 characters for Discord):",
-    );
+    console.log("\n📏 MODAL TITLE LENGTH VIOLATIONS (Must be 5-45 characters for Discord):");
     console.log("-".repeat(60));
 
-    for (const {
-      key,
-      value,
-      length,
-      locale,
-    } of results.modalTitleViolations.sort((a, b) =>
+    for (const { key, value, length, locale } of results.modalTitleViolations.sort((a, b) =>
       a.key.localeCompare(b.key),
     )) {
       const status = length < 5 ? "Too short" : "Too long";
@@ -1018,17 +938,10 @@ function displayResults(results: AnalysisResult): void {
 
   // Modal description length violations section
   if (results.modalDescriptionViolations.length > 0) {
-    console.log(
-      "\n📏 MODAL DESCRIPTION LENGTH VIOLATIONS (Must be ≤99 characters for Discord):",
-    );
+    console.log("\n📏 MODAL DESCRIPTION LENGTH VIOLATIONS (Must be ≤99 characters for Discord):");
     console.log("-".repeat(60));
 
-    for (const {
-      key,
-      value,
-      length,
-      locale,
-    } of results.modalDescriptionViolations.sort((a, b) =>
+    for (const { key, value, length, locale } of results.modalDescriptionViolations.sort((a, b) =>
       a.key.localeCompare(b.key),
     )) {
       console.log(`  ⚠️  ${key} [${locale}]`);
@@ -1036,24 +949,15 @@ function displayResults(results: AnalysisResult): void {
       console.log(`     ℹ️  Discord requires ≤99 characters`);
     }
   } else {
-    console.log(
-      "\n✅ All modal descriptions meet Discord length requirements!",
-    );
+    console.log("\n✅ All modal descriptions meet Discord length requirements!");
   }
 
   // Command description length violations section
   if (results.commandDescriptionViolations.length > 0) {
-    console.log(
-      "\n📏 COMMAND DESCRIPTION LENGTH VIOLATIONS (Must be 1-100 characters for Discord):",
-    );
+    console.log("\n📏 COMMAND DESCRIPTION LENGTH VIOLATIONS (Must be 1-100 characters for Discord):");
     console.log("-".repeat(60));
 
-    for (const {
-      key,
-      value,
-      length,
-      locale,
-    } of results.commandDescriptionViolations.sort((a, b) =>
+    for (const { key, value, length, locale } of results.commandDescriptionViolations.sort((a, b) =>
       a.key.localeCompare(b.key),
     )) {
       const status = length < 1 ? "Empty" : "Too long";
@@ -1062,9 +966,7 @@ function displayResults(results: AnalysisResult): void {
       console.log(`     ℹ️  Discord requires 1-100 characters`);
     }
   } else {
-    console.log(
-      "\n✅ All command descriptions meet Discord length requirements!",
-    );
+    console.log("\n✅ All command descriptions meet Discord length requirements!");
   }
 
   // Missing keys section
@@ -1072,9 +974,7 @@ function displayResults(results: AnalysisResult): void {
     console.log("\n❌ MISSING LOCALIZATION KEYS (Referenced but don't exist):");
     console.log("-".repeat(60));
 
-    for (const { key, files } of results.missingKeys.sort((a, b) =>
-      a.key.localeCompare(b.key),
-    )) {
+    for (const { key, files } of results.missingKeys.sort((a, b) => a.key.localeCompare(b.key))) {
       console.log(`  ❌ ${key}`);
       console.log(
         `     📁 Used in ${files.size} files: ${Array.from(files).slice(0, 3).join(", ")}${files.size > 3 ? "..." : ""}`,
@@ -1104,30 +1004,18 @@ function displayResults(results: AnalysisResult): void {
   console.log("-".repeat(60));
   const localeNames = Array.from(results.localeKeys.keys());
   console.log(`  • ${localeNames.length} locales: ${localeNames.join(", ")}`);
-  console.log(
-    `  • ${results.availableKeys.size} total keys available across all locale files`,
-  );
-  console.log(
-    `  • ${results.referencedKeys.size} total keys referenced in source code`,
-  );
-  console.log(
-    `  • ${results.parityIssues.length} parity issues (keys missing in some locales)`,
-  );
-  console.log(
-    `  • ${results.modalTitleViolations.length} modal title length violations (must be 5-45 chars)`,
-  );
+  console.log(`  • ${results.availableKeys.size} total keys available across all locale files`);
+  console.log(`  • ${results.referencedKeys.size} total keys referenced in source code`);
+  console.log(`  • ${results.parityIssues.length} parity issues (keys missing in some locales)`);
+  console.log(`  • ${results.modalTitleViolations.length} modal title length violations (must be 5-45 chars)`);
   console.log(
     `  • ${results.modalDescriptionViolations.length} modal description length violations (must be ≤99 chars)`,
   );
   console.log(
     `  • ${results.commandDescriptionViolations.length} command description length violations (must be 1-100 chars)`,
   );
-  console.log(
-    `  • ${results.missingKeys.length} missing keys (referenced but don't exist)`,
-  );
-  console.log(
-    `  • ${results.unusedKeys.length} unused keys (exist but never referenced)`,
-  );
+  console.log(`  • ${results.missingKeys.length} missing keys (referenced but don't exist)`);
+  console.log(`  • ${results.unusedKeys.length} unused keys (exist but never referenced)`);
 
   if (
     results.missingKeys.length === 0 &&

@@ -1,15 +1,10 @@
-import {
-  CUSTOM_PROVIDER_PLACEHOLDER_API_KEY,
-  normalizeCustomApiUrl,
-} from "@/providers/custom/customStreamAdapter";
+import { CUSTOM_PROVIDER_PLACEHOLDER_API_KEY, normalizeCustomApiUrl } from "@/providers/custom/customStreamAdapter";
 import { logSanitizedOpenAICompatibleRequest } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
 import type { ProviderImageInput } from "@/types/provider/featureInterfaces";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 import { log } from "@/utils/misc/logger";
 
-export type CustomContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+export type CustomContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 export type CustomMessage =
   | { role: "system"; content: string }
@@ -49,9 +44,7 @@ export async function buildCustomUserContent(
     return userPrompt;
   }
 
-  const contentParts: CustomContentPart[] = [
-    { type: "text", text: userPrompt },
-  ];
+  const contentParts: CustomContentPart[] = [{ type: "text", text: userPrompt }];
 
   for (const image of images) {
     try {
@@ -63,17 +56,13 @@ export async function buildCustomUserContent(
         },
       });
     } catch (fetchError) {
-      log.error(
-        `Error fetching custom provider image ${image.name ?? image.url}`,
-        fetchError as Error,
-        {
-          errorType: "CustomProviderImageFetchError",
-          metadata: {
-            imageName: image.name ?? null,
-            imageUrl: image.url,
-          },
+      log.error(`Error fetching custom provider image ${image.name ?? image.url}`, fetchError as Error, {
+        errorType: "CustomProviderImageFetchError",
+        metadata: {
+          imageName: image.name ?? null,
+          imageUrl: image.url,
         },
-      );
+      });
     }
   }
 
@@ -109,8 +98,7 @@ export async function callCustomChatCompletions(params: {
   logLabel: string;
   messagesForLog?: Array<Record<string, unknown>>;
 }): Promise<
-  | { success: true; data: CustomChatCompletionResponse }
-  | { success: false; error: CustomChatCompletionError }
+  { success: true; data: CustomChatCompletionResponse } | { success: false; error: CustomChatCompletionError }
 > {
   if (!params.endpointUrl?.trim()) {
     return {
@@ -207,9 +195,7 @@ export function buildExampleJsonFromSchema(schema: unknown): unknown {
   const schemaType = record.type;
   if (schemaType === "object") {
     const properties =
-      record.properties && typeof record.properties === "object"
-        ? (record.properties as Record<string, unknown>)
-        : {};
+      record.properties && typeof record.properties === "object" ? (record.properties as Record<string, unknown>) : {};
     const example: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(properties)) {
       example[key] = buildExampleJsonFromSchema(value);
@@ -222,10 +208,7 @@ export function buildExampleJsonFromSchema(schema: unknown): unknown {
   }
 
   if (schemaType === "integer" || schemaType === "number") {
-    const minimum =
-      typeof record.minimum === "number" && Number.isFinite(record.minimum)
-        ? record.minimum
-        : 0;
+    const minimum = typeof record.minimum === "number" && Number.isFinite(record.minimum) ? record.minimum : 0;
     return minimum;
   }
 
@@ -262,10 +245,7 @@ export function buildSchemaSteeredSystemPrompt(
     .join("\n\n");
 }
 
-export function shouldFallbackStructuredMode(
-  status: number,
-  errorBody: string,
-): boolean {
+export function shouldFallbackStructuredMode(status: number, errorBody: string): boolean {
   if (status !== 400 && status !== 422) {
     return false;
   }

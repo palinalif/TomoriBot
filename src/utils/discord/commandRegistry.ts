@@ -29,9 +29,7 @@ class CommandRegistry {
       const commands = await client.application?.commands.fetch();
 
       if (!commands) {
-        log.warn(
-          "No application commands found during registry initialization",
-        );
+        log.warn("No application commands found during registry initialization");
         return;
       }
 
@@ -64,9 +62,7 @@ class CommandRegistry {
       }
 
       this.initialized = true;
-      log.info(
-        `CommandRegistry initialized with ${this.commandIds.size} command entries`,
-      );
+      log.info(`CommandRegistry initialized with ${this.commandIds.size} command entries`);
     } catch (error) {
       log.error("Failed to initialize CommandRegistry", error as Error);
     }
@@ -90,11 +86,7 @@ class CommandRegistry {
    * // Returns: "`/teach memory personal`"
    * getCommandMention("teach", "memory", "personal");
    */
-  getCommandMention(
-    commandName: string,
-    subcommandOrGroup?: string,
-    subcommand?: string,
-  ): string {
+  getCommandMention(commandName: string, subcommandOrGroup?: string, subcommand?: string): string {
     // Build the command string based on parameters
     let commandString: string;
 

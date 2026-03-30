@@ -10,14 +10,8 @@ import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import type { UserRow } from "../../../types/db/schema";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("help")
-    .setDescription(
-      localizer("en-US", "commands.config.apikey.help.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("help").setDescription(localizer("en-US", "commands.config.apikey.help.description"));
 
 /**
  * Displays setup instructions for the Custom provider (OpenAI-compatible endpoints).

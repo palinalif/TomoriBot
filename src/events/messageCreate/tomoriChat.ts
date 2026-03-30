@@ -9,43 +9,21 @@ import type {
   Embed,
   Webhook,
 } from "discord.js";
-import {
-  BaseGuildTextChannel,
-  ChannelType,
-  DMChannel,
-  MessageType,
-  TextChannel,
-} from "discord.js"; // Import value for instanceof check
+import { BaseGuildTextChannel, ChannelType, DMChannel, MessageType, TextChannel } from "discord.js"; // Import value for instanceof check
 // Provider imports moved to factory pattern
-import type {
-  StructuredContextItem,
-  RequestSnapshot,
-} from "../../types/misc/context";
+import type { StructuredContextItem, RequestSnapshot } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
 import type { StandardEmbedOptions } from "../../types/discord/embed";
 // Provider-specific types moved to individual providers
-import type {
-  FunctionCall,
-  FunctionResponseImageMetadata,
-} from "../../types/provider/interfaces";
+import type { FunctionCall, FunctionResponseImageMetadata } from "../../types/provider/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
-import {
-  getCachedAllPersonas,
-  getLastDbError,
-} from "../../utils/cache/tomoriStateCache";
-import {
-  getCachedUserRow,
-  getCachedPrivacyLevel,
-  getCachedBlacklistStatus,
-} from "../../utils/cache/userCache";
+import { getCachedAllPersonas, getLastDbError } from "../../utils/cache/tomoriStateCache";
+import { getCachedUserRow, getCachedPrivacyLevel, getCachedBlacklistStatus } from "../../utils/cache/userCache";
 import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
 import { getCachedChannelLlm } from "../../utils/cache/channelLlmCache";
 import { storeShortTermMemory } from "../../utils/cache/shortTermMemoryCache";
 import { incrementTomoriCounter, registerUser } from "@/utils/db/dbWrite";
-import {
-  createStandardEmbed,
-  sendStandardEmbed,
-} from "../../utils/discord/embedHelper";
+import { createStandardEmbed, sendStandardEmbed } from "../../utils/discord/embedHelper";
 import { resolvePreferredDiscordDisplayName } from "../../utils/discord/displayName";
 import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
@@ -57,16 +35,9 @@ import {
   type WebhookCreateErrorReason,
 } from "../../utils/discord/webhookManager";
 import { ColorCode, log } from "../../utils/misc/logger";
-import {
-  buildContext,
-  formatMessageTimestamp,
-  formatTimestampInline,
-} from "../../utils/text/contextBuilder";
+import { buildContext, formatMessageTimestamp, formatTimestampInline } from "../../utils/text/contextBuilder";
 import { getEmojiPenaltyDirective } from "../../utils/text/emojiPenalty";
-import {
-  removeYouTubeUrls,
-  extractYouTubeVideoIds,
-} from "../../utils/text/youTubeUrlCleaner";
+import { removeYouTubeUrls, extractYouTubeVideoIds } from "../../utils/text/youTubeUrlCleaner";
 import { resolveTenorUrl } from "../../utils/media/tenorResolver";
 import { PeekProfilePictureTool } from "../../tools/functionCalls/peekProfilePictureTool";
 import { ProcessGifTool } from "../../tools/functionCalls/processGifTool";
@@ -79,50 +50,22 @@ import {
   recordKeyError,
   type SelectedKeyResult,
 } from "@/utils/security/keyRotation";
-import {
-  localizer,
-  getSupportedLocales,
-  getLocaleSubKeys,
-} from "../../utils/text/localizer";
-import {
-  escapeRegExp,
-  normalizeCustomEmojisForLlm,
-} from "../../utils/text/stringHelper";
+import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/text/localizer";
+import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
-import {
-  getLinkedMatrixRoom,
-  pendingMatrixReplyChannels,
-  sendMatrixTypingIndicator,
-} from "@/utils/matrix";
-import {
-  isBridgeUserId,
-  stripBridgePrefix,
-  extractBridgeUserId,
-  isMatrixBridgeWebhookUsername,
-} from "@/utils/bridge";
+import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
+import { isBridgeUserId, stripBridgePrefix, extractBridgeUserId, isMatrixBridgeWebhookUsername } from "@/utils/bridge";
 
-import type {
-  TomoriState,
-  TomoriConfigRow,
-  ServerEmojiRow,
-  ServerStickerRow,
-} from "@/types/db/schema";
+import type { TomoriState, TomoriConfigRow, ServerEmojiRow, ServerStickerRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
 import { getProviderForTomori } from "../../utils/provider/providerFactory";
-import type {
-  LLMProvider,
-  StreamResult,
-  ThoughtLogPayload,
-} from "../../types/provider/interfaces";
+import type { LLMProvider, StreamResult, ThoughtLogPayload } from "../../types/provider/interfaces";
 import { ToolRegistry } from "../../tools/toolRegistry";
 import { keyManager } from "@/utils/security/keyManager";
-import {
-  checkUserRateLimit,
-  checkServerRateLimit,
-} from "@/utils/security/rateLimiter";
+import { checkUserRateLimit, checkServerRateLimit } from "@/utils/security/rateLimiter";
 import {
   checkMessageTriggerCooldownWithWhitelist,
   setMessageTriggerCooldownWithWhitelist,
@@ -137,17 +80,10 @@ import {
 } from "../../utils/cache/openrouterCapabilityCache";
 import { getGeminiTokenLimits } from "../../utils/cache/geminiCapabilityCache";
 import { getNovelAITokenLimits } from "../../utils/cache/novelaiCapabilityCache";
-import {
-  getCachedContextTokens,
-  refreshNovelAISubscription,
-} from "../../utils/cache/novelaiSubscriptionCache";
+import { getCachedContextTokens, refreshNovelAISubscription } from "../../utils/cache/novelaiSubscriptionCache";
 import type { NovelaiStreamConfig } from "../../providers/novelai/novelaiStreamAdapter";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
-import {
-  checkTextQuota,
-  incrementTextQuota,
-  type TextQuotaCheckResult,
-} from "@/utils/quota/textQuotaManager";
+import { checkTextQuota, incrementTextQuota, type TextQuotaCheckResult } from "@/utils/quota/textQuotaManager";
 import type { ForcedMention } from "@/types/discord/mentions";
 import { buildForcedMentionsForUser } from "@/utils/discord/mentionHelper";
 import {
@@ -156,61 +92,38 @@ import {
   sendThoughtLogEmbed,
   type ThoughtLogOwner,
 } from "@/utils/discord/thoughtLog";
-import {
-  isAudioAttachment,
-  transcribeMessageAudioAttachment,
-} from "@/utils/audio/audioAttachmentTranscription";
-import {
-  getCachedVoiceTranscript,
-  setCachedVoiceTranscript,
-} from "@/utils/audio/voiceTranscriptCache";
+import { isAudioAttachment, transcribeMessageAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
+import { getCachedVoiceTranscript, setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 
 // Base trigger words that will always work (with or without spaces for English)
-const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
-  (word) => word.trim(),
-) || ["tomori", "tomo", "トモリ", "ともり"];
+const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
+  "tomori",
+  "tomo",
+  "トモリ",
+  "ともり",
+];
 
-function parseBooleanEnvFlag(
-  value: string | undefined,
-  defaultValue: boolean,
-): boolean {
+function parseBooleanEnvFlag(value: string | undefined, defaultValue: boolean): boolean {
   if (typeof value !== "string") return defaultValue;
   const normalized = value.trim().toLowerCase();
   if (!normalized) return defaultValue;
-  if (
-    normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes" ||
-    normalized === "on"
-  ) {
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
     return true;
   }
-  if (
-    normalized === "false" ||
-    normalized === "0" ||
-    normalized === "no" ||
-    normalized === "off"
-  ) {
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
     return false;
   }
   return defaultValue;
 }
 
-function parseIntegerEnvFlag(
-  value: string | undefined,
-  defaultValue: number,
-  minimum: number,
-): number {
+function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
   if (typeof value !== "string") return defaultValue;
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return defaultValue;
   return Math.max(minimum, parsed);
 }
 
-function thoughtLogOwnersMatch(
-  existing: ThoughtLogOwner | undefined,
-  incoming: ThoughtLogOwner,
-): boolean {
+function thoughtLogOwnersMatch(existing: ThoughtLogOwner | undefined, incoming: ThoughtLogOwner): boolean {
   if (!existing) {
     return true;
   }
@@ -223,10 +136,7 @@ function thoughtLogOwnersMatch(
     case "default":
       return true;
     case "persona":
-      return (
-        incoming.type === "persona" &&
-        existing.persona.tomori_id === incoming.persona.tomori_id
-      );
+      return incoming.type === "persona" && existing.persona.tomori_id === incoming.persona.tomori_id;
     case "user_impersonation":
       return (
         incoming.type === "user_impersonation" &&
@@ -259,10 +169,7 @@ function dropOldestHistoryExchangePairs(
 
   const findNewestDialogueUserIndex = (): number => {
     for (let i = items.length - 1; i >= 0; i--) {
-      if (
-        items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
-        items[i].role === "user"
-      ) {
+      if (items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY && items[i].role === "user") {
         return i;
       }
     }
@@ -293,20 +200,14 @@ function dropOldestHistoryExchangePairs(
       if (i === newestDialogueUserIdx) {
         break;
       }
-      if (
-        items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
-        items[i].role === "model"
-      ) {
+      if (items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY && items[i].role === "model") {
         followingModelIdx = i;
         break;
       }
     }
 
     if (followingModelIdx !== -1) {
-      items.splice(
-        oldestDroppableUserIdx,
-        followingModelIdx - oldestDroppableUserIdx + 1,
-      );
+      items.splice(oldestDroppableUserIdx, followingModelIdx - oldestDroppableUserIdx + 1);
     } else {
       items.splice(oldestDroppableUserIdx, 1);
     }
@@ -329,10 +230,7 @@ function dropOldestHistoryExchangePairs(
 
 const WEBHOOK_ERROR_COOLDOWN_MS = 10 * 60 * 1000;
 const webhookErrorCooldowns = new Map<string, number>();
-const REACTION_CONTEXT_ENABLED = parseBooleanEnvFlag(
-  process.env.REACTION_CONTEXT_ENABLED,
-  true,
-);
+const REACTION_CONTEXT_ENABLED = parseBooleanEnvFlag(process.env.REACTION_CONTEXT_ENABLED, true);
 const OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS = parseIntegerEnvFlag(
   process.env.OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS,
   2,
@@ -355,15 +253,8 @@ const REACTION_CONTEXT_MAX_USERS_PER_REACTION = parseIntegerEnvFlag(
 );
 
 /** Maximum number of tool-call round-trips before giving up and showing the "Thinking Loop" embed. Configurable via BOT_MAX_FUNCTION_CALL_ITERATIONS (min: 1). */
-const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(
-  process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS,
-  20,
-  1,
-);
-const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(
-  process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3",
-  10,
-); // Max consecutive tool failures before showing error embed (NAI GLM only)
+const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS, 20, 1);
+const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3", 10); // Max consecutive tool failures before showing error embed (NAI GLM only)
 const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   "update_short_term_memory",
   //"update_long_term_memory",
@@ -379,10 +270,7 @@ const MAX_TRIGGERED_PERSONA_LIMIT = 10;
 const SELF_DEBUG_ERROR_EMBED_MAX_DESCRIPTION_LENGTH = 1200;
 const SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT = 6;
 const SELF_DEBUG_ERROR_EMBED_MAX_FIELD_VALUE_LENGTH = 280;
-const ERROR_EMBED_COLOR_DECIMAL = Number.parseInt(
-  ColorCode.ERROR.replace("#", ""),
-  16,
-);
+const ERROR_EMBED_COLOR_DECIMAL = Number.parseInt(ColorCode.ERROR.replace("#", ""), 16);
 const SELF_REPLY_CHAIN_TTL_MS = 30 * 60 * 1000; // Reset self-reply chain after 30 minutes of inactivity
 const SELF_REPLY_SUPPRESSION_TTL_MS = 5000;
 const selfReplySuppressionUntil = new Map<string, number>();
@@ -400,10 +288,7 @@ type MessageWithInternalFlags = Message & {
   [AUDIO_TRANSCRIPTION_HANDLED_KEY]?: boolean;
 };
 
-export function suppressNextSelfReply(
-  channelId: string,
-  ttlMs = SELF_REPLY_SUPPRESSION_TTL_MS,
-): void {
+export function suppressNextSelfReply(channelId: string, ttlMs = SELF_REPLY_SUPPRESSION_TTL_MS): void {
   selfReplySuppressionUntil.set(channelId, Date.now() + ttlMs);
 }
 
@@ -459,9 +344,7 @@ function buildQueuedReplyAttachmentSummary(message: Message): string | null {
       imageCount++;
       continue;
     }
-    if (
-      SUPPORTED_VIDEO_MIME_TYPES.some((type) => contentType.startsWith(type))
-    ) {
+    if (SUPPORTED_VIDEO_MIME_TYPES.some((type) => contentType.startsWith(type))) {
       videoCount++;
       continue;
     }
@@ -486,12 +369,8 @@ function buildQueuedReplyAttachmentSummary(message: Message): string | null {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
-function buildQueuedReplyDirective(
-  message: Message,
-  replyTargetName: string,
-): string {
-  const normalizedTargetName =
-    compactWhitespace(stripBridgePrefix(replyTargetName)) || "User";
+function buildQueuedReplyDirective(message: Message, replyTargetName: string): string {
+  const normalizedTargetName = compactWhitespace(stripBridgePrefix(replyTargetName)) || "User";
   const contentPreview = truncateForSystemContext(
     message.cleanContent || message.content || "",
     QUEUED_REPLY_DIRECTIVE_MAX_CONTENT_LENGTH,
@@ -510,9 +389,7 @@ function buildQueuedReplyDirective(
   return `${directive}.`;
 }
 
-function checkSelfDebugDiagnosticEmbedTitle(
-  embedTitle: string | null,
-): boolean {
+function checkSelfDebugDiagnosticEmbedTitle(embedTitle: string | null): boolean {
   if (!embedTitle) return false;
 
   for (const supportedLocale of getSupportedLocales()) {
@@ -532,42 +409,28 @@ function checkSelfDebugDiagnosticEmbedTitle(
 }
 
 function shouldIncludeSelfDebugEmbed(embed: Embed): boolean {
-  return (
-    embed.color === ERROR_EMBED_COLOR_DECIMAL ||
-    checkSelfDebugDiagnosticEmbedTitle(embed.title)
-  );
+  return embed.color === ERROR_EMBED_COLOR_DECIMAL || checkSelfDebugDiagnosticEmbedTitle(embed.title);
 }
 
-function formatTomoriSelfDebugEmbedAsSystemMessage(
-  embed: Embed,
-): string | null {
+function formatTomoriSelfDebugEmbedAsSystemMessage(embed: Embed): string | null {
   if (!shouldIncludeSelfDebugEmbed(embed)) {
     return null;
   }
 
   const isErrorEmbed = embed.color === ERROR_EMBED_COLOR_DECIMAL;
 
-  const lines: string[] = [
-    isErrorEmbed
-      ? "Tomori emitted an error embed."
-      : "Tomori emitted a diagnostic embed.",
-  ];
+  const lines: string[] = [isErrorEmbed ? "Tomori emitted an error embed." : "Tomori emitted a diagnostic embed."];
 
   if (embed.title?.trim()) {
     lines.push(`Title: ${truncateForSystemContext(embed.title, 160)}`);
   }
   if (embed.description?.trim()) {
     lines.push(
-      `Description: ${truncateForSystemContext(
-        embed.description,
-        SELF_DEBUG_ERROR_EMBED_MAX_DESCRIPTION_LENGTH,
-      )}`,
+      `Description: ${truncateForSystemContext(embed.description, SELF_DEBUG_ERROR_EMBED_MAX_DESCRIPTION_LENGTH)}`,
     );
   }
   if (embed.author?.name?.trim()) {
-    lines.push(
-      `Embed Author: ${truncateForSystemContext(embed.author.name, 120)}`,
-    );
+    lines.push(`Embed Author: ${truncateForSystemContext(embed.author.name, 120)}`);
   }
 
   if (embed.fields.length > 0) {
@@ -582,9 +445,7 @@ function formatTomoriSelfDebugEmbedAsSystemMessage(
       lines.push(`Fields: ${fieldSummary}`);
     }
     if (embed.fields.length > SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT) {
-      lines.push(
-        `Additional fields omitted: ${embed.fields.length - SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT}.`,
-      );
+      lines.push(`Additional fields omitted: ${embed.fields.length - SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT}.`);
     }
   }
 
@@ -595,11 +456,7 @@ function formatTomoriSelfDebugEmbedAsSystemMessage(
   return `[System: ${lines.join("\n")}]`;
 }
 
-function cacheWebhookRelay(
-  webhookId: string,
-  userId: string,
-  kind: CachedWebhookRelayKind,
-): void {
+function cacheWebhookRelay(webhookId: string, userId: string, kind: CachedWebhookRelayKind): void {
   if (!webhookId || !userId) {
     return;
   }
@@ -611,16 +468,11 @@ function cacheWebhookRelay(
   });
 }
 
-function cacheUserImpersonationWebhook(
-  webhookId: string,
-  userId: string,
-): void {
+function cacheUserImpersonationWebhook(webhookId: string, userId: string): void {
   cacheWebhookRelay(webhookId, userId, "user_impersonation");
 }
 
-function getCachedWebhookRelay(
-  webhookId: string | null | undefined,
-): CachedWebhookRelay | null {
+function getCachedWebhookRelay(webhookId: string | null | undefined): CachedWebhookRelay | null {
   if (!webhookId) {
     return null;
   }
@@ -638,9 +490,7 @@ function getCachedWebhookRelay(
   return cached;
 }
 
-function getCachedImpersonatedUserIdForWebhook(
-  webhookId: string | null | undefined,
-): string | null {
+function getCachedImpersonatedUserIdForWebhook(webhookId: string | null | undefined): string | null {
   const cachedRelay = getCachedWebhookRelay(webhookId);
   if (!cachedRelay || cachedRelay.kind !== "user_impersonation") {
     return null;
@@ -654,10 +504,7 @@ function markAudioTranscriptionHandled(message: Message): void {
 }
 
 function hasHandledAudioTranscription(message: Message): boolean {
-  return (
-    (message as MessageWithInternalFlags)[AUDIO_TRANSCRIPTION_HANDLED_KEY] ===
-    true
-  );
+  return (message as MessageWithInternalFlags)[AUDIO_TRANSCRIPTION_HANDLED_KEY] === true;
 }
 
 function applyEffectiveMessageContent(message: Message, content: string): void {
@@ -682,19 +529,12 @@ function applyEffectiveMessageContent(message: Message, content: string): void {
   }
 }
 
-function isMatrixRelayMessage(
-  message: Pick<Message, "webhookId" | "author">,
-): boolean {
-  return (
-    Boolean(message.webhookId) &&
-    isMatrixBridgeWebhookUsername(message.author.username)
-  );
+function isMatrixRelayMessage(message: Pick<Message, "webhookId" | "author">): boolean {
+  return Boolean(message.webhookId) && isMatrixBridgeWebhookUsername(message.author.username);
 }
 
 function isRealUserLikeMessage(message: Message): boolean {
-  return (
-    (!message.author.bot && !message.webhookId) || isMatrixRelayMessage(message)
-  );
+  return (!message.author.bot && !message.webhookId) || isMatrixRelayMessage(message);
 }
 
 function normalizeIdentityName(value?: string | null): string {
@@ -734,22 +574,15 @@ function resolveImpersonatedUserIdByWebhookIdentity(
   // webhook display names would match their own member entries, causing
   // foreign bot slash-command responses to be misidentified as user
   // impersonation targets and cached as such.
-  const matchingMembers = Array.from(guild.members.cache.values()).filter(
-    (member) => {
-      if (member.user.bot) return false;
+  const matchingMembers = Array.from(guild.members.cache.values()).filter((member) => {
+    if (member.user.bot) return false;
 
-      const candidateNames = [
-        member.displayName,
-        member.user.displayName,
-        member.user.globalName,
-        member.user.username,
-      ]
-        .map((name) => normalizeIdentityName(name))
-        .filter((name) => name.length > 0);
+    const candidateNames = [member.displayName, member.user.displayName, member.user.globalName, member.user.username]
+      .map((name) => normalizeIdentityName(name))
+      .filter((name) => name.length > 0);
 
-      return candidateNames.includes(normalizedWebhookName);
-    },
-  );
+    return candidateNames.includes(normalizedWebhookName);
+  });
 
   if (matchingMembers.length === 1) {
     return matchingMembers[0].id;
@@ -770,9 +603,7 @@ function resolveImpersonatedUserIdByWebhookIdentity(
       extension: "png",
       forceStatic: true,
     });
-    return (
-      normalizeAvatarUrlForMatch(memberAvatarUrl) === normalizedWebhookAvatar
-    );
+    return normalizeAvatarUrlForMatch(memberAvatarUrl) === normalizedWebhookAvatar;
   });
 
   return avatarMatches.length === 1 ? avatarMatches[0].id : null;
@@ -785,11 +616,9 @@ async function resolveImpersonatedIdentity(
   fallbackName?: string | null,
 ): Promise<{ displayName: string; avatarUrl?: string }> {
   const guildMember = guild
-    ? (guild.members.cache.get(userId) ??
-      (await guild.members.fetch(userId).catch(() => null)))
+    ? (guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null)))
     : null;
-  const discordUser =
-    guildMember?.user || (await client.users.fetch(userId).catch(() => null));
+  const discordUser = guildMember?.user || (await client.users.fetch(userId).catch(() => null));
 
   const displayName =
     guildMember?.displayName ||
@@ -870,11 +699,7 @@ function resolveReferencedWebhookTarget(
     forceStatic: true,
   });
 
-  const impersonatedUserId = resolveImpersonatedUserIdByWebhookIdentity(
-    guild,
-    webhookName,
-    webhookAvatarUrl,
-  );
+  const impersonatedUserId = resolveImpersonatedUserIdByWebhookIdentity(guild, webhookName, webhookAvatarUrl);
 
   return {
     replyPersona: null,
@@ -882,9 +707,7 @@ function resolveReferencedWebhookTarget(
   };
 }
 
-function buildCombinedTailDirectiveMessage(
-  directives: string[],
-): StructuredContextItem | null {
+function buildCombinedTailDirectiveMessage(directives: string[]): StructuredContextItem | null {
   const normalized = directives
     .map((directive) => normalizeTailDirective(directive))
     .filter((directive) => directive.length > 0);
@@ -897,9 +720,7 @@ function buildCombinedTailDirectiveMessage(
   };
 }
 
-function buildTailDirectiveMessage(
-  directive: string | null | undefined,
-): StructuredContextItem | null {
+function buildTailDirectiveMessage(directive: string | null | undefined): StructuredContextItem | null {
   if (!directive) return null;
   return buildCombinedTailDirectiveMessage([directive]);
 }
@@ -999,32 +820,13 @@ async function sendWebhookErrorEmbed(
  */
 function createNaturalStopPatterns(): RegExp[] {
   // 1. Basic stop commands (single words with word boundaries)
-  const basicStops = [
-    "wait",
-    "stop",
-    "enough",
-    "chill",
-    "halt",
-    "pause",
-    "quit",
-  ];
+  const basicStops = ["wait", "stop", "enough", "chill", "halt", "pause", "quit"];
 
   // 2. Polite stop phrases (with contextual words)
-  const politeStops = [
-    "okay\\s+(stop|enough)",
-    "that's\\s+(enough|good|fine)",
-    "alright\\s+stop",
-    "please\\s+stop",
-  ];
+  const politeStops = ["okay\\s+(stop|enough)", "that's\\s+(enough|good|fine)", "alright\\s+stop", "please\\s+stop"];
 
   // 3. Dismissive phrases
-  const dismissive = [
-    "nevermind",
-    "never\\s*mind",
-    "cut\\s+it\\s+out",
-    "tone\\s+it\\s+down",
-    "knock\\s+it\\s+off",
-  ];
+  const dismissive = ["nevermind", "never\\s*mind", "cut\\s+it\\s+out", "tone\\s+it\\s+down", "knock\\s+it\\s+off"];
 
   // 4. Japanese stop patterns (common ways to say stop/enough in Japanese)
   const japanese = [
@@ -1091,8 +893,7 @@ const SUPPORTED_VIDEO_MIME_TYPES = [
 
 // Regex to detect Tenor GIF URLs anywhere in the message content
 // Includes % for URL-encoded characters (e.g., Japanese characters in slugs)
-const TENOR_GIF_REGEX =
-  /(https?:\/\/)?(www\.)?tenor\.com\/view\/[a-zA-Z0-9%-]+-gif-\d+(\?.*)?/gi;
+const TENOR_GIF_REGEX = /(https?:\/\/)?(www\.)?tenor\.com\/view\/[a-zA-Z0-9%-]+-gif-\d+(\?.*)?/gi;
 
 type ReactionContextBudgetState = {
   callsUsed: number;
@@ -1101,9 +902,7 @@ type ReactionContextBudgetState = {
   fallbackCount: number;
 };
 
-function normalizeReactionEmojiLabel(
-  reaction: import("discord.js").MessageReaction,
-): string {
+function normalizeReactionEmojiLabel(reaction: import("discord.js").MessageReaction): string {
   const emojiName = reaction.emoji.name;
   const emojiId = reaction.emoji.id;
 
@@ -1119,10 +918,7 @@ function normalizeReactionEmojiLabel(
   return "unknown_emoji";
 }
 
-function formatReactionUserLabel(user: {
-  globalName: string | null;
-  username: string;
-}) {
+function formatReactionUserLabel(user: { globalName: string | null; username: string }) {
   return user.globalName || user.username;
 }
 
@@ -1130,10 +926,7 @@ async function buildReactionContextAnnotation(
   message: Message,
   budgetState: ReactionContextBudgetState,
 ): Promise<string | null> {
-  if (
-    !REACTION_CONTEXT_ENABLED ||
-    REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE < 1
-  ) {
+  if (!REACTION_CONTEXT_ENABLED || REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE < 1) {
     return null;
   }
 
@@ -1147,10 +940,7 @@ async function buildReactionContextAnnotation(
 
   budgetState.messagesWithReactions += 1;
 
-  const selectedReactions = availableReactions.slice(
-    0,
-    REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE,
-  );
+  const selectedReactions = availableReactions.slice(0, REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE);
   const reactionSegments: string[] = [];
 
   for (const reaction of selectedReactions) {
@@ -1197,12 +987,9 @@ async function buildReactionContextAnnotation(
     reactionSegments.push(segment);
   }
 
-  const remainingReactionTypes =
-    availableReactions.length - selectedReactions.length;
+  const remainingReactionTypes = availableReactions.length - selectedReactions.length;
   if (remainingReactionTypes > 0) {
-    reactionSegments.push(
-      `+${remainingReactionTypes} more reaction type${remainingReactionTypes === 1 ? "" : "s"}`,
-    );
+    reactionSegments.push(`+${remainingReactionTypes} more reaction type${remainingReactionTypes === 1 ? "" : "s"}`);
   }
 
   if (reactionSegments.length === 0) {
@@ -1248,9 +1035,7 @@ function buildEmojiCdnUrl(emojiId: string): string {
   return `https://cdn.discordapp.com/emojis/${emojiId}.png`;
 }
 
-function extractEmojiImageAttachments(
-  content: string,
-): SimplifiedMessageForContext["imageAttachments"] {
+function extractEmojiImageAttachments(content: string): SimplifiedMessageForContext["imageAttachments"] {
   const attachments: SimplifiedMessageForContext["imageAttachments"] = [];
   if (!content) return attachments;
 
@@ -1282,9 +1067,7 @@ function extractEmojiImageAttachments(
   return attachments;
 }
 
-function mergeForcedMentions(
-  ...mentionLists: Array<ForcedMention[] | undefined>
-): ForcedMention[] {
+function mergeForcedMentions(...mentionLists: Array<ForcedMention[] | undefined>): ForcedMention[] {
   const seen = new Set<string>();
   const merged: ForcedMention[] = [];
 
@@ -1322,10 +1105,7 @@ const DISCORD_TYPING_KEEPALIVE_INTERVAL_MS = parseIntegerEnvFlag(
 );
 
 /** Maximum consecutive follow-up interrupts before messages are queued normally (prevents infinite restart loops) */
-const MAX_FOLLOW_UP_INTERRUPTS = Number.parseInt(
-  process.env.MAX_FOLLOW_UP_INTERRUPTS || "3",
-  10,
-);
+const MAX_FOLLOW_UP_INTERRUPTS = Number.parseInt(process.env.MAX_FOLLOW_UP_INTERRUPTS || "3", 10);
 
 // New: In-memory store for channel locks and message queues
 type TextQuotaSource = "user" | "system";
@@ -1381,36 +1161,24 @@ interface ChannelLockEntry {
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
 const textQuotaTriggerStates = new Map<string, TextQuotaTriggerState>();
 
-async function refreshDiscordTypingIndicator(
-  channel: Message["channel"],
-  reason: string,
-): Promise<void> {
+async function refreshDiscordTypingIndicator(channel: Message["channel"], reason: string): Promise<void> {
   if (!("sendTyping" in channel) || typeof channel.sendTyping !== "function") {
     return;
   }
 
   await channel.sendTyping().catch((error: unknown) => {
-    log.warn(
-      `Discord typing refresh failed for channel ${channel.id} (${reason})`,
-      error,
-    );
+    log.warn(`Discord typing refresh failed for channel ${channel.id} (${reason})`, error);
   });
 }
 
-function stopDiscordTypingKeepalive(
-  channelId: string,
-  lockEntry: ChannelLockEntry,
-  reason: string,
-): void {
+function stopDiscordTypingKeepalive(channelId: string, lockEntry: ChannelLockEntry, reason: string): void {
   if (!lockEntry.typingKeepaliveTimer) {
     return;
   }
 
   clearInterval(lockEntry.typingKeepaliveTimer);
   lockEntry.typingKeepaliveTimer = null;
-  log.info(
-    `Discord typing keepalive stopped for channel ${channelId} (${reason}).`,
-  );
+  log.info(`Discord typing keepalive stopped for channel ${channelId} (${reason}).`);
 }
 
 async function startDiscordTypingKeepalive(
@@ -1447,10 +1215,7 @@ function cleanupTextQuotaTriggerStates(): void {
   }
 }
 
-function buildTextQuotaResetInfo(
-  locale: string,
-  quotaCheck: TextQuotaCheckResult,
-): string {
+function buildTextQuotaResetInfo(locale: string, quotaCheck: TextQuotaCheckResult): string {
   if (!quotaCheck.resetTime) {
     return "";
   }
@@ -1498,9 +1263,7 @@ export function clearChannelProcessingQueue(channelId: string): number {
   const clearedCount = lockEntry.messageQueue.length;
   lockEntry.messageQueue = [];
 
-  log.info(
-    `Cleared ${clearedCount} queued message(s) for channel ${channelId}.`,
-  );
+  log.info(`Cleared ${clearedCount} queued message(s) for channel ${channelId}.`);
 
   return clearedCount;
 }
@@ -1532,10 +1295,7 @@ function getSelfReplyChainState(channelId: string): SelfReplyChainState {
   return fresh;
 }
 
-function updateSelfReplyChainState(
-  channelId: string,
-  isSelfMessage: boolean,
-): SelfReplyChainState {
+function updateSelfReplyChainState(channelId: string, isSelfMessage: boolean): SelfReplyChainState {
   const state = getSelfReplyChainState(channelId);
   state.updatedAt = Date.now();
 
@@ -1591,9 +1351,7 @@ function getLastRespondedPersonaId(channelId: string): number | null {
  */
 function isNaturalStopMessage(content: string): boolean {
   if (!content?.trim()) return false;
-  return NATURAL_STOP_PATTERNS.some((pattern) =>
-    pattern.test(content.toLowerCase()),
-  );
+  return NATURAL_STOP_PATTERNS.some((pattern) => pattern.test(content.toLowerCase()));
 }
 
 /**
@@ -1608,18 +1366,13 @@ function getUserActiveMessageCount(userDiscId: string): number {
   // Iterate through all channel locks
   for (const lockEntry of channelLocks.values()) {
     // 1. Count if user's message is currently being processed
-    if (
-      lockEntry.isLocked &&
-      lockEntry.userDiscId === userDiscId &&
-      !lockEntry.currentIsPersonaJob
-    ) {
+    if (lockEntry.isLocked && lockEntry.userDiscId === userDiscId && !lockEntry.currentIsPersonaJob) {
       count++;
     }
 
     // 2. Count queued messages from this user
     count += lockEntry.messageQueue.filter(
-      (queuedMsg) =>
-        queuedMsg.message.author.id === userDiscId && !queuedMsg.isPersonaJob,
+      (queuedMsg) => queuedMsg.message.author.id === userDiscId && !queuedMsg.isPersonaJob,
     ).length;
   }
 
@@ -1679,9 +1432,7 @@ async function sendUserRateLimitDM(
 
     // Send the DM
     await user.send({ embeds: [rateLimitEmbed] });
-    log.info(
-      `Sent rate limit DM to user ${userDiscId} (${currentCount} active messages)`,
-    );
+    log.info(`Sent rate limit DM to user ${userDiscId} (${currentCount} active messages)`);
   } catch (error) {
     // User likely has DMs disabled or blocked the bot - this is expected, log as info not error
     log.info(
@@ -1698,12 +1449,7 @@ async function sendUserRateLimitDM(
  * @param currentCount - The current number of active messages for this server
  */
 async function sendServerRateLimitEmbed(
-  channel:
-    | TextChannel
-    | DMChannel
-    | BaseGuildTextChannel
-    | AnyThreadChannel
-    | BaseGuildVoiceChannel,
+  channel: TextChannel | DMChannel | BaseGuildTextChannel | AnyThreadChannel | BaseGuildVoiceChannel,
   locale: string,
   currentCount: number,
 ): Promise<void> {
@@ -1713,9 +1459,7 @@ async function sendServerRateLimitEmbed(
       descriptionKey: "rate_limit.server_exceeded_description",
       color: ColorCode.WARN,
     });
-    log.info(
-      `Sent rate limit embed to channel ${channel.id} (${currentCount} active messages in server)`,
-    );
+    log.info(`Sent rate limit embed to channel ${channel.id} (${currentCount} active messages in server)`);
   } catch (error) {
     log.warn(`Failed to send rate limit embed to channel ${channel.id}`, error);
   }
@@ -1724,12 +1468,7 @@ async function sendServerRateLimitEmbed(
 async function enforceGlobalRateLimit(params: {
   userDiscId: string;
   serverDiscId: string;
-  channel:
-    | TextChannel
-    | DMChannel
-    | BaseGuildTextChannel
-    | AnyThreadChannel
-    | BaseGuildVoiceChannel;
+  channel: TextChannel | DMChannel | BaseGuildTextChannel | AnyThreadChannel | BaseGuildVoiceChannel;
   guild: Guild | null;
   client: Client;
   messageId: string;
@@ -1747,10 +1486,7 @@ async function enforceGlobalRateLimit(params: {
     serverActiveCountAdjustment = 0,
   } = params;
 
-  const userActiveCount = Math.max(
-    getUserActiveMessageCount(userDiscId) + userActiveCountAdjustment,
-    0,
-  );
+  const userActiveCount = Math.max(getUserActiveMessageCount(userDiscId) + userActiveCountAdjustment, 0);
   const userRateCheck = checkUserRateLimit(userActiveCount);
   if (!userRateCheck.allowed) {
     const currentCount = userRateCheck.currentCount ?? userActiveCount;
@@ -1759,18 +1495,14 @@ async function enforceGlobalRateLimit(params: {
     );
 
     const tempUserRow = await getCachedUserRow(userDiscId);
-    const userLocale =
-      tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
+    const userLocale = tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
 
     await sendUserRateLimitDM(userDiscId, client, userLocale, currentCount);
 
     return false;
   }
 
-  const serverActiveCount = Math.max(
-    getServerActiveMessageCount(serverDiscId) + serverActiveCountAdjustment,
-    0,
-  );
+  const serverActiveCount = Math.max(getServerActiveMessageCount(serverDiscId) + serverActiveCountAdjustment, 0);
   const serverRateCheck = checkServerRateLimit(serverActiveCount);
   if (!serverRateCheck.allowed) {
     const currentCount = serverRateCheck.currentCount ?? serverActiveCount;
@@ -1856,15 +1588,12 @@ export default async function tomoriChat(
   const isBotAuthor = message.author.bot;
   const isWebhookMessage = Boolean(message.webhookId);
   const isInteractionResponse = Boolean(message.interaction);
-  const isFromClientUser = Boolean(
-    client.user && message.author.id === client.user.id,
-  );
+  const isFromClientUser = Boolean(client.user && message.author.id === client.user.id);
   // Matrix relay messages arrive via a channel webhook but represent real user messages.
   // They must not be treated as self-messages or persona jobs — exempt them from all
   // webhook/bot guards so TomoriBot responds to them like regular user messages.
   const isMatrixRelay = isMatrixRelayMessage(message);
-  const isLikelySelfMessage =
-    !isMatrixRelay && (isFromClientUser || isWebhookMessage);
+  const isLikelySelfMessage = !isMatrixRelay && (isFromClientUser || isWebhookMessage);
 
   const isSeedPlaceholderMessage =
     isFromClientUser &&
@@ -1889,30 +1618,18 @@ export default async function tomoriChat(
     return;
   }
 
-  if (
-    !isManuallyTriggered &&
-    isLikelySelfMessage &&
-    message.reference?.messageId
-  ) {
-    let referencedMessage = message.channel.messages.cache.get(
-      message.reference.messageId,
-    );
+  if (!isManuallyTriggered && isLikelySelfMessage && message.reference?.messageId) {
+    let referencedMessage = message.channel.messages.cache.get(message.reference.messageId);
 
     if (!referencedMessage && "messages" in channel) {
       try {
-        referencedMessage = await channel.messages.fetch(
-          message.reference.messageId,
-        );
+        referencedMessage = await channel.messages.fetch(message.reference.messageId);
       } catch {
         referencedMessage = undefined;
       }
     }
 
-    if (
-      referencedMessage &&
-      (referencedMessage.author.id === client.user?.id ||
-        referencedMessage.webhookId)
-    ) {
+    if (referencedMessage && (referencedMessage.author.id === client.user?.id || referencedMessage.webhookId)) {
       updateSelfReplyChainState(channel.id, false);
       return;
     }
@@ -1949,9 +1666,7 @@ export default async function tomoriChat(
 
   // Debug logging for stop response
   if (isStopResponse) {
-    log.info(
-      `Processing stop response for message ${message.id} using original message as passport`,
-    );
+    log.info(`Processing stop response for message ${message.id} using original message as passport`);
   }
 
   // Easter egg: Respond to "$whoami" as the main persona
@@ -1960,9 +1675,7 @@ export default async function tomoriChat(
     return;
   }
 
-  const explicitLongTermMemoryIntent = hasExplicitLongTermMemoryIntent(
-    message.content,
-  );
+  const explicitLongTermMemoryIntent = hasExplicitLongTermMemoryIntent(message.content);
 
   // Initialize streaming context for context-aware tool availability
   const streamingContext: StreamingContext = {
@@ -1979,30 +1692,19 @@ export default async function tomoriChat(
   };
 
   const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
-  const triggererUsername =
-    manualTriggerInvoker?.username ?? message.author.username;
+  const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
   const queuedReplyDirective =
     isFromQueue && !isStopResponse
-      ? buildQueuedReplyDirective(
-          message,
-          manualTriggerInvoker?.member?.displayName ?? triggererUsername,
-        )
+      ? buildQueuedReplyDirective(message, manualTriggerInvoker?.member?.displayName ?? triggererUsername)
       : null;
-  const matrixRelayUserId = isMatrixRelay
-    ? extractBridgeUserId(message.author.username)
-    : undefined;
+  const matrixRelayUserId = isMatrixRelay ? extractBridgeUserId(message.author.username) : undefined;
   const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
   const effectiveTextQuotaTriggerKey = textQuotaTriggerKey ?? message.id;
-  const effectiveTextQuotaUserDiscId =
-    textQuotaUserDiscId ?? cooldownUserDiscId;
+  const effectiveTextQuotaUserDiscId = textQuotaUserDiscId ?? cooldownUserDiscId;
 
   // Check if user is allowed to trigger bot (Level 2 FULL privacy users cannot trigger)
   // Skip this check for manual triggers and reminders
-  if (
-    !isManuallyTriggered &&
-    !reminderRecipientID &&
-    !reminderData?.self_reminder
-  ) {
+  if (!isManuallyTriggered && !reminderRecipientID && !reminderData?.self_reminder) {
     const userPrivacyLevel = await getCachedPrivacyLevel(userDiscId);
     if (userPrivacyLevel === PrivacyLevel.FULL) {
       // Silently ignore - Level 2 users chose to be completely invisible
@@ -2018,15 +1720,9 @@ export default async function tomoriChat(
     channel.type === ChannelType.PublicThread ||
     channel.type === ChannelType.PrivateThread ||
     channel.type === ChannelType.AnnouncementThread;
-  const isVoiceChannel =
-    channel.type === ChannelType.GuildVoice ||
-    channel.type === ChannelType.GuildStageVoice;
+  const isVoiceChannel = channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice;
 
-  if (
-    channel instanceof BaseGuildTextChannel ||
-    isThreadChannel ||
-    isVoiceChannel
-  ) {
+  if (channel instanceof BaseGuildTextChannel || isThreadChannel || isVoiceChannel) {
     // Standard guild text channel, thread, or voice/stage text
     // biome-ignore lint/style/noNonNullAssertion: Guild is always present in guild message events
     guild = message.guild!;
@@ -2071,23 +1767,14 @@ export default async function tomoriChat(
       }
     }
     // Check if bot was mentioned
-    if (
-      !shouldShowError &&
-      client.user &&
-      message.mentions.users.has(client.user.id)
-    ) {
+    if (!shouldShowError && client.user && message.mentions.users.has(client.user.id)) {
       shouldShowError = true;
     }
     // Check if message is a reply to the bot
     if (!shouldShowError && message.reference?.messageId) {
       try {
-        const referenceMessage = await message.channel.messages.fetch(
-          message.reference.messageId,
-        );
-        if (
-          referenceMessage &&
-          referenceMessage.author.id === client.user?.id
-        ) {
+        const referenceMessage = await message.channel.messages.fetch(message.reference.messageId);
+        if (referenceMessage && referenceMessage.author.id === client.user?.id) {
           shouldShowError = true;
         }
       } catch (_fetchError) {
@@ -2124,9 +1811,7 @@ export default async function tomoriChat(
     if (!permissions) {
       return;
     }
-    const canSend = isThreadChannel
-      ? permissions.has("SendMessagesInThreads")
-      : permissions.has("SendMessages");
+    const canSend = isThreadChannel ? permissions.has("SendMessagesInThreads") : permissions.has("SendMessages");
     if (!canSend) {
       return;
     }
@@ -2165,15 +1850,11 @@ export default async function tomoriChat(
   // Placed here (after earlyAllPersonas load) so all persona/alter trigger words are
   // available for the check, not just BASE_TRIGGER_WORDS.
   if (!isManuallyTriggered && !isBotAuthor && message.reference?.messageId) {
-    let referencedMessage = message.channel.messages.cache.get(
-      message.reference.messageId,
-    );
+    let referencedMessage = message.channel.messages.cache.get(message.reference.messageId);
 
     if (!referencedMessage && "messages" in channel) {
       try {
-        referencedMessage = await channel.messages.fetch(
-          message.reference.messageId,
-        );
+        referencedMessage = await channel.messages.fetch(message.reference.messageId);
       } catch {
         referencedMessage = undefined;
       }
@@ -2196,17 +1877,13 @@ export default async function tomoriChat(
           if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(word)) {
             return message.content.includes(word);
           }
-          return new RegExp(`\\b${escapeRegExp(word)}\\b`, "i").test(
-            message.content,
-          );
+          return new RegExp(`\\b${escapeRegExp(word)}\\b`, "i").test(message.content);
         }) ||
         // 3. Persona/alter trigger words (requires earlyAllPersonas to be loaded)
         earlyAllPersonas.some((persona) => {
           const triggers =
             persona.trigger_words ??
-            (persona.is_alter
-              ? (persona.alter_triggers ?? [])
-              : (persona.config?.trigger_words ?? []));
+            (persona.is_alter ? (persona.alter_triggers ?? []) : (persona.config?.trigger_words ?? []));
 
           return triggers.some((trigger: string) => {
             if (trigger.startsWith("<@")) {
@@ -2226,30 +1903,20 @@ export default async function tomoriChat(
     }
   }
 
-  if (
-    !hasHandledAudioTranscription(message) &&
-    earlyTomoriState &&
-    !isWebhookMessage &&
-    !isBotAuthor
-  ) {
-    const transcriptionResult = await transcribeMessageAudioAttachment(
-      message,
-      earlyTomoriState.server_id,
-    );
+  if (!hasHandledAudioTranscription(message) && earlyTomoriState && !isWebhookMessage && !isBotAuthor) {
+    const transcriptionResult = await transcribeMessageAudioAttachment(message, earlyTomoriState.server_id);
 
     if (transcriptionResult.hasAudio) {
       markAudioTranscriptionHandled(message);
 
       if (transcriptionResult.transcriptText) {
-        const isChatMode =
-          earlyTomoriState.config?.voice_transcript_chat_mode ?? false;
+        const isChatMode = earlyTomoriState.config?.voice_transcript_chat_mode ?? false;
 
         if (isChatMode) {
           // 1. Chat mode: post transcript as a visible webhook message instead of
           //    caching internally. The LLM will read it naturally from chat history,
           //    no re-transcription needed. Silently skip on webhook errors (non-fatal).
-          const displayName =
-            message.member?.displayName ?? message.author.displayName;
+          const displayName = message.member?.displayName ?? message.author.displayName;
           const avatarUrl = message.author.displayAvatarURL({
             size: 256,
             extension: "png",
@@ -2267,11 +1934,7 @@ export default async function tomoriChat(
         } else {
           // 1. Default mode: cache the transcript so the history formatter can
           //    inline it on future context passes without re-running STT.
-          setCachedVoiceTranscript(
-            message.id,
-            transcriptionResult.transcriptText,
-            "user_stt",
-          );
+          setCachedVoiceTranscript(message.id, transcriptionResult.transcriptText, "user_stt");
           log.info(
             `[VoiceCache] SET user_stt | msg=${message.id} | chars=${transcriptionResult.transcriptText.length} | preview="${transcriptionResult.transcriptText.slice(0, 60)}${transcriptionResult.transcriptText.length > 60 ? "…" : ""}"`,
           );
@@ -2299,8 +1962,7 @@ export default async function tomoriChat(
             await sendStandardEmbed(channel, locale, {
               color: ColorCode.WARN,
               titleKey: "general.errors.voice_transcription_failed_title",
-              descriptionKey:
-                "general.errors.voice_transcription_failed_description",
+              descriptionKey: "general.errors.voice_transcription_failed_description",
             });
           }
           return;
@@ -2331,19 +1993,12 @@ export default async function tomoriChat(
       channelLocks.set(channelLockId, lockEntry);
     }
 
-    if (
-      lockEntry.isLocked &&
-      Date.now() - lockEntry.lockedAt > CHANNEL_LOCK_TIMEOUT_MS
-    ) {
+    if (lockEntry.isLocked && Date.now() - lockEntry.lockedAt > CHANNEL_LOCK_TIMEOUT_MS) {
       // 3. Check for stale lock (if current message finds it locked)
       log.warn(
         `Channel ${channelLockId} lock is stale (locked since ${new Date(lockEntry.lockedAt).toISOString()} for message ${lockEntry.currentMessageId}). Forcibly releasing. Previous queue length: ${lockEntry.messageQueue.length}`,
       );
-      stopDiscordTypingKeepalive(
-        channelLockId,
-        lockEntry,
-        "stale_lock_release",
-      );
+      stopDiscordTypingKeepalive(channelLockId, lockEntry, "stale_lock_release");
       lockEntry.isLocked = false; // Release stale lock
       lockEntry.userDiscId = undefined; // Clear user tracking
       lockEntry.currentIsPersonaJob = false;
@@ -2368,9 +2023,7 @@ export default async function tomoriChat(
         `Stop message detected in channel ${channelLockId} while processing message ${lockEntry.currentMessageId}. Signaling graceful stop.`,
       );
 
-      const { StreamOrchestrator } = await import(
-        "../../utils/discord/streamOrchestrator"
-      );
+      const { StreamOrchestrator } = await import("../../utils/discord/streamOrchestrator");
 
       StreamOrchestrator.requestStop(channelLockId, message.author.id, {
         originalStopMessage: message,
@@ -2424,9 +2077,7 @@ export default async function tomoriChat(
       }
 
       // Pure text streaming: interrupt and regenerate with follow-up context.
-      const { StreamOrchestrator } = await import(
-        "../../utils/discord/streamOrchestrator"
-      );
+      const { StreamOrchestrator } = await import("../../utils/discord/streamOrchestrator");
 
       StreamOrchestrator.requestFollowUp(channelLockId, userDiscId);
 
@@ -2469,14 +2120,7 @@ export default async function tomoriChat(
 
         // 2. Decide whether to enqueue based on the modified state.
         // Always enqueue if it's a manual command, otherwise use shouldBotReply logic
-        if (
-          isManuallyTriggered ||
-          shouldBotReply(
-            message,
-            modifiedEarlyTomoriStateForCheck,
-            earlyAllPersonas,
-          )
-        ) {
+        if (isManuallyTriggered || shouldBotReply(message, modifiedEarlyTomoriStateForCheck, earlyAllPersonas)) {
           if (!isStopResponse && !isPersonaJob) {
             const rateLimitAllowed = await enforceGlobalRateLimit({
               userDiscId,
@@ -2492,23 +2136,12 @@ export default async function tomoriChat(
           }
 
           // 2a. Check cooldown BEFORE queuing (skip for manual triggers)
-          if (
-            !isManuallyTriggered &&
-            !isStopResponse &&
-            !message.author.bot &&
-            !message.webhookId
-          ) {
+          if (!isManuallyTriggered && !isStopResponse && !message.author.bot && !message.webhookId) {
             // Check whitelist status
-            const memberRoleDiscIds = message.member
-              ? message.member.roles.cache.map((role) => role.id)
-              : undefined;
+            const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
             // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-            const isThread =
-              "isThread" in channel &&
-              typeof channel.isThread === "function" &&
-              channel.isThread();
-            const parentChannelId =
-              isThread && "parent" in channel ? channel.parent?.id : undefined;
+            const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+            const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
             const whitelistStatus = await getCachedWhitelistStatus(
               guild?.id ?? message.author.id,
               message.channelId,
@@ -2525,22 +2158,18 @@ export default async function tomoriChat(
             }
 
             // Continue with cooldown check
-            const preQueueCooldownResult =
-              await checkMessageTriggerCooldownWithWhitelist(
-                guild?.id ?? message.author.id,
-                cooldownUserDiscId,
-                message.channelId,
-                earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
-                message.member,
-              );
+            const preQueueCooldownResult = await checkMessageTriggerCooldownWithWhitelist(
+              guild?.id ?? message.author.id,
+              cooldownUserDiscId,
+              message.channelId,
+              earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
+              message.member,
+            );
             if (preQueueCooldownResult.isOnCooldown) {
               // Show cooldown warning via DM and don't queue
-              const footerKey = getCooldownTypeFooterKey(
-                preQueueCooldownResult.cooldownType,
-              );
+              const footerKey = getCooldownTypeFooterKey(preQueueCooldownResult.cooldownType);
               const tempUserRow = await getCachedUserRow(userDiscId);
-              const cooldownLocale =
-                tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
+              const cooldownLocale = tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
               await sendCooldownDM(
                 message.author,
                 cooldownLocale,
@@ -2588,8 +2217,7 @@ export default async function tomoriChat(
           if (message.author.id !== client.user!.id) {
             try {
               const tempUserRow = await getCachedUserRow(userDiscId);
-              const waitingLocale =
-                tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
+              const waitingLocale = tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
               const currentMessageLink = lockEntry.currentMessageId
                 ? isDMChannel
                   ? `https://discord.com/channels/@me/${channel.id}/${lockEntry.currentMessageId}`
@@ -2683,34 +2311,23 @@ export default async function tomoriChat(
       // For backward compatibility, we also get the main persona separately
       const allPersonas = await getCachedAllPersonas(serverDiscId);
       const mainPersona = allPersonas.find((p) => !p.is_alter) || null;
-      const fallbackPersona =
-        mainPersona ?? (allPersonas.length > 0 ? allPersonas[0] : null);
+      const fallbackPersona = mainPersona ?? (allPersonas.length > 0 ? allPersonas[0] : null);
       let tomoriState = earlyLoadAttempted ? earlyTomoriState : fallbackPersona;
       let userRow = await getCachedUserRow(userDiscId);
 
       // Register user if they don't exist yet (first message interaction)
       if (!userRow) {
         const registrationLocale =
-          manualTriggerInvoker?.locale ??
-          (message.guild?.preferredLocale.startsWith("ja") ? "ja" : "en-US");
+          manualTriggerInvoker?.locale ?? (message.guild?.preferredLocale.startsWith("ja") ? "ja" : "en-US");
         const registrationDisplayName = resolvePreferredDiscordDisplayName({
-          memberDisplayName:
-            manualTriggerInvoker?.member?.displayName ??
-            message.member?.displayName,
-          user: manualTriggerInvoker
-            ? { username: triggererUsername }
-            : message.author,
+          memberDisplayName: manualTriggerInvoker?.member?.displayName ?? message.member?.displayName,
+          user: manualTriggerInvoker ? { username: triggererUsername } : message.author,
           fallback: triggererUsername,
         });
-        userRow = await registerUser(
-          userDiscId,
-          registrationDisplayName,
-          registrationLocale,
-        );
+        userRow = await registerUser(userDiscId, registrationDisplayName, registrationLocale);
       }
 
-      locale =
-        userRow?.language_pref ?? manualTriggerInvoker?.locale ?? "en-US"; // Set locale based on user pref
+      locale = userRow?.language_pref ?? manualTriggerInvoker?.locale ?? "en-US"; // Set locale based on user pref
 
       const sendChannelEmbedOrFailImpersonation = async (
         options: StandardEmbedOptions,
@@ -2724,21 +2341,15 @@ export default async function tomoriChat(
       };
 
       // Determine triggererName based on blacklist and personalization settings
-      const isUserBlacklisted = await getCachedBlacklistStatus(
-        serverDiscId,
-        userDiscId,
-      );
-      const serverPersonalizationDisabled =
-        tomoriState?.config.personal_memories_enabled === false;
+      const isUserBlacklisted = await getCachedBlacklistStatus(serverDiscId, userDiscId);
+      const serverPersonalizationDisabled = tomoriState?.config.personal_memories_enabled === false;
       const triggererDisplayName = isMatrixRelay
         ? stripBridgePrefix(message.author.username) || message.author.username
         : triggererUsername;
 
       // Use Discord username if user is blacklisted OR server personalization is disabled OR no custom nickname exists
       const triggererName =
-        isUserBlacklisted ||
-        serverPersonalizationDisabled ||
-        !userRow?.user_nickname
+        isUserBlacklisted || serverPersonalizationDisabled || !userRow?.user_nickname
           ? triggererDisplayName
           : userRow.user_nickname;
 
@@ -2750,9 +2361,7 @@ export default async function tomoriChat(
       // Preload guild member for presence lookups (only if not DM)
       let preloadedMember = null;
       if (!isDMChannel && guild) {
-        preloadedMember =
-          manualTriggerInvoker?.member ??
-          (await guild.members.fetch(userDiscId).catch(() => null));
+        preloadedMember = manualTriggerInvoker?.member ?? (await guild.members.fetch(userDiscId).catch(() => null));
       }
 
       // Create the snapshot
@@ -2770,15 +2379,8 @@ export default async function tomoriChat(
       );
 
       if (reminderRecipientID && !reminderData?.self_reminder) {
-        const reminderForcedMentions = await buildForcedMentionsForUser(
-          reminderRecipientID,
-          client,
-          guild ?? null,
-        );
-        const mergedForcedMentions = mergeForcedMentions(
-          forcedMentions,
-          reminderForcedMentions,
-        );
+        const reminderForcedMentions = await buildForcedMentionsForUser(reminderRecipientID, client, guild ?? null);
+        const mergedForcedMentions = mergeForcedMentions(forcedMentions, reminderForcedMentions);
         if (mergedForcedMentions.length > 0) {
           streamingContext.forcedMentions = mergedForcedMentions;
         }
@@ -2787,31 +2389,19 @@ export default async function tomoriChat(
       }
 
       const selectedPersona = selectedPersonaId
-        ? (allPersonas.find((p) => p.tomori_id === selectedPersonaId) ??
-          fallbackPersona)
+        ? (allPersonas.find((p) => p.tomori_id === selectedPersonaId) ?? fallbackPersona)
         : fallbackPersona;
       const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
-      const rawSelfReplyLimit =
-        tomoriState?.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
-      const selfReplyLimit = Math.min(
-        Math.max(rawSelfReplyLimit, 0),
-        MAX_SELF_REPLY_LIMIT,
-      );
-      const rawTriggeredPersonaLimit =
-        tomoriState?.config.triggered_persona_limit ??
-        DEFAULT_TRIGGERED_PERSONA_LIMIT;
+      const rawSelfReplyLimit = tomoriState?.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
+      const selfReplyLimit = Math.min(Math.max(rawSelfReplyLimit, 0), MAX_SELF_REPLY_LIMIT);
+      const rawTriggeredPersonaLimit = tomoriState?.config.triggered_persona_limit ?? DEFAULT_TRIGGERED_PERSONA_LIMIT;
       const triggeredPersonaLimit = Math.min(
         Math.max(rawTriggeredPersonaLimit, MIN_TRIGGERED_PERSONA_LIMIT),
         MAX_TRIGGERED_PERSONA_LIMIT,
       );
       let textQuotaStateForTrigger: TextQuotaTriggerState | null = null;
 
-      if (
-        (message.author.bot || message.webhookId) &&
-        !isSelfMessage &&
-        !isManuallyTriggered &&
-        !isMatrixRelay
-      ) {
+      if ((message.author.bot || message.webhookId) && !isSelfMessage && !isManuallyTriggered && !isMatrixRelay) {
         return;
       }
 
@@ -2862,17 +2452,12 @@ export default async function tomoriChat(
       } {
         if (!embedTitle) return { isTarget: false, type: null };
 
-        const matchesLocalizedTitleTemplate = (
-          template: string,
-          actualTitle: string,
-        ): boolean => {
+        const matchesLocalizedTitleTemplate = (template: string, actualTitle: string): boolean => {
           if (!template.includes("{")) {
             return actualTitle === template;
           }
 
-          const pattern = new RegExp(
-            `^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`,
-          );
+          const pattern = new RegExp(`^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`);
           return pattern.test(actualTitle);
         };
 
@@ -2881,22 +2466,10 @@ export default async function tomoriChat(
         for (const supportedLocale of getSupportedLocales()) {
           // Target localizer keys for memory learning embeds
           const memoryLearningTitles = [
-            localizer(
-              supportedLocale,
-              "genai.self_teach.server_memory_learned_title",
-            ),
-            localizer(
-              supportedLocale,
-              "genai.self_teach.server_memory_updated_title",
-            ),
-            localizer(
-              supportedLocale,
-              "genai.self_teach.personal_memory_learned_title",
-            ),
-            localizer(
-              supportedLocale,
-              "genai.self_teach.personal_memory_updated_title",
-            ),
+            localizer(supportedLocale, "genai.self_teach.server_memory_learned_title"),
+            localizer(supportedLocale, "genai.self_teach.server_memory_updated_title"),
+            localizer(supportedLocale, "genai.self_teach.personal_memory_learned_title"),
+            localizer(supportedLocale, "genai.self_teach.personal_memory_updated_title"),
           ];
 
           const reminderSetTitles = [
@@ -2910,39 +2483,22 @@ export default async function tomoriChat(
           );
 
           // Target localizer key for conversation reset
-          const resetTitle = localizer(
-            supportedLocale,
-            "commands.tool.refresh.title",
-          );
+          const resetTitle = localizer(supportedLocale, "commands.tool.refresh.title");
 
           // Target localizer key for system message injection
-          const systemInjectionTitle = localizer(
-            supportedLocale,
-            "commands.bot.impersonate.system_title",
-          );
+          const systemInjectionTitle = localizer(supportedLocale, "commands.bot.impersonate.system_title");
           // Reward embed titles — dynamically discovered from locale sub-keys
           // so new reward commands are automatically recognized without updating this list
-          const rewardNames = getLocaleSubKeys(
-            supportedLocale,
-            "commands.reward",
-          );
+          const rewardNames = getLocaleSubKeys(supportedLocale, "commands.reward");
           const rewardTitles = rewardNames
-            .map((name) =>
-              localizer(supportedLocale, `commands.reward.${name}.embed_title`),
-            )
+            .map((name) => localizer(supportedLocale, `commands.reward.${name}.embed_title`))
             .filter((title) => !title.includes(".")); // Filter out unresolved keys
-          const compactSummaryTitle = localizer(
-            supportedLocale,
-            "commands.tool.compact.summary_title",
-          );
+          const compactSummaryTitle = localizer(supportedLocale, "commands.tool.compact.summary_title");
           const compactSummaryTitleRefreshed = localizer(
             supportedLocale,
             "commands.tool.compact.summary_title_refreshed",
           );
-          const compactSceneTitle = localizer(
-            supportedLocale,
-            "commands.tool.compact.roleplay_scene_title",
-          );
+          const compactSceneTitle = localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title");
           const compactSceneTitleRefreshed = localizer(
             supportedLocale,
             "commands.tool.compact.roleplay_scene_title_refreshed",
@@ -2970,35 +2526,22 @@ export default async function tomoriChat(
             return { isTarget: true, type: "reward" };
           }
           // Check for compact summary embeds (conversation/scene)
-          if (
-            embedTitle === compactSummaryTitle ||
-            embedTitle === compactSceneTitle
-          ) {
+          if (embedTitle === compactSummaryTitle || embedTitle === compactSceneTitle) {
             return { isTarget: true, type: "compact_summary" };
           }
 
           // Check for compact refresh embeds (reset marker)
-          if (
-            embedTitle === compactSummaryTitleRefreshed ||
-            embedTitle === compactSceneTitleRefreshed
-          ) {
+          if (embedTitle === compactSummaryTitleRefreshed || embedTitle === compactSceneTitleRefreshed) {
             return { isTarget: true, type: "compact_refresh" };
           }
 
           // Check for compact roleplay character embeds by prefix match
-          if (
-            compactCharacterTitlePrefix &&
-            embedTitle.startsWith(compactCharacterTitlePrefix)
-          ) {
+          if (compactCharacterTitlePrefix && embedTitle.startsWith(compactCharacterTitlePrefix)) {
             return { isTarget: true, type: "compact_summary" };
           }
 
           // Check for reminder set confirmation embeds (all types)
-          if (
-            reminderSetTitles.some((title) =>
-              matchesLocalizedTitleTemplate(title, embedTitle),
-            )
-          ) {
+          if (reminderSetTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle))) {
             return { isTarget: true, type: "reminder_set" };
           }
         }
@@ -3039,11 +2582,7 @@ export default async function tomoriChat(
       } {
         // 1. Check if this embed has any meaningful content to extract
         const hasContent =
-          embed.url ||
-          embed.title ||
-          embed.description ||
-          embed.author?.name ||
-          embed.fields.length > 0;
+          embed.url || embed.title || embed.description || embed.author?.name || embed.fields.length > 0;
         if (!hasContent) {
           return {
             isLinkPreview: false,
@@ -3093,9 +2632,7 @@ export default async function tomoriChat(
             // Only include non-empty fields
             if (field.name || field.value) {
               contentParts.push(
-                field.name && field.value
-                  ? `${field.name}: ${field.value}`
-                  : field.name || field.value,
+                field.name && field.value ? `${field.name}: ${field.value}` : field.name || field.value,
               );
             }
           }
@@ -3157,8 +2694,7 @@ export default async function tomoriChat(
         if (embed.thumbnail?.url && !imageInfo) {
           try {
             const thumbnailUrl = new URL(embed.thumbnail.url);
-            let filename =
-              thumbnailUrl.pathname.split("/").pop() || "embed_thumbnail";
+            let filename = thumbnailUrl.pathname.split("/").pop() || "embed_thumbnail";
 
             // Handle social media thumbnail URLs with size suffixes
             filename = filename.replace(/:(large|medium|small|orig)$/, "");
@@ -3213,18 +2749,12 @@ export default async function tomoriChat(
       // Check if message is a reply to the bot
       if (message.reference?.messageId) {
         try {
-          const referenceMessage = await message.channel.messages.fetch(
-            message.reference.messageId,
-          );
+          const referenceMessage = await message.channel.messages.fetch(message.reference.messageId);
           if (referenceMessage) {
             if (referenceMessage.author.id === client.user?.id) {
               isReplyToBot = true;
             } else if (referenceMessage.webhookId) {
-              const webhookReplyTarget = resolveReferencedWebhookTarget(
-                referenceMessage,
-                personaByNickname,
-                guild,
-              );
+              const webhookReplyTarget = resolveReferencedWebhookTarget(referenceMessage, personaByNickname, guild);
 
               if (webhookReplyTarget.replyPersona) {
                 replyPersona = webhookReplyTarget.replyPersona;
@@ -3232,17 +2762,12 @@ export default async function tomoriChat(
                 isReplyToBot = true;
                 isUserImpersonation = true;
                 impersonatedUserId = webhookReplyTarget.impersonatedUserId;
-                log.info(
-                  `Reply ${message.id} matched user impersonation webhook. Target user: ${impersonatedUserId}`,
-                );
+                log.info(`Reply ${message.id} matched user impersonation webhook. Target user: ${impersonatedUserId}`);
               }
             }
           }
         } catch (fetchError) {
-          log.warn(
-            "Could not fetch reference message for reply check",
-            fetchError,
-          );
+          log.warn("Could not fetch reference message for reply check", fetchError);
         }
       }
 
@@ -3252,9 +2777,7 @@ export default async function tomoriChat(
       isBaseTriggerWord = checkForBaseTriggerWords(message.content);
 
       // Check if bot was mentioned
-      const isBotMentioned = !!(
-        client.user && message.mentions.users.has(client.user.id)
-      );
+      const isBotMentioned = !!(client.user && message.mentions.users.has(client.user.id));
 
       // 4. Early validation for directly triggered messages or manual triggers (including DMs)
       // For DMs, always validate regardless of content since all DM messages should trigger responses
@@ -3321,62 +2844,38 @@ export default async function tomoriChat(
 
       // 5. Auto-Counter Update (only needs to happen if Tomori is set up)
       const config = tomoriState.config;
-      if (
-        !isDMChannel &&
-        config.thought_log_channel_disc_id &&
-        config.thought_log_channel_disc_id === channel.id
-      ) {
-        log.info(
-          `Skipping normal chat trigger in configured thought-log channel ${channel.id}.`,
-        );
+      if (!isDMChannel && config.thought_log_channel_disc_id && config.thought_log_channel_disc_id === channel.id) {
+        log.info(`Skipping normal chat trigger in configured thought-log channel ${channel.id}.`);
         return;
       }
 
       const { minThreshold, maxThreshold } = getAutochatRange(config);
-      const isAutoCounterChannelActive = isAutochatCounterChannelActive(
-        config,
-        channel.id,
-      );
+      const isAutoCounterChannelActive = isAutochatCounterChannelActive(config, channel.id);
 
       if (!message.author.bot && isAutoCounterChannelActive) {
         if (!tomoriState.tomori_id) {
-          log.error(
-            `Tomori ID missing for server ${serverDiscId} during counter increment.`,
-          );
+          log.error(`Tomori ID missing for server ${serverDiscId} during counter increment.`);
         } else {
           try {
-            const updatedTomoriRow = await incrementTomoriCounter(
-              tomoriState.tomori_id,
-              minThreshold,
-              maxThreshold,
-            );
+            const updatedTomoriRow = await incrementTomoriCounter(tomoriState.tomori_id, minThreshold, maxThreshold);
             if (updatedTomoriRow) {
               tomoriState.autoch_counter = updatedTomoriRow.autoch_counter;
-              tomoriState.autoch_next_target =
-                updatedTomoriRow.autoch_next_target;
+              tomoriState.autoch_next_target = updatedTomoriRow.autoch_next_target;
               log.info(
                 `Auto-message counter updated for server ${serverDiscId}. New value: ${tomoriState.autoch_counter}/${tomoriState.autoch_next_target}`,
               );
             } else {
-              log.warn(
-                `Failed to update auto-message counter for server ${serverDiscId}.`,
-              );
+              log.warn(`Failed to update auto-message counter for server ${serverDiscId}.`);
             }
           } catch (dbError) {
-            log.error(
-              `Error updating auto-message counter for server ${serverDiscId}`,
-              dbError,
-            );
+            log.error(`Error updating auto-message counter for server ${serverDiscId}`, dbError);
           }
         }
       }
 
       // 6. Determine if Bot Should Reply using shouldBotReply helper
       // Skip check if this is a manual command trigger
-      if (
-        !isManuallyTriggered &&
-        !shouldBotReply(message, tomoriState, allPersonas)
-      ) {
+      if (!isManuallyTriggered && !shouldBotReply(message, tomoriState, allPersonas)) {
         return;
       }
 
@@ -3403,16 +2902,10 @@ export default async function tomoriChat(
 
       // 6.5. Check whitelist status (skip for manual triggers, stop responses, and self messages)
       if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
-        const memberRoleDiscIds = message.member
-          ? message.member.roles.cache.map((role) => role.id)
-          : undefined;
+        const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
         // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-        const isThread =
-          "isThread" in channel &&
-          typeof channel.isThread === "function" &&
-          channel.isThread();
-        const parentChannelId =
-          isThread && "parent" in channel ? channel.parent?.id : undefined;
+        const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+        const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
         const whitelistStatus = await getCachedWhitelistStatus(
           guild?.id ?? message.author.id,
           message.channelId,
@@ -3440,9 +2933,7 @@ export default async function tomoriChat(
         );
         if (cooldownResult.isOnCooldown) {
           // Send cooldown warning via DM
-          const footerKey = getCooldownTypeFooterKey(
-            cooldownResult.cooldownType,
-          );
+          const footerKey = getCooldownTypeFooterKey(cooldownResult.cooldownType);
           await sendCooldownDM(
             message.author,
             locale,
@@ -3488,18 +2979,13 @@ export default async function tomoriChat(
       let personasToRespond: TomoriState[];
       if (isManuallyTriggered) {
         personasToRespond = selectedPersona ? [selectedPersona] : [];
-      } else if (
-        reminderRecipientID ||
-        reminderData?.self_reminder ||
-        isStopResponse
-      ) {
+      } else if (reminderRecipientID || reminderData?.self_reminder || isStopResponse) {
         // Only main persona for reminders and stop responses
         personasToRespond = tomoriState ? [tomoriState] : [];
       } else {
         // Check if the shared auto-chat range hit for this message
         const config = tomoriState?.config;
-        const isAutoMsgHit =
-          !!config && isAutochatCounterHit(tomoriState, message.channel.id);
+        const isAutoMsgHit = !!config && isAutochatCounterHit(tomoriState, message.channel.id);
         const isScopedAlwaysReplyActive =
           !!config &&
           isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
@@ -3534,13 +3020,9 @@ export default async function tomoriChat(
           const lastRespondedId = getLastRespondedPersonaId(channel.id);
           if (lastRespondedId != null) {
             const before = personasToRespond.length;
-            personasToRespond = personasToRespond.filter(
-              (p) => p.tomori_id !== lastRespondedId,
-            );
+            personasToRespond = personasToRespond.filter((p) => p.tomori_id !== lastRespondedId);
             if (personasToRespond.length < before) {
-              const skippedPersona = allPersonas.find(
-                (p) => p.tomori_id === lastRespondedId,
-              );
+              const skippedPersona = allPersonas.find((p) => p.tomori_id === lastRespondedId);
               log.info(
                 `Consecutive persona filter: skipped "${skippedPersona?.tomori_nickname ?? lastRespondedId}" (last responder) for message ${message.id} in channel ${channel.id}`,
               );
@@ -3563,9 +3045,7 @@ export default async function tomoriChat(
 
       // If no personas match, return early
       if (personasToRespond.length === 0) {
-        log.info(
-          `No personas matched trigger for message ${message.id} in server ${serverDiscId}`,
-        );
+        log.info(`No personas matched trigger for message ${message.id} in server ${serverDiscId}`);
         return;
       }
 
@@ -3578,16 +3058,11 @@ export default async function tomoriChat(
         !reminderData?.self_reminder;
 
       if (shouldApplyTextQuota) {
-        const existingTextQuotaState = textQuotaTriggerStates.get(
-          effectiveTextQuotaTriggerKey,
-        );
+        const existingTextQuotaState = textQuotaTriggerStates.get(effectiveTextQuotaTriggerKey);
 
         if (!isPersonaJob) {
           if (!existingTextQuotaState) {
-            const quotaCheck = await checkTextQuota(
-              tomoriState.server_id,
-              effectiveTextQuotaUserDiscId,
-            );
+            const quotaCheck = await checkTextQuota(tomoriState.server_id, effectiveTextQuotaUserDiscId);
 
             if (!quotaCheck.allowed) {
               const resetInfo = buildTextQuotaResetInfo(locale, quotaCheck);
@@ -3596,8 +3071,7 @@ export default async function tomoriChat(
               if (quotaCheck.reason === "user_quota_exceeded") {
                 descriptionKey = "genai.text_user_quota_exceeded_description";
               } else if (quotaCheck.reason === "serverwide_quota_exceeded") {
-                descriptionKey =
-                  "genai.text_serverwide_quota_exceeded_description";
+                descriptionKey = "genai.text_serverwide_quota_exceeded_description";
               }
 
               await sendStandardEmbed(channel, locale, {
@@ -3618,10 +3092,7 @@ export default async function tomoriChat(
               consumed: false,
               createdAt: Date.now(),
             };
-            textQuotaTriggerStates.set(
-              effectiveTextQuotaTriggerKey,
-              textQuotaStateForTrigger,
-            );
+            textQuotaTriggerStates.set(effectiveTextQuotaTriggerKey, textQuotaStateForTrigger);
           } else {
             textQuotaStateForTrigger = existingTextQuotaState;
           }
@@ -3731,28 +3202,18 @@ export default async function tomoriChat(
         channel.type === ChannelType.PublicThread ||
         channel.type === ChannelType.PrivateThread ||
         channel.type === ChannelType.AnnouncementThread;
-      const isWebhookThread =
-        "isThread" in channel &&
-        typeof channel.isThread === "function" &&
-        channel.isThread();
-      const webhookTargetChannel =
-        isWebhookThread && channel.parent ? channel.parent : channel;
+      const isWebhookThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+      const webhookTargetChannel = isWebhookThread && channel.parent ? channel.parent : channel;
       const hasWebhookMethods =
-        !!webhookTargetChannel &&
-        "fetchWebhooks" in webhookTargetChannel &&
-        "createWebhook" in webhookTargetChannel;
+        !!webhookTargetChannel && "fetchWebhooks" in webhookTargetChannel && "createWebhook" in webhookTargetChannel;
 
       if (hasAlters && supportsWebhooks && hasWebhookMethods) {
-        const webhookResult = await getOrCreateWebhook(
-          webhookTargetChannel as BaseGuildTextChannel,
-        );
+        const webhookResult = await getOrCreateWebhook(webhookTargetChannel as BaseGuildTextChannel);
         channelWebhook = webhookResult.webhook;
         webhookErrorReason = webhookResult.errorReason;
 
         if (channelWebhook) {
-          log.info(
-            `Webhook ready for multi-persona responses in ${channel.type} ${channel.id}`,
-          );
+          log.info(`Webhook ready for multi-persona responses in ${channel.type} ${channel.id}`);
         } else if (webhookErrorReason) {
           await sendWebhookErrorEmbed(channel, locale, webhookErrorReason);
           webhookErrorNotified = true;
@@ -3772,9 +3233,7 @@ export default async function tomoriChat(
        * the most recent consecutive messages in correct order. Cache may contain gaps
        * or out-of-order messages from gateway events.
        */
-      const messageFetchLimit = normalizeMessageFetchLimit(
-        tomoriState.config.message_fetch_limit,
-      );
+      const messageFetchLimit = normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit);
       const fetchedMessages = await channel.messages.fetch({
         limit: messageFetchLimit,
       });
@@ -3784,9 +3243,7 @@ export default async function tomoriChat(
 
       // MODIFIED: If processing a message from the queue, ensure it's treated as the latest message for context
       const queuedMessageId = message.id;
-      const indexOfQueuedMessage = messagesArray.findIndex(
-        (m) => m.id === queuedMessageId,
-      );
+      const indexOfQueuedMessage = messagesArray.findIndex((m) => m.id === queuedMessageId);
 
       if (isFromQueue) {
         if (indexOfQueuedMessage !== -1) {
@@ -3817,16 +3274,9 @@ export default async function tomoriChat(
         let embedContainsReset = false;
         for (const embed of msg.embeds) {
           const embedCheck = checkTargetEmbedTitle(embed.title);
-          if (
-            embedCheck.isTarget &&
-            (embedCheck.type === "reset" ||
-              embedCheck.type === "compact_refresh")
-          ) {
+          if (embedCheck.isTarget && (embedCheck.type === "reset" || embedCheck.type === "compact_refresh")) {
             embedContainsReset = true;
-            resetType =
-              embedCheck.type === "compact_refresh"
-                ? "compact_refresh"
-                : "reset";
+            resetType = embedCheck.type === "compact_refresh" ? "compact_refresh" : "reset";
             break;
           }
         }
@@ -3847,12 +3297,7 @@ export default async function tomoriChat(
       }
 
       // 9. Determine the messages to include in the history
-      const startIndex =
-        resetIndex === -1
-          ? 0
-          : resetType === "compact_refresh"
-            ? resetIndex
-            : resetIndex + 1;
+      const startIndex = resetIndex === -1 ? 0 : resetType === "compact_refresh" ? resetIndex : resetIndex + 1;
       const relevantMessagesArray = messagesArray.slice(startIndex);
 
       // Pre-populate the voice transcript cache for audio messages in history.
@@ -3861,25 +3306,17 @@ export default async function tomoriChat(
       // Only user messages are STT'd; bot/webhook messages are skipped.
       // Skip entirely in chat mode — transcripts are already posted as chat
       // messages and the cache is not used in that mode.
-      if (
-        earlyTomoriState &&
-        !(earlyTomoriState.config?.voice_transcript_chat_mode ?? false)
-      ) {
+      if (earlyTomoriState && !(earlyTomoriState.config?.voice_transcript_chat_mode ?? false)) {
         for (const msg of relevantMessagesArray) {
           // 1. Skip bots and webhooks — only user audio is STT'd
           if (msg.author.bot || msg.webhookId) continue;
           // 2. Skip if already cached (current-turn message was cached above)
           if (getCachedVoiceTranscript(msg.id)) continue;
           // 3. Run STT only if the message has at least one audio attachment
-          const hasAudio = [...msg.attachments.values()].some(
-            isAudioAttachment,
-          );
+          const hasAudio = [...msg.attachments.values()].some(isAudioAttachment);
           if (!hasAudio) continue;
 
-          const result = await transcribeMessageAudioAttachment(
-            msg,
-            earlyTomoriState.server_id,
-          );
+          const result = await transcribeMessageAudioAttachment(msg, earlyTomoriState.server_id);
           if (result.transcriptText) {
             setCachedVoiceTranscript(msg.id, result.transcriptText, "user_stt");
             log.info(
@@ -3900,10 +3337,7 @@ export default async function tomoriChat(
       // - persona entries keyed by tomori_id (short numeric)
       // - webhook entries keyed by webhook ID (snowflake)
       // This lets tools consume stable persona IDs in production/local.
-      const syntheticUserMap = new Map<
-        string,
-        { displayName: string; type: "persona" | "webhook" }
-      >();
+      const syntheticUserMap = new Map<string, { displayName: string; type: "persona" | "webhook" }>();
       let impersonatedUserDbNickname: string | undefined;
       let impersonatedUserPrompt: string | undefined;
       let impersonatedIdentityName: string | undefined;
@@ -3912,8 +3346,7 @@ export default async function tomoriChat(
       if (isUserImpersonation && impersonatedUserId) {
         const impersonatedUserRow = await getCachedUserRow(impersonatedUserId);
         impersonatedUserDbNickname = impersonatedUserRow?.user_nickname;
-        impersonatedUserPrompt =
-          impersonatedUserRow?.impersonation_prompt ?? undefined;
+        impersonatedUserPrompt = impersonatedUserRow?.impersonation_prompt ?? undefined;
         const impersonatedIdentity = await resolveImpersonatedIdentity(
           client,
           guild,
@@ -3948,9 +3381,7 @@ export default async function tomoriChat(
         // Filter out Level 2 (FULL privacy) users from conversation history
         const authorPrivacyLevel = await getCachedPrivacyLevel(authorId);
         if (authorPrivacyLevel === PrivacyLevel.FULL) {
-          log.info(
-            `Filtering message from user ${authorId} (privacy level FULL)`,
-          );
+          log.info(`Filtering message from user ${authorId} (privacy level FULL)`);
           continue; // Skip this message entirely
         }
 
@@ -3961,8 +3392,7 @@ export default async function tomoriChat(
         const joinServerName = guild?.name ?? "this server";
 
         // 1. Check for debug prefix "$:" at the start of the message
-        const isDebugMessage =
-          !isUserJoinMessage && msg.content.startsWith("$:"); // Easter egg functionality hehehe
+        const isDebugMessage = !isUserJoinMessage && msg.content.startsWith("$:"); // Easter egg functionality hehehe
         let processedContent = isUserJoinMessage
           ? `[System: <@${authorId}> has just joined ${joinServerName}]`
           : msg.content;
@@ -3973,15 +3403,9 @@ export default async function tomoriChat(
         }
 
         // 3. Add reference context only for the most recent message with a reference
-        if (
-          index === latestReferenceMessageIndex &&
-          msg.reference?.messageId &&
-          processedContent
-        ) {
+        if (index === latestReferenceMessageIndex && msg.reference?.messageId && processedContent) {
           try {
-            const msgReferencedMessage = await channel.messages.fetch(
-              msg.reference.messageId,
-            );
+            const msgReferencedMessage = await channel.messages.fetch(msg.reference.messageId);
             if (msgReferencedMessage) {
               // Get the author name for the referenced message
               const referencedAuthorName =
@@ -3990,9 +3414,7 @@ export default async function tomoriChat(
                   : msgReferencedMessage.author.username;
 
               // Get the referenced message content (truncate if too long)
-              let referencedContent = (
-                msgReferencedMessage.content || "[No text content]"
-              ).replace(/\n/g, " ");
+              let referencedContent = (msgReferencedMessage.content || "[No text content]").replace(/\n/g, " ");
               if (referencedContent.length > 200) {
                 referencedContent = `${referencedContent.substring(0, 197)}...`;
               }
@@ -4021,9 +3443,7 @@ export default async function tomoriChat(
                     imageCount++;
                   } else if (
                     attachment.contentType &&
-                    SUPPORTED_VIDEO_MIME_TYPES.some((type) =>
-                      attachment.contentType?.startsWith(type),
-                    )
+                    SUPPORTED_VIDEO_MIME_TYPES.some((type) => attachment.contentType?.startsWith(type))
                   ) {
                     videoCount++;
                   }
@@ -4044,10 +3464,7 @@ export default async function tomoriChat(
               processedContent = `${referenceContext}\n${processedContent}`;
             }
           } catch (fetchError) {
-            log.warn(
-              `Could not fetch referenced message ${msg.reference.messageId} for context`,
-              fetchError,
-            );
+            log.warn(`Could not fetch referenced message ${msg.reference.messageId} for context`, fetchError);
           }
         }
 
@@ -4061,10 +3478,7 @@ export default async function tomoriChat(
         const isWebhookMessage = Boolean(msg.webhookId);
 
         if (msg.author.id === client.user?.id || isDebugMessage) {
-          const mainNickname =
-            mainPersona?.tomori_nickname ??
-            tomoriState?.tomori_nickname ??
-            msg.author.username;
+          const mainNickname = mainPersona?.tomori_nickname ?? tomoriState?.tomori_nickname ?? msg.author.username;
           authorName = mainNickname; // Use main persona nickname for bot/debug messages
           authorType = "persona";
           personaName = mainNickname;
@@ -4072,9 +3486,7 @@ export default async function tomoriChat(
           // Strip "[Matrix|@user:host] " prefix from Matrix bridge webhooks
           // so TomoriBot sees just the display name (e.g., "bred") in context
           const webhookName = stripBridgePrefix(msg.author.username);
-          const matchedPersona = webhookName
-            ? personaByNickname.get(webhookName.toLowerCase())
-            : undefined;
+          const matchedPersona = webhookName ? personaByNickname.get(webhookName.toLowerCase()) : undefined;
 
           if (matchedPersona) {
             authorName = matchedPersona.tomori_nickname;
@@ -4090,20 +3502,13 @@ export default async function tomoriChat(
               forceStatic: true,
             });
             resolvedWebhookImpersonatedUserId =
-              (msg.webhookId
-                ? getCachedImpersonatedUserIdForWebhook(msg.webhookId)
-                : null) ??
-              resolveImpersonatedUserIdByWebhookIdentity(
-                guild,
-                webhookName,
-                webhookAvatarUrl,
-              );
+              (msg.webhookId ? getCachedImpersonatedUserIdForWebhook(msg.webhookId) : null) ??
+              resolveImpersonatedUserIdByWebhookIdentity(guild, webhookName, webhookAvatarUrl);
             if (
               !resolvedWebhookImpersonatedUserId &&
               isUserImpersonation &&
               impersonatedUserId &&
-              normalizeIdentityName(webhookName) ===
-                normalizeIdentityName(impersonatedIdentityName) &&
+              normalizeIdentityName(webhookName) === normalizeIdentityName(impersonatedIdentityName) &&
               (!impersonatedIdentityAvatarUrl ||
                 normalizeAvatarUrlForMatch(webhookAvatarUrl) ===
                   normalizeAvatarUrlForMatch(impersonatedIdentityAvatarUrl))
@@ -4112,10 +3517,7 @@ export default async function tomoriChat(
             }
 
             if (resolvedWebhookImpersonatedUserId && msg.webhookId) {
-              cacheUserImpersonationWebhook(
-                msg.webhookId,
-                resolvedWebhookImpersonatedUserId,
-              );
+              cacheUserImpersonationWebhook(msg.webhookId, resolvedWebhookImpersonatedUserId);
               effectiveAuthorId = resolvedWebhookImpersonatedUserId;
               if (
                 isUserImpersonation &&
@@ -4136,11 +3538,7 @@ export default async function tomoriChat(
             }
           }
         } else {
-          if (
-            isUserImpersonation &&
-            impersonatedUserId === authorId &&
-            impersonatedIdentityName
-          ) {
+          if (isUserImpersonation && impersonatedUserId === authorId && impersonatedIdentityName) {
             authorName = impersonatedIdentityName;
           } else {
             authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
@@ -4151,22 +3549,14 @@ export default async function tomoriChat(
         // Skip Matrix relay non-persona webhook messages — they are tracked in matrixUserMap
         // instead, since all Matrix relays share the same Discord webhook bot user ID.
         const isMatrixNonPersonaRelay =
-          isWebhookMessage &&
-          isMatrixBridgeWebhookUsername(msg.author.username) &&
-          authorType === "user";
+          isWebhookMessage && isMatrixBridgeWebhookUsername(msg.author.username) && authorType === "user";
         const shouldTreatWebhookAsRealUser =
-          isWebhookMessage &&
-          authorType === "user" &&
-          !!resolvedWebhookImpersonatedUserId;
+          isWebhookMessage && authorType === "user" && !!resolvedWebhookImpersonatedUserId;
 
         // Register synthetic identities for context:
         // - matched alter persona => tomori_id (short numeric)
         // - non-persona webhook => webhook snowflake
-        if (
-          isWebhookMessage &&
-          !isMatrixNonPersonaRelay &&
-          !shouldTreatWebhookAsRealUser
-        ) {
+        if (isWebhookMessage && !isMatrixNonPersonaRelay && !shouldTreatWebhookAsRealUser) {
           if (matchedPersonaId !== null) {
             syntheticUserMap.set(String(matchedPersonaId), {
               displayName: authorName,
@@ -4186,8 +3576,7 @@ export default async function tomoriChat(
           userListSet.add(
             matchedPersonaId !== null
               ? String(matchedPersonaId)
-              : shouldTreatWebhookAsRealUser &&
-                  resolvedWebhookImpersonatedUserId
+              : shouldTreatWebhookAsRealUser && resolvedWebhookImpersonatedUserId
                 ? resolvedWebhookImpersonatedUserId
                 : isWebhookMessage && msg.webhookId
                   ? msg.webhookId
@@ -4195,23 +3584,17 @@ export default async function tomoriChat(
           );
         }
 
-        const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
-          [];
-        const videoAttachments: SimplifiedMessageForContext["videoAttachments"] =
-          [];
+        const imageAttachments: SimplifiedMessageForContext["imageAttachments"] = [];
+        const videoAttachments: SimplifiedMessageForContext["videoAttachments"] = [];
         const selfDebugEnabled = tomoriState.config.self_debug_enabled ?? false;
         const isTomoriAuthoredMessage =
-          msg.author.id === client.user?.id ||
-          (isWebhookMessage && authorType === "persona");
+          msg.author.id === client.user?.id || (isWebhookMessage && authorType === "persona");
         let messageContentForLlm: string | null = processedContent; // Use processed content (with reference context and "$:" removed if present)
         let hasProcessedEmbed = false; // Track if this message contains a processed embed
         const mediaSourceMessageIds: string[] = []; // Array to collect all message IDs with media
         let hasLocalMedia = false;
 
-        const reactionContextLine = await buildReactionContextAnnotation(
-          msg,
-          reactionContextBudget,
-        );
+        const reactionContextLine = await buildReactionContextAnnotation(msg, reactionContextBudget);
         if (reactionContextLine) {
           messageContentForLlm = messageContentForLlm
             ? `${messageContentForLlm}\n${reactionContextLine}`
@@ -4220,10 +3603,7 @@ export default async function tomoriChat(
 
         // Extract attachments from referenced message if it exists (after arrays are declared)
         // Check if this is the message that got reference context injection and we have stored reference message data
-        if (
-          index === latestReferenceMessageIndex &&
-          typeof referencedMessageData !== "undefined"
-        ) {
+        if (index === latestReferenceMessageIndex && typeof referencedMessageData !== "undefined") {
           const preRefImageCount = imageAttachments.length;
           const preRefVideoCount = videoAttachments.length;
 
@@ -4245,9 +3625,7 @@ export default async function tomoriChat(
                 });
               } else if (
                 attachment.contentType &&
-                SUPPORTED_VIDEO_MIME_TYPES.some((type) =>
-                  attachment.contentType?.startsWith(type),
-                )
+                SUPPORTED_VIDEO_MIME_TYPES.some((type) => attachment.contentType?.startsWith(type))
               ) {
                 videoAttachments.push({
                   url: attachment.url,
@@ -4260,30 +3638,20 @@ export default async function tomoriChat(
             }
           }
 
-          if (
-            shouldExtractEmojiImages &&
-            referencedMessageData.message.content
-          ) {
-            const referencedEmojiAttachments = extractEmojiImageAttachments(
-              referencedMessageData.message.content,
-            );
+          if (shouldExtractEmojiImages && referencedMessageData.message.content) {
+            const referencedEmojiAttachments = extractEmojiImageAttachments(referencedMessageData.message.content);
             if (referencedEmojiAttachments.length > 0) {
               imageAttachments.push(...referencedEmojiAttachments);
             }
           }
 
-          if (
-            imageAttachments.length > preRefImageCount ||
-            videoAttachments.length > preRefVideoCount
-          ) {
+          if (imageAttachments.length > preRefImageCount || videoAttachments.length > preRefVideoCount) {
             mediaSourceMessageIds.push(referencedMessageData.message.id);
           }
 
           // Log attachment extraction for debugging
           const extractedImages = imageAttachments.length;
-          const extractedVideos = videoAttachments.filter(
-            (v) => !v.isYouTubeLink,
-          ).length;
+          const extractedVideos = videoAttachments.filter((v) => !v.isYouTubeLink).length;
           if (extractedImages > 0 || extractedVideos > 0) {
             log.info(
               `Extracted ${extractedImages} images and ${extractedVideos} videos from referenced message ${referencedMessageData.message.id}`,
@@ -4313,8 +3681,7 @@ export default async function tomoriChat(
                 embedCheck.type === "compact_refresh"
               ) {
                 const titleLine =
-                  embedCheck.type === "compact_summary" ||
-                  embedCheck.type === "compact_refresh"
+                  embedCheck.type === "compact_summary" || embedCheck.type === "compact_refresh"
                     ? embed.title
                       ? `## ${embed.title}\n`
                       : ""
@@ -4329,57 +3696,35 @@ export default async function tomoriChat(
                 let cleanedDescription = embed.description;
                 if (tomoriState?.tomori_nickname) {
                   // Escape special regex characters in the bot nickname
-                  const escapedNickname = tomoriState.tomori_nickname.replace(
-                    /[.*+?^${}()|[\]\\]/g,
-                    "\\$&",
-                  );
-                  const botNamePattern = new RegExp(
-                    `^${escapedNickname}:\\s*`,
-                    "i",
-                  );
+                  const escapedNickname = tomoriState.tomori_nickname.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                  const botNamePattern = new RegExp(`^${escapedNickname}:\\s*`, "i");
                   if (botNamePattern.test(cleanedDescription)) {
-                    cleanedDescription = cleanedDescription
-                      .replace(botNamePattern, "")
-                      .trim();
+                    cleanedDescription = cleanedDescription.replace(botNamePattern, "").trim();
                   }
                 }
 
                 const includeTitleInEmbedContent =
-                  embedCheck.type === "memory_learning" ||
-                  embedCheck.type === "reminder_set";
-                const titleLine =
-                  includeTitleInEmbedContent && embed.title
-                    ? `${embed.title}\n`
-                    : "";
+                  embedCheck.type === "memory_learning" || embedCheck.type === "reminder_set";
+                const titleLine = includeTitleInEmbedContent && embed.title ? `${embed.title}\n` : "";
                 const embedBody = `${titleLine}${cleanedDescription}`;
                 const embedContent =
-                  embedCheck.type === "memory_learning" ||
-                  embedCheck.type === "reward"
+                  embedCheck.type === "memory_learning" || embedCheck.type === "reward"
                     ? `[System: ${embedBody}]`
                     : `[The following is a system-produced embed]\n${embedBody}`;
-                messageContentForLlm = messageContentForLlm
-                  ? `${messageContentForLlm}\n${embedContent}`
-                  : embedContent;
+                messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${embedContent}` : embedContent;
                 hasProcessedEmbed = true;
               }
             }
 
             // 2. Process Tomori diagnostic embeds when self-debug mode is enabled
-            else if (
-              selfDebugEnabled &&
-              isTomoriAuthoredMessage &&
-              shouldIncludeSelfDebugEmbed(embed)
-            ) {
-              const diagnosticEmbedContent =
-                formatTomoriSelfDebugEmbedAsSystemMessage(embed);
+            else if (selfDebugEnabled && isTomoriAuthoredMessage && shouldIncludeSelfDebugEmbed(embed)) {
+              const diagnosticEmbedContent = formatTomoriSelfDebugEmbedAsSystemMessage(embed);
               if (diagnosticEmbedContent) {
                 messageContentForLlm = messageContentForLlm
                   ? `${messageContentForLlm}\n${diagnosticEmbedContent}`
                   : diagnosticEmbedContent;
                 hasProcessedEmbed = true;
-                log.info(
-                  `Self-debug: loaded Tomori diagnostic embed from message ${msg.id} into context`,
-                );
+                log.info(`Self-debug: loaded Tomori diagnostic embed from message ${msg.id} into context`);
               }
             }
 
@@ -4404,9 +3749,7 @@ export default async function tomoriChat(
                     filename: linkEmbedData.imageInfo.filename,
                   });
                   hasLocalMedia = true;
-                  log.info(
-                    `Added embed image from link preview: ${linkEmbedData.imageInfo.filename}`,
-                  );
+                  log.info(`Added embed image from link preview: ${linkEmbedData.imageInfo.filename}`);
                 }
 
                 // Add embed thumbnail to imageAttachments if present (and no main image)
@@ -4418,9 +3761,7 @@ export default async function tomoriChat(
                     filename: linkEmbedData.thumbnailInfo.filename,
                   });
                   hasLocalMedia = true;
-                  log.info(
-                    `Added embed thumbnail from link preview: ${linkEmbedData.thumbnailInfo.filename}`,
-                  );
+                  log.info(`Added embed thumbnail from link preview: ${linkEmbedData.thumbnailInfo.filename}`);
                 }
               }
             }
@@ -4442,15 +3783,9 @@ export default async function tomoriChat(
         } else if (isDebugMessage) {
           // Debug messages ($:) should appear as coming from the bot (model role)
           effectiveAuthorId = client.user?.id || "bot"; // Use bot's actual ID for debug messages
-          authorName =
-            mainPersona?.tomori_nickname ??
-            tomoriState?.tomori_nickname ??
-            "Bot"; // Keep bot nickname
+          authorName = mainPersona?.tomori_nickname ?? tomoriState?.tomori_nickname ?? "Bot"; // Keep bot nickname
           authorType = "persona";
-          personaName =
-            mainPersona?.tomori_nickname ??
-            tomoriState?.tomori_nickname ??
-            null;
+          personaName = mainPersona?.tomori_nickname ?? tomoriState?.tomori_nickname ?? null;
         }
 
         // 5.a. Process direct image attachments and stickers
@@ -4475,9 +3810,7 @@ export default async function tomoriChat(
             // 1. Check for video attachments using supported MIME types
             else if (
               attachment.contentType &&
-              SUPPORTED_VIDEO_MIME_TYPES.some((type) =>
-                attachment.contentType?.startsWith(type),
-              )
+              SUPPORTED_VIDEO_MIME_TYPES.some((type) => attachment.contentType?.startsWith(type))
             ) {
               videoAttachments.push({
                 url: attachment.url,
@@ -4487,9 +3820,7 @@ export default async function tomoriChat(
                 isYouTubeLink: false,
               });
               hasLocalMedia = true;
-              log.info(
-                `Processed video attachment: ${attachment.name} (${attachment.contentType})`,
-              );
+              log.info(`Processed video attachment: ${attachment.name} (${attachment.contentType})`);
             }
             // Non-media attachments (PDF, TXT, MD, etc.) — check for audio cache first,
             // otherwise append a text placeholder with message ID for read_document
@@ -4505,9 +3836,7 @@ export default async function tomoriChat(
                   // already embedded the transcript in processedContent.
                   if (!messageContentForLlm?.includes(cached.transcript)) {
                     const voiceText = `[System: This was sent as a voice message.]\n${cached.transcript}`;
-                    messageContentForLlm = messageContentForLlm
-                      ? `${messageContentForLlm}\n${voiceText}`
-                      : voiceText;
+                    messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${voiceText}` : voiceText;
                   }
                 }
                 // For "tts" source or cache miss, fall through to a generic attachment hint
@@ -4515,17 +3844,13 @@ export default async function tomoriChat(
                 else {
                   const attachName = attachment.name ?? "file";
                   const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
-                  messageContentForLlm = messageContentForLlm
-                    ? `${messageContentForLlm} ${attachHint}`
-                    : attachHint;
+                  messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
                 }
               }
             } else {
               const attachName = attachment.name ?? "file";
               const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
-              messageContentForLlm = messageContentForLlm
-                ? `${messageContentForLlm} ${attachHint}`
-                : attachHint;
+              messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
             }
           }
         }
@@ -4553,9 +3878,7 @@ export default async function tomoriChat(
           if (emojiAttachments.length > 0) {
             imageAttachments.push(...emojiAttachments);
             hasLocalMedia = true;
-            log.info(
-              `Processed ${emojiAttachments.length} emoji(s) from message ${msg.id}`,
-            );
+            log.info(`Processed ${emojiAttachments.length} emoji(s) from message ${msg.id}`);
           }
         }
 
@@ -4585,23 +3908,17 @@ export default async function tomoriChat(
         // Note: We check regardless of existing attachments because Discord may have added a PNG preview
         if (msg.content) {
           // Use matchAll to find all Tenor URLs in the message
-          const tenorMatches = Array.from(
-            msg.content.matchAll(TENOR_GIF_REGEX),
-          );
+          const tenorMatches = Array.from(msg.content.matchAll(TENOR_GIF_REGEX));
 
           if (tenorMatches.length > 0) {
-            log.info(
-              `Detected ${tenorMatches.length} Tenor GIF link(s) in msg ID ${msg.id}`,
-            );
+            log.info(`Detected ${tenorMatches.length} Tenor GIF link(s) in msg ID ${msg.id}`);
 
             // Process each Tenor URL found (typically just one)
             for (const match of tenorMatches) {
               const tenorViewUrl = match[0];
 
               // Ensure it's a complete URL (add https:// if missing)
-              const fullUrl = tenorViewUrl.startsWith("http")
-                ? tenorViewUrl
-                : `https://${tenorViewUrl}`;
+              const fullUrl = tenorViewUrl.startsWith("http") ? tenorViewUrl : `https://${tenorViewUrl}`;
 
               log.info(`Processing Tenor URL: ${fullUrl}`);
 
@@ -4611,16 +3928,13 @@ export default async function tomoriChat(
               if (directGifUrl) {
                 // Determine if this is a GIF or video based on file extension
                 const fileExt = directGifUrl.split(".").pop()?.toLowerCase();
-                const isVideo =
-                  fileExt === "mp4" || fileExt === "webm" || fileExt === "mov";
+                const isVideo = fileExt === "mp4" || fileExt === "webm" || fileExt === "mov";
                 const isGif = fileExt === "gif";
 
                 // Check if Discord already added a preview attachment for this Tenor URL
                 // Discord proxy URLs look like: https://images-ext-1.discordapp.net/external/.../media.tenor.com/...png
                 const discordTenorProxyIndex = imageAttachments.findIndex(
-                  (att) =>
-                    att.proxyUrl.includes("discordapp.net/external") &&
-                    att.proxyUrl.includes("media.tenor.com"),
+                  (att) => att.proxyUrl.includes("discordapp.net/external") && att.proxyUrl.includes("media.tenor.com"),
                 );
 
                 if (isGif) {
@@ -4634,9 +3948,7 @@ export default async function tomoriChat(
                       mimeType: "image/gif",
                       filename: `tenor_${discordTenorProxyIndex + 1}.gif`,
                     };
-                    log.success(
-                      `Replaced Discord Tenor preview with resolved GIF: ${directGifUrl}`,
-                    );
+                    log.success(`Replaced Discord Tenor preview with resolved GIF: ${directGifUrl}`);
                   } else {
                     // No Discord preview found, add as new attachment
                     imageAttachments.push({
@@ -4645,9 +3957,7 @@ export default async function tomoriChat(
                       mimeType: "image/gif",
                       filename: `tenor_${imageAttachments.length + 1}.gif`,
                     });
-                    log.success(
-                      `Successfully resolved Tenor URL to GIF: ${directGifUrl}`,
-                    );
+                    log.success(`Successfully resolved Tenor URL to GIF: ${directGifUrl}`);
                   }
                 } else if (isVideo) {
                   hasLocalMedia = true;
@@ -4659,11 +3969,7 @@ export default async function tomoriChat(
 
                   // Determine video mimeType
                   const videoMimeType =
-                    fileExt === "mp4"
-                      ? "video/mp4"
-                      : fileExt === "webm"
-                        ? "video/webm"
-                        : "video/quicktime"; // for .mov
+                    fileExt === "mp4" ? "video/mp4" : fileExt === "webm" ? "video/webm" : "video/quicktime"; // for .mov
 
                   // Add as video attachment
                   videoAttachments.push({
@@ -4673,18 +3979,12 @@ export default async function tomoriChat(
                     filename: `tenor_${videoAttachments.length + 1}.${fileExt}`,
                     isYouTubeLink: false, // This is a direct Tenor video, not YouTube
                   });
-                  log.success(
-                    `Successfully resolved Tenor URL to video (${videoMimeType}): ${directGifUrl}`,
-                  );
+                  log.success(`Successfully resolved Tenor URL to video (${videoMimeType}): ${directGifUrl}`);
                 } else {
-                  log.warn(
-                    `Unknown Tenor media format: ${fileExt}, keeping as text`,
-                  );
+                  log.warn(`Unknown Tenor media format: ${fileExt}, keeping as text`);
                 }
               } else {
-                log.warn(
-                  `Failed to resolve Tenor URL, keeping as text: ${fullUrl}`,
-                );
+                log.warn(`Failed to resolve Tenor URL, keeping as text: ${fullUrl}`);
               }
             }
 
@@ -4715,9 +4015,7 @@ export default async function tomoriChat(
         // This prevents combining debug messages ($:) with regular messages from the same user
         // and prevents combining processed embed messages with other messages
         const isSameEffectiveAuthor =
-          prevMessage &&
-          prevMessage.authorId === effectiveAuthorId &&
-          prevWasDebugMessage === isDebugMessage;
+          prevMessage && prevMessage.authorId === effectiveAuthorId && prevWasDebugMessage === isDebugMessage;
 
         // 5.d. Determine if we should combine with the previous message or create a new entry.
         // The previous message is considered "has something to merge into" if it has text OR
@@ -4725,46 +4023,24 @@ export default async function tomoriChat(
         // immediately sends a follow-up reply in the same turn.
         const prevMessageHasContent =
           prevMessage &&
-          (prevMessage.content ||
-            prevMessage.imageAttachments.length > 0 ||
-            prevMessage.videoAttachments.length > 0);
-        if (
-          isSameEffectiveAuthor &&
-          messageContentForLlm &&
-          prevMessageHasContent
-        ) {
+          (prevMessage.content || prevMessage.imageAttachments.length > 0 || prevMessage.videoAttachments.length > 0);
+        if (isSameEffectiveAuthor && messageContentForLlm && prevMessageHasContent) {
           // Append this message's content to the previous message with a newline
           prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
           if (imageAttachments.length > 0) {
-            prevMessage.imageAttachments = [
-              ...prevMessage.imageAttachments,
-              ...imageAttachments,
-            ];
+            prevMessage.imageAttachments = [...prevMessage.imageAttachments, ...imageAttachments];
           }
           // If this message has videos, add them to the previous message's videos
           if (videoAttachments.length > 0) {
-            prevMessage.videoAttachments = [
-              ...prevMessage.videoAttachments,
-              ...videoAttachments,
-            ];
+            prevMessage.videoAttachments = [...prevMessage.videoAttachments, ...videoAttachments];
           }
-          if (
-            resolvedMediaSourceMessageIds &&
-            resolvedMediaSourceMessageIds.length > 0
-          ) {
+          if (resolvedMediaSourceMessageIds && resolvedMediaSourceMessageIds.length > 0) {
             // Merge media source message IDs, avoiding duplicates
             const existingIds = prevMessage.mediaSourceMessageIds ?? [];
-            const combinedIds = [
-              ...existingIds,
-              ...resolvedMediaSourceMessageIds,
-            ];
+            const combinedIds = [...existingIds, ...resolvedMediaSourceMessageIds];
             prevMessage.mediaSourceMessageIds = [...new Set(combinedIds)]; // Remove duplicates
           }
-        } else if (
-          messageContentForLlm ||
-          imageAttachments.length > 0 ||
-          videoAttachments.length > 0
-        ) {
+        } else if (messageContentForLlm || imageAttachments.length > 0 || videoAttachments.length > 0) {
           // Create a new entry if it's a different author or the previous has no content
           simplifiedMessages.push({
             id: msg.id,
@@ -4792,9 +4068,7 @@ export default async function tomoriChat(
       // Add the bot's own Discord user ID only when no alter persona identity is
       // active in this turn. When alters are present, exposing both the bot account
       // ID and persona IDs can confuse tool targeting.
-      const hasPersonaSyntheticUser = Array.from(
-        syntheticUserMap.values(),
-      ).some((entry) => entry.type === "persona");
+      const hasPersonaSyntheticUser = Array.from(syntheticUserMap.values()).some((entry) => entry.type === "persona");
       if (client.user?.id && !hasPersonaSyntheticUser && !isUserImpersonation) {
         userListSet.add(client.user.id);
       }
@@ -4818,19 +4092,9 @@ export default async function tomoriChat(
       }
 
       const userList = Array.from(userListSet);
-      const channelName = isDMChannel
-        ? "Direct Message"
-        : "name" in channel
-          ? channel.name
-          : "Unknown Channel";
-      const channelDesc = isDMChannel
-        ? null
-        : "topic" in channel
-          ? channel.topic
-          : null;
-      const serverName = isDMChannel
-        ? "Direct Message"
-        : guild?.name || "Unknown Server";
+      const channelName = isDMChannel ? "Direct Message" : "name" in channel ? channel.name : "Unknown Channel";
+      const channelDesc = isDMChannel ? null : "topic" in channel ? channel.topic : null;
+      const serverName = isDMChannel ? "Direct Message" : guild?.name || "Unknown Server";
       const serverDescription = isDMChannel ? null : guild?.description;
 
       // ========== MULTI-PERSONA RESPONSE LOOP START ==========
@@ -4846,15 +4110,9 @@ export default async function tomoriChat(
       }> = [];
       let turnThoughtLog: ThoughtLogPayload | undefined;
       let turnThoughtLogOwner: ThoughtLogOwner | undefined;
-      const matrixTypingRoomId = isMatrixRelay
-        ? await getLinkedMatrixRoom(channel.id)
-        : null;
+      const matrixTypingRoomId = isMatrixRelay ? await getLinkedMatrixRoom(channel.id) : null;
 
-      for (
-        let personaIndex = 0;
-        personaIndex < personasToRespond.length;
-        personaIndex++
-      ) {
+      for (let personaIndex = 0; personaIndex < personasToRespond.length; personaIndex++) {
         const currentPersona = personasToRespond[personaIndex];
         const trimmedPrefill = manualPrefill?.trim();
         let personaSnapshot: RequestSnapshot = {
@@ -4880,14 +4138,8 @@ export default async function tomoriChat(
         //   1. persona_llm  — persona-specific override (set via /config model text scope:persona)
         //   2. channel LLM  — channel-level override (set via /config model text scope:channel)
         //   3. global llm   — server-wide default in tomori_configs
-        const channelLlmOverride = await getCachedChannelLlm(
-          currentPersona.server_id,
-          channel.id,
-        );
-        const effectiveLlm =
-          currentPersona.persona_llm ??
-          channelLlmOverride ??
-          currentPersona.llm;
+        const channelLlmOverride = await getCachedChannelLlm(currentPersona.server_id, channel.id);
+        const effectiveLlm = currentPersona.persona_llm ?? channelLlmOverride ?? currentPersona.llm;
         if (effectiveLlm !== currentPersona.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
           tomoriState = { ...tomoriState, llm: effectiveLlm };
@@ -4902,16 +4154,9 @@ export default async function tomoriChat(
           await refreshDiscordTypingIndicator(channel, "persona_transition");
         }
         const matrixTypingTargetRoomId = matrixTypingRoomId;
-        const matrixTypingPersonaName =
-          currentPersona.tomori_nickname ??
-          process.env.DEFAULT_BOTNAME ??
-          "Tomori";
+        const matrixTypingPersonaName = currentPersona.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori";
         if (matrixTypingTargetRoomId) {
-          await sendMatrixTypingIndicator(
-            matrixTypingTargetRoomId,
-            matrixTypingPersonaName,
-            true,
-          );
+          await sendMatrixTypingIndicator(matrixTypingTargetRoomId, matrixTypingPersonaName, true);
         }
         let temporaryUserImpersonationWebhook: Webhook | null = null;
 
@@ -4923,15 +4168,9 @@ export default async function tomoriChat(
           let loadedStickers: ServerStickerRow[] | null = null;
 
           // Check if current channel is designated as an RP channel (always suppresses emojis/stickers)
-          const isRpChannel = tomoriState.config.rp_channel_ids.includes(
-            channel.id,
-          );
-          const effectiveEmojiEnabled = isRpChannel
-            ? false
-            : tomoriState.config.emoji_usage_enabled;
-          const effectiveStickerEnabled = isRpChannel
-            ? false
-            : tomoriState.config.sticker_usage_enabled;
+          const isRpChannel = tomoriState.config.rp_channel_ids.includes(channel.id);
+          const effectiveEmojiEnabled = isRpChannel ? false : tomoriState.config.emoji_usage_enabled;
+          const effectiveStickerEnabled = isRpChannel ? false : tomoriState.config.sticker_usage_enabled;
           // Shallow-copy config with effective flags for context building (avoids mutating cached state)
           const effectiveTomoriConfig = isRpChannel
             ? {
@@ -4943,9 +4182,7 @@ export default async function tomoriChat(
           // Shallow-copy TomoriState with effective config so both createConfig and streamToDiscord
           // see the suppressed flags without ever mutating the cached TomoriState object.
           // Must be `let` so the fallback model loop can swap in a different llm for each attempt.
-          let effectiveTomoriState = isRpChannel
-            ? { ...tomoriState, config: effectiveTomoriConfig }
-            : tomoriState;
+          let effectiveTomoriState = isRpChannel ? { ...tomoriState, config: effectiveTomoriConfig } : tomoriState;
 
           // Load emojis and stickers from 5-minute in-memory cache (lazy sync included)
           if (!isDMChannel && guild && currentPersona.server_id) {
@@ -4963,12 +4200,8 @@ export default async function tomoriChat(
             if (effectiveEmojiEnabled && emojis && emojis.length > 0) {
               // Sort emojis by created_at timestamp, then by ID
               const sortedEmojis = [...emojis].sort((a, b) => {
-                const rawATime = a.created_at
-                  ? new Date(a.created_at).getTime()
-                  : 0;
-                const rawBTime = b.created_at
-                  ? new Date(b.created_at).getTime()
-                  : 0;
+                const rawATime = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const rawBTime = b.created_at ? new Date(b.created_at).getTime() : 0;
                 const aTime = Number.isNaN(rawATime) ? 0 : rawATime;
                 const bTime = Number.isNaN(rawBTime) ? 0 : rawBTime;
                 if (aTime !== bTime) return aTime - bTime;
@@ -4980,8 +4213,7 @@ export default async function tomoriChat(
 
               // Convert to Discord emoji string format
               emojiStrings = sortedEmojis.map(
-                (e) =>
-                  `<${e.is_animated ? "a" : ""}:${e.emoji_name}:${e.emoji_disc_id}>`,
+                (e) => `<${e.is_animated ? "a" : ""}:${e.emoji_name}:${e.emoji_disc_id}>`,
               );
 
               // Debug: Log loaded emoji count and sample
@@ -4996,10 +4228,7 @@ export default async function tomoriChat(
 
           // Inject reminder into conversation history if needed
           // This makes the reminder part of the natural conversation flow rather than system injection
-          if (
-            reminderData &&
-            (reminderRecipientID || reminderData.self_reminder)
-          ) {
+          if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
             const isSelfReminder = reminderData.self_reminder === true;
             let reminderContent = "";
 
@@ -5008,17 +4237,12 @@ export default async function tomoriChat(
               if (reminderData.reminder_lateness) {
                 reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
               }
-            } else if (
-              reminderRecipientID &&
-              isBridgeUserId(reminderRecipientID)
-            ) {
+            } else if (reminderRecipientID && isBridgeUserId(reminderRecipientID)) {
               // Matrix user IDs (@user:server) must not be wrapped in <@...> Discord mention
               // format — that produces <@@user:server> (double @), which is malformed.
               // Strip the server suffix for display; use @{localpart} as the mention
               // placeholder (matrixRelay.ts converts this to a proper HTML Matrix mention).
-              const matrixLocalpart = reminderRecipientID
-                .split(":")[0]
-                .replace(/^@/, "");
+              const matrixLocalpart = reminderRecipientID.split(":")[0].replace(/^@/, "");
               reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
               if (reminderData.reminder_lateness) {
                 reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
@@ -5030,8 +4254,7 @@ export default async function tomoriChat(
               }
             }
 
-            const fallbackAuthorId =
-              client.user?.id ?? reminderRecipientID ?? "system";
+            const fallbackAuthorId = client.user?.id ?? reminderRecipientID ?? "system";
 
             // Create synthetic simplified message for the reminder
             const reminderMessage: SimplifiedMessageForContext = {
@@ -5067,43 +4290,30 @@ export default async function tomoriChat(
             !reminderData?.self_reminder &&
             simplifiedMessages.length > 0
           ) {
-            const lastMessage =
-              simplifiedMessages[simplifiedMessages.length - 1];
+            const lastMessage = simplifiedMessages[simplifiedMessages.length - 1];
 
             // 1. Check if the last message is from a persona
             const isFromPersona = lastMessage.authorType === "persona";
 
             // 2. Check if the last message is from the SELECTED persona (for alter support)
-            const selectedPersonaNickname =
-              selectedPersona?.tomori_nickname?.toLowerCase();
-            const lastMessagePersonaNickname =
-              lastMessage.personaName?.toLowerCase();
+            const selectedPersonaNickname = selectedPersona?.tomori_nickname?.toLowerCase();
+            const lastMessagePersonaNickname = lastMessage.personaName?.toLowerCase();
             const isFromSelectedPersona =
-              isFromPersona &&
-              selectedPersonaNickname &&
-              lastMessagePersonaNickname === selectedPersonaNickname;
+              isFromPersona && selectedPersonaNickname && lastMessagePersonaNickname === selectedPersonaNickname;
 
             // 3. Check if the last message contains embeds (skip continuation for embeds)
-            const isEmbedMessage =
-              lastMessage.content?.includes(
-                "[The following is a system-produced embed]",
-              ) ?? false;
+            const isEmbedMessage = lastMessage.content?.includes("[The following is a system-produced embed]") ?? false;
 
             const isNovelaiKayraOrErato =
               tomoriState.llm.llm_provider === "novelai" &&
-              (tomoriState.llm.llm_codename === "kayra-v1" ||
-                tomoriState.llm.llm_codename === "llama-3-erato-v1");
-            const usePrefillContinuationDirective =
-              Boolean(trimmedPrefill) && !isNovelaiKayraOrErato;
+              (tomoriState.llm.llm_codename === "kayra-v1" || tomoriState.llm.llm_codename === "llama-3-erato-v1");
+            const usePrefillContinuationDirective = Boolean(trimmedPrefill) && !isNovelaiKayraOrErato;
             if (Boolean(trimmedPrefill) && isNovelaiKayraOrErato) {
-              log.info(
-                "Manual prefill directive skipped for NovelAI Kayra/Erato; relying on assistant prefill tail",
-              );
+              log.info("Manual prefill directive skipped for NovelAI Kayra/Erato; relying on assistant prefill tail");
             }
 
             const shouldInjectContinuation =
-              (isFromSelectedPersona && !isEmbedMessage) ||
-              usePrefillContinuationDirective;
+              (isFromSelectedPersona && !isEmbedMessage) || usePrefillContinuationDirective;
 
             // 4. Only inject continuation if:
             //    - Last message is from the selected persona (and not an embed), OR
@@ -5112,9 +4322,7 @@ export default async function tomoriChat(
               const continuationReason = usePrefillContinuationDirective
                 ? "manual prefill"
                 : `${selectedPersona?.tomori_nickname} as last speaker`;
-              log.info(
-                `Manual trigger detected (${continuationReason}) - injecting continuation prompt for UX`,
-              );
+              log.info(`Manual trigger detected (${continuationReason}) - injecting continuation prompt for UX`);
 
               const botName =
                 currentPersona?.tomori_nickname ??
@@ -5128,9 +4336,7 @@ export default async function tomoriChat(
                 : "[Continue your last message]";
 
               manualContinuationDirective = continuationText;
-              log.info(
-                `Captured continuation directive for ${selectedPersona?.tomori_nickname} response`,
-              );
+              log.info(`Captured continuation directive for ${selectedPersona?.tomori_nickname} response`);
             }
           }
 
@@ -5179,8 +4385,8 @@ export default async function tomoriChat(
               triggererName,
               emojiStrings,
               // Use the current persona nickname so role mapping and samples match the responding persona
-              tomoriNickname: // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-                currentPersona.tomori_nickname ?? tomoriState!.tomori_nickname,
+              // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+              tomoriNickname: currentPersona.tomori_nickname ?? tomoriState!.tomori_nickname,
               // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
               tomoriAttributes: tomoriState!.attribute_list,
               // Use effectiveTomoriConfig so RP channels suppress emoji/sticker system instructions
@@ -5195,22 +4401,16 @@ export default async function tomoriChat(
               preloadedStickers: loadedStickers, // Pass pre-loaded sticker data to avoid redundant DB query
               isUserImpersonation, // Pass user impersonation flag (February 2026)
               impersonatedUserId, // Pass impersonated user ID (February 2026)
-              impersonatedUserNickname:
-                impersonatedIdentityName ?? impersonatedUserDbNickname, // Pass resolved identity name for context (February 2026)
+              impersonatedUserNickname: impersonatedIdentityName ?? impersonatedUserDbNickname, // Pass resolved identity name for context (February 2026)
               impersonatedUserPrompt,
               explicitLongTermMemoryIntent,
               // Pass API-resolved capability flags so the context builder matches the stream adapter
               seesImages: effectiveContextSeesImages,
               seesVideos: effectiveContextSeesVideos,
               // Vision tool available when: vision model configured AND chat model can't see images
-              hasVisionTool:
-                !!tomoriState?.vision_llm &&
-                !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+              hasVisionTool: !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
             });
-            contextSegments = appendInjectedContextItems(
-              contextBuild.contextItems,
-              injectedContextItems,
-            );
+            contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
 
             // Truncate oldest dialogue history pairs if the conversation is approaching
             // the context window limit, ensuring the output budget is always preserved.
@@ -5222,28 +4422,17 @@ export default async function tomoriChat(
               tomoriState.llm.llm_codename !== "other-model" &&
               isOpenRouterCapabilityCacheReady()
             ) {
-              const tokenLimits = getOpenRouterTokenLimits(
-                tomoriState.llm.llm_codename,
-              );
+              const tokenLimits = getOpenRouterTokenLimits(tomoriState.llm.llm_codename);
               const openrouterTruncationOutputCap = Number.parseInt(
                 process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
                 10,
               );
-              if (
-                tokenLimits &&
-                tokenLimits.contextLength > 0 &&
-                tokenLimits.maxCompletionTokens
-              ) {
+              if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
                 const truncationMaxCompletionTokens = Math.min(
                   tokenLimits.maxCompletionTokens,
                   openrouterTruncationOutputCap,
                 );
-                const {
-                  truncated,
-                  historyPairsDropped,
-                  sampleItemsDropped,
-                  totalDropped,
-                } = truncateDialogueHistory(
+                const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } = truncateDialogueHistory(
                   contextSegments,
                   tokenLimits.contextLength,
                   truncationMaxCompletionTokens,
@@ -5258,20 +4447,9 @@ export default async function tomoriChat(
                 }
               }
             } else if (tomoriState.llm.llm_provider === "google") {
-              const tokenLimits = getGeminiTokenLimits(
-                tomoriState.llm.llm_codename,
-              );
-              if (
-                tokenLimits &&
-                tokenLimits.contextLength > 0 &&
-                tokenLimits.maxCompletionTokens
-              ) {
-                const {
-                  truncated,
-                  historyPairsDropped,
-                  sampleItemsDropped,
-                  totalDropped,
-                } = truncateDialogueHistory(
+              const tokenLimits = getGeminiTokenLimits(tomoriState.llm.llm_codename);
+              if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } = truncateDialogueHistory(
                   contextSegments,
                   tokenLimits.contextLength,
                   tokenLimits.maxCompletionTokens,
@@ -5289,38 +4467,17 @@ export default async function tomoriChat(
               // Look up subscription contextTokens for accurate tier-aware truncation.
               // If cache is cold (e.g. after bot restart), decrypt the key early and fetch.
               let naiSubscriptionTokens = getCachedContextTokens(serverDiscId);
-              if (
-                naiSubscriptionTokens === undefined &&
-                tomoriState.config.api_key
-              ) {
+              if (naiSubscriptionTokens === undefined && tomoriState.config.api_key) {
                 try {
-                  const tempKey = await decryptApiKey(
-                    tomoriState.config.api_key,
-                    tomoriState.config.key_version || 1,
-                  );
-                  naiSubscriptionTokens = await refreshNovelAISubscription(
-                    serverDiscId,
-                    tempKey,
-                  );
+                  const tempKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
+                  naiSubscriptionTokens = await refreshNovelAISubscription(serverDiscId, tempKey);
                 } catch {
                   // Subscription fetch failed; getNovelAITokenLimits will use env var fallback
                 }
               }
-              const tokenLimits = getNovelAITokenLimits(
-                tomoriState.llm.llm_codename,
-                naiSubscriptionTokens,
-              );
-              if (
-                tokenLimits &&
-                tokenLimits.contextLength > 0 &&
-                tokenLimits.maxCompletionTokens
-              ) {
-                const {
-                  truncated,
-                  historyPairsDropped,
-                  sampleItemsDropped,
-                  totalDropped,
-                } = truncateDialogueHistory(
+              const tokenLimits = getNovelAITokenLimits(tomoriState.llm.llm_codename, naiSubscriptionTokens);
+              if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } = truncateDialogueHistory(
                   contextSegments,
                   tokenLimits.contextLength,
                   tokenLimits.maxCompletionTokens,
@@ -5337,17 +4494,13 @@ export default async function tomoriChat(
             }
 
             const shouldApplyOpenRouterLengthRetryTrim =
-              emptyResponseFinishReason === "length" &&
-              retryCount > 0 &&
-              tomoriState.llm.llm_provider === "openrouter";
+              emptyResponseFinishReason === "length" && retryCount > 0 && tomoriState.llm.llm_provider === "openrouter";
             if (shouldApplyOpenRouterLengthRetryTrim) {
-              const requestedPairDrops =
-                OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS * retryCount;
-              const { truncated, historyPairsDropped } =
-                dropOldestHistoryExchangePairs(
-                  contextSegments,
-                  requestedPairDrops,
-                );
+              const requestedPairDrops = OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS * retryCount;
+              const { truncated, historyPairsDropped } = dropOldestHistoryExchangePairs(
+                contextSegments,
+                requestedPairDrops,
+              );
               if (historyPairsDropped > 0) {
                 log.warn(
                   `OpenRouter length-empty retry trimming: dropped ${historyPairsDropped}/${requestedPairDrops} oldest history exchange pair(s) on retry ${retryCount}.`,
@@ -5368,11 +4521,7 @@ export default async function tomoriChat(
             // Apply emoji repetition penalty if bot has been using too many emojis
             const emojiPenaltyDirective = getEmojiPenaltyDirective(
               contextSegments,
-              isUserImpersonation
-                ? null
-                : (tomoriState?.tomori_nickname ??
-                    process.env.DEFAULT_BOTNAME ??
-                    "Tomori"),
+              isUserImpersonation ? null : (tomoriState?.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori"),
             );
             if (emojiPenaltyDirective) {
               tailDirectives.push(emojiPenaltyDirective);
@@ -5397,16 +4546,10 @@ export default async function tomoriChat(
                 tailDirectives.push(
                   `The user has requested you to stop your current generation. Original message: "${originalContent}"`,
                 );
-                log.info(
-                  `Captured stop response context. Original content: "${originalContent}"`,
-                );
+                log.info(`Captured stop response context. Original content: "${originalContent}"`);
               } else {
-                tailDirectives.push(
-                  "The user has requested you to stop your current generation.",
-                );
-                log.info(
-                  "Captured stop response context (no user context found)",
-                );
+                tailDirectives.push("The user has requested you to stop your current generation.");
+                log.info("Captured stop response context (no user context found)");
               }
             }
 
@@ -5415,9 +4558,7 @@ export default async function tomoriChat(
               tailDirectives.push(
                 `The user has activated reasoning mode with the following query: "${reasoningQuery}". Please provide a thoughtful, well-reasoned response to this query.`,
               );
-              log.info(
-                `Captured reasoning query for tail directives: "${reasoningQuery}"`,
-              );
+              log.info(`Captured reasoning query for tail directives: "${reasoningQuery}"`);
             }
 
             // Inject manual system prompt at the end (for manual commands)
@@ -5430,23 +4571,20 @@ export default async function tomoriChat(
               log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
             }
 
-            const combinedTailMessage =
-              buildCombinedTailDirectiveMessage(tailDirectives);
+            const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);
             if (combinedTailMessage) {
               contextSegments.push(combinedTailMessage);
             }
 
             // Keep queued reply guidance isolated so it does not collapse into
             // unrelated tail notes like emoji penalties or STM reminders.
-            const queuedReplyTailMessage =
-              buildTailDirectiveMessage(queuedReplyDirective);
+            const queuedReplyTailMessage = buildTailDirectiveMessage(queuedReplyDirective);
             if (queuedReplyTailMessage) {
               contextSegments.push(queuedReplyTailMessage);
             }
 
             // Keep uncensor isolated and last so it retains the strongest recency signal.
-            const uncensorTailMessage =
-              buildTailDirectiveMessage(uncensorDirective);
+            const uncensorTailMessage = buildTailDirectiveMessage(uncensorDirective);
             if (uncensorTailMessage) {
               contextSegments.push(uncensorTailMessage);
             }
@@ -5460,9 +4598,7 @@ export default async function tomoriChat(
                 "Tomori";
               const prefillMessage: StructuredContextItem = {
                 role: "model",
-                parts: [
-                  { type: "text", text: `${botName}: ${trimmedPrefill}` },
-                ],
+                parts: [{ type: "text", text: `${botName}: ${trimmedPrefill}` }],
                 metadataTag: ContextItemTag.DIALOGUE_HISTORY,
               };
               contextSegments.push(prefillMessage);
@@ -5519,11 +4655,8 @@ export default async function tomoriChat(
                 );
 
                 try {
-                  const { encryptApiKey } = await import(
-                    "@/utils/security/crypto"
-                  );
-                  const { encrypted, version } =
-                    await encryptApiKey(decryptedKey);
+                  const { encryptApiKey } = await import("@/utils/security/crypto");
+                  const { encrypted, version } = await encryptApiKey(decryptedKey);
 
                   await sql`
 										UPDATE tomori_configs
@@ -5533,9 +4666,7 @@ export default async function tomoriChat(
 										WHERE server_id = ${tomoriState?.server_id}
 									`;
 
-                  log.success(
-                    `Main API key rotation completed for server ${tomoriState?.server_id}`,
-                  );
+                  log.success(`Main API key rotation completed for server ${tomoriState?.server_id}`);
 
                   // Update in-memory state to reflect the new version
                   // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked earlier
@@ -5543,10 +4674,7 @@ export default async function tomoriChat(
                   // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked earlier
                   tomoriState!.config.key_version = version;
                 } catch (error) {
-                  log.warn(
-                    "Failed to rotate main API key (non-critical - will retry on next message)",
-                    error,
-                  );
+                  log.warn("Failed to rotate main API key (non-critical - will retry on next message)", error);
                   // Continue execution - the old key still works
                 }
               }
@@ -5576,9 +4704,7 @@ export default async function tomoriChat(
               }
 
               // All rotation keys exhausted or in cooldown, fall back to main key
-              log.warn(
-                `All rotation keys exhausted for server ${tomoriState?.server_id}, falling back to main key`,
-              );
+              log.warn(`All rotation keys exhausted for server ${tomoriState?.server_id}, falling back to main key`);
               return {
                 apiKey: await decryptMainKey(false),
                 selectedKeyResult: null,
@@ -5635,8 +4761,7 @@ export default async function tomoriChat(
               {
                 color: ColorCode.ERROR,
                 titleKey: "general.errors.provider_not_supported_title",
-                descriptionKey:
-                  "general.errors.provider_not_supported_description",
+                descriptionKey: "general.errors.provider_not_supported_description",
                 descriptionVars: {
                   provider: tomoriState?.llm.llm_provider || "unknown",
                 },
@@ -5653,18 +4778,13 @@ export default async function tomoriChat(
           if (llmOverrideCodename) {
             originalModelCodename = tomoriState.llm.llm_codename;
             tomoriState.llm.llm_codename = llmOverrideCodename;
-            log.info(
-              `Overriding model from ${originalModelCodename} to ${llmOverrideCodename} for manual command`,
-            );
+            log.info(`Overriding model from ${originalModelCodename} to ${llmOverrideCodename} for manual command`);
           }
 
           // Use effectiveTomoriState (immutable shallow copy) for createConfig so the provider's
           // StreamConfig reflects RP channel suppression without mutating the cached TomoriState.
           // Must be `let` so the fallback model loop can recreate config for each new model.
-          let providerConfig = await provider.createConfig(
-            effectiveTomoriState,
-            decryptedApiKey,
-          );
+          let providerConfig = await provider.createConfig(effectiveTomoriState, decryptedApiKey);
 
           // Thread the subscription-derived Kayra context limit into providerConfig so the
           // secondary dynamic cap in novelaiStreamAdapter uses the correct tier limit
@@ -5672,8 +4792,7 @@ export default async function tomoriChat(
           if (tomoriState.llm.llm_provider === "novelai") {
             const cachedKayraLimit = getCachedContextTokens(serverDiscId);
             if (cachedKayraLimit !== undefined) {
-              (providerConfig as NovelaiStreamConfig).kayraContextLimit =
-                cachedKayraLimit;
+              (providerConfig as NovelaiStreamConfig).kayraContextLimit = cachedKayraLimit;
             }
           }
 
@@ -5682,33 +4801,16 @@ export default async function tomoriChat(
             tomoriState.llm.llm_codename = originalModelCodename;
           }
 
-          log.info(
-            "Streaming mode enabled. Attempting to stream response to Discord.",
-          );
+          log.info("Streaming mode enabled. Attempting to stream response to Discord.");
 
           // Resolve persona webhook and avatar/username for webhook-based sending
           // Only use webhook for alter personas (not main) in guild channels (not DMs)
           let personaWebhook = channelWebhook;
-          if (
-            !personaWebhook &&
-            supportsWebhooks &&
-            currentPersona.is_alter &&
-            hasWebhookMethods
-          ) {
-            const webhookResult = await getOrCreateWebhook(
-              webhookTargetChannel as BaseGuildTextChannel,
-            );
+          if (!personaWebhook && supportsWebhooks && currentPersona.is_alter && hasWebhookMethods) {
+            const webhookResult = await getOrCreateWebhook(webhookTargetChannel as BaseGuildTextChannel);
             personaWebhook = webhookResult.webhook;
-            if (
-              !personaWebhook &&
-              webhookResult.errorReason &&
-              !webhookErrorNotified
-            ) {
-              await sendWebhookErrorEmbed(
-                channel,
-                locale,
-                webhookResult.errorReason,
-              );
+            if (!personaWebhook && webhookResult.errorReason && !webhookErrorNotified) {
+              await sendWebhookErrorEmbed(channel, locale, webhookResult.errorReason);
               webhookErrorNotified = true;
             }
           }
@@ -5726,36 +4828,25 @@ export default async function tomoriChat(
               cacheUserImpersonationWebhook(tempWebhook.id, impersonatedUserId);
               temporaryUserImpersonationWebhook = tempWebhook;
               personaWebhook = tempWebhook;
-              log.info(
-                `Created temporary webhook for user impersonation: ${impersonatedIdentityName || "User"}`,
-              );
+              log.info(`Created temporary webhook for user impersonation: ${impersonatedIdentityName || "User"}`);
             } catch (error) {
-              log.error(
-                "Failed to create temporary webhook for user impersonation",
-                {
-                  error,
-                  impersonatedUserId,
-                },
-              );
+              log.error("Failed to create temporary webhook for user impersonation", {
+                error,
+                impersonatedUserId,
+              });
               throw error instanceof Error
                 ? error
-                : new Error(
-                    "Failed to create temporary webhook for user impersonation.",
-                  );
+                : new Error("Failed to create temporary webhook for user impersonation.");
             }
           }
 
           const resolvedPersonaIdentity =
-            !isUserImpersonation &&
-            personaWebhook &&
-            guild &&
-            currentPersona.is_alter
+            !isUserImpersonation && personaWebhook && guild && currentPersona.is_alter
               ? await resolvePersonaWebhookIdentity(currentPersona, guild)
               : undefined;
           const personaAvatarUrl = isUserImpersonation
             ? undefined
-            : (resolvedPersonaIdentity?.avatarDataUri ??
-              resolvedPersonaIdentity?.avatarUrl);
+            : (resolvedPersonaIdentity?.avatarDataUri ?? resolvedPersonaIdentity?.avatarUrl);
 
           // For user impersonation: separate webhook display name from prefix stripping name
           let personaUsername: string | undefined;
@@ -5769,9 +4860,7 @@ export default async function tomoriChat(
             prefixStrippingName = personaUsername || impersonatedUserDbNickname;
           } else if (personaWebhook && currentPersona.is_alter) {
             // For alter personas, use persona nickname for both
-            personaUsername =
-              resolvedPersonaIdentity?.username ??
-              currentPersona.tomori_nickname;
+            personaUsername = resolvedPersonaIdentity?.username ?? currentPersona.tomori_nickname;
             prefixStrippingName = undefined; // Will fall back to personaUsername
           } else {
             personaUsername = undefined;
@@ -5829,8 +4918,7 @@ export default async function tomoriChat(
           let finalStreamCompleted = false;
           let finalAccumulatedText = ""; // Track accumulated text from successful stream
           let finalDetailsContent = ""; // Track extracted <details> block content for STM
-          const accumulatedStreamedModelParts: Array<Record<string, unknown>> =
-            [];
+          const accumulatedStreamedModelParts: Array<Record<string, unknown>> = [];
           let personaThoughtLog: ThoughtLogPayload | undefined;
           let personaStreamCompletedSuccessfully = false;
           let naiConsecutiveToolFailures = 0; // Tracks consecutive tool failures for NAI GLM retry logic (Case 2)
@@ -5862,11 +4950,7 @@ export default async function tomoriChat(
             try {
               // Debug: Log final context right before sending to LLM
               if (reminderRecipientID) {
-                for (
-                  let i = Math.max(0, contextSegments.length - 3);
-                  i < contextSegments.length;
-                  i++
-                ) {
+                for (let i = Math.max(0, contextSegments.length - 3); i < contextSegments.length; i++) {
                   const segment = contextSegments[i];
                   const textParts = segment.parts
                     .filter((p) => p.type === "text")
@@ -5890,25 +4974,19 @@ export default async function tomoriChat(
               }
 
               // Create isolated copies for each persona to prevent context pollution
-              const personaAccumulatedParts = [
-                ...accumulatedStreamedModelParts,
-              ];
+              const personaAccumulatedParts = [...accumulatedStreamedModelParts];
               const personaFunctionHistory = [...functionInteractionHistory];
               const runStreamWithKeyRetry = async (): Promise<{
                 streamResult: StreamResult | null;
                 abort: boolean;
               }> => {
                 if (!tomoriState) {
-                  log.error(
-                    "TomoriState missing during stream retry loop.",
-                    undefined,
-                    {
-                      errorType: "TomoriStateMissing",
-                      metadata: {
-                        channelId: channel.id,
-                      },
+                  log.error("TomoriState missing during stream retry loop.", undefined, {
+                    errorType: "TomoriStateMissing",
+                    metadata: {
+                      channelId: channel.id,
                     },
-                  );
+                  });
                   return { streamResult: null, abort: true };
                 }
 
@@ -5928,24 +5006,17 @@ export default async function tomoriChat(
                     };
                   }
 
-                  const fallbackExcludeIds = [
-                    ...Array.from(excludedRotationKeyIds),
-                  ];
+                  const fallbackExcludeIds = [...Array.from(excludedRotationKeyIds)];
                   if (selectedKeyResult?.rotationKeyId != null) {
                     fallbackExcludeIds.push(selectedKeyResult.rotationKeyId);
                   }
 
                   const hasFallbackKey =
-                    rotationActive &&
-                    (await hasAvailableRotationKey(
-                      activeTomoriState,
-                      fallbackExcludeIds,
-                    ));
+                    rotationActive && (await hasAvailableRotationKey(activeTomoriState, fallbackExcludeIds));
 
                   // Suppress errors if rotation keys remain OR if model fallbacks are pending
                   streamingContext.suppressUserErrors =
-                    hasFallbackKey ||
-                    (streamingContext.forceModelFallback ?? false);
+                    hasFallbackKey || (streamingContext.forceModelFallback ?? false);
 
                   // Keep provider config in sync with the selected key
                   if (providerConfig.apiKey !== decryptedApiKey) {
@@ -5964,9 +5035,7 @@ export default async function tomoriChat(
                     contextSegments, // Can be shared (read-only message history)
                     personaAccumulatedParts, // Isolated per persona
                     emojiStrings,
-                    personaFunctionHistory.length > 0
-                      ? personaFunctionHistory
-                      : undefined, // Isolated per persona
+                    personaFunctionHistory.length > 0 ? personaFunctionHistory : undefined, // Isolated per persona
                     undefined,
                     isFromQueue ? message : undefined,
                     streamingContext, // Pass streaming context for context-aware tool availability
@@ -5982,21 +5051,14 @@ export default async function tomoriChat(
                   const timeoutPromise = new Promise<never>((_, reject) => {
                     sdkTimeoutId = setTimeout(() => {
                       sdkAbortController.abort(); // Signal the provider to cancel its HTTP request
-                      reject(
-                        new Error(
-                          "SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
-                        ),
-                      );
+                      reject(new Error("SDK_CALL_TIMEOUT: provider streamToDiscord call timed out."));
                     }, STREAM_SDK_CALL_TIMEOUT_MS);
                   });
 
                   let streamResult: StreamResult;
                   try {
                     // Promise.race will settle as soon as one of the promises settles
-                    streamResult = await Promise.race([
-                      streamProviderPromise,
-                      timeoutPromise,
-                    ]);
+                    streamResult = await Promise.race([streamProviderPromise, timeoutPromise]);
                     // Stream completed before timeout — clear the pending timer
                     if (sdkTimeoutId) clearTimeout(sdkTimeoutId);
                   } catch (raceError) {
@@ -6005,10 +5067,7 @@ export default async function tomoriChat(
 
                     // This catch block will execute if timeoutPromise rejects first,
                     // or if streamProviderPromise itself rejects *before* the timeout.
-                    if (
-                      raceError instanceof Error &&
-                      raceError.message.startsWith("SDK_CALL_TIMEOUT:")
-                    ) {
+                    if (raceError instanceof Error && raceError.message.startsWith("SDK_CALL_TIMEOUT:")) {
                       log.error(
                         `Provider streamToDiscord call timed out for channel ${channel.id}.`,
                         raceError, // Log the timeout error
@@ -6018,15 +5077,12 @@ export default async function tomoriChat(
                         },
                       );
                       if (isUserImpersonation) {
-                        throw new Error(
-                          "User impersonation timed out before a reply could be sent.",
-                        );
+                        throw new Error("User impersonation timed out before a reply could be sent.");
                       }
                       await sendStandardEmbed(channel, locale, {
                         color: ColorCode.ERROR, // Using ERROR as it's a more critical failure
                         titleKey: "genai.error_stream_timeout_title",
-                        descriptionKey:
-                          "genai.error_stream_timeout_description",
+                        descriptionKey: "genai.error_stream_timeout_description",
                       });
                       return { streamResult: null, abort: true };
                     }
@@ -6051,9 +5107,7 @@ export default async function tomoriChat(
                       };
                       const errorMessage =
                         errorData.message ||
-                        (streamResult.data instanceof Error
-                          ? streamResult.data.message
-                          : "Unknown error");
+                        (streamResult.data instanceof Error ? streamResult.data.message : "Unknown error");
 
                       if (errorData.type === "rate_limit") {
                         await recordKeyError(
@@ -6075,9 +5129,7 @@ export default async function tomoriChat(
                     }
 
                     if (selectedKeyResult?.rotationKeyId) {
-                      excludedRotationKeyIds.add(
-                        selectedKeyResult.rotationKeyId,
-                      );
+                      excludedRotationKeyIds.add(selectedKeyResult.rotationKeyId);
                     }
 
                     const nextKeySelection = await selectApiKeyForAttempt();
@@ -6085,20 +5137,15 @@ export default async function tomoriChat(
                     selectedKeyResult = nextKeySelection.selectedKeyResult;
 
                     if (!decryptedApiKey) {
-                      log.error(
-                        "API Key is not set or failed to decrypt during retry.",
-                        undefined,
-                        {
-                          serverId: tomoriState?.server_id,
-                          errorType: "ApiKeyError",
-                        },
-                      );
+                      log.error("API Key is not set or failed to decrypt during retry.", undefined, {
+                        serverId: tomoriState?.server_id,
+                        errorType: "ApiKeyError",
+                      });
                       await sendChannelEmbedOrFailImpersonation(
                         {
                           color: ColorCode.ERROR,
                           titleKey: "general.errors.api_key_error_title",
-                          descriptionKey:
-                            "general.errors.api_key_error_description",
+                          descriptionKey: "general.errors.api_key_error_description",
                         },
                         "User impersonation could not continue because the API key became unavailable during retry.",
                       );
@@ -6148,18 +5195,97 @@ export default async function tomoriChat(
                * selectedKeyResult, excludedRotationKeyIds, streamingContext, tomoriState,
                * provider, serverDiscId (for NovelAI context limit re-application).
                */
-              const runWithFallbackModels =
-                async (): Promise<FallbackRunResult> => {
-                  const fallbackLlms = tomoriState?.fallback_llms ?? [];
-                  // Snapshot the original effective state to restore if all fallbacks fail
-                  const primaryEffectiveTomoriState = effectiveTomoriState;
+              const runWithFallbackModels = async (): Promise<FallbackRunResult> => {
+                const fallbackLlms = tomoriState?.fallback_llms ?? [];
+                // Snapshot the original effective state to restore if all fallbacks fail
+                const primaryEffectiveTomoriState = effectiveTomoriState;
 
-                  // 1. Attempt with the primary model
-                  streamingContext.forceModelFallback = fallbackLlms.length > 0;
-                  const primaryResult = await runStreamWithKeyRetry();
+                // 1. Attempt with the primary model
+                streamingContext.forceModelFallback = fallbackLlms.length > 0;
+                const primaryResult = await runStreamWithKeyRetry();
 
-                  if (primaryResult.abort) {
+                if (primaryResult.abort) {
+                  streamingContext.forceModelFallback = false;
+                  return {
+                    streamResult: null,
+                    abort: true,
+                    fallbackUsed: null,
+                    successModel: null,
+                  };
+                }
+
+                if (!primaryResult.streamResult || primaryResult.streamResult.status !== "error") {
+                  // Primary succeeded (or returned a non-error status)
+                  streamingContext.forceModelFallback = false;
+                  return {
+                    ...primaryResult,
+                    fallbackUsed: null,
+                    successModel: null,
+                  };
+                }
+
+                // 2. Primary errored — enter fallback loop
+                const failures: FallbackAttempt[] = [
+                  {
+                    modelCodename: primaryEffectiveTomoriState.llm.llm_codename,
+                    errorCode: extractErrorCode(primaryResult.streamResult),
+                  },
+                ];
+                let lastResult = primaryResult;
+
+                for (let fi = 0; fi < fallbackLlms.length; fi++) {
+                  const fallbackLlm = fallbackLlms[fi];
+                  const isLast = fi === fallbackLlms.length - 1;
+
+                  log.info(
+                    `Primary model failed (${failures[0].errorCode}). ` +
+                      `Trying fallback ${fi + 1}/${fallbackLlms.length}: ${fallbackLlm.llm_codename}`,
+                  );
+
+                  // 2a. Swap in the fallback model and recreate provider config
+                  effectiveTomoriState = {
+                    ...effectiveTomoriState,
+                    llm: fallbackLlm,
+                  };
+                  providerConfig = await provider.createConfig(effectiveTomoriState, decryptedApiKey);
+                  // Re-apply NovelAI subscription context limit when relevant
+                  if (fallbackLlm.llm_provider === "novelai") {
+                    const cachedKayraLimit = getCachedContextTokens(serverDiscId);
+                    if (cachedKayraLimit !== undefined) {
+                      (providerConfig as NovelaiStreamConfig).kayraContextLimit = cachedKayraLimit;
+                    }
+                  }
+
+                  // 2b. Reset key rotation state for a clean attempt
+                  excludedRotationKeyIds.clear();
+                  const resetKeySelection = await selectApiKeyForAttempt();
+                  decryptedApiKey = resetKeySelection.apiKey;
+                  selectedKeyResult = resetKeySelection.selectedKeyResult;
+
+                  if (!decryptedApiKey) {
+                    log.error("API key unavailable during fallback model attempt", undefined, {
+                      serverId: tomoriState?.server_id,
+                      errorType: "ApiKeyError",
+                    });
                     streamingContext.forceModelFallback = false;
+                    effectiveTomoriState = primaryEffectiveTomoriState;
+                    return {
+                      streamResult: lastResult.streamResult,
+                      abort: false,
+                      fallbackUsed: null,
+                      successModel: null,
+                    };
+                  }
+
+                  // 2c. Show error on last attempt; suppress on all earlier attempts
+                  streamingContext.forceModelFallback = !isLast;
+
+                  const fallbackResult = await runStreamWithKeyRetry();
+                  lastResult = fallbackResult;
+
+                  if (fallbackResult.abort) {
+                    streamingContext.forceModelFallback = false;
+                    effectiveTomoriState = primaryEffectiveTomoriState;
                     return {
                       streamResult: null,
                       abort: true,
@@ -6168,138 +5294,39 @@ export default async function tomoriChat(
                     };
                   }
 
-                  if (
-                    !primaryResult.streamResult ||
-                    primaryResult.streamResult.status !== "error"
-                  ) {
-                    // Primary succeeded (or returned a non-error status)
+                  if (!fallbackResult.streamResult || fallbackResult.streamResult.status !== "error") {
+                    // This fallback succeeded
                     streamingContext.forceModelFallback = false;
                     return {
-                      ...primaryResult,
-                      fallbackUsed: null,
-                      successModel: null,
+                      streamResult: fallbackResult.streamResult,
+                      abort: false,
+                      fallbackUsed: failures,
+                      successModel: fallbackLlm,
                     };
                   }
 
-                  // 2. Primary errored — enter fallback loop
-                  const failures: FallbackAttempt[] = [
-                    {
-                      modelCodename:
-                        primaryEffectiveTomoriState.llm.llm_codename,
-                      errorCode: extractErrorCode(primaryResult.streamResult),
-                    },
-                  ];
-                  let lastResult = primaryResult;
+                  failures.push({
+                    modelCodename: fallbackLlm.llm_codename,
+                    errorCode: extractErrorCode(fallbackResult.streamResult),
+                  });
+                }
 
-                  for (let fi = 0; fi < fallbackLlms.length; fi++) {
-                    const fallbackLlm = fallbackLlms[fi];
-                    const isLast = fi === fallbackLlms.length - 1;
-
-                    log.info(
-                      `Primary model failed (${failures[0].errorCode}). ` +
-                        `Trying fallback ${fi + 1}/${fallbackLlms.length}: ${fallbackLlm.llm_codename}`,
-                    );
-
-                    // 2a. Swap in the fallback model and recreate provider config
-                    effectiveTomoriState = {
-                      ...effectiveTomoriState,
-                      llm: fallbackLlm,
-                    };
-                    providerConfig = await provider.createConfig(
-                      effectiveTomoriState,
-                      decryptedApiKey,
-                    );
-                    // Re-apply NovelAI subscription context limit when relevant
-                    if (fallbackLlm.llm_provider === "novelai") {
-                      const cachedKayraLimit =
-                        getCachedContextTokens(serverDiscId);
-                      if (cachedKayraLimit !== undefined) {
-                        (
-                          providerConfig as NovelaiStreamConfig
-                        ).kayraContextLimit = cachedKayraLimit;
-                      }
-                    }
-
-                    // 2b. Reset key rotation state for a clean attempt
-                    excludedRotationKeyIds.clear();
-                    const resetKeySelection = await selectApiKeyForAttempt();
-                    decryptedApiKey = resetKeySelection.apiKey;
-                    selectedKeyResult = resetKeySelection.selectedKeyResult;
-
-                    if (!decryptedApiKey) {
-                      log.error(
-                        "API key unavailable during fallback model attempt",
-                        undefined,
-                        {
-                          serverId: tomoriState?.server_id,
-                          errorType: "ApiKeyError",
-                        },
-                      );
-                      streamingContext.forceModelFallback = false;
-                      effectiveTomoriState = primaryEffectiveTomoriState;
-                      return {
-                        streamResult: lastResult.streamResult,
-                        abort: false,
-                        fallbackUsed: null,
-                        successModel: null,
-                      };
-                    }
-
-                    // 2c. Show error on last attempt; suppress on all earlier attempts
-                    streamingContext.forceModelFallback = !isLast;
-
-                    const fallbackResult = await runStreamWithKeyRetry();
-                    lastResult = fallbackResult;
-
-                    if (fallbackResult.abort) {
-                      streamingContext.forceModelFallback = false;
-                      effectiveTomoriState = primaryEffectiveTomoriState;
-                      return {
-                        streamResult: null,
-                        abort: true,
-                        fallbackUsed: null,
-                        successModel: null,
-                      };
-                    }
-
-                    if (
-                      !fallbackResult.streamResult ||
-                      fallbackResult.streamResult.status !== "error"
-                    ) {
-                      // This fallback succeeded
-                      streamingContext.forceModelFallback = false;
-                      return {
-                        streamResult: fallbackResult.streamResult,
-                        abort: false,
-                        fallbackUsed: failures,
-                        successModel: fallbackLlm,
-                      };
-                    }
-
-                    failures.push({
-                      modelCodename: fallbackLlm.llm_codename,
-                      errorCode: extractErrorCode(fallbackResult.streamResult),
-                    });
-                  }
-
-                  // 3. All models failed — restore primary state for clean teardown
-                  streamingContext.forceModelFallback = false;
-                  effectiveTomoriState = primaryEffectiveTomoriState;
-                  return {
-                    streamResult: lastResult.streamResult,
-                    abort: false,
-                    fallbackUsed: null,
-                    successModel: null,
-                  };
+                // 3. All models failed — restore primary state for clean teardown
+                streamingContext.forceModelFallback = false;
+                effectiveTomoriState = primaryEffectiveTomoriState;
+                return {
+                  streamResult: lastResult.streamResult,
+                  abort: false,
+                  fallbackUsed: null,
+                  successModel: null,
                 };
+              };
 
               let streamResult: StreamResult | null = null;
               const fallbackRunResult = await runWithFallbackModels();
               if (fallbackRunResult.abort) {
                 if (isUserImpersonation) {
-                  throw new Error(
-                    "User impersonation ended before a reply could be sent.",
-                  );
+                  throw new Error("User impersonation ended before a reply could be sent.");
                 }
                 finalStreamCompleted = true;
                 break;
@@ -6307,9 +5334,7 @@ export default async function tomoriChat(
               streamResult = fallbackRunResult.streamResult;
               if (!streamResult) {
                 if (isUserImpersonation) {
-                  throw new Error(
-                    "User impersonation ended without returning a stream result.",
-                  );
+                  throw new Error("User impersonation ended without returning a stream result.");
                 }
                 finalStreamCompleted = true;
                 break;
@@ -6319,10 +5344,7 @@ export default async function tomoriChat(
               switch (streamResult.status) {
                 case "completed": {
                   log.success("Streaming to Discord completed successfully.");
-                  personaThoughtLog = mergeThoughtLogPayload(
-                    personaThoughtLog,
-                    streamResult.thoughtLog,
-                  );
+                  personaThoughtLog = mergeThoughtLogPayload(personaThoughtLog, streamResult.thoughtLog);
                   personaStreamCompletedSuccessfully = true;
                   // Record success for rotation key if one was used
                   if (selectedKeyResult?.rotationKeyId) {
@@ -6347,14 +5369,10 @@ export default async function tomoriChat(
                 }
 
                 case "error": {
-                  log.error(
-                    "Streaming to Discord reported an error.",
-                    streamResult.data,
-                    {
-                      serverId: tomoriState?.server_id,
-                      errorType: "StreamingError",
-                    },
-                  );
+                  log.error("Streaming to Discord reported an error.", streamResult.data, {
+                    serverId: tomoriState?.server_id,
+                    errorType: "StreamingError",
+                  });
                   // Record error for rotation key if one was used and error is key-related
                   if (selectedKeyResult?.rotationKeyId && streamResult.data) {
                     // Check if error is API key related (rate limit or auth error)
@@ -6365,20 +5383,14 @@ export default async function tomoriChat(
                     };
                     const errorMessage =
                       errorData.message ||
-                      (streamResult.data instanceof Error
-                        ? streamResult.data.message
-                        : "Unknown error");
+                      (streamResult.data instanceof Error ? streamResult.data.message : "Unknown error");
                     if (errorData.type === "rate_limit") {
                       await recordKeyError(
                         selectedKeyResult.rotationKeyId,
                         "rate_limit",
                         errorMessage || "Rate limit exceeded",
                       );
-                    } else if (
-                      errorData.type === "api_error" ||
-                      errorData.code === "401" ||
-                      errorData.code === "403"
-                    ) {
+                    } else if (errorData.type === "api_error" || errorData.code === "401" || errorData.code === "403") {
                       await recordKeyError(
                         selectedKeyResult.rotationKeyId,
                         "api_error",
@@ -6400,17 +5412,12 @@ export default async function tomoriChat(
                           : "User impersonation failed before a reply could be sent."),
                     );
                   }
-                  if (
-                    finalErrorData?.type === "timeout" &&
-                    streamingContext.suppressUserErrors
-                  ) {
+                  if (finalErrorData?.type === "timeout" && streamingContext.suppressUserErrors) {
                     await sendStandardEmbed(channel, locale, {
                       color: ColorCode.WARN,
                       titleKey: "genai.error_stream_timeout_title",
                       descriptionKey: "genai.error_stream_timeout_description",
-                    }).catch((e) =>
-                      log.warn("Failed to send timeout embed to channel", e),
-                    );
+                    }).catch((e) => log.warn("Failed to send timeout embed to channel", e));
                   }
 
                   // streamGeminiToDiscord already attempts to send an error message.
@@ -6430,11 +5437,8 @@ export default async function tomoriChat(
                       ? (streamResult.data as Record<string, unknown>)
                       : undefined;
                   const terminalFinishReason =
-                    typeof streamResultData?.finishReason === "string"
-                      ? streamResultData.finishReason
-                      : undefined;
-                  const isOpenRouterLengthEmptyResponse =
-                    terminalFinishReason === "length";
+                    typeof streamResultData?.finishReason === "string" ? streamResultData.finishReason : undefined;
+                  const isOpenRouterLengthEmptyResponse = terminalFinishReason === "length";
 
                   if (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
                     log.info(
@@ -6443,9 +5447,7 @@ export default async function tomoriChat(
                     );
 
                     // Wait before retry
-                    await new Promise((resolve) =>
-                      setTimeout(resolve, RETRY_DELAY_MS),
-                    );
+                    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
 
                     // Recursive call with fresh context (skipLock=true to avoid semaphore issues)
                     // Use currentPersona.tomori_id to preserve the exact persona that got the
@@ -6483,14 +5485,10 @@ export default async function tomoriChat(
                     );
                   } else {
                     // Max retries reached, show error embed
-                    log.warn(
-                      `Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} retries. Showing error embed.`,
-                    );
+                    log.warn(`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} retries. Showing error embed.`);
 
                     if (isUserImpersonation) {
-                      throw new Error(
-                        "User impersonation returned an empty response.",
-                      );
+                      throw new Error("User impersonation returned an empty response.");
                     }
 
                     await sendStandardEmbed(channel, locale, {
@@ -6498,12 +5496,7 @@ export default async function tomoriChat(
                       descriptionKey: "genai.empty_response_description",
                       color: ColorCode.WARN,
                       footerKey: "genai.generic_error_footer",
-                    }).catch((e) =>
-                      log.warn(
-                        "Failed to send empty response embed to channel",
-                        e,
-                      ),
-                    );
+                    }).catch((e) => log.warn("Failed to send empty response embed to channel", e));
 
                     finalStreamCompleted = true; // Mark as completed to exit
                     break;
@@ -6517,9 +5510,7 @@ export default async function tomoriChat(
                     streamResult.data,
                   );
                   if (isUserImpersonation) {
-                    throw new Error(
-                      "User impersonation timed out before a reply could be sent.",
-                    );
+                    throw new Error("User impersonation timed out before a reply could be sent.");
                   }
                   await sendStandardEmbed(channel, locale, {
                     color: ColorCode.WARN,
@@ -6536,9 +5527,7 @@ export default async function tomoriChat(
                 case "stopped_by_user": {
                   // Handle any graceful stop, including user stops and internal guards.
                   const stopReason = streamResult.stopReason ?? "unknown";
-                  log.info(
-                    `Streaming stopped for channel ${channel.id}. Reason: ${stopReason}.`,
-                  );
+                  log.info(`Streaming stopped for channel ${channel.id}. Reason: ${stopReason}.`);
                   finalStreamCompleted = true;
 
                   // Reset follow-up counter — stop is a terminal event
@@ -6546,9 +5535,7 @@ export default async function tomoriChat(
                   if (stoppedLockEntry) stoppedLockEntry.followUpCount = 0;
 
                   // Check if we have stop context to create a response
-                  const stopContext = StreamOrchestrator.getAndClearStopContext(
-                    channel.id,
-                  );
+                  const stopContext = StreamOrchestrator.getAndClearStopContext(channel.id);
 
                   if (stopContext) {
                     // Get the current lock entry to queue the stop response
@@ -6562,8 +5549,7 @@ export default async function tomoriChat(
                         llmOverrideCodename,
                         isStopResponse: true, // This response cannot be stopped
                         // Keep stop follow-up persona aligned with the interrupted stream.
-                        selectedPersonaId:
-                          currentPersona.tomori_id ?? undefined,
+                        selectedPersonaId: currentPersona.tomori_id ?? undefined,
                         textQuotaSource: "system",
                         textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
                       });
@@ -6600,10 +5586,7 @@ export default async function tomoriChat(
                 }
 
                 case "function_call": {
-                  personaThoughtLog = mergeThoughtLogPayload(
-                    personaThoughtLog,
-                    streamResult.thoughtLog,
-                  );
+                  personaThoughtLog = mergeThoughtLogPayload(personaThoughtLog, streamResult.thoughtLog);
 
                   // Accumulate any <details> content captured before the tool call
                   if (streamResult.detailsContent) {
@@ -6614,10 +5597,7 @@ export default async function tomoriChat(
 
                   if (!streamResult.data) {
                     // Function call without data - log error and break
-                    log.error(
-                      "Function call status received without data:",
-                      streamResult,
-                    );
+                    log.error("Function call status received without data:", streamResult);
                     finalStreamCompleted = true;
                     break;
                   }
@@ -6625,9 +5605,7 @@ export default async function tomoriChat(
                   // Capture any text the model streamed to Discord before calling
                   // the tool, so it appears in the function interaction history
                   // and the model won't repeat itself on continuation.
-                  const preToolText = (
-                    streamResult.accumulatedText ?? ""
-                  ).trim();
+                  const preToolText = (streamResult.accumulatedText ?? "").trim();
                   if (preToolText) {
                     accumulatedStreamedModelParts.push({
                       type: "text",
@@ -6647,9 +5625,7 @@ export default async function tomoriChat(
                   );
 
                   // 2. Execute function using modular tool system
-                  log.info(
-                    `Executing tool: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
-                  );
+                  log.info(`Executing tool: ${funcName} with args: ${JSON.stringify(funcCall.args)}`);
 
                   // Build tool execution context
                   const toolContext = {
@@ -6670,61 +5646,36 @@ export default async function tomoriChat(
                   // Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
                   // Check for stop request before executing function call
                   if (StreamOrchestrator.hasStopRequest(channel.id)) {
-                    log.info(
-                      `Function call execution cancelled due to stop request: ${funcName}`,
-                    );
+                    log.info(`Function call execution cancelled due to stop request: ${funcName}`);
                     finalStreamCompleted = true;
                     break;
                   }
 
                   const functionCallStart = Date.now();
-                  const toolResult = await ToolRegistry.executeTool(
-                    funcName,
-                    funcCall.args || {},
-                    toolContext,
-                  );
+                  const toolResult = await ToolRegistry.executeTool(funcName, funcCall.args || {}, toolContext);
                   const functionCallDuration = Date.now() - functionCallStart;
 
                   // Log function call timing (especially long-running ones)
                   if (functionCallDuration > 5000) {
-                    log.warn(
-                      `Long-running function call: ${funcName} took ${functionCallDuration}ms`,
-                    );
+                    log.warn(`Long-running function call: ${funcName} took ${functionCallDuration}ms`);
                   } else {
-                    log.info(
-                      `Function call completed: ${funcName} (${functionCallDuration}ms)`,
-                    );
+                    log.info(`Function call completed: ${funcName} (${functionCallDuration}ms)`);
                   }
 
                   // Convert tool result to function execution result format
                   let functionExecutionResult: Record<string, unknown>;
 
                   if (toolResult.success) {
-                    functionExecutionResult = (toolResult.data as Record<
-                      string,
-                      unknown
-                    >) || { status: "completed" };
+                    functionExecutionResult = (toolResult.data as Record<string, unknown>) || { status: "completed" };
 
                     // Handle sticker selection specifically (extract sticker for later sending)
-                    if (
-                      funcName === "select_sticker_for_response" &&
-                      toolResult.data
-                    ) {
-                      const stickerData = toolResult.data as Record<
-                        string,
-                        unknown
-                      >;
-                      if (
-                        stickerData.status === "sticker_selected_successfully"
-                      ) {
+                    if (funcName === "select_sticker_for_response" && toolResult.data) {
+                      const stickerData = toolResult.data as Record<string, unknown>;
+                      if (stickerData.status === "sticker_selected_successfully") {
                         // Find the sticker in guild cache to send later
-                        const discordSticker = guild?.stickers.cache.get(
-                          stickerData.sticker_id as string,
-                        );
+                        const discordSticker = guild?.stickers.cache.get(stickerData.sticker_id as string);
                         selectedStickerToSend = discordSticker || null;
-                        log.success(
-                          `Sticker '${stickerData.sticker_name}' selected for sending`,
-                        );
+                        log.success(`Sticker '${stickerData.sticker_name}' selected for sending`);
                       } else {
                         selectedStickerToSend = null;
                       }
@@ -6734,15 +5685,10 @@ export default async function tomoriChat(
                     if (
                       funcName === "process_youtube_video" &&
                       toolResult.data &&
-                      (toolResult.data as Record<string, unknown>).type ===
-                        "context_restart_with_video"
+                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_video"
                     ) {
-                      const restartData = toolResult.data as Record<
-                        string,
-                        unknown
-                      >;
-                      const enhancedContextItem =
-                        restartData.enhanced_context_item as StructuredContextItem;
+                      const restartData = toolResult.data as Record<string, unknown>;
+                      const enhancedContextItem = restartData.enhanced_context_item as StructuredContextItem;
                       const videoUrl = restartData.video_url as string;
                       const videoId = restartData.video_id as string;
 
@@ -6753,9 +5699,7 @@ export default async function tomoriChat(
                       // Set flag to disable YouTube processing during enhanced context restart
                       // This prevents TomoriBot from making additional YouTube function calls while processing
                       streamingContext.disableYouTubeProcessing = true;
-                      log.info(
-                        "Temporarily disabled YouTube processing function during enhanced context restart",
-                      );
+                      log.info("Temporarily disabled YouTube processing function during enhanced context restart");
 
                       // Clean YouTube URLs from all existing context text parts FIRST to prevent false duplication detection
                       for (const contextItem of contextSegments) {
@@ -6782,15 +5726,11 @@ export default async function tomoriChat(
                             part.type === "video" &&
                             part.uri &&
                             "isYouTubeLink" in part &&
-                            (part as { isYouTubeLink: boolean })
-                              .isYouTubeLink &&
+                            (part as { isYouTubeLink: boolean }).isYouTubeLink &&
                             "enhancedContext" in part &&
-                            (part as { enhancedContext: boolean })
-                              .enhancedContext
+                            (part as { enhancedContext: boolean }).enhancedContext
                           ) {
-                            const existingIds = extractYouTubeVideoIds(
-                              part.uri,
-                            );
+                            const existingIds = extractYouTubeVideoIds(part.uri);
                             for (const id of existingIds) {
                               existingVideoIds.add(id);
                             }
@@ -6806,9 +5746,7 @@ export default async function tomoriChat(
                           `Enhanced context with YouTube video Part (ID: ${videoId}). Total context items: ${contextSegments.length}`,
                         );
                       } else {
-                        log.warn(
-                          `YouTube video ${videoId} already exists in context. Skipping duplication.`,
-                        );
+                        log.warn(`YouTube video ${videoId} already exists in context. Skipping duplication.`);
                       }
 
                       // Continue to next iteration WITHOUT adding to function interaction history
@@ -6820,13 +5758,9 @@ export default async function tomoriChat(
                     if (
                       funcName === "peek_profile_picture" &&
                       toolResult.data &&
-                      (toolResult.data as Record<string, unknown>).type ===
-                        "context_restart_with_image"
+                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_image"
                     ) {
-                      const restartData = toolResult.data as Record<
-                        string,
-                        unknown
-                      >;
+                      const restartData = toolResult.data as Record<string, unknown>;
                       const userId = restartData.user_id as string;
                       const username = restartData.username as string;
 
@@ -6835,10 +5769,7 @@ export default async function tomoriChat(
                       );
 
                       // Get the enhanced context item from external storage
-                      const enhancedContextItem =
-                        PeekProfilePictureTool.getPendingEnhancedContext(
-                          userId,
-                        );
+                      const enhancedContextItem = PeekProfilePictureTool.getPendingEnhancedContext(userId);
 
                       if (!enhancedContextItem) {
                         log.warn(
@@ -6862,11 +5793,9 @@ export default async function tomoriChat(
                           if (
                             part.type === "image" &&
                             "isProfilePicture" in part &&
-                            (part as { isProfilePicture: boolean })
-                              .isProfilePicture &&
+                            (part as { isProfilePicture: boolean }).isProfilePicture &&
                             "enhancedContext" in part &&
-                            (part as { enhancedContext: boolean })
-                              .enhancedContext
+                            (part as { enhancedContext: boolean }).enhancedContext
                           ) {
                             hasExistingProfilePicture = true;
                             break;
@@ -6897,13 +5826,9 @@ export default async function tomoriChat(
                     if (
                       funcName === "process_gif" &&
                       toolResult.data &&
-                      (toolResult.data as Record<string, unknown>).type ===
-                        "context_restart_with_gif"
+                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_gif"
                     ) {
-                      const restartData = toolResult.data as Record<
-                        string,
-                        unknown
-                      >;
+                      const restartData = toolResult.data as Record<string, unknown>;
                       const messageId = restartData.message_id as string;
                       const frameCount = restartData.frame_count as number;
 
@@ -6912,22 +5837,17 @@ export default async function tomoriChat(
                       );
 
                       // Get the enhanced context item from external storage
-                      const enhancedContextItem =
-                        ProcessGifTool.getPendingEnhancedContext(messageId);
+                      const enhancedContextItem = ProcessGifTool.getPendingEnhancedContext(messageId);
 
                       if (!enhancedContextItem) {
-                        log.warn(
-                          `No pending enhanced context found for message ${messageId}. GIF restart failed.`,
-                        );
+                        log.warn(`No pending enhanced context found for message ${messageId}. GIF restart failed.`);
                         continue;
                       }
 
                       // Set flag to disable GIF processing during enhanced context restart
                       // This prevents TomoriBot from making additional GIF function calls while processing
                       streamingContext.disableGifProcessing = true;
-                      log.info(
-                        "Temporarily disabled GIF processing function during enhanced context restart",
-                      );
+                      log.info("Temporarily disabled GIF processing function during enhanced context restart");
 
                       // Add the GIF frames context item to existing context
                       contextSegments.push(enhancedContextItem);
@@ -6944,13 +5864,9 @@ export default async function tomoriChat(
                     if (
                       funcName === "increase_media_context" &&
                       toolResult.data &&
-                      (toolResult.data as Record<string, unknown>).type ===
-                        "context_restart_with_media"
+                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_media"
                     ) {
-                      const restartData = toolResult.data as Record<
-                        string,
-                        unknown
-                      >;
+                      const restartData = toolResult.data as Record<string, unknown>;
                       const extendBy = restartData.extend_by as number;
                       const oldWindow = restartData.old_window as number;
                       const newWindow = restartData.new_window as number;
@@ -6999,16 +5915,9 @@ export default async function tomoriChat(
                         seesImages: effectiveContextSeesImages,
                         seesVideos: effectiveContextSeesVideos,
                         hasVisionTool:
-                          !!tomoriState?.vision_llm &&
-                          !(
-                            effectiveContextSeesImages ??
-                            tomoriState?.llm.sees_images
-                          ),
+                          !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
                       });
-                      contextSegments = appendInjectedContextItems(
-                        contextBuild.contextItems,
-                        injectedContextItems,
-                      );
+                      contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
 
                       // Truncate oldest dialogue history pairs if the conversation is approaching
                       // the context window limit, ensuring the output budget is always preserved.
@@ -7020,32 +5929,22 @@ export default async function tomoriChat(
                         tomoriState.llm.llm_codename !== "other-model" &&
                         isOpenRouterCapabilityCacheReady()
                       ) {
-                        const tokenLimits = getOpenRouterTokenLimits(
-                          tomoriState.llm.llm_codename,
-                        );
+                        const tokenLimits = getOpenRouterTokenLimits(tomoriState.llm.llm_codename);
                         const openrouterTruncationOutputCap = Number.parseInt(
                           process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
                           10,
                         );
-                        if (
-                          tokenLimits &&
-                          tokenLimits.contextLength > 0 &&
-                          tokenLimits.maxCompletionTokens
-                        ) {
+                        if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
                           const truncationMaxCompletionTokens = Math.min(
                             tokenLimits.maxCompletionTokens,
                             openrouterTruncationOutputCap,
                           );
-                          const {
-                            truncated,
-                            historyPairsDropped,
-                            sampleItemsDropped,
-                            totalDropped,
-                          } = truncateDialogueHistory(
-                            contextSegments,
-                            tokenLimits.contextLength,
-                            truncationMaxCompletionTokens,
-                          );
+                          const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } =
+                            truncateDialogueHistory(
+                              contextSegments,
+                              tokenLimits.contextLength,
+                              truncationMaxCompletionTokens,
+                            );
                           if (totalDropped > 0) {
                             log.warn(
                               `History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
@@ -7056,24 +5955,14 @@ export default async function tomoriChat(
                           }
                         }
                       } else if (tomoriState.llm.llm_provider === "google") {
-                        const tokenLimits = getGeminiTokenLimits(
-                          tomoriState.llm.llm_codename,
-                        );
-                        if (
-                          tokenLimits &&
-                          tokenLimits.contextLength > 0 &&
-                          tokenLimits.maxCompletionTokens
-                        ) {
-                          const {
-                            truncated,
-                            historyPairsDropped,
-                            sampleItemsDropped,
-                            totalDropped,
-                          } = truncateDialogueHistory(
-                            contextSegments,
-                            tokenLimits.contextLength,
-                            tokenLimits.maxCompletionTokens,
-                          );
+                        const tokenLimits = getGeminiTokenLimits(tomoriState.llm.llm_codename);
+                        if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                          const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } =
+                            truncateDialogueHistory(
+                              contextSegments,
+                              tokenLimits.contextLength,
+                              tokenLimits.maxCompletionTokens,
+                            );
                           if (totalDropped > 0) {
                             log.warn(
                               `History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
@@ -7086,45 +5975,26 @@ export default async function tomoriChat(
                       } else if (tomoriState.llm.llm_provider === "novelai") {
                         // Look up subscription contextTokens for accurate tier-aware truncation.
                         // If cache is cold (e.g. after bot restart), decrypt the key early and fetch.
-                        let naiSubscriptionTokens =
-                          getCachedContextTokens(serverDiscId);
-                        if (
-                          naiSubscriptionTokens === undefined &&
-                          tomoriState.config.api_key
-                        ) {
+                        let naiSubscriptionTokens = getCachedContextTokens(serverDiscId);
+                        if (naiSubscriptionTokens === undefined && tomoriState.config.api_key) {
                           try {
                             const tempKey = await decryptApiKey(
                               tomoriState.config.api_key,
                               tomoriState.config.key_version || 1,
                             );
-                            naiSubscriptionTokens =
-                              await refreshNovelAISubscription(
-                                serverDiscId,
-                                tempKey,
-                              );
+                            naiSubscriptionTokens = await refreshNovelAISubscription(serverDiscId, tempKey);
                           } catch {
                             // Subscription fetch failed; getNovelAITokenLimits will use env var fallback
                           }
                         }
-                        const tokenLimits = getNovelAITokenLimits(
-                          tomoriState.llm.llm_codename,
-                          naiSubscriptionTokens,
-                        );
-                        if (
-                          tokenLimits &&
-                          tokenLimits.contextLength > 0 &&
-                          tokenLimits.maxCompletionTokens
-                        ) {
-                          const {
-                            truncated,
-                            historyPairsDropped,
-                            sampleItemsDropped,
-                            totalDropped,
-                          } = truncateDialogueHistory(
-                            contextSegments,
-                            tokenLimits.contextLength,
-                            tokenLimits.maxCompletionTokens,
-                          );
+                        const tokenLimits = getNovelAITokenLimits(tomoriState.llm.llm_codename, naiSubscriptionTokens);
+                        if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                          const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } =
+                            truncateDialogueHistory(
+                              contextSegments,
+                              tokenLimits.contextLength,
+                              tokenLimits.maxCompletionTokens,
+                            );
                           if (totalDropped > 0) {
                             log.warn(
                               `History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
@@ -7141,13 +6011,11 @@ export default async function tomoriChat(
                         retryCount > 0 &&
                         tomoriState.llm.llm_provider === "openrouter";
                       if (shouldApplyOpenRouterLengthRetryTrim) {
-                        const requestedPairDrops =
-                          OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS * retryCount;
-                        const { truncated, historyPairsDropped } =
-                          dropOldestHistoryExchangePairs(
-                            contextSegments,
-                            requestedPairDrops,
-                          );
+                        const requestedPairDrops = OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS * retryCount;
+                        const { truncated, historyPairsDropped } = dropOldestHistoryExchangePairs(
+                          contextSegments,
+                          requestedPairDrops,
+                        );
                         if (historyPairsDropped > 0) {
                           log.warn(
                             `OpenRouter length-empty retry trimming: dropped ${historyPairsDropped}/${requestedPairDrops} oldest history exchange pair(s) on retry ${retryCount}.`,
@@ -7159,9 +6027,7 @@ export default async function tomoriChat(
                           );
                         }
                       }
-                      const tailDirectives: string[] = [
-                        ...contextBuild.tailDirectives,
-                      ];
+                      const tailDirectives: string[] = [...contextBuild.tailDirectives];
                       const uncensorDirective = contextBuild.uncensorDirective;
                       if (manualContinuationDirective) {
                         tailDirectives.push(manualContinuationDirective);
@@ -7176,9 +6042,7 @@ export default async function tomoriChat(
                         contextSegments,
                         isUserImpersonation
                           ? null
-                          : (tomoriState?.tomori_nickname ??
-                              process.env.DEFAULT_BOTNAME ??
-                              "Tomori"),
+                          : (tomoriState?.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori"),
                       );
                       if (emojiPenaltyDirective) {
                         tailDirectives.push(emojiPenaltyDirective);
@@ -7197,24 +6061,15 @@ export default async function tomoriChat(
                         if (lastUserContext) {
                           const originalContent = lastUserContext.parts
                             .filter((part) => part.type === "text")
-                            .map(
-                              (part) =>
-                                (part as { type: "text"; text: string }).text,
-                            )
+                            .map((part) => (part as { type: "text"; text: string }).text)
                             .join(" ");
                           tailDirectives.push(
                             `The user has requested you to stop your current generation. Original message: "${originalContent}"`,
                           );
-                          log.info(
-                            `Captured stop response context. Original content: "${originalContent}"`,
-                          );
+                          log.info(`Captured stop response context. Original content: "${originalContent}"`);
                         } else {
-                          tailDirectives.push(
-                            "The user has requested you to stop your current generation.",
-                          );
-                          log.info(
-                            "Captured stop response context (no user context found)",
-                          );
+                          tailDirectives.push("The user has requested you to stop your current generation.");
+                          log.info("Captured stop response context (no user context found)");
                         }
                       }
 
@@ -7223,38 +6078,30 @@ export default async function tomoriChat(
                         tailDirectives.push(
                           `The user has activated reasoning mode with the following query: "${reasoningQuery}". Please provide a thoughtful, well-reasoned response to this query.`,
                         );
-                        log.info(
-                          `Captured reasoning query for tail directives: "${reasoningQuery}"`,
-                        );
+                        log.info(`Captured reasoning query for tail directives: "${reasoningQuery}"`);
                       }
 
                       // Inject manual system prompt at the end (for manual commands)
                       if (manualSystemPrompt?.trim()) {
                         const trimmedPrompt = manualSystemPrompt.trim();
-                        const directiveText =
-                          normalizeTailDirective(trimmedPrompt);
+                        const directiveText = normalizeTailDirective(trimmedPrompt);
                         if (directiveText) {
                           tailDirectives.push(directiveText);
                         }
-                        log.info(
-                          `Injected manual system prompt: "${trimmedPrompt}"`,
-                        );
+                        log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
                       }
 
-                      const combinedTailMessage =
-                        buildCombinedTailDirectiveMessage(tailDirectives);
+                      const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);
                       if (combinedTailMessage) {
                         contextSegments.push(combinedTailMessage);
                       }
 
-                      const queuedReplyTailMessage =
-                        buildTailDirectiveMessage(queuedReplyDirective);
+                      const queuedReplyTailMessage = buildTailDirectiveMessage(queuedReplyDirective);
                       if (queuedReplyTailMessage) {
                         contextSegments.push(queuedReplyTailMessage);
                       }
 
-                      const uncensorTailMessage =
-                        buildTailDirectiveMessage(uncensorDirective);
+                      const uncensorTailMessage = buildTailDirectiveMessage(uncensorDirective);
                       if (uncensorTailMessage) {
                         contextSegments.push(uncensorTailMessage);
                       }
@@ -7267,8 +6114,7 @@ export default async function tomoriChat(
                     if (
                       funcName === "refresh_message_timestamps" &&
                       toolResult.data &&
-                      (toolResult.data as Record<string, unknown>).type ===
-                        "context_restart_with_timestamps"
+                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_timestamps"
                     ) {
                       log.info(
                         "Message timestamps restart signal detected. Injecting timestamp annotations into context.",
@@ -7288,14 +6134,9 @@ export default async function tomoriChat(
                       // Inject [System: Sent ...] annotations into existing DIALOGUE_HISTORY context items
                       let annotatedCount = 0;
                       for (const contextItem of contextSegments) {
-                        if (
-                          contextItem.messageId &&
-                          timestampMap.has(contextItem.messageId)
-                        ) {
+                        if (contextItem.messageId && timestampMap.has(contextItem.messageId)) {
                           // biome-ignore lint/style/noNonNullAssertion: checked by has()
-                          const createdAt = timestampMap.get(
-                            contextItem.messageId,
-                          )!;
+                          const createdAt = timestampMap.get(contextItem.messageId)!;
                           contextItem.parts.push({
                             type: "text",
                             text: formatMessageTimestamp(createdAt),
@@ -7310,29 +6151,20 @@ export default async function tomoriChat(
                         /\[System: This message is referring to a previous message \(ID: (\d+)\) by/g;
                       for (const contextItem of contextSegments) {
                         for (const part of contextItem.parts) {
-                          if (
-                            part.type === "text" &&
-                            part.text.includes("This message is referring to")
-                          ) {
-                            part.text = part.text.replace(
-                              replyRefPattern,
-                              (match, referencedId: string) => {
-                                const refTimestamp =
-                                  timestampMap.get(referencedId);
-                                if (!refTimestamp) return match;
-                                return match.replace(
-                                  `(ID: ${referencedId})`,
-                                  `(ID: ${referencedId}, sent ${formatTimestampInline(refTimestamp)})`,
-                                );
-                              },
-                            );
+                          if (part.type === "text" && part.text.includes("This message is referring to")) {
+                            part.text = part.text.replace(replyRefPattern, (match, referencedId: string) => {
+                              const refTimestamp = timestampMap.get(referencedId);
+                              if (!refTimestamp) return match;
+                              return match.replace(
+                                `(ID: ${referencedId})`,
+                                `(ID: ${referencedId}, sent ${formatTimestampInline(refTimestamp)})`,
+                              );
+                            });
                           }
                         }
                       }
 
-                      log.success(
-                        `Injected timestamp annotations into ${annotatedCount} context items.`,
-                      );
+                      log.success(`Injected timestamp annotations into ${annotatedCount} context items.`);
 
                       // Continue to next iteration WITHOUT adding to function interaction history
                       continue;
@@ -7343,20 +6175,12 @@ export default async function tomoriChat(
                     // (e.g., available sticker list for token-budget exhaustion recovery).
                     functionExecutionResult = {
                       status: "tool_execution_failed",
-                      reason:
-                        toolResult.message ||
-                        toolResult.error ||
-                        "Tool execution failed without specific error",
+                      reason: toolResult.message || toolResult.error || "Tool execution failed without specific error",
                       tool_name: funcName,
                     };
 
-                    const toolResultData = toolResult.data as
-                      | Record<string, unknown>
-                      | undefined;
-                    const toolStatus =
-                      typeof toolResultData?.status === "string"
-                        ? toolResultData.status
-                        : undefined;
+                    const toolResultData = toolResult.data as Record<string, unknown> | undefined;
+                    const toolStatus = typeof toolResultData?.status === "string" ? toolResultData.status : undefined;
                     const isRecoverableStickerMiss =
                       funcName === "select_sticker_for_response" &&
                       (toolStatus === "sticker_not_found" ||
@@ -7365,8 +6189,7 @@ export default async function tomoriChat(
 
                     if (isRecoverableStickerMiss) {
                       const stickerNameAttempted =
-                        typeof toolResultData?.sticker_name_attempted ===
-                        "string"
+                        typeof toolResultData?.sticker_name_attempted === "string"
                           ? toolResultData.sticker_name_attempted
                           : undefined;
                       const stickerIdAttempted =
@@ -7380,33 +6203,21 @@ export default async function tomoriChat(
                           status: toolStatus,
                           stickerNameAttempted,
                           stickerIdAttempted,
-                          reason:
-                            toolResult.message ||
-                            toolResult.error ||
-                            "Sticker selection retry suggested",
+                          reason: toolResult.message || toolResult.error || "Sticker selection retry suggested",
                         },
                       );
                     } else {
-                      log.error(
-                        `Tool execution failed for ${funcName}: ${toolResult.error}`,
-                      );
+                      log.error(`Tool execution failed for ${funcName}: ${toolResult.error}`);
                     }
 
                     // Case 2: NAI GLM tool failure with text already sent
                     // Suppress text output on retry so the model can re-attempt the tool
                     // without repeating the pre-tool text to Discord. After exceeding the
                     // retry threshold, show an error embed and end the turn.
-                    const textAlreadySent =
-                      (streamResult.accumulatedText ?? "").trim().length > 0;
-                    if (
-                      textAlreadySent &&
-                      provider.getInfo().name === "novelai"
-                    ) {
+                    const textAlreadySent = (streamResult.accumulatedText ?? "").trim().length > 0;
+                    if (textAlreadySent && provider.getInfo().name === "novelai") {
                       naiConsecutiveToolFailures++;
-                      if (
-                        naiConsecutiveToolFailures >=
-                        NAI_TOOL_FAILURE_RETRY_THRESHOLD
-                      ) {
+                      if (naiConsecutiveToolFailures >= NAI_TOOL_FAILURE_RETRY_THRESHOLD) {
                         log.warn(
                           `NovelAI GLM: Tool "${funcName}" failed ${naiConsecutiveToolFailures} consecutive times after text was sent — showing error embed and ending turn`,
                         );
@@ -7416,8 +6227,7 @@ export default async function tomoriChat(
                           {
                             color: ColorCode.ERROR,
                             titleKey: "genai.nai_tool_retry_exhausted_title",
-                            descriptionKey:
-                              "genai.nai_tool_retry_exhausted_description",
+                            descriptionKey: "genai.nai_tool_retry_exhausted_description",
                           },
                           {
                             webhook: personaWebhook ?? undefined,
@@ -7451,10 +6261,7 @@ export default async function tomoriChat(
                         response: { result: functionExecutionResult },
                       },
                     },
-                    preToolCallTextParts:
-                      personaAccumulatedParts.length > 0
-                        ? [...personaAccumulatedParts]
-                        : undefined,
+                    preToolCallTextParts: personaAccumulatedParts.length > 0 ? [...personaAccumulatedParts] : undefined,
                   };
 
                   // Add imageMetadata if present (for tools that send images like brave_image_search)
@@ -7484,14 +6291,9 @@ export default async function tomoriChat(
                   }
 
                   // Disable STM after first successful call to prevent duplicate updates in one turn
-                  if (
-                    funcName === "update_short_term_memory" &&
-                    toolResult.success
-                  ) {
+                  if (funcName === "update_short_term_memory" && toolResult.success) {
                     streamingContext.disableShortTermMemoryUpdate = true;
-                    log.info(
-                      "Short-term memory updated — disabling further STM calls for this turn",
-                    );
+                    log.info("Short-term memory updated — disabling further STM calls for this turn");
                   }
 
                   const providerName = provider.getInfo().name;
@@ -7515,18 +6317,13 @@ export default async function tomoriChat(
                       naiConsecutiveToolFailures = 0;
 
                       // Check if this tool needs a follow-up to present results
-                      const needsFollowUp = await ToolRegistry.requiresFollowUp(
-                        funcName,
-                        providerName,
-                      );
+                      const needsFollowUp = await ToolRegistry.requiresFollowUp(funcName, providerName);
 
                       if (needsFollowUp) {
                         // Case 4: Search/fetch tool succeeded with pre-text — allow follow-up
                         // Clear suppression in case it was set by a prior failed attempt
                         streamingContext.suppressTextOutput = false;
-                        log.info(
-                          `NovelAI GLM: Tool "${funcName}" requires follow-up — allowing next generation`,
-                        );
+                        log.info(`NovelAI GLM: Tool "${funcName}" requires follow-up — allowing next generation`);
                       } else {
                         // Case 1: Non-search tool succeeded with pre-text — suppress follow-up
                         log.info(
@@ -7537,19 +6334,11 @@ export default async function tomoriChat(
                       }
                     }
                     // Tool failure with pre-text is handled above in Case 2 block
-                  } else if (
-                    hasPreToolText &&
-                    TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT.has(funcName)
-                  ) {
-                    const needsFollowUp = await ToolRegistry.requiresFollowUp(
-                      funcName,
-                      providerName,
-                    );
+                  } else if (hasPreToolText && TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT.has(funcName)) {
+                    const needsFollowUp = await ToolRegistry.requiresFollowUp(funcName, providerName);
 
                     if (needsFollowUp) {
-                      log.info(
-                        `Tool "${funcName}" requires follow-up after pre-tool text — allowing next generation`,
-                      );
+                      log.info(`Tool "${funcName}" requires follow-up after pre-tool text — allowing next generation`);
                     } else {
                       log.info(
                         `Tool "${funcName}" executed after text was already streamed. Ending turn to prevent repetition.`,
@@ -7576,8 +6365,7 @@ export default async function tomoriChat(
                     await sendStandardEmbed(channel, locale, {
                       color: ColorCode.WARN,
                       titleKey: "genai.max_iterations_title", // New locale key
-                      descriptionKey:
-                        "genai.max_iterations_streaming_description", // New locale key
+                      descriptionKey: "genai.max_iterations_streaming_description", // New locale key
                       footerKey: "genai.generic_error_footer",
                     });
                     finalStreamCompleted = true; // Mark as "completed" to exit loop
@@ -7593,9 +6381,7 @@ export default async function tomoriChat(
                   const _exhaustive: never = streamResult.status;
                   log.error(
                     `Unhandled stream status in streaming loop: ${_exhaustive}`,
-                    new Error(
-                      `Unknown status: ${JSON.stringify(streamResult)}`,
-                    ),
+                    new Error(`Unknown status: ${JSON.stringify(streamResult)}`),
                   );
 
                   if (isUserImpersonation) {
@@ -7610,12 +6396,7 @@ export default async function tomoriChat(
                     descriptionKey: "genai.no_response_description",
                     color: ColorCode.WARN,
                     footerKey: "genai.generic_error_footer",
-                  }).catch((e) =>
-                    log.warn(
-                      "Failed to send unhandled status embed to channel",
-                      e,
-                    ),
-                  );
+                  }).catch((e) => log.warn("Failed to send unhandled status embed to channel", e));
 
                   finalStreamCompleted = true; // Break loop on unexpected status
                   break;
@@ -7624,11 +6405,7 @@ export default async function tomoriChat(
 
               // If a fallback model was used successfully, send a blue info embed so
               // the user knows which model actually responded and what failed before it.
-              if (
-                !isUserImpersonation &&
-                fallbackRunResult.fallbackUsed &&
-                fallbackRunResult.successModel
-              ) {
+              if (!isUserImpersonation && fallbackRunResult.fallbackUsed && fallbackRunResult.successModel) {
                 const chain = fallbackRunResult.fallbackUsed
                   .map((f) => `\`${f.modelCodename}\` (errored ${f.errorCode})`)
                   .join(" → ");
@@ -7640,9 +6417,7 @@ export default async function tomoriChat(
                     success_model: fallbackRunResult.successModel.llm_codename,
                     chain,
                   },
-                }).catch((e) =>
-                  log.warn("Failed to send fallback info embed", e),
-                );
+                }).catch((e) => log.warn("Failed to send fallback info embed", e));
               }
 
               // Check if we should exit the loop after switch statement
@@ -7650,31 +6425,22 @@ export default async function tomoriChat(
                 break; // Exit the for loop
               }
             } catch (streamingError) {
-              log.error(
-                "Critical error during streamGeminiToDiscord call within streaming loop:",
-                streamingError,
-                {
-                  serverId: tomoriState?.server_id,
-                  errorType: "StreamingInvocationError",
-                  metadata: { channelId: channel.id, iteration: i + 1 },
-                },
-              );
+              log.error("Critical error during streamGeminiToDiscord call within streaming loop:", streamingError, {
+                serverId: tomoriState?.server_id,
+                errorType: "StreamingInvocationError",
+                metadata: { channelId: channel.id, iteration: i + 1 },
+              });
               if (isUserImpersonation) {
                 throw streamingError instanceof Error
                   ? streamingError
-                  : new Error(
-                      "User impersonation failed during the streaming invocation.",
-                    );
+                  : new Error("User impersonation failed during the streaming invocation.");
               }
               await sendStandardEmbed(channel, locale, {
                 color: ColorCode.ERROR,
                 titleKey: "genai.generic_error_title",
                 descriptionKey: "genai.stream.streaming_failed_description",
                 descriptionVars: {
-                  error_message:
-                    streamingError instanceof Error
-                      ? streamingError.message
-                      : "Unknown Error",
+                  error_message: streamingError instanceof Error ? streamingError.message : "Unknown Error",
                 },
                 footerKey: "genai.generic_error_footer",
               });
@@ -7686,17 +6452,13 @@ export default async function tomoriChat(
           // Clear YouTube processing disable flag after streaming completes
           if (streamingContext.disableYouTubeProcessing) {
             streamingContext.disableYouTubeProcessing = false;
-            log.info(
-              "Re-enabled YouTube processing function after enhanced context restart completion",
-            );
+            log.info("Re-enabled YouTube processing function after enhanced context restart completion");
           }
 
           // Clear profile picture processing disable flag after streaming completes
           if (streamingContext.disableProfilePictureProcessing) {
             streamingContext.disableProfilePictureProcessing = false;
-            log.info(
-              "Re-enabled profile picture processing function after enhanced context restart completion",
-            );
+            log.info("Re-enabled profile picture processing function after enhanced context restart completion");
           }
 
           // 5. After the loop, if a sticker was selected and a stream completed, send the sticker.
@@ -7707,9 +6469,7 @@ export default async function tomoriChat(
             if (currentPersona.is_alter && personaWebhook && personaUsername) {
               const stickerUrl = selectedStickerToSend.url;
               const threadId =
-                "isThread" in channel &&
-                typeof channel.isThread === "function" &&
-                channel.isThread()
+                "isThread" in channel && typeof channel.isThread === "function" && channel.isThread()
                   ? channel.id
                   : undefined;
               try {
@@ -7722,20 +6482,13 @@ export default async function tomoriChat(
                   {
                     username: personaUsername,
                     avatarUrl: personaAvatarUrl,
-                    avatarDataUri: personaAvatarUrl?.startsWith("data:image/")
-                      ? personaAvatarUrl
-                      : undefined,
+                    avatarDataUri: personaAvatarUrl?.startsWith("data:image/") ? personaAvatarUrl : undefined,
                   },
                 );
                 stickerSent = true;
-                log.info(
-                  `Sent sticker URL for '${selectedStickerToSend.name}' via webhook.`,
-                );
+                log.info(`Sent sticker URL for '${selectedStickerToSend.name}' via webhook.`);
               } catch (stickerError) {
-                log.warn(
-                  "Failed to send sticker URL via webhook, falling back to bot sticker send",
-                  stickerError,
-                );
+                log.warn("Failed to send sticker URL via webhook, falling back to bot sticker send", stickerError);
               }
             }
 
@@ -7749,36 +6502,23 @@ export default async function tomoriChat(
                   await channel.send({ stickers: [selectedStickerToSend.id] });
                 }
                 stickerSent = true;
-                log.info(
-                  `Sent selected sticker '${selectedStickerToSend.name}' after stream.`,
-                );
+                log.info(`Sent selected sticker '${selectedStickerToSend.name}' after stream.`);
               } catch (stickerError) {
-                log.error(
-                  "Failed to send selected sticker after stream:",
-                  stickerError,
-                  {
-                    serverId: tomoriState?.server_id,
-                    errorType: "StickerSendError",
-                    metadata: { stickerId: selectedStickerToSend.id },
-                  },
-                );
+                log.error("Failed to send selected sticker after stream:", stickerError, {
+                  serverId: tomoriState?.server_id,
+                  errorType: "StickerSendError",
+                  metadata: { stickerId: selectedStickerToSend.id },
+                });
               }
             }
           } else if (!finalStreamCompleted) {
-            log.warn(
-              "Streaming process did not complete successfully, final response might be missing.",
-            );
+            log.warn("Streaming process did not complete successfully, final response might be missing.");
             // Potentially send a message indicating an issue if no error was already sent.
           }
 
           if (personaStreamCompletedSuccessfully && personaThoughtLog) {
-            turnThoughtLog = mergeThoughtLogPayload(
-              turnThoughtLog,
-              personaThoughtLog,
-            );
-            if (
-              thoughtLogOwnersMatch(turnThoughtLogOwner, currentThoughtLogOwner)
-            ) {
+            turnThoughtLog = mergeThoughtLogPayload(turnThoughtLog, personaThoughtLog);
+            if (thoughtLogOwnersMatch(turnThoughtLogOwner, currentThoughtLogOwner)) {
               turnThoughtLogOwner = currentThoughtLogOwner;
             } else {
               turnThoughtLogOwner = { type: "default" };
@@ -7847,38 +6587,24 @@ export default async function tomoriChat(
           await sendStandardEmbed(channel, locale, {
             color: ColorCode.ERROR,
             titleKey: "general.errors.persona_response_failed_title",
-            descriptionKey:
-              "general.errors.persona_response_failed_description",
+            descriptionKey: "general.errors.persona_response_failed_description",
             descriptionVars: {
               personaName: currentPersona.tomori_nickname,
             },
             footerKey: "genai.generic_error_footer",
-          }).catch((embedError) =>
-            log.warn("Failed to send persona error embed", embedError),
-          );
+          }).catch((embedError) => log.warn("Failed to send persona error embed", embedError));
         } finally {
           if (temporaryUserImpersonationWebhook) {
             try {
-              await temporaryUserImpersonationWebhook.delete(
-                "User impersonation complete",
-              );
-              log.info(
-                `Deleted temporary user impersonation webhook for user ${impersonatedUserId}`,
-              );
+              await temporaryUserImpersonationWebhook.delete("User impersonation complete");
+              log.info(`Deleted temporary user impersonation webhook for user ${impersonatedUserId}`);
             } catch (error) {
-              log.warn(
-                "Failed to delete temporary user impersonation webhook",
-                error,
-              );
+              log.warn("Failed to delete temporary user impersonation webhook", error);
             }
           }
 
           if (matrixTypingTargetRoomId) {
-            await sendMatrixTypingIndicator(
-              matrixTypingTargetRoomId,
-              matrixTypingPersonaName,
-              false,
-            );
+            await sendMatrixTypingIndicator(matrixTypingTargetRoomId, matrixTypingPersonaName, false);
           }
         }
       } // END OF MULTI-PERSONA RESPONSE LOOP
@@ -7908,15 +6634,9 @@ export default async function tomoriChat(
         !textQuotaStateForTrigger.consumed &&
         personaResponses.length > 0
       ) {
-        await incrementTextQuota(
-          textQuotaStateForTrigger.serverId,
-          textQuotaStateForTrigger.userDiscId,
-        );
+        await incrementTextQuota(textQuotaStateForTrigger.serverId, textQuotaStateForTrigger.userDiscId);
         textQuotaStateForTrigger.consumed = true;
-        textQuotaTriggerStates.set(
-          effectiveTextQuotaTriggerKey,
-          textQuotaStateForTrigger,
-        );
+        textQuotaTriggerStates.set(effectiveTextQuotaTriggerKey, textQuotaStateForTrigger);
       }
 
       // === SHORT-TERM MEMORY STORAGE (Phase 2) ===
@@ -7935,21 +6655,12 @@ export default async function tomoriChat(
           // Extract last 10 messages (user + model only) with timestamps and speaker names
           const messagesToStore = simplifiedMessages
             .slice(-10)
-            .filter(
-              (msg) =>
-                msg.authorType === "user" || msg.authorType === "persona",
-            )
+            .filter((msg) => msg.authorType === "user" || msg.authorType === "persona")
             .map((msg) => ({
-              role:
-                msg.authorType === "user"
-                  ? ("user" as const)
-                  : ("model" as const),
+              role: msg.authorType === "user" ? ("user" as const) : ("model" as const),
               content: normalizeCustomEmojisForLlm(msg.content || ""),
               timestamp: Date.now(), // Use current time as approximation
-              speakerName:
-                msg.authorType === "persona"
-                  ? msg.personaName || msg.authorName
-                  : msg.authorName,
+              speakerName: msg.authorType === "persona" ? msg.personaName || msg.authorName : msg.authorName,
             }));
 
           // Add persona responses from this turn (bot's responses just sent)
@@ -7967,22 +6678,15 @@ export default async function tomoriChat(
           if (messagesToStore.length > 0) {
             // Collect unique tomoriIds from responding personas (filter out undefined)
             const uniqueTomoriIds = [
-              ...new Set(
-                personaResponses
-                  .map((r) => r.tomoriId)
-                  .filter((id): id is number => id !== undefined),
-              ),
+              ...new Set(personaResponses.map((r) => r.tomoriId).filter((id): id is number => id !== undefined)),
             ];
 
             if (uniqueTomoriIds.length > 0) {
               // Multi-persona or single-persona: store user-scoped STM and, in guilds, server-shared STM
               for (const tomoriId of uniqueTomoriIds) {
                 // Look up the lineage ID for this persona from the responses
-                const matchingResponse = personaResponses.find(
-                  (r) => r.tomoriId === tomoriId,
-                );
-                const personaLineageId =
-                  matchingResponse?.personaLineageId ?? null;
+                const matchingResponse = personaResponses.find((r) => r.tomoriId === tomoriId);
+                const personaLineageId = matchingResponse?.personaLineageId ?? null;
                 const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}:${tomoriId}`;
                 const serverCacheKey = isDMChannel
                   ? "n/a"
@@ -8009,9 +6713,7 @@ export default async function tomoriChat(
             } else {
               // Fallback: no persona responses captured (e.g., all failed), store without tomoriId
               const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}`;
-              const serverCacheKey = isDMChannel
-                ? "n/a"
-                : `shortterm:server:${serverDiscId}:${channel.id}`;
+              const serverCacheKey = isDMChannel ? "n/a" : `shortterm:server:${serverDiscId}:${channel.id}`;
               log.info(
                 `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}`,
               );
@@ -8033,10 +6735,7 @@ export default async function tomoriChat(
         }
       } catch (storageError) {
         // Don't fail the conversation if storage fails
-        log.warn(
-          "Failed to store short-term memory, but conversation completed successfully",
-          storageError,
-        );
+        log.warn("Failed to store short-term memory, but conversation completed successfully", storageError);
       }
 
       // 13b. Cross-channel boomerang check — if a cross_channel_message tool dispatched
@@ -8047,29 +6746,19 @@ export default async function tomoriChat(
         );
         const boomerang = consumePendingBoomerang(channel.id);
         if (boomerang) {
-          log.info(
-            `[tomoriChat] Boomerang detected for channel ${channel.id} → source ${boomerang.sourceChannelId}`,
-          );
+          log.info(`[tomoriChat] Boomerang detected for channel ${channel.id} → source ${boomerang.sourceChannelId}`);
           setImmediate(async () => {
             try {
               // Fetch a context message from the source channel
-              const sourceChannel = await client.channels
-                .fetch(boomerang.sourceChannelId)
-                .catch(() => null);
+              const sourceChannel = await client.channels.fetch(boomerang.sourceChannelId).catch(() => null);
               if (!sourceChannel?.isTextBased()) {
-                log.warn(
-                  `Boomerang: Source channel ${boomerang.sourceChannelId} not found or not text-based`,
-                );
+                log.warn(`Boomerang: Source channel ${boomerang.sourceChannelId} not found or not text-based`);
                 return;
               }
-              const sourceMessages = await sourceChannel.messages
-                .fetch({ limit: 1 })
-                .catch(() => null);
+              const sourceMessages = await sourceChannel.messages.fetch({ limit: 1 }).catch(() => null);
               const sourceLastMessage = sourceMessages?.first();
               if (!sourceLastMessage) {
-                log.warn(
-                  `Boomerang: No messages in source channel ${boomerang.sourceChannelId}`,
-                );
+                log.warn(`Boomerang: No messages in source channel ${boomerang.sourceChannelId}`);
                 return;
               }
 
@@ -8103,33 +6792,21 @@ export default async function tomoriChat(
                 boomerangContext, // injectedContextItems
               );
 
-              log.success(
-                `Boomerang: Follow-up generation completed in source channel ${boomerang.sourceChannelId}`,
-              );
+              log.success(`Boomerang: Follow-up generation completed in source channel ${boomerang.sourceChannelId}`);
             } catch (boomerangError) {
-              log.error(
-                "Boomerang: Failed to generate follow-up:",
-                boomerangError,
-              );
+              log.error("Boomerang: Failed to generate follow-up:", boomerangError);
             }
           });
         }
       } catch (boomerangCheckError) {
         // Don't fail the conversation if boomerang check fails
-        log.warn(
-          "Failed to check/execute boomerang, but conversation completed successfully",
-          boomerangCheckError,
-        );
+        log.warn("Failed to check/execute boomerang, but conversation completed successfully", boomerangCheckError);
       }
     } catch (error) {
       // 14. Global error handler for entire function
       log.error("Unhandled error in tomoriChat handler:", error);
       if (isUserImpersonation) {
-        throw error instanceof Error
-          ? error
-          : new Error(
-              "User impersonation failed before a reply could be sent.",
-            );
+        throw error instanceof Error ? error : new Error("User impersonation failed before a reply could be sent.");
       }
       // Use default locale as userRow might not be available
       await sendStandardEmbed(channel, "en-US", {
@@ -8153,33 +6830,20 @@ export default async function tomoriChat(
       lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
       lockEntry.isCommandTriggered = false; // Clear command trigger flag
       stopDiscordTypingKeepalive(channelLockId, lockEntry, "lock_released");
-      log.info(
-        `Channel ${channelLockId} lock released for message ${message.id}.`,
-      );
+      log.info(`Channel ${channelLockId} lock released for message ${message.id}.`);
 
       // Check for stop context and create response after lock release
-      const { StreamOrchestrator } = await import(
-        "../../utils/discord/streamOrchestrator"
-      );
-      const stopContext =
-        StreamOrchestrator.getAndClearStopContext(channelLockId);
+      const { StreamOrchestrator } = await import("../../utils/discord/streamOrchestrator");
+      const stopContext = StreamOrchestrator.getAndClearStopContext(channelLockId);
       if (stopContext) {
-        log.info(
-          `Found stop context for channel ${channelLockId}. Triggering stop response after lock release.`,
-        );
+        log.info(`Found stop context for channel ${channelLockId}. Triggering stop response after lock release.`);
 
         // Trigger stop response after current execution completes and lock is fully released
         setImmediate(async () => {
           try {
-            await handleStopResponse(
-              stopContext.originalStopMessage,
-              stopContext.client,
-            );
+            await handleStopResponse(stopContext.originalStopMessage, stopContext.client);
           } catch (error) {
-            log.error(
-              "Failed to generate stop response after lock release:",
-              error,
-            );
+            log.error("Failed to generate stop response after lock release:", error);
           }
         });
       }
@@ -8223,10 +6887,7 @@ export default async function tomoriChat(
               nextMessageData.forcedMentions,
               nextMessageData.manualTriggerInvoker,
             ).catch((e) => {
-              log.error(
-                `Error processing queued message ${nextMessageData.message.id}:`,
-                e,
-              );
+              log.error(`Error processing queued message ${nextMessageData.message.id}:`, e);
             });
           });
         }
@@ -8245,10 +6906,7 @@ export default async function tomoriChat(
   }
 }
 
-export function isSelfTriggerMessage(
-  message: Message,
-  allPersonas: TomoriState[],
-): boolean {
+export function isSelfTriggerMessage(message: Message, allPersonas: TomoriState[]): boolean {
   if (message.interaction) return false;
 
   const clientUserId = message.client.user?.id;
@@ -8263,9 +6921,7 @@ export function isSelfTriggerMessage(
   const authorName = message.author.username?.toLowerCase();
   if (!authorName) return false;
 
-  return allPersonas.some(
-    (persona) => persona.tomori_nickname?.toLowerCase() === authorName,
-  );
+  return allPersonas.some((persona) => persona.tomori_nickname?.toLowerCase() === authorName);
 }
 
 function getAutochatRange(config: TomoriConfigRow): {
@@ -8280,51 +6936,25 @@ function getAutochatRange(config: TomoriConfigRow): {
   const rawMaxThreshold = Math.max(config.autoch_threshold_max ?? 0, 0);
   return {
     minThreshold,
-    maxThreshold:
-      rawMaxThreshold > 0
-        ? Math.max(rawMaxThreshold, minThreshold)
-        : minThreshold,
+    maxThreshold: rawMaxThreshold > 0 ? Math.max(rawMaxThreshold, minThreshold) : minThreshold,
   };
 }
 
-function isAutochatConfiguredChannel(
-  config: TomoriConfigRow,
-  channelId: string,
-): boolean {
-  return (
-    config.autoch_disc_ids.length > 0 &&
-    config.autoch_disc_ids.includes(channelId)
-  );
+function isAutochatConfiguredChannel(config: TomoriConfigRow, channelId: string): boolean {
+  return config.autoch_disc_ids.length > 0 && config.autoch_disc_ids.includes(channelId);
 }
 
-function isAutochatCounterChannelActive(
-  config: TomoriConfigRow,
-  channelId: string,
-): boolean {
+function isAutochatCounterChannelActive(config: TomoriConfigRow, channelId: string): boolean {
   const { minThreshold, maxThreshold } = getAutochatRange(config);
-  return (
-    minThreshold > 0 &&
-    maxThreshold > 0 &&
-    isAutochatConfiguredChannel(config, channelId)
-  );
+  return minThreshold > 0 && maxThreshold > 0 && isAutochatConfiguredChannel(config, channelId);
 }
 
-function isAutochatAlwaysReplyChannelActive(
-  config: TomoriConfigRow,
-  channelId: string,
-): boolean {
+function isAutochatAlwaysReplyChannelActive(config: TomoriConfigRow, channelId: string): boolean {
   const { minThreshold, maxThreshold } = getAutochatRange(config);
-  return (
-    minThreshold === 0 &&
-    maxThreshold === 0 &&
-    isAutochatConfiguredChannel(config, channelId)
-  );
+  return minThreshold === 0 && maxThreshold === 0 && isAutochatConfiguredChannel(config, channelId);
 }
 
-function isAutochatCounterHit(
-  tomoriState: TomoriState,
-  channelId: string,
-): boolean {
+function isAutochatCounterHit(tomoriState: TomoriState, channelId: string): boolean {
   if (!isAutochatCounterChannelActive(tomoriState.config, channelId)) {
     return false;
   }
@@ -8392,9 +7022,7 @@ export function determineMatchingPersonas(
   // Determine which persona (if any) is being replied to for self-trigger prevention
   let repliedToPersona: TomoriState | undefined;
   if (message.reference?.messageId) {
-    const referenceMessage = message.channel.messages.cache.get(
-      message.reference.messageId,
-    );
+    const referenceMessage = message.channel.messages.cache.get(message.reference.messageId);
     if (referenceMessage) {
       // biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
       if (referenceMessage.author.id === _client.user!.id) {
@@ -8429,10 +7057,7 @@ export function determineMatchingPersonas(
 
     // Persona-scoped trigger words (fallback to legacy columns during soak)
     const triggers =
-      persona.trigger_words ??
-      (persona.is_alter
-        ? (persona.alter_triggers ?? [])
-        : (config.trigger_words ?? []));
+      persona.trigger_words ?? (persona.is_alter ? (persona.alter_triggers ?? []) : (config.trigger_words ?? []));
 
     let hasMatch = false;
     let firstMatchIndex = Number.MAX_SAFE_INTEGER;
@@ -8489,21 +7114,11 @@ export function determineMatchingPersonas(
  * @param tomoriState - The current state of the bot for the server (TomoriRow + TomoriConfigRow).
  * @returns True if the bot should reply, false otherwise.
  */
-export function shouldBotReply(
-  message: Message,
-  tomoriState: TomoriState,
-  allPersonas: TomoriState[],
-): boolean {
+export function shouldBotReply(message: Message, tomoriState: TomoriState, allPersonas: TomoriState[]): boolean {
   const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
-  const isMatrixRelayMessage =
-    Boolean(message.webhookId) &&
-    isMatrixBridgeWebhookUsername(message.author.username);
-  const rawSelfReplyLimit =
-    tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
-  const selfReplyLimit = Math.min(
-    Math.max(rawSelfReplyLimit, 0),
-    MAX_SELF_REPLY_LIMIT,
-  );
+  const isMatrixRelayMessage = Boolean(message.webhookId) && isMatrixBridgeWebhookUsername(message.author.username);
+  const rawSelfReplyLimit = tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
+  const selfReplyLimit = Math.min(Math.max(rawSelfReplyLimit, 0), MAX_SELF_REPLY_LIMIT);
 
   if (message.webhookId && !isSelfMessage && !isMatrixRelayMessage) {
     return false;
@@ -8518,12 +7133,9 @@ export function shouldBotReply(
     message.channel.type === ChannelType.PrivateThread ||
     message.channel.type === ChannelType.AnnouncementThread;
   const isVoiceChannel =
-    message.channel.type === ChannelType.GuildVoice ||
-    message.channel.type === ChannelType.GuildStageVoice;
+    message.channel.type === ChannelType.GuildVoice || message.channel.type === ChannelType.GuildStageVoice;
   if (
-    (message.author.bot &&
-      (!isSelfMessage || selfReplyLimit <= 0) &&
-      !isMatrixRelayMessage) ||
+    (message.author.bot && (!isSelfMessage || selfReplyLimit <= 0) && !isMatrixRelayMessage) ||
     message.content.startsWith("!") || // Basic command prefix check
     !(
       message.channel instanceof TextChannel ||
@@ -8557,19 +7169,13 @@ export function shouldBotReply(
     personaByNickname.set(nicknameKey, persona);
   }
   if (message.reference?.messageId) {
-    const referenceMessage = message.channel.messages.cache.get(
-      message.reference.messageId,
-    );
+    const referenceMessage = message.channel.messages.cache.get(message.reference.messageId);
     // biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
     if (referenceMessage?.author.id === message.client.user!.id) {
       isReplyToBot = true;
       isReplyToPersona = true;
     } else if (referenceMessage?.webhookId) {
-      const webhookReplyTarget = resolveReferencedWebhookTarget(
-        referenceMessage,
-        personaByNickname,
-        message.guild,
-      );
+      const webhookReplyTarget = resolveReferencedWebhookTarget(referenceMessage, personaByNickname, message.guild);
       if (webhookReplyTarget.replyPersona) {
         isReplyToPersona = true;
       }
@@ -8620,9 +7226,7 @@ export function shouldBotReply(
         : "config_trigger_words";
     const triggers =
       persona.trigger_words ??
-      (persona.is_alter
-        ? (persona.alter_triggers ?? [])
-        : (persona.config?.trigger_words ?? []));
+      (persona.is_alter ? (persona.alter_triggers ?? []) : (persona.config?.trigger_words ?? []));
 
     for (const trigger of triggers) {
       let matched = false;
@@ -8633,9 +7237,7 @@ export function shouldBotReply(
         matched = message.mentions.users.has(userId);
       } else {
         // Check if trigger contains Japanese characters
-        const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(
-          trigger,
-        );
+        const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(trigger);
         if (isJapanese) {
           // Japanese triggers: direct substring match (no screaming support)
           matched = message.content.includes(trigger);
@@ -8651,13 +7253,10 @@ export function shouldBotReply(
         // Log diagnostic for self-messages to trace cross-persona trigger chains
         if (isSelfMessage) {
           selfMsgTriggerDiag = {
-            matchedPersona:
-              persona.tomori_nickname ?? `id:${persona.tomori_id}`,
+            matchedPersona: persona.tomori_nickname ?? `id:${persona.tomori_id}`,
             matchedTrigger: trigger,
             triggerSource,
-            senderPersona:
-              senderPersona?.tomori_nickname ??
-              `id:${senderPersona?.tomori_id}`,
+            senderPersona: senderPersona?.tomori_nickname ?? `id:${senderPersona?.tomori_id}`,
             contentSnippet: message.content.slice(0, 120),
           };
         }
@@ -8704,9 +7303,7 @@ export function shouldBotReply(
   // matrixManager.ts registers the channel in pendingMatrixReplyChannels when it relays
   // a Matrix reply to a bot persona. Set.delete() returns true if the key existed
   // and removes it atomically — one-shot consumption prevents stale triggers.
-  const isMatrixReplyToPersona =
-    isMatrixRelayMessage &&
-    pendingMatrixReplyChannels.delete(message.channelId);
+  const isMatrixReplyToPersona = isMatrixRelayMessage && pendingMatrixReplyChannels.delete(message.channelId);
 
   const wouldReply =
     isReplyToBot ||
@@ -8747,10 +7344,7 @@ export function shouldBotReply(
  * @param originalStopMessage - The original message that requested the stop
  * @param client - Discord client
  */
-export async function handleStopResponse(
-  originalStopMessage: Message,
-  client: Client,
-): Promise<void> {
+export async function handleStopResponse(originalStopMessage: Message, client: Client): Promise<void> {
   try {
     log.info(
       `Generating stop response for message ${originalStopMessage.id} in channel ${originalStopMessage.channel.id}`,

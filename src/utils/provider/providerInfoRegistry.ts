@@ -1,8 +1,4 @@
-import type {
-  ProviderApiFamily,
-  ProviderFeatureSupport,
-  ProviderInfo,
-} from "@/types/provider/interfaces";
+import type { ProviderApiFamily, ProviderFeatureSupport, ProviderInfo } from "@/types/provider/interfaces";
 import { customProviderInfo } from "@/providers/custom/providerInfo";
 import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
 import { zaiProviderInfo } from "@/providers/zai/providerInfo";
@@ -50,10 +46,7 @@ export type ProviderFeatureImplementation =
   | "vertex";
 
 const providerFeatureImplementations: Partial<
-  Record<
-    ProviderFeatureName,
-    Partial<Record<string, ProviderFeatureImplementation>>
-  >
+  Record<ProviderFeatureName, Partial<Record<string, ProviderFeatureImplementation>>>
 > = {
   nativeImageGeneration: {
     google: "google",
@@ -76,9 +69,7 @@ export function normalizeProviderName(providerName: string): string {
   return providerAliasToCanonicalName.get(normalizedName) ?? normalizedName;
 }
 
-export function getStaticProviderInfo(
-  providerName: string,
-): ProviderInfo | null {
+export function getStaticProviderInfo(providerName: string): ProviderInfo | null {
   const canonicalName = normalizeProviderName(providerName);
   return providerInfoByCanonicalName.get(canonicalName) ?? null;
 }
@@ -87,19 +78,11 @@ export function getProviderDisplayName(providerName: string): string {
   return getStaticProviderInfo(providerName)?.displayName ?? providerName;
 }
 
-export function providerSupportsFeature(
-  providerName: string,
-  featureName: ProviderFeatureName,
-): boolean {
-  return (
-    getStaticProviderInfo(providerName)?.featureSupport[featureName] ?? false
-  );
+export function providerSupportsFeature(providerName: string, featureName: ProviderFeatureName): boolean {
+  return getStaticProviderInfo(providerName)?.featureSupport[featureName] ?? false;
 }
 
-export function providerUsesApiFamily(
-  providerName: string,
-  apiFamily: ProviderApiFamily,
-): boolean {
+export function providerUsesApiFamily(providerName: string, apiFamily: ProviderApiFamily): boolean {
   return getStaticProviderInfo(providerName)?.apiFamily === apiFamily;
 }
 

@@ -63,10 +63,7 @@ const CHATMOCK_PORT = process.env.CHATMOCK_PORT ?? "8000";
 export function isChatmockEndpoint(apiUrl: string): boolean {
   try {
     const { hostname, port } = new URL(apiUrl);
-    const isLoopback =
-      hostname === "127.0.0.1" ||
-      hostname === "localhost" ||
-      hostname === "::1";
+    const isLoopback = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
     return isLoopback && port === CHATMOCK_PORT;
   } catch {
     // Malformed URL — don't assume ChatMock

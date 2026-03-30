@@ -65,9 +65,7 @@ export async function clearAllCooldowns(): Promise<CooldownsCleanupResult> {
 
     const deletedCount = deletedRows.length;
 
-    log.warn(
-      `Successfully cleared ${deletedCount} cooldown records from database`,
-    );
+    log.warn(`Successfully cleared ${deletedCount} cooldown records from database`);
 
     return {
       success: true,

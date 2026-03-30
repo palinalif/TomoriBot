@@ -9,18 +9,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
 import { updateTomoriConfig } from "../../../utils/db/dbWrite";
 
@@ -29,14 +22,8 @@ import { updateTomoriConfig } from "../../../utils/db/dbWrite";
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.novelai.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.novelai.remove.description"));
 
 /**
  * Removes the NovelAI API key from the server's optional API keys and clears exclusive imggen flag
@@ -69,9 +56,7 @@ export async function execute(
 
   try {
     // 3. Load the Tomori state for this server
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -86,8 +71,7 @@ export async function execute(
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.novelai.remove.no_key_title",
-        descriptionKey:
-          "commands.optionalkey.novelai.remove.no_key_description",
+        descriptionKey: "commands.optionalkey.novelai.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });

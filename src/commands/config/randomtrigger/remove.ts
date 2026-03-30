@@ -20,22 +20,11 @@ import {
   promptWithRawModal,
   safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  getCachedAllPersonas,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { getServerRandomTriggers } from "@/utils/db/dbRead";
 import { deleteRandomTrigger } from "@/utils/db/dbWrite";
-import type {
-  UserRow,
-  ErrorContext,
-  RandomTriggerRow,
-} from "@/types/db/schema";
-import type {
-  CheckboxGroupOption,
-  ModalCheckboxGroupField,
-  SelectOption,
-} from "@/types/discord/modal";
+import type { UserRow, ErrorContext, RandomTriggerRow } from "@/types/db/schema";
+import type { CheckboxGroupOption, ModalCheckboxGroupField, SelectOption } from "@/types/discord/modal";
 
 const MODAL_CUSTOM_ID = "config_randomtrigger_remove_modal";
 const TRIGGER_SELECT_ID = "trigger_select";
@@ -51,14 +40,8 @@ type RandomTriggerSummary = {
   summary: string;
 };
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.config.randomtrigger.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.config.randomtrigger.remove.description"));
 
 export async function execute(
   _client: Client,
@@ -99,10 +82,7 @@ export async function execute(
       return;
     }
 
-    const randomLabel = localizer(
-      locale,
-      "commands.config.randomtrigger.add.persona_random_label",
-    );
+    const randomLabel = localizer(locale, "commands.config.randomtrigger.add.persona_random_label");
     const allPersonas = await getCachedAllPersonas(interaction.guild.id);
     const personaNameById = new Map<number, string>();
     for (const persona of allPersonas) {
@@ -111,26 +91,14 @@ export async function execute(
       }
     }
 
-    const triggerSummaries = buildTriggerSummaries(
-      interaction,
-      triggers,
-      personaNameById,
-      randomLabel,
-    );
+    const triggerSummaries = buildTriggerSummaries(interaction, triggers, personaNameById, randomLabel);
 
     if (triggerSummaries.length > MAX_ENTRIES_PER_MODAL) {
-      await handlePaginatedRemovalFallback(
-        interaction,
-        locale,
-        tomoriState.server_id,
-        triggerSummaries,
-      );
+      await handlePaginatedRemovalFallback(interaction, locale, tomoriState.server_id, triggerSummaries);
       return;
     }
 
-    const triggerGroupCount = Math.ceil(
-      triggerSummaries.length / MAX_OPTIONS_PER_GROUP,
-    );
+    const triggerGroupCount = Math.ceil(triggerSummaries.length / MAX_OPTIONS_PER_GROUP);
     const checkboxGroups = buildTriggerCheckboxGroups(triggerSummaries);
 
     const modalResult = await promptWithRawModal(
@@ -145,61 +113,42 @@ export async function execute(
     );
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Randomtrigger remove modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Randomtrigger remove modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
     if (!modalResult.interaction) {
-      log.error(
-        "Random trigger removal modal unexpectedly missing interaction",
-      );
+      log.error("Random trigger removal modal unexpectedly missing interaction");
       return;
     }
     const modalInteraction = modalResult.interaction;
 
     const checkedTriggerIds = new Set<number>();
     for (let groupIndex = 0; groupIndex < triggerGroupCount; groupIndex++) {
-      const groupValues =
-        modalResult.multiValues?.[
-          `${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`
-        ] ?? [];
+      const groupValues = modalResult.multiValues?.[`${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
       for (const triggerId of groupValues) {
         checkedTriggerIds.add(Number.parseInt(triggerId, 10));
       }
     }
 
-    const triggersToRemove = triggerSummaries.filter(
-      (summary) => !checkedTriggerIds.has(summary.trigger.trigger_id),
-    );
+    const triggersToRemove = triggerSummaries.filter((summary) => !checkedTriggerIds.has(summary.trigger.trigger_id));
     if (triggersToRemove.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "commands.config.randomtrigger.remove.no_removals_title",
-        descriptionKey:
-          "commands.config.randomtrigger.remove.no_removals_description",
+        descriptionKey: "commands.config.randomtrigger.remove.no_removals_description",
         color: ColorCode.INFO,
       });
       return;
     }
 
-    await removeRandomTriggers(
-      tomoriState.server_id,
-      triggersToRemove,
-      modalInteraction,
-      locale,
-    );
+    await removeRandomTriggers(tomoriState.server_id, triggersToRemove, modalInteraction, locale);
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
       errorType: "CommandExecutionError",
       metadata: { command: "config randomtrigger remove" },
     };
-    await log.error(
-      "Error in /config randomtrigger remove",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config randomtrigger remove", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {
@@ -223,12 +172,10 @@ async function handlePaginatedRemovalFallback(
   serverId: number,
   triggerSummaries: RandomTriggerSummary[],
 ): Promise<void> {
-  const triggerOptions: SelectOption[] = triggerSummaries.map(
-    (summary, index) => ({
-      value: index.toString(),
-      label: safeSelectOptionText(summary.summary),
-    }),
-  );
+  const triggerOptions: SelectOption[] = triggerSummaries.map((summary, index) => ({
+    value: index.toString(),
+    label: safeSelectOptionText(summary.summary),
+  }));
 
   const modalResult = await promptWithPaginatedModal(interaction, locale, {
     modalCustomId: MODAL_CUSTOM_ID,
@@ -237,8 +184,7 @@ async function handlePaginatedRemovalFallback(
       {
         customId: TRIGGER_SELECT_ID,
         labelKey: "commands.config.randomtrigger.remove.select_label",
-        descriptionKey:
-          "commands.config.randomtrigger.remove.select_description",
+        descriptionKey: "commands.config.randomtrigger.remove.select_description",
         placeholder: "commands.config.randomtrigger.remove.select_placeholder",
         required: true,
         options: triggerOptions,
@@ -247,18 +193,14 @@ async function handlePaginatedRemovalFallback(
   });
 
   if (modalResult.outcome !== "submit") {
-    log.info(
-      `Randomtrigger remove fallback modal ${modalResult.outcome} for user ${interaction.user.id}`,
-    );
+    log.info(`Randomtrigger remove fallback modal ${modalResult.outcome} for user ${interaction.user.id}`);
     return;
   }
 
   const modalInteraction = modalResult.interaction;
   const selectedIndexRaw = modalResult.values?.[TRIGGER_SELECT_ID];
   if (!modalInteraction || !selectedIndexRaw) {
-    log.error(
-      "Random trigger fallback modal unexpectedly missing interaction or values",
-    );
+    log.error("Random trigger fallback modal unexpectedly missing interaction or values");
     return;
   }
 
@@ -266,8 +208,7 @@ async function handlePaginatedRemovalFallback(
     await modalInteraction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
-  const selectedSummary =
-    triggerSummaries[Number.parseInt(selectedIndexRaw, 10)];
+  const selectedSummary = triggerSummaries[Number.parseInt(selectedIndexRaw, 10)];
   if (!selectedSummary) {
     await replyInfoEmbed(modalInteraction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -277,12 +218,7 @@ async function handlePaginatedRemovalFallback(
     return;
   }
 
-  await removeRandomTriggers(
-    serverId,
-    [selectedSummary],
-    modalInteraction,
-    locale,
-  );
+  await removeRandomTriggers(serverId, [selectedSummary], modalInteraction, locale);
 }
 
 async function removeRandomTriggers(
@@ -297,12 +233,8 @@ async function removeRandomTriggers(
       deleted: await deleteRandomTrigger(summary.trigger.trigger_id),
     })),
   );
-  const removedSummaries = deletionResults
-    .filter((result) => result.deleted)
-    .map((result) => result.summary);
-  const failedSummaries = deletionResults
-    .filter((result) => !result.deleted)
-    .map((result) => result.summary);
+  const removedSummaries = deletionResults.filter((result) => result.deleted).map((result) => result.summary);
+  const failedSummaries = deletionResults.filter((result) => !result.deleted).map((result) => result.summary);
 
   if (failedSummaries.length > 0) {
     const context: ErrorContext = {
@@ -310,9 +242,7 @@ async function removeRandomTriggers(
       errorType: "DatabaseDeleteError",
       metadata: {
         operation: "deleteRandomTrigger",
-        failedTriggerIds: failedSummaries.map(
-          (summary) => summary.trigger.trigger_id,
-        ),
+        failedTriggerIds: failedSummaries.map((summary) => summary.trigger.trigger_id),
       },
     };
     await log.error(
@@ -332,9 +262,7 @@ async function removeRandomTriggers(
     titleKey: "commands.config.randomtrigger.remove.success_title",
     descriptionKey: "commands.config.randomtrigger.remove.success_description",
     descriptionVars: {
-      triggers_removed: formatRemovedSummaries(
-        removedSummaries.map((summary) => summary.summary),
-      ),
+      triggers_removed: formatRemovedSummaries(removedSummaries.map((summary) => summary.summary)),
     },
     color: ColorCode.SUCCESS,
   });
@@ -351,22 +279,14 @@ function buildTriggerSummaries(
   randomLabel: string,
 ): RandomTriggerSummary[] {
   return triggers
-    .filter(
-      (trigger): trigger is RandomTriggerRow & { trigger_id: number } =>
-        trigger.trigger_id != null,
-    )
+    .filter((trigger): trigger is RandomTriggerRow & { trigger_id: number } => trigger.trigger_id != null)
     .map((trigger) => {
-      const guildChannel = interaction.guild?.channels.cache.get(
-        trigger.channel_disc_id,
-      );
+      const guildChannel = interaction.guild?.channels.cache.get(trigger.channel_disc_id);
       const channelLabel = guildChannel
         ? `#${guildChannel.name}`
         : `Unknown (${trigger.channel_disc_id.slice(0, 10)}...)`;
       const personaName =
-        trigger.tomori_id == null
-          ? randomLabel
-          : (personaNameById.get(trigger.tomori_id) ??
-            `ID:${trigger.tomori_id}`);
+        trigger.tomori_id == null ? randomLabel : (personaNameById.get(trigger.tomori_id) ?? `ID:${trigger.tomori_id}`);
       const timingLabel = formatTimingLabel(trigger);
       return {
         trigger,
@@ -377,9 +297,7 @@ function buildTriggerSummaries(
     });
 }
 
-function buildTriggerCheckboxGroups(
-  triggerSummaries: RandomTriggerSummary[],
-): ModalCheckboxGroupField[] {
+function buildTriggerCheckboxGroups(triggerSummaries: RandomTriggerSummary[]): ModalCheckboxGroupField[] {
   const checkboxGroups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < triggerSummaries.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -399,10 +317,7 @@ function buildTriggerCheckboxGroups(
         groupIndex === 0
           ? "commands.config.randomtrigger.remove.checkbox_label"
           : "commands.config.randomtrigger.remove.checkbox_label_continued",
-      descriptionKey:
-        groupIndex === 0
-          ? "commands.config.randomtrigger.remove.checkbox_description"
-          : undefined,
+      descriptionKey: groupIndex === 0 ? "commands.config.randomtrigger.remove.checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,
@@ -414,9 +329,7 @@ function buildTriggerCheckboxGroups(
 
 function formatTimingLabel(trigger: RandomTriggerRow): string {
   const offsetSegment =
-    trigger.random_offset_range != null && trigger.random_offset_range > 0
-      ? ` +/-${trigger.random_offset_range}h`
-      : "";
+    trigger.random_offset_range != null && trigger.random_offset_range > 0 ? ` +/-${trigger.random_offset_range}h` : "";
   return `${trigger.timer_hours}h${offsetSegment} / ${trigger.chance_percent}%`;
 }
 

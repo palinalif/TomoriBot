@@ -21,9 +21,7 @@ import { sql } from "bun";
 config();
 
 const { keyManager } = await import("../src/utils/security/keyManager");
-const { decryptApiKey, encryptApiKey } = await import(
-  "../src/utils/security/crypto"
-);
+const { decryptApiKey, encryptApiKey } = await import("../src/utils/security/crypto");
 
 // Populate the key manager's internal map from process.env (now loaded)
 keyManager.initialize();
@@ -46,9 +44,7 @@ function getPostgresUrl(): string {
   const database = process.env.POSTGRES_DB || "tomodb";
 
   if (!password) {
-    throw new Error(
-      "Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL",
-    );
+    throw new Error("Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL");
   }
 
   return `postgresql://${user}:${password}@${host}:${port}/${database}`;
@@ -132,9 +128,7 @@ async function rotateAllKeys() {
 
   // 2. Check if there's anything to rotate
   if (oldKeys.length === 0) {
-    console.log(
-      `✅ All keys are already on the current version (V${currentVersion})`,
-    );
+    console.log(`✅ All keys are already on the current version (V${currentVersion})`);
     console.log("   No rotation needed!\n");
     return;
   }
@@ -160,16 +154,12 @@ async function rotateAllKeys() {
     console.log("📋 Keys that would be rotated:\n");
     for (const key of oldKeys.slice(0, 10)) {
       // Show first 10
-      console.log(
-        `   V${key.key_version} → V${currentVersion}: ${key.table} (${key.identifier})`,
-      );
+      console.log(`   V${key.key_version} → V${currentVersion}: ${key.table} (${key.identifier})`);
     }
     if (oldKeys.length > 10) {
       console.log(`   ... and ${oldKeys.length - 10} more`);
     }
-    console.log(
-      "\n✅ Dry run complete. Remove --dry-run to perform rotation.\n",
-    );
+    console.log("\n✅ Dry run complete. Remove --dry-run to perform rotation.\n");
     return;
   }
 
@@ -208,9 +198,7 @@ async function rotateAllKeys() {
       }
 
       successCount++;
-      console.log(
-        `   ✅ Rotated V${oldKey.key_version} → V${version}: ${oldKey.table} (${oldKey.identifier})`,
-      );
+      console.log(`   ✅ Rotated V${oldKey.key_version} → V${version}: ${oldKey.table} (${oldKey.identifier})`);
     } catch (error) {
       failCount++;
       errors.push({ key: oldKey, error });
@@ -230,9 +218,7 @@ async function rotateAllKeys() {
     console.log("⚠️  Some keys failed to rotate. Details:");
     for (const { key, error } of errors.slice(0, 5)) {
       // Show first 5 errors
-      console.log(
-        `   - ${key.table} (${key.identifier}): ${error instanceof Error ? error.message : error}`,
-      );
+      console.log(`   - ${key.table} (${key.identifier}): ${error instanceof Error ? error.message : error}`);
     }
     if (errors.length > 5) {
       console.log(`   ... and ${errors.length - 5} more errors`);
@@ -244,9 +230,7 @@ async function rotateAllKeys() {
     console.log(`🎉 All keys successfully rotated to V${currentVersion}!`);
     console.log("   Run 'bun run audit-keys' to verify.\n");
   } else if (successCount > 0) {
-    console.log(
-      `⚠️  Partial success: ${successCount}/${oldKeys.length} keys rotated.`,
-    );
+    console.log(`⚠️  Partial success: ${successCount}/${oldKeys.length} keys rotated.`);
     console.log("   Run 'bun run audit-keys' to see current status.\n");
   } else {
     console.log("❌ Rotation failed - no keys were migrated.");

@@ -1,7 +1,4 @@
-import {
-  GetSecretValueCommand,
-  SecretsManagerClient,
-} from "@aws-sdk/client-secrets-manager";
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { log } from "@/utils/misc/logger";
 
 /**
@@ -95,9 +92,7 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
   // Development mode OR test production mode: Use process.env (loaded via dotenv)
   // TEST_PRODUCTION allows testing production behavior locally without AWS
   if (!isProduction || isTestProduction) {
-    log.info(
-      `Loading secrets from .env (${isTestProduction ? "test production" : "development"} mode)`,
-    );
+    log.info(`Loading secrets from .env (${isTestProduction ? "test production" : "development"} mode)`);
 
     const secrets: TomoriSecrets = {
       DISCORD_TOKEN: process.env.DISCORD_TOKEN || "",
@@ -167,8 +162,7 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
       secrets.MATRIX_HS_TOKEN = process.env.MATRIX_HS_TOKEN;
     }
     if (process.env.MATRIX_APPSERVICE_PUBLIC_URL) {
-      secrets.MATRIX_APPSERVICE_PUBLIC_URL =
-        process.env.MATRIX_APPSERVICE_PUBLIC_URL;
+      secrets.MATRIX_APPSERVICE_PUBLIC_URL = process.env.MATRIX_APPSERVICE_PUBLIC_URL;
     }
 
     // Optional Top.gg integration token
@@ -184,9 +178,7 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 
   // Production mode: Fetch from AWS Secrets Manager
   const awsRegion = process.env.AWS_REGION || "us-east-1";
-  log.info(
-    `Fetching secrets from AWS Secrets Manager (production mode, region: ${awsRegion})`,
-  );
+  log.info(`Fetching secrets from AWS Secrets Manager (production mode, region: ${awsRegion})`);
 
   try {
     // 1. Create AWS Secrets Manager client with configurable region
@@ -201,9 +193,7 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
 
     // 3. Parse SecretString as JSON
     if (!response.SecretString) {
-      throw new Error(
-        "AWS Secrets Manager returned empty SecretString. Ensure the secret contains a JSON object.",
-      );
+      throw new Error("AWS Secrets Manager returned empty SecretString. Ensure the secret contains a JSON object.");
     }
 
     const rawSecrets = JSON.parse(response.SecretString);
@@ -275,8 +265,7 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
       secrets.MATRIX_HS_TOKEN = rawSecrets.MATRIX_HS_TOKEN;
     }
     if (rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL) {
-      secrets.MATRIX_APPSERVICE_PUBLIC_URL =
-        rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL;
+      secrets.MATRIX_APPSERVICE_PUBLIC_URL = rawSecrets.MATRIX_APPSERVICE_PUBLIC_URL;
     }
 
     // Optional Top.gg integration token
@@ -351,9 +340,7 @@ function validateRequiredSecrets(secrets: TomoriSecrets): void {
     "CRYPTO_SECRET",
   ];
 
-  const missingFields = requiredFields.filter(
-    (field) => !secrets[field] || secrets[field] === "",
-  );
+  const missingFields = requiredFields.filter((field) => !secrets[field] || secrets[field] === "");
 
   if (missingFields.length > 0) {
     throw new Error(

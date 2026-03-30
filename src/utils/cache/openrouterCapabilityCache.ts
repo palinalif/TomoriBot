@@ -109,10 +109,7 @@ let cacheReady = false;
  */
 function detectToolSupport(model: OpenRouterModel): boolean {
   // 1. Check if supported_parameters exists and is an array
-  if (
-    !model.supported_parameters ||
-    !Array.isArray(model.supported_parameters)
-  ) {
+  if (!model.supported_parameters || !Array.isArray(model.supported_parameters)) {
     return false;
   }
 
@@ -141,12 +138,7 @@ function detectImageSupport(model: OpenRouterModel): boolean {
   // 2. Check for image capability indicators
   // OpenRouter uses "text+image->text" notation — check for "image" as the primary signal,
   // plus "vision" and "multimodal" for forward compatibility with any future API format changes
-  return (
-    modality?.includes("image") ||
-    modality?.includes("vision") ||
-    modality?.includes("multimodal") ||
-    false
-  );
+  return modality?.includes("image") || modality?.includes("vision") || modality?.includes("multimodal") || false;
 }
 
 /**
@@ -190,12 +182,9 @@ function detectStructuredOutputSupport(model: OpenRouterModel): boolean {
   );
 }
 
-function parseUsdPerMillion(
-  value: string | number | undefined,
-): number | undefined {
+function parseUsdPerMillion(value: string | number | undefined): number | undefined {
   if (value === undefined) return undefined;
-  const parsed =
-    typeof value === "number" ? value : Number.parseFloat(value.trim());
+  const parsed = typeof value === "number" ? value : Number.parseFloat(value.trim());
   if (!Number.isFinite(parsed) || parsed < 0) return undefined;
 
   // OpenRouter /models pricing values are per-token USD.
@@ -237,9 +226,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
 
     // 3. Check response status
     if (!response.ok) {
-      throw new Error(
-        `OpenRouter API returned ${response.status}: ${response.statusText}`,
-      );
+      throw new Error(`OpenRouter API returned ${response.status}: ${response.statusText}`);
     }
 
     // 4. Parse JSON response
@@ -269,16 +256,11 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
         maxCompletionTokens: model.top_provider?.max_completion_tokens,
       };
       const promptPricePerMillion = parseUsdPerMillion(model.pricing?.prompt);
-      const completionPricePerMillion = parseUsdPerMillion(
-        model.pricing?.completion,
-      );
+      const completionPricePerMillion = parseUsdPerMillion(model.pricing?.completion);
 
       // Store in caches with model ID as key
       capabilityCache.set(model.id, capabilities);
-      supportedParametersCache.set(
-        model.id,
-        new Set(model.supported_parameters ?? []),
-      );
+      supportedParametersCache.set(model.id, new Set(model.supported_parameters ?? []));
       if (typeof model.architecture?.tokenizer === "string") {
         const tokenizer = model.architecture.tokenizer.trim();
         if (tokenizer.length > 0) {
@@ -286,10 +268,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
         }
       }
       tokenLimitsCache.set(model.id, tokenLimits);
-      if (
-        promptPricePerMillion !== undefined &&
-        completionPricePerMillion !== undefined
-      ) {
+      if (promptPricePerMillion !== undefined && completionPricePerMillion !== undefined) {
         pricingCache.set(model.id, {
           promptPricePerMillion,
           completionPricePerMillion,
@@ -301,15 +280,9 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
     cacheReady = true;
 
     // 8. Log statistics
-    const toolModels = Array.from(capabilityCache.values()).filter(
-      (c) => c.hasTools,
-    ).length;
-    const visionModels = Array.from(capabilityCache.values()).filter(
-      (c) => c.seesImages,
-    ).length;
-    const videoModels = Array.from(capabilityCache.values()).filter(
-      (c) => c.seesVideos,
-    ).length;
+    const toolModels = Array.from(capabilityCache.values()).filter((c) => c.hasTools).length;
+    const visionModels = Array.from(capabilityCache.values()).filter((c) => c.seesImages).length;
+    const videoModels = Array.from(capabilityCache.values()).filter((c) => c.seesVideos).length;
     const pricedModels = pricingCache.size;
 
     log.success(
@@ -319,8 +292,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
   } catch (error) {
     // Non-critical error - bot continues with database flags as fallback
     log.warn(
-      "Failed to initialize OpenRouter capability cache (non-critical) - " +
-        "will fall back to database flags",
+      "Failed to initialize OpenRouter capability cache (non-critical) - " + "will fall back to database flags",
       error as Error,
     );
 
@@ -346,9 +318,7 @@ export async function initializeOpenRouterCapabilityCache(): Promise<void> {
  *   // Model supports function calling
  * }
  */
-export function getOpenRouterCapabilities(
-  modelCodename: string,
-): ModelCapabilities | undefined {
+export function getOpenRouterCapabilities(modelCodename: string): ModelCapabilities | undefined {
   // 1. Return undefined if cache is not ready
   if (!cacheReady) {
     return undefined;
@@ -364,9 +334,7 @@ export function getOpenRouterCapabilities(
  * @param modelCodename - Model codename (e.g., "anthropic/claude-3.5-sonnet")
  * @returns Set of supported parameter names, or undefined if cache/model not ready
  */
-export function getOpenRouterSupportedParameters(
-  modelCodename: string,
-): ReadonlySet<string> | undefined {
+export function getOpenRouterSupportedParameters(modelCodename: string): ReadonlySet<string> | undefined {
   if (!cacheReady) {
     return undefined;
   }
@@ -380,9 +348,7 @@ export function getOpenRouterSupportedParameters(
  * @param modelCodename - Model codename (e.g., "openai/gpt-4o-mini")
  * @returns Raw tokenizer label from OpenRouter, or undefined if not cached
  */
-export function getOpenRouterTokenizer(
-  modelCodename: string,
-): string | undefined {
+export function getOpenRouterTokenizer(modelCodename: string): string | undefined {
   if (!cacheReady) {
     return undefined;
   }
@@ -419,9 +385,7 @@ export function getOpenRouterCapabilityCacheSize(): number {
  * @param modelCodename - Model codename (e.g., "google/gemini-2.0-flash-exp")
  * @returns ModelTokenLimits if found, undefined if not cached or cache not ready
  */
-export function getOpenRouterTokenLimits(
-  modelCodename: string,
-): ModelTokenLimits | undefined {
+export function getOpenRouterTokenLimits(modelCodename: string): ModelTokenLimits | undefined {
   if (!cacheReady) return undefined;
   return tokenLimitsCache.get(modelCodename);
 }
@@ -432,9 +396,7 @@ export function getOpenRouterTokenLimits(
  * @param modelCodename - Model codename (e.g., "google/gemini-2.0-flash-exp")
  * @returns ModelPricing if found, undefined if cache/model not ready
  */
-export function getOpenRouterPricing(
-  modelCodename: string,
-): ModelPricing | undefined {
+export function getOpenRouterPricing(modelCodename: string): ModelPricing | undefined {
   if (!cacheReady) return undefined;
   return pricingCache.get(modelCodename);
 }
@@ -464,9 +426,7 @@ export async function testAccountSettingModel(apiKey: string): Promise<
   | { error: string }
 > {
   try {
-    log.info(
-      "Testing account-setting model to detect actual OpenRouter default...",
-    );
+    log.info("Testing account-setting model to detect actual OpenRouter default...");
 
     // Make a minimal streaming request to account-setting to see which model OpenRouter picks
     // Using streaming because some models/configurations prefer it
@@ -478,17 +438,14 @@ export async function testAccountSettingModel(apiKey: string): Promise<
       max_tokens: 5,
     };
 
-    const testResponse = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(testPayload),
+    const testResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-    );
+      body: JSON.stringify(testPayload),
+    });
 
     if (!testResponse.ok) {
       const errorText = await testResponse.text();
@@ -535,8 +492,7 @@ export async function testAccountSettingModel(apiKey: string): Promise<
 
     if (!actualModel) {
       return {
-        error:
-          "Could not determine actual model from OpenRouter streaming response",
+        error: "Could not determine actual model from OpenRouter streaming response",
       };
     }
 
@@ -582,9 +538,7 @@ export async function testAccountSettingModel(apiKey: string): Promise<
  *   // User's account-setting model supports images
  * }
  */
-export async function getOrFetchOpenRouterCapabilities(
-  modelCodename: string,
-): Promise<ModelCapabilities | undefined> {
+export async function getOrFetchOpenRouterCapabilities(modelCodename: string): Promise<ModelCapabilities | undefined> {
   // 1. Cache not ready - cannot even fetch on-demand
   if (!cacheReady) {
     log.warn(`Cannot fetch capabilities for ${modelCodename}: cache not ready`);
@@ -608,20 +562,15 @@ export async function getOrFetchOpenRouterCapabilities(
     log.info(`Fetching capabilities on-demand for model: ${modelCodename}`);
 
     // Fetch specific model from OpenRouter API
-    const response = await fetch(
-      `https://openrouter.ai/api/v1/models/${encodeURIComponent(modelCodename)}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const response = await fetch(`https://openrouter.ai/api/v1/models/${encodeURIComponent(modelCodename)}`, {
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
 
     // 5. Check response status
     if (!response.ok) {
-      log.warn(
-        `Failed to fetch capabilities for ${modelCodename}: ${response.status} ${response.statusText}`,
-      );
+      log.warn(`Failed to fetch capabilities for ${modelCodename}: ${response.status} ${response.statusText}`);
       return undefined;
     }
 

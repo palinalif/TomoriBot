@@ -18,8 +18,7 @@ import { join } from "node:path";
  */
 function createDatabaseClient(): SQL {
   const runEnv = process.env.RUN_ENV || "development";
-  const isProduction =
-    runEnv === "production" && process.env.TEST_PRODUCTION !== "true";
+  const isProduction = runEnv === "production" && process.env.TEST_PRODUCTION !== "true";
 
   // Build connection parameters from environment
   const host = process.env.POSTGRES_HOST || "localhost";
@@ -73,10 +72,7 @@ function createDatabaseClient(): SQL {
         },
       });
     } catch (error) {
-      console.error(
-        "\x1b[31m[ERROR]\x1b[0m Failed to load AWS RDS CA certificate:",
-        error,
-      );
+      console.error("\x1b[31m[ERROR]\x1b[0m Failed to load AWS RDS CA certificate:", error);
       throw new Error(
         "Production database requires a CA certificate. " +
           `Searched paths: ${candidatePaths.join(", ")}. ` +
@@ -86,9 +82,7 @@ function createDatabaseClient(): SQL {
   }
 
   // Development: No SSL for localhost PostgreSQL
-  console.log(
-    "\x1b[36m[INFO]\x1b[0m Database SSL mode: disabled (development)",
-  );
+  console.log("\x1b[36m[INFO]\x1b[0m Database SSL mode: disabled (development)");
   return new SQL({
     hostname: host,
     port: port,
@@ -127,9 +121,7 @@ export function resetDatabaseConnection(): void {
     // Bun's SQL client doesn't have an explicit close method, but clearing
     // the reference allows garbage collection and forces reconnection
     cachedClient = null;
-    console.log(
-      "\x1b[33m[WARN]\x1b[0m Database connection reset (prepared statement cache cleared)",
-    );
+    console.log("\x1b[33m[WARN]\x1b[0m Database connection reset (prepared statement cache cleared)");
   }
 }
 
@@ -171,18 +163,13 @@ export const sql = new Proxy(
  * );
  * ```
  */
-export async function withCachedPlanRetry<T>(
-  queryFn: () => Promise<T>,
-  operationName: string,
-): Promise<T | null> {
+export async function withCachedPlanRetry<T>(queryFn: () => Promise<T>, operationName: string): Promise<T | null> {
   try {
     return await queryFn();
   } catch (error) {
     // Check if this is a cached plan error
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const isCachedPlanError = errorMessage.includes(
-      "cached plan must not change result type",
-    );
+    const isCachedPlanError = errorMessage.includes("cached plan must not change result type");
 
     if (isCachedPlanError) {
       console.log(
@@ -196,10 +183,7 @@ export async function withCachedPlanRetry<T>(
         // Retry the query with fresh connection
         return await queryFn();
       } catch (retryError) {
-        console.error(
-          `\x1b[31m[ERROR]\x1b[0m Retry failed for ${operationName}:`,
-          retryError,
-        );
+        console.error(`\x1b[31m[ERROR]\x1b[0m Retry failed for ${operationName}:`, retryError);
         return null;
       }
     }

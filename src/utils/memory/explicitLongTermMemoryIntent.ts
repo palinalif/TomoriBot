@@ -28,20 +28,13 @@ function normalizeExplicitLongTermMemoryIntentText(text: string): string {
   return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-export function hasExplicitLongTermMemoryIntent(
-  text: string | null | undefined,
-): boolean {
+export function hasExplicitLongTermMemoryIntent(text: string | null | undefined): boolean {
   if (!text?.trim()) {
     return false;
   }
 
   const normalizedText = normalizeExplicitLongTermMemoryIntentText(text);
-  return EXPLICIT_LONG_TERM_MEMORY_INTENT_PHRASES.some((phrase) =>
-    normalizedText.includes(phrase),
-  );
+  return EXPLICIT_LONG_TERM_MEMORY_INTENT_PHRASES.some((phrase) => normalizedText.includes(phrase));
 }
 
-export {
-  ENGLISH_EXPLICIT_LONG_TERM_MEMORY_INTENT_PHRASES,
-  JAPANESE_EXPLICIT_LONG_TERM_MEMORY_INTENT_PHRASES,
-};
+export { ENGLISH_EXPLICIT_LONG_TERM_MEMORY_INTENT_PHRASES, JAPANESE_EXPLICIT_LONG_TERM_MEMORY_INTENT_PHRASES };

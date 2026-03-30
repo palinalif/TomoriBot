@@ -17,16 +17,8 @@ import {
 import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { sendWebhookMessageWithIdentity } from "./webhookManager";
-import type {
-  StandardEmbedOptions,
-  SummaryEmbedOptions,
-  TranslationEmbedOptions,
-} from "../../types/discord/embed";
-import {
-  TRANSLATOR_COLORS,
-  TRANSLATOR_STYLES,
-  TranslationProvider,
-} from "../../types/discord/embed";
+import type { StandardEmbedOptions, SummaryEmbedOptions, TranslationEmbedOptions } from "../../types/discord/embed";
+import { TRANSLATOR_COLORS, TRANSLATOR_STYLES, TranslationProvider } from "../../types/discord/embed";
 
 type Provider = keyof typeof TRANSLATOR_COLORS;
 
@@ -62,10 +54,7 @@ function truncateFieldValue(value: string): string {
  * @param options - Configuration for the embed
  * @returns EmbedBuilder instance
  */
-export function createStandardEmbed(
-  locale: string,
-  options: StandardEmbedOptions,
-): EmbedBuilder {
+export function createStandardEmbed(locale: string, options: StandardEmbedOptions): EmbedBuilder {
   const {
     titleKey,
     titleVars = {},
@@ -103,10 +92,7 @@ export function createStandardEmbed(
   return embed;
 }
 
-export function createSummaryEmbed(
-  locale: string,
-  options: SummaryEmbedOptions,
-): EmbedBuilder {
+export function createSummaryEmbed(locale: string, options: SummaryEmbedOptions): EmbedBuilder {
   const {
     titleKey,
     titleVars = {},
@@ -186,13 +172,7 @@ export function createSummaryEmbed(
  * @returns Promise<void>
  */
 export async function sendStandardEmbed(
-  channel:
-    | TextChannel
-    | NewsChannel
-    | DMChannel
-    | BaseGuildTextChannel
-    | AnyThreadChannel
-    | BaseGuildVoiceChannel,
+  channel: TextChannel | NewsChannel | DMChannel | BaseGuildTextChannel | AnyThreadChannel | BaseGuildVoiceChannel,
   locale: string,
   options: StandardEmbedOptions,
   webhookContext?: WebhookEmbedContext,
@@ -200,11 +180,7 @@ export async function sendStandardEmbed(
   const embed = createStandardEmbed(locale, options);
   if (webhookContext?.webhook && webhookContext.personaUsername) {
     const threadId =
-      "isThread" in channel &&
-      typeof channel.isThread === "function" &&
-      channel.isThread()
-        ? channel.id
-        : undefined;
+      "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
     try {
       await sendWebhookMessageWithIdentity(
         webhookContext.webhook,
@@ -215,19 +191,14 @@ export async function sendStandardEmbed(
         {
           username: webhookContext.personaUsername,
           avatarUrl: webhookContext.personaAvatarUrl,
-          avatarDataUri: webhookContext.personaAvatarUrl?.startsWith(
-            "data:image/",
-          )
+          avatarDataUri: webhookContext.personaAvatarUrl?.startsWith("data:image/")
             ? webhookContext.personaAvatarUrl
             : undefined,
         },
       );
       return;
     } catch (error) {
-      log.warn(
-        "Failed to send embed via webhook, falling back to bot message",
-        error as Error,
-      );
+      log.warn("Failed to send embed via webhook, falling back to bot message", error as Error);
     }
   }
 
@@ -242,15 +213,8 @@ const TRANSLATION_TIMEOUT = 90000;
  * @param options - Configuration for the translation embed
  * @returns Promise<void>
  */
-export async function sendTranslationEmbed(
-  message: Message,
-  options: TranslationEmbedOptions,
-): Promise<void> {
-  const {
-    translations,
-    initialProvider = TranslationProvider.GOOGLE,
-    timeout = TRANSLATION_TIMEOUT,
-  } = options;
+export async function sendTranslationEmbed(message: Message, options: TranslationEmbedOptions): Promise<void> {
+  const { translations, initialProvider = TranslationProvider.GOOGLE, timeout = TRANSLATION_TIMEOUT } = options;
 
   // Create buttons for each provider with their brand colors
   const createButtons = (activeProvider: Provider) => {

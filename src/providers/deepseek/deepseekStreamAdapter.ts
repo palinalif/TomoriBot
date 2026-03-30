@@ -23,9 +23,7 @@ export class DeepseekStreamAdapter extends OpenAICompatibleStreamAdapter {
         return config.endpointUrl;
       },
       mutateRequestBody: ({ requestBody, config, context }) => {
-        const thinkingEnabled =
-          config.model === DEEPSEEK_REASONER_MODEL ||
-          config.forceReason === true;
+        const thinkingEnabled = config.model === DEEPSEEK_REASONER_MODEL || config.forceReason === true;
         if (thinkingEnabled) {
           if (config.model === DEEPSEEK_CHAT_MODEL) {
             requestBody.thinking = { type: "enabled" };

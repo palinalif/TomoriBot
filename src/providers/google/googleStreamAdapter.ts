@@ -23,21 +23,12 @@ import {
   type Part,
   type ThinkingConfig,
 } from "@google/genai";
-import type {
-  FunctionCall,
-  ThoughtLogEntry,
-} from "../../types/provider/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "../../types/misc/context";
+import type { FunctionCall, ThoughtLogEntry } from "../../types/provider/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
-import {
-  buildPersonaSpeakerStopString,
-  mergeStopStrings,
-} from "../utils/stopStrings";
+import { buildPersonaSpeakerStopString, mergeStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -118,16 +109,13 @@ export class GoogleStreamAdapter implements StreamProvider {
     contextItems: StructuredContextItem[],
     model?: string,
   ): Promise<GoogleTokenCountPayload> {
-    const { systemInstruction, dialogueContents } =
-      await this.assembleGoogleContext(contextItems, [], undefined);
+    const { systemInstruction, dialogueContents } = await this.assembleGoogleContext(contextItems, [], undefined);
 
     const contents = [...dialogueContents];
     let finalSystemInstruction = systemInstruction;
 
     if (systemInstruction && !this.supportsDeveloperInstruction(model)) {
-      contents.unshift(
-        this.createInBandSystemInstructionContent(systemInstruction),
-      );
+      contents.unshift(this.createInBandSystemInstructionContent(systemInstruction));
       finalSystemInstruction = undefined;
     }
 
@@ -140,10 +128,7 @@ export class GoogleStreamAdapter implements StreamProvider {
   /**
    * Start streaming from Google's Gemini API
    */
-  async *startStream(
-    config: StreamConfig,
-    context: StreamContext,
-  ): AsyncGenerator<RawStreamChunk, void, unknown> {
+  async *startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown> {
     log.info("GoogleStreamAdapter: Initializing Gemini streaming");
 
     // Initialize Google AI client
@@ -156,25 +141,16 @@ export class GoogleStreamAdapter implements StreamProvider {
       safetySettings: googleConfig.safetySettings,
     };
 
-    const personaSpeakerStop = buildPersonaSpeakerStopString(
-      context.tomoriState.tomori_nickname,
-    );
+    const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
     this.speakerGuardPendingTail = "";
     this.streamedTextTail = "";
     this.speakerGuardEnabled = Boolean(personaSpeakerStop);
-    this.activePersonaNameLower = (
-      context.tomoriState.tomori_nickname ?? ""
-    ).toLowerCase();
-    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
-      context.contextItems,
-    );
+    this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
+    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
     if (this.activePersonaNameLower) {
       this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
     }
-    const mergedStopSequences = mergeStopStrings(
-      requestConfig.stopSequences,
-      personaSpeakerStop,
-    );
+    const mergedStopSequences = mergeStopStrings(requestConfig.stopSequences, personaSpeakerStop);
     if (mergedStopSequences) {
       requestConfig.stopSequences = mergedStopSequences;
     }
@@ -186,17 +162,12 @@ export class GoogleStreamAdapter implements StreamProvider {
     }
 
     // Assemble context for Google format (shared with token counting path)
-    const payload = await this.buildTokenCountPayload(
-      context.contextItems,
-      config.model,
-    );
+    const payload = await this.buildTokenCountPayload(context.contextItems, config.model);
     const finalContents = [...payload.contents];
 
     if (payload.systemInstruction) {
       requestConfig.systemInstruction = payload.systemInstruction;
-      log.info(
-        `Assembled system instruction. Length: ${payload.systemInstruction.length}`,
-      );
+      log.info(`Assembled system instruction. Length: ${payload.systemInstruction.length}`);
     }
 
     // Add tools if available
@@ -210,16 +181,11 @@ export class GoogleStreamAdapter implements StreamProvider {
         role: "model",
         parts: context.currentTurnModelParts as Part[],
       });
-      log.info(
-        `Added ${context.currentTurnModelParts.length} accumulated model parts to API history.`,
-      );
+      log.info(`Added ${context.currentTurnModelParts.length} accumulated model parts to API history.`);
     }
 
     // Add function interaction history
-    if (
-      context.functionInteractionHistory &&
-      context.functionInteractionHistory.length > 0
-    ) {
+    if (context.functionInteractionHistory && context.functionInteractionHistory.length > 0) {
       for (const item of context.functionInteractionHistory) {
         const functionCallPart: Part = {
           functionCall: {
@@ -228,8 +194,7 @@ export class GoogleStreamAdapter implements StreamProvider {
           } as GoogleFunctionCall,
         };
         if (item.functionCall.thoughtSignature) {
-          functionCallPart.thoughtSignature =
-            item.functionCall.thoughtSignature;
+          functionCallPart.thoughtSignature = item.functionCall.thoughtSignature;
         }
 
         // Build model parts: pre-tool-call text (if any) + function call
@@ -240,9 +205,7 @@ export class GoogleStreamAdapter implements StreamProvider {
           for (const textPart of item.preToolCallTextParts) {
             modelParts.push(textPart as Part);
           }
-          log.info(
-            `Google: Including ${item.preToolCallTextParts.length} pre-tool-call text part(s) in model turn`,
-          );
+          log.info(`Google: Including ${item.preToolCallTextParts.length} pre-tool-call text part(s) in model turn`);
         }
 
         modelParts.push(functionCallPart);
@@ -257,17 +220,12 @@ export class GoogleStreamAdapter implements StreamProvider {
 
         // Add image parts if present (for tools that send images like brave_image_search)
         if (item.imageMetadata?.imageUrls) {
-          log.info(
-            `Adding ${item.imageMetadata.imageUrls.length} image(s) to function response for LLM visibility`,
-          );
+          log.info(`Adding ${item.imageMetadata.imageUrls.length} image(s) to function response for LLM visibility`);
 
           for (const imageInfo of item.imageMetadata.imageUrls) {
             try {
               // Fetch and optimize image for LLM context (downscales oversized images)
-              const optimized = await fetchAndOptimizeImage(
-                imageInfo.url,
-                imageInfo.mimeType || "image/jpeg",
-              );
+              const optimized = await fetchAndOptimizeImage(imageInfo.url, imageInfo.mimeType || "image/jpeg");
 
               responseParts.push({
                 inlineData: {
@@ -276,26 +234,17 @@ export class GoogleStreamAdapter implements StreamProvider {
                 },
               });
 
-              log.success(
-                `Successfully added image to function response: ${imageInfo.url}`,
-              );
+              log.success(`Successfully added image to function response: ${imageInfo.url}`);
             } catch (imgErr) {
-              log.warn(
-                `Error processing image for function response: ${imageInfo.url}`,
-                {
-                  error:
-                    imgErr instanceof Error ? imgErr.message : String(imgErr),
-                },
-              );
+              log.warn(`Error processing image for function response: ${imageInfo.url}`, {
+                error: imgErr instanceof Error ? imgErr.message : String(imgErr),
+              });
             }
           }
         }
 
         // Surface Discord message IDs where images were sent so tools can reference them
-        if (
-          item.imageMetadata?.messageIds &&
-          item.imageMetadata.messageIds.length > 0
-        ) {
+        if (item.imageMetadata?.messageIds && item.imageMetadata.messageIds.length > 0) {
           responseParts.push({
             text: `[System: Images were sent to Discord in message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`,
           });
@@ -310,9 +259,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 
     // Ensure model is provided
     if (!config.model) {
-      throw new Error(
-        "Model must be specified in config. Use GoogleProvider.getDefaultModel() if needed.",
-      );
+      throw new Error("Model must be specified in config. Use GoogleProvider.getDefaultModel() if needed.");
     }
 
     log.info(`Generating content with model ${config.model}`);
@@ -331,20 +278,13 @@ export class GoogleStreamAdapter implements StreamProvider {
       // Yield each chunk
       for await (const chunkResponse of stream) {
         const normalizedChunk = this.normalizeGoogleStreamChunk(chunkResponse);
-        const chunksToEmit =
-          this.splitChunkWithTextAndFunctionCalls(normalizedChunk);
+        const chunksToEmit = this.splitChunkWithTextAndFunctionCalls(normalizedChunk);
 
         for (const chunkToEmit of chunksToEmit) {
-          const deduplicatedChunk =
-            this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
-          const guardResult =
-            this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
+          const deduplicatedChunk = this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
+          const guardResult = this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
 
-          if (
-            this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-              guardResult.chunk,
-            )
-          ) {
+          if (this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(guardResult.chunk)) {
             const tailText = this.consumeSpeakerGuardPendingTail();
             if (tailText) {
               yield {
@@ -429,9 +369,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     return tail;
   }
 
-  private deduplicateChunkTextAgainstRecentStream(
-    chunk: GoogleStreamChunk,
-  ): GoogleStreamChunk {
+  private deduplicateChunkTextAgainstRecentStream(chunk: GoogleStreamChunk): GoogleStreamChunk {
     if (!chunk.text) {
       return chunk;
     }
@@ -455,11 +393,7 @@ export class GoogleStreamAdapter implements StreamProvider {
   }
 
   private getTextDelta(chunkText: string): string {
-    if (
-      !chunkText ||
-      chunkText.length < GoogleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS ||
-      !this.streamedTextTail
-    ) {
+    if (!chunkText || chunkText.length < GoogleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS || !this.streamedTextTail) {
       return chunkText;
     }
 
@@ -469,15 +403,8 @@ export class GoogleStreamAdapter implements StreamProvider {
     }
 
     const maxOverlap = Math.min(seenTail.length, chunkText.length);
-    for (
-      let overlap = maxOverlap;
-      overlap >= GoogleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS;
-      overlap--
-    ) {
-      if (
-        seenTail.slice(seenTail.length - overlap) ===
-        chunkText.slice(0, overlap)
-      ) {
+    for (let overlap = maxOverlap; overlap >= GoogleStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS; overlap--) {
+      if (seenTail.slice(seenTail.length - overlap) === chunkText.slice(0, overlap)) {
         return chunkText.slice(overlap);
       }
     }
@@ -491,12 +418,8 @@ export class GoogleStreamAdapter implements StreamProvider {
     }
 
     this.streamedTextTail += text;
-    if (
-      this.streamedTextTail.length > GoogleStreamAdapter.STREAM_TEXT_TAIL_CHARS
-    ) {
-      this.streamedTextTail = this.streamedTextTail.slice(
-        -GoogleStreamAdapter.STREAM_TEXT_TAIL_CHARS,
-      );
+    if (this.streamedTextTail.length > GoogleStreamAdapter.STREAM_TEXT_TAIL_CHARS) {
+      this.streamedTextTail = this.streamedTextTail.slice(-GoogleStreamAdapter.STREAM_TEXT_TAIL_CHARS);
     }
   }
 
@@ -534,9 +457,7 @@ export class GoogleStreamAdapter implements StreamProvider {
       .join("");
   }
 
-  private extractFunctionCallsFromParts(
-    parts: unknown[],
-  ): GoogleFunctionCall[] {
+  private extractFunctionCallsFromParts(parts: unknown[]): GoogleFunctionCall[] {
     const extracted: GoogleFunctionCall[] = [];
 
     for (const part of parts) {
@@ -555,9 +476,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     return extracted;
   }
 
-  private extractTopLevelFunctionCalls(
-    chunk: GoogleStreamChunk,
-  ): GoogleFunctionCall[] {
+  private extractTopLevelFunctionCalls(chunk: GoogleStreamChunk): GoogleFunctionCall[] {
     const extracted: GoogleFunctionCall[] = [];
     const chunkObj = chunk as {
       functionCalls?: unknown;
@@ -586,9 +505,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     return extracted;
   }
 
-  private extractFunctionCallsFromChunk(
-    chunk: GoogleStreamChunk,
-  ): GoogleFunctionCall[] {
+  private extractFunctionCallsFromChunk(chunk: GoogleStreamChunk): GoogleFunctionCall[] {
     const topLevelCalls = this.extractTopLevelFunctionCalls(chunk);
     if (topLevelCalls.length > 0) {
       return topLevelCalls;
@@ -614,14 +531,8 @@ export class GoogleStreamAdapter implements StreamProvider {
     return "";
   }
 
-  private splitChunkWithTextAndFunctionCalls(
-    chunk: GoogleStreamChunk,
-  ): GoogleStreamChunk[] {
-    if (
-      !chunk.text ||
-      !chunk.functionCalls ||
-      chunk.functionCalls.length === 0
-    ) {
+  private splitChunkWithTextAndFunctionCalls(chunk: GoogleStreamChunk): GoogleStreamChunk[] {
+    if (!chunk.text || !chunk.functionCalls || chunk.functionCalls.length === 0) {
       return [chunk];
     }
 
@@ -640,14 +551,8 @@ export class GoogleStreamAdapter implements StreamProvider {
     ];
   }
 
-  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-    chunk: GoogleStreamChunk,
-  ): boolean {
-    if (
-      !this.speakerGuardEnabled ||
-      this.speakerGuardPendingTail.length === 0 ||
-      Boolean(chunk.text)
-    ) {
+  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(chunk: GoogleStreamChunk): boolean {
+    if (!this.speakerGuardEnabled || this.speakerGuardPendingTail.length === 0 || Boolean(chunk.text)) {
       return false;
     }
 
@@ -661,8 +566,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 
     if (
       chunk.promptFeedback?.blockReason &&
-      chunk.promptFeedback.blockReason !==
-        BlockedReason.BLOCKED_REASON_UNSPECIFIED
+      chunk.promptFeedback.blockReason !== BlockedReason.BLOCKED_REASON_UNSPECIFIED
     ) {
       return true;
     }
@@ -670,9 +574,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     return Boolean(chunk.candidates?.[0]?.finishReason);
   }
 
-  private collectKnownSpeakerNames(
-    contextItems: StructuredContextItem[],
-  ): Set<string> {
+  private collectKnownSpeakerNames(contextItems: StructuredContextItem[]): Set<string> {
     const names = new Set<string>();
 
     for (const item of contextItems) {
@@ -723,20 +625,12 @@ export class GoogleStreamAdapter implements StreamProvider {
       if (!match) break;
 
       const rawLabel = match[1].trim();
-      if (
-        !isRegisteredOrReservedSpeakerLabel(
-          rawLabel,
-          this.knownSpeakerNamesLower,
-        )
-      ) {
+      if (!isRegisteredOrReservedSpeakerLabel(rawLabel, this.knownSpeakerNamesLower)) {
         continue;
       }
 
       const normalizedLabel = rawLabel.toLowerCase();
-      if (
-        this.activePersonaNameLower &&
-        normalizedLabel === this.activePersonaNameLower
-      ) {
+      if (this.activePersonaNameLower && normalizedLabel === this.activePersonaNameLower) {
         continue;
       }
 
@@ -771,10 +665,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     };
   }
 
-  private cloneChunkWithText(
-    chunk: GoogleStreamChunk,
-    text: string,
-  ): GoogleStreamChunk {
+  private cloneChunkWithText(chunk: GoogleStreamChunk, text: string): GoogleStreamChunk {
     return {
       text,
       functionCalls: chunk.functionCalls,
@@ -803,8 +694,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     // Check for content blocks from prompt feedback
     if (
       googleChunk.promptFeedback?.blockReason &&
-      googleChunk.promptFeedback.blockReason !==
-        BlockedReason.BLOCKED_REASON_UNSPECIFIED
+      googleChunk.promptFeedback.blockReason !== BlockedReason.BLOCKED_REASON_UNSPECIFIED
     ) {
       const error: ProviderError = {
         type: "content_blocked",
@@ -822,10 +712,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 
     // Check for finish reason blocks
     const candidate = googleChunk.candidates?.[0];
-    if (
-      candidate?.finishReason &&
-      this.isBlockingFinishReason(candidate.finishReason)
-    ) {
+    if (candidate?.finishReason && this.isBlockingFinishReason(candidate.finishReason)) {
       const error: ProviderError = {
         type: "content_blocked",
         message: `Response stopped/blocked. Reason: ${candidate.finishReason}`,
@@ -877,10 +764,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     // - deduplicateChunkTextAgainstRecentStream() may zero it to "" to suppress duplicates.
     // Re-extracting via extractTextFromChunk() would bypass that dedup by reading raw candidates.
     // Fall back only when `text` is undefined (un-normalized chunk, shouldn't occur in practice).
-    const textContent =
-      googleChunk.text !== undefined
-        ? googleChunk.text
-        : this.extractTextFromChunk(googleChunk);
+    const textContent = googleChunk.text !== undefined ? googleChunk.text : this.extractTextFromChunk(googleChunk);
     if (textContent) {
       return {
         type: "text",
@@ -951,10 +835,7 @@ export class GoogleStreamAdapter implements StreamProvider {
           googleApiError = parsedError.error || parsedError;
 
           // Extract the actual Google error message
-          if (
-            googleApiError?.message &&
-            typeof googleApiError.message === "string"
-          ) {
+          if (googleApiError?.message && typeof googleApiError.message === "string") {
             try {
               // Some Google errors have double-nested JSON
               const nestedError = JSON.parse(googleApiError.message);
@@ -973,10 +854,7 @@ export class GoogleStreamAdapter implements StreamProvider {
         }
       }
     } catch (parseError) {
-      log.warn(
-        "GoogleStreamAdapter: Failed to parse Google API error structure",
-        parseError,
-      );
+      log.warn("GoogleStreamAdapter: Failed to parse Google API error structure", parseError);
     }
 
     // Determine error type and create localized error based on Google API error codes
@@ -988,10 +866,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     switch (errorCode) {
       case 400:
         // Check if this is a billing-related 400 error
-        if (
-          errorMessage.includes("billing") ||
-          errorMessage.includes("free tier")
-        ) {
+        if (errorMessage.includes("billing") || errorMessage.includes("free tier")) {
           errorType = "api_error";
           retryable = false;
         } else {
@@ -1026,10 +901,7 @@ export class GoogleStreamAdapter implements StreamProvider {
       default:
         // Fallback for unknown error codes or when code is not available
         // Try to categorize based on error message content
-        if (
-          errorMessage.includes("API key") ||
-          errorMessage.includes("PERMISSION_DENIED")
-        ) {
+        if (errorMessage.includes("API key") || errorMessage.includes("PERMISSION_DENIED")) {
           errorType = "api_error";
           retryable = false;
         } else if (
@@ -1039,16 +911,10 @@ export class GoogleStreamAdapter implements StreamProvider {
         ) {
           errorType = "rate_limit";
           retryable = true;
-        } else if (
-          errorMessage.includes("timeout") ||
-          errorMessage.includes("DEADLINE_EXCEEDED")
-        ) {
+        } else if (errorMessage.includes("timeout") || errorMessage.includes("DEADLINE_EXCEEDED")) {
           errorType = "timeout";
           retryable = true;
-        } else if (
-          errorMessage.includes("overloaded") ||
-          errorMessage.includes("UNAVAILABLE")
-        ) {
+        } else if (errorMessage.includes("overloaded") || errorMessage.includes("UNAVAILABLE")) {
           errorType = "provider_overloaded";
           retryable = true;
         } else if (
@@ -1127,23 +993,16 @@ export class GoogleStreamAdapter implements StreamProvider {
           // Truncate error message to avoid Discord embed limits
           const maxErrorLength = 1000;
           const apiErrorSnippet =
-            error.message.length > maxErrorLength
-              ? `${error.message.substring(0, maxErrorLength)}...`
-              : error.message;
+            error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
           googleMessage += `\n\n**API Response:**\n${apiErrorSnippet}`;
         }
       } catch {
         // If locale key doesn't exist, use a generic fallback with actual API error
-        googleMessage = localizer(
-          locale,
-          "genai.google.unknown_default_message",
-        );
+        googleMessage = localizer(locale, "genai.google.unknown_default_message");
         // Append actual API error for unknown errors
         const maxErrorLength = 1000;
         const apiErrorSnippet =
-          error.message.length > maxErrorLength
-            ? `${error.message.substring(0, maxErrorLength)}...`
-            : error.message;
+          error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
         googleMessage += `\n\n**API Response:**\n${apiErrorSnippet}`;
       }
     }
@@ -1195,9 +1054,7 @@ export class GoogleStreamAdapter implements StreamProvider {
         item.role === "system" ||
         (item.role === "user" &&
           item.metadataTag &&
-          GoogleStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(
-            item.metadataTag,
-          ))
+          GoogleStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(item.metadataTag))
       ) {
         if (itemTextContent) systemInstructionParts.push(itemTextContent);
       } else if (item.role === "user" || item.role === "model") {
@@ -1247,10 +1104,7 @@ export class GoogleStreamAdapter implements StreamProvider {
                 }
               } else {
                 // Regular image processing (non-GIF) — optimize oversized images
-                const optimized = await fetchAndOptimizeImage(
-                  part.uri,
-                  part.mimeType,
-                );
+                const optimized = await fetchAndOptimizeImage(part.uri, part.mimeType);
 
                 geminiParts.push({
                   inlineData: {
@@ -1260,29 +1114,17 @@ export class GoogleStreamAdapter implements StreamProvider {
                 });
               }
             } catch (imgErr) {
-              log.warn(
-                `GoogleStreamAdapter: Image processing error ${part.uri}`,
-                {
-                  error:
-                    imgErr instanceof Error ? imgErr.message : String(imgErr),
-                },
-              );
+              log.warn(`GoogleStreamAdapter: Image processing error ${part.uri}`, {
+                error: imgErr instanceof Error ? imgErr.message : String(imgErr),
+              });
             }
-          } else if (
-            part.type === "image" &&
-            "inlineData" in part &&
-            part.inlineData
-          ) {
+          } else if (part.type === "image" && "inlineData" in part && part.inlineData) {
             // Handle images that already have base64 data (e.g., from profile picture tool)
             const inlineData = part.inlineData as {
               mimeType: string;
               data: string;
             };
-            if (
-              typeof inlineData === "object" &&
-              inlineData.mimeType &&
-              inlineData.data
-            ) {
+            if (typeof inlineData === "object" && inlineData.mimeType && inlineData.data) {
               // Check if this is a GIF - handle based on environment
               if (inlineData.mimeType === "image/gif") {
                 const isProduction = process.env.RUN_ENV === "production";
@@ -1293,9 +1135,7 @@ export class GoogleStreamAdapter implements StreamProvider {
                     text: "[System: This context contains inline GIF data. GIF processing disabled in production.]",
                   });
 
-                  log.info(
-                    "GoogleStreamAdapter: Inline GIF detected in production mode, replaced with placeholder",
-                  );
+                  log.info("GoogleStreamAdapter: Inline GIF detected in production mode, replaced with placeholder");
                 } else {
                   // Development: Process GIF normally (but warn about memory usage)
                   try {
@@ -1331,15 +1171,9 @@ export class GoogleStreamAdapter implements StreamProvider {
                       `GoogleStreamAdapter: Successfully processed inline GIF into ${keyframes.length} keyframes`,
                     );
                   } catch (gifErr) {
-                    log.warn(
-                      "GoogleStreamAdapter: Failed to process inline GIF, skipping",
-                      {
-                        error:
-                          gifErr instanceof Error
-                            ? gifErr.message
-                            : String(gifErr),
-                      },
-                    );
+                    log.warn("GoogleStreamAdapter: Failed to process inline GIF, skipping", {
+                      error: gifErr instanceof Error ? gifErr.message : String(gifErr),
+                    });
                   }
                 }
               } else {
@@ -1350,29 +1184,21 @@ export class GoogleStreamAdapter implements StreamProvider {
                     data: inlineData.data,
                   },
                 });
-                log.info(
-                  "GoogleStreamAdapter: Processed image with existing inlineData",
-                );
+                log.info("GoogleStreamAdapter: Processed image with existing inlineData");
               }
             } else {
-              log.warn(
-                "GoogleStreamAdapter: Invalid inlineData structure for image part",
-              );
+              log.warn("GoogleStreamAdapter: Invalid inlineData structure for image part");
             }
           } else if (part.type === "video" && part.uri && part.mimeType) {
             // Handle videos
             try {
               if ((part as { isYouTubeLink?: boolean }).isYouTubeLink) {
                 // Check if this is an enhanced context video part (should be processed)
-                const isEnhancedContext = (
-                  part as { enhancedContext?: boolean }
-                ).enhancedContext;
+                const isEnhancedContext = (part as { enhancedContext?: boolean }).enhancedContext;
 
                 if (isEnhancedContext) {
                   // Process enhanced context YouTube videos (from function call restart)
-                  log.info(
-                    `GoogleStreamAdapter: Processing enhanced context YouTube video: ${part.uri}`,
-                  );
+                  log.info(`GoogleStreamAdapter: Processing enhanced context YouTube video: ${part.uri}`);
                   geminiParts.push({
                     fileData: {
                       fileUri: part.uri,
@@ -1389,22 +1215,16 @@ export class GoogleStreamAdapter implements StreamProvider {
                 // Direct video uploads (handle size limits)
                 const videoResponse = await fetch(part.uri);
                 if (!videoResponse.ok) {
-                  throw new Error(
-                    `Video fetch failed: ${videoResponse.status}`,
-                  );
+                  throw new Error(`Video fetch failed: ${videoResponse.status}`);
                 }
 
-                const contentLength =
-                  videoResponse.headers.get("content-length");
-                const fileSizeBytes = contentLength
-                  ? Number.parseInt(contentLength, 10)
-                  : 0;
+                const contentLength = videoResponse.headers.get("content-length");
+                const fileSizeBytes = contentLength ? Number.parseInt(contentLength, 10) : 0;
                 const maxInlineSize = 20 * 1024 * 1024; // 20MB limit
 
                 if (fileSizeBytes > 0 && fileSizeBytes < maxInlineSize) {
                   const videoArrayBuffer = await videoResponse.arrayBuffer();
-                  const base64VideoData =
-                    Buffer.from(videoArrayBuffer).toString("base64");
+                  const base64VideoData = Buffer.from(videoArrayBuffer).toString("base64");
 
                   geminiParts.push({
                     inlineData: {
@@ -1412,9 +1232,7 @@ export class GoogleStreamAdapter implements StreamProvider {
                       data: base64VideoData,
                     },
                   });
-                  log.info(
-                    `GoogleStreamAdapter: Added inline video: ${part.uri} (${fileSizeBytes} bytes)`,
-                  );
+                  log.info(`GoogleStreamAdapter: Added inline video: ${part.uri} (${fileSizeBytes} bytes)`);
                 } else {
                   log.warn(
                     `GoogleStreamAdapter: Video too large for inline processing: ${part.uri} (${fileSizeBytes} bytes). Consider implementing File API upload for videos >20MB.`,
@@ -1422,15 +1240,9 @@ export class GoogleStreamAdapter implements StreamProvider {
                 }
               }
             } catch (videoErr) {
-              log.warn(
-                `GoogleStreamAdapter: Video processing error ${part.uri}`,
-                {
-                  error:
-                    videoErr instanceof Error
-                      ? videoErr.message
-                      : String(videoErr),
-                },
-              );
+              log.warn(`GoogleStreamAdapter: Video processing error ${part.uri}`, {
+                error: videoErr instanceof Error ? videoErr.message : String(videoErr),
+              });
             }
           }
         }
@@ -1442,9 +1254,7 @@ export class GoogleStreamAdapter implements StreamProvider {
     }
 
     const systemInstruction =
-      systemInstructionParts.length > 0
-        ? systemInstructionParts.join("\n\n---\n\n")
-        : undefined;
+      systemInstructionParts.length > 0 ? systemInstructionParts.join("\n\n---\n\n") : undefined;
 
     return { systemInstruction, dialogueContents };
   }
@@ -1452,12 +1262,8 @@ export class GoogleStreamAdapter implements StreamProvider {
   /**
    * Extract a thought signature from a Google stream chunk.
    */
-  private extractThoughtSignature(
-    googleChunk: GoogleStreamChunk,
-  ): string | undefined {
-    const directSignature = this.normalizeThoughtSignature(
-      googleChunk.thoughtSignature,
-    );
+  private extractThoughtSignature(googleChunk: GoogleStreamChunk): string | undefined {
+    const directSignature = this.normalizeThoughtSignature(googleChunk.thoughtSignature);
     if (directSignature) {
       return directSignature;
     }
@@ -1469,8 +1275,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 
     const functionCallPart = parts.find((part) => part.functionCall);
     const partSignature =
-      functionCallPart?.thoughtSignature ??
-      parts.find((part) => part.thoughtSignature)?.thoughtSignature;
+      functionCallPart?.thoughtSignature ?? parts.find((part) => part.thoughtSignature)?.thoughtSignature;
 
     return this.normalizeThoughtSignature(partSignature);
   }
@@ -1478,9 +1283,7 @@ export class GoogleStreamAdapter implements StreamProvider {
   /**
    * Normalize a thought signature to base64 string if needed.
    */
-  private normalizeThoughtSignature(
-    signature?: string | Uint8Array,
-  ): string | undefined {
+  private normalizeThoughtSignature(signature?: string | Uint8Array): string | undefined {
     if (!signature) {
       return undefined;
     }
@@ -1504,9 +1307,7 @@ export class GoogleStreamAdapter implements StreamProvider {
    * Fallback for models without developer-instruction support:
    * inject instructions as the first in-band content item.
    */
-  private createInBandSystemInstructionContent(
-    systemInstruction: string,
-  ): Content {
+  private createInBandSystemInstructionContent(systemInstruction: string): Content {
     return {
       role: "user",
       parts: [
@@ -1522,9 +1323,7 @@ export class GoogleStreamAdapter implements StreamProvider {
   /**
    * Convert Google function call to our generic format
    */
-  private convertGoogleFunctionCall(
-    googleFunctionCall: GoogleFunctionCall,
-  ): FunctionCall {
+  private convertGoogleFunctionCall(googleFunctionCall: GoogleFunctionCall): FunctionCall {
     return {
       name: googleFunctionCall.name ?? "",
       args: googleFunctionCall.args || {},
@@ -1549,19 +1348,14 @@ export class GoogleStreamAdapter implements StreamProvider {
   /**
    * Log sanitized request configuration for debugging
    */
-  private logSanitizedRequest(
-    requestConfig: GenerateContentConfig,
-    contents: Content[],
-  ): void {
+  private logSanitizedRequest(requestConfig: GenerateContentConfig, contents: Content[]): void {
     log.section("GoogleStreamAdapter: Request Details");
 
     const sanitizedRequestConfig = {
       ...requestConfig,
       apiKey: undefined, // Remove API key for logging
     };
-    log.info(
-      `Request Config: ${JSON.stringify(sanitizedRequestConfig, null, 2)}`,
-    );
+    log.info(`Request Config: ${JSON.stringify(sanitizedRequestConfig, null, 2)}`);
 
     const sanitizedContents = contents.map((content) => ({
       ...content,
@@ -1576,8 +1370,6 @@ export class GoogleStreamAdapter implements StreamProvider {
           : part,
       ),
     }));
-    log.info(
-      `Contents (${contents.length} items): ${JSON.stringify(sanitizedContents, null, 2)}`,
-    );
+    log.info(`Contents (${contents.length} items): ${JSON.stringify(sanitizedContents, null, 2)}`);
   }
 }

@@ -10,12 +10,8 @@ import type { UserRow } from "@/types/db/schema";
  * @param subcommand - The slash command subcommand builder
  * @returns The configured subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("kofi")
-    .setDescription(localizer("en-US", "commands.donate.kofi.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("kofi").setDescription(localizer("en-US", "commands.donate.kofi.description"));
 
 /**
  * Execute the donate kofi command - show Ko-fi donation link and information

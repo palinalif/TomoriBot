@@ -9,31 +9,19 @@ import { deleteSavedProviderConfig } from "@/utils/db/dbWrite";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { SelectOption, ModalComponent } from "@/types/discord/modal";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
-import {
-  isCustomProvider,
-  deleteCustomLLMEntry,
-} from "@/utils/discord/customProviderModal";
+import { isCustomProvider, deleteCustomLLMEntry } from "@/utils/discord/customProviderModal";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_provider_remove_modal";
 const PROVIDER_SELECT_ID = "provider_remove_select";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.config.provider.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.config.provider.remove.description"));
 
 /**
  * Removes a saved provider configuration from the database.
@@ -74,19 +62,13 @@ export async function execute(
   }
 
   // Track modal submit interaction for error handling in catch block
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
 
   try {
     // 3. Load saved provider configs, excluding the currently active provider
-    const allSavedConfigs = await loadSavedProviderConfigs(
-      tomoriState.server_id,
-    );
+    const allSavedConfigs = await loadSavedProviderConfigs(tomoriState.server_id);
     const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
-    const removableConfigs = allSavedConfigs.filter(
-      (c) => c.provider.toLowerCase() !== currentProvider,
-    );
+    const removableConfigs = allSavedConfigs.filter((c) => c.provider.toLowerCase() !== currentProvider);
 
     // 4. If no saved configs to remove, show error
     if (removableConfigs.length === 0) {
@@ -131,9 +113,7 @@ export async function execute(
 
     // 7. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Provider remove modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Provider remove modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -141,17 +121,12 @@ export async function execute(
     const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
 
     if (!modalSubmitInteraction || !selectedProvider) {
-      log.error(
-        "Provider remove modal result unexpectedly missing interaction or values",
-      );
+      log.error("Provider remove modal result unexpectedly missing interaction or values");
       return;
     }
 
     // 8. Delete the saved config
-    const deleted = await deleteSavedProviderConfig(
-      tomoriState.server_id,
-      selectedProvider,
-    );
+    const deleted = await deleteSavedProviderConfig(tomoriState.server_id, selectedProvider);
 
     if (!deleted) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -163,25 +138,16 @@ export async function execute(
     }
 
     // 9. Also purge rotation keys for that provider (clean break)
-    const { purgeRotationKeysForProvider } = await import(
-      "../../../utils/security/keyRotation"
-    );
-    const purgedCount = await purgeRotationKeysForProvider(
-      tomoriState.server_id,
-      selectedProvider,
-    );
+    const { purgeRotationKeysForProvider } = await import("../../../utils/security/keyRotation");
+    const purgedCount = await purgeRotationKeysForProvider(tomoriState.server_id, selectedProvider);
     if (purgedCount > 0) {
-      log.info(
-        `Purged ${purgedCount} rotation key(s) for removed provider ${selectedProvider}`,
-      );
+      log.info(`Purged ${purgedCount} rotation key(s) for removed provider ${selectedProvider}`);
     }
 
     // 10. If removing custom provider's saved config, clean up the custom LLM entry
     // (only if the custom provider is NOT currently active)
     if (isCustomProvider(selectedProvider)) {
-      log.info(
-        `Removing saved custom provider config — cleaning up custom LLM entry`,
-      );
+      log.info(`Removing saved custom provider config — cleaning up custom LLM entry`);
       await deleteCustomLLMEntry(serverId);
     }
 

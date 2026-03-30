@@ -14,16 +14,8 @@
  * Phase 3: Tool-Based Summarization
  */
 
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
-import {
-  updateShortTermMemorySummary,
-  MAX_SUMMARY_LENGTH,
-} from "../../utils/cache/shortTermMemoryCache";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
+import { updateShortTermMemorySummary, MAX_SUMMARY_LENGTH } from "../../utils/cache/shortTermMemoryCache";
 import { log } from "../../utils/misc/logger";
 
 export class UpdateShortTermMemoryTool extends BaseTool {
@@ -69,16 +61,12 @@ export class UpdateShortTermMemoryTool extends BaseTool {
     if (!this.isAvailableFor(provider)) return false;
 
     if (context?.streamContext?.explicitLongTermMemoryIntent) {
-      log.info(
-        "UpdateShortTermMemoryTool: Disabled for this turn — explicit long-term memory intent detected",
-      );
+      log.info("UpdateShortTermMemoryTool: Disabled for this turn — explicit long-term memory intent detected");
       return false;
     }
 
     if (context?.streamContext?.disableShortTermMemoryUpdate) {
-      log.info(
-        "UpdateShortTermMemoryTool: Disabled for this turn — STM already updated once",
-      );
+      log.info("UpdateShortTermMemoryTool: Disabled for this turn — STM already updated once");
       return false;
     }
 
@@ -88,44 +76,32 @@ export class UpdateShortTermMemoryTool extends BaseTool {
   /**
    * Execute the tool to update short-term memory summary
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     if (context.streamContext?.explicitLongTermMemoryIntent) {
-      log.info(
-        "[updateShortTermMemoryTool] Execution blocked — explicit long-term memory intent detected",
-      );
+      log.info("[updateShortTermMemoryTool] Execution blocked — explicit long-term memory intent detected");
       return {
         success: false,
-        message:
-          "Short-term memory updates are disabled when the user explicitly asks for persistent memory.",
+        message: "Short-term memory updates are disabled when the user explicitly asks for persistent memory.",
       };
     }
 
     // Defense-in-depth guard: block execution if STM was already updated this turn
     if (context.streamContext?.disableShortTermMemoryUpdate) {
-      log.info(
-        "[updateShortTermMemoryTool] Execution blocked — STM already updated once this turn",
-      );
+      log.info("[updateShortTermMemoryTool] Execution blocked — STM already updated once this turn");
       return {
         success: false,
         message: "Short-term memory was already updated this turn.",
       };
     }
 
-    log.info(
-      `[updateShortTermMemoryTool] Tool called - userId=${context.userId}, channelId=${context.channel?.id}`,
-    );
+    log.info(`[updateShortTermMemoryTool] Tool called - userId=${context.userId}, channelId=${context.channel?.id}`);
 
     try {
       // 1. Validate parameters
       const summary = args.summary;
 
       if (typeof summary !== "string") {
-        log.warn(
-          `[updateShortTermMemoryTool] Invalid summary parameter - summaryType=${typeof summary}`,
-        );
+        log.warn(`[updateShortTermMemoryTool] Invalid summary parameter - summaryType=${typeof summary}`);
         return {
           success: false,
           message: "Error: summary parameter must be a string",
@@ -155,8 +131,7 @@ export class UpdateShortTermMemoryTool extends BaseTool {
         );
         return {
           success: false,
-          message:
-            "Error: unable to identify user or channel for this conversation",
+          message: "Error: unable to identify user or channel for this conversation",
         };
       }
 
@@ -172,10 +147,8 @@ export class UpdateShortTermMemoryTool extends BaseTool {
 
       // 4. Extract server and channel info for new entries
       const serverId = context.guildId || "DM";
-      const serverName =
-        "guild" in context.channel ? context.channel.guild?.name : undefined;
-      const channelName =
-        "name" in context.channel ? context.channel.name : undefined;
+      const serverName = "guild" in context.channel ? context.channel.guild?.name : undefined;
+      const channelName = "name" in context.channel ? context.channel.name : undefined;
 
       // 5. Update both the user-scoped STM and, in guilds, the shared server STM
       const tomoriId = context.tomoriState?.tomori_id ?? null;
@@ -211,17 +184,12 @@ export class UpdateShortTermMemoryTool extends BaseTool {
       // 6. Return success with no user-facing message (silent operation)
       return {
         success: true,
-        message:
-          "Short-term memory updated successfully (no user notification)",
+        message: "Short-term memory updated successfully (no user notification)",
       };
     } catch (error) {
-      await log.error(
-        "[updateShortTermMemoryTool] Failed to update short-term memory",
-        error,
-        {
-          errorType: "UPDATE_SHORT_TERM_MEMORY_ERROR",
-        },
-      );
+      await log.error("[updateShortTermMemoryTool] Failed to update short-term memory", error, {
+        errorType: "UPDATE_SHORT_TERM_MEMORY_ERROR",
+      });
 
       return {
         success: false,

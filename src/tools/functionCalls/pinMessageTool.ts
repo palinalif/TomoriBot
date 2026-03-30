@@ -5,12 +5,7 @@
 
 import type { Message } from "discord.js";
 import { log } from "../../utils/misc/logger";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 
 /**
  * Tool for pinning Discord messages from recent conversation
@@ -52,10 +47,7 @@ export class PinMessageTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // 1. Validate parameters
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -112,10 +104,7 @@ export class PinMessageTool extends BaseTool {
           let bestMatch: Message<true> | undefined;
           let bestDiff = 1000n; // Max acceptable numeric distance
           for (const [id, msg] of recentMessages) {
-            const diff =
-              targetBigInt > BigInt(id)
-                ? targetBigInt - BigInt(id)
-                : BigInt(id) - targetBigInt;
+            const diff = targetBigInt > BigInt(id) ? targetBigInt - BigInt(id) : BigInt(id) - targetBigInt;
             if (diff < bestDiff && diff > 0n) {
               bestDiff = diff;
               bestMatch = msg;
@@ -135,9 +124,7 @@ export class PinMessageTool extends BaseTool {
 
       if (!targetMessage) {
         // Message not found in recent messages
-        log.warn(
-          `PinMessageTool: Message ID ${messageId} not found in recent messages (last 100)`,
-        );
+        log.warn(`PinMessageTool: Message ID ${messageId} not found in recent messages (last 100)`);
 
         return {
           success: false,
@@ -147,8 +134,7 @@ export class PinMessageTool extends BaseTool {
           data: {
             status: "message_not_found_in_recent",
             attempted_id: messageId,
-            reason:
-              "Message not found in the last 100 messages of this channel",
+            reason: "Message not found in the last 100 messages of this channel",
           },
         };
       }
@@ -170,8 +156,7 @@ export class PinMessageTool extends BaseTool {
           data: {
             status: "message_already_pinned",
             message_id: targetMessage.id,
-            author:
-              targetMessage.author.displayName || targetMessage.author.username,
+            author: targetMessage.author.displayName || targetMessage.author.username,
             preview: messagePreview,
           },
         };
@@ -196,26 +181,19 @@ export class PinMessageTool extends BaseTool {
         data: {
           status: "message_pinned_successfully",
           message_id: targetMessage.id,
-          author:
-            targetMessage.author.displayName || targetMessage.author.username,
+          author: targetMessage.author.displayName || targetMessage.author.username,
           timestamp: targetMessage.createdAt.toISOString(),
           preview: messagePreview,
           channel_id: context.channel.id,
         },
       };
     } catch (error) {
-      log.error(
-        `PinMessageTool: Failed to pin message ID: ${messageId}`,
-        error as Error,
-      );
+      log.error(`PinMessageTool: Failed to pin message ID: ${messageId}`, error as Error);
 
       // 9. Handle specific Discord API errors
       if (error instanceof Error) {
         // Check for permission errors
-        if (
-          error.message.includes("Missing Permissions") ||
-          error.message.includes("50013")
-        ) {
+        if (error.message.includes("Missing Permissions") || error.message.includes("50013")) {
           return {
             success: false,
             error: "Insufficient permissions to pin messages",
@@ -229,10 +207,7 @@ export class PinMessageTool extends BaseTool {
         }
 
         // Check for channel pin limit (max 50 pins per channel)
-        if (
-          error.message.includes("50019") ||
-          error.message.includes("pin limit")
-        ) {
+        if (error.message.includes("50019") || error.message.includes("pin limit")) {
           return {
             success: false,
             error: "Channel pin limit reached",
@@ -246,15 +221,11 @@ export class PinMessageTool extends BaseTool {
         }
 
         // Check for rate limiting
-        if (
-          error.message.includes("rate limit") ||
-          error.message.includes("429")
-        ) {
+        if (error.message.includes("rate limit") || error.message.includes("429")) {
           return {
             success: false,
             error: "Rate limited by Discord API",
-            message:
-              "I'm being rate limited by Discord. Please try again in a moment.",
+            message: "I'm being rate limited by Discord. Please try again in a moment.",
             data: {
               status: "rate_limited",
               retry_suggestion: "Try again in 30-60 seconds",
@@ -266,17 +237,13 @@ export class PinMessageTool extends BaseTool {
       // 10. Generic error fallback
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error occurred during message pinning",
+        error: error instanceof Error ? error.message : "Unknown error occurred during message pinning",
         message:
           "Failed to pin the message due to an unexpected error. Please try again or check if the message ID is correct.",
         data: {
           status: "pin_operation_failed",
           attempted_id: messageId,
-          error_details:
-            error instanceof Error ? error.message : "Unknown error",
+          error_details: error instanceof Error ? error.message : "Unknown error",
         },
       };
     }

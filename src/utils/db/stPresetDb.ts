@@ -72,17 +72,12 @@ export async function insertPresetWithNodes(
       return preset;
     });
 
-    log.success(
-      `[StPresetDb] Inserted preset "${presetName}" with ${nodes.length} nodes for server ${serverId}`,
-    );
+    log.success(`[StPresetDb] Inserted preset "${presetName}" with ${nodes.length} nodes for server ${serverId}`);
     // Invalidate cache after successful write
     invalidateStPresetCache(serverId);
     return result as StPresetRow;
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to insert preset "${presetName}" for server ${serverId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to insert preset "${presetName}" for server ${serverId}`, error);
     return null;
   }
 }
@@ -95,9 +90,7 @@ export async function insertPresetWithNodes(
  * @param serverId - Internal server_id
  * @returns Array of preset rows ordered by creation date
  */
-export async function loadPresetsForServer(
-  serverId: number,
-): Promise<StPresetRow[]> {
+export async function loadPresetsForServer(serverId: number): Promise<StPresetRow[]> {
   try {
     const rows = await sql`
 			SELECT preset_id, server_id, preset_name, is_active, created_at, updated_at
@@ -107,10 +100,7 @@ export async function loadPresetsForServer(
 		`;
     return rows as StPresetRow[];
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to load presets for server ${serverId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to load presets for server ${serverId}`, error);
     return [];
   }
 }
@@ -121,9 +111,7 @@ export async function loadPresetsForServer(
  * @param presetId - The preset_id to load
  * @returns The preset row or null if not found
  */
-export async function loadPresetById(
-  presetId: number,
-): Promise<StPresetRow | null> {
+export async function loadPresetById(presetId: number): Promise<StPresetRow | null> {
   try {
     const [row] = await sql`
 			SELECT * FROM st_presets WHERE preset_id = ${presetId}
@@ -141,9 +129,7 @@ export async function loadPresetById(
  * @param serverId - Internal server_id
  * @returns The active preset row or null
  */
-export async function loadActivePreset(
-  serverId: number,
-): Promise<StPresetRow | null> {
+export async function loadActivePreset(serverId: number): Promise<StPresetRow | null> {
   try {
     const [row] = await sql`
 			SELECT * FROM st_presets
@@ -152,10 +138,7 @@ export async function loadActivePreset(
 		`;
     return (row as StPresetRow) ?? null;
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to load active preset for server ${serverId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to load active preset for server ${serverId}`, error);
     return null;
   }
 }
@@ -169,9 +152,7 @@ export async function loadActivePreset(
  * @param presetId - The preset_id to load nodes for
  * @returns Array of node rows in prompt_order sequence
  */
-export async function loadToggleableNodes(
-  presetId: number,
-): Promise<StPresetNodeRow[]> {
+export async function loadToggleableNodes(presetId: number): Promise<StPresetNodeRow[]> {
   try {
     const rows = await sql`
 			SELECT * FROM st_preset_nodes
@@ -181,10 +162,7 @@ export async function loadToggleableNodes(
 		`;
     return rows as StPresetNodeRow[];
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to load toggleable nodes for preset ${presetId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to load toggleable nodes for preset ${presetId}`, error);
     return [];
   }
 }
@@ -196,9 +174,7 @@ export async function loadToggleableNodes(
  * @param presetId - The preset_id to load nodes for
  * @returns Array of all node rows in prompt_order sequence
  */
-export async function loadAllNodes(
-  presetId: number,
-): Promise<StPresetNodeRow[]> {
+export async function loadAllNodes(presetId: number): Promise<StPresetNodeRow[]> {
   try {
     const rows = await sql`
 			SELECT * FROM st_preset_nodes
@@ -207,10 +183,7 @@ export async function loadAllNodes(
 		`;
     return rows as StPresetNodeRow[];
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to load all nodes for preset ${presetId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to load all nodes for preset ${presetId}`, error);
     return [];
   }
 }
@@ -240,17 +213,12 @@ export async function updateNodeEnabledStates(
       }
     });
 
-    log.info(
-      `[StPresetDb] Updated ${enabledMap.size} node states for preset ${presetId}`,
-    );
+    log.info(`[StPresetDb] Updated ${enabledMap.size} node states for preset ${presetId}`);
     // Invalidate cache after successful toggle (node states affect context assembly)
     invalidateStPresetCache(serverId);
     return true;
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to update node states for preset ${presetId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to update node states for preset ${presetId}`, error);
     return false;
   }
 }
@@ -264,17 +232,12 @@ export async function updateNodeEnabledStates(
  * @param serverId - Internal server_id for cache invalidation (required to keep preset cache consistent)
  * @returns True if a row was deleted
  */
-export async function deletePreset(
-  presetId: number,
-  serverId: number,
-): Promise<boolean> {
+export async function deletePreset(presetId: number, serverId: number): Promise<boolean> {
   try {
     const result = await sql`
 			DELETE FROM st_presets WHERE preset_id = ${presetId}
 		`;
-    const deleted =
-      (result as unknown[]).length > 0 ||
-      (result as { count?: number }).count === 1;
+    const deleted = (result as unknown[]).length > 0 || (result as { count?: number }).count === 1;
     if (deleted) {
       log.success(`[StPresetDb] Deleted preset ${presetId}`);
       // Invalidate cache after successful delete
@@ -295,10 +258,7 @@ export async function deletePreset(
  * @param presetId - The preset_id to activate
  * @returns True if the activation succeeded
  */
-export async function setActivePreset(
-  serverId: number,
-  presetId: number,
-): Promise<boolean> {
+export async function setActivePreset(serverId: number, presetId: number): Promise<boolean> {
   try {
     await sql.begin(async (tx) => {
       // 1. Deactivate all presets for this server
@@ -313,17 +273,12 @@ export async function setActivePreset(
 			`;
     });
 
-    log.success(
-      `[StPresetDb] Activated preset ${presetId} for server ${serverId}`,
-    );
+    log.success(`[StPresetDb] Activated preset ${presetId} for server ${serverId}`);
     // Invalidate cache after successful activation change
     invalidateStPresetCache(serverId);
     return true;
   } catch (error) {
-    log.error(
-      `[StPresetDb] Failed to activate preset ${presetId} for server ${serverId}`,
-      error,
-    );
+    log.error(`[StPresetDb] Failed to activate preset ${presetId} for server ${serverId}`, error);
     return false;
   }
 }

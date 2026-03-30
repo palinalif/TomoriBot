@@ -47,11 +47,7 @@ export function extractEmojis(text: string): string[] {
  * @param threshold - Minimum consecutive appearances to be considered repetitive (default: 2)
  * @returns True if the emoji appears consecutively at or above the threshold
  */
-export function hasConsecutiveEmoji(
-  text: string,
-  emoji: string,
-  threshold = 2,
-): boolean {
+export function hasConsecutiveEmoji(text: string, emoji: string, threshold = 2): boolean {
   if (!text || !emoji) return false;
 
   // Escape special regex characters in the emoji
@@ -99,10 +95,7 @@ export function extractCustomEmojis(text: string): string[] {
  * @param emojisToRemove - Set of emoji strings to remove (e.g., ":tomori:", ":pepehands:")
  * @returns Text with specified custom emojis removed
  */
-export function filterCustomEmojis(
-  text: string,
-  emojisToRemove: Set<string>,
-): string {
+export function filterCustomEmojis(text: string, emojisToRemove: Set<string>): string {
   if (!text || emojisToRemove.size === 0) return text;
 
   let filtered = text;
@@ -110,10 +103,7 @@ export function filterCustomEmojis(
   // Remove each emoji from the set
   for (const emoji of emojisToRemove) {
     // Create regex to match the emoji (case-insensitive for custom emojis)
-    const emojiRegex = new RegExp(
-      emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      "gi",
-    );
+    const emojiRegex = new RegExp(emoji.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
     filtered = filtered.replace(emojiRegex, "").trim();
   }
 

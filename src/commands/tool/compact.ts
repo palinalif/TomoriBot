@@ -7,39 +7,20 @@ import type {
   Embed,
   Message,
 } from "discord.js";
-import {
-  ChannelType,
-  EmbedBuilder,
-  MessageFlags,
-  TextInputStyle,
-} from "discord.js";
+import { ChannelType, EmbedBuilder, MessageFlags, TextInputStyle } from "discord.js";
 import { localizer, getSupportedLocales } from "@/utils/text/localizer";
 import { ColorCode, log } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import type { UserRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
-import {
-  loadTomoriState,
-  loadAllPersonasForServer,
-  loadPersonalMemoriesForUserLineage,
-} from "@/utils/db/dbRead";
+import { loadTomoriState, loadAllPersonasForServer, loadPersonalMemoriesForUserLineage } from "@/utils/db/dbRead";
 import { decryptApiKey } from "@/utils/security/crypto";
-import {
-  getCachedUserRow,
-  getCachedPrivacyLevel,
-  getCachedBlacklistStatus,
-} from "@/utils/cache/userCache";
+import { getCachedUserRow, getCachedPrivacyLevel, getCachedBlacklistStatus } from "@/utils/cache/userCache";
 import { resolvePersonaAvatarURL } from "@/utils/discord/webhookManager";
 import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import type { ModalComponent } from "@/types/discord/modal";
 import { escapeRegExp } from "@/utils/text/stringHelper";
-import type {
-  CompactRoleplaySummary,
-  CompactSummaryMode,
-} from "@/types/misc/compact";
+import type { CompactRoleplaySummary, CompactSummaryMode } from "@/types/misc/compact";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import {
   generateConversationSummaryForProvider,
@@ -57,18 +38,14 @@ const ADDITIONAL_INST_FIELD_ID = "additional_instructions";
 /**
  * Configure /tool compact subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("compact")
     .setDescription(localizer("en-US", "commands.tool.compact.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer("en-US", "commands.tool.compact.channel_description"),
-        )
+        .setDescription(localizer("en-US", "commands.tool.compact.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(false),
     );
@@ -93,9 +70,7 @@ type ImageReference = {
   source: string;
 };
 
-function extractCustomEmojiImages(
-  content: string,
-): Array<{ url: string; name: string }> {
+function extractCustomEmojiImages(content: string): Array<{ url: string; name: string }> {
   const results: Array<{ url: string; name: string }> = [];
   if (!content) return results;
 
@@ -118,17 +93,12 @@ function extractCustomEmojiImages(
   return results;
 }
 
-function matchesLocalizedTitleTemplate(
-  template: string,
-  actualTitle: string,
-): boolean {
+function matchesLocalizedTitleTemplate(template: string, actualTitle: string): boolean {
   if (!template.includes("{")) {
     return actualTitle === template;
   }
 
-  const pattern = new RegExp(
-    `^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`,
-  );
+  const pattern = new RegExp(`^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`);
   return pattern.test(actualTitle);
 }
 
@@ -149,22 +119,10 @@ function classifyEmbedTitle(embedTitle: string | null): {
 
   for (const supportedLocale of getSupportedLocales()) {
     const memoryLearningTitles = [
-      localizer(
-        supportedLocale,
-        "genai.self_teach.server_memory_learned_title",
-      ),
-      localizer(
-        supportedLocale,
-        "genai.self_teach.personal_memory_learned_title",
-      ),
-      localizer(
-        supportedLocale,
-        "genai.self_teach.server_memory_updated_title",
-      ),
-      localizer(
-        supportedLocale,
-        "genai.self_teach.personal_memory_updated_title",
-      ),
+      localizer(supportedLocale, "genai.self_teach.server_memory_learned_title"),
+      localizer(supportedLocale, "genai.self_teach.personal_memory_learned_title"),
+      localizer(supportedLocale, "genai.self_teach.server_memory_updated_title"),
+      localizer(supportedLocale, "genai.self_teach.personal_memory_updated_title"),
     ];
 
     const reminderSetTitles = [
@@ -173,28 +131,13 @@ function classifyEmbedTitle(embedTitle: string | null): {
       localizer(supportedLocale, "reminders.task_set_title"),
     ];
 
-    const systemInjectionTitle = localizer(
-      supportedLocale,
-      "commands.bot.impersonate.system_title",
-    );
+    const systemInjectionTitle = localizer(supportedLocale, "commands.bot.impersonate.system_title");
 
-    const refreshTitle = localizer(
-      supportedLocale,
-      "commands.tool.refresh.title",
-    );
+    const refreshTitle = localizer(supportedLocale, "commands.tool.refresh.title");
 
-    const compactSummaryTitle = localizer(
-      supportedLocale,
-      "commands.tool.compact.summary_title",
-    );
-    const compactSummaryTitleRefreshed = localizer(
-      supportedLocale,
-      "commands.tool.compact.summary_title_refreshed",
-    );
-    const compactSceneTitle = localizer(
-      supportedLocale,
-      "commands.tool.compact.roleplay_scene_title",
-    );
+    const compactSummaryTitle = localizer(supportedLocale, "commands.tool.compact.summary_title");
+    const compactSummaryTitleRefreshed = localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed");
+    const compactSceneTitle = localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title");
     const compactSceneTitleRefreshed = localizer(
       supportedLocale,
       "commands.tool.compact.roleplay_scene_title_refreshed",
@@ -204,12 +147,8 @@ function classifyEmbedTitle(embedTitle: string | null): {
       "commands.tool.compact.roleplay_character_title_prefix",
     );
 
-    const isMemoryLearning = memoryLearningTitles.some((title) =>
-      matchesLocalizedTitleTemplate(title, embedTitle),
-    );
-    const isReminderSet = reminderSetTitles.some((title) =>
-      matchesLocalizedTitleTemplate(title, embedTitle),
-    );
+    const isMemoryLearning = memoryLearningTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle));
+    const isReminderSet = reminderSetTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle));
     const isReset =
       embedTitle === refreshTitle ||
       embedTitle === compactSummaryTitleRefreshed ||
@@ -221,10 +160,7 @@ function classifyEmbedTitle(embedTitle: string | null): {
       embedTitle === compactSummaryTitleRefreshed ||
       embedTitle === compactSceneTitle ||
       embedTitle === compactSceneTitleRefreshed ||
-      Boolean(
-        compactCharacterTitlePrefix &&
-          embedTitle.startsWith(compactCharacterTitlePrefix),
-      );
+      Boolean(compactCharacterTitlePrefix && embedTitle.startsWith(compactCharacterTitlePrefix));
 
     if (isMemoryLearning || isReminderSet || isReset || isSystemInjection) {
       return {
@@ -248,11 +184,7 @@ function appendEmbedContent(baseContent: string, embed: Embed): string {
   if (!embed.description || !embed.title) return baseContent;
 
   const classification = classifyEmbedTitle(embed.title);
-  if (
-    !classification.isSystemInjection &&
-    !classification.isMemoryLearning &&
-    !classification.isReminderSet
-  ) {
+  if (!classification.isSystemInjection && !classification.isMemoryLearning && !classification.isReminderSet) {
     return baseContent;
   }
 
@@ -290,10 +222,7 @@ function normalizeNameForMatch(value: string): string {
     .toLowerCase();
 }
 
-async function buildPersonaAvatarMap(
-  serverDiscId: string,
-  guild?: Guild | null,
-): Promise<Map<string, string>> {
+async function buildPersonaAvatarMap(serverDiscId: string, guild?: Guild | null): Promise<Map<string, string>> {
   const personas = await loadAllPersonasForServer(serverDiscId);
   const avatarMap = new Map<string, string>();
 
@@ -302,8 +231,7 @@ async function buildPersonaAvatarMap(
     if (guild) {
       avatarUrl = resolvePersonaAvatarURL(persona, guild);
     } else if (persona.webhook_avatar_url) {
-      avatarUrl =
-        resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? undefined;
+      avatarUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url) ?? undefined;
     }
 
     if (!avatarUrl) continue;
@@ -329,9 +257,7 @@ async function buildUserAvatarMap(params: {
       member = await params.guild.members.fetch(userId).catch(() => null);
     }
 
-    const user =
-      member?.user ??
-      (await params.client.users.fetch(userId).catch(() => null));
+    const user = member?.user ?? (await params.client.users.fetch(userId).catch(() => null));
     if (!user) continue;
 
     const avatarUrl =
@@ -485,14 +411,11 @@ async function buildSupplementaryContext(params: {
   const tomoriState = await loadTomoriState(params.serverDiscId);
 
   if (tomoriState?.server_memories && tomoriState.server_memories.length > 0) {
-    sections.push(
-      `Server memories:\n- ${tomoriState.server_memories.join("\n- ")}`,
-    );
+    sections.push(`Server memories:\n- ${tomoriState.server_memories.join("\n- ")}`);
   }
 
   if (tomoriState) {
-    const personalizationEnabled =
-      tomoriState.config.personal_memories_enabled ?? true;
+    const personalizationEnabled = tomoriState.config.personal_memories_enabled ?? true;
 
     const userMemoryLines: string[] = [];
     for (const userId of params.userIds) {
@@ -504,19 +427,12 @@ async function buildSupplementaryContext(params: {
         continue;
       }
 
-      const isBlacklisted = await getCachedBlacklistStatus(
-        params.serverDiscId,
-        userId,
-      );
+      const isBlacklisted = await getCachedBlacklistStatus(params.serverDiscId, userId);
       if (isBlacklisted) continue;
       if (!personalizationEnabled) continue;
 
       const lineageId = tomoriState.persona_lineage_id ?? 0;
-      const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
-        userRow.user_id,
-        lineageId,
-        true,
-      );
+      const personalMemoryRows = await loadPersonalMemoriesForUserLineage(userRow.user_id, lineageId, true);
       if (personalMemoryRows.length === 0) {
         continue;
       }
@@ -535,9 +451,7 @@ async function buildSupplementaryContext(params: {
     const personas = await loadAllPersonasForServer(params.serverDiscId);
     if (personas.length > 0) {
       const personaLines = personas.map((persona) => {
-        const attributes = persona.attribute_list?.length
-          ? persona.attribute_list.join(" | ")
-          : "(no attributes)";
+        const attributes = persona.attribute_list?.length ? persona.attribute_list.join(" | ") : "(no attributes)";
         return `${persona.tomori_nickname}: ${attributes}`;
       });
 
@@ -567,11 +481,7 @@ function buildConversationPrompt(params: {
 
   if (params.imageReferences.length > 0) {
     sections.push("\nIMAGE REFERENCES:");
-    sections.push(
-      params.imageReferences
-        .map((img) => `${img.label}: ${img.source}`)
-        .join("\n"),
-    );
+    sections.push(params.imageReferences.map((img) => `${img.label}: ${img.source}`).join("\n"));
   }
 
   if (params.supplementaryContext) {
@@ -620,11 +530,7 @@ function buildRoleplayPrompt(params: {
 
   if (params.imageReferences.length > 0) {
     sections.push("\nIMAGE REFERENCES:");
-    sections.push(
-      params.imageReferences
-        .map((img) => `${img.label}: ${img.source}`)
-        .join("\n"),
-    );
+    sections.push(params.imageReferences.map((img) => `${img.label}: ${img.source}`).join("\n"));
   }
 
   if (params.supplementaryContext) {
@@ -655,10 +561,7 @@ function buildRoleplayEmbeds(
     ? localizer(locale, "commands.tool.compact.roleplay_scene_title_refreshed")
     : localizer(locale, "commands.tool.compact.roleplay_scene_title");
 
-  const synopsisHeader = localizer(
-    locale,
-    "commands.tool.compact.roleplay_scene_synopsis_header",
-  );
+  const synopsisHeader = localizer(locale, "commands.tool.compact.roleplay_scene_synopsis_header");
   const sceneDescription = `## ${synopsisHeader}\n${summary.overall_scene_summary}`;
 
   const sceneEmbed = new EmbedBuilder()
@@ -674,30 +577,12 @@ function buildRoleplayEmbeds(
 
   embeds.push(sceneEmbed);
 
-  const characterPrefix = localizer(
-    locale,
-    "commands.tool.compact.roleplay_character_title_prefix",
-  );
-  const labelCurrentGoals = localizer(
-    locale,
-    "commands.tool.compact.roleplay_labels.current_goals",
-  );
-  const labelEmotionalStatus = localizer(
-    locale,
-    "commands.tool.compact.roleplay_labels.emotional_status",
-  );
-  const labelPhysicalStatus = localizer(
-    locale,
-    "commands.tool.compact.roleplay_labels.physical_status",
-  );
-  const labelAppearance = localizer(
-    locale,
-    "commands.tool.compact.roleplay_labels.appearance_clothing",
-  );
-  const labelInventory = localizer(
-    locale,
-    "commands.tool.compact.roleplay_labels.inventory",
-  );
+  const characterPrefix = localizer(locale, "commands.tool.compact.roleplay_character_title_prefix");
+  const labelCurrentGoals = localizer(locale, "commands.tool.compact.roleplay_labels.current_goals");
+  const labelEmotionalStatus = localizer(locale, "commands.tool.compact.roleplay_labels.emotional_status");
+  const labelPhysicalStatus = localizer(locale, "commands.tool.compact.roleplay_labels.physical_status");
+  const labelAppearance = localizer(locale, "commands.tool.compact.roleplay_labels.appearance_clothing");
+  const labelInventory = localizer(locale, "commands.tool.compact.roleplay_labels.inventory");
   const fuzzyAvatarMap = new Map<string, string>();
   if (avatarMap) {
     for (const [nameKey, url] of avatarMap) {
@@ -722,9 +607,7 @@ function buildRoleplayEmbeds(
       .setDescription(description)
       .setColor(ColorCode.SECTION);
 
-    let avatarUrl = character.name
-      ? avatarMap?.get(character.name.trim().toLowerCase())
-      : undefined;
+    let avatarUrl = character.name ? avatarMap?.get(character.name.trim().toLowerCase()) : undefined;
     if (!avatarUrl && character.name) {
       const normalized = normalizeNameForMatch(character.name);
       avatarUrl = normalized ? fuzzyAvatarMap.get(normalized) : undefined;
@@ -754,11 +637,7 @@ function buildRoleplayEmbeds(
   return embeds;
 }
 
-function buildConversationEmbed(
-  locale: string,
-  summaryText: string,
-  refresh: boolean,
-): EmbedBuilder {
+function buildConversationEmbed(locale: string, summaryText: string, refresh: boolean): EmbedBuilder {
   const title = refresh
     ? localizer(locale, "commands.tool.compact.summary_title_refreshed")
     : localizer(locale, "commands.tool.compact.summary_title");
@@ -781,10 +660,7 @@ type SendableChannel = {
   send: (options: { embeds: EmbedBuilder[] }) => Promise<Message>;
 };
 
-async function sendEmbedsInChunks(
-  channel: SendableChannel,
-  embeds: EmbedBuilder[],
-): Promise<void> {
+async function sendEmbedsInChunks(channel: SendableChannel, embeds: EmbedBuilder[]): Promise<void> {
   const chunkSize = 10;
   for (let i = 0; i < embeds.length; i += chunkSize) {
     const chunk = embeds.slice(i, i + chunkSize);
@@ -824,17 +700,11 @@ export async function execute(
       required: true,
       options: [
         {
-          label: localizer(
-            locale,
-            "commands.tool.compact.modal.type_choice_conversation",
-          ),
+          label: localizer(locale, "commands.tool.compact.modal.type_choice_conversation"),
           value: "conversation",
         },
         {
-          label: localizer(
-            locale,
-            "commands.tool.compact.modal.type_choice_roleplay",
-          ),
+          label: localizer(locale, "commands.tool.compact.modal.type_choice_roleplay"),
           value: "roleplay",
         },
       ],
@@ -876,8 +746,7 @@ export async function execute(
     {
       customId: ADDITIONAL_INST_FIELD_ID,
       labelKey: "commands.tool.compact.modal.additional_instructions_label",
-      placeholder:
-        "commands.tool.compact.modal.additional_instructions_placeholder",
+      placeholder: "commands.tool.compact.modal.additional_instructions_placeholder",
       required: false,
       style: TextInputStyle.Paragraph,
       maxLength: 1000,
@@ -905,17 +774,11 @@ export async function execute(
     return;
   }
 
-  const summaryType = (modalResult.values[TYPE_FIELD_ID] ||
-    "conversation") as CompactSummaryMode;
+  const summaryType = (modalResult.values[TYPE_FIELD_ID] || "conversation") as CompactSummaryMode;
   // Checkbox Group returns selected values in multiValues; "yes" present = true
-  const refresh = (modalResult.multiValues?.[REFRESH_FIELD_ID] ?? []).includes(
-    "yes",
-  );
-  const analyzeImages = (
-    modalResult.multiValues?.[ANALYZE_IMAGES_FIELD_ID] ?? []
-  ).includes("yes");
-  const additionalInstructions =
-    modalResult.values[ADDITIONAL_INST_FIELD_ID]?.trim();
+  const refresh = (modalResult.multiValues?.[REFRESH_FIELD_ID] ?? []).includes("yes");
+  const analyzeImages = (modalResult.multiValues?.[ANALYZE_IMAGES_FIELD_ID] ?? []).includes("yes");
+  const additionalInstructions = modalResult.values[ADDITIONAL_INST_FIELD_ID]?.trim();
 
   const serverDiscId = interaction.guild?.id ?? interaction.user.id;
   const tomoriState = await loadTomoriState(serverDiscId);
@@ -924,9 +787,7 @@ export async function execute(
       embeds: [
         new EmbedBuilder()
           .setTitle(localizer(locale, "general.errors.tomori_not_setup_title"))
-          .setDescription(
-            localizer(locale, "general.errors.tomori_not_setup_description"),
-          )
+          .setDescription(localizer(locale, "general.errors.tomori_not_setup_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -934,30 +795,18 @@ export async function execute(
   }
 
   const providerName = tomoriState.llm.llm_provider.toLowerCase();
-  const effectiveModelName = getEffectiveLlmModelName(
-    tomoriState.llm,
-    tomoriState.config.custom_model_name,
-  );
-  const messageFetchLimit = normalizeMessageFetchLimit(
-    tomoriState.config.message_fetch_limit,
-  );
+  const effectiveModelName = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
+  const messageFetchLimit = normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit);
 
   if (!providerSupportsFeature(providerName, "conversationCompaction")) {
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(
-              locale,
-              "commands.tool.compact.provider_unsupported_title",
-            ),
-          )
+          .setTitle(localizer(locale, "commands.tool.compact.provider_unsupported_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.tool.compact.provider_unsupported_description",
-              { provider: tomoriState.llm.llm_provider },
-            ),
+            localizer(locale, "commands.tool.compact.provider_unsupported_description", {
+              provider: tomoriState.llm.llm_provider,
+            }),
           )
           .setColor(ColorCode.ERROR),
       ],
@@ -969,15 +818,11 @@ export async function execute(
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.tool.compact.model_incompatible_title"),
-          )
+          .setTitle(localizer(locale, "commands.tool.compact.model_incompatible_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.tool.compact.model_incompatible_description",
-              { model_name: effectiveModelName },
-            ),
+            localizer(locale, "commands.tool.compact.model_incompatible_description", {
+              model_name: effectiveModelName,
+            }),
           )
           .setColor(ColorCode.ERROR),
       ],
@@ -989,18 +834,11 @@ export async function execute(
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(
-              locale,
-              "commands.tool.compact.image_vision_required_title",
-            ),
-          )
+          .setTitle(localizer(locale, "commands.tool.compact.image_vision_required_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.tool.compact.image_vision_required_description",
-              { model_name: effectiveModelName },
-            ),
+            localizer(locale, "commands.tool.compact.image_vision_required_description", {
+              model_name: effectiveModelName,
+            }),
           )
           .setColor(ColorCode.ERROR),
       ],
@@ -1013,9 +851,7 @@ export async function execute(
       embeds: [
         new EmbedBuilder()
           .setTitle(localizer(locale, "general.errors.api_key_missing_title"))
-          .setDescription(
-            localizer(locale, "general.errors.api_key_missing_description"),
-          )
+          .setDescription(localizer(locale, "general.errors.api_key_missing_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -1029,9 +865,7 @@ export async function execute(
       embeds: [
         new EmbedBuilder()
           .setTitle(localizer(locale, "general.errors.api_key_error_title"))
-          .setDescription(
-            localizer(locale, "general.errors.api_key_error_description"),
-          )
+          .setDescription(localizer(locale, "general.errors.api_key_error_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -1042,27 +876,18 @@ export async function execute(
     embeds: [
       new EmbedBuilder()
         .setTitle(localizer(locale, "commands.tool.compact.processing_title"))
-        .setDescription(
-          localizer(locale, "commands.tool.compact.processing_description"),
-        )
+        .setDescription(localizer(locale, "commands.tool.compact.processing_description"))
         .setColor(ColorCode.INFO),
     ],
   });
 
   const channel = submitInteraction.channel ?? interaction.channel;
-  if (
-    !channel ||
-    !("send" in channel) ||
-    typeof channel.send !== "function" ||
-    !("messages" in channel)
-  ) {
+  if (!channel || !("send" in channel) || typeof channel.send !== "function" || !("messages" in channel)) {
     await submitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
           .setTitle(localizer(locale, "general.errors.channel_only_title"))
-          .setDescription(
-            localizer(locale, "general.errors.channel_only_description"),
-          )
+          .setDescription(localizer(locale, "general.errors.channel_only_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -1074,17 +899,13 @@ export async function execute(
   // 1. Resolve the output channel: fetch the redirect target if specified, otherwise use the current channel
   let outputChannel: SendableChannel = channel as SendableChannel;
   if (targetChannelOption) {
-    const fetchedTarget = await client.channels
-      .fetch(targetChannelOption.id)
-      .catch(() => null);
+    const fetchedTarget = await client.channels.fetch(targetChannelOption.id).catch(() => null);
     if (!fetchedTarget || !("send" in fetchedTarget)) {
       await submitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.channel_only_title"))
-            .setDescription(
-              localizer(locale, "general.errors.channel_only_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.channel_only_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -1094,12 +915,11 @@ export async function execute(
   }
 
   // 2. Always build conversation context from the current channel (where the command was run)
-  const { conversationText, imageReferences, userIds } =
-    await buildConversationContext({
-      channel: textChannel,
-      includeImages: analyzeImages,
-      maxMessages: messageFetchLimit,
-    });
+  const { conversationText, imageReferences, userIds } = await buildConversationContext({
+    channel: textChannel,
+    includeImages: analyzeImages,
+    maxMessages: messageFetchLimit,
+  });
 
   const supplementaryContext = await buildSupplementaryContext({
     serverDiscId,
@@ -1107,9 +927,7 @@ export async function execute(
     includePersonas: true,
   });
 
-  const imagePayload = analyzeImages
-    ? imageReferences.map((img) => ({ url: img.url, mimeType: img.mimeType }))
-    : [];
+  const imagePayload = analyzeImages ? imageReferences.map((img) => ({ url: img.url, mimeType: img.mimeType })) : [];
 
   try {
     if (summaryType === "conversation") {
@@ -1149,11 +967,7 @@ export async function execute(
         return;
       }
 
-      const summaryEmbed = buildConversationEmbed(
-        locale,
-        result.summary,
-        refresh,
-      );
+      const summaryEmbed = buildConversationEmbed(locale, result.summary, refresh);
 
       await sendEmbedsInChunks(outputChannel, [summaryEmbed]);
     } else {
@@ -1173,10 +987,7 @@ export async function execute(
         guild: interaction.guild ?? null,
         serverDiscId,
       });
-      const personaAvatarMap = await buildPersonaAvatarMap(
-        serverDiscId,
-        interaction.guild ?? null,
-      );
+      const personaAvatarMap = await buildPersonaAvatarMap(serverDiscId, interaction.guild ?? null);
       const avatarMap = new Map(userAvatarMap);
       for (const [key, value] of personaAvatarMap) {
         avatarMap.set(key, value);
@@ -1208,24 +1019,15 @@ export async function execute(
         return;
       }
 
-      const embeds = buildRoleplayEmbeds(
-        locale,
-        result.summary,
-        refresh,
-        avatarMap,
-      );
+      const embeds = buildRoleplayEmbeds(locale, result.summary, refresh, avatarMap);
       await sendEmbedsInChunks(outputChannel, embeds);
     }
 
     // Show success — if summary was redirected, tell the user which channel it went to
     const successDescription = targetChannelOption
-      ? localizer(
-          locale,
-          "commands.tool.compact.success_description_redirect",
-          {
-            channel: `<#${targetChannelOption.id}>`,
-          },
-        )
+      ? localizer(locale, "commands.tool.compact.success_description_redirect", {
+          channel: `<#${targetChannelOption.id}>`,
+        })
       : localizer(locale, "commands.tool.compact.success_description");
 
     await submitInteraction.editReply({

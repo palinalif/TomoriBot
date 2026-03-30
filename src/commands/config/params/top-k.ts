@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
 // Neutral value: 0 = disabled (use model default)
@@ -24,20 +17,14 @@ const TOP_K_MAX = 40;
 const TOP_K_DEFAULT = 0;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("top-k")
-    .setDescription(
-      localizer("en-US", "commands.config.params.top-k.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.params.top-k.description"))
     .addIntegerOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer("en-US", "commands.config.params.top-k.value_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.params.top-k.value_description"))
         .setMinValue(TOP_K_MIN)
         .setMaxValue(TOP_K_MAX)
         .setRequired(true),
@@ -79,8 +66,7 @@ export async function execute(
     if (newValue < TOP_K_MIN || newValue > TOP_K_MAX) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.top-k.invalid_value_title",
-        descriptionKey:
-          "commands.config.params.top-k.invalid_value_description",
+        descriptionKey: "commands.config.params.top-k.invalid_value_description",
         descriptionVars: {
           min: String(TOP_K_MIN),
           max: String(TOP_K_MAX),
@@ -136,9 +122,7 @@ export async function execute(
           command: "config params top-k",
           guildId: interaction.guild?.id,
           newValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -192,11 +176,7 @@ export async function execute(
         valueAttempted: interaction.options.getInteger("value"),
       },
     };
-    await log.error(
-      `Error executing /config params top-k for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config params top-k for user ${userData.user_disc_id}`, error as Error, context);
 
     if (interaction.deferred && !interaction.replied) {
       await interaction.followUp({

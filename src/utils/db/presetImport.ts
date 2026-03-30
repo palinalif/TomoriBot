@@ -12,18 +12,12 @@ import {
   type ImportResult,
   type ValidationResult,
 } from "../../types/preset/presetExport";
-import {
-  validateMemoryContent,
-  validateAttributeAndDialogue,
-} from "./memoryLimits";
+import { validateMemoryContent, validateAttributeAndDialogue } from "./memoryLimits";
 import { validateTomoriConfigFields } from "./sqlSecurity";
 
 function isUniqueViolation(error: unknown): boolean {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "23505"
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505"
   );
 }
 
@@ -91,10 +85,7 @@ export async function importPresetData(
     }
 
     // 2. Validate sample dialogues arrays match in length
-    if (
-      importData.sample_dialogues_in.length !==
-      importData.sample_dialogues_out.length
-    ) {
+    if (importData.sample_dialogues_in.length !== importData.sample_dialogues_out.length) {
       return {
         success: false,
         error: "commands.persona.import.error_dialogue_mismatch",
@@ -165,8 +156,7 @@ export async function importPresetData(
     const triggerWordsArrayLiteral = `{${importData.trigger_words
       .map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
       .join(",")}}`;
-    const shouldUseImportedLineage =
-      identityMode === "preserve" && importedLineageId !== null;
+    const shouldUseImportedLineage = identityMode === "preserve" && importedLineageId !== null;
 
     // 5.5. Build NAI tags array literal for safe insertion
     const naiTagsArrayLiteral = `{${(importData.nai_tags ?? [])
@@ -207,10 +197,7 @@ export async function importPresetData(
     }
 
     // 7. Update persona-scoped trigger words + optional persona prompt
-    const importedPersonaPrompt =
-      typeof importData.persona_prompt === "string"
-        ? importData.persona_prompt
-        : null;
+    const importedPersonaPrompt = typeof importData.persona_prompt === "string" ? importData.persona_prompt : null;
 
     await sql`
 			INSERT INTO persona_configs (tomori_id, trigger_words, persona_prompt)
@@ -232,9 +219,7 @@ export async function importPresetData(
 			WHERE server_id = ${serverId}
 		`;
 
-    log.success(
-      `Successfully imported preset for server ${serverDiscId}: ${importData.tomori_nickname}`,
-    );
+    log.success(`Successfully imported preset for server ${serverDiscId}: ${importData.tomori_nickname}`);
 
     return {
       success: true,

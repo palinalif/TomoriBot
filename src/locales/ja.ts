@@ -156,8 +156,7 @@ export default {
     error_stream_timeout_title: "接続タイムアウト",
 
     // プロバイダーエラー形式テンプレート
-    provider_error_format:
-      "{providerName} エラーコード {errorCode}: {apiMessage}。{tip}",
+    provider_error_format: "{providerName} エラーコード {errorCode}: {apiMessage}。{tip}",
     error_stream_timeout_description:
       "この問題が続く場合、選択したAIプロバイダーに一時的な問題がある可能性があります。後でもう一度お試しいただくか、`/tool refresh`を使用してコンテキスト履歴をリフレッシュしてください。",
 
@@ -217,10 +216,8 @@ export default {
     // YouTube動画処理メッセージ
     video: {
       youtube_processing_title: "👁️ YouTube動画を視聴中...",
-      youtube_processing_description:
-        "現在、YouTube動画を視聴しています: {video_url}",
-      youtube_processing_footer:
-        "動画の長さに応じて、少し時間がかかる場合があります",
+      youtube_processing_description: "現在、YouTube動画を視聴しています: {video_url}",
+      youtube_processing_footer: "動画の長さに応じて、少し時間がかかる場合があります",
     },
 
     // インラインドキュメント読み取りメッセージ (read_document ツール)
@@ -232,25 +229,21 @@ export default {
     image: {
       generating_title: "🖼️ 画像を生成中...",
       generating_description: "現在のプロンプトから画像を作成しています",
-      generating_with_references_description:
-        "現在のプロンプトと参照画像を使って画像を作成しています",
+      generating_with_references_description: "現在のプロンプトと参照画像を使って画像を作成しています",
       editing_title: "🖌️ 画像を編集中...",
       editing_description: "参照画像の `{edit_target}` を対象に編集しています",
-      generating_footer:
-        "プロバイダーの混雑状況によって少し時間がかかる場合があります",
+      generating_footer: "プロバイダーの混雑状況によって少し時間がかかる場合があります",
     },
 
     vision: {
       analyzing_title: "🖼️ 画像を解析中...",
-      analyzing_description:
-        "現在のモデルはビジョン非対応です。設定されたビジョンモデルを使用して画像を解析しています",
+      analyzing_description: "現在のモデルはビジョン非対応です。設定されたビジョンモデルを使用して画像を解析しています",
       analyzing_footer: "画像の数によって少し時間がかかる場合があります",
     },
 
     gif: {
       processing_title: "🎞️ GIFを処理中...",
-      processing_description:
-        "詳細に確認するため、指定されたGIFからキーフレームを抽出しています",
+      processing_description: "詳細に確認するため、指定されたGIFからキーフレームを抽出しています",
       processing_footer: "大きいGIFは少し時間がかかる場合があります",
     },
 
@@ -266,17 +259,14 @@ export default {
       response_stopped_description:
         "次の理由で応答が中断されました: {reason}。送信されたコンテンツがAIプロバイダーにとって大きすぎないか確認してください。`/tool refresh`で会話コンテンツをクリアしてください。",
       prohibited_content_title: "コンテンツポリシー違反",
-      prohibited_content_description:
-        "禁止コンテンツが検出されたため、応答はブロックされました。",
+      prohibited_content_description: "禁止コンテンツが検出されたため、応答はブロックされました。",
       prohibited_content_admin_notice_title: "管理者への通知",
       prohibited_content_admin_notice_description:
         "確認: メッセージ(`/tool refresh`)、性格/記憶(`/data export`)、問題のあるメンバーをブラックリスト(`/server blacklist`)、またはプロバイダを変更(`/config model`)",
-      streaming_failed_description:
-        "応答をストリーミング中に問題が発生しました。",
+      streaming_failed_description: "応答をストリーミング中に問題が発生しました。",
 
       // エラーインタラクションメッセージ
-      provider_error_interaction:
-        "ストリーム応答がブロック/停止されました。理由: {reason}。",
+      provider_error_interaction: "ストリーム応答がブロック/停止されました。理由: {reason}。",
       retry_message: "これは一時的なエラーです。後でもう一度お試しください。",
 
       // 汎用プロバイダーエラータイトルとヒント（genai.googleから移動）
@@ -285,12 +275,10 @@ export default {
         "APIキーを確認して再度お試しください。このエラーが解決しない場合は、`/support discord`で報告してください。",
 
       rate_limit_title: "🟡 プロバイダーレート制限を超過",
-      rate_limit_title_all_rotation_keys:
-        "🟡 全ローテーションキーがレート制限中",
+      rate_limit_title_all_rotation_keys: "🟡 全ローテーションキーがレート制限中",
       rate_limit_tip:
         "数分お待ちいただいてから再度お試しください。複数の個人キーをお持ちなら、`/config apikey rotation` の利用も検討してください。",
-      model_fallback_hint:
-        "耐障害性を高めるには、`/config model fallback` でモデルのフェイルオーバーを設定できます。",
+      model_fallback_hint: "耐障害性を高めるには、`/config model fallback` でモデルのフェイルオーバーを設定できます。",
 
       content_blocked_title: "🔴️ プロバイダーコンテンツフィルター",
       content_blocked_tip:
@@ -304,8 +292,7 @@ export default {
         "プロバイダーが現在過負荷状態です。しばらく後に再度お試しいただくか、別のプロバイダーに変更してください",
 
       unknown_title: "🔴 プロバイダーエラー",
-      unknown_tip:
-        "再度お試しいただくか、この問題が続く場合は `/support discord` をご利用ください",
+      unknown_tip: "再度お試しいただくか、この問題が続く場合は `/support discord` をご利用ください",
 
       flush_limit_title: "🟡️ 応答の長さ制限に達しました",
       flush_limit_description:
@@ -344,8 +331,7 @@ export default {
       "504_default_message": "リクエストの処理時間が長すぎました",
 
       // Content blocked errors
-      content_blocked_default_message:
-        "あなたのコンテンツは安全フィルターによってブロックされました",
+      content_blocked_default_message: "あなたのコンテンツは安全フィルターによってブロックされました",
 
       // Generic fallback for unknown Google errors
       unknown_default_message: "予期しないエラーが発生しました",
@@ -367,8 +353,7 @@ export default {
       "402_default_message": "Anlasクレジットが不足しています",
 
       // 429 TOO_MANY_REQUESTS
-      "429_default_message":
-        "リクエストを送信しすぎています。ペースを落としてください",
+      "429_default_message": "リクエストを送信しすぎています。ペースを落としてください",
 
       // 503 SERVICE_UNAVAILABLE
       "503_default_message": "NovelAIサーバーが現在過負荷状態です",
@@ -383,20 +368,17 @@ export default {
     // OpenRouter固有のエラーメッセージ（プロバイダー固有のデフォルトメッセージのみ）
     openrouter: {
       // 400 BAD_REQUEST
-      "400_default_message":
-        "不正なリクエスト：無効または欠落したパラメータ、またはCORSの問題",
+      "400_default_message": "不正なリクエスト：無効または欠落したパラメータ、またはCORSの問題",
 
       // 401 UNAUTHORIZED
-      "401_default_message":
-        "無効な認証情報：OAuthセッションの期限切れ、または無効/無効化されたAPIキー",
+      "401_default_message": "無効な認証情報：OAuthセッションの期限切れ、または無効/無効化されたAPIキー",
 
       // 402 PAYMENT_REQUIRED
       "402_default_message":
         "アカウントまたはAPIキーのクレジットが不足しています。クレジットを追加して再試行してください。",
 
       // 403 FORBIDDEN
-      "403_default_message":
-        "選択したモデルはモデレーションが必要で、入力がフラグされました",
+      "403_default_message": "選択したモデルはモデレーションが必要で、入力がフラグされました",
 
       // 404 NOT_FOUND
       "404_default_message":
@@ -419,16 +401,13 @@ export default {
         "リクエストボディが大きすぎます（コンテキスト/メディアがプロバイダーの制限を超えています）。`/tool refresh`で会話履歴をクリアするか、コンテキスト内のメディア/記憶の量を減らしてください。",
 
       // 429 TOO_MANY_REQUESTS
-      "429_default_message":
-        "レート制限中です。しばらくしてから再試行するか、無料ではないモデルを使用してください。",
+      "429_default_message": "レート制限中です。しばらくしてから再試行するか、無料ではないモデルを使用してください。",
 
       // 502 BAD_GATEWAY
-      "502_default_message":
-        "選択したモデルがダウンしているか、無効な応答を受信しました",
+      "502_default_message": "選択したモデルがダウンしているか、無効な応答を受信しました",
 
       // 503 SERVICE_UNAVAILABLE
-      "503_default_message":
-        "ルーティング要件を満たす利用可能なモデルプロバイダーがありません",
+      "503_default_message": "ルーティング要件を満たす利用可能なモデルプロバイダーがありません",
 
       // invalid_type error (parameter type mismatch)
       invalid_type_default_message:
@@ -439,26 +418,20 @@ export default {
     },
 
     deepseek: {
-      connection_refused:
-        "DeepSeek APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
+      connection_refused: "DeepSeek APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
 
-      "401_default_message":
-        "DeepSeekのAPIキーが無効か、このモデルへのアクセス権がありません。",
+      "401_default_message": "DeepSeekのAPIキーが無効か、このモデルへのアクセス権がありません。",
 
-      "402_default_message":
-        "このリクエストを実行するためのDeepSeekクレジットが不足しています。",
+      "402_default_message": "このリクエストを実行するためのDeepSeekクレジットが不足しています。",
 
       "403_default_message":
         "DeepSeekによってこのリクエストが拒否されました。アカウント状態とモデル権限を確認してください。",
 
-      "404_default_message":
-        "要求されたDeepSeekモデルまたはAPIルートが見つかりませんでした。",
+      "404_default_message": "要求されたDeepSeekモデルまたはAPIルートが見つかりませんでした。",
 
-      "408_default_message":
-        "DeepSeekからの応答前にリクエストがタイムアウトしました。",
+      "408_default_message": "DeepSeekからの応答前にリクエストがタイムアウトしました。",
 
-      "429_default_message":
-        "DeepSeekでレート制限が発生しています。しばらくしてから再度お試しください。",
+      "429_default_message": "DeepSeekでレート制限が発生しています。しばらくしてから再度お試しください。",
 
       "429_plan_access_default_message":
         "ご利用中のDeepSeekプランではこのモデルにアクセスできません。`/config model text` で別のモデルに切り替えてください。",
@@ -467,62 +440,48 @@ export default {
 
       "503_default_message": "DeepSeekは現在利用できないか、過負荷状態です。",
 
-      unknown_default_message:
-        "DeepSeekとの通信中に予期しないエラーが発生しました。",
+      unknown_default_message: "DeepSeekとの通信中に予期しないエラーが発生しました。",
     },
 
     nvidia: {
-      connection_refused:
-        "NVIDIA APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
+      connection_refused: "NVIDIA APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
 
-      "401_default_message":
-        "NVIDIAのAPIキーが無効か、このモデルへのアクセス権がありません。",
+      "401_default_message": "NVIDIAのAPIキーが無効か、このモデルへのアクセス権がありません。",
 
-      "402_default_message":
-        "このリクエストを実行するためのNVIDIAクレジットが不足しています。",
+      "402_default_message": "このリクエストを実行するためのNVIDIAクレジットが不足しています。",
 
       "403_default_message":
         "NVIDIAによってこのリクエストが拒否されました。アカウント状態とモデル権限を確認してください。",
 
-      "404_default_message":
-        "要求されたNVIDIAモデルまたはAPIルートが見つかりませんでした。",
+      "404_default_message": "要求されたNVIDIAモデルまたはAPIルートが見つかりませんでした。",
 
-      "408_default_message":
-        "NVIDIAからの応答前にリクエストがタイムアウトしました。",
+      "408_default_message": "NVIDIAからの応答前にリクエストがタイムアウトしました。",
 
-      "429_default_message":
-        "NVIDIAでレート制限が発生しています。しばらくしてから再度お試しください。",
+      "429_default_message": "NVIDIAでレート制限が発生しています。しばらくしてから再度お試しください。",
 
       "500_default_message": "NVIDIAで内部サーバーエラーが発生しました。",
 
       "503_default_message": "NVIDIAは現在利用できないか、過負荷状態です。",
 
-      unknown_default_message:
-        "NVIDIAとの通信中に予期しないエラーが発生しました。",
+      unknown_default_message: "NVIDIAとの通信中に予期しないエラーが発生しました。",
     },
 
     // Z.aiプロバイダー固有のエラーメッセージ
     zai: {
-      connection_refused:
-        "Z.ai APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
+      connection_refused: "Z.ai APIエンドポイントに接続できませんでした。しばらくしてから再度お試しください。",
 
-      "401_default_message":
-        "Z.aiのAPIキーが無効か、このモデルへのアクセス権がありません。",
+      "401_default_message": "Z.aiのAPIキーが無効か、このモデルへのアクセス権がありません。",
 
-      "402_default_message":
-        "このリクエストを実行するためのZ.aiクレジットが不足しています。",
+      "402_default_message": "このリクエストを実行するためのZ.aiクレジットが不足しています。",
 
       "403_default_message":
         "Z.aiによってこのリクエストが拒否されました。アカウント状態とモデル権限を確認してください。",
 
-      "404_default_message":
-        "要求されたZ.aiモデルまたはAPIルートが見つかりませんでした。",
+      "404_default_message": "要求されたZ.aiモデルまたはAPIルートが見つかりませんでした。",
 
-      "429_default_message":
-        "Z.aiでレート制限が発生しています。しばらくしてから再度お試しください。",
+      "429_default_message": "Z.aiでレート制限が発生しています。しばらくしてから再度お試しください。",
 
-      "429_balance_default_message":
-        "このリクエストを実行するためのZ.ai残高またはクレジットが不足しています。",
+      "429_balance_default_message": "このリクエストを実行するためのZ.ai残高またはクレジットが不足しています。",
 
       "429_plan_access_default_message":
         "ご利用中のZ.aiプランではこのモデルにアクセスできません。`/config model text` で別のモデルに切り替えてください。",
@@ -531,8 +490,7 @@ export default {
 
       "503_default_message": "Z.aiは現在利用できないか、過負荷状態です。",
 
-      unknown_default_message:
-        "Z.aiとの通信中に予期しないエラーが発生しました。",
+      unknown_default_message: "Z.aiとの通信中に予期しないエラーが発生しました。",
     },
 
     // カスタムプロバイダー固有のエラーメッセージ（セルフホスト型のOpenAI互換エンドポイント用）
@@ -551,43 +509,31 @@ export default {
       "404_default_message":
         "リソースが見つかりません。Ollamaユーザーの場合：モデル名が正しいか確認してください（`/config setup`で更新可能）。それ以外の場合は、エンドポイントURLに適切なパス（例：/v1/chat/completions）が含まれているか確認してください。",
 
-      "408_default_message":
-        "リクエストがタイムアウトしました。カスタムエンドポイントの応答に時間がかかりすぎました。",
+      "408_default_message": "リクエストがタイムアウトしました。カスタムエンドポイントの応答に時間がかかりすぎました。",
 
-      "429_default_message":
-        "カスタムエンドポイントからレート制限を受けています。しばらくしてから再度お試しください。",
+      "429_default_message": "カスタムエンドポイントからレート制限を受けています。しばらくしてから再度お試しください。",
 
       "500_default_message":
         "カスタムエンドポイントで内部サーバーエラーが発生しました。LLMサーバーのログを確認してください。",
 
-      "502_default_message":
-        "バッドゲートウェイエラー。カスタムエンドポイントが無効な応答を返しました。",
+      "502_default_message": "バッドゲートウェイエラー。カスタムエンドポイントが無効な応答を返しました。",
 
       "503_default_message":
         "カスタムエンドポイントは現在利用できません。LLMサーバーが起動しているか確認してください。",
 
       // 汎用フォールバック
-      unknown_default_message:
-        "カスタムエンドポイントとの通信中に予期しないエラーが発生しました。",
+      unknown_default_message: "カスタムエンドポイントとの通信中に予期しないエラーが発生しました。",
     },
 
     self_teach: {
-      server_memory_learned_title:
-        "🧠 {persona_nickname}が新しいことを学びました！",
-      server_memory_learned_description:
-        "サーバー記憶を保存しました:\n`{memory_content}`",
-      server_memory_updated_title:
-        "📝 {persona_nickname}が記憶を更新しました！",
-      server_memory_updated_description:
-        "サーバー記憶を更新しました:\n`{memory_content}`",
-      personal_memory_learned_title:
-        "💡 {persona_nickname}が{user_nickname}さんについて新しいことを学びました！",
-      personal_memory_learned_description:
-        "{user_nickname}さんに関する個人的な記憶を保存しました:\n`{memory_content}`",
-      personal_memory_updated_title:
-        "📝 {persona_nickname}が{user_nickname}さんについての記憶を更新しました！",
-      personal_memory_updated_description:
-        "{user_nickname}さんに関する個人的な記憶を更新しました:\n`{memory_content}`",
+      server_memory_learned_title: "🧠 {persona_nickname}が新しいことを学びました！",
+      server_memory_learned_description: "サーバー記憶を保存しました:\n`{memory_content}`",
+      server_memory_updated_title: "📝 {persona_nickname}が記憶を更新しました！",
+      server_memory_updated_description: "サーバー記憶を更新しました:\n`{memory_content}`",
+      personal_memory_learned_title: "💡 {persona_nickname}が{user_nickname}さんについて新しいことを学びました！",
+      personal_memory_learned_description: "{user_nickname}さんに関する個人的な記憶を保存しました:\n`{memory_content}`",
+      personal_memory_updated_title: "📝 {persona_nickname}が{user_nickname}さんについての記憶を更新しました！",
+      personal_memory_updated_description: "{user_nickname}さんに関する個人的な記憶を更新しました:\n`{memory_content}`",
       server_memory_footer:
         "サーバー管理者は`/teach`と`/forget`コマンドでこの記憶を管理できます。全文は`/data export`で確認できます。",
       personal_memory_footer_manage:
@@ -3242,14 +3188,11 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         // チェックボックスセレクトメニューの文字列
         select_placeholder: "有効にする権限を選択...",
         select_embed_title: "権限の設定",
-        select_embed_description:
-          "**有効にする**権限を選択してください。チェックあり = 有効、チェックなし = 無効。",
+        select_embed_description: "**有効にする**権限を選択してください。チェックあり = 有効、チェックなし = 無効。",
         no_changes_title: "変更なし",
-        no_changes_description:
-          "すべての権限はすでに選択した値に設定されています。",
+        no_changes_description: "すべての権限はすでに選択した値に設定されています。",
         timed_out_title: "タイムアウト",
-        timed_out_description:
-          "権限メニューがタイムアウトしました。変更は適用されませんでした。",
+        timed_out_description: "権限メニューがタイムアウトしました。変更は適用されませんでした。",
         set_description: `私のためにこの権限を有効または無効にします。`,
         already_set_title: `権限は既に設定済みです`,
         already_enabled_description: `権限 \`{permission_type}\` は既に**有効**です。`,
@@ -3905,14 +3848,11 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         // チェックボックスセレクトメニューの文字列
         select_placeholder: "メンバーに許可することを選択...",
         select_embed_title: "メンバー教育権限",
-        select_embed_description:
-          "管理者以外のメンバーが**教えられる**ことを選択してください。チェックあり = 許可。",
+        select_embed_description: "管理者以外のメンバーが**教えられる**ことを選択してください。チェックあり = 許可。",
         no_changes_title: "変更なし",
-        no_changes_description:
-          "すべての権限はすでに選択した値に設定されています。",
+        no_changes_description: "すべての権限はすでに選択した値に設定されています。",
         timed_out_title: "タイムアウト",
-        timed_out_description:
-          "権限メニューがタイムアウトしました。変更は適用されませんでした。",
+        timed_out_description: "権限メニューがタイムアウトしました。変更は適用されませんでした。",
         set_description: `メンバーに対してこの権限を有効または無効にします。`,
         success_title: `メンバー権限が更新されました`,
         success_description: `**{count}** 件の権限を更新しました。`,
@@ -4520,13 +4460,11 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           title: "画像生成のリクエスト",
           prompt_label: "画像プロンプト",
           prompt_description: "生成したい画像を説明してください",
-          prompt_placeholder:
-            "バナナを食べている、ショートヘアの可愛いエルフの美少女、マンガ風",
+          prompt_placeholder: "バナナを食べている、ショートヘアの可愛いエルフの美少女、マンガ風",
           image_upload_label: "参照画像（オプション）",
           image_upload_2_label: "参照画像2（オプション）",
           image_upload_3_label: "参照画像3（オプション）",
-          image_upload_description:
-            "画像間生成のために参照画像をアップロードできます",
+          image_upload_description: "画像間生成のために参照画像をアップロードできます",
           aspect_ratio_label: "アスペクト比",
           aspect_ratio_description: "希望するアスペクト比を選択してください",
           aspect_ratio_placeholder: "アスペクト比を選択...",
@@ -4554,37 +4492,29 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         wrong_provider_description:
           "画像生成にはネイティブ画像生成に対応したプロバイダーが必要です。現在のプロバイダーは**{current_provider}**です。",
         no_api_key_title: "🔴 APIキーがありません",
-        no_api_key_description:
-          "APIキーが設定されていません。`/config apikey set`を使用してください。",
+        no_api_key_description: "APIキーが設定されていません。`/config apikey set`を使用してください。",
         api_key_decrypt_failed_title: "🔴 APIキーエラー",
         api_key_decrypt_failed_description:
           "APIキーの復号化に失敗しました。`/config apikey set`を使用して再設定してください。",
         no_diffusion_model_title: "🔴 画像モデルがありません",
-        no_diffusion_model_description:
-          "プロバイダーに対して画像拡散モデルが設定されていません。",
+        no_diffusion_model_description: "プロバイダーに対して画像拡散モデルが設定されていません。",
         error_billing_title: "🔴 課金が必要です",
-        error_billing_description:
-          "画像生成を使用するには、APIキーの課金を有効にする必要があります。",
+        error_billing_description: "画像生成を使用するには、APIキーの課金を有効にする必要があります。",
         error_safety_title: "🔴 コンテンツがブロックされました",
         error_safety_description:
           "プロンプトが安全フィルターによってブロックされました。別のプロンプトを試してください。",
         error_generation_failed_title: "🔴 生成に失敗しました",
         error_generation_failed_description: "画像生成に失敗しました: {error}",
         invalid_image_title: "🔴 無効な画像",
-        invalid_image_description:
-          "有効な画像ファイル（PNG、JPGなど）をアップロードしてください。",
+        invalid_image_description: "有効な画像ファイル（PNG、JPGなど）をアップロードしてください。",
         // クォータエラー
         quota_exceeded_title: "🔴 画像クォータを超過しました",
-        quota_exceeded_description:
-          "画像生成クォータに達しました。{reset_info}",
-        user_quota_exceeded_description:
-          "日次画像生成クォータに達しました。{reset_info}",
-        serverwide_quota_exceeded_description:
-          "このサーバーはこの期間の画像生成クォータに達しました。{reset_info}",
+        quota_exceeded_description: "画像生成クォータに達しました。{reset_info}",
+        user_quota_exceeded_description: "日次画像生成クォータに達しました。{reset_info}",
+        serverwide_quota_exceeded_description: "このサーバーはこの期間の画像生成クォータに達しました。{reset_info}",
         quota_resets_in_hours: "クォータは {hours} 時間後にリセットされます。",
         quota_resets_in_days: "クォータは {days} 日後にリセットされます。",
-        quota_exceeded_footer:
-          "このクォータは、このサーバーの管理者が `/server quota` で設定しています。",
+        quota_exceeded_footer: "このクォータは、このサーバーの管理者が `/server quota` で設定しています。",
       },
     },
   },

@@ -15,16 +15,8 @@ import {
   ZAI_CODING_CHAT_COMPLETIONS_URL,
   ZAI_GENERAL_CHAT_COMPLETIONS_URL,
 } from "@/providers/zai/zaiShared";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "../../types/misc/context";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -80,8 +72,7 @@ export class PeekProfilePictureTool extends BaseTool {
    * Discord IDs are 17-19 digit snowflakes
    */
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN =
-    /^(?:self|(?:persona:)?\d{1,10})$/i;
+  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   /**
    * Check if profile picture tool is available for the given provider.
@@ -107,9 +98,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
     // Require context with tomoriState
     if (!context?.tomoriState) {
-      log.warn(
-        "PeekProfilePictureTool: No tomoriState in context, defaulting to unavailable",
-      );
+      log.warn("PeekProfilePictureTool: No tomoriState in context, defaulting to unavailable");
       return false;
     }
 
@@ -128,9 +117,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
     // Check for profile picture processing disable flag in context
     if (context?.streamContext?.disableProfilePictureProcessing) {
-      log.info(
-        "PeekProfilePictureTool: Temporarily disabled during enhanced context restart",
-      );
+      log.info("PeekProfilePictureTool: Temporarily disabled during enhanced context restart");
       return false;
     }
 
@@ -143,10 +130,7 @@ export class PeekProfilePictureTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result with processed image data
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Check if profile picture processing is temporarily disabled during enhanced context restart
     if (context.streamContext?.disableProfilePictureProcessing) {
       log.info(
@@ -155,8 +139,7 @@ export class PeekProfilePictureTool extends BaseTool {
       return {
         success: false,
         error: "Profile picture processing is temporarily disabled",
-        message:
-          "Profile picture processing is temporarily disabled while analyzing another image.",
+        message: "Profile picture processing is temporarily disabled while analyzing another image.",
         data: {
           status: "temporarily_disabled",
           reason: "Enhanced context restart in progress",
@@ -178,9 +161,7 @@ export class PeekProfilePictureTool extends BaseTool {
     const userId = args.user_id as string;
     const reason = (args.reason as string) || "User-requested avatar analysis";
 
-    log.info(
-      `Processing profile picture for user ID: ${userId} - Reason: ${reason}`,
-    );
+    log.info(`Processing profile picture for user ID: ${userId} - Reason: ${reason}`);
 
     try {
       // Validate Discord user ID format
@@ -193,8 +174,7 @@ export class PeekProfilePictureTool extends BaseTool {
           data: {
             status: "invalid_user_id",
             provided_id: userId,
-            expected_format:
-              "'self', 17-19 digit Discord/webhook ID, or short numeric persona ID",
+            expected_format: "'self', 17-19 digit Discord/webhook ID, or short numeric persona ID",
           },
         };
       }
@@ -205,13 +185,9 @@ export class PeekProfilePictureTool extends BaseTool {
       });
 
       // Fetch and convert the avatar image to base64
-      const base64ImageData = await this.fetchAndConvertImageToBase64(
-        avatarData.avatarUrl,
-      );
+      const base64ImageData = await this.fetchAndConvertImageToBase64(avatarData.avatarUrl);
 
-      log.success(
-        `Profile picture fetched for ${userId} (Username: ${avatarData.username})`,
-      );
+      log.success(`Profile picture fetched for ${userId} (Username: ${avatarData.username})`);
 
       // Build display text with optional server nickname
       let userDisplayText = avatarData.username;
@@ -219,35 +195,19 @@ export class PeekProfilePictureTool extends BaseTool {
         userDisplayText += ` (Nickname: ${avatarData.serverNickname})`;
       }
       const targetTypeLabel =
-        avatarData.sourceType === "persona"
-          ? "persona"
-          : avatarData.sourceType === "webhook"
-            ? "webhook"
-            : "user";
+        avatarData.sourceType === "persona" ? "persona" : avatarData.sourceType === "webhook" ? "webhook" : "user";
 
       // Non-vision redirect path: if the primary model cannot see images but a dedicated
       // vision model is configured, call the vision model directly with the avatar image
       // and return a text description. The primary model then responds to that description.
-      if (
-        !context.tomoriState.llm.sees_images &&
-        context.tomoriState.vision_llm
-      ) {
-        return await this.redirectToVisionModel(
-          base64ImageData,
-          targetTypeLabel,
-          userDisplayText,
-          reason,
-          context,
-        );
+      if (!context.tomoriState.llm.sees_images && context.tomoriState.vision_llm) {
+        return await this.redirectToVisionModel(base64ImageData, targetTypeLabel, userDisplayText, reason, context);
       }
 
       // Enhanced context restart path: inject the raw image into the context so the
       // vision-capable primary model can see it directly on the next iteration.
       // Check if this is the bot's own profile picture (Discord user identity only)
-      const isBotSelf =
-        avatarData.sourceType === "user" &&
-        context.client.user &&
-        userId === context.client.user.id;
+      const isBotSelf = avatarData.sourceType === "user" && context.client.user && userId === context.client.user.id;
       const contextText = isBotSelf
         ? "[This message contains profile picture content from a previous avatar analysis request you made for yourself]"
         : `[This message contains profile picture content from a previous avatar analysis request you made for ${targetTypeLabel}: ${userDisplayText}]`;
@@ -283,10 +243,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
       // Store the enhanced context item in a module-level map for tomoriChat to access
       // This is the cleanest way to avoid serializing base64 data in tool responses
-      PeekProfilePictureTool.pendingEnhancedContextItems.set(
-        userId,
-        imageContextItem,
-      );
+      PeekProfilePictureTool.pendingEnhancedContextItems.set(userId, imageContextItem);
 
       return {
         success: true,
@@ -305,10 +262,7 @@ export class PeekProfilePictureTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(
-        `Profile picture processing failed for user ID: ${userId}`,
-        error as Error,
-      );
+      log.error(`Profile picture processing failed for user ID: ${userId}`, error as Error);
 
       // Categorize errors for better user experience
       let errorMessage = "Failed to process the user's profile picture.";
@@ -317,32 +271,26 @@ export class PeekProfilePictureTool extends BaseTool {
       if (error instanceof Error) {
         if (
           error.message.includes("No Discord user or webhook found") ||
-          (error.message.includes("User with ID") &&
-            error.message.includes("not found"))
+          (error.message.includes("User with ID") && error.message.includes("not found"))
         ) {
           errorMessage = `No Discord user, webhook, or active persona avatar with ID ${userId} was found. Please check the ID and try again.`;
           errorStatus = "user_or_webhook_not_found";
         } else if (error.message.includes("privacy settings")) {
-          errorMessage =
-            "Cannot access this user's profile due to privacy settings.";
+          errorMessage = "Cannot access this user's profile due to privacy settings.";
           errorStatus = "privacy_restricted";
         } else if (error.message.includes("Avatar image processing failed")) {
           errorMessage =
             "Failed to download and process the user's avatar image. The image may be corrupted or inaccessible.";
           errorStatus = "image_processing_failed";
         } else if (error.message.includes("Failed to fetch avatar image")) {
-          errorMessage =
-            "Could not download the avatar image from Discord's servers. Please try again later.";
+          errorMessage = "Could not download the avatar image from Discord's servers. Please try again later.";
           errorStatus = "image_fetch_failed";
         }
       }
 
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unknown error occurred during profile picture processing",
+        error: error instanceof Error ? error.message : "Unknown error occurred during profile picture processing",
         message: errorMessage,
         data: {
           status: errorStatus,
@@ -384,10 +332,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
     // 1. Decrypt the API key
     const keyVersion = context.tomoriState.config.key_version || 1;
-    const apiKey = await decryptApiKey(
-      context.tomoriState.config.api_key,
-      keyVersion,
-    );
+    const apiKey = await decryptApiKey(context.tomoriState.config.api_key, keyVersion);
 
     if (!apiKey) {
       return {
@@ -413,12 +358,7 @@ export class PeekProfilePictureTool extends BaseTool {
     let analysisResult: string;
 
     if (provider === "google") {
-      analysisResult = await this.callGoogleVisionWithBase64(
-        apiKey,
-        apiModelName,
-        base64ImageData,
-        prompt,
-      );
+      analysisResult = await this.callGoogleVisionWithBase64(apiKey, apiModelName, base64ImageData, prompt);
     } else {
       const endpointUrl = this.getVisionEndpointUrl(provider, context);
       analysisResult = await this.callOpenAICompatibleVisionWithBase64(
@@ -430,9 +370,7 @@ export class PeekProfilePictureTool extends BaseTool {
       );
     }
 
-    log.success(
-      `PeekProfilePictureTool: Vision model analysis completed for ${targetTypeLabel}: ${userDisplayText}`,
-    );
+    log.success(`PeekProfilePictureTool: Vision model analysis completed for ${targetTypeLabel}: ${userDisplayText}`);
 
     return {
       success: true,
@@ -459,9 +397,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
     const customUrl = context.tomoriState.config.custom_endpoint_url;
     if (customUrl) {
-      return customUrl.endsWith("/chat/completions")
-        ? customUrl
-        : `${customUrl}/chat/completions`;
+      return customUrl.endsWith("/chat/completions") ? customUrl : `${customUrl}/chat/completions`;
     }
 
     return "https://api.openai.com/v1/chat/completions";
@@ -563,9 +499,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error(
-        "Vision API returned an empty response. The model may not support image inputs.",
-      );
+      throw new Error("Vision API returned an empty response. The model may not support image inputs.");
     }
 
     return content;
@@ -578,8 +512,7 @@ export class PeekProfilePictureTool extends BaseTool {
    */
   private isValidDiscordId(userId: string): boolean {
     return (
-      PeekProfilePictureTool.DISCORD_ID_PATTERN.test(userId) ||
-      PeekProfilePictureTool.PERSONA_ID_PATTERN.test(userId)
+      PeekProfilePictureTool.DISCORD_ID_PATTERN.test(userId) || PeekProfilePictureTool.PERSONA_ID_PATTERN.test(userId)
     );
   }
 
@@ -588,17 +521,13 @@ export class PeekProfilePictureTool extends BaseTool {
    * @param avatarUrl - Discord avatar URL to fetch
    * @returns Promise resolving to base64 encoded image data
    */
-  private async fetchAndConvertImageToBase64(
-    avatarUrl: string,
-  ): Promise<string> {
+  private async fetchAndConvertImageToBase64(avatarUrl: string): Promise<string> {
     try {
       // Fetch the image from Discord CDN
       const response = await fetch(avatarUrl);
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch avatar image: ${response.status} ${response.statusText}`,
-        );
+        throw new Error(`Failed to fetch avatar image: ${response.status} ${response.statusText}`);
       }
 
       // Get the image as array buffer
@@ -609,10 +538,7 @@ export class PeekProfilePictureTool extends BaseTool {
 
       return base64String;
     } catch (error) {
-      log.error(
-        `Failed to fetch and convert avatar image: ${avatarUrl}`,
-        error as Error,
-      );
+      log.error(`Failed to fetch and convert avatar image: ${avatarUrl}`, error as Error);
 
       if (error instanceof Error) {
         throw new Error(`Avatar image processing failed: ${error.message}`);
@@ -636,11 +562,8 @@ export class PeekProfilePictureTool extends BaseTool {
    * @param userId - User ID to get pending context for
    * @returns Enhanced context item if found, undefined otherwise
    */
-  static getPendingEnhancedContext(
-    userId: string,
-  ): StructuredContextItem | undefined {
-    const contextItem =
-      PeekProfilePictureTool.pendingEnhancedContextItems.get(userId);
+  static getPendingEnhancedContext(userId: string): StructuredContextItem | undefined {
+    const contextItem = PeekProfilePictureTool.pendingEnhancedContextItems.get(userId);
     if (contextItem) {
       // Remove from map to prevent memory leaks
       PeekProfilePictureTool.pendingEnhancedContextItems.delete(userId);

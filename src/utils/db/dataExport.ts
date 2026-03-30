@@ -47,10 +47,7 @@ function sanitizeForJson(content: string): {
  * @param contextLabel - Label for logging (e.g., "personal memories", "server memories")
  * @returns Object with sanitized memories and count of sanitized items
  */
-function sanitizeMemories(
-  memories: string[],
-  contextLabel: string,
-): { sanitized: string[]; sanitizedCount: number } {
+function sanitizeMemories(memories: string[], contextLabel: string): { sanitized: string[]; sanitizedCount: number } {
   // 1. Track how many memories were sanitized
   let sanitizedCount = 0;
 
@@ -61,9 +58,7 @@ function sanitizeMemories(
     // 3. Log warning if sanitization occurred
     if (wasSanitized) {
       sanitizedCount++;
-      log.warn(
-        `Sanitized ${contextLabel} at index ${index}: removed control characters`,
-      );
+      log.warn(`Sanitized ${contextLabel} at index ${index}: removed control characters`);
     }
 
     return cleanMemory;
@@ -123,15 +118,10 @@ export async function exportPersonalData(
 					ORDER BY created_at DESC, personal_memory_id DESC
 				`;
 
-    const personalMemories = memoryRows.map(
-      (row: { content: string }) => row.content,
-    );
+    const personalMemories = memoryRows.map((row: { content: string }) => row.content);
 
     // 3. Sanitize memories for safe JSON export
-    const { sanitized: sanitizedMemories } = sanitizeMemories(
-      personalMemories,
-      "personal memories",
-    );
+    const { sanitized: sanitizedMemories } = sanitizeMemories(personalMemories, "personal memories");
 
     // 4. Build export object
     const exportData: PersonalExport = {
@@ -149,10 +139,7 @@ export async function exportPersonalData(
     // 5. Validate export data structure
     const validated = getPersonalExportSchema().safeParse(exportData);
     if (!validated.success) {
-      log.error(
-        `Personal export validation failed for user ${userDiscId}:`,
-        validated.error,
-      );
+      log.error(`Personal export validation failed for user ${userDiscId}:`, validated.error);
       return {
         success: false,
         error: "commands.data.export.error_validation_failed",
@@ -178,10 +165,7 @@ export async function exportPersonalData(
  * @param tomoriId - Optional persona ID to export persona-scoped server memories from
  * @returns ExportResult containing the exported data or error
  */
-export async function exportServerData(
-  serverDiscId: string,
-  tomoriId?: number,
-): Promise<ExportResult> {
+export async function exportServerData(serverDiscId: string, tomoriId?: number): Promise<ExportResult> {
   try {
     // 1. Get internal server ID
     const serverRows = await sql`
@@ -275,9 +259,7 @@ export async function exportServerData(
             ? Number(rawMainLineageId)
             : (rawMainLineageId ?? null);
     } else {
-      const [targetPersonaMeta] = await sql<
-        Array<{ persona_lineage_id: number | bigint | string }>
-      >`
+      const [targetPersonaMeta] = await sql<Array<{ persona_lineage_id: number | bigint | string }>>`
 				SELECT persona_lineage_id
 				FROM tomoris
 				WHERE tomori_id = ${targetTomoriId}
@@ -299,10 +281,7 @@ export async function exportServerData(
             : (rawLineageId ?? null);
     }
 
-    if (
-      targetPersonaLineageId !== null &&
-      !Number.isFinite(targetPersonaLineageId)
-    ) {
+    if (targetPersonaLineageId !== null && !Number.isFinite(targetPersonaLineageId)) {
       targetPersonaLineageId = null;
     }
 
@@ -323,15 +302,10 @@ export async function exportServerData(
 					ORDER BY created_at DESC
 				`;
 
-    const serverMemories = memoryRows.map(
-      (row: { content: string }) => row.content,
-    );
+    const serverMemories = memoryRows.map((row: { content: string }) => row.content);
 
     // 5. Sanitize memories for safe JSON export
-    const { sanitized: sanitizedServerMemories } = sanitizeMemories(
-      serverMemories,
-      "server memories",
-    );
+    const { sanitized: sanitizedServerMemories } = sanitizeMemories(serverMemories, "server memories");
 
     // 6. Build export object
     const exportData: ServerExport = {
@@ -352,10 +326,8 @@ export async function exportServerData(
           message_fetch_limit: configData.message_fetch_limit,
           system_prompt: configData.system_prompt ?? null,
           server_memteaching_enabled: configData.server_memteaching_enabled,
-          attribute_memteaching_enabled:
-            configData.attribute_memteaching_enabled,
-          sampledialogue_memteaching_enabled:
-            configData.sampledialogue_memteaching_enabled,
+          attribute_memteaching_enabled: configData.attribute_memteaching_enabled,
+          sampledialogue_memteaching_enabled: configData.sampledialogue_memteaching_enabled,
           self_teaching_enabled: configData.self_teaching_enabled,
           web_search_enabled: configData.web_search_enabled,
           personal_memories_enabled: configData.personal_memories_enabled,
@@ -379,10 +351,7 @@ export async function exportServerData(
     // 7. Validate export data structure
     const validated = getServerExportSchema().safeParse(exportData);
     if (!validated.success) {
-      log.error(
-        `Server export validation failed for server ${serverDiscId}:`,
-        validated.error,
-      );
+      log.error(`Server export validation failed for server ${serverDiscId}:`, validated.error);
       return {
         success: false,
         error: "commands.data.export.error_validation_failed",
@@ -411,16 +380,8 @@ export async function exportPersonaPersonalMemories(
   userDiscId: string,
   personaLineageId: number,
 ): Promise<ExportResult> {
-  const baseExport = await exportPersonalData(
-    userDiscId,
-    personaLineageId,
-    false,
-  );
-  if (
-    !baseExport.success ||
-    !baseExport.data ||
-    baseExport.data.type !== "personal"
-  ) {
+  const baseExport = await exportPersonalData(userDiscId, personaLineageId, false);
+  if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
     return {
       success: false,
       error: baseExport.error || "commands.data.export.error_export_failed",
@@ -438,10 +399,7 @@ export async function exportPersonaPersonalMemories(
 
   const validated = personalMemoriesExportSchema.safeParse(exportData);
   if (!validated.success) {
-    log.error(
-      `Persona personal memories export validation failed for user ${userDiscId}:`,
-      validated.error,
-    );
+    log.error(`Persona personal memories export validation failed for user ${userDiscId}:`, validated.error);
     return {
       success: false,
       error: "commands.data.export.error_validation_failed",
@@ -458,15 +416,9 @@ export async function exportPersonaPersonalMemories(
  * Exports global personal memories only (lineage 0).
  * @param userDiscId - Discord user ID to export data for
  */
-export async function exportGlobalPersonalMemories(
-  userDiscId: string,
-): Promise<ExportResult> {
+export async function exportGlobalPersonalMemories(userDiscId: string): Promise<ExportResult> {
   const baseExport = await exportPersonalData(userDiscId, 0, false);
-  if (
-    !baseExport.success ||
-    !baseExport.data ||
-    baseExport.data.type !== "personal"
-  ) {
+  if (!baseExport.success || !baseExport.data || baseExport.data.type !== "personal") {
     return {
       success: false,
       error: baseExport.error || "commands.data.export.error_export_failed",
@@ -484,10 +436,7 @@ export async function exportGlobalPersonalMemories(
 
   const validated = globalPersonalMemoriesExportSchema.safeParse(exportData);
   if (!validated.success) {
-    log.error(
-      `Global personal memories export validation failed for user ${userDiscId}:`,
-      validated.error,
-    );
+    log.error(`Global personal memories export validation failed for user ${userDiscId}:`, validated.error);
     return {
       success: false,
       error: "commands.data.export.error_validation_failed",
@@ -504,9 +453,7 @@ export async function exportGlobalPersonalMemories(
  * Exports personal settings only (nickname, language, impersonation prompt, NovelAI character data).
  * @param userDiscId - Discord user ID to export data for
  */
-export async function exportPersonalSettings(
-  userDiscId: string,
-): Promise<ExportResult> {
+export async function exportPersonalSettings(userDiscId: string): Promise<ExportResult> {
   try {
     // 1. Query user settings including NovelAI character fields
     const rows = await sql`
@@ -542,10 +489,7 @@ export async function exportPersonalSettings(
     // 3. Validate export data structure
     const validated = personalSettingsExportSchema.safeParse(exportData);
     if (!validated.success) {
-      log.error(
-        `Personal settings export validation failed for user ${userDiscId}:`,
-        validated.error,
-      );
+      log.error(`Personal settings export validation failed for user ${userDiscId}:`, validated.error);
       return {
         success: false,
         error: "commands.data.export.error_validation_failed",
@@ -557,10 +501,7 @@ export async function exportPersonalSettings(
       data: validated.data,
     };
   } catch (error) {
-    log.error(
-      `Error exporting personal settings for user ${userDiscId}:`,
-      error,
-    );
+    log.error(`Error exporting personal settings for user ${userDiscId}:`, error);
     return {
       success: false,
       error: "commands.data.export.error_export_failed",
@@ -573,16 +514,9 @@ export async function exportPersonalSettings(
  * @param serverDiscId - Discord server ID to export data for
  * @param tomoriId - Persona ID to export memories from
  */
-export async function exportPersonaServerMemories(
-  serverDiscId: string,
-  tomoriId: number,
-): Promise<ExportResult> {
+export async function exportPersonaServerMemories(serverDiscId: string, tomoriId: number): Promise<ExportResult> {
   const baseExport = await exportServerData(serverDiscId, tomoriId);
-  if (
-    !baseExport.success ||
-    !baseExport.data ||
-    baseExport.data.type !== "server"
-  ) {
+  if (!baseExport.success || !baseExport.data || baseExport.data.type !== "server") {
     return {
       success: false,
       error: baseExport.error || "commands.data.export.error_export_failed",
@@ -600,10 +534,7 @@ export async function exportPersonaServerMemories(
 
   const validated = serverMemoriesExportSchema.safeParse(exportData);
   if (!validated.success) {
-    log.error(
-      `Persona server memories export validation failed for server ${serverDiscId}:`,
-      validated.error,
-    );
+    log.error(`Persona server memories export validation failed for server ${serverDiscId}:`, validated.error);
     return {
       success: false,
       error: "commands.data.export.error_validation_failed",
@@ -620,15 +551,9 @@ export async function exportPersonaServerMemories(
  * Exports server config only.
  * @param serverDiscId - Discord server ID to export data for
  */
-export async function exportServerConfig(
-  serverDiscId: string,
-): Promise<ExportResult> {
+export async function exportServerConfig(serverDiscId: string): Promise<ExportResult> {
   const baseExport = await exportServerData(serverDiscId);
-  if (
-    !baseExport.success ||
-    !baseExport.data ||
-    baseExport.data.type !== "server"
-  ) {
+  if (!baseExport.success || !baseExport.data || baseExport.data.type !== "server") {
     return {
       success: false,
       error: baseExport.error || "commands.data.export.error_export_failed",
@@ -646,10 +571,7 @@ export async function exportServerConfig(
 
   const validated = serverConfigOnlyExportSchema.safeParse(exportData);
   if (!validated.success) {
-    log.error(
-      `Server config export validation failed for server ${serverDiscId}:`,
-      validated.error,
-    );
+    log.error(`Server config export validation failed for server ${serverDiscId}:`, validated.error);
     return {
       success: false,
       error: "commands.data.export.error_validation_failed",
@@ -668,10 +590,7 @@ export async function exportServerConfig(
  * @param tomoriId - Optional persona ID to export personality for
  * @returns PersonalityExportResult containing formatted text or error
  */
-export async function exportPersonalityData(
-  serverDiscId: string,
-  tomoriId?: number,
-): Promise<PersonalityExportResult> {
+export async function exportPersonalityData(serverDiscId: string, tomoriId?: number): Promise<PersonalityExportResult> {
   try {
     // 1. Get persona data (selected persona or default main persona)
     const rows =
@@ -768,10 +687,7 @@ export async function exportPersonalityData(
       text: textOutput,
     };
   } catch (error) {
-    log.error(
-      `Error exporting personality data for server ${serverDiscId}:`,
-      error,
-    );
+    log.error(`Error exporting personality data for server ${serverDiscId}:`, error);
     return {
       success: false,
       error: "commands.data.export.error_export_failed",

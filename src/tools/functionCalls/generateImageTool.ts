@@ -11,26 +11,12 @@ import { localizer } from "../../utils/text/localizer";
 import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
-import {
-  checkImageQuota,
-  incrementImageQuota,
-} from "../../utils/quota/imageQuotaManager";
-import {
-  providerSupportsFeature,
-  resolveProviderFeatureImplementation,
-} from "@/utils/provider/providerInfoRegistry";
-import {
-  ZAI_CODING_IMAGES_GENERATIONS_URL,
-  ZAI_GENERAL_IMAGES_GENERATIONS_URL,
-} from "@/providers/zai/zaiShared";
+import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
+import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -42,8 +28,7 @@ export class GenerateImageTool extends BaseTool {
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
   private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN =
-    /^(?:self|(?:persona:)?\d{1,10})$/i;
+  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -65,20 +50,8 @@ export class GenerateImageTool extends BaseTool {
       },
       aspect_ratio: {
         type: "string",
-        description:
-          "Optional: The aspect ratio for the generated image. Default is '1:1' (square).",
-        enum: [
-          "1:1",
-          "2:3",
-          "3:2",
-          "3:4",
-          "4:3",
-          "4:5",
-          "5:4",
-          "9:16",
-          "16:9",
-          "21:9",
-        ],
+        description: "Optional: The aspect ratio for the generated image. Default is '1:1' (square).",
+        enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
       },
     },
     required: ["prompt"],
@@ -108,9 +81,7 @@ export class GenerateImageTool extends BaseTool {
    * @param diffusionModelId - Database ID of the diffusion model
    * @returns The model codename string (e.g., "gemini-2.5-flash-image")
    */
-  private async getDiffusionModelCodename(
-    diffusionModelId: number,
-  ): Promise<string> {
+  private async getDiffusionModelCodename(diffusionModelId: number): Promise<string> {
     const result = await sql`
 			SELECT codename
 			FROM image_diffusion_models
@@ -118,9 +89,7 @@ export class GenerateImageTool extends BaseTool {
 		`.values();
 
     if (result.length === 0) {
-      throw new Error(
-        `Diffusion model not found in database: ${diffusionModelId}`,
-      );
+      throw new Error(`Diffusion model not found in database: ${diffusionModelId}`);
     }
 
     return result[0][0] as string;
@@ -131,9 +100,7 @@ export class GenerateImageTool extends BaseTool {
     attachment: AttachmentBuilder,
   ): Promise<import("discord.js").Message> {
     const threadId =
-      "isThread" in context.channel &&
-      typeof context.channel.isThread === "function" &&
-      context.channel.isThread()
+      "isThread" in context.channel && typeof context.channel.isThread === "function" && context.channel.isThread()
         ? context.channel.id
         : undefined;
 
@@ -148,16 +115,11 @@ export class GenerateImageTool extends BaseTool {
           {
             username: context.personaUsername,
             avatarUrl: context.personaAvatarUrl,
-            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
-              ? context.personaAvatarUrl
-              : undefined,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
           },
         );
       } catch (error) {
-        log.warn(
-          "Failed to send generated image via webhook, falling back to bot message",
-          error as Error,
-        );
+        log.warn("Failed to send generated image via webhook, falling back to bot message", error as Error);
       }
     }
 
@@ -184,8 +146,7 @@ export class GenerateImageTool extends BaseTool {
     mimeType: string;
     source: string;
   }> {
-    const emojiUrls: Array<{ url: string; mimeType: string; source: string }> =
-      [];
+    const emojiUrls: Array<{ url: string; mimeType: string; source: string }> = [];
     if (!content) return emojiUrls;
 
     const emojiPattern = /<(a?):([^:]+):(\d{17,20})>/g;
@@ -241,9 +202,7 @@ export class GenerateImageTool extends BaseTool {
       }> = [];
 
       // 2. Extract images from direct attachments
-      const imageAttachments = message.attachments.filter((attachment) =>
-        attachment.contentType?.startsWith("image/"),
-      );
+      const imageAttachments = message.attachments.filter((attachment) => attachment.contentType?.startsWith("image/"));
 
       for (const attachment of imageAttachments.values()) {
         imageUrls.push({
@@ -310,38 +269,28 @@ export class GenerateImageTool extends BaseTool {
           // Fetch image data
           const imageResponse = await fetch(imageInfo.url);
           if (!imageResponse.ok) {
-            log.warn(
-              `Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`,
-            );
+            log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`);
             continue;
           }
 
           // Convert to base64
           const imageArrayBuffer = await imageResponse.arrayBuffer();
-          const base64ImageData =
-            Buffer.from(imageArrayBuffer).toString("base64");
+          const base64ImageData = Buffer.from(imageArrayBuffer).toString("base64");
 
           inlineDataArray.push({
             mimeType: imageInfo.mimeType,
             data: base64ImageData,
           });
 
-          log.info(
-            `Successfully converted image from ${imageInfo.source} to base64`,
-          );
+          log.info(`Successfully converted image from ${imageInfo.source} to base64`);
         } catch (imgErr) {
-          log.warn(
-            `Failed to process image from ${imageInfo.source}:`,
-            imgErr as Error,
-          );
+          log.warn(`Failed to process image from ${imageInfo.source}:`, imgErr as Error);
         }
       }
 
       // 6. Ensure at least one image was successfully processed
       if (inlineDataArray.length === 0) {
-        throw new Error(
-          `Failed to process any images from message ${messageId}`,
-        );
+        throw new Error(`Failed to process any images from message ${messageId}`);
       }
 
       return inlineDataArray;
@@ -445,17 +394,14 @@ export class GenerateImageTool extends BaseTool {
     );
 
     // Call OpenRouter API
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestPayload),
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(requestPayload),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -469,18 +415,12 @@ export class GenerateImageTool extends BaseTool {
       let parsedMessage = "";
       try {
         const parsed = JSON.parse(errorText);
-        parsedMessage =
-          (parsed?.error?.message as string | undefined) ||
-          (parsed?.message as string | undefined) ||
-          "";
+        parsedMessage = (parsed?.error?.message as string | undefined) || (parsed?.message as string | undefined) || "";
       } catch {
         // ignore JSON parse errors; fall back to raw snippet
       }
 
-      const friendlyMessage =
-        parsedMessage ||
-        bodySnippet ||
-        `${response.status} ${response.statusText}`.trim();
+      const friendlyMessage = parsedMessage || bodySnippet || `${response.status} ${response.statusText}`.trim();
 
       throw new Error(
         `OpenRouter API request failed (${response.status} ${response.statusText}) for model "${modelCodename}": ${friendlyMessage}`,
@@ -498,8 +438,7 @@ export class GenerateImageTool extends BaseTool {
     if (message?.images?.[0]) {
       const firstImage = message.images[0];
       // OpenRouter may return either snake_case (image_url) or camelCase (imageUrl)
-      imageUrl =
-        firstImage?.image_url?.url || firstImage?.imageUrl?.url || null;
+      imageUrl = firstImage?.image_url?.url || firstImage?.imageUrl?.url || null;
     } else if (Array.isArray(message?.content)) {
       const firstImagePart = message.content.find(
         (part: unknown) =>
@@ -526,8 +465,7 @@ export class GenerateImageTool extends BaseTool {
       if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
         const imageResponse = await fetch(imageUrl);
         if (imageResponse.ok) {
-          const mimeType =
-            imageResponse.headers.get("content-type")?.split(";")[0] || null;
+          const mimeType = imageResponse.headers.get("content-type")?.split(";")[0] || null;
           const arrayBuffer = await imageResponse.arrayBuffer();
           return {
             imageData: Buffer.from(arrayBuffer).toString("base64"),
@@ -546,10 +484,7 @@ export class GenerateImageTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result with generated image
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Validate parameters
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -577,10 +512,7 @@ export class GenerateImageTool extends BaseTool {
       };
     }
 
-    const quotaCheck = await checkImageQuota(
-      context.tomoriState.server_id,
-      userDiscId,
-    );
+    const quotaCheck = await checkImageQuota(context.tomoriState.server_id, userDiscId);
 
     if (!quotaCheck.allowed) {
       // Build user-friendly error message based on quota type
@@ -590,43 +522,28 @@ export class GenerateImageTool extends BaseTool {
       if (quotaCheck.resetTime) {
         const now = new Date();
         const resetTime = quotaCheck.resetTime;
-        const hoursUntilReset = Math.ceil(
-          (resetTime.getTime() - now.getTime()) / (1000 * 60 * 60),
-        );
+        const hoursUntilReset = Math.ceil((resetTime.getTime() - now.getTime()) / (1000 * 60 * 60));
 
         if (hoursUntilReset < 24) {
-          resetInfo = localizer(
-            context.locale,
-            "tools.generate_image.quota_resets_in_hours",
-            { hours: hoursUntilReset.toString() },
-          );
+          resetInfo = localizer(context.locale, "tools.generate_image.quota_resets_in_hours", {
+            hours: hoursUntilReset.toString(),
+          });
         } else {
           const daysUntilReset = Math.ceil(hoursUntilReset / 24);
-          resetInfo = localizer(
-            context.locale,
-            "tools.generate_image.quota_resets_in_days",
-            { days: daysUntilReset.toString() },
-          );
+          resetInfo = localizer(context.locale, "tools.generate_image.quota_resets_in_days", {
+            days: daysUntilReset.toString(),
+          });
         }
       }
 
       if (quotaCheck.reason === "user_quota_exceeded") {
-        errorMessage = localizer(
-          context.locale,
-          "tools.generate_image.user_quota_exceeded",
-          { reset_info: resetInfo },
-        );
+        errorMessage = localizer(context.locale, "tools.generate_image.user_quota_exceeded", { reset_info: resetInfo });
       } else if (quotaCheck.reason === "serverwide_quota_exceeded") {
-        errorMessage = localizer(
-          context.locale,
-          "tools.generate_image.serverwide_quota_exceeded",
-          { reset_info: resetInfo },
-        );
+        errorMessage = localizer(context.locale, "tools.generate_image.serverwide_quota_exceeded", {
+          reset_info: resetInfo,
+        });
       } else {
-        errorMessage = localizer(
-          context.locale,
-          "tools.generate_image.quota_exceeded_generic",
-        );
+        errorMessage = localizer(context.locale, "tools.generate_image.quota_exceeded_generic");
       }
 
       return {
@@ -655,8 +572,7 @@ export class GenerateImageTool extends BaseTool {
         };
       }
 
-      const modelCodename =
-        await this.getDiffusionModelCodename(diffusionModelId);
+      const modelCodename = await this.getDiffusionModelCodename(diffusionModelId);
 
       log.info(`Using diffusion model: ${modelCodename} for image generation`);
 
@@ -705,17 +621,10 @@ export class GenerateImageTool extends BaseTool {
       const referenceImages: Array<{ mimeType: string; data: string }> = [];
 
       if (messageId) {
-        log.info(
-          `Extracting images from message ${messageId} for image-to-image generation`,
-        );
-        const messageImages = await this.extractImagesFromMessage(
-          messageId,
-          context,
-        );
+        log.info(`Extracting images from message ${messageId} for image-to-image generation`);
+        const messageImages = await this.extractImagesFromMessage(messageId, context);
         referenceImages.push(...messageImages);
-        log.info(
-          `Using ${messageImages.length} reference image(s) from message ${messageId} for generation`,
-        );
+        log.info(`Using ${messageImages.length} reference image(s) from message ${messageId} for generation`);
       }
 
       if (userId) {
@@ -732,31 +641,19 @@ export class GenerateImageTool extends BaseTool {
           const avatarData = await resolveAvatarByDiscordId(userId, context, {
             forceStatic: false,
           });
-          const avatarBase64 = await this.fetchAndConvertImageToBase64(
-            avatarData.avatarUrl,
-          );
+          const avatarBase64 = await this.fetchAndConvertImageToBase64(avatarData.avatarUrl);
           referenceImages.push({
             mimeType: "image/png",
             data: avatarBase64,
           });
           const avatarTypeLabel =
-            avatarData.sourceType === "persona"
-              ? "persona"
-              : avatarData.sourceType === "webhook"
-                ? "webhook"
-                : "user";
-          log.info(
-            `Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${userId})`,
-          );
+            avatarData.sourceType === "persona" ? "persona" : avatarData.sourceType === "webhook" ? "webhook" : "user";
+          log.info(`Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${userId})`);
         } catch (avatarErr) {
-          log.error(
-            `Failed to fetch profile picture for ID ${userId}`,
-            avatarErr as Error,
-          );
+          log.error(`Failed to fetch profile picture for ID ${userId}`, avatarErr as Error);
           return {
             success: false,
-            error:
-              "Failed to fetch profile picture for user_id (user/webhook/persona)",
+            error: "Failed to fetch profile picture for user_id (user/webhook/persona)",
             message:
               "Could not fetch an avatar for that ID. Please confirm it is 'self', a valid Discord/webhook ID, or a persona ID and try again.",
           };
@@ -771,11 +668,10 @@ export class GenerateImageTool extends BaseTool {
       let generatedImageData: string | null = null;
       let referenceImagesUsed = referenceImages.length > 0;
       let referenceImagesIgnoredReason = "";
-      const imageGenerationImplementation =
-        resolveProviderFeatureImplementation(
-          context.provider,
-          "nativeImageGeneration",
-        );
+      const imageGenerationImplementation = resolveProviderFeatureImplementation(
+        context.provider,
+        "nativeImageGeneration",
+      );
 
       if (imageGenerationImplementation === "openrouter") {
         // Use OpenRouter API
@@ -820,11 +716,7 @@ export class GenerateImageTool extends BaseTool {
         const response = await chat.sendMessage(messagePayload);
 
         // Extract generated image from response
-        if (
-          response?.candidates &&
-          response.candidates.length > 0 &&
-          response.candidates[0]?.content?.parts
-        ) {
+        if (response?.candidates && response.candidates.length > 0 && response.candidates[0]?.content?.parts) {
           for (const part of response.candidates[0].content.parts) {
             if (part.inlineData) {
               generatedImageData = part.inlineData.data ?? null;
@@ -839,18 +731,14 @@ export class GenerateImageTool extends BaseTool {
           referenceImagesIgnoredReason =
             " Reference images were ignored because the active provider's image endpoint is text-to-image only.";
         }
-        const { generateZaiNativeImage } = await import(
-          "@/providers/zai/zaiImageGeneration"
-        );
+        const { generateZaiNativeImage } = await import("@/providers/zai/zaiImageGeneration");
         const result = await generateZaiNativeImage({
           apiKey,
           model: modelCodename,
           prompt,
           aspectRatio,
           endpointUrl:
-            context.provider === "zaicoding"
-              ? ZAI_CODING_IMAGES_GENERATIONS_URL
-              : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+            context.provider === "zaicoding" ? ZAI_CODING_IMAGES_GENERATIONS_URL : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
         });
         generatedImageData = result.imageData;
       } else if (imageGenerationImplementation === "nvidia") {
@@ -860,16 +748,13 @@ export class GenerateImageTool extends BaseTool {
           referenceImagesIgnoredReason =
             " Reference images were ignored because the active provider's image endpoint is text-to-image only.";
         }
-        const { generateNvidiaNativeImage } = await import(
-          "@/providers/nvidia/nvidiaImageGeneration"
-        );
+        const { generateNvidiaNativeImage } = await import("@/providers/nvidia/nvidiaImageGeneration");
         const result = await generateNvidiaNativeImage({
           apiKey,
           model: modelCodename,
           prompt,
           aspectRatio,
-          referenceImages:
-            referenceImages.length > 0 ? referenceImages : undefined,
+          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         });
         generatedImageData = result.imageData;
       } else {
@@ -882,8 +767,7 @@ export class GenerateImageTool extends BaseTool {
       if (!generatedImageData) {
         return {
           success: false,
-          error:
-            "No image data received from API. The generation may have been blocked or failed.",
+          error: "No image data received from API. The generation may have been blocked or failed.",
         };
       }
 
@@ -916,11 +800,9 @@ export class GenerateImageTool extends BaseTool {
       }
 
       if (quotaCheck.userRemaining !== undefined) {
-        const remainingText = localizer(
-          context.locale,
-          "tools.generate_image.quota_remaining",
-          { remaining: quotaCheck.userRemaining.toString() },
-        );
+        const remainingText = localizer(context.locale, "tools.generate_image.quota_remaining", {
+          remaining: quotaCheck.userRemaining.toString(),
+        });
         successMessage += ` ${remainingText}`;
       }
 
@@ -929,14 +811,11 @@ export class GenerateImageTool extends BaseTool {
         message: successMessage,
         // imageMetadata intentionally omitted to avoid 403 errors when OpenRouter tries to fetch Discord CDN URLs
         // End the LLM turn immediately when this tool is the target of a hidden agent turn
-        endTurn:
-          context.streamContext?.endTurnAfterTools?.includes(this.name) ??
-          false,
+        endTurn: context.streamContext?.endTurnAfterTools?.includes(this.name) ?? false,
       };
     } catch (error) {
       // Handle specific Google API errors
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       // Localize errors, but fall back to readable defaults if the localizer
       // isn't initialized or a key is missing (to avoid leaking locale keys)
@@ -956,19 +835,12 @@ export class GenerateImageTool extends BaseTool {
       ) {
         return {
           success: false,
-          error: getReadableError(
-            "errors.google.400_billing_default_message",
-            "Billing is required for this service",
-          ),
+          error: getReadableError("errors.google.400_billing_default_message", "Billing is required for this service"),
         };
       }
 
       // Check for content safety errors
-      if (
-        errorMessage.includes("safety") ||
-        errorMessage.includes("blocked") ||
-        errorMessage.includes("RECITATION")
-      ) {
+      if (errorMessage.includes("safety") || errorMessage.includes("blocked") || errorMessage.includes("RECITATION")) {
         return {
           success: false,
           error: getReadableError(
@@ -990,23 +862,16 @@ export class GenerateImageTool extends BaseTool {
    * Validate Discord snowflake format
    */
   private isValidDiscordId(userId: string): boolean {
-    return (
-      GenerateImageTool.DISCORD_ID_PATTERN.test(userId) ||
-      GenerateImageTool.PERSONA_ID_PATTERN.test(userId)
-    );
+    return GenerateImageTool.DISCORD_ID_PATTERN.test(userId) || GenerateImageTool.PERSONA_ID_PATTERN.test(userId);
   }
 
   /**
    * Fetch an image URL and convert to base64 (used for profile pictures)
    */
-  private async fetchAndConvertImageToBase64(
-    imageUrl: string,
-  ): Promise<string> {
+  private async fetchAndConvertImageToBase64(imageUrl: string): Promise<string> {
     const response = await fetch(imageUrl);
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch image: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
     }
 
     const imageArrayBuffer = await response.arrayBuffer();

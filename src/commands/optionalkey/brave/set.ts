@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { storeOptApiKey } from "../../../utils/security/crypto";
 import { braveWebSearch } from "../../../tools/restAPIs/brave/braveSearchService";
 
@@ -24,20 +17,14 @@ import { braveWebSearch } from "../../../tools/restAPIs/brave/braveSearchService
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.brave.set.description"),
-    )
+    .setDescription(localizer("en-US", "commands.optionalkey.brave.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(
-          localizer("en-US", "commands.optionalkey.brave.set.key_description"),
-        )
+        .setDescription(localizer("en-US", "commands.optionalkey.brave.set.key_description"))
         .setRequired(true),
     );
 
@@ -79,17 +66,14 @@ export async function execute(
     if (!apiKey || apiKey.length < 10) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.brave.set.invalid_key_title",
-        descriptionKey:
-          "commands.optionalkey.brave.set.invalid_key_description",
+        descriptionKey: "commands.optionalkey.brave.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
     // 5. Load the Tomori state for this server
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -103,45 +87,32 @@ export async function execute(
     try {
       const validationResult = await Promise.race([
         braveWebSearch({ q: "test" }, { apiKey: apiKey, timeout: 5000 }),
-        new Promise<{ success: boolean }>((resolve) =>
-          setTimeout(() => resolve({ success: false }), 5000),
-        ),
+        new Promise<{ success: boolean }>((resolve) => setTimeout(() => resolve({ success: false }), 5000)),
       ]);
 
       if (!validationResult.success) {
         // Don't log specific validation failures - they could contain sensitive info
-        log.info(
-          `Brave API key validation failed for server ${tomoriState.server_id}`,
-        );
+        log.info(`Brave API key validation failed for server ${tomoriState.server_id}`);
         await replyInfoEmbed(interaction, locale, {
-          titleKey:
-            "commands.optionalkey.brave.set.key_validation_failed_title",
-          descriptionKey:
-            "commands.optionalkey.brave.set.key_validation_failed_description",
+          titleKey: "commands.optionalkey.brave.set.key_validation_failed_title",
+          descriptionKey: "commands.optionalkey.brave.set.key_validation_failed_description",
           color: ColorCode.ERROR,
         });
         return;
       }
     } catch (_error) {
       // Same error handling regardless of error type to prevent information leakage
-      log.info(
-        `Brave API key validation error for server ${tomoriState.server_id}`,
-      );
+      log.info(`Brave API key validation error for server ${tomoriState.server_id}`);
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.brave.set.key_validation_failed_title",
-        descriptionKey:
-          "commands.optionalkey.brave.set.key_validation_failed_description",
+        descriptionKey: "commands.optionalkey.brave.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
     // 9. Store the validated API key
-    const isStored = await storeOptApiKey(
-      tomoriState.server_id,
-      "brave-search",
-      apiKey,
-    );
+    const isStored = await storeOptApiKey(tomoriState.server_id, "brave-search", apiKey);
 
     if (!isStored) {
       const context: ErrorContext = {

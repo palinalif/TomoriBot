@@ -36,9 +36,7 @@ export default async (client: Client): Promise<void> => {
       return;
     }
 
-    log.info(
-      `Preparing to register ${registrationData.length} top-level commands`,
-    );
+    log.info(`Preparing to register ${registrationData.length} top-level commands`);
 
     // Initialize REST API for command registration
     const rest = new REST().setToken(discordToken);
@@ -51,9 +49,7 @@ export default async (client: Client): Promise<void> => {
       await rest.put(Routes.applicationCommands(applicationId), {
         body: registrationData,
       });
-      log.success(
-        `Successfully registered ${registrationData.length} commands globally`,
-      );
+      log.success(`Successfully registered ${registrationData.length} commands globally`);
     } catch (error) {
       const context: ErrorContext = {
         errorType: "CommandRegistrationError",
@@ -66,10 +62,6 @@ export default async (client: Client): Promise<void> => {
       errorType: "CommandRegistrationError",
       metadata: { stage: "initialization" },
     };
-    await log.error(
-      "Error during command registration process:",
-      error,
-      context,
-    );
+    await log.error("Error during command registration process:", error, context);
   }
 };

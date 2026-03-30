@@ -93,10 +93,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
       return googleFunction;
     } catch (error) {
-      log.error(
-        `Failed to convert tool '${tool.name}' (${tool.category}) to Google format`,
-        error as Error,
-      );
+      log.error(`Failed to convert tool '${tool.name}' (${tool.category}) to Google format`, error as Error);
       throw error;
     }
   }
@@ -122,10 +119,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
             resultText = data.summary;
           } else if (data.message && typeof data.message === "string") {
             resultText = data.message;
-          } else if (
-            data.selectionReason &&
-            typeof data.selectionReason === "string"
-          ) {
+          } else if (data.selectionReason && typeof data.selectionReason === "string") {
             resultText = data.selectionReason;
           } else {
             // Include relevant data in the result text
@@ -142,8 +136,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
       }
 
       // Failed execution - provide error information
-      const errorText =
-        result.message || result.error || "Tool execution failed";
+      const errorText = result.message || result.error || "Tool execution failed";
 
       return {
         text: `Error: ${errorText}`,
@@ -202,11 +195,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
     serverId?: number,
     allowedMCPFunctions?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    return this.getAllToolsInGoogleFormat(
-      builtInTools,
-      serverId,
-      allowedMCPFunctions,
-    );
+    return this.getAllToolsInGoogleFormat(builtInTools, serverId, allowedMCPFunctions);
   }
 
   /**
@@ -244,26 +233,18 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
       let filteredBuiltInTools = builtInTools;
       if (!hasBraveApiKey) {
         // No Brave API key - exclude Brave search tools
-        filteredBuiltInTools = builtInTools.filter(
-          (tool) => !braveSearchToolNames.includes(tool.name),
-        );
+        filteredBuiltInTools = builtInTools.filter((tool) => !braveSearchToolNames.includes(tool.name));
         const excludedCount = builtInTools.length - filteredBuiltInTools.length;
         if (excludedCount > 0) {
-          log.info(
-            `Excluded ${excludedCount} Brave search tools (no API key available)`,
-          );
+          log.info(`Excluded ${excludedCount} Brave search tools (no API key available)`);
         }
       }
 
       // Convert filtered built-in tools
       if (filteredBuiltInTools.length > 0) {
-        const builtInDeclarations = filteredBuiltInTools.map((tool) =>
-          this.convertTool(tool),
-        );
+        const builtInDeclarations = filteredBuiltInTools.map((tool) => this.convertTool(tool));
         allFunctionDeclarations.push(...builtInDeclarations);
-        log.info(
-          `Converted ${filteredBuiltInTools.length} built-in tools to Google format`,
-        );
+        log.info(`Converted ${filteredBuiltInTools.length} built-in tools to Google format`);
       }
 
       // Add MCP tools if available (using pre-filtered list or legacy filtering)
@@ -277,13 +258,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
         // iask-search / monica-search: unsupported or low-quality search modes
         // fetch-url: Use dedicated Fetch MCP server instead
         // url-metadata: Redundant with Fetch MCP server
-        const disabledDDGFunctions = [
-          "felo-search",
-          "iask-search",
-          "monica-search",
-          "fetch-url",
-          "url-metadata",
-        ];
+        const disabledDDGFunctions = ["felo-search", "iask-search", "monica-search", "fetch-url", "url-metadata"];
         let disabledFunctionsCount = 0;
 
         if (allowedMCPFunctions) {
@@ -296,19 +271,19 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
               const geminiTool = await mcpTool.tool();
               if (geminiTool.functionDeclarations) {
                 // Filter declarations to only include allowed functions and exclude disabled DDG functions
-                const declarations = (
-                  geminiTool.functionDeclarations as Record<string, unknown>[]
-                ).filter((declaration) => {
-                  const functionName = declaration.name as string;
+                const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter(
+                  (declaration) => {
+                    const functionName = declaration.name as string;
 
-                  // Exclude disabled DuckDuckGo functions
-                  if (disabledDDGFunctions.includes(functionName)) {
-                    disabledFunctionsCount++;
-                    return false;
-                  }
+                    // Exclude disabled DuckDuckGo functions
+                    if (disabledDDGFunctions.includes(functionName)) {
+                      disabledFunctionsCount++;
+                      return false;
+                    }
 
-                  return allowedFunctionSet.has(functionName);
-                });
+                    return allowedFunctionSet.has(functionName);
+                  },
+                );
 
                 if (declarations.length > 0) {
                   allFunctionDeclarations.push(...declarations);
@@ -316,10 +291,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
                 }
               }
             } catch (error) {
-              log.warn(
-                "Failed to extract functions from MCP tool:",
-                error as Error,
-              );
+              log.warn("Failed to extract functions from MCP tool:", error as Error);
             }
           }
 
@@ -336,49 +308,35 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
           const mcpTools = mcpManager.getMCPTools();
 
           // DuckDuckGo search function names for filtering when Brave is available
-          const duckduckgoSearchFunctions = [
-            "web-search",
-            "iask-search",
-            "monica-search",
-            "url-metadata",
-          ];
+          const duckduckgoSearchFunctions = ["web-search", "iask-search", "monica-search", "url-metadata"];
 
           for (const mcpTool of mcpTools) {
             try {
               const geminiTool = await mcpTool.tool();
               if (geminiTool.functionDeclarations) {
                 // Cast FunctionDeclaration to Record<string, unknown> for type compatibility
-                let declarations = geminiTool.functionDeclarations as Record<
-                  string,
-                  unknown
-                >[];
+                let declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
 
                 // Filter out disabled DuckDuckGo functions (always)
                 const originalCount = declarations.length;
-                declarations = declarations.filter(
-                  (declaration: Record<string, unknown>) => {
-                    const functionName = declaration.name as string;
+                declarations = declarations.filter((declaration: Record<string, unknown>) => {
+                  const functionName = declaration.name as string;
 
-                    // Always exclude disabled functions
-                    if (disabledDDGFunctions.includes(functionName)) {
-                      disabledFunctionsCount++;
-                      return false;
-                    }
+                  // Always exclude disabled functions
+                  if (disabledDDGFunctions.includes(functionName)) {
+                    disabledFunctionsCount++;
+                    return false;
+                  }
 
-                    // Filter out DuckDuckGo search functions if Brave API key is available
-                    if (
-                      hasBraveApiKey &&
-                      duckduckgoSearchFunctions.includes(functionName)
-                    ) {
-                      return false;
-                    }
+                  // Filter out DuckDuckGo search functions if Brave API key is available
+                  if (hasBraveApiKey && duckduckgoSearchFunctions.includes(functionName)) {
+                    return false;
+                  }
 
-                    return true;
-                  },
-                );
+                  return true;
+                });
 
-                excludedDDGFunctionsCount +=
-                  originalCount - declarations.length - disabledFunctionsCount;
+                excludedDDGFunctionsCount += originalCount - declarations.length - disabledFunctionsCount;
 
                 // Add remaining declarations
                 if (declarations.length > 0) {
@@ -387,10 +345,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
                 }
               }
             } catch (error) {
-              log.warn(
-                "Failed to extract functions from MCP tool:",
-                error as Error,
-              );
+              log.warn("Failed to extract functions from MCP tool:", error as Error);
             }
           }
 
@@ -403,9 +358,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
             );
           }
           if (excludedDDGFunctionsCount > 0) {
-            log.info(
-              `Excluded ${excludedDDGFunctionsCount} DuckDuckGo search functions (Brave API key available)`,
-            );
+            log.info(`Excluded ${excludedDDGFunctionsCount} DuckDuckGo search functions (Brave API key available)`);
           }
         }
       }
@@ -421,29 +374,21 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
             try {
               const geminiTool = await guildTool.tool();
               if (geminiTool.functionDeclarations) {
-                const declarations = (
-                  geminiTool.functionDeclarations as Record<string, unknown>[]
-                ).filter((decl) => allowedFunctionSet.has(decl.name as string));
+                const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter((decl) =>
+                  allowedFunctionSet.has(decl.name as string),
+                );
 
                 if (declarations.length > 0) {
                   allFunctionDeclarations.push(...declarations);
-                  log.info(
-                    `Added ${declarations.length} guild MCP tool declaration(s) to Google format`,
-                  );
+                  log.info(`Added ${declarations.length} guild MCP tool declaration(s) to Google format`);
                 }
               }
             } catch (error) {
-              log.warn(
-                "Failed to extract guild MCP tool declarations:",
-                error as Error,
-              );
+              log.warn("Failed to extract guild MCP tool declarations:", error as Error);
             }
           }
         } catch (error) {
-          log.warn(
-            "Failed to get guild MCP tools for Google format:",
-            error as Error,
-          );
+          log.warn("Failed to get guild MCP tools for Google format:", error as Error);
         }
       }
 
@@ -502,9 +447,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
    * @param genericType - Generic parameter type
    * @returns Google Type enum value
    */
-  private convertParameterType(
-    genericType: ToolParameterType,
-  ): GoogleTypeValue {
+  private convertParameterType(genericType: ToolParameterType): GoogleTypeValue {
     switch (genericType) {
       case "string":
         return Type.STRING;
@@ -518,16 +461,12 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
         return Type.OBJECT;
       default:
         // Default to string for unknown types
-        log.warn(
-          `Unknown parameter type: ${genericType}, defaulting to STRING`,
-        );
+        log.warn(`Unknown parameter type: ${genericType}, defaulting to STRING`);
         return Type.STRING;
     }
   }
 
-  private convertParameterSchema(
-    schema: ToolParameterPropertySchema,
-  ): GoogleParameterSchema {
+  private convertParameterSchema(schema: ToolParameterPropertySchema): GoogleParameterSchema {
     const convertedSchema: GoogleParameterSchema = {
       type: this.convertParameterType(schema.type),
     };
@@ -577,13 +516,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
    */
   private extractRelevantData(data: Record<string, unknown>): string | null {
     try {
-      const relevantFields = [
-        "summary",
-        "preview",
-        "selectionReason",
-        "query",
-        "resultLength",
-      ];
+      const relevantFields = ["summary", "preview", "selectionReason", "query", "resultLength"];
       const extractedData: Record<string, unknown> = {};
 
       for (const field of relevantFields) {
@@ -603,10 +536,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
       return entries.length > 200 ? `${entries.substring(0, 200)}...` : entries;
     } catch (error) {
-      log.warn(
-        "Failed to extract relevant data from tool result",
-        error as Error,
-      );
+      log.warn("Failed to extract relevant data from tool result", error as Error);
       return null;
     }
   }
@@ -624,10 +554,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
       }
 
       // Check parameter schema structure
-      if (
-        !tool.parameters.properties ||
-        !Array.isArray(tool.parameters.required)
-      ) {
+      if (!tool.parameters.properties || !Array.isArray(tool.parameters.required)) {
         return false;
       }
 
@@ -638,24 +565,13 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
       return true;
     } catch (error) {
-      log.warn(
-        `Tool compatibility validation failed for '${tool.name}'`,
-        error as Error,
-      );
+      log.warn(`Tool compatibility validation failed for '${tool.name}'`, error as Error);
       return false;
     }
   }
 
-  private isSupportedParameterSchema(
-    schema: ToolParameterPropertySchema,
-  ): boolean {
-    const supportedTypes: ToolParameterType[] = [
-      "string",
-      "number",
-      "boolean",
-      "array",
-      "object",
-    ];
+  private isSupportedParameterSchema(schema: ToolParameterPropertySchema): boolean {
+    const supportedTypes: ToolParameterType[] = ["string", "number", "boolean", "array", "object"];
 
     if (!supportedTypes.includes(schema.type)) {
       return false;

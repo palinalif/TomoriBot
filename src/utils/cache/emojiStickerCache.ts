@@ -26,8 +26,7 @@ const cache = new Map<number, EmojiStickerCacheEntry>();
  * Cache duration: configurable via env, default 10 minutes.
  * Balances freshness vs performance (99% of messages should hit cache)
  */
-const MEMORY_CACHE_DURATION_MS =
-  (Number(process.env.EMOJI_STICKER_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
+const MEMORY_CACHE_DURATION_MS = (Number(process.env.EMOJI_STICKER_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
 
 /**
  * Cache statistics for monitoring
@@ -77,9 +76,7 @@ export async function loadEmojiStickerCache(
     if (cacheAge < MEMORY_CACHE_DURATION_MS) {
       // Cache hit - return immediately
       cacheHits++;
-      log.info(
-        `[Emoji/Sticker Cache] HIT for server ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`,
-      );
+      log.info(`[Emoji/Sticker Cache] HIT for server ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`);
       return {
         emojis: emojiUsageEnabled ? cachedEntry.emojis : null,
         stickers: stickerUsageEnabled ? cachedEntry.stickers : null,
@@ -87,16 +84,12 @@ export async function loadEmojiStickerCache(
     }
 
     // Cache stale - fall through to refresh
-    log.info(
-      `[Emoji/Sticker Cache] STALE for server ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`,
-    );
+    log.info(`[Emoji/Sticker Cache] STALE for server ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // 3. Cache miss or stale - refresh from DB
   cacheMisses++;
-  log.info(
-    `[Emoji/Sticker Cache] MISS for server ${serverId} - loading from DB`,
-  );
+  log.info(`[Emoji/Sticker Cache] MISS for server ${serverId} - loading from DB`);
 
   try {
     // 4. Lazy sync from Discord if needed (24hr check)
@@ -127,8 +120,7 @@ export async function loadEmojiStickerCache(
 					FROM server_stickers
 					WHERE server_id = ${serverId}
 				`;
-        stickers =
-          stickersData.length > 0 ? (stickersData as ServerStickerRow[]) : [];
+        stickers = stickersData.length > 0 ? (stickersData as ServerStickerRow[]) : [];
       }
     }
 
@@ -145,16 +137,11 @@ export async function loadEmojiStickerCache(
 
     return { emojis, stickers };
   } catch (error) {
-    log.error(
-      `[Emoji/Sticker Cache] Error loading data for server ${serverId}:`,
-      error,
-    );
+    log.error(`[Emoji/Sticker Cache] Error loading data for server ${serverId}:`, error);
 
     // Return stale cache if available (fallback)
     if (cachedEntry) {
-      log.warn(
-        `[Emoji/Sticker Cache] Returning stale cache for server ${serverId} due to error`,
-      );
+      log.warn(`[Emoji/Sticker Cache] Returning stale cache for server ${serverId} due to error`);
       return {
         emojis: emojiUsageEnabled ? cachedEntry.emojis : null,
         stickers: stickerUsageEnabled ? cachedEntry.stickers : null,
@@ -191,9 +178,7 @@ export function clearEmojiStickerCache(): void {
   cacheHits = 0;
   cacheMisses = 0;
 
-  log.info(
-    `[Emoji/Sticker Cache] Cleared entire cache (${previousSize} entries)`,
-  );
+  log.info(`[Emoji/Sticker Cache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**
@@ -208,8 +193,7 @@ export function getEmojiStickerCacheStats(): {
   cacheSize: number;
 } {
   const total = cacheHits + cacheMisses;
-  const hitRate =
-    total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
+  const hitRate = total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
 
   return {
     hits: cacheHits,

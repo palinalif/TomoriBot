@@ -7,10 +7,7 @@ import type { ChatInputCommandInteraction, Client } from "discord.js";
 import { MessageFlags, SlashCommandSubcommandBuilder } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
@@ -22,9 +19,7 @@ import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 export function configureSubcommand(): SlashCommandSubcommandBuilder {
   return new SlashCommandSubcommandBuilder()
     .setName("clear")
-    .setDescription(
-      "Remove custom system prompt and use default humanizer instruction",
-    )
+    .setDescription("Remove custom system prompt and use default humanizer instruction")
     .setDescriptionLocalizations({
       // Add localizations as needed
     });
@@ -65,8 +60,7 @@ export async function execute(
     if (!tomoriState.config.system_prompt) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.prompt.clear.no_custom_prompt_title",
-        descriptionKey:
-          "commands.config.prompt.clear.no_custom_prompt_description",
+        descriptionKey: "commands.config.prompt.clear.no_custom_prompt_description",
         descriptionVars: { defaultPrompt: DEFAULT_SYSTEM_PROMPT.trim() },
         color: ColorCode.INFO,
         flags: MessageFlags.Ephemeral,

@@ -19,10 +19,7 @@ export type {
   ProviderCompactSummaryRequest as CompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 
-async function buildUserParts(
-  userPrompt: string,
-  images?: Array<{ url: string; mimeType?: string }>,
-): Promise<Part[]> {
+async function buildUserParts(userPrompt: string, images?: Array<{ url: string; mimeType?: string }>): Promise<Part[]> {
   const parts: Part[] = [{ text: userPrompt }];
 
   if (!images || images.length === 0) {
@@ -31,10 +28,7 @@ async function buildUserParts(
 
   for (const image of images) {
     try {
-      const optimized = await fetchAndOptimizeImage(
-        image.url,
-        image.mimeType || "image/png",
-      );
+      const optimized = await fetchAndOptimizeImage(image.url, image.mimeType || "image/png");
       parts.push({
         inlineData: {
           data: optimized.data,
@@ -42,10 +36,7 @@ async function buildUserParts(
         },
       });
     } catch (error) {
-      log.warn(
-        `Compact summary: failed to process image ${image.url}`,
-        error as Error,
-      );
+      log.warn(`Compact summary: failed to process image ${image.url}`, error as Error);
     }
   }
 
@@ -68,9 +59,7 @@ export async function generateConversationSummaryGoogle(
     }
 
     const genAI = client ?? new GoogleGenAI({ apiKey: request.apiKey });
-    const prompt = request.systemPrompt
-      ? `${request.systemPrompt}\n\n${request.userPrompt}`
-      : request.userPrompt;
+    const prompt = request.systemPrompt ? `${request.systemPrompt}\n\n${request.userPrompt}` : request.userPrompt;
 
     const parts = await buildUserParts(prompt, request.images);
     const contents: Content = { role: "user", parts };
@@ -150,9 +139,7 @@ export async function generateRoleplaySummaryGoogle(
     }
 
     const genAI = client ?? new GoogleGenAI({ apiKey: request.apiKey });
-    const prompt = request.systemPrompt
-      ? `${request.systemPrompt}\n\n${request.userPrompt}`
-      : request.userPrompt;
+    const prompt = request.systemPrompt ? `${request.systemPrompt}\n\n${request.userPrompt}` : request.userPrompt;
 
     const parts = await buildUserParts(prompt, request.images);
     const contents: Content = { role: "user", parts };
@@ -180,18 +167,11 @@ export async function generateRoleplaySummaryGoogle(
       parsed = JSON.parse(responseText) as CompactRoleplaySummary;
     } catch (parseError) {
       return {
-        error:
-          parseError instanceof Error
-            ? parseError.message
-            : "Invalid JSON response from Google",
+        error: parseError instanceof Error ? parseError.message : "Invalid JSON response from Google",
       };
     }
 
-    if (
-      !parsed ||
-      typeof parsed.overall_scene_summary !== "string" ||
-      !Array.isArray(parsed.characters)
-    ) {
+    if (!parsed || typeof parsed.overall_scene_summary !== "string" || !Array.isArray(parsed.characters)) {
       return { error: "Invalid roleplay summary format from Google" };
     }
 

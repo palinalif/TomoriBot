@@ -86,10 +86,7 @@ function extractCustomEmojis(content: string): ImageUrlInfo[] {
  * @returns Array of base64-encoded images with MIME types
  * @throws Error if the message is not found or no images could be processed
  */
-export async function extractImagesFromMessage(
-  messageId: string,
-  context: ToolContext,
-): Promise<ExtractedImage[]> {
+export async function extractImagesFromMessage(messageId: string, context: ToolContext): Promise<ExtractedImage[]> {
   // 1. Fetch the Discord message
   const message = await context.channel.messages.fetch(messageId);
 
@@ -101,9 +98,7 @@ export async function extractImagesFromMessage(
   const imageUrls: ImageUrlInfo[] = [];
 
   // 2. Direct attachments
-  const imageAttachments = message.attachments.filter((attachment) =>
-    attachment.contentType?.startsWith("image/"),
-  );
+  const imageAttachments = message.attachments.filter((attachment) => attachment.contentType?.startsWith("image/"));
 
   for (const attachment of imageAttachments.values()) {
     imageUrls.push({
@@ -166,9 +161,7 @@ export async function extractImagesFromMessage(
     try {
       const imageResponse = await fetch(imageInfo.url);
       if (!imageResponse.ok) {
-        log.warn(
-          `Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`,
-        );
+        log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`);
         continue;
       }
 
@@ -178,14 +171,9 @@ export async function extractImagesFromMessage(
         data: Buffer.from(imageArrayBuffer).toString("base64"),
       });
 
-      log.info(
-        `Successfully converted image from ${imageInfo.source} to base64`,
-      );
+      log.info(`Successfully converted image from ${imageInfo.source} to base64`);
     } catch (imgErr) {
-      log.warn(
-        `Failed to process image from ${imageInfo.source}:`,
-        imgErr as Error,
-      );
+      log.warn(`Failed to process image from ${imageInfo.source}:`, imgErr as Error);
     }
   }
 
@@ -207,9 +195,7 @@ export async function extractImagesFromMessage(
 export async function fetchImageAsBuffer(imageUrl: string): Promise<Buffer> {
   const response = await fetch(imageUrl);
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch image: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
   }
 
   const arrayBuffer = await response.arrayBuffer();

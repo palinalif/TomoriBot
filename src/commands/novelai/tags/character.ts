@@ -8,11 +8,7 @@ import {
 import { invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import type { TomoriState, UserRow } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import type { SelectOption } from "../../../types/discord/modal";
@@ -35,14 +31,8 @@ const TAGS_INPUT_ID = "tags_input";
  * @param subcommand - The subcommand builder to configure
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("character")
-    .setDescription(
-      localizer("en-US", "commands.novelai.tags.character.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("character").setDescription(localizer("en-US", "commands.novelai.tags.character.description"));
 
 /**
  * Configures NovelAI character tags (imageboard-style) for a persona profile.
@@ -97,21 +87,13 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.server.trigger.add.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.server.trigger.add.main_persona_description",
-            ),
+          ? localizer(locale, "commands.server.trigger.add.alter_persona_description")
+          : localizer(locale, "commands.server.trigger.add.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
 
     if (personaSelectOptions.length === 0) {
-      log.error(
-        "No selectable personas found while building character tags modal options",
-      );
+      log.error("No selectable personas found while building character tags modal options");
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.unknown_error_title",
         descriptionKey: "general.errors.unknown_error_description",
@@ -128,18 +110,15 @@ export async function execute(
         {
           customId: PERSONA_SELECT_ID,
           labelKey: "commands.novelai.tags.character.persona_select_label",
-          descriptionKey:
-            "commands.novelai.tags.character.persona_select_description",
-          placeholder:
-            "commands.novelai.tags.character.persona_select_placeholder",
+          descriptionKey: "commands.novelai.tags.character.persona_select_description",
+          placeholder: "commands.novelai.tags.character.persona_select_placeholder",
           required: true,
           options: personaSelectOptions,
         },
         {
           customId: TAGS_INPUT_ID,
           labelKey: "commands.novelai.tags.character.tags_input_label",
-          descriptionKey:
-            "commands.novelai.tags.character.tags_input_description",
+          descriptionKey: "commands.novelai.tags.character.tags_input_description",
           placeholder: "commands.novelai.tags.character.tags_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: false, // Empty input clears tags
@@ -149,9 +128,7 @@ export async function execute(
     });
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Character tags modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Character tags modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -170,10 +147,7 @@ export async function execute(
     }
 
     // 5. Find the selected persona
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
 
     if (!selectedPersona) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -220,22 +194,17 @@ export async function execute(
     if (!validationResult.isValid && validationResult.reason === "too_many") {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.tags.character.too_many_tags_title",
-        descriptionKey:
-          "commands.novelai.tags.character.too_many_tags_description",
+        descriptionKey: "commands.novelai.tags.character.too_many_tags_description",
         descriptionVars: { max_tags: MAX_TAGS.toString() },
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    if (
-      !validationResult.isValid &&
-      validationResult.reason === "tag_too_long"
-    ) {
+    if (!validationResult.isValid && validationResult.reason === "tag_too_long") {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.tags.character.tag_too_long_title",
-        descriptionKey:
-          "commands.novelai.tags.character.tag_too_long_description",
+        descriptionKey: "commands.novelai.tags.character.tag_too_long_description",
         descriptionVars: { max_length: MAX_TAG_LENGTH.toString() },
         color: ColorCode.ERROR,
       });

@@ -13,11 +13,7 @@ import { memoryGuard } from "@/utils/security/rateLimiter";
 export const EXTRACTABLE_EXTENSIONS = [".pdf", ".txt", ".md"] as const;
 
 /** MIME types supported for inline document extraction */
-export const EXTRACTABLE_CONTENT_TYPES = [
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-] as const;
+export const EXTRACTABLE_CONTENT_TYPES = ["application/pdf", "text/plain", "text/markdown"] as const;
 
 /**
  * Check if a file is an extractable document by extension or MIME type
@@ -25,23 +21,16 @@ export const EXTRACTABLE_CONTENT_TYPES = [
  * @param filename - Filename to check by extension
  * @returns True if the file is a supported document type
  */
-export function isExtractableDocument(
-  contentType: string | null,
-  filename: string,
-): boolean {
+export function isExtractableDocument(contentType: string | null, filename: string): boolean {
   const lowerName = filename.toLowerCase();
 
   // Check by extension
-  const hasExtension = EXTRACTABLE_EXTENSIONS.some((ext) =>
-    lowerName.endsWith(ext),
-  );
+  const hasExtension = EXTRACTABLE_EXTENSIONS.some((ext) => lowerName.endsWith(ext));
   if (hasExtension) return true;
 
   // Check by MIME type
   if (contentType) {
-    return (EXTRACTABLE_CONTENT_TYPES as readonly string[]).includes(
-      contentType,
-    );
+    return (EXTRACTABLE_CONTENT_TYPES as readonly string[]).includes(contentType);
   }
 
   return false;
@@ -86,13 +75,7 @@ export interface ExtractTextResult {
   /** Original text length before truncation (only if truncated) */
   originalLength?: number;
   /** Error category if extraction failed */
-  error?:
-    | "size_exceeded"
-    | "extraction_failed"
-    | "memory_pressure"
-    | "timeout"
-    | "download_failed"
-    | "empty_document";
+  error?: "size_exceeded" | "extraction_failed" | "memory_pressure" | "timeout" | "download_failed" | "empty_document";
 }
 
 /**
@@ -119,9 +102,7 @@ export async function extractTextFromUrl(
   // 1. Check memory guard — block under warning/critical pressure
   const memCheck = memoryGuard.checkMemory();
   if (memCheck.status === "warning" || memCheck.status === "critical") {
-    log.warn(
-      `textExtractor: Blocked extraction due to memory pressure (${memCheck.status})`,
-    );
+    log.warn(`textExtractor: Blocked extraction due to memory pressure (${memCheck.status})`);
     return { success: false, truncated: false, error: "memory_pressure" };
   }
 
@@ -140,25 +121,16 @@ export async function extractTextFromUrl(
         : downloadResult.error === "timeout"
           ? "timeout"
           : "download_failed";
-    log.warn(
-      `textExtractor: Download failed for ${filename}: ${downloadResult.error} - ${downloadResult.details}`,
-    );
+    log.warn(`textExtractor: Download failed for ${filename}: ${downloadResult.error} - ${downloadResult.details}`);
     return { success: false, truncated: false, error: errorType };
   }
 
   // 3. Extract text from the buffer
   let rawText: string;
   try {
-    rawText = await extractTextFromBuffer(
-      downloadResult.buffer,
-      filename,
-      contentType,
-    );
+    rawText = await extractTextFromBuffer(downloadResult.buffer, filename, contentType);
   } catch (error) {
-    log.error(
-      `textExtractor: Failed to extract text from ${filename}`,
-      error as Error,
-    );
+    log.error(`textExtractor: Failed to extract text from ${filename}`, error as Error);
     return { success: false, truncated: false, error: "extraction_failed" };
   }
 
@@ -171,9 +143,7 @@ export async function extractTextFromUrl(
 
   // 5. Truncate if necessary
   const truncated = normalizedText.length > options.maxTextLength;
-  const finalText = truncated
-    ? normalizedText.slice(0, options.maxTextLength)
-    : normalizedText;
+  const finalText = truncated ? normalizedText.slice(0, options.maxTextLength) : normalizedText;
 
   return {
     success: true,

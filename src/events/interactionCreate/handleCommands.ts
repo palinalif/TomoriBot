@@ -2,25 +2,13 @@ import { MessageFlags, type Client, type Interaction } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
-import {
-  CooldownType,
-  userSchema,
-  type UserRow,
-  type ErrorContext,
-} from "../../types/db/schema";
+import { CooldownType, userSchema, type UserRow, type ErrorContext } from "../../types/db/schema";
 import { registerUser } from "../../utils/db/dbWrite";
-import {
-  loadCommandData,
-  type CommandExecutionMap,
-  type CommandCooldownMap,
-} from "../../utils/discord/commandLoader";
+import { loadCommandData, type CommandExecutionMap, type CommandCooldownMap } from "../../utils/discord/commandLoader";
 import { resolvePreferredDiscordDisplayName } from "../../utils/discord/displayName";
 
 // Define constants at the top (Rule #20)
-const DEFAULT_COOLDOWN = Number.parseInt(
-  process.env.DEFAULT_COMMAND_COOLDOWN || "1600",
-  10,
-); // Default cooldown for all commands in milliseconds
+const DEFAULT_COOLDOWN = Number.parseInt(process.env.DEFAULT_COMMAND_COOLDOWN || "1600", 10); // Default cooldown for all commands in milliseconds
 
 const COOLDOWN_MAP = new Map<string, number>([
   ["config", Number.parseInt(process.env.COOLDOWN_CONFIG || "3000", 10)],
@@ -42,10 +30,7 @@ let cooldownMap: CommandCooldownMap | null = null;
  * @param category - Command category
  * @returns Boolean indicating if command is on cooldown
  */
-async function checkCooldown(
-  userId: string,
-  category: string,
-): Promise<boolean> {
+async function checkCooldown(userId: string, category: string): Promise<boolean> {
   const now = Date.now();
   const [cooldown] = await sql`
     SELECT expiry_time
@@ -65,10 +50,7 @@ async function checkCooldown(
  * @param category - Command category
  * @returns Remaining cooldown time in seconds
  */
-async function getRemainingCooldown(
-  userId: string,
-  category: string,
-): Promise<number> {
+async function getRemainingCooldown(userId: string, category: string): Promise<number> {
   const now = Date.now();
   const [cooldown] = await sql`
     SELECT expiry_time
@@ -89,11 +71,7 @@ async function getRemainingCooldown(
  * @param category - Command category
  * @param duration - Cooldown duration in milliseconds
  */
-async function setCooldown(
-  userId: string,
-  category: string,
-  duration: number,
-): Promise<void> {
+async function setCooldown(userId: string, category: string, duration: number): Promise<void> {
   const expiryTime = Date.now() + duration;
 
   await sql`
@@ -114,15 +92,11 @@ async function setCooldown(
   `;
 }
 
-const handler = async (
-  client: Client,
-  interaction: Interaction,
-): Promise<void> => {
+const handler = async (client: Client, interaction: Interaction): Promise<void> => {
   if (!interaction.isChatInputCommand()) return;
 
   // Determine locale early for potential error messages
-  const initialLocale =
-    interaction.locale ?? interaction.guildLocale ?? "en-US";
+  const initialLocale = interaction.locale ?? interaction.guildLocale ?? "en-US";
 
   try {
     // 1. Load command data on first run if cache is empty
@@ -185,9 +159,7 @@ const handler = async (
     }
 
     // Build execution key based on whether command is grouped or flat
-    const executionKey = groupName
-      ? `${groupName}.${subcommandName}`
-      : subcommandName;
+    const executionKey = groupName ? `${groupName}.${subcommandName}` : subcommandName;
 
     // Get the execute function for this subcommand
     const executeFunction = subcommandMap.get(executionKey);
@@ -218,15 +190,9 @@ const handler = async (
         cooldownMap!.get(commandName) ?? DEFAULT_COOLDOWN;
 
       // Check if user is on cooldown for this command category
-      const isOnCooldown = await checkCooldown(
-        interaction.user.id,
-        commandName,
-      );
+      const isOnCooldown = await checkCooldown(interaction.user.id, commandName);
       if (isOnCooldown) {
-        const remainingSeconds = await getRemainingCooldown(
-          interaction.user.id,
-          commandName,
-        );
+        const remainingSeconds = await getRemainingCooldown(interaction.user.id, commandName);
         await replyInfoEmbed(
           interaction,
           initialLocale,
@@ -262,8 +228,7 @@ const handler = async (
           interaction.member && typeof interaction.member === "object"
             ? "displayName" in interaction.member
               ? interaction.member.displayName
-              : "nick" in interaction.member &&
-                  typeof interaction.member.nick === "string"
+              : "nick" in interaction.member && typeof interaction.member.nick === "string"
                 ? interaction.member.nick
                 : null
             : null;
@@ -284,8 +249,7 @@ const handler = async (
       }
 
       // Get the final locale once user data is potentially available
-      const finalLocale =
-        userData?.language_pref ?? interaction.guildLocale ?? "en-US";
+      const finalLocale = userData?.language_pref ?? interaction.guildLocale ?? "en-US";
 
       // 6. Execute command
       if (userData) {
@@ -299,11 +263,7 @@ const handler = async (
             command: `${commandName} ${subcommandName}`,
           },
         };
-        await log.error(
-          "User data unavailable for command execution",
-          undefined,
-          context,
-        );
+        await log.error("User data unavailable for command execution", undefined, context);
 
         await replyInfoEmbed(interaction, finalLocale, {
           titleKey: "general.errors.unknown_error_title",
@@ -329,11 +289,7 @@ const handler = async (
         guildDiscordId: interaction.guild?.id ?? "DM",
       },
     };
-    await log.error(
-      `Error in command handler for: ${interaction.commandName}`,
-      error,
-      context,
-    );
+    await log.error(`Error in command handler for: ${interaction.commandName}`, error, context);
 
     // Reply to user with enhanced defensive error handling
     // The improved replyInfoEmbed function can now handle various interaction states more robustly

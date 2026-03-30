@@ -47,9 +47,7 @@ const BRAVE_LANGUAGE_CODE_MAP: Record<string, string> = {
  * @param langCode - Standard ISO 639-1 language code or Brave-specific code
  * @returns Brave API-compatible language code
  */
-function normalizeBraveLangCode(
-  langCode: string | undefined,
-): string | undefined {
+function normalizeBraveLangCode(langCode: string | undefined): string | undefined {
   if (!langCode) return undefined;
 
   // Check if we have a mapping for this code
@@ -101,9 +99,7 @@ export function extractImageUrls(response: ImageSearchApiResponse): string[] {
     }
   }
 
-  log.info(
-    `Extracted ${imageUrls.length} image URLs from Brave Search response`,
-  );
+  log.info(`Extracted ${imageUrls.length} image URLs from Brave Search response`);
   return imageUrls;
 }
 
@@ -148,10 +144,7 @@ export async function sendImagesToDiscord(
         log.info(`Prepared Discord attachment for image: ${imageUrl}`);
       } catch (attachmentError) {
         failedUrls.push(imageUrls[i]);
-        log.warn(
-          `Failed to create attachment for URL: ${imageUrls[i]}`,
-          attachmentError as Error,
-        );
+        log.warn(`Failed to create attachment for URL: ${imageUrls[i]}`, attachmentError as Error);
       }
     }
 
@@ -191,9 +184,7 @@ export async function sendImagesToDiscord(
  * @param response - Original image search response
  * @returns Cleaned response without image URLs
  */
-export function cleanImageSearchResult(
-  response: ImageSearchApiResponse,
-): Partial<ImageSearchApiResponse> {
+export function cleanImageSearchResult(response: ImageSearchApiResponse): Partial<ImageSearchApiResponse> {
   try {
     return {
       type: response.type,
@@ -218,8 +209,7 @@ export function cleanImageSearchResult(
       })),
       extra: {
         ...response.extra,
-        summary:
-          "Image search completed - images have been sent to Discord channel",
+        summary: "Image search completed - images have been sent to Discord channel",
       },
     };
   } catch (error) {
@@ -229,8 +219,7 @@ export function cleanImageSearchResult(
       query: response.query,
       results: [],
       extra: {
-        summary:
-          "Image search completed - images have been sent to Discord channel",
+        summary: "Image search completed - images have been sent to Discord channel",
         imageDataRemoved: true,
       },
     };
@@ -261,9 +250,7 @@ export function addFetchCapabilityReminder(originalResult: string): {
 
     const enhancedMessage = originalResult;
 
-    log.info(
-      `Enhanced web search response - Found ${urlCount} URLs, added fetch capability reminder`,
-    );
+    log.info(`Enhanced web search response - Found ${urlCount} URLs, added fetch capability reminder`);
 
     return {
       enhancedMessage,
@@ -299,10 +286,7 @@ async function getBraveApiKey(serverId?: number): Promise<string | null> {
         return serverApiKey;
       }
     } catch (error) {
-      log.warn(
-        `Failed to retrieve server API key for ${serverId}:`,
-        error as Error,
-      );
+      log.warn(`Failed to retrieve server API key for ${serverId}:`, error as Error);
     }
   }
 
@@ -313,9 +297,7 @@ async function getBraveApiKey(serverId?: number): Promise<string | null> {
     return envApiKey;
   }
 
-  log.warn(
-    "No Brave API key available (neither server-specific nor environment variable)",
-  );
+  log.warn("No Brave API key available (neither server-specific nor environment variable)");
   return null;
 }
 
@@ -352,9 +334,7 @@ async function makeBraveApiRequest<T>(
       }
     }
 
-    log.info(
-      `Making Brave API request to: ${endpoint} with ${Object.keys(params).length} parameters`,
-    );
+    log.info(`Making Brave API request to: ${endpoint} with ${Object.keys(params).length} parameters`);
 
     // Create fetch request with timeout
     const controller = new AbortController();
@@ -376,9 +356,7 @@ async function makeBraveApiRequest<T>(
     // Check if request was successful
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      log.error(
-        `Brave API request failed with status ${response.status}: ${errorText}`,
-      );
+      log.error(`Brave API request failed with status ${response.status}: ${errorText}`);
 
       return {
         success: false,
@@ -399,9 +377,7 @@ async function makeBraveApiRequest<T>(
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === "AbortError") {
-        log.error(
-          `Brave API request to ${endpoint} timed out after ${timeout}ms`,
-        );
+        log.error(`Brave API request to ${endpoint} timed out after ${timeout}ms`);
         return {
           success: false,
           error: "Request timed out",
@@ -455,11 +431,7 @@ export async function braveWebSearch(
     ...(params.units ? { units: params.units } : {}),
   };
 
-  return makeBraveApiRequest<WebSearchApiResponse>(
-    "/web/search",
-    searchParams,
-    config,
-  );
+  return makeBraveApiRequest<WebSearchApiResponse>("/web/search", searchParams, config);
 }
 
 /**
@@ -481,11 +453,7 @@ export async function braveImageSearch(
     safesearch: params.safesearch || "off", // Default to "off" if not specified
     spellcheck: params.spellcheck !== false,
   };
-  return makeBraveApiRequest<ImageSearchApiResponse>(
-    "/images/search",
-    searchParams,
-    config,
-  );
+  return makeBraveApiRequest<ImageSearchApiResponse>("/images/search", searchParams, config);
 }
 
 /**
@@ -512,11 +480,7 @@ export async function braveVideoSearch(
     ...(params.freshness ? { freshness: params.freshness } : {}),
   };
 
-  return makeBraveApiRequest<VideoSearchApiResponse>(
-    "/videos/search",
-    searchParams,
-    config,
-  );
+  return makeBraveApiRequest<VideoSearchApiResponse>("/videos/search", searchParams, config);
 }
 
 /**
@@ -543,11 +507,7 @@ export async function braveNewsSearch(
     ...(params.freshness ? { freshness: params.freshness } : {}),
   };
 
-  return makeBraveApiRequest<NewsSearchApiResponse>(
-    "/news/search",
-    searchParams,
-    config,
-  );
+  return makeBraveApiRequest<NewsSearchApiResponse>("/news/search", searchParams, config);
 }
 
 // =============================================
@@ -559,9 +519,7 @@ export async function braveNewsSearch(
  * @param serverId - Discord server ID (optional)
  * @returns True if API key is available
  */
-export async function isBraveSearchAvailable(
-  serverId?: number,
-): Promise<boolean> {
+export async function isBraveSearchAvailable(serverId?: number): Promise<boolean> {
   const apiKey = await getBraveApiKey(serverId);
   return apiKey !== null;
 }
@@ -571,14 +529,9 @@ export async function isBraveSearchAvailable(
  * @param serverId - Discord server ID (optional)
  * @returns Test result
  */
-export async function testBraveApiConnection(
-  serverId?: number,
-): Promise<{ success: boolean; error?: string }> {
+export async function testBraveApiConnection(serverId?: number): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await braveWebSearch(
-      { q: "test" },
-      { serverId, timeout: 5000 },
-    );
+    const result = await braveWebSearch({ q: "test" }, { serverId, timeout: 5000 });
 
     if (result.success) {
       return { success: true };
@@ -688,10 +641,7 @@ export function formatBraveSearchResults(
     }
 
     // Add query alteration info if available
-    if (
-      response.query?.altered &&
-      response.query.altered !== response.query.original
-    ) {
+    if (response.query?.altered && response.query.altered !== response.query.original) {
       formatted += `\n*Search query was corrected to: "${response.query.altered}"*`;
     }
 
@@ -712,21 +662,11 @@ export function formatBraveSearchResults(
  * @param statusCode - HTTP status code
  * @returns True if error is API key related
  */
-export function isBraveApiKeyError(
-  error: string,
-  statusCode?: number,
-): boolean {
-  const keywordErrors = [
-    "unauthorized",
-    "invalid api key",
-    "subscription",
-    "authentication",
-  ];
+export function isBraveApiKeyError(error: string, statusCode?: number): boolean {
+  const keywordErrors = ["unauthorized", "invalid api key", "subscription", "authentication"];
 
   return (
-    statusCode === 401 ||
-    statusCode === 403 ||
-    keywordErrors.some((keyword) => error.toLowerCase().includes(keyword))
+    statusCode === 401 || statusCode === 403 || keywordErrors.some((keyword) => error.toLowerCase().includes(keyword))
   );
 }
 
@@ -736,18 +676,8 @@ export function isBraveApiKeyError(
  * @param statusCode - HTTP status code
  * @returns True if error is rate limit related
  */
-export function isBraveRateLimitError(
-  error: string,
-  statusCode?: number,
-): boolean {
-  const rateLimitKeywords = [
-    "rate limit",
-    "too many requests",
-    "quota exceeded",
-  ];
+export function isBraveRateLimitError(error: string, statusCode?: number): boolean {
+  const rateLimitKeywords = ["rate limit", "too many requests", "quota exceeded"];
 
-  return (
-    statusCode === 429 ||
-    rateLimitKeywords.some((keyword) => error.toLowerCase().includes(keyword))
-  );
+  return statusCode === 429 || rateLimitKeywords.some((keyword) => error.toLowerCase().includes(keyword));
 }

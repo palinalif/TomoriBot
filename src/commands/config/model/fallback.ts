@@ -1,28 +1,11 @@
-import type {
-  ChatInputCommandInteraction,
-  ButtonInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
-import {
-  MessageFlags,
-  ButtonBuilder,
-  ButtonStyle,
-  ActionRowBuilder,
-} from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import type { ChatInputCommandInteraction, ButtonInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import { MessageFlags, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { loadAvailableModelsForProvider } from "../../../utils/db/dbRead";
 import { setFallbackLlms } from "../../../utils/db/dbWrite";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import { createStandardEmbed } from "../../../utils/discord/embedHelper";
 import type { LlmRow, UserRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
@@ -61,10 +44,8 @@ const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
  */
 function getLocalizedDescription(model: LlmRow, locale: string): string {
   const normalizedLocale = locale.toLowerCase().split("-")[0];
-  const description =
-    normalizedLocale === "ja" ? model.ja_description : model.llm_description;
-  const baseDescription =
-    description || model.llm_description || `${model.llm_provider} model`;
+  const description = normalizedLocale === "ja" ? model.ja_description : model.llm_description;
+  const baseDescription = description || model.llm_description || `${model.llm_provider} model`;
 
   if (model.llm_codename === "other-model") return baseDescription;
 
@@ -80,14 +61,8 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("fallback")
-    .setDescription(
-      localizer("en-US", "commands.config.model.fallback.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("fallback").setDescription(localizer("en-US", "commands.config.model.fallback.description"));
 
 /**
  * Handles the /config model fallback command.
@@ -141,8 +116,7 @@ export async function execute(
   if (currentProvider === "custom") {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.model.fallback.custom_provider_title",
-      descriptionKey:
-        "commands.config.model.fallback.custom_provider_description",
+      descriptionKey: "commands.config.model.fallback.custom_provider_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -165,15 +139,12 @@ export async function execute(
   const allModelOptions: SelectOption[] = availableModels.map((m) => ({
     label: safeSelectOptionText(m.llm_codename),
     value: safeSelectOptionText(m.llm_codename),
-    description: safeSelectOptionText(
-      getLocalizedDescription(m, userData.language_pref),
-    ),
+    description: safeSelectOptionText(getLocalizedDescription(m, userData.language_pref)),
   }));
 
   // 6. Handle pagination when models exceed Discord's 25-option limit per select
   let optionsForModal = allModelOptions;
-  let modalInteraction: ChatInputCommandInteraction | ButtonInteraction =
-    interaction;
+  let modalInteraction: ChatInputCommandInteraction | ButtonInteraction = interaction;
 
   if (allModelOptions.length > ITEMS_PER_PAGE) {
     const totalPages = Math.ceil(allModelOptions.length / ITEMS_PER_PAGE);
@@ -197,9 +168,7 @@ export async function execute(
         .setStyle(ButtonStyle.Primary),
     );
 
-    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      ...pageButtons,
-    );
+    const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);
 
     // 6b. Reply with page selector (first acknowledgment for this interaction)
     const pageSelectMessage = await interaction.reply({
@@ -210,31 +179,20 @@ export async function execute(
 
     try {
       // 6c. Wait for user to select a page
-      const pageButtonInteraction =
-        await pageSelectMessage.awaitMessageComponent({
-          filter: (i) =>
-            i.user.id === interaction.user.id &&
-            i.customId.startsWith("fallback_page_"),
-          time: 300_000,
-        });
+      const pageButtonInteraction = await pageSelectMessage.awaitMessageComponent({
+        filter: (i) => i.user.id === interaction.user.id && i.customId.startsWith("fallback_page_"),
+        time: 300_000,
+      });
 
       // 6d. Slice the options to the selected page
-      const selectedPage = Number.parseInt(
-        pageButtonInteraction.customId.replace("fallback_page_", ""),
-        10,
-      );
+      const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("fallback_page_", ""), 10);
       const startIndex = (selectedPage - 1) * ITEMS_PER_PAGE;
-      const endIndex = Math.min(
-        startIndex + ITEMS_PER_PAGE,
-        allModelOptions.length,
-      );
+      const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, allModelOptions.length);
       optionsForModal = allModelOptions.slice(startIndex, endIndex);
       modalInteraction = pageButtonInteraction as ButtonInteraction;
     } catch {
       // Timeout — user did not select a page; clean up and exit
-      await interaction
-        .editReply({ embeds: [], components: [] })
-        .catch(() => {});
+      await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
     }
   }
@@ -250,10 +208,7 @@ export async function execute(
       components: SLOT_IDS.map((customId, index) => ({
         customId,
         labelKey: SLOT_LABEL_KEYS[index],
-        placeholder: localizer(
-          locale,
-          "commands.config.model.fallback.select_placeholder",
-        ),
+        placeholder: localizer(locale, "commands.config.model.fallback.select_placeholder"),
         required: index === 0, // Only slot 1 is required
         options: optionsForModal,
       })),
@@ -262,9 +217,7 @@ export async function execute(
   );
 
   if (modalResult.outcome !== "submit") {
-    log.info(
-      `Fallback model modal ${modalResult.outcome} for user ${userData.user_id}`,
-    );
+    log.info(`Fallback model modal ${modalResult.outcome} for user ${userData.user_id}`);
     return;
   }
 
@@ -282,9 +235,7 @@ export async function execute(
   const values = modalResult.values;
 
   // 8. Collect non-empty slot values in order
-  const rawSlots = SLOT_IDS.map((id) => (values[id] ?? "").trim()).filter(
-    (v) => v !== "",
-  );
+  const rawSlots = SLOT_IDS.map((id) => (values[id] ?? "").trim()).filter((v) => v !== "");
 
   // 9. Deduplicate while preserving order (silently drop later duplicates)
   const seen = new Set<string>();
@@ -301,8 +252,7 @@ export async function execute(
   if (deduplicatedCodenames.some((c) => c === primaryCodename)) {
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.fallback.primary_conflict_title",
-      descriptionKey:
-        "commands.config.model.fallback.primary_conflict_description",
+      descriptionKey: "commands.config.model.fallback.primary_conflict_description",
       descriptionVars: { model: primaryCodename },
       color: ColorCode.ERROR,
     });
@@ -352,9 +302,7 @@ export async function execute(
       color: ColorCode.SUCCESS,
     });
   } else {
-    const modelList = resolvedCodenames
-      .map((c, i) => `${i + 1}. \`${c}\``)
-      .join("\n");
+    const modelList = resolvedCodenames.map((c, i) => `${i + 1}. \`${c}\``).join("\n");
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.fallback.success_title",
       descriptionKey: "commands.config.model.fallback.success_description",

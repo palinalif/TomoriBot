@@ -68,77 +68,26 @@ export type MemoryValidationError =
  * @returns MemoryLimits configuration object
  */
 export function getMemoryLimits(): MemoryLimits {
-  const maxPersonalMemories = Number.parseInt(
-    process.env.MAX_PERSONAL_MEMORIES || "25",
-    10,
-  );
-  const maxServerMemories = Number.parseInt(
-    process.env.MAX_SERVER_MEMORIES || "25",
-    10,
-  );
-  const maxMemoryLength = Number.parseInt(
-    process.env.MAX_MEMORY_LENGTH || "1000",
-    10,
-  );
-  const maxSampleDialogueLength = Number.parseInt(
-    process.env.MAX_SAMPLE_DIALOGUE_LENGTH || "2000",
-    10,
-  );
-  const maxAttributeLength = Number.parseInt(
-    process.env.MAX_ATTRIBUTE_LENGTH || "2000",
-    10,
-  );
-  const maxTriggerWords = Number.parseInt(
-    process.env.MAX_TRIGGER_WORDS || "10",
-    10,
-  );
-  const maxSampleDialogues = Number.parseInt(
-    process.env.MAX_SAMPLE_DIALOGUES || "15",
-    10,
-  );
+  const maxPersonalMemories = Number.parseInt(process.env.MAX_PERSONAL_MEMORIES || "25", 10);
+  const maxServerMemories = Number.parseInt(process.env.MAX_SERVER_MEMORIES || "25", 10);
+  const maxMemoryLength = Number.parseInt(process.env.MAX_MEMORY_LENGTH || "1000", 10);
+  const maxSampleDialogueLength = Number.parseInt(process.env.MAX_SAMPLE_DIALOGUE_LENGTH || "2000", 10);
+  const maxAttributeLength = Number.parseInt(process.env.MAX_ATTRIBUTE_LENGTH || "2000", 10);
+  const maxTriggerWords = Number.parseInt(process.env.MAX_TRIGGER_WORDS || "10", 10);
+  const maxSampleDialogues = Number.parseInt(process.env.MAX_SAMPLE_DIALOGUES || "15", 10);
   const maxAttributes = Number.parseInt(process.env.MAX_ATTRIBUTES || "10", 10);
-  const maxPersonasPerServer = Number.parseInt(
-    process.env.MAX_PERSONAS_PER_SERVER || "20",
-    10,
-  );
-  const maxDocumentSizeMB = Number.parseInt(
-    process.env.MAX_DOCUMENT_SIZE_MB || "4",
-    10,
-  );
-  const maxDocumentTextLength = Number.parseInt(
-    process.env.MAX_DOCUMENT_TEXT_LENGTH || "120000",
-    10,
-  );
-  const documentChunkSize = Number.parseInt(
-    process.env.DOCUMENT_CHUNK_SIZE || "1000",
-    10,
-  );
-  const documentChunkOverlap = Number.parseInt(
-    process.env.DOCUMENT_CHUNK_OVERLAP || "200",
-    10,
-  );
-  const maxDocumentChunks = Number.parseInt(
-    process.env.MAX_DOCUMENT_CHUNKS || "150",
-    10,
-  );
-  const maxDocumentsPerServer = Number.parseInt(
-    process.env.MAX_DOCUMENTS_PER_SERVER || "20",
-    10,
-  );
-  const maxDocumentChunksPerServer = Number.parseInt(
-    process.env.MAX_DOCUMENT_CHUNKS_PER_SERVER || "1000",
-    10,
-  );
+  const maxPersonasPerServer = Number.parseInt(process.env.MAX_PERSONAS_PER_SERVER || "20", 10);
+  const maxDocumentSizeMB = Number.parseInt(process.env.MAX_DOCUMENT_SIZE_MB || "4", 10);
+  const maxDocumentTextLength = Number.parseInt(process.env.MAX_DOCUMENT_TEXT_LENGTH || "120000", 10);
+  const documentChunkSize = Number.parseInt(process.env.DOCUMENT_CHUNK_SIZE || "1000", 10);
+  const documentChunkOverlap = Number.parseInt(process.env.DOCUMENT_CHUNK_OVERLAP || "200", 10);
+  const maxDocumentChunks = Number.parseInt(process.env.MAX_DOCUMENT_CHUNKS || "150", 10);
+  const maxDocumentsPerServer = Number.parseInt(process.env.MAX_DOCUMENTS_PER_SERVER || "20", 10);
+  const maxDocumentChunksPerServer = Number.parseInt(process.env.MAX_DOCUMENT_CHUNKS_PER_SERVER || "1000", 10);
 
   // Validate that environment variables are reasonable numbers
-  if (
-    !Number.isInteger(maxPersonalMemories) ||
-    maxPersonalMemories <= 0 ||
-    maxPersonalMemories > 1000
-  ) {
-    log.warn(
-      `Invalid MAX_PERSONAL_MEMORIES value: ${process.env.MAX_PERSONAL_MEMORIES}. Using default: 30`,
-    );
+  if (!Number.isInteger(maxPersonalMemories) || maxPersonalMemories <= 0 || maxPersonalMemories > 1000) {
+    log.warn(`Invalid MAX_PERSONAL_MEMORIES value: ${process.env.MAX_PERSONAL_MEMORIES}. Using default: 30`);
     return {
       maxPersonalMemories: 30,
       maxServerMemories,
@@ -159,14 +108,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxServerMemories) ||
-    maxServerMemories <= 0 ||
-    maxServerMemories > 1000
-  ) {
-    log.warn(
-      `Invalid MAX_SERVER_MEMORIES value: ${process.env.MAX_SERVER_MEMORIES}. Using default: 50`,
-    );
+  if (!Number.isInteger(maxServerMemories) || maxServerMemories <= 0 || maxServerMemories > 1000) {
+    log.warn(`Invalid MAX_SERVER_MEMORIES value: ${process.env.MAX_SERVER_MEMORIES}. Using default: 50`);
     return {
       maxPersonalMemories,
       maxServerMemories: 50,
@@ -187,14 +130,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxMemoryLength) ||
-    maxMemoryLength <= 0 ||
-    maxMemoryLength > 2000
-  ) {
-    log.warn(
-      `Invalid MAX_MEMORY_LENGTH value: ${process.env.MAX_MEMORY_LENGTH}. Using default: 1000`,
-    );
+  if (!Number.isInteger(maxMemoryLength) || maxMemoryLength <= 0 || maxMemoryLength > 2000) {
+    log.warn(`Invalid MAX_MEMORY_LENGTH value: ${process.env.MAX_MEMORY_LENGTH}. Using default: 1000`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -215,11 +152,7 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxSampleDialogueLength) ||
-    maxSampleDialogueLength <= 0 ||
-    maxSampleDialogueLength > 5000
-  ) {
+  if (!Number.isInteger(maxSampleDialogueLength) || maxSampleDialogueLength <= 0 || maxSampleDialogueLength > 5000) {
     log.warn(
       `Invalid MAX_SAMPLE_DIALOGUE_LENGTH value: ${process.env.MAX_SAMPLE_DIALOGUE_LENGTH}. Using default: 2000`,
     );
@@ -243,14 +176,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxAttributeLength) ||
-    maxAttributeLength <= 0 ||
-    maxAttributeLength > 5000
-  ) {
-    log.warn(
-      `Invalid MAX_ATTRIBUTE_LENGTH value: ${process.env.MAX_ATTRIBUTE_LENGTH}. Using default: 2000`,
-    );
+  if (!Number.isInteger(maxAttributeLength) || maxAttributeLength <= 0 || maxAttributeLength > 5000) {
+    log.warn(`Invalid MAX_ATTRIBUTE_LENGTH value: ${process.env.MAX_ATTRIBUTE_LENGTH}. Using default: 2000`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -271,14 +198,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxTriggerWords) ||
-    maxTriggerWords <= 0 ||
-    maxTriggerWords > 100
-  ) {
-    log.warn(
-      `Invalid MAX_TRIGGER_WORDS value: ${process.env.MAX_TRIGGER_WORDS}. Using default: 10`,
-    );
+  if (!Number.isInteger(maxTriggerWords) || maxTriggerWords <= 0 || maxTriggerWords > 100) {
+    log.warn(`Invalid MAX_TRIGGER_WORDS value: ${process.env.MAX_TRIGGER_WORDS}. Using default: 10`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -299,14 +220,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxSampleDialogues) ||
-    maxSampleDialogues <= 0 ||
-    maxSampleDialogues > 100
-  ) {
-    log.warn(
-      `Invalid MAX_SAMPLE_DIALOGUES value: ${process.env.MAX_SAMPLE_DIALOGUES}. Using default: 15`,
-    );
+  if (!Number.isInteger(maxSampleDialogues) || maxSampleDialogues <= 0 || maxSampleDialogues > 100) {
+    log.warn(`Invalid MAX_SAMPLE_DIALOGUES value: ${process.env.MAX_SAMPLE_DIALOGUES}. Using default: 15`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -327,14 +242,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxAttributes) ||
-    maxAttributes <= 0 ||
-    maxAttributes > 200
-  ) {
-    log.warn(
-      `Invalid MAX_ATTRIBUTES value: ${process.env.MAX_ATTRIBUTES}. Using default: 10`,
-    );
+  if (!Number.isInteger(maxAttributes) || maxAttributes <= 0 || maxAttributes > 200) {
+    log.warn(`Invalid MAX_ATTRIBUTES value: ${process.env.MAX_ATTRIBUTES}. Using default: 10`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -360,9 +269,7 @@ export function getMemoryLimits(): MemoryLimits {
     maxPersonasPerServer <= 0 ||
     maxPersonasPerServer > ABSOLUTE_MAX_PERSONAS_PER_SERVER
   ) {
-    log.warn(
-      `Invalid MAX_PERSONAS_PER_SERVER value: ${process.env.MAX_PERSONAS_PER_SERVER}. Using default: 20`,
-    );
+    log.warn(`Invalid MAX_PERSONAS_PER_SERVER value: ${process.env.MAX_PERSONAS_PER_SERVER}. Using default: 20`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -383,14 +290,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(maxDocumentSizeMB) ||
-    maxDocumentSizeMB <= 0 ||
-    maxDocumentSizeMB > 100
-  ) {
-    log.warn(
-      `Invalid MAX_DOCUMENT_SIZE_MB value: ${process.env.MAX_DOCUMENT_SIZE_MB}. Using default: 4`,
-    );
+  if (!Number.isInteger(maxDocumentSizeMB) || maxDocumentSizeMB <= 0 || maxDocumentSizeMB > 100) {
+    log.warn(`Invalid MAX_DOCUMENT_SIZE_MB value: ${process.env.MAX_DOCUMENT_SIZE_MB}. Using default: 4`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -416,9 +317,7 @@ export function getMemoryLimits(): MemoryLimits {
     maxDocumentTextLength <= 0 ||
     maxDocumentTextLength > ABSOLUTE_MAX_DOCUMENT_TEXT_LENGTH
   ) {
-    log.warn(
-      `Invalid MAX_DOCUMENT_TEXT_LENGTH value: ${process.env.MAX_DOCUMENT_TEXT_LENGTH}. Using default: 120000`,
-    );
+    log.warn(`Invalid MAX_DOCUMENT_TEXT_LENGTH value: ${process.env.MAX_DOCUMENT_TEXT_LENGTH}. Using default: 120000`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -439,14 +338,8 @@ export function getMemoryLimits(): MemoryLimits {
     };
   }
 
-  if (
-    !Number.isInteger(documentChunkSize) ||
-    documentChunkSize <= 200 ||
-    documentChunkSize > 5000
-  ) {
-    log.warn(
-      `Invalid DOCUMENT_CHUNK_SIZE value: ${process.env.DOCUMENT_CHUNK_SIZE}. Using default: 1000`,
-    );
+  if (!Number.isInteger(documentChunkSize) || documentChunkSize <= 200 || documentChunkSize > 5000) {
+    log.warn(`Invalid DOCUMENT_CHUNK_SIZE value: ${process.env.DOCUMENT_CHUNK_SIZE}. Using default: 1000`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -472,9 +365,7 @@ export function getMemoryLimits(): MemoryLimits {
     documentChunkOverlap < 0 ||
     documentChunkOverlap >= documentChunkSize
   ) {
-    log.warn(
-      `Invalid DOCUMENT_CHUNK_OVERLAP value: ${process.env.DOCUMENT_CHUNK_OVERLAP}. Using default: 200`,
-    );
+    log.warn(`Invalid DOCUMENT_CHUNK_OVERLAP value: ${process.env.DOCUMENT_CHUNK_OVERLAP}. Using default: 200`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -500,9 +391,7 @@ export function getMemoryLimits(): MemoryLimits {
     maxDocumentChunks <= 0 ||
     maxDocumentChunks > ABSOLUTE_MAX_DOCUMENT_CHUNKS
   ) {
-    log.warn(
-      `Invalid MAX_DOCUMENT_CHUNKS value: ${process.env.MAX_DOCUMENT_CHUNKS}. Using default: 150`,
-    );
+    log.warn(`Invalid MAX_DOCUMENT_CHUNKS value: ${process.env.MAX_DOCUMENT_CHUNKS}. Using default: 150`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -528,9 +417,7 @@ export function getMemoryLimits(): MemoryLimits {
     maxDocumentsPerServer <= 0 ||
     maxDocumentsPerServer > ABSOLUTE_MAX_DOCUMENTS_PER_SERVER
   ) {
-    log.warn(
-      `Invalid MAX_DOCUMENTS_PER_SERVER value: ${process.env.MAX_DOCUMENTS_PER_SERVER}. Using default: 20`,
-    );
+    log.warn(`Invalid MAX_DOCUMENTS_PER_SERVER value: ${process.env.MAX_DOCUMENTS_PER_SERVER}. Using default: 20`);
     return {
       maxPersonalMemories,
       maxServerMemories,
@@ -664,9 +551,7 @@ export function validateAttribute(content: string): MemoryValidationResult {
  * @param content - The sample dialogue content to validate
  * @returns MemoryValidationResult indicating if content length is valid
  */
-export function validateSampleDialogue(
-  content: string,
-): MemoryValidationResult {
+export function validateSampleDialogue(content: string): MemoryValidationResult {
   const limits = getMemoryLimits();
 
   // Check if content is empty or just whitespace
@@ -696,9 +581,7 @@ export function validateSampleDialogue(
  * @param content - The attribute or sample dialogue content to validate
  * @returns MemoryValidationResult indicating if content length is valid
  */
-export function validateAttributeAndDialogue(
-  content: string,
-): MemoryValidationResult {
+export function validateAttributeAndDialogue(content: string): MemoryValidationResult {
   // Delegates to validateSampleDialogue for backward compatibility
   // (uses the same limit as before)
   return validateSampleDialogue(content);
@@ -753,10 +636,7 @@ export async function checkPersonalMemoryLimit(
       maxAllowed: limits.maxPersonalMemories,
     };
   } catch (error) {
-    log.error(
-      `Error checking personal memory limit for user ${userId}:`,
-      error,
-    );
+    log.error(`Error checking personal memory limit for user ${userId}:`, error);
     // Fail safe - if we can't check the limit, assume it's exceeded
     return {
       isValid: false,
@@ -810,10 +690,7 @@ export async function checkServerMemoryLimit(
       maxAllowed: limits.maxServerMemories,
     };
   } catch (error) {
-    log.error(
-      `Error checking server memory limit for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error checking server memory limit for server ${serverId}:`, error);
     // Fail safe - if we can't check the limit, assume it's exceeded
     return {
       isValid: false,
@@ -827,10 +704,7 @@ export async function checkServerMemoryLimit(
  * @param serverId - Internal server ID
  * @returns MemoryValidationResult indicating if server can add more trigger words
  */
-export async function checkTriggerWordLimit(
-  serverId: number,
-  tomoriId?: number,
-): Promise<MemoryValidationResult> {
+export async function checkTriggerWordLimit(serverId: number, tomoriId?: number): Promise<MemoryValidationResult> {
   const limits = getMemoryLimits();
 
   try {
@@ -864,10 +738,7 @@ export async function checkTriggerWordLimit(
       maxAllowed: limits.maxTriggerWords,
     };
   } catch (error) {
-    log.error(
-      `Error checking trigger word limit for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error checking trigger word limit for server ${serverId}:`, error);
     // Fail safe - if we can't check the limit, assume it's exceeded
     return {
       isValid: false,
@@ -881,9 +752,7 @@ export async function checkTriggerWordLimit(
  * @param tomoriId - Internal tomori ID
  * @returns MemoryValidationResult indicating if server can add more sample dialogues
  */
-export async function checkSampleDialogueLimit(
-  tomoriId: number,
-): Promise<MemoryValidationResult> {
+export async function checkSampleDialogueLimit(tomoriId: number): Promise<MemoryValidationResult> {
   const limits = getMemoryLimits();
 
   try {
@@ -913,10 +782,7 @@ export async function checkSampleDialogueLimit(
       maxAllowed: limits.maxSampleDialogues,
     };
   } catch (error) {
-    log.error(
-      `Error checking sample dialogue limit for tomori ${tomoriId}:`,
-      error,
-    );
+    log.error(`Error checking sample dialogue limit for tomori ${tomoriId}:`, error);
     // Fail safe - if we can't check the limit, assume it's exceeded
     return {
       isValid: false,
@@ -930,9 +796,7 @@ export async function checkSampleDialogueLimit(
  * @param tomoriId - Internal tomori ID
  * @returns MemoryValidationResult indicating if server can add more attributes
  */
-export async function checkAttributeLimit(
-  tomoriId: number,
-): Promise<MemoryValidationResult> {
+export async function checkAttributeLimit(tomoriId: number): Promise<MemoryValidationResult> {
   const limits = getMemoryLimits();
 
   try {

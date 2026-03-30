@@ -1,11 +1,5 @@
 import { ButtonStyle } from "discord.js";
-import type {
-  ButtonInteraction,
-  ColorResolvable,
-  APIEmbedField,
-  EmbedField,
-  MessageFlags,
-} from "discord.js";
+import type { ButtonInteraction, ColorResolvable, APIEmbedField, EmbedField, MessageFlags } from "discord.js";
 
 /**
  * Options for creating a standard info/status embed.

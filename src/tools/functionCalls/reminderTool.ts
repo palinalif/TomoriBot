@@ -4,25 +4,10 @@
  */
 
 import { log } from "../../utils/misc/logger";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
-import {
-  validateFutureTime,
-  formatTimeRemaining,
-} from "../../utils/text/stringHelper";
-import {
-  parseTimeWithOffset,
-  formatUTCOffset,
-  formatTimeWithOffset,
-} from "../../utils/text/timezoneHelper";
-import {
-  isBridgeUserId,
-  isMatrixBridgeWebhookUsername,
-} from "../../utils/bridge";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
+import { validateFutureTime, formatTimeRemaining } from "../../utils/text/stringHelper";
+import { parseTimeWithOffset, formatUTCOffset, formatTimeWithOffset } from "../../utils/text/timezoneHelper";
+import { isBridgeUserId, isMatrixBridgeWebhookUsername } from "../../utils/bridge";
 import { resolveBridgeUserId } from "../../utils/matrix";
 
 /**
@@ -93,12 +78,7 @@ export class ReminderTool extends BaseTool {
           "OPTIONAL: Discord channel ID where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
       },
     },
-    required: [
-      "reminder_purpose",
-      "target_user_nickname",
-      "target_user_discord_id",
-      "repetition_interval_hours",
-    ],
+    required: ["reminder_purpose", "target_user_nickname", "target_user_discord_id", "repetition_interval_hours"],
   };
 
   /**
@@ -117,10 +97,7 @@ export class ReminderTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Validate parameters
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -143,9 +120,7 @@ export class ReminderTool extends BaseTool {
     const hoursFromNowArg = args.hours_from_now as number | undefined;
     const daysFromNowArg = args.days_from_now as number | undefined;
     const monthsFromNowArg = args.months_from_now as number | undefined;
-    let repetitionIntervalHoursArg = args.repetition_interval_hours as
-      | number
-      | undefined;
+    let repetitionIntervalHoursArg = args.repetition_interval_hours as number | undefined;
     const selfReminderArg = args.self_reminder as boolean | undefined;
     const requestedChannelIdArg = args.channel_id as string | undefined;
 
@@ -156,8 +131,7 @@ export class ReminderTool extends BaseTool {
     if (context.message?.author && selfReminderArg !== true) {
       const authorId = context.message.author.id;
       const guildMember = context.message.guild?.members.cache.get(authorId);
-      const authorDisplayName =
-        guildMember?.displayName ?? context.message.author.username;
+      const authorDisplayName = guildMember?.displayName ?? context.message.author.username;
 
       // 1. Fuzzy-match Discord ID: if the provided ID doesn't match any cached guild member,
       //    search ALL cached members for the closest snowflake ID within a tolerance of 1000.
@@ -176,10 +150,7 @@ export class ReminderTool extends BaseTool {
 
               // Scan all cached guild members for the closest matching ID
               for (const [memberId] of guild.members.cache) {
-                const diff =
-                  garbledId > BigInt(memberId)
-                    ? garbledId - BigInt(memberId)
-                    : BigInt(memberId) - garbledId;
+                const diff = garbledId > BigInt(memberId) ? garbledId - BigInt(memberId) : BigInt(memberId) - garbledId;
                 if (diff > 0n && diff < smallestDiff) {
                   smallestDiff = diff;
                   closestMemberId = memberId;
@@ -200,10 +171,7 @@ export class ReminderTool extends BaseTool {
       }
 
       // 2. Auto-fill missing target_user_nickname from context
-      if (
-        !targetUserNicknameArg?.trim() &&
-        targetUserDiscordIdArg === authorId
-      ) {
+      if (!targetUserNicknameArg?.trim() && targetUserDiscordIdArg === authorId) {
         log.info(
           `Reminder tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
         );
@@ -214,12 +182,8 @@ export class ReminderTool extends BaseTool {
       if (!targetUserDiscordIdArg?.trim() && targetUserNicknameArg?.trim()) {
         const providedLower = targetUserNicknameArg.toLowerCase();
         const authorNameLower = authorDisplayName.toLowerCase();
-        const authorUsernameLower =
-          context.message.author.username.toLowerCase();
-        if (
-          providedLower === authorNameLower ||
-          providedLower === authorUsernameLower
-        ) {
+        const authorUsernameLower = context.message.author.username.toLowerCase();
+        if (providedLower === authorNameLower || providedLower === authorUsernameLower) {
           log.info(
             `Reminder tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
           );
@@ -242,14 +206,9 @@ export class ReminderTool extends BaseTool {
       // 1. Replace slash date separators with dashes (2025/09/05 → 2025-09-05)
       normalized = normalized.replace(/^(\d{4})\/(\d{2})\/(\d{2})/, "$1-$2-$3");
       // 2. Replace space or T between date and time with underscore
-      normalized = normalized.replace(
-        /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/,
-        "$1_$2",
-      );
+      normalized = normalized.replace(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/, "$1_$2");
       if (normalized !== reminderTimeArg) {
-        log.info(
-          `Reminder tool: Normalized time format "${reminderTimeArg}" → "${normalized}"`,
-        );
+        log.info(`Reminder tool: Normalized time format "${reminderTimeArg}" → "${normalized}"`);
         reminderTimeArg = normalized;
       }
     }
@@ -258,22 +217,15 @@ export class ReminderTool extends BaseTool {
     // GLM frequently omits this required parameter for simple "remind me in X" requests.
     // Only for NovelAI — other providers have retries and should be required to explicitly
     // set this so the model is "conscious" of whether the reminder is one-time or recurring.
-    if (
-      context.provider === "novelai" &&
-      typeof repetitionIntervalHoursArg !== "number"
-    ) {
-      log.info(
-        "Reminder tool: Auto-filling missing repetition_interval_hours with 0 (one-time reminder)",
-      );
+    if (context.provider === "novelai" && typeof repetitionIntervalHoursArg !== "number") {
+      log.info("Reminder tool: Auto-filling missing repetition_interval_hours with 0 (one-time reminder)");
       repetitionIntervalHoursArg = 0;
     }
 
     // Import database functions and utilities
     const { loadUserRow } = await import("../../utils/db/dbRead");
     const { addReminder } = await import("../../utils/db/dbWrite");
-    const { sendStandardEmbed } = await import(
-      "../../utils/discord/embedHelper"
-    );
+    const { sendStandardEmbed } = await import("../../utils/discord/embedHelper");
     const { ColorCode } = await import("../../utils/misc/logger");
 
     // Get server and user context
@@ -285,12 +237,9 @@ export class ReminderTool extends BaseTool {
     // Detect this case so we can relax the requestingUserRow guard below and
     // store created_by_user_id = null (the column is nullable for this reason).
     const isMatrixRelayRequester =
-      !!context.message?.webhookId &&
-      isMatrixBridgeWebhookUsername(context.message?.author?.username ?? "");
+      !!context.message?.webhookId && isMatrixBridgeWebhookUsername(context.message?.author?.username ?? "");
 
-    const requestingUserRow = resolvedUserId
-      ? await loadUserRow(resolvedUserId)
-      : null;
+    const requestingUserRow = resolvedUserId ? await loadUserRow(resolvedUserId) : null;
     const channelId = context.channel.id;
 
     if (
@@ -306,15 +255,11 @@ export class ReminderTool extends BaseTool {
       const missing = [
         !tomoriState && "tomoriState",
         !requestingUserRow && !isMatrixRelayRequester && "requestingUserRow",
-        requestingUserRow &&
-          !requestingUserRow.user_id &&
-          "requestingUserRow.user_id",
+        requestingUserRow && !requestingUserRow.user_id && "requestingUserRow.user_id",
         tomoriState && !tomoriState.server_id && "tomoriState.server_id",
         !resolvedUserId && "resolvedUserId",
       ].filter(Boolean);
-      log.error(
-        `Critical state missing before handling create_task: [${missing.join(", ")}]`,
-      );
+      log.error(`Critical state missing before handling create_task: [${missing.join(", ")}]`);
       return {
         success: false,
         error: "Internal bot error: Critical state information is missing",
@@ -326,21 +271,16 @@ export class ReminderTool extends BaseTool {
     }
 
     const personaNickname =
-      context.personaUsername ||
-      tomoriState.tomori_nickname ||
-      context.client.user?.username ||
-      "TomoriBot";
+      context.personaUsername || tomoriState.tomori_nickname || context.client.user?.username || "TomoriBot";
 
     // Validate reminder purpose
     if (typeof reminderPurposeArg !== "string" || !reminderPurposeArg.trim()) {
       return {
         success: false,
-        error:
-          "The 'reminder_purpose' argument was missing, empty, or not a string",
+        error: "The 'reminder_purpose' argument was missing, empty, or not a string",
         data: {
           status: "reminder_creation_failed_invalid_args",
-          reason:
-            "The 'reminder_purpose' argument was missing, empty, or not a string",
+          reason: "The 'reminder_purpose' argument was missing, empty, or not a string",
         },
       };
     }
@@ -349,40 +289,28 @@ export class ReminderTool extends BaseTool {
     const botUserId = context.client.user?.id;
     const isSelfReminder =
       selfReminderArg === true ||
-      (typeof targetUserDiscordIdArg === "string" &&
-        !!botUserId &&
-        targetUserDiscordIdArg.trim() === botUserId);
+      (typeof targetUserDiscordIdArg === "string" && !!botUserId && targetUserDiscordIdArg.trim() === botUserId);
 
     if (!isSelfReminder) {
-      if (
-        typeof targetUserNicknameArg !== "string" ||
-        !targetUserNicknameArg.trim()
-      ) {
+      if (typeof targetUserNicknameArg !== "string" || !targetUserNicknameArg.trim()) {
         return {
           success: false,
-          error:
-            "The 'target_user_nickname' argument was missing, empty, or not a string",
+          error: "The 'target_user_nickname' argument was missing, empty, or not a string",
           data: {
             status: "reminder_creation_failed_invalid_args",
-            reason:
-              "The 'target_user_nickname' argument was missing, empty, or not a string",
+            reason: "The 'target_user_nickname' argument was missing, empty, or not a string",
           },
         };
       }
 
       // Validate target user Discord ID
-      if (
-        typeof targetUserDiscordIdArg !== "string" ||
-        !targetUserDiscordIdArg.trim()
-      ) {
+      if (typeof targetUserDiscordIdArg !== "string" || !targetUserDiscordIdArg.trim()) {
         return {
           success: false,
-          error:
-            "The 'target_user_discord_id' argument was missing, empty, or not a string",
+          error: "The 'target_user_discord_id' argument was missing, empty, or not a string",
           data: {
             status: "reminder_creation_failed_invalid_args",
-            reason:
-              "The 'target_user_discord_id' argument was missing, empty, or not a string",
+            reason: "The 'target_user_discord_id' argument was missing, empty, or not a string",
           },
         };
       }
@@ -407,18 +335,15 @@ export class ReminderTool extends BaseTool {
       ) {
         return {
           success: false,
-          error:
-            "The 'repetition_interval_hours' must be 0 (for one-time) or an integer >= 1 (for recurring)",
+          error: "The 'repetition_interval_hours' must be 0 (for one-time) or an integer >= 1 (for recurring)",
           data: {
             status: "reminder_creation_failed_invalid_repeat_interval",
-            reason:
-              "The 'repetition_interval_hours' must be 0 or an integer >= 1.",
+            reason: "The 'repetition_interval_hours' must be 0 or an integer >= 1.",
           },
         };
       }
       // Only set repetitionIntervalHours if it's > 0 (recurring)
-      repetitionIntervalHours =
-        repetitionIntervalHoursArg > 0 ? repetitionIntervalHoursArg : null;
+      repetitionIntervalHours = repetitionIntervalHoursArg > 0 ? repetitionIntervalHoursArg : null;
     }
 
     // Resolve and validate target channel (optional override)
@@ -444,15 +369,12 @@ export class ReminderTool extends BaseTool {
             error: "Channel overrides are not supported in DMs",
             data: {
               status: "reminder_creation_failed_invalid_channel",
-              reason:
-                "Channel overrides are not supported in DMs. Use the current channel.",
+              reason: "Channel overrides are not supported in DMs. Use the current channel.",
             },
           };
         }
       } else {
-        let targetChannel = await context.client.channels
-          .fetch(trimmedChannelId)
-          .catch(() => null);
+        let targetChannel = await context.client.channels.fetch(trimmedChannelId).catch(() => null);
 
         // GLM fuzzy recovery: if exact channel ID not found, search all guild
         // channels for the closest snowflake ID within a tolerance of 1000.
@@ -460,19 +382,14 @@ export class ReminderTool extends BaseTool {
         if (!targetChannel && context.guildId) {
           try {
             const garbledId = BigInt(trimmedChannelId);
-            const guild = await context.client.guilds
-              .fetch(context.guildId)
-              .catch(() => null);
+            const guild = await context.client.guilds.fetch(context.guildId).catch(() => null);
             if (guild) {
               let closestChannelId: string | null = null;
               let smallestDiff = BigInt(1000); // threshold: < 1000
 
               // Scan all cached guild channels for the closest matching ID
               for (const [chId] of guild.channels.cache) {
-                const diff =
-                  garbledId > BigInt(chId)
-                    ? garbledId - BigInt(chId)
-                    : BigInt(chId) - garbledId;
+                const diff = garbledId > BigInt(chId) ? garbledId - BigInt(chId) : BigInt(chId) - garbledId;
                 if (diff > 0n && diff < smallestDiff) {
                   smallestDiff = diff;
                   closestChannelId = chId;
@@ -483,9 +400,7 @@ export class ReminderTool extends BaseTool {
                 log.info(
                   `Reminder tool: Correcting garbled channel ID "${trimmedChannelId}" → "${closestChannelId}" (diff: ${smallestDiff}, fuzzy-matched from guild channels cache)`,
                 );
-                targetChannel = await context.client.channels
-                  .fetch(closestChannelId)
-                  .catch(() => null);
+                targetChannel = await context.client.channels.fetch(closestChannelId).catch(() => null);
               }
             }
           } catch {
@@ -504,10 +419,7 @@ export class ReminderTool extends BaseTool {
           };
         }
 
-        if (
-          !("guildId" in targetChannel) ||
-          targetChannel.guildId !== context.guildId
-        ) {
+        if (!("guildId" in targetChannel) || targetChannel.guildId !== context.guildId) {
           return {
             success: false,
             error: `Channel with ID '${trimmedChannelId}' was not found in this server`,
@@ -524,8 +436,7 @@ export class ReminderTool extends BaseTool {
             error: "The specified channel is not a text-based server channel",
             data: {
               status: "reminder_creation_failed_invalid_channel",
-              reason:
-                "The specified channel is not a text-based server channel.",
+              reason: "The specified channel is not a text-based server channel.",
             },
           };
         }
@@ -541,17 +452,10 @@ export class ReminderTool extends BaseTool {
     // Get the server's configured timezone offset (default to 0/UTC if not set)
     const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
 
-    if (
-      reminderTimeArg &&
-      typeof reminderTimeArg === "string" &&
-      reminderTimeArg.trim()
-    ) {
+    if (reminderTimeArg && typeof reminderTimeArg === "string" && reminderTimeArg.trim()) {
       // Method 1: Absolute time provided - parse in server's configured timezone
       timeCalculationMethod = "absolute";
-      finalReminderTime = parseTimeWithOffset(
-        reminderTimeArg.trim(),
-        timezoneOffset,
-      );
+      finalReminderTime = parseTimeWithOffset(reminderTimeArg.trim(), timezoneOffset);
       if (!finalReminderTime) {
         return {
           success: false,
@@ -576,9 +480,7 @@ export class ReminderTool extends BaseTool {
       let effectiveMinutesFromNow = minutesFromNowArg;
       if (!hasRelativeParams) {
         effectiveMinutesFromNow = 1;
-        log.info(
-          "No time parameters provided for reminder - defaulting to 1 minute from now",
-        );
+        log.info("No time parameters provided for reminder - defaulting to 1 minute from now");
       }
 
       // Calculate relative time by adding all "from now" parameters
@@ -587,10 +489,7 @@ export class ReminderTool extends BaseTool {
       let totalMilliseconds = 0;
 
       // Add each time component (convert to milliseconds)
-      if (
-        typeof effectiveMinutesFromNow === "number" &&
-        effectiveMinutesFromNow > 0
-      ) {
+      if (typeof effectiveMinutesFromNow === "number" && effectiveMinutesFromNow > 0) {
         totalMilliseconds += effectiveMinutesFromNow * 60 * 1000;
       }
       if (typeof hoursFromNowArg === "number" && hoursFromNowArg > 0) {
@@ -644,10 +543,7 @@ export class ReminderTool extends BaseTool {
 
       if (isSelfReminder) {
         resolvedTargetUserId = botUserId as string;
-        actualNicknameInDB =
-          tomoriState.tomori_nickname ||
-          context.client.user?.username ||
-          "Tomori";
+        actualNicknameInDB = tomoriState.tomori_nickname || context.client.user?.username || "Tomori";
       } else if (isBridgeUserId(resolvedTargetUserId)) {
         // Matrix users have no users table record — their ID is "@user:host" format.
         // Trust the AI-provided nickname directly (verified by the context builder
@@ -661,9 +557,7 @@ export class ReminderTool extends BaseTool {
         const targetUserRow = await loadUserRow(resolvedTargetUserId);
 
         if (!targetUserRow || !targetUserRow.user_id) {
-          log.warn(
-            `Reminder: Target user with Discord ID ${resolvedTargetUserId} not found`,
-          );
+          log.warn(`Reminder: Target user with Discord ID ${resolvedTargetUserId} not found`);
           return {
             success: false,
             error: `The user with Discord ID '${resolvedTargetUserId}' was not found in TomoriBot's records`,
@@ -677,8 +571,7 @@ export class ReminderTool extends BaseTool {
 
         // Verify nickname as "two-factor" check
         actualNicknameInDB = targetUserRow.user_nickname;
-        const guildMember =
-          context.message?.guild?.members.cache.get(resolvedTargetUserId);
+        const guildMember = context.message?.guild?.members.cache.get(resolvedTargetUserId);
         const guildDisplayName = guildMember?.displayName?.toLowerCase();
         const discordUsername = guildMember?.user?.username?.toLowerCase();
 
@@ -739,26 +632,18 @@ export class ReminderTool extends BaseTool {
 
         // Send confirmation embed to the channel
         // Format the reminder time in the server's configured timezone
-        const formattedReminderTime = formatTimeWithOffset(
-          finalReminderTime,
-          timezoneOffset,
-          {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          },
-        );
+        const formattedReminderTime = formatTimeWithOffset(finalReminderTime, timezoneOffset, {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
 
-        const useRecurringTaskEmbed =
-          isSelfReminder && repetitionIntervalHours !== null;
-        const useOneTimeTaskEmbed =
-          isSelfReminder && repetitionIntervalHours === null;
+        const useRecurringTaskEmbed = isSelfReminder && repetitionIntervalHours !== null;
+        const useOneTimeTaskEmbed = isSelfReminder && repetitionIntervalHours === null;
         const reminderPurposeText =
-          reminderPurpose.length > 200
-            ? `${reminderPurpose.substring(0, 197)}...`
-            : reminderPurpose;
+          reminderPurpose.length > 200 ? `${reminderPurpose.substring(0, 197)}...` : reminderPurpose;
         const reminderTimeText = `${formattedReminderTime} (${formatUTCOffset(timezoneOffset)})`;
         const baseDescriptionVars = {
           user_nickname: actualNicknameInDB,

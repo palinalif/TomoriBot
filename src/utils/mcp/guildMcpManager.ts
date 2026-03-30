@@ -46,12 +46,10 @@ function isSmitheryUrl(url: string): boolean {
 // ─── Configuration ───────────────────────────────────────────────────
 
 /** How long an idle connection lives before eviction (default: 10 min) */
-const CONNECTION_TTL_MS =
-  (Number(process.env.GUILD_MCP_CONNECTION_TTL_MINUTES) || 10) * 60 * 1000;
+const CONNECTION_TTL_MS = (Number(process.env.GUILD_MCP_CONNECTION_TTL_MINUTES) || 10) * 60 * 1000;
 
 /** Timeout for initial connect + tool discovery (default: 15s) */
-const CONNECT_TIMEOUT_MS =
-  Number(process.env.GUILD_MCP_CONNECT_TIMEOUT_MS) || 15_000;
+const CONNECT_TIMEOUT_MS = Number(process.env.GUILD_MCP_CONNECT_TIMEOUT_MS) || 15_000;
 
 /** Timeout for individual tool execution calls (default: 30s) */
 const EXECUTION_TIMEOUT_MS = 30_000;
@@ -78,10 +76,7 @@ class GuildMcpManager {
 
   private constructor() {
     // Start the eviction sweep
-    this.evictionTimer = setInterval(
-      () => this.evictIdleConnections(),
-      EVICTION_INTERVAL_MS,
-    );
+    this.evictionTimer = setInterval(() => this.evictIdleConnections(), EVICTION_INTERVAL_MS);
   }
 
   static getInstance(): GuildMcpManager {
@@ -141,10 +136,7 @@ class GuildMcpManager {
           }
         }
       } catch (error) {
-        log.warn(
-          "[GuildMcpManager] Failed to extract function names from guild MCP tool",
-          error,
-        );
+        log.warn("[GuildMcpManager] Failed to extract function names from guild MCP tool", error);
       }
     }
 
@@ -158,10 +150,7 @@ class GuildMcpManager {
    * @param functionName - Function name to check
    * @returns True if the function is from a guild MCP server
    */
-  async isGuildMCPFunction(
-    serverId: number,
-    functionName: string,
-  ): Promise<boolean> {
+  async isGuildMCPFunction(serverId: number, functionName: string): Promise<boolean> {
     const names = await this.getGuildMCPFunctionNames(serverId);
     return names.includes(functionName);
   }
@@ -226,39 +215,25 @@ class GuildMcpManager {
           );
         } catch (embedError) {
           // Non-critical — don't block execution if the embed fails
-          log.warn(
-            `[GuildMcpManager] Failed to send MCP tool embed for ${functionName}:`,
-            embedError,
-          );
+          log.warn(`[GuildMcpManager] Failed to send MCP tool embed for ${functionName}:`, embedError);
         }
       }
 
       // 4. Execute the function via the CallableTool
-      log.info(
-        `[GuildMcpManager] Executing guild MCP function: ${functionName} (server: ${conn.name})`,
-      );
+      log.info(`[GuildMcpManager] Executing guild MCP function: ${functionName} (server: ${conn.name})`);
 
       const callableTool = conn.callableTool as CallableTool;
       const mcpResult = await Promise.race([
         callableTool.callTool([{ name: functionName, args }]),
         new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Guild MCP execution timed out")),
-            EXECUTION_TIMEOUT_MS,
-          ),
+          setTimeout(() => reject(new Error("Guild MCP execution timed out")), EXECUTION_TIMEOUT_MS),
         ),
       ]);
 
       // 5. Process the result using default MCP processing
       if (mcpResult && Array.isArray(mcpResult) && mcpResult.length > 0) {
         const firstResult = mcpResult[0] as MCPServerResponse;
-        return this.processDefaultResult(
-          functionName,
-          firstResult,
-          conn.name,
-          executionStartTime,
-          context,
-        );
+        return this.processDefaultResult(functionName, firstResult, conn.name, executionStartTime, context);
       }
 
       return {
@@ -276,15 +251,11 @@ class GuildMcpManager {
       };
     } catch (error) {
       const executionTime = Date.now() - executionStartTime;
-      log.error(
-        `[GuildMcpManager] Guild MCP execution failed: ${functionName}`,
-        error,
-      );
+      log.error(`[GuildMcpManager] Guild MCP execution failed: ${functionName}`, error);
 
       return {
         success: false,
-        message:
-          error instanceof Error ? error.message : "Guild MCP execution failed",
+        message: error instanceof Error ? error.message : "Guild MCP execution failed",
         error: error instanceof Error ? error.message : String(error),
         data: {
           source: "mcp",
@@ -319,12 +290,9 @@ class GuildMcpManager {
     const MAX_VALUE_LENGTH = 200;
     const MAX_TOTAL_LENGTH = 900; // Stay under Discord's 1024 field limit with header
     const lines = entries.map(([key, value]) => {
-      const stringValue =
-        typeof value === "string" ? value : JSON.stringify(value);
+      const stringValue = typeof value === "string" ? value : JSON.stringify(value);
       const truncated =
-        stringValue.length > MAX_VALUE_LENGTH
-          ? `${stringValue.substring(0, MAX_VALUE_LENGTH)}...`
-          : stringValue;
+        stringValue.length > MAX_VALUE_LENGTH ? `${stringValue.substring(0, MAX_VALUE_LENGTH)}...` : stringValue;
       return `${key}: ${truncated}`;
     });
 
@@ -347,10 +315,7 @@ class GuildMcpManager {
    * @param authToken - Optional bearer token
    * @returns Test result with tool count and names
    */
-  async testConnection(
-    url: string,
-    authToken?: string,
-  ): Promise<GuildMCPTestResult> {
+  async testConnection(url: string, authToken?: string): Promise<GuildMCPTestResult> {
     let client: MCPClient | null = null;
     try {
       client = new MCPClient({ name: "tomoribot-test", version: "1.0.0" });
@@ -418,22 +383,14 @@ class GuildMcpManager {
   async eagerConnectAll(configs: GuildMcpServerRow[]): Promise<void> {
     if (configs.length === 0) return;
 
-    log.info(
-      `[GuildMcpManager] Eager-connecting ${configs.length} guild MCP server(s)...`,
-    );
+    log.info(`[GuildMcpManager] Eager-connecting ${configs.length} guild MCP server(s)...`);
 
-    const results = await Promise.allSettled(
-      configs.map((config) => this.connectServer(config)),
-    );
+    const results = await Promise.allSettled(configs.map((config) => this.connectServer(config)));
 
-    const succeeded = results.filter(
-      (r) => r.status === "fulfilled" && r.value !== null,
-    ).length;
+    const succeeded = results.filter((r) => r.status === "fulfilled" && r.value !== null).length;
     const failed = results.length - succeeded;
 
-    log.info(
-      `[GuildMcpManager] Eager connect complete: ${succeeded} succeeded, ${failed} failed`,
-    );
+    log.info(`[GuildMcpManager] Eager connect complete: ${succeeded} succeeded, ${failed} failed`);
   }
 
   /**
@@ -445,19 +402,14 @@ class GuildMcpManager {
       this.evictionTimer = null;
     }
 
-    const closePromises = Array.from(this.pool.entries()).map(
-      async ([key, conn]) => {
-        try {
-          await (conn.client as MCPClient).close();
-          log.info(`[GuildMcpManager] Closed connection: ${key}`);
-        } catch (error) {
-          log.warn(
-            `[GuildMcpManager] Error closing connection ${key} during cleanup`,
-            error,
-          );
-        }
-      },
-    );
+    const closePromises = Array.from(this.pool.entries()).map(async ([key, conn]) => {
+      try {
+        await (conn.client as MCPClient).close();
+        log.info(`[GuildMcpManager] Closed connection: ${key}`);
+      } catch (error) {
+        log.warn(`[GuildMcpManager] Error closing connection ${key} during cleanup`, error);
+      }
+    });
 
     await Promise.allSettled(closePromises);
     this.pool.clear();
@@ -489,9 +441,7 @@ class GuildMcpManager {
    * Connect to a single guild MCP server and add it to the pool.
    * Handles transport creation, connection, tool discovery, and collision checks.
    */
-  private async connectServer(
-    config: GuildMcpServerRow,
-  ): Promise<GuildMCPConnection | null> {
+  private async connectServer(config: GuildMcpServerRow): Promise<GuildMCPConnection | null> {
     const key = this.poolKey(config.server_id, config.name);
 
     // Check if already in pool
@@ -500,9 +450,7 @@ class GuildMcpManager {
 
     // Prevent duplicate connect races
     if (this.connectingKeys.has(key)) {
-      log.info(
-        `[GuildMcpManager] Connection already in progress for ${key}, skipping`,
-      );
+      log.info(`[GuildMcpManager] Connection already in progress for ${key}, skipping`);
       return null;
     }
 
@@ -519,12 +467,7 @@ class GuildMcpManager {
       });
 
       // 3. Connect with transport (StreamableHTTP → SSE fallback) + timeout
-      await this.connectWithFallback(
-        client,
-        config.url,
-        authToken ?? undefined,
-        config.name,
-      );
+      await this.connectWithFallback(client, config.url, authToken ?? undefined, config.name);
 
       // 4. Create CallableTool via mcpToTool (same as global MCP servers)
       const callableTool = mcpToTool(client);
@@ -589,32 +532,21 @@ class GuildMcpManager {
     const label = serverLabel ?? url;
     const urlValidation = await validateRemoteMcpUrl(url);
     if (!urlValidation.valid) {
-      throw new Error(
-        urlValidation.details ??
-          `Guild MCP URL failed runtime validation for '${label}'.`,
-      );
+      throw new Error(urlValidation.details ?? `Guild MCP URL failed runtime validation for '${label}'.`);
     }
 
     // 1. Try Smithery Connect for *.run.tools URLs
     if (isSmitheryUrl(url) && authToken) {
       try {
         const smitheryClient = new Smithery({ apiKey: authToken });
-        const { transport: smitheryTransport } = await createSmitheryConnection(
-          {
-            client: smitheryClient,
-            mcpUrl: url,
-          },
-        );
+        const { transport: smitheryTransport } = await createSmitheryConnection({
+          client: smitheryClient,
+          mcpUrl: url,
+        });
         await Promise.race([
           client.connect(smitheryTransport),
           new Promise<never>((_, reject) =>
-            setTimeout(
-              () =>
-                reject(
-                  new Error(`Smithery connection to '${label}' timed out`),
-                ),
-              CONNECT_TIMEOUT_MS,
-            ),
+            setTimeout(() => reject(new Error(`Smithery connection to '${label}' timed out`)), CONNECT_TIMEOUT_MS),
           ),
         ]);
         log.info(`[GuildMcpManager] Connected via Smithery Connect: ${label}`);
@@ -646,10 +578,7 @@ class GuildMcpManager {
       await Promise.race([
         client.connect(streamableTransport),
         new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`Connection to '${label}' timed out`)),
-            CONNECT_TIMEOUT_MS,
-          ),
+          setTimeout(() => reject(new Error(`Connection to '${label}' timed out`)), CONNECT_TIMEOUT_MS),
         ),
       ]);
       log.info(`[GuildMcpManager] Connected via StreamableHTTP: ${label}`);
@@ -666,10 +595,7 @@ class GuildMcpManager {
     await Promise.race([
       client.connect(sseTransport),
       new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`SSE connection to '${label}' timed out`)),
-          CONNECT_TIMEOUT_MS,
-        ),
+        setTimeout(() => reject(new Error(`SSE connection to '${label}' timed out`)), CONNECT_TIMEOUT_MS),
       ),
     ]);
     log.info(`[GuildMcpManager] Connected via SSE fallback: ${label}`);
@@ -678,16 +604,10 @@ class GuildMcpManager {
   /**
    * Find the connection that owns a given function name for a specific server.
    */
-  private async findConnectionForFunction(
-    serverId: number,
-    functionName: string,
-  ): Promise<GuildMCPConnection | null> {
+  private async findConnectionForFunction(serverId: number, functionName: string): Promise<GuildMCPConnection | null> {
     // 1. Check in-pool connections first (fast path)
     for (const conn of this.pool.values()) {
-      if (
-        conn.serverId === serverId &&
-        conn.functionNames.includes(functionName)
-      ) {
+      if (conn.serverId === serverId && conn.functionNames.includes(functionName)) {
         return conn;
       }
     }
@@ -727,16 +647,12 @@ class GuildMcpManager {
       try {
         await (conn.client as MCPClient).close();
       } catch (error) {
-        log.warn(
-          `[GuildMcpManager] Error closing idle connection ${key}`,
-          error,
-        );
+        log.warn(`[GuildMcpManager] Error closing idle connection ${key}`, error);
       }
 
       this.pool.delete(key);
       log.info(
-        `[GuildMcpManager] Evicted idle connection: ${key} ` +
-          `(idle: ${Math.round((now - conn.lastUsedAt) / 1000)}s)`,
+        `[GuildMcpManager] Evicted idle connection: ${key} ` + `(idle: ${Math.round((now - conn.lastUsedAt) / 1000)}s)`,
       );
     }
   }

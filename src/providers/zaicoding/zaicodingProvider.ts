@@ -9,10 +9,7 @@ import type {
 } from "discord.js";
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import { zaicodingProviderInfo } from "@/providers/zaicoding/providerInfo";
-import {
-  ZaicodingStreamAdapter,
-  type ZaicodingStreamConfig,
-} from "@/providers/zaicoding/zaicodingStreamAdapter";
+import { ZaicodingStreamAdapter, type ZaicodingStreamConfig } from "@/providers/zaicoding/zaicodingStreamAdapter";
 import { getZaicodingToolAdapter } from "@/providers/zaicoding/zaicodingToolAdapter";
 import {
   createOpenAICompatibleHttpError,
@@ -20,15 +17,9 @@ import {
 } from "@/providers/openaiCompatible/openaiCompatibleErrorFormatter";
 import { callZaiStructuredJSON } from "@/providers/zai/zaiStructuredOutput";
 import { generateZaiNativeImage } from "@/providers/zai/zaiImageGeneration";
-import {
-  generateConversationSummaryZai,
-  generateRoleplaySummaryZai,
-} from "@/providers/zai/compactGenerator";
+import { generateConversationSummaryZai, generateRoleplaySummaryZai } from "@/providers/zai/compactGenerator";
 import { generatePresetFromPromptZai } from "@/providers/zai/presetGenerator";
-import {
-  ZAI_CODING_CHAT_COMPLETIONS_URL,
-  ZAI_CODING_IMAGES_GENERATIONS_URL,
-} from "@/providers/zai/zaiShared";
+import { ZAI_CODING_CHAT_COMPLETIONS_URL, ZAI_CODING_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchService";
 import { getMCPManager } from "@/utils/mcp/mcpManager";
 import type { TomoriState } from "@/types/db/schema";
@@ -62,10 +53,7 @@ import { BaseLLMProvider } from "@/types/provider/interfaces";
 import type { ProviderError, StreamContext } from "@/types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
-import {
-  type ToolStateForContext,
-  getAvailableToolsWithMCP,
-} from "@/tools/toolRegistry";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
 import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 
@@ -112,11 +100,7 @@ export class ZaicodingProvider
       });
 
       if (!response.ok) {
-        throw createOpenAICompatibleHttpError(
-          response.status,
-          response.statusText,
-          await response.text(),
-        );
+        throw createOpenAICompatibleHttpError(response.status, response.statusText, await response.text());
       }
 
       return { valid: true };
@@ -165,18 +149,14 @@ export class ZaicodingProvider
     streamingContext?: StreamingContext,
   ): Promise<Array<Record<string, unknown>>> {
     if (!tomoriState.llm.has_tools) {
-      log.info(
-        "Z.ai Coding provider: Model does not support tools (seeded capability)",
-      );
+      log.info("Z.ai Coding provider: Model does not support tools (seeded capability)");
       return [];
     }
 
     try {
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
-        activePersonaHasElevenlabsVoice: Boolean(
-          tomoriState.elevenlabs_voice_id?.trim(),
-        ),
+        activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,
@@ -215,8 +195,7 @@ export class ZaicodingProvider
 
         finalBuiltInTools = availableBuiltInTools.filter((tool) => {
           const isContextAvailable =
-            "isAvailableForContext" in tool &&
-            typeof tool.isAvailableForContext === "function"
+            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
               ? tool.isAvailableForContext("zaicoding", minimalContext)
               : true;
 
@@ -241,10 +220,7 @@ export class ZaicodingProvider
 
       return allToolsConfig;
     } catch (error) {
-      log.error(
-        `Failed to get tools for Z.ai Coding provider: ${tomoriState.llm.llm_codename}`,
-        error as Error,
-      );
+      log.error(`Failed to get tools for Z.ai Coding provider: ${tomoriState.llm.llm_codename}`, error as Error);
       return [];
     }
   }
@@ -253,10 +229,7 @@ export class ZaicodingProvider
     return DEFAULT_ZAI_CODING_MODEL;
   }
 
-  async createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<ZaicodingProviderConfig> {
+  async createConfig(tomoriState: TomoriState, apiKey: string): Promise<ZaicodingProviderConfig> {
     const config: ZaicodingProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey,
@@ -283,10 +256,7 @@ export class ZaicodingProvider
     };
 
     // Attach runtime logit_bias map if the server has any active entries for this model
-    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(
-      tomoriState.config.llm_logit_biases ?? [],
-      tomoriState.llm,
-    );
+    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(tomoriState.config.llm_logit_biases ?? [], tomoriState.llm);
     if (Object.keys(runtimeLogitBias).length > 0) {
       config.logitBias = runtimeLogitBias;
     }
@@ -299,11 +269,7 @@ export class ZaicodingProvider
   }
 
   async streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -325,9 +291,7 @@ export class ZaicodingProvider
     personaUsername?: string,
     prefixStrippingName?: string,
   ): Promise<StreamResult> {
-    log.info(
-      `ZaicodingProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`,
-    );
+    log.info(`ZaicodingProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`);
 
     try {
       const zaiConfig = config as ZaicodingProviderConfig;
@@ -335,14 +299,11 @@ export class ZaicodingProvider
         ...zaiConfig,
         maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
         flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
-        flushBufferSizeCodeBlock:
-          DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+        flushBufferSizeCodeBlock: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
         inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
-        baseTypeSpeedMsPerChar:
-          DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+        baseTypeSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
         maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
-        minVisibleTypingDurationMs:
-          DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+        minVisibleTypingDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
         humanizerDegree: tomoriState.config.humanizer_degree,
         emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
         seesImages: tomoriState.llm.sees_images,
@@ -351,9 +312,7 @@ export class ZaicodingProvider
       };
 
       if (streamingContext && tomoriState.llm.has_tools) {
-        log.info(
-          "ZaicodingProvider: Reloading tools with streaming context for context-aware availability",
-        );
+        log.info("ZaicodingProvider: Reloading tools with streaming context for context-aware availability");
         streamConfig.tools = await this.getTools(tomoriState, streamingContext);
       }
 
@@ -383,15 +342,9 @@ export class ZaicodingProvider
 
       const orchestrator = new StreamOrchestrator();
       const adapter = new ZaicodingStreamAdapter();
-      const result = await orchestrator.streamToDiscord(
-        adapter,
-        streamConfig,
-        streamContext,
-      );
+      const result = await orchestrator.streamToDiscord(adapter, streamConfig, streamContext);
 
-      log.info(
-        `ZaicodingProvider: Streaming completed with status: ${result.status}`,
-      );
+      log.info(`ZaicodingProvider: Streaming completed with status: ${result.status}`);
       return result;
     } catch (error) {
       log.error(
@@ -415,15 +368,11 @@ export class ZaicodingProvider
     }
 
     if (!request.toolContext) {
-      log.warn(
-        "Z.ai Coding preset generation skipped search tools: no tool context available.",
-      );
+      log.warn("Z.ai Coding preset generation skipped search tools: no tool context available.");
       return undefined;
     }
 
-    const hasBraveApiKey = await isBraveSearchAvailable(
-      request.tomoriState.server_id,
-    );
+    const hasBraveApiKey = await isBraveSearchAvailable(request.tomoriState.server_id);
 
     if (!hasBraveApiKey) {
       const mcpManager = getMCPManager();
@@ -434,9 +383,7 @@ export class ZaicodingProvider
 
     const toolStateForContext: ToolStateForContext = {
       server_id: request.tomoriState.server_id.toString(),
-      activePersonaHasElevenlabsVoice: Boolean(
-        request.tomoriState.elevenlabs_voice_id?.trim(),
-      ),
+      activePersonaHasElevenlabsVoice: Boolean(request.tomoriState.elevenlabs_voice_id?.trim()),
       llm: {
         llm_codename: request.tomoriState.llm.llm_codename,
         has_tools: request.tomoriState.llm.has_tools,
@@ -456,14 +403,10 @@ export class ZaicodingProvider
       },
     };
 
-    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
-      "zaicoding",
-      toolStateForContext,
-    );
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP("zaicoding", toolStateForContext);
 
     const searchTools = builtInTools.filter(
-      (tool) =>
-        tool.category === "search" || tool.requiresFeatureFlag === "web_search",
+      (tool) => tool.category === "search" || tool.requiresFeatureFlag === "web_search",
     );
 
     const adapter = getZaicodingToolAdapter();
@@ -474,45 +417,28 @@ export class ZaicodingProvider
     );
   }
 
-  async generatePreset(
-    request: ProviderPresetGenerationRequest,
-  ): Promise<PresetGenerationResult> {
+  async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const tools = await this.getPresetGenerationTools(request);
 
     // Use the shared ZAI generator with the coding endpoint and coding tool adapter
-    return await generatePresetFromPromptZai(
-      request.apiKey,
-      request.params,
-      request.locale,
-      {
-        model: request.tomoriState.llm.llm_codename,
-        temperature: request.tomoriState.config.llm_temperature,
-        tools,
-        toolContext: request.toolContext,
-        maxToolRounds: request.maxToolRounds,
-        endpointUrl: ZAI_CODING_CHAT_COMPLETIONS_URL,
-        toolAdapter: getZaicodingToolAdapter(),
-      },
-    );
+    return await generatePresetFromPromptZai(request.apiKey, request.params, request.locale, {
+      model: request.tomoriState.llm.llm_codename,
+      temperature: request.tomoriState.config.llm_temperature,
+      tools,
+      toolContext: request.toolContext,
+      maxToolRounds: request.maxToolRounds,
+      endpointUrl: ZAI_CODING_CHAT_COMPLETIONS_URL,
+      toolAdapter: getZaicodingToolAdapter(),
+    });
   }
 
-  async generateConversationSummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactConversationResult> {
+  async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
     // Use the shared ZAI generator with the coding endpoint
-    return await generateConversationSummaryZai(
-      request,
-      ZAI_CODING_CHAT_COMPLETIONS_URL,
-    );
+    return await generateConversationSummaryZai(request, ZAI_CODING_CHAT_COMPLETIONS_URL);
   }
 
-  async generateRoleplaySummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactRoleplayResult> {
+  async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
     // Use the shared ZAI generator with the coding endpoint
-    return await generateRoleplaySummaryZai(
-      request,
-      ZAI_CODING_CHAT_COMPLETIONS_URL,
-    );
+    return await generateRoleplaySummaryZai(request, ZAI_CODING_CHAT_COMPLETIONS_URL);
   }
 }

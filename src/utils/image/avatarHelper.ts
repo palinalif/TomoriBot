@@ -21,10 +21,7 @@ const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
  * @returns Promise resolving to PNG image as Buffer
  * @throws Error if avatar cannot be fetched or processed
  */
-export async function getServerAvatar(
-  guild: Guild | null,
-  client: Client,
-): Promise<Buffer> {
+export async function getServerAvatar(guild: Guild | null, client: Client): Promise<Buffer> {
   try {
     let avatarUrl: string | null = null;
 
@@ -72,9 +69,7 @@ export async function getServerAvatar(
     const response = await fetch(avatarUrl);
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch avatar: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Failed to fetch avatar: ${response.status} ${response.statusText}`);
     }
 
     // 5. Convert to Buffer
@@ -132,9 +127,7 @@ export async function downloadImage(imageUrl: string): Promise<Buffer> {
     const response = await fetch(imageUrl);
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to download image: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
     }
 
     // 2. Convert to Buffer
@@ -202,9 +195,7 @@ const presetAvatarCache = new Map<number, string | null>();
  * This should be called once at bot startup for optimal performance
  * @param presets - Array of preset rows from the database
  */
-export async function initializePresetAvatarCache(
-  presets: TomoriPresetRow[],
-): Promise<void> {
+export async function initializePresetAvatarCache(presets: TomoriPresetRow[]): Promise<void> {
   try {
     log.info("Initializing preset avatar cache...");
 
@@ -229,9 +220,7 @@ export async function initializePresetAvatarCache(
         // 5. Validate it's a PNG
         const validation = validatePNGBuffer(imageBuffer);
         if (!validation.isValid) {
-          log.warn(
-            `Invalid PNG for preset "${preset.tomori_preset_name}": ${validation.error}`,
-          );
+          log.warn(`Invalid PNG for preset "${preset.tomori_preset_name}": ${validation.error}`);
           presetAvatarCache.set(preset.tomori_preset_id, null);
           continue;
         }
@@ -254,9 +243,7 @@ export async function initializePresetAvatarCache(
       }
     }
 
-    log.success(
-      `Preset avatar cache initialized with ${presetAvatarCache.size} presets`,
-    );
+    log.success(`Preset avatar cache initialized with ${presetAvatarCache.size} presets`);
   } catch (error) {
     log.error("Failed to initialize preset avatar cache:", error as Error);
     // Don't throw - bot should still work without cached avatars

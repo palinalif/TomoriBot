@@ -19,26 +19,13 @@ import {
   type SavedProviderConfigUpsert,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
-import {
-  validateTomoriConfigFields,
-  validateTomoriFields,
-  validateUserFields,
-} from "./sqlSecurity";
+import { validateTomoriConfigFields, validateTomoriFields, validateUserFields } from "./sqlSecurity";
 import { invalidateUserCache } from "../cache/userCache";
 import { getBaseTriggerWords } from "../text/localizer";
 import { DEFAULT_SYSTEM_PROMPT } from "../text/contextBuilder";
 import type { Guild } from "discord.js";
-import {
-  validateMemoryContent,
-  checkPersonalMemoryLimit,
-  checkServerMemoryLimit,
-} from "./memoryLimits";
-import type {
-  ServerMemoryRow,
-  PersonalMemoryRow,
-  SetupConfig,
-  SetupResult,
-} from "../../types/db/schema";
+import { validateMemoryContent, checkPersonalMemoryLimit, checkServerMemoryLimit } from "./memoryLimits";
+import type { ServerMemoryRow, PersonalMemoryRow, SetupConfig, SetupResult } from "../../types/db/schema";
 import { setupConfigSchema, setupResultSchema } from "../../types/db/schema";
 
 const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
@@ -54,11 +41,7 @@ const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
  * @param language - Preferred language/locale code (e.g., 'en-US'), defaults to 'en'
  * @returns The validated UserRow object, or null if registration failed
  */
-export async function registerUser(
-  userDiscId: string,
-  displayName: string,
-  language = "en",
-): Promise<UserRow | null> {
+export async function registerUser(userDiscId: string, displayName: string, language = "en"): Promise<UserRow | null> {
   try {
     log.info(`Ensuring user ${userDiscId} exists (${displayName})`);
 
@@ -94,10 +77,7 @@ export async function registerUser(
     const validatedUser = userSchema.safeParse(userData);
 
     if (!validatedUser.success) {
-      log.error(
-        `Failed to validate registered user data for ${userDiscId}:`,
-        validatedUser.error,
-      );
+      log.error(`Failed to validate registered user data for ${userDiscId}:`, validatedUser.error);
       return null;
     }
 
@@ -140,9 +120,7 @@ export async function setPrivacyLevel(
 
     // 3. Check if user was found and updated
     if (!userData) {
-      log.warn(
-        `Cannot set privacy level: User ${userDiscId} not found in database`,
-      );
+      log.warn(`Cannot set privacy level: User ${userDiscId} not found in database`);
       return null;
     }
 
@@ -150,16 +128,11 @@ export async function setPrivacyLevel(
     const validatedUser = userSchema.safeParse(userData);
 
     if (!validatedUser.success) {
-      log.error(
-        `Failed to validate user data after privacy update for ${userDiscId}:`,
-        validatedUser.error,
-      );
+      log.error(`Failed to validate user data after privacy update for ${userDiscId}:`, validatedUser.error);
       return null;
     }
 
-    log.success(
-      `Privacy level successfully set to ${level} for user ${userDiscId}`,
-    );
+    log.success(`Privacy level successfully set to ${level} for user ${userDiscId}`);
     return validatedUser.data;
   } catch (error) {
     log.error(`Error setting privacy level for user ${userDiscId}:`, error);
@@ -171,10 +144,7 @@ export async function setPrivacyLevel(
  * Backward compatibility wrapper for setPrivacyOptOut
  * @deprecated Use setPrivacyLevel() instead
  */
-export async function setPrivacyOptOut(
-  userDiscId: string,
-  optedOut: boolean,
-): Promise<UserRow | null> {
+export async function setPrivacyOptOut(userDiscId: string, optedOut: boolean): Promise<UserRow | null> {
   const { PrivacyLevel } = await import("@/types/db/schema");
   const level = optedOut ? PrivacyLevel.FULL : PrivacyLevel.MINIMAL; // optedOut=true maps to Level 2 (FULL privacy)
   return setPrivacyLevel(userDiscId, level);
@@ -188,9 +158,7 @@ export async function setPrivacyOptOut(
  * @param userDiscId - Discord user ID
  * @returns New opt-in value (true if enabled, false if disabled)
  */
-export async function toggleCrossServerShortTermMemoryOptIn(
-  userDiscId: string,
-): Promise<boolean> {
+export async function toggleCrossServerShortTermMemoryOptIn(userDiscId: string): Promise<boolean> {
   try {
     // Toggle the setting
     const [updated] = await sql`
@@ -203,19 +171,13 @@ export async function toggleCrossServerShortTermMemoryOptIn(
     // Return the toggled value directly — only one column was returned
     return updated?.shortterm_cache_crossserver_opt_in ?? false;
   } catch (error) {
-    log.error(
-      `Error toggling cross-server short-term memory opt-in for user ${userDiscId}:`,
-      error,
-    );
+    log.error(`Error toggling cross-server short-term memory opt-in for user ${userDiscId}:`, error);
     // Re-throw to allow caller to handle
     throw error;
   }
 }
 
-function rollAutochatTarget(
-  minThreshold: number,
-  maxThreshold: number,
-): number {
+function rollAutochatTarget(minThreshold: number, maxThreshold: number): number {
   const normalizedMin = Math.max(minThreshold, 0);
   const normalizedMax = Math.max(maxThreshold, normalizedMin);
 
@@ -227,10 +189,7 @@ function rollAutochatTarget(
     return normalizedMin;
   }
 
-  return (
-    Math.floor(Math.random() * (normalizedMax - normalizedMin + 1)) +
-    normalizedMin
-  );
+  return Math.floor(Math.random() * (normalizedMax - normalizedMin + 1)) + normalizedMin;
 }
 
 /**
@@ -289,25 +248,16 @@ export async function incrementTomoriCounter(
           },
         };
 
-        await log.error(
-          "Failed to validate Tomori data before counter update",
-          parsedCurrentTomori.error,
-          context,
-        );
+        await log.error("Failed to validate Tomori data before counter update", parsedCurrentTomori.error, context);
         return null;
       }
 
       const currentTomoriRow = parsedCurrentTomori.data;
       const currentTarget = currentTomoriRow.autoch_next_target;
-      const shouldStartNewCycle =
-        currentTarget > 0 && currentTomoriRow.autoch_counter >= currentTarget;
+      const shouldStartNewCycle = currentTarget > 0 && currentTomoriRow.autoch_counter >= currentTarget;
       const nextTarget =
-        shouldStartNewCycle || currentTarget <= 0
-          ? rollAutochatTarget(normalizedMin, normalizedMax)
-          : currentTarget;
-      const nextCounter = shouldStartNewCycle
-        ? 1
-        : currentTomoriRow.autoch_counter + 1;
+        shouldStartNewCycle || currentTarget <= 0 ? rollAutochatTarget(normalizedMin, normalizedMax) : currentTarget;
+      const nextCounter = shouldStartNewCycle ? 1 : currentTomoriRow.autoch_counter + 1;
 
       const [updatedRow] = await tx`
 				UPDATE tomoris
@@ -351,11 +301,7 @@ export async function incrementTomoriCounter(
         },
       };
 
-      await log.error(
-        "Failed to validate Tomori data after counter update",
-        parsedTomori.error,
-        context,
-      );
+      await log.error("Failed to validate Tomori data after counter update", parsedTomori.error, context);
       return null;
     }
 
@@ -371,11 +317,7 @@ export async function incrementTomoriCounter(
       },
     };
 
-    await log.error(
-      `Error incrementing auto counter for Tomori ${tomoriId}`,
-      error,
-      context,
-    );
+    await log.error(`Error incrementing auto counter for Tomori ${tomoriId}`, error, context);
     return null;
   }
 }
@@ -390,18 +332,13 @@ export async function incrementTomoriCounter(
  * @returns All database rows created during setup
  * @throws If validation fails or any part of the setup transaction fails
  */
-export async function setupServer(
-  guild: Guild | null,
-  config: SetupConfig,
-): Promise<SetupResult> {
+export async function setupServer(guild: Guild | null, config: SetupConfig): Promise<SetupResult> {
   // Validate input config - critical operation so we use Zod (Rule 3, Rule 5)
   const validConfig = setupConfigSchema.parse(config);
 
   // Detect if this is a DM context (no guild)
   const isDMChannel = guild === null;
-  log.section(
-    `Starting server setup transaction (${isDMChannel ? "DM" : "Guild"} context)`,
-  );
+  log.section(`Starting server setup transaction (${isDMChannel ? "DM" : "Guild"} context)`);
 
   try {
     // Start transaction for atomicity (Rule 15)
@@ -432,18 +369,14 @@ export async function setupServer(
         )[0];
 
         if (!selectedLlm) {
-          throw new Error(
-            `No available models found for provider: ${validConfig.provider}`,
-          );
+          throw new Error(`No available models found for provider: ${validConfig.provider}`);
         }
 
         log.warn(
           `No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`,
         );
       } else {
-        log.info(
-          `Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`,
-        );
+        log.info(`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`);
       }
 
       // Find the default diffusion model for the selected provider (for image generation)
@@ -481,9 +414,7 @@ export async function setupServer(
           );
         }
       } else {
-        log.info(
-          `Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`,
-        );
+        log.info(`Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`);
       }
 
       // Find the default embedding model for the selected provider (for document retrieval)
@@ -520,22 +451,14 @@ export async function setupServer(
           );
         }
       } else {
-        log.info(
-          `Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`,
-        );
+        log.info(`Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`);
       }
 
       // Extract diffusion_model_id (null if no model found)
-      const selectedDiffusionModelId = selectedDiffusionModel
-        ? selectedDiffusionModel.diffusion_model_id
-        : null;
-      const selectedEmbeddingModelId = selectedEmbeddingModel
-        ? selectedEmbeddingModel.embedding_model_id
-        : null;
+      const selectedDiffusionModelId = selectedDiffusionModel ? selectedDiffusionModel.diffusion_model_id : null;
+      const selectedEmbeddingModelId = selectedEmbeddingModel ? selectedEmbeddingModel.embedding_model_id : null;
 
-      const presetRows = await tx<
-        Array<{ preset_trigger_words: string[] | null }>
-      >`
+      const presetRows = await tx<Array<{ preset_trigger_words: string[] | null }>>`
 				SELECT preset_trigger_words
 				FROM tomori_presets
 				WHERE tomori_preset_id = ${validConfig.presetId}
@@ -543,8 +466,7 @@ export async function setupServer(
 			`;
       const presetTriggerCandidates =
         presetRows[0]?.preset_trigger_words?.filter(
-          (trigger): trigger is string =>
-            typeof trigger === "string" && trigger.trim().length > 0,
+          (trigger): trigger is string => typeof trigger === "string" && trigger.trim().length > 0,
         ) ?? [];
       const dedupedPresetTriggers: string[] = [];
       const seenPresetTriggers = new Set<string>();
@@ -558,9 +480,7 @@ export async function setupServer(
       }
 
       const defaultTriggers =
-        dedupedPresetTriggers.length > 0
-          ? dedupedPresetTriggers
-          : getBaseTriggerWords(validConfig.locale);
+        dedupedPresetTriggers.length > 0 ? dedupedPresetTriggers : getBaseTriggerWords(validConfig.locale);
 
       // 1. Create or update server record with DM support (Rule 15)
       // registration_locale is only set on INSERT (static field for analytics)
@@ -646,21 +566,14 @@ export async function setupServer(
       // 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
       const emojis = [];
       if (!isDMChannel && guild) {
-        const emojiValues = Array.from(guild.emojis.cache.values()).map(
-          (e) => ({
-            emoji_disc_id: e.id,
-            emoji_name: e.name ?? "",
-            emotion_key: "unset", // Add the emotion_key field
-            is_animated: e.animated || false, // Track if emoji is animated
-          }),
-        );
+        const emojiValues = Array.from(guild.emojis.cache.values()).map((e) => ({
+          emoji_disc_id: e.id,
+          emoji_name: e.name ?? "",
+          emotion_key: "unset", // Add the emotion_key field
+          is_animated: e.animated || false, // Track if emoji is animated
+        }));
 
-        for (const {
-          emoji_disc_id,
-          emoji_name,
-          emotion_key,
-          is_animated,
-        } of emojiValues) {
+        for (const { emoji_disc_id, emoji_name, emotion_key, is_animated } of emojiValues) {
           const [row] = await tx`
 				INSERT INTO server_emojis (
 					server_id,
@@ -688,16 +601,14 @@ export async function setupServer(
       const stickers = [];
       if (!isDMChannel && guild) {
         log.info(`Registering stickers for server ${server.server_id}`);
-        const stickerValues = Array.from(guild.stickers.cache.values()).map(
-          (s) => ({
-            sticker_disc_id: s.id,
-            sticker_name: s.name,
-            sticker_desc: s.description ?? "",
-            emotion_key: "unset",
-            // is_animated: s.format === StickerFormatType.Lottie, // Remove this line
-            sticker_format: s.format, // Store the actual format type enum value
-          }),
-        );
+        const stickerValues = Array.from(guild.stickers.cache.values()).map((s) => ({
+          sticker_disc_id: s.id,
+          sticker_name: s.name,
+          sticker_desc: s.description ?? "",
+          emotion_key: "unset",
+          // is_animated: s.format === StickerFormatType.Lottie, // Remove this line
+          sticker_format: s.format, // Store the actual format type enum value
+        }));
 
         for (const {
           sticker_disc_id,
@@ -753,9 +664,7 @@ export async function setupServer(
       `${isDMChannel ? "DM pseudo-server" : "Server"} setup completed successfully for Server ID (${validConfig.serverId})`,
     );
     if (!isDMChannel) {
-      log.info(
-        `Registered ${result.emojis.length} emojis and ${result.stickers.length} stickers`,
-      );
+      log.info(`Registered ${result.emojis.length} emojis and ${result.stickers.length} stickers`);
     } else {
       log.info("DM setup completed - emoji/sticker registration skipped");
     }
@@ -787,8 +696,7 @@ export async function updateTomoriConfig(
     // Filter to only keys that were in the original input — Zod injects defaults for all
     // schema fields with .default(), which would incorrectly expand the SET clause.
     const fields = Object.keys(validConfigData).filter(
-      (key) =>
-        key !== "tomori_id" && key !== "tomori_config_id" && key in configData,
+      (key) => key !== "tomori_id" && key !== "tomori_config_id" && key in configData,
     );
 
     if (fields.length === 0) {
@@ -840,11 +748,7 @@ export async function updateTomoriConfig(
           fields,
         },
       };
-      await log.error(
-        `No tomori_config found with server_id: ${serverId}`,
-        new Error("Config not found"),
-        context,
-      );
+      await log.error(`No tomori_config found with server_id: ${serverId}`, new Error("Config not found"), context);
       return null;
     }
 
@@ -859,11 +763,7 @@ export async function updateTomoriConfig(
           validationErrors: updatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        `Failed to validate updated config for server_id: ${serverId}`,
-        updatedConfig.error,
-        context,
-      );
+      await log.error(`Failed to validate updated config for server_id: ${serverId}`, updatedConfig.error, context);
       return null;
     }
 
@@ -876,11 +776,7 @@ export async function updateTomoriConfig(
         operation: "updateTomoriConfig",
       },
     };
-    await log.error(
-      `Error updating tomori_config for server_id: ${serverId}`,
-      error,
-      context,
-    );
+    await log.error(`Error updating tomori_config for server_id: ${serverId}`, error, context);
     return null;
   }
 }
@@ -920,11 +816,9 @@ export async function applyNaiPreset(
 
   // 1. Extract schema-compatible sampling fields from the preset.
   //    Absent values fall back to neutral/disabled DB defaults.
-  const naiTemp =
-    typeof params.temperature === "number" ? params.temperature : 1.35;
+  const naiTemp = typeof params.temperature === "number" ? params.temperature : 1.35;
   const llm_temperature = invertNaiTemperature(naiTemp, model);
-  const llm_top_k =
-    typeof params.top_k === "number" ? Math.round(params.top_k) : 0;
+  const llm_top_k = typeof params.top_k === "number" ? Math.round(params.top_k) : 0;
   const llm_top_p = typeof params.top_p === "number" ? params.top_p : 1.0;
   const llm_min_p = typeof params.min_p === "number" ? params.min_p : 0.0;
 
@@ -946,10 +840,7 @@ export async function applyNaiPreset(
  * @param tomoriData - Partial data to update (only specified fields will be changed)
  * @returns The updated TomoriRow or null if update failed
  */
-export async function updateTomori(
-  tomoriId: number,
-  tomoriData: Partial<TomoriRow>,
-): Promise<TomoriRow | null> {
+export async function updateTomori(tomoriId: number, tomoriData: Partial<TomoriRow>): Promise<TomoriRow | null> {
   try {
     // Validate the partial data with Zod (Rule #7)
     const validTomoriData = tomoriSchema.partial().parse(tomoriData);
@@ -958,9 +849,7 @@ export async function updateTomori(
     // Filter to only keys present in the original input — Zod injects defaults
     // for all schema fields with .default(), which would incorrectly expand the
     // SET clause (e.g. attribute_list: [] would overwrite existing data).
-    const fields = Object.keys(validTomoriData).filter(
-      (key) => key !== "tomori_id" && key in tomoriData,
-    );
+    const fields = Object.keys(validTomoriData).filter((key) => key !== "tomori_id" && key in tomoriData);
 
     if (fields.length === 0) {
       log.warn(`No fields provided to update for tomori_id: ${tomoriId}`);
@@ -982,9 +871,7 @@ export async function updateTomori(
       const rawValue = validTomoriData[field as keyof typeof validTomoriData];
       if (Array.isArray(rawValue)) {
         // Serialize to PostgreSQL array literal: {"val1","val2"} or {}
-        const escaped = rawValue.map(
-          (v) => `"${String(v).replace(/(["\\])/g, "\\$1")}"`,
-        );
+        const escaped = rawValue.map((v) => `"${String(v).replace(/(["\\])/g, "\\$1")}"`);
         values.push(`{${escaped.join(",")}}`);
       } else {
         values.push(rawValue);
@@ -1019,11 +906,7 @@ export async function updateTomori(
           fields,
         },
       };
-      await log.error(
-        `No tomori found with id: ${tomoriId}`,
-        new Error("Tomori not found"),
-        context,
-      );
+      await log.error(`No tomori found with id: ${tomoriId}`, new Error("Tomori not found"), context);
       return null;
     }
 
@@ -1038,11 +921,7 @@ export async function updateTomori(
           validationErrors: updatedTomori.error.flatten(),
         },
       };
-      await log.error(
-        `Failed to validate updated tomori for id: ${tomoriId}`,
-        updatedTomori.error,
-        context,
-      );
+      await log.error(`Failed to validate updated tomori for id: ${tomoriId}`, updatedTomori.error, context);
       return null;
     }
 
@@ -1055,11 +934,7 @@ export async function updateTomori(
         operation: "updateTomori",
       },
     };
-    await log.error(
-      `Error updating tomori for id: ${tomoriId}`,
-      error,
-      context,
-    );
+    await log.error(`Error updating tomori for id: ${tomoriId}`, error, context);
     return null;
   }
 }
@@ -1072,10 +947,7 @@ export async function updateTomori(
  * @param userData - Partial data to update (only specified fields will be changed)
  * @returns The updated UserRow or null if update failed
  */
-export async function updateUser(
-  userId: number,
-  userData: Partial<UserRow>,
-): Promise<UserRow | null> {
+export async function updateUser(userId: number, userData: Partial<UserRow>): Promise<UserRow | null> {
   try {
     // Validate the partial data with Zod (Rule #7)
     const validUserData = userSchema.partial().parse(userData);
@@ -1084,9 +956,7 @@ export async function updateUser(
     // Filter to only keys present in the original input — Zod injects defaults
     // for all schema fields with .default(), which would incorrectly expand the
     // SET clause (e.g. personal_memories: [] would overwrite existing data).
-    const fields = Object.keys(validUserData).filter(
-      (key) => key !== "user_id" && key in userData,
-    );
+    const fields = Object.keys(validUserData).filter((key) => key !== "user_id" && key in userData);
 
     if (fields.length === 0) {
       log.warn(`No fields provided to update for user_id: ${userId}`);
@@ -1107,9 +977,7 @@ export async function updateUser(
       setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
       const rawValue = validUserData[field as keyof typeof validUserData];
       if (Array.isArray(rawValue)) {
-        const escaped = rawValue.map(
-          (v) => `"${String(v).replace(/(["\\])/g, "\\$1")}"`,
-        );
+        const escaped = rawValue.map((v) => `"${String(v).replace(/(["\\])/g, "\\$1")}"`);
         values.push(`{${escaped.join(",")}}`);
       } else {
         values.push(rawValue);
@@ -1144,11 +1012,7 @@ export async function updateUser(
           fields,
         },
       };
-      await log.error(
-        `No user found with id: ${userId}`,
-        new Error("User not found"),
-        context,
-      );
+      await log.error(`No user found with id: ${userId}`, new Error("User not found"), context);
       return null;
     }
 
@@ -1163,11 +1027,7 @@ export async function updateUser(
           validationErrors: updatedUser.error.flatten(),
         },
       };
-      await log.error(
-        `Failed to validate updated user for id: ${userId}`,
-        updatedUser.error,
-        context,
-      );
+      await log.error(`Failed to validate updated user for id: ${userId}`, updatedUser.error, context);
       return null;
     }
 
@@ -1211,17 +1071,12 @@ export async function addServerMemoryByTomori(
   // 2. Validate memory content before database operations
   const contentValidation = validateMemoryContent(content);
   if (!contentValidation.isValid) {
-    log.warn(
-      `Server memory content validation failed for server ID ${serverId}: ${contentValidation.error}`,
-    );
+    log.warn(`Server memory content validation failed for server ID ${serverId}: ${contentValidation.error}`);
     return null;
   }
 
   // 3. Check server memory limit
-  const serverLimitCheck = await checkServerMemoryLimit(
-    serverId,
-    personaLineageId,
-  );
+  const serverLimitCheck = await checkServerMemoryLimit(serverId, personaLineageId);
   if (!serverLimitCheck.isValid) {
     log.warn(
       `Server memory limit exceeded for server ID ${serverId}: ${serverLimitCheck.currentCount}/${serverLimitCheck.maxAllowed}`,
@@ -1253,11 +1108,7 @@ export async function addServerMemoryByTomori(
           validationErrors: validatedMemory.error.flatten(),
         },
       };
-      await log.error(
-        `Failed to validate new server memory for server ID ${serverId}`,
-        validatedMemory.error,
-        context,
-      );
+      await log.error(`Failed to validate new server memory for server ID ${serverId}`, validatedMemory.error, context);
       return null;
     }
 
@@ -1277,11 +1128,7 @@ export async function addServerMemoryByTomori(
         contentAttempted: content.substring(0, 100),
       },
     };
-    await log.error(
-      `Error adding server memory for server ID ${serverId}`,
-      error,
-      context,
-    );
+    await log.error(`Error adding server memory for server ID ${serverId}`, error, context);
     return null;
   }
 }
@@ -1306,18 +1153,12 @@ export async function addPersonalMemoryByTomori(
   // 2. Validate memory content before database operations
   const contentValidation = validateMemoryContent(content);
   if (!contentValidation.isValid) {
-    log.warn(
-      `Personal memory content validation failed for user ID ${userId}: ${contentValidation.error}`,
-    );
+    log.warn(`Personal memory content validation failed for user ID ${userId}: ${contentValidation.error}`);
     return null;
   }
 
   // 3. Check personal memory limit
-  const personalLimitCheck = await checkPersonalMemoryLimit(
-    userId,
-    personaLineageId,
-    true,
-  );
+  const personalLimitCheck = await checkPersonalMemoryLimit(userId, personaLineageId, true);
   if (!personalLimitCheck.isValid) {
     log.warn(
       `Personal memory limit exceeded for user ID ${userId}: ${personalLimitCheck.currentCount}/${personalLimitCheck.maxAllowed}`,
@@ -1333,9 +1174,7 @@ export async function addPersonalMemoryByTomori(
 		`;
 
     if (!insertedMemory) {
-      log.warn(
-        `Attempted to insert personal memory for non-existent user ${userId}`,
-      );
+      log.warn(`Attempted to insert personal memory for non-existent user ${userId}`);
       return null;
     }
 
@@ -1479,11 +1318,7 @@ export async function addReminder(reminderData: {
         targetUser: reminderData.user_discord_id,
       },
     };
-    await log.error(
-      `Error creating reminder for user ${reminderData.user_discord_id}`,
-      error,
-      context,
-    );
+    await log.error(`Error creating reminder for user ${reminderData.user_discord_id}`, error, context);
     return null;
   }
 }
@@ -1494,10 +1329,7 @@ export async function addReminder(reminderData: {
  * @param nextReminderTime - The next scheduled reminder time
  * @returns The updated ReminderRow object, or null if update failed
  */
-export async function rescheduleReminder(
-  reminderId: number,
-  nextReminderTime: Date,
-): Promise<ReminderRow | null> {
+export async function rescheduleReminder(reminderId: number, nextReminderTime: Date): Promise<ReminderRow | null> {
   try {
     const [updatedReminder] = await sql`
 			UPDATE reminders
@@ -1530,9 +1362,7 @@ export async function rescheduleReminder(
       return null;
     }
 
-    log.success(
-      `Reminder rescheduled (ID: ${reminderId}) to ${nextReminderTime.toISOString()}`,
-    );
+    log.success(`Reminder rescheduled (ID: ${reminderId}) to ${nextReminderTime.toISOString()}`);
     return validatedReminder.data;
   } catch (error) {
     const context: ErrorContext = {
@@ -1543,11 +1373,7 @@ export async function rescheduleReminder(
         nextReminderTime: nextReminderTime.toISOString(),
       },
     };
-    await log.error(
-      `Error rescheduling reminder ${reminderId}`,
-      error,
-      context,
-    );
+    await log.error(`Error rescheduling reminder ${reminderId}`, error, context);
     return null;
   }
 }
@@ -1577,9 +1403,7 @@ interface RandomTriggerData {
  * @param data - Trigger configuration data.
  * @returns The inserted RandomTriggerRow, or null on failure.
  */
-export async function insertRandomTrigger(
-  data: RandomTriggerData,
-): Promise<RandomTriggerRow | null> {
+export async function insertRandomTrigger(data: RandomTriggerData): Promise<RandomTriggerRow | null> {
   try {
     // 1. Insert trigger; schedule first roll after one full timer cycle
     const [row] = await sql`
@@ -1625,9 +1449,7 @@ export async function insertRandomTrigger(
       return null;
     }
 
-    log.success(
-      `Random trigger created (id=${parsed.data.trigger_id}) for channel ${data.channelDiscId}`,
-    );
+    log.success(`Random trigger created (id=${parsed.data.trigger_id}) for channel ${data.channelDiscId}`);
     return parsed.data;
   } catch (error) {
     const context: ErrorContext = {
@@ -1714,11 +1536,7 @@ export async function deleteRandomTrigger(triggerId: number): Promise<boolean> {
       errorType: "DatabaseDeleteError",
       metadata: { operation: "deleteRandomTrigger", triggerId },
     };
-    await log.error(
-      `Error deleting random trigger ${triggerId}`,
-      error,
-      context,
-    );
+    await log.error(`Error deleting random trigger ${triggerId}`, error, context);
     return false;
   }
 }
@@ -1742,8 +1560,7 @@ export async function rescheduleRandomTrigger(
     const normalizedOffsetRange = Math.max(0, randomOffsetRange ?? 0);
     const randomOffset =
       normalizedOffsetRange > 0
-        ? Math.floor(Math.random() * (normalizedOffsetRange * 2 + 1)) -
-          normalizedOffsetRange
+        ? Math.floor(Math.random() * (normalizedOffsetRange * 2 + 1)) - normalizedOffsetRange
         : 0;
     const nextTimerHours = Math.max(1, timerHours + randomOffset);
 
@@ -1756,9 +1573,7 @@ export async function rescheduleRandomTrigger(
 			RETURNING trigger_id
 		`;
     if (!row) {
-      log.warn(
-        `rescheduleRandomTrigger: no row found for trigger_id=${triggerId}`,
-      );
+      log.warn(`rescheduleRandomTrigger: no row found for trigger_id=${triggerId}`);
       return false;
     }
     return true;
@@ -1773,11 +1588,7 @@ export async function rescheduleRandomTrigger(
         consecutiveFailures,
       },
     };
-    await log.error(
-      `Error rescheduling random trigger ${triggerId}`,
-      error,
-      context,
-    );
+    await log.error(`Error rescheduling random trigger ${triggerId}`, error, context);
     return false;
   }
 }
@@ -1791,11 +1602,7 @@ export async function rescheduleRandomTrigger(
  * @param llmId - The llm_id to set as the override
  * @returns True on success, false on failure
  */
-export async function setChannelLlmOverride(
-  serverId: number,
-  channelDiscId: string,
-  llmId: number,
-): Promise<boolean> {
+export async function setChannelLlmOverride(serverId: number, channelDiscId: string, llmId: number): Promise<boolean> {
   try {
     // UPSERT — insert or update the override for this (server, channel) pair
     await sql`
@@ -1806,10 +1613,7 @@ export async function setChannelLlmOverride(
 		`;
     return true;
   } catch (error) {
-    log.error(
-      `Error setting channel LLM override for server ${serverId} channel ${channelDiscId}:`,
-      error,
-    );
+    log.error(`Error setting channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
     return false;
   }
 }
@@ -1823,10 +1627,7 @@ export async function setChannelLlmOverride(
  * @param llmId - The llm_id to set as the override, or null to clear it
  * @returns True on success, false on failure
  */
-export async function setPersonaLlmOverride(
-  tomoriId: number,
-  llmId: number | null,
-): Promise<boolean> {
+export async function setPersonaLlmOverride(tomoriId: number, llmId: number | null): Promise<boolean> {
   try {
     // UPSERT — create or update the persona_configs row
     await sql`
@@ -1837,10 +1638,7 @@ export async function setPersonaLlmOverride(
 		`;
     return true;
   } catch (error) {
-    log.error(
-      `Error setting persona LLM override for tomori_id ${tomoriId}:`,
-      error,
-    );
+    log.error(`Error setting persona LLM override for tomori_id ${tomoriId}:`, error);
     return false;
   }
 }
@@ -1855,10 +1653,7 @@ export async function setPersonaLlmOverride(
  * @param llmIds - Ordered array of llm_id values (up to 5), or [] to clear all fallbacks
  * @returns True on success, false on failure
  */
-export async function setFallbackLlms(
-  serverId: number,
-  llmIds: number[],
-): Promise<boolean> {
+export async function setFallbackLlms(serverId: number, llmIds: number[]): Promise<boolean> {
   try {
     const fallbackJson = JSON.stringify(llmIds);
     // Match server-scoped rows (server_id = serverId) first.
@@ -1908,10 +1703,7 @@ export async function setFallbackLlms(
 
     return true;
   } catch (error) {
-    log.error(
-      `Error setting fallback LLMs for server ${serverId} (ids: [${llmIds.join(", ")}]):`,
-      error,
-    );
+    log.error(`Error setting fallback LLMs for server ${serverId} (ids: [${llmIds.join(", ")}]):`, error);
     return false;
   }
 }
@@ -1924,10 +1716,7 @@ export async function setFallbackLlms(
  * @param channelDiscId - The Discord snowflake ID of the channel
  * @returns True on success, false on failure
  */
-export async function deleteChannelLlmOverride(
-  serverId: number,
-  channelDiscId: string,
-): Promise<boolean> {
+export async function deleteChannelLlmOverride(serverId: number, channelDiscId: string): Promise<boolean> {
   try {
     await sql`
 			DELETE FROM channel_llm_overrides
@@ -1936,10 +1725,7 @@ export async function deleteChannelLlmOverride(
 		`;
     return true;
   } catch (error) {
-    log.error(
-      `Error deleting channel LLM override for server ${serverId} channel ${channelDiscId}:`,
-      error,
-    );
+    log.error(`Error deleting channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
     return false;
   }
 }
@@ -1951,9 +1737,7 @@ export async function deleteChannelLlmOverride(
  * @param serverId - The database server_id
  * @returns True on success, false on failure
  */
-export async function clearAllChannelLlmOverridesForServer(
-  serverId: number,
-): Promise<boolean> {
+export async function clearAllChannelLlmOverridesForServer(serverId: number): Promise<boolean> {
   try {
     await sql`
 			DELETE FROM channel_llm_overrides
@@ -1961,10 +1745,7 @@ export async function clearAllChannelLlmOverridesForServer(
 		`;
     return true;
   } catch (error) {
-    log.error(
-      `Error clearing channel LLM overrides for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error clearing channel LLM overrides for server ${serverId}:`, error);
     return false;
   }
 }
@@ -1976,9 +1757,7 @@ export async function clearAllChannelLlmOverridesForServer(
  * @param serverId - The database server_id
  * @returns True on success, false on failure
  */
-export async function clearAllPersonaLlmOverridesForServer(
-  serverId: number,
-): Promise<boolean> {
+export async function clearAllPersonaLlmOverridesForServer(serverId: number): Promise<boolean> {
   try {
     // Join via tomoris to scope the update to this server only
     await sql`
@@ -1990,10 +1769,7 @@ export async function clearAllPersonaLlmOverridesForServer(
 		`;
     return true;
   } catch (error) {
-    log.error(
-      `Error clearing persona LLM overrides for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error clearing persona LLM overrides for server ${serverId}:`, error);
     return false;
   }
 }
@@ -2005,19 +1781,12 @@ export async function clearAllPersonaLlmOverridesForServer(
  * @param config - The provider config fields to save
  * @returns True on success, false on failure
  */
-export async function upsertSavedProviderConfig(
-  serverId: number,
-  config: SavedProviderConfigUpsert,
-): Promise<boolean> {
+export async function upsertSavedProviderConfig(serverId: number, config: SavedProviderConfigUpsert): Promise<boolean> {
   try {
     const provider = config.provider.toLowerCase();
     const fallbackJson = JSON.stringify(config.fallback_llm_ids ?? []);
-    const channelOverridesJson = JSON.stringify(
-      config.channel_llm_overrides ?? [],
-    );
-    const personaOverridesJson = JSON.stringify(
-      config.persona_llm_overrides ?? [],
-    );
+    const channelOverridesJson = JSON.stringify(config.channel_llm_overrides ?? []);
+    const personaOverridesJson = JSON.stringify(config.persona_llm_overrides ?? []);
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     const rows = await sql`
@@ -2075,15 +1844,10 @@ export async function upsertSavedProviderConfig(
       }
     }
 
-    log.info(
-      `Upserted saved provider config for server ${serverId}, provider ${provider}`,
-    );
+    log.info(`Upserted saved provider config for server ${serverId}, provider ${provider}`);
     return true;
   } catch (error) {
-    log.error(
-      `Error upserting saved provider config for server ${serverId}, provider ${config.provider}:`,
-      error,
-    );
+    log.error(`Error upserting saved provider config for server ${serverId}, provider ${config.provider}:`, error);
     return false;
   }
 }
@@ -2094,10 +1858,7 @@ export async function upsertSavedProviderConfig(
  * @param provider - The provider name (lowercase)
  * @returns True if a row was deleted, false if not found or error
  */
-export async function deleteSavedProviderConfig(
-  serverId: number,
-  provider: string,
-): Promise<boolean> {
+export async function deleteSavedProviderConfig(serverId: number, provider: string): Promise<boolean> {
   try {
     const result = await sql`
 			DELETE FROM saved_provider_configs
@@ -2107,16 +1868,11 @@ export async function deleteSavedProviderConfig(
 
     const deleted = result.count > 0;
     if (deleted) {
-      log.info(
-        `Deleted saved provider config for server ${serverId}, provider ${provider}`,
-      );
+      log.info(`Deleted saved provider config for server ${serverId}, provider ${provider}`);
     }
     return deleted;
   } catch (error) {
-    log.error(
-      `Error deleting saved provider config for server ${serverId}, provider ${provider}:`,
-      error,
-    );
+    log.error(`Error deleting saved provider config for server ${serverId}, provider ${provider}:`, error);
     return false;
   }
 }
@@ -2151,9 +1907,7 @@ export async function restoreOverridesFromSnapshot(
     // Skip overrides for channels that no longer exist in the guild
     if (!validChannelIds.has(override.channel_disc_id)) {
       skipped++;
-      log.info(
-        `Skipping dead channel override: channel ${override.channel_disc_id} no longer exists`,
-      );
+      log.info(`Skipping dead channel override: channel ${override.channel_disc_id} no longer exists`);
       continue;
     }
 
@@ -2163,17 +1917,11 @@ export async function restoreOverridesFromSnapshot(
 		`;
     if (llmCheck.length === 0) {
       skipped++;
-      log.info(
-        `Skipping channel override for ${override.channel_disc_id}: llm_id ${override.llm_id} no longer exists`,
-      );
+      log.info(`Skipping channel override for ${override.channel_disc_id}: llm_id ${override.llm_id} no longer exists`);
       continue;
     }
 
-    const success = await setChannelLlmOverride(
-      serverId,
-      override.channel_disc_id,
-      override.llm_id,
-    );
+    const success = await setChannelLlmOverride(serverId, override.channel_disc_id, override.llm_id);
     if (success) {
       channelRestored++;
     } else {
@@ -2191,9 +1939,7 @@ export async function restoreOverridesFromSnapshot(
 		`;
     if (personaCheck.length === 0) {
       skipped++;
-      log.info(
-        `Skipping persona override: tomori_id ${override.tomori_id} no longer exists for server ${serverId}`,
-      );
+      log.info(`Skipping persona override: tomori_id ${override.tomori_id} no longer exists for server ${serverId}`);
       continue;
     }
 
@@ -2209,10 +1955,7 @@ export async function restoreOverridesFromSnapshot(
       continue;
     }
 
-    const success = await setPersonaLlmOverride(
-      override.tomori_id,
-      override.llm_id,
-    );
+    const success = await setPersonaLlmOverride(override.tomori_id, override.llm_id);
     if (success) {
       personaRestored++;
     } else {
@@ -2234,10 +1977,7 @@ export async function restoreOverridesFromSnapshot(
  * @param validChannelIds - Set of Discord channel IDs that currently exist in the guild
  * @returns Number of dead overrides removed
  */
-export async function cleanupDeadChannelOverrides(
-  serverId: number,
-  validChannelIds: Set<string>,
-): Promise<number> {
+export async function cleanupDeadChannelOverrides(serverId: number, validChannelIds: Set<string>): Promise<number> {
   try {
     // 1. Fetch all channel overrides for this server
     const overrideRows = await sql`
@@ -2261,15 +2001,10 @@ export async function cleanupDeadChannelOverrides(
 			  AND channel_disc_id = ANY(${deadChannelIds})
 		`;
 
-    log.info(
-      `Cleaned up ${deadChannelIds.length} dead channel override(s) for server ${serverId}`,
-    );
+    log.info(`Cleaned up ${deadChannelIds.length} dead channel override(s) for server ${serverId}`);
     return deadChannelIds.length;
   } catch (error) {
-    log.error(
-      `Error cleaning up dead channel overrides for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error cleaning up dead channel overrides for server ${serverId}:`, error);
     return 0;
   }
 }

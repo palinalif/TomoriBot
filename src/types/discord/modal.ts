@@ -1,8 +1,4 @@
-import type {
-  ModalSubmitInteraction,
-  TextInputStyle,
-  APIAttachment,
-} from "discord.js";
+import type { ModalSubmitInteraction, TextInputStyle, APIAttachment } from "discord.js";
 
 /**
  * Options for string select menu choices
@@ -150,32 +146,23 @@ export type ModalComponent =
 /**
  * Type guard for text input fields
  */
-export function isModalInputField(
-  component: ModalComponent,
-): component is ModalInputField {
+export function isModalInputField(component: ModalComponent): component is ModalInputField {
   return (
-    "style" in component ||
-    (!("options" in component) &&
-      !("minValues" in component) &&
-      !("maxValues" in component))
+    "style" in component || (!("options" in component) && !("minValues" in component) && !("maxValues" in component))
   );
 }
 
 /**
  * Type guard for select fields
  */
-export function isModalSelectField(
-  component: ModalComponent,
-): component is ModalSelectField {
+export function isModalSelectField(component: ModalComponent): component is ModalSelectField {
   return "options" in component;
 }
 
 /**
  * Type guard for file upload fields
  */
-export function isModalFileUploadField(
-  component: ModalComponent,
-): component is ModalFileUploadField {
+export function isModalFileUploadField(component: ModalComponent): component is ModalFileUploadField {
   return "minValues" in component || "maxValues" in component;
 }
 
@@ -183,38 +170,24 @@ export function isModalFileUploadField(
  * Type guard for Radio Group fields (type 21)
  * Uses the `kind` discriminant to avoid ambiguity with other option-bearing types.
  */
-export function isModalRadioGroupField(
-  component: ModalComponent,
-): component is ModalRadioGroupField {
-  return (
-    "kind" in component &&
-    (component as ModalRadioGroupField).kind === "radioGroup"
-  );
+export function isModalRadioGroupField(component: ModalComponent): component is ModalRadioGroupField {
+  return "kind" in component && (component as ModalRadioGroupField).kind === "radioGroup";
 }
 
 /**
  * Type guard for Checkbox Group fields (type 22)
  * Uses the `kind` discriminant to avoid ambiguity with other option-bearing types.
  */
-export function isModalCheckboxGroupField(
-  component: ModalComponent,
-): component is ModalCheckboxGroupField {
-  return (
-    "kind" in component &&
-    (component as ModalCheckboxGroupField).kind === "checkboxGroup"
-  );
+export function isModalCheckboxGroupField(component: ModalComponent): component is ModalCheckboxGroupField {
+  return "kind" in component && (component as ModalCheckboxGroupField).kind === "checkboxGroup";
 }
 
 /**
  * Type guard for Checkbox fields (type 23)
  * Uses the `kind` discriminant to distinguish from other non-option types.
  */
-export function isModalCheckboxField(
-  component: ModalComponent,
-): component is ModalCheckboxField {
-  return (
-    "kind" in component && (component as ModalCheckboxField).kind === "checkbox"
-  );
+export function isModalCheckboxField(component: ModalComponent): component is ModalCheckboxField {
+  return "kind" in component && (component as ModalCheckboxField).kind === "checkbox";
 }
 
 /**

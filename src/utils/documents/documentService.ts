@@ -1,9 +1,6 @@
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
-import {
-  generateEmbeddingsBatched,
-  providerSupportsEmbeddingTaskType,
-} from "@/utils/embeddings/embeddingProvider";
+import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "@/utils/embeddings/embeddingProvider";
 import type { EmbeddingModelRow } from "@/types/db/schema";
 
 export interface RetrievedDocumentChunk {
@@ -23,21 +20,14 @@ export function normalizeDocumentText(text: string): string {
     .trim();
 }
 
-export function chunkDocumentText(
-  text: string,
-  chunkSize: number,
-  overlap: number,
-): string[] {
+export function chunkDocumentText(text: string, chunkSize: number, overlap: number): string[] {
   const chunks: string[] = [];
 
   if (chunkSize <= 0) {
     return chunks;
   }
 
-  const safeOverlap = Math.max(
-    0,
-    Math.min(overlap, Math.max(0, chunkSize - 1)),
-  );
+  const safeOverlap = Math.max(0, Math.min(overlap, Math.max(0, chunkSize - 1)));
   let start = 0;
 
   while (start < text.length) {
@@ -92,9 +82,7 @@ export async function insertDocumentWithChunks(params: {
   } = params;
 
   if (chunks.length !== embeddings.length) {
-    throw new Error(
-      `Chunk count (${chunks.length}) does not match embedding count (${embeddings.length})`,
-    );
+    throw new Error(`Chunk count (${chunks.length}) does not match embedding count (${embeddings.length})`);
   }
 
   return sql.transaction(async (tx) => {
@@ -166,16 +154,7 @@ export async function retrieveRelevantDocumentChunks(params: {
   minSimilarity: number;
   batchSize?: number;
 }): Promise<RetrievedDocumentChunk[]> {
-  const {
-    serverId,
-    tomoriId,
-    query,
-    embeddingModel,
-    apiKey,
-    maxResults,
-    minSimilarity,
-    batchSize,
-  } = params;
+  const { serverId, tomoriId, query, embeddingModel, apiKey, maxResults, minSimilarity, batchSize } = params;
 
   if (!query.trim()) {
     return [];
@@ -186,9 +165,7 @@ export async function retrieveRelevantDocumentChunks(params: {
     apiKey,
     model: embeddingModel.codename,
     inputs: [query],
-    taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider))
-      ? "RETRIEVAL_QUERY"
-      : undefined,
+    taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider)) ? "RETRIEVAL_QUERY" : undefined,
     batchSize,
   });
 
@@ -250,10 +227,7 @@ export async function retrieveRelevantDocumentChunks(params: {
 
   const results: RetrievedDocumentChunk[] = [];
   for (const row of rows) {
-    const distance =
-      typeof row.distance === "string"
-        ? Number.parseFloat(row.distance)
-        : Number(row.distance);
+    const distance = typeof row.distance === "string" ? Number.parseFloat(row.distance) : Number(row.distance);
     const similarity = Number.isFinite(distance) ? 1 - distance : 0;
     if (similarity < minSimilarity) {
       continue;
@@ -270,16 +244,12 @@ export async function retrieveRelevantDocumentChunks(params: {
   return results;
 }
 
-export function formatRetrievedChunksForPrompt(
-  chunks: RetrievedDocumentChunk[],
-  maxChars: number,
-): string | null {
+export function formatRetrievedChunksForPrompt(chunks: RetrievedDocumentChunk[], maxChars: number): string | null {
   if (!chunks.length) {
     return null;
   }
 
-  let output =
-    "[System: The following are relevant excerpts from server documents:\n\n";
+  let output = "[System: The following are relevant excerpts from server documents:\n\n";
   let currentDoc = "";
 
   for (const chunk of chunks) {
@@ -334,9 +304,7 @@ export async function reembedServerDocuments(params: {
     const chunks = chunkDocumentText(normalized, chunkSize, chunkOverlap);
 
     if (chunks.length === 0) {
-      log.warn(
-        `Skipping empty document during re-embed: ${document.document_id}`,
-      );
+      log.warn(`Skipping empty document during re-embed: ${document.document_id}`);
       continue;
     }
 
@@ -345,11 +313,7 @@ export async function reembedServerDocuments(params: {
       apiKey,
       model: embeddingModel.codename,
       inputs: chunks,
-      taskType: (await providerSupportsEmbeddingTaskType(
-        embeddingModel.provider,
-      ))
-        ? "RETRIEVAL_DOCUMENT"
-        : undefined,
+      taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider)) ? "RETRIEVAL_DOCUMENT" : undefined,
       batchSize: 16,
     });
 

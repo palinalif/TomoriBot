@@ -1,14 +1,7 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { tomoriConfigSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
@@ -20,20 +13,14 @@ const MAX_LIMIT = 10;
 const DEFAULT_LIMIT = 3;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("multitrigger")
-    .setDescription(
-      localizer("en-US", "commands.config.multitrigger.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.multitrigger.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(
-          localizer("en-US", "commands.config.multitrigger.limit_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.multitrigger.limit_description"))
         .setMinValue(MIN_LIMIT)
         .setMaxValue(MAX_LIMIT)
         .setRequired(true),
@@ -73,8 +60,7 @@ export async function execute(
     if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.multitrigger.limit.invalid_range_title",
-        descriptionKey:
-          "commands.config.multitrigger.limit.invalid_range_description",
+        descriptionKey: "commands.config.multitrigger.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_LIMIT.toString(),
           max: MAX_LIMIT.toString(),
@@ -96,13 +82,11 @@ export async function execute(
     }
 
     // 5. Check if this is the same as the current limit
-    const currentLimit =
-      tomoriState.config.triggered_persona_limit ?? DEFAULT_LIMIT;
+    const currentLimit = tomoriState.config.triggered_persona_limit ?? DEFAULT_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.multitrigger.limit.already_set_title",
-        descriptionKey:
-          "commands.config.multitrigger.limit.already_set_description",
+        descriptionKey: "commands.config.multitrigger.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -157,11 +141,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -193,11 +173,7 @@ export async function execute(
         options: interaction.options?.data,
       },
     };
-    await log.error(
-      "Error in /config multitrigger limit command",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config multitrigger limit command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

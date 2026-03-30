@@ -8,15 +8,8 @@ import {
 } from "discord.js";
 import { z } from "zod";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  type ErrorContext,
-  type UserRow,
-  tomoriConfigSchema,
-} from "@/types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { type ErrorContext, type UserRow, tomoriConfigSchema } from "@/types/db/schema";
 import {
   LOGIT_BIAS_MAX,
   LOGIT_BIAS_MIN,
@@ -62,10 +55,7 @@ function parseUploadedEntries(payload: unknown) {
     return rawUploadEntrySchema.array().safeParse(payload);
   }
 
-  const record =
-    payload && typeof payload === "object"
-      ? (payload as Record<string, unknown>)
-      : null;
+  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
   if (record && Array.isArray(record.logit_biases)) {
     return rawUploadEntrySchema.array().safeParse(record.logit_biases);
   }
@@ -73,23 +63,14 @@ function parseUploadedEntries(payload: unknown) {
   return rawUploadEntrySchema.array().safeParse([payload]);
 }
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("upload")
-    .setDescription(
-      localizer("en-US", "commands.config.logitbias.upload.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.logitbias.upload.description"))
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.logitbias.upload.file_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.logitbias.upload.file_description"))
         .setRequired(true),
     );
 
@@ -129,8 +110,7 @@ export async function execute(
     if (attachment.size && attachment.size > maxSizeBytes) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.upload.file_too_large_title",
-        descriptionKey:
-          "commands.config.logitbias.upload.file_too_large_description",
+        descriptionKey: "commands.config.logitbias.upload.file_too_large_description",
         descriptionVars: {
           max_size: MAX_UPLOAD_FILE_SIZE_MB.toString(),
         },
@@ -151,8 +131,7 @@ export async function execute(
     if (!downloadResult.success || !downloadResult.buffer) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.upload.download_failed_title",
-        descriptionKey:
-          "commands.config.logitbias.upload.download_failed_description",
+        descriptionKey: "commands.config.logitbias.upload.download_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -164,8 +143,7 @@ export async function execute(
     } catch {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.upload.invalid_json_title",
-        descriptionKey:
-          "commands.config.logitbias.upload.invalid_json_description",
+        descriptionKey: "commands.config.logitbias.upload.invalid_json_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -175,8 +153,7 @@ export async function execute(
     if (!parsedEntries.success) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.upload.invalid_schema_title",
-        descriptionKey:
-          "commands.config.logitbias.upload.invalid_schema_description",
+        descriptionKey: "commands.config.logitbias.upload.invalid_schema_description",
         descriptionVars: {
           min: LOGIT_BIAS_MIN.toString(),
           max: LOGIT_BIAS_MAX.toString(),
@@ -190,8 +167,7 @@ export async function execute(
     if (parsedEntries.data.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.upload.no_entries_title",
-        descriptionKey:
-          "commands.config.logitbias.upload.no_entries_description",
+        descriptionKey: "commands.config.logitbias.upload.no_entries_description",
         color: ColorCode.WARN,
       });
       return;
@@ -206,21 +182,14 @@ export async function execute(
         tokenizations: [],
       }),
     );
-    const resolvedEntries = resolveLogitBiasEntriesForLlm(
-      normalizedUploadEntries,
-      tomoriState.llm,
-    );
+    const resolvedEntries = resolveLogitBiasEntriesForLlm(normalizedUploadEntries, tomoriState.llm);
 
-    const merged = mergeLogitBiasEntries(
-      tomoriState.config.llm_logit_biases ?? [],
-      resolvedEntries.entries,
-    );
+    const merged = mergeLogitBiasEntries(tomoriState.config.llm_logit_biases ?? [], resolvedEntries.entries);
 
     if (merged.addedCount === 0 && merged.updatedCount === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.logitbias.upload.already_set_title",
-        descriptionKey:
-          "commands.config.logitbias.upload.already_set_description",
+        descriptionKey: "commands.config.logitbias.upload.already_set_description",
         color: ColorCode.INFO,
       });
       return;
@@ -243,9 +212,7 @@ export async function execute(
         metadata: {
           command: "config logitbias upload",
           entryCount: parsedEntries.data.length,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -272,10 +239,7 @@ export async function execute(
         added_count: merged.addedCount.toString(),
         updated_count: merged.updatedCount.toString(),
         total_count: merged.entries.length.toString(),
-        runtime_ready_count: countRuntimeReadyLogitBiasEntries(
-          merged.entries,
-          resolvedEntries.tokenizerKey,
-        ).toString(),
+        runtime_ready_count: countRuntimeReadyLogitBiasEntries(merged.entries, resolvedEntries.tokenizerKey).toString(),
       },
       color: ColorCode.SUCCESS,
     });
@@ -292,11 +256,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      "Error executing /config logitbias upload",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /config logitbias upload", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {

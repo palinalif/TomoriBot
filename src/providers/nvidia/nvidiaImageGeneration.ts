@@ -3,20 +3,14 @@ import type {
   ProviderNativeImageGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-import {
-  NVIDIA_IMAGE_ASPECT_RATIO_MAP,
-  NVIDIA_IMAGE_GENERATION_URL,
-} from "@/providers/nvidia/nvidiaConstants";
+import { NVIDIA_IMAGE_ASPECT_RATIO_MAP, NVIDIA_IMAGE_GENERATION_URL } from "@/providers/nvidia/nvidiaConstants";
 
 function normalizeAspectRatio(aspectRatio: string): string {
   return NVIDIA_IMAGE_ASPECT_RATIO_MAP[aspectRatio] ?? "1:1";
 }
 
 function extractBase64Image(result: unknown): string | null {
-  const record =
-    typeof result === "object" && result !== null
-      ? (result as Record<string, unknown>)
-      : null;
+  const record = typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
   if (!record) {
     return null;
   }
@@ -71,10 +65,7 @@ function extractBase64Image(result: unknown): string | null {
 }
 
 function extractImageUrl(result: unknown): string | null {
-  const record =
-    typeof result === "object" && result !== null
-      ? (result as Record<string, unknown>)
-      : null;
+  const record = typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
   if (!record) {
     return null;
   }
@@ -111,10 +102,7 @@ function extractImageUrl(result: unknown): string | null {
 }
 
 function extractMimeTypeFromResult(result: unknown): string | null {
-  const record =
-    typeof result === "object" && result !== null
-      ? (result as Record<string, unknown>)
-      : null;
+  const record = typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
   if (!record) {
     return null;
   }
@@ -145,19 +133,13 @@ function extractMimeTypeFromResult(result: unknown): string | null {
   return null;
 }
 
-async function fetchImageUrlAsBase64(
-  imageUrl: string,
-): Promise<ProviderNativeImageGenerationResult> {
+async function fetchImageUrlAsBase64(imageUrl: string): Promise<ProviderNativeImageGenerationResult> {
   const imageResponse = await fetch(imageUrl);
   if (!imageResponse.ok) {
-    log.error(
-      "Failed to fetch NVIDIA generated image URL",
-      new Error(`HTTP ${imageResponse.status}`),
-      {
-        errorType: "NvidiaImageFetchError",
-        metadata: { imageUrl },
-      },
-    );
+    log.error("Failed to fetch NVIDIA generated image URL", new Error(`HTTP ${imageResponse.status}`), {
+      errorType: "NvidiaImageFetchError",
+      metadata: { imageUrl },
+    });
     return { imageData: null, mimeType: null };
   }
 
@@ -176,32 +158,26 @@ export async function generateNvidiaNativeImage(
   request: ProviderNativeImageGenerationRequest,
 ): Promise<ProviderNativeImageGenerationResult> {
   if (request.referenceImages && request.referenceImages.length > 0) {
-    log.warn(
-      "NVIDIA image generation currently ignores reference images. Proceeding with text-only generation.",
-      {
-        model: request.model,
-        referenceCount: request.referenceImages.length,
-      },
-    );
+    log.warn("NVIDIA image generation currently ignores reference images. Proceeding with text-only generation.", {
+      model: request.model,
+      referenceCount: request.referenceImages.length,
+    });
   }
 
   const aspectRatio = normalizeAspectRatio(request.aspectRatio);
 
-  const response = await fetch(
-    request.endpointUrl || NVIDIA_IMAGE_GENERATION_URL,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${request.apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json, image/jpeg",
-      },
-      body: JSON.stringify({
-        prompt: request.prompt,
-        aspect_ratio: aspectRatio,
-      }),
+  const response = await fetch(request.endpointUrl || NVIDIA_IMAGE_GENERATION_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${request.apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, image/jpeg",
     },
-  );
+    body: JSON.stringify({
+      prompt: request.prompt,
+      aspect_ratio: aspectRatio,
+    }),
+  });
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -213,17 +189,13 @@ export async function generateNvidiaNativeImage(
         aspectRatio,
       },
     });
-    throw new Error(
-      `NVIDIA image generation failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`NVIDIA image generation failed: ${response.status} ${response.statusText}`);
   }
 
   const contentType = response.headers.get("Content-Type") ?? "";
   if (contentType.toLowerCase().startsWith("image/")) {
     const mimeType = contentType.split(";")[0].trim();
-    const imageData = Buffer.from(await response.arrayBuffer()).toString(
-      "base64",
-    );
+    const imageData = Buffer.from(await response.arrayBuffer()).toString("base64");
     return {
       imageData,
       mimeType,

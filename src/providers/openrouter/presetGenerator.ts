@@ -5,10 +5,7 @@
 
 import { log } from "@/utils/misc/logger";
 import { sanitizeSampleDialogueText } from "@/providers/google/presetGenerator";
-import type {
-  GeneratePresetParams,
-  PresetGenerationResult,
-} from "@/types/provider/featureInterfaces";
+import type { GeneratePresetParams, PresetGenerationResult } from "@/types/provider/featureInterfaces";
 import type { ToolContext } from "@/types/tool/interfaces";
 import { executeTool } from "@/tools/toolRegistry";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
@@ -66,9 +63,7 @@ export async function generatePresetFromPromptOpenrouter(
     },
   };
 
-  const contentParts: PresetContentPart[] = [
-    { type: "text", text: buildPresetPrompt(params) },
-  ];
+  const contentParts: PresetContentPart[] = [{ type: "text", text: buildPresetPrompt(params) }];
 
   if (params.imageBase64 && params.imageMimeType) {
     contentParts.push({
@@ -81,9 +76,7 @@ export async function generatePresetFromPromptOpenrouter(
   }
 
   const userContent =
-    contentParts.length === 1 && contentParts[0].type === "text"
-      ? contentParts[0].text
-      : contentParts;
+    contentParts.length === 1 && contentParts[0].type === "text" ? contentParts[0].text : contentParts;
 
   const messages: PresetMessage[] = [
     {
@@ -111,32 +104,25 @@ export async function generatePresetFromPromptOpenrouter(
       body.tool_choice = "auto";
     }
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "OpenRouter preset generation request failed",
-        new Error(errorBody),
-        {
-          errorType: "OpenrouterPresetHttpError",
-          metadata: {
-            model: options.model,
-            status: response.status,
-            errorBody,
-          },
+      log.error("OpenRouter preset generation request failed", new Error(errorBody), {
+        errorType: "OpenrouterPresetHttpError",
+        metadata: {
+          model: options.model,
+          status: response.status,
+          errorBody,
         },
-      );
+      });
       return {
         error: `OpenRouter request failed (${response.status}): ${response.statusText}`,
         errorType: "CONNECTION",
@@ -192,9 +178,7 @@ export async function generatePresetFromPromptOpenrouter(
         const functionName = toolCall.function?.name;
         const rawArgs = toolCall.function?.arguments ?? "";
 
-        let toolResult:
-          | import("@/types/tool/interfaces").ToolResult
-          | undefined;
+        let toolResult: import("@/types/tool/interfaces").ToolResult | undefined;
         let parsedArgs: Record<string, unknown> = {};
 
         if (!functionName) {
@@ -204,25 +188,14 @@ export async function generatePresetFromPromptOpenrouter(
             try {
               parsedArgs = JSON.parse(rawArgs);
             } catch (parseError) {
-              log.warn(
-                `OpenRouter tool call args parse failed for ${functionName}: ${rawArgs}`,
-                parseError as Error,
-              );
-              toolResult = buildToolErrorResult(
-                `Invalid tool arguments for ${functionName}`,
-              );
+              log.warn(`OpenRouter tool call args parse failed for ${functionName}: ${rawArgs}`, parseError as Error);
+              toolResult = buildToolErrorResult(`Invalid tool arguments for ${functionName}`);
             }
           }
 
           if (!toolResult) {
-            log.info(
-              `Executing OpenRouter tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`,
-            );
-            toolResult = await executeTool(
-              functionName,
-              parsedArgs,
-              toolContext,
-            );
+            log.info(`Executing OpenRouter tool call: ${functionName} with args: ${JSON.stringify(parsedArgs)}`);
+            toolResult = await executeTool(functionName, parsedArgs, toolContext);
           }
         }
 
@@ -262,65 +235,43 @@ export async function generatePresetFromPromptOpenrouter(
     try {
       parsedResponse = JSON.parse(responseText);
     } catch (parseError) {
-      log.error(
-        "OpenRouter preset generation JSON parse failed",
-        parseError as Error,
-      );
+      log.error("OpenRouter preset generation JSON parse failed", parseError as Error);
       return {
         error: "Invalid JSON response from OpenRouter.",
         errorType: "INVALID_JSON",
       };
     }
 
-    if (
-      !parsedResponse.attribute_list ||
-      !parsedResponse.sample_dialogues_in ||
-      !parsedResponse.sample_dialogues_out
-    ) {
+    if (!parsedResponse.attribute_list || !parsedResponse.sample_dialogues_in || !parsedResponse.sample_dialogues_out) {
       return {
         error: "Generated character data is incomplete. Please try again.",
         errorType: "INVALID_JSON",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.attribute_list) ||
-      parsedResponse.attribute_list.length !== 6
-    ) {
+    if (!Array.isArray(parsedResponse.attribute_list) || parsedResponse.attribute_list.length !== 6) {
       return {
-        error:
-          "Generated attribute list must contain exactly 6 items. Please try again.",
+        error: "Generated attribute list must contain exactly 6 items. Please try again.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.sample_dialogues_in) ||
-      parsedResponse.sample_dialogues_in.length !== 5
-    ) {
+    if (!Array.isArray(parsedResponse.sample_dialogues_in) || parsedResponse.sample_dialogues_in.length !== 5) {
       return {
         error: "Generated sample dialogues must contain exactly 5 user inputs.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    if (
-      !Array.isArray(parsedResponse.sample_dialogues_out) ||
-      parsedResponse.sample_dialogues_out.length !== 5
-    ) {
+    if (!Array.isArray(parsedResponse.sample_dialogues_out) || parsedResponse.sample_dialogues_out.length !== 5) {
       return {
-        error:
-          "Generated sample dialogues must contain exactly 5 character responses.",
+        error: "Generated sample dialogues must contain exactly 5 character responses.",
         errorType: "VALIDATION_ERROR",
       };
     }
 
-    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(
-      sanitizeSampleDialogueText,
-    );
-    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(
-      sanitizeSampleDialogueText,
-    );
+    const sanitizedDialoguesIn = parsedResponse.sample_dialogues_in.map(sanitizeSampleDialogueText);
+    const sanitizedDialoguesOut = parsedResponse.sample_dialogues_out.map(sanitizeSampleDialogueText);
 
     const preset = {
       tomori_nickname: params.characterName,
@@ -330,9 +281,7 @@ export async function generatePresetFromPromptOpenrouter(
       sample_dialogues_out: sanitizedDialoguesOut,
     };
 
-    log.success(
-      `OpenRouter preset generation successful for ${params.characterName}`,
-    );
+    log.success(`OpenRouter preset generation successful for ${params.characterName}`);
     return { preset };
   }
 }

@@ -3,27 +3,16 @@
  * AI-powered personality generation using supported structured output providers
  */
 
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { TextInputStyle } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import { decryptApiKey } from "../../utils/security/crypto";
-import {
-  memoryGuard,
-  PERSONA_LIMITS,
-  reservePersonaQuota,
-} from "../../utils/security/rateLimiter";
+import { memoryGuard, PERSONA_LIMITS, reservePersonaQuota } from "../../utils/security/rateLimiter";
 import { safeDownload } from "../../utils/security/safeDownload";
 import type { GeneratePresetParams } from "../../providers/google/presetGenerator";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
@@ -34,10 +23,7 @@ import {
   embedMetadataInPNG,
 } from "../../utils/image/pngMetadata";
 import { convertSillyTavernMetadataToPresetData } from "../../utils/db/sillyTavernImport";
-import {
-  presetExportDataSchema,
-  PRESET_EXPORT_VERSION,
-} from "../../types/preset/presetExport";
+import { presetExportDataSchema, PRESET_EXPORT_VERSION } from "../../types/preset/presetExport";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import type { PresetExport } from "../../types/preset/presetExport";
 import type { ModalComponent } from "../../types/discord/modal";
@@ -76,14 +62,8 @@ function parsePersonaNameInput(input: string): string[] {
 /**
  * Configure the 'generate' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("generate")
-    .setDescription(
-      localizer("en-US", "commands.persona.generate.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("generate").setDescription(localizer("en-US", "commands.persona.generate.description"));
 
 /**
  * Format sample dialogues for preview display
@@ -100,11 +80,7 @@ function formatDialoguePreview(
   maxLength = 100,
 ): string {
   // 1. Determine how many dialogues to show (min of array lengths and maxExamples)
-  const numDialogues = Math.min(
-    dialoguesIn.length,
-    dialoguesOut.length,
-    maxExamples,
-  );
+  const numDialogues = Math.min(dialoguesIn.length, dialoguesOut.length, maxExamples);
 
   // 2. Build preview string with truncated dialogues
   const previews: string[] = [];
@@ -113,10 +89,8 @@ function formatDialoguePreview(
     const botResponse = dialoguesOut[i].substring(0, maxLength);
 
     // 3. Add ellipsis if truncated
-    const userText =
-      dialoguesIn[i].length > maxLength ? `${userInput}...` : userInput;
-    const botText =
-      dialoguesOut[i].length > maxLength ? `${botResponse}...` : botResponse;
+    const userText = dialoguesIn[i].length > maxLength ? `${userInput}...` : userInput;
+    const botText = dialoguesOut[i].length > maxLength ? `${botResponse}...` : botResponse;
 
     // 4. Format as User/Bot pair
     previews.push(`**User:** ${userText}\n**Bot:** ${botText}`);
@@ -199,10 +173,7 @@ export async function execute(
 
     // 3. Validate provider and model capabilities
     const providerName = tomoriState.llm.llm_provider.toLowerCase();
-    const effectiveModelName = getEffectiveLlmModelName(
-      tomoriState.llm,
-      tomoriState.config.custom_model_name,
-    );
+    const effectiveModelName = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
 
     if (!providerSupportsFeature(providerName, "presetGeneration")) {
       await replyInfoEmbed(interaction, locale, {
@@ -222,8 +193,7 @@ export async function execute(
     if (!tomoriState.llm.supports_structoutput) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.model_incompatible_title",
-        descriptionKey:
-          "commands.persona.generate.model_incompatible_description",
+        descriptionKey: "commands.persona.generate.model_incompatible_description",
         descriptionVars: {
           model_name: effectiveModelName,
         },
@@ -245,15 +215,11 @@ export async function execute(
     }
 
     const keyVersion = tomoriState.config.key_version || 1; // Default to V1 for backward compatibility
-    const decryptedApiKey = await decryptApiKey(
-      tomoriState.config.api_key,
-      keyVersion,
-    );
+    const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key, keyVersion);
     if (!decryptedApiKey) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.api_key_decrypt_failed_title",
-        descriptionKey:
-          "commands.persona.generate.api_key_decrypt_failed_description",
+        descriptionKey: "commands.persona.generate.api_key_decrypt_failed_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -265,10 +231,8 @@ export async function execute(
       {
         customId: CHARACTER_NAME_ID,
         labelKey: "commands.persona.generate.modal.character_name_label",
-        descriptionKey:
-          "commands.persona.generate.modal.character_name_description",
-        placeholder:
-          "commands.persona.generate.modal.character_name_placeholder",
+        descriptionKey: "commands.persona.generate.modal.character_name_description",
+        placeholder: "commands.persona.generate.modal.character_name_placeholder",
         required: true,
         style: TextInputStyle.Short,
         maxLength: 100,
@@ -276,10 +240,8 @@ export async function execute(
       {
         customId: CHARACTER_INFO_ID,
         labelKey: "commands.persona.generate.modal.character_info_label",
-        descriptionKey:
-          "commands.persona.generate.modal.character_info_description",
-        placeholder:
-          "commands.persona.generate.modal.character_info_placeholder",
+        descriptionKey: "commands.persona.generate.modal.character_info_description",
+        placeholder: "commands.persona.generate.modal.character_info_placeholder",
         required: true,
         style: TextInputStyle.Paragraph,
         maxLength: 2000, // Increased to accommodate both description and speech examples
@@ -287,23 +249,16 @@ export async function execute(
       {
         customId: WEB_SEARCH_ID,
         labelKey: "commands.persona.generate.modal.web_search_label",
-        descriptionKey:
-          "commands.persona.generate.modal.web_search_description",
+        descriptionKey: "commands.persona.generate.modal.web_search_description",
         placeholder: "commands.persona.generate.modal.web_search_placeholder",
         required: true,
         options: [
           {
-            label: localizer(
-              locale,
-              "commands.persona.generate.modal.web_search_yes",
-            ),
+            label: localizer(locale, "commands.persona.generate.modal.web_search_yes"),
             value: "yes",
           },
           {
-            label: localizer(
-              locale,
-              "commands.persona.generate.modal.web_search_no",
-            ),
+            label: localizer(locale, "commands.persona.generate.modal.web_search_no"),
             value: "no",
           },
         ],
@@ -311,8 +266,7 @@ export async function execute(
       {
         customId: ADDITIONAL_INST_ID,
         labelKey: "commands.persona.generate.modal.additional_inst_label",
-        placeholder:
-          "commands.persona.generate.modal.additional_inst_placeholder",
+        placeholder: "commands.persona.generate.modal.additional_inst_placeholder",
         required: false,
         style: TextInputStyle.Paragraph,
         maxLength: 500,
@@ -320,8 +274,7 @@ export async function execute(
       {
         customId: FILE_UPLOAD_ID,
         labelKey: "commands.persona.generate.modal.file_upload_label",
-        descriptionKey:
-          "commands.persona.generate.modal.file_upload_description",
+        descriptionKey: "commands.persona.generate.modal.file_upload_description",
         minValues: 0,
         maxValues: 1,
         required: false,
@@ -352,12 +305,7 @@ export async function execute(
     const additionalInst = modalResult.values?.[ADDITIONAL_INST_ID];
 
     // Safety checks
-    if (
-      !modalSubmitInteraction ||
-      !characterNameInput ||
-      !characterInfo ||
-      !webSearch
-    ) {
+    if (!modalSubmitInteraction || !characterNameInput || !characterInfo || !webSearch) {
       log.error("Modal result unexpectedly missing values");
       return;
     }
@@ -393,16 +341,12 @@ export async function execute(
     // 9. Reserve persona operation quota (atomic check+increment for DDoS protection)
     const quotaReserve = reservePersonaQuota(interaction.user.id);
     if (!quotaReserve.allowed) {
-      const resetTime = quotaReserve.resetAt
-        ? new Date(quotaReserve.resetAt).toLocaleString(locale)
-        : "unknown";
+      const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
 
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "rate_limit.error_quota_exceeded_title"),
-            )
+            .setTitle(localizer(locale, "rate_limit.error_quota_exceeded_title"))
             .setDescription(
               localizer(locale, "rate_limit.error_quota_exceeded_description", {
                 reset_time: resetTime,
@@ -433,42 +377,28 @@ export async function execute(
         // Preserve modal inputs for user convenience
         const embed = new EmbedBuilder()
           .setTitle(localizer(locale, "rate_limit.error_memory_critical_title"))
-          .setDescription(
-            localizer(locale, "rate_limit.error_memory_critical_description"),
-          )
+          .setDescription(localizer(locale, "rate_limit.error_memory_critical_description"))
           .setColor(ColorCode.ERROR);
 
         // Add modal inputs as fields (excluding image)
         embed.addFields(
           {
-            name: localizer(
-              locale,
-              "commands.persona.generate.field_character_name",
-            ),
+            name: localizer(locale, "commands.persona.generate.field_character_name"),
             value: characterNameInput.substring(0, 1024) || "N/A",
             inline: false,
           },
           {
-            name: localizer(
-              locale,
-              "commands.persona.generate.field_character_info",
-            ),
+            name: localizer(locale, "commands.persona.generate.field_character_info"),
             value: characterInfo.substring(0, 1024) || "N/A",
             inline: false,
           },
           {
-            name: localizer(
-              locale,
-              "commands.persona.generate.field_web_search",
-            ),
+            name: localizer(locale, "commands.persona.generate.field_web_search"),
             value: webSearch.substring(0, 1024) || "N/A",
             inline: false,
           },
           {
-            name: localizer(
-              locale,
-              "commands.persona.generate.field_additional_inst",
-            ),
+            name: localizer(locale, "commands.persona.generate.field_additional_inst"),
             value: additionalInst?.substring(0, 1024) || "N/A",
             inline: false,
           },
@@ -486,18 +416,8 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.generate.invalid_image_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.generate.invalid_image_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.generate.invalid_image_title"))
+              .setDescription(localizer(locale, "commands.persona.generate.invalid_image_description"))
               .setColor(ColorCode.ERROR),
           ],
           files: [getInputAttachment()],
@@ -524,11 +444,7 @@ export async function execute(
         }
 
         await modalSubmitInteraction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(localizer(locale, errorKey))
-              .setColor(ColorCode.ERROR),
-          ],
+          embeds: [new EmbedBuilder().setTitle(localizer(locale, errorKey)).setColor(ColorCode.ERROR)],
           files: [getInputAttachment()],
         });
         return;
@@ -540,12 +456,7 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.generate.error_download_failed",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.generate.error_download_failed"))
               .setColor(ColorCode.ERROR),
           ],
           files: [getInputAttachment()],
@@ -573,8 +484,7 @@ export async function execute(
       if (!extractedPresetContext) {
         const stMetadata = extractSillyTavernMetadataFromPNG(imageBuffer);
         if (stMetadata) {
-          const conversionResult =
-            convertSillyTavernMetadataToPresetData(stMetadata);
+          const conversionResult = convertSillyTavernMetadataToPresetData(stMetadata);
           if (conversionResult.success) {
             extractedPresetContext = JSON.stringify(conversionResult.data);
             log.info("Extracted SillyTavern card data from uploaded image");
@@ -601,20 +511,11 @@ export async function execute(
             await modalSubmitInteraction.editReply({
               embeds: [
                 new EmbedBuilder()
-                  .setTitle(
-                    localizer(
-                      locale,
-                      "commands.persona.generate.image_vision_required_title",
-                    ),
-                  )
+                  .setTitle(localizer(locale, "commands.persona.generate.image_vision_required_title"))
                   .setDescription(
-                    localizer(
-                      locale,
-                      "commands.persona.generate.image_vision_required_description",
-                      {
-                        model_name: effectiveModelName,
-                      },
-                    ),
+                    localizer(locale, "commands.persona.generate.image_vision_required_description", {
+                      model_name: effectiveModelName,
+                    }),
                   )
                   .setColor(ColorCode.ERROR),
               ],
@@ -624,9 +525,7 @@ export async function execute(
           }
         } else {
           const visionProviderName = visionLlm.llm_provider.toLowerCase();
-          if (
-            !providerSupportsFeature(visionProviderName, "presetGeneration")
-          ) {
+          if (!providerSupportsFeature(visionProviderName, "presetGeneration")) {
             // Vision model is set but its provider cannot perform preset generation
             if (extractedPresetContext) {
               // Fall back to text-only with extracted card data
@@ -639,21 +538,12 @@ export async function execute(
               await modalSubmitInteraction.editReply({
                 embeds: [
                   new EmbedBuilder()
-                    .setTitle(
-                      localizer(
-                        locale,
-                        "commands.persona.generate.vision_model_provider_unsupported_title",
-                      ),
-                    )
+                    .setTitle(localizer(locale, "commands.persona.generate.vision_model_provider_unsupported_title"))
                     .setDescription(
-                      localizer(
-                        locale,
-                        "commands.persona.generate.vision_model_provider_unsupported_description",
-                        {
-                          vision_model_name: visionLlm.llm_codename,
-                          vision_provider: visionLlm.llm_provider,
-                        },
-                      ),
+                      localizer(locale, "commands.persona.generate.vision_model_provider_unsupported_description", {
+                        vision_model_name: visionLlm.llm_codename,
+                        vision_provider: visionLlm.llm_provider,
+                      }),
                     )
                     .setColor(ColorCode.ERROR),
                 ],
@@ -675,36 +565,20 @@ export async function execute(
 
     // 10. Validate web search capability before processing
     const webSearchRequested = webSearch.trim().toLowerCase() === "yes";
-    const useWebSearch =
-      webSearchRequested && tomoriState.config.web_search_enabled;
+    const useWebSearch = webSearchRequested && tomoriState.config.web_search_enabled;
 
     if (webSearchRequested && !tomoriState.config.web_search_enabled) {
-      log.info(
-        "Web search requested but disabled by server configuration; proceeding without search.",
-      );
+      log.info("Web search requested but disabled by server configuration; proceeding without search.");
     }
-    if (
-      webSearchRequested &&
-      tomoriState.config.web_search_enabled &&
-      !tomoriState.llm.has_tools
-    ) {
+    if (webSearchRequested && tomoriState.config.web_search_enabled && !tomoriState.llm.has_tools) {
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.persona.generate.web_search_tools_required_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.generate.web_search_tools_required_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.persona.generate.web_search_tools_required_description",
-                {
-                  model_name: effectiveModelName,
-                },
-              ),
+              localizer(locale, "commands.persona.generate.web_search_tools_required_description", {
+                model_name: effectiveModelName,
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -717,15 +591,8 @@ export async function execute(
     await modalSubmitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.persona.generate.processing_title"),
-          )
-          .setDescription(
-            localizer(
-              locale,
-              "commands.persona.generate.processing_description",
-            ),
-          )
+          .setTitle(localizer(locale, "commands.persona.generate.processing_title"))
+          .setDescription(localizer(locale, "commands.persona.generate.processing_description"))
           .setColor(ColorCode.INFO),
       ],
     });
@@ -755,15 +622,11 @@ export async function execute(
         guildId: interaction.guild?.id,
       };
     } else if (useWebSearch) {
-      log.warn(
-        "Preset generation web search skipped: no channel context available.",
-      );
+      log.warn("Preset generation web search skipped: no channel context available.");
     }
 
     // 13. Generate preset data
-    log.info(
-      `Generating preset data with ${generationTomoriState.llm.llm_provider}...`,
-    );
+    log.info(`Generating preset data with ${generationTomoriState.llm.llm_provider}...`);
 
     const genResult = await generatePresetForProvider({
       providerName: generationProviderName,
@@ -779,20 +642,11 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.persona.generate.generation_failed_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.generate.generation_failed_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.persona.generate.generation_failed_description",
-                {
-                  error: genResult.error || "Unknown error",
-                },
-              ),
+              localizer(locale, "commands.persona.generate.generation_failed_description", {
+                error: genResult.error || "Unknown error",
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -809,14 +663,8 @@ export async function execute(
     if (!validationResult.success) {
       // Log detailed validation errors
       log.error("Generated preset failed validation:");
-      log.error(
-        "Validation errors:",
-        JSON.stringify(validationResult.error.format(), null, 2),
-      );
-      log.error(
-        "Generated preset data:",
-        JSON.stringify(genResult.preset, null, 2),
-      );
+      log.error("Validation errors:", JSON.stringify(validationResult.error.format(), null, 2));
+      log.error("Generated preset data:", JSON.stringify(genResult.preset, null, 2));
 
       // Extract specific error messages for user
       const errorDetails = validationResult.error.issues
@@ -826,12 +674,7 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.persona.generate.validation_failed_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.generate.validation_failed_title"))
             .setDescription(
               `${localizer(
                 locale,
@@ -861,18 +704,8 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.generate.image_processing_failed_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.generate.image_processing_failed_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.generate.image_processing_failed_title"))
+              .setDescription(localizer(locale, "commands.persona.generate.image_processing_failed_description"))
               .setColor(ColorCode.ERROR),
           ],
           files: [getInputAttachment()],
@@ -890,18 +723,8 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.generate.avatar_fetch_failed_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.generate.avatar_fetch_failed_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.generate.avatar_fetch_failed_title"))
+              .setDescription(localizer(locale, "commands.persona.generate.avatar_fetch_failed_description"))
               .setColor(ColorCode.ERROR),
           ],
           files: [getInputAttachment()],
@@ -928,18 +751,8 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.persona.generate.metadata_embed_failed_title",
-              ),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.persona.generate.metadata_embed_failed_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.generate.metadata_embed_failed_title"))
+            .setDescription(localizer(locale, "commands.persona.generate.metadata_embed_failed_description"))
             .setColor(ColorCode.ERROR),
         ],
         files: [getInputAttachment()],
@@ -989,14 +802,8 @@ export async function execute(
       .setImage(`attachment://${filename}`)
       .addFields([
         {
-          name: localizer(
-            locale,
-            "commands.persona.generate.success_next_steps_title",
-          ),
-          value: localizer(
-            locale,
-            "commands.persona.generate.success_next_steps_description",
-          ),
+          name: localizer(locale, "commands.persona.generate.success_next_steps_title"),
+          value: localizer(locale, "commands.persona.generate.success_next_steps_description"),
           inline: false,
         },
       ]);
@@ -1004,10 +811,7 @@ export async function execute(
     // Add DM-specific footer if in DM
     if (isDM) {
       successEmbed.setFooter({
-        text: localizer(
-          locale,
-          "commands.persona.generate.avatar_update_skipped_dm",
-        ),
+        text: localizer(locale, "commands.persona.generate.avatar_update_skipped_dm"),
       });
     }
 
@@ -1021,8 +825,7 @@ export async function execute(
     log.success(`Preset generated successfully for: ${characterName}`);
   } catch (error) {
     log.error("Error in preset generate command:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
     // Try to send error embed if possible
     try {

@@ -33,29 +33,21 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 /**
  * Configure the /server matrix link subcommand builder.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("link")
-    .setDescription(
-      localizer("en-US", "commands.server.matrix.link.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.matrix.link.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer("en-US", "commands.server.matrix.link.channel_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.matrix.link.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("room")
-        .setDescription(
-          localizer("en-US", "commands.server.matrix.link.room_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.matrix.link.room_description"))
         .setRequired(true),
     );
 
@@ -109,8 +101,7 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
         titleKey: "commands.server.matrix.link.matrix_not_configured_title",
-        descriptionKey:
-          "commands.server.matrix.link.matrix_not_configured_description",
+        descriptionKey: "commands.server.matrix.link.matrix_not_configured_description",
       });
       return;
     }
@@ -149,12 +140,10 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
         titleKey: "commands.server.matrix.link.encrypted_room_title",
-        descriptionKey:
-          "commands.server.matrix.link.encrypted_room_description",
+        descriptionKey: "commands.server.matrix.link.encrypted_room_description",
         descriptionVars: {
           room_id: roomId,
-          bot_user_id:
-            process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account",
+          bot_user_id: process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account",
         },
       });
       return;
@@ -186,20 +175,13 @@ export async function execute(
     try {
       await joinMatrixRoom(roomId);
     } catch (joinError) {
-      log.warn(
-        `Matrix link: could not auto-join room ${roomId} — user must invite the bot`,
-        joinError,
-      );
+      log.warn(`Matrix link: could not auto-join room ${roomId} — user must invite the bot`, joinError);
       joinFailed = true;
     }
 
     // 14. Reply success (with note if join failed)
-    const botUserId =
-      process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
-    const helpMatrixMention = commandRegistry.getCommandMention(
-      "help",
-      "matrix",
-    );
+    const botUserId = process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
+    const helpMatrixMention = commandRegistry.getCommandMention("help", "matrix");
 
     if (joinFailed) {
       await replyInfoEmbed(interaction, locale, {
@@ -229,14 +211,9 @@ export async function execute(
     if (!joinFailed && oldRoomId !== roomId) {
       const channelName = channel.name ?? channel.id;
 
-      void sendMatrixLinkedSetupNotice(roomId, locale, channelName).catch(
-        (noticeError) => {
-          log.warn(
-            `Matrix link: failed to post onboarding notice to room ${roomId}`,
-            noticeError,
-          );
-        },
-      );
+      void sendMatrixLinkedSetupNotice(roomId, locale, channelName).catch((noticeError) => {
+        log.warn(`Matrix link: failed to post onboarding notice to room ${roomId}`, noticeError);
+      });
     }
 
     log.info(

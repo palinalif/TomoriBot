@@ -21,52 +21,30 @@ import { localizer } from "../../utils/text/localizer";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
-import {
-  checkImageQuota,
-  incrementImageQuota,
-} from "../../utils/quota/imageQuotaManager";
-import {
-  providerSupportsFeature,
-  resolveProviderFeatureImplementation,
-} from "@/utils/provider/providerInfoRegistry";
-import {
-  ZAI_CODING_IMAGES_GENERATIONS_URL,
-  ZAI_GENERAL_IMAGES_GENERATIONS_URL,
-} from "@/providers/zai/zaiShared";
+import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
+import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
 const PROMPT_INPUT_ID = "prompt_input";
 const ASPECT_RATIO_SELECT_ID = "aspect_ratio_select";
-const REFERENCE_IMAGE_INPUT_IDS = [
-  "image_upload_1",
-  "image_upload_2",
-  "image_upload_3",
-] as const;
+const REFERENCE_IMAGE_INPUT_IDS = ["image_upload_1", "image_upload_2", "image_upload_3"] as const;
 
 /**
  * Configure the subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("image")
-    .setDescription(localizer("en-US", "commands.generate.image.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("image").setDescription(localizer("en-US", "commands.generate.image.description"));
 
 /**
  * Get the diffusion model codename from the database
  * @param diffusionModelId - Database ID of the diffusion model
  * @returns The model codename string (e.g., "gemini-2.5-flash-image")
  */
-async function getDiffusionModelCodename(
-  diffusionModelId: number,
-): Promise<string> {
+async function getDiffusionModelCodename(diffusionModelId: number): Promise<string> {
   const result = await sql`
 		SELECT codename
 		FROM image_diffusion_models
@@ -85,9 +63,7 @@ async function getDiffusionModelCodename(
  * @param attachment - Discord API attachment object
  * @returns Object with mimeType and base64 data
  */
-async function convertAttachmentToBase64(
-  attachment: APIAttachment,
-): Promise<{ mimeType: string; data: string }> {
+async function convertAttachmentToBase64(attachment: APIAttachment): Promise<{ mimeType: string; data: string }> {
   // 1. Validate image MIME type
   if (!attachment.content_type?.startsWith("image/")) {
     throw new Error(`Invalid image type: ${attachment.content_type}`);
@@ -96,18 +72,14 @@ async function convertAttachmentToBase64(
   // 2. Fetch image from Discord CDN
   const response = await fetch(attachment.url);
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch image: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
   }
 
   // 3. Convert to base64
   const arrayBuffer = await response.arrayBuffer();
   const base64Data = Buffer.from(arrayBuffer).toString("base64");
 
-  log.info(
-    `Converted attachment ${attachment.id} (${attachment.filename}) to base64`,
-  );
+  log.info(`Converted attachment ${attachment.id} (${attachment.filename}) to base64`);
 
   return {
     mimeType: attachment.content_type,
@@ -152,9 +124,7 @@ async function generateImageWithOpenRouter(
         },
       });
     }
-    log.info(
-      `[OpenRouter] Added ${referenceImages.length} reference image(s) to content array`,
-    );
+    log.info(`[OpenRouter] Added ${referenceImages.length} reference image(s) to content array`);
   }
 
   // Prepare request payload
@@ -173,17 +143,14 @@ async function generateImageWithOpenRouter(
   };
 
   // Call OpenRouter API
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestPayload),
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(requestPayload),
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -193,22 +160,14 @@ async function generateImageWithOpenRouter(
     let parsedMessage = "";
     try {
       const parsed = JSON.parse(errorText);
-      parsedMessage =
-        (parsed?.error?.message as string | undefined) ||
-        (parsed?.message as string | undefined) ||
-        "";
+      parsedMessage = (parsed?.error?.message as string | undefined) || (parsed?.message as string | undefined) || "";
     } catch {
       // Ignore JSON parse errors
     }
 
-    const friendlyMessage =
-      parsedMessage ||
-      bodySnippet ||
-      `${response.status} ${response.statusText}`.trim();
+    const friendlyMessage = parsedMessage || bodySnippet || `${response.status} ${response.statusText}`.trim();
 
-    throw new Error(
-      `OpenRouter API request failed (${response.status} ${response.statusText}): ${friendlyMessage}`,
-    );
+    throw new Error(`OpenRouter API request failed (${response.status} ${response.statusText}): ${friendlyMessage}`);
   }
 
   const result = await response.json();
@@ -226,10 +185,7 @@ async function generateImageWithOpenRouter(
   } else if (Array.isArray(message?.content)) {
     const firstImagePart = message.content.find(
       (part: unknown) =>
-        typeof part === "object" &&
-        part !== null &&
-        "type" in part &&
-        (part as { type?: string }).type === "image_url",
+        typeof part === "object" && part !== null && "type" in part && (part as { type?: string }).type === "image_url",
     ) as { image_url?: { url?: string } } | undefined;
 
     imageUrl = firstImagePart?.image_url?.url || null;
@@ -249,8 +205,7 @@ async function generateImageWithOpenRouter(
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
       const imageResponse = await fetch(imageUrl);
       if (imageResponse.ok) {
-        const mimeType =
-          imageResponse.headers.get("content-type")?.split(";")[0] || null;
+        const mimeType = imageResponse.headers.get("content-type")?.split(";")[0] || null;
         const arrayBuffer = await imageResponse.arrayBuffer();
         return {
           imageData: Buffer.from(arrayBuffer).toString("base64"),
@@ -348,8 +303,7 @@ export async function execute(
   if (!apiKey) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.image.api_key_decrypt_failed_title",
-      descriptionKey:
-        "commands.generate.image.api_key_decrypt_failed_description",
+      descriptionKey: "commands.generate.image.api_key_decrypt_failed_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -370,47 +324,35 @@ export async function execute(
   }
 
   // 9. Check image generation quota BEFORE showing modal (prevent user frustration)
-  const quotaCheck = await checkImageQuota(
-    tomoriState.server_id,
-    interaction.user.id,
-  );
+  const quotaCheck = await checkImageQuota(tomoriState.server_id, interaction.user.id);
 
   if (!quotaCheck.allowed) {
     // Build user-friendly error message based on quota type
     const errorTitleKey = "commands.generate.image.quota_exceeded_title";
-    let errorDescriptionKey =
-      "commands.generate.image.quota_exceeded_description";
+    let errorDescriptionKey = "commands.generate.image.quota_exceeded_description";
     const descriptionVars: Record<string, string> = {};
 
     if (quotaCheck.resetTime) {
       const now = new Date();
       const resetTime = quotaCheck.resetTime;
-      const hoursUntilReset = Math.ceil(
-        (resetTime.getTime() - now.getTime()) / (1000 * 60 * 60),
-      );
+      const hoursUntilReset = Math.ceil((resetTime.getTime() - now.getTime()) / (1000 * 60 * 60));
 
       if (hoursUntilReset < 24) {
-        descriptionVars.reset_info = localizer(
-          locale,
-          "commands.generate.image.quota_resets_in_hours",
-          { hours: hoursUntilReset.toString() },
-        );
+        descriptionVars.reset_info = localizer(locale, "commands.generate.image.quota_resets_in_hours", {
+          hours: hoursUntilReset.toString(),
+        });
       } else {
         const daysUntilReset = Math.ceil(hoursUntilReset / 24);
-        descriptionVars.reset_info = localizer(
-          locale,
-          "commands.generate.image.quota_resets_in_days",
-          { days: daysUntilReset.toString() },
-        );
+        descriptionVars.reset_info = localizer(locale, "commands.generate.image.quota_resets_in_days", {
+          days: daysUntilReset.toString(),
+        });
       }
     }
 
     if (quotaCheck.reason === "user_quota_exceeded") {
-      errorDescriptionKey =
-        "commands.generate.image.user_quota_exceeded_description";
+      errorDescriptionKey = "commands.generate.image.user_quota_exceeded_description";
     } else if (quotaCheck.reason === "serverwide_quota_exceeded") {
-      errorDescriptionKey =
-        "commands.generate.image.serverwide_quota_exceeded_description";
+      errorDescriptionKey = "commands.generate.image.serverwide_quota_exceeded_description";
     }
 
     await replyInfoEmbed(interaction, locale, {
@@ -425,9 +367,7 @@ export async function execute(
   }
 
   // Track modal submit interaction for error handling in catch block
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
 
   try {
     // 9. Build modal components
@@ -444,8 +384,7 @@ export async function execute(
       {
         customId: REFERENCE_IMAGE_INPUT_IDS[0],
         labelKey: "commands.generate.image.modal.image_upload_label",
-        descriptionKey:
-          "commands.generate.image.modal.image_upload_description",
+        descriptionKey: "commands.generate.image.modal.image_upload_description",
         minValues: 0,
         maxValues: 1,
         required: false,
@@ -453,8 +392,7 @@ export async function execute(
       {
         customId: REFERENCE_IMAGE_INPUT_IDS[1],
         labelKey: "commands.generate.image.modal.image_upload_2_label",
-        descriptionKey:
-          "commands.generate.image.modal.image_upload_description",
+        descriptionKey: "commands.generate.image.modal.image_upload_description",
         minValues: 0,
         maxValues: 1,
         required: false,
@@ -462,8 +400,7 @@ export async function execute(
       {
         customId: REFERENCE_IMAGE_INPUT_IDS[2],
         labelKey: "commands.generate.image.modal.image_upload_3_label",
-        descriptionKey:
-          "commands.generate.image.modal.image_upload_description",
+        descriptionKey: "commands.generate.image.modal.image_upload_description",
         minValues: 0,
         maxValues: 1,
         required: false,
@@ -472,8 +409,7 @@ export async function execute(
         kind: "radioGroup" as const,
         customId: ASPECT_RATIO_SELECT_ID,
         labelKey: "commands.generate.image.modal.aspect_ratio_label",
-        descriptionKey:
-          "commands.generate.image.modal.aspect_ratio_description",
+        descriptionKey: "commands.generate.image.modal.aspect_ratio_description",
         required: true,
         options: [
           { label: "1:1 (Square)", value: "1:1" },
@@ -511,9 +447,9 @@ export async function execute(
     modalSubmitInteraction = modalResult.interaction;
     const prompt = modalResult.values?.[PROMPT_INPUT_ID];
     const aspectRatio = modalResult.values?.[ASPECT_RATIO_SELECT_ID];
-    const imageAttachments = REFERENCE_IMAGE_INPUT_IDS.map(
-      (customId) => modalResult.attachments?.[customId],
-    ).filter((attachment): attachment is APIAttachment => Boolean(attachment));
+    const imageAttachments = REFERENCE_IMAGE_INPUT_IDS.map((customId) => modalResult.attachments?.[customId]).filter(
+      (attachment): attachment is APIAttachment => Boolean(attachment),
+    );
 
     // 12. Safety check for required values
     if (!modalSubmitInteraction || !prompt || !aspectRatio) {
@@ -527,36 +463,21 @@ export async function execute(
 
     for (const imageAttachment of imageAttachments) {
       try {
-        log.info(
-          `Processing uploaded reference image: ${imageAttachment.filename}`,
-        );
+        log.info(`Processing uploaded reference image: ${imageAttachment.filename}`);
         const converted = await convertAttachmentToBase64(imageAttachment);
         referenceImages.push(converted);
         if (!referenceImageUrl) {
           referenceImageUrl = imageAttachment.url; // Use first reference for thumbnail
         }
       } catch (error) {
-        log.warn(
-          `Failed to process attachment ${imageAttachment.id}:`,
-          error as Error,
-        );
+        log.warn(`Failed to process attachment ${imageAttachment.id}:`, error as Error);
 
         // Image processing failed - show error and exit
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.generate.image.invalid_image_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.generate.image.invalid_image_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.generate.image.invalid_image_title"))
+              .setDescription(localizer(locale, "commands.generate.image.invalid_image_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -565,9 +486,7 @@ export async function execute(
     }
 
     if (referenceImages.length > 0) {
-      log.info(
-        `Successfully processed ${referenceImages.length} reference image(s)`,
-      );
+      log.info(`Successfully processed ${referenceImages.length} reference image(s)`);
     }
 
     // 14. Get model codename from database
@@ -583,10 +502,7 @@ export async function execute(
     // 16. Call provider API to generate image
     let generatedImageData: string | null = null;
     let generatedImageMimeType: string | null = null;
-    const imageGenerationImplementation = resolveProviderFeatureImplementation(
-      provider,
-      "nativeImageGeneration",
-    );
+    const imageGenerationImplementation = resolveProviderFeatureImplementation(provider, "nativeImageGeneration");
 
     if (imageGenerationImplementation === "openrouter") {
       // Use OpenRouter API
@@ -632,11 +548,7 @@ export async function execute(
       const response = await chat.sendMessage(messagePayload);
 
       // Extract generated image from response
-      if (
-        response?.candidates &&
-        response.candidates.length > 0 &&
-        response.candidates[0]?.content?.parts
-      ) {
+      if (response?.candidates && response.candidates.length > 0 && response.candidates[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
           if (part.inlineData) {
             generatedImageData = part.inlineData.data ?? null;
@@ -649,24 +561,16 @@ export async function execute(
       // Use Z.ai native image generation API
       if (referenceImages.length > 0) {
         await interaction.followUp({
-          content: localizer(
-            locale,
-            "commands.generate.image.zai_no_img2img_warning",
-          ),
+          content: localizer(locale, "commands.generate.image.zai_no_img2img_warning"),
         });
       }
-      const { generateZaiNativeImage } = await import(
-        "@/providers/zai/zaiImageGeneration"
-      );
+      const { generateZaiNativeImage } = await import("@/providers/zai/zaiImageGeneration");
       const result = await generateZaiNativeImage({
         apiKey,
         model: modelCodename,
         prompt,
         aspectRatio,
-        endpointUrl:
-          provider === "zaicoding"
-            ? ZAI_CODING_IMAGES_GENERATIONS_URL
-            : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+        endpointUrl: provider === "zaicoding" ? ZAI_CODING_IMAGES_GENERATIONS_URL : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
       });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
@@ -674,29 +578,21 @@ export async function execute(
       // Use NVIDIA native image generation API
       if (referenceImages.length > 0) {
         await interaction.followUp({
-          content: localizer(
-            locale,
-            "commands.generate.image.nvidia_no_img2img_warning",
-          ),
+          content: localizer(locale, "commands.generate.image.nvidia_no_img2img_warning"),
         });
       }
-      const { generateNvidiaNativeImage } = await import(
-        "@/providers/nvidia/nvidiaImageGeneration"
-      );
+      const { generateNvidiaNativeImage } = await import("@/providers/nvidia/nvidiaImageGeneration");
       const result = await generateNvidiaNativeImage({
         apiKey,
         model: modelCodename,
         prompt,
         aspectRatio,
-        referenceImages:
-          referenceImages.length > 0 ? referenceImages : undefined,
+        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
     } else {
-      throw new Error(
-        `Image generation is not implemented for provider ${tomoriState.llm.llm_provider}`,
-      );
+      throw new Error(`Image generation is not implemented for provider ${tomoriState.llm.llm_provider}`);
     }
 
     // 17. Calculate generation time
@@ -708,20 +604,11 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.generate.image.error_generation_failed_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.generate.image.error_generation_failed_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.generate.image.error_generation_failed_description",
-                {
-                  error: "No image data received from API",
-                },
-              ),
+              localizer(locale, "commands.generate.image.error_generation_failed_description", {
+                error: "No image data received from API",
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -734,11 +621,7 @@ export async function execute(
 
     // Determine file extension from MIME type
     const extension =
-      generatedImageMimeType === "image/jpeg"
-        ? "jpg"
-        : generatedImageMimeType === "image/webp"
-          ? "webp"
-          : "png"; // Default to PNG
+      generatedImageMimeType === "image/jpeg" ? "jpg" : generatedImageMimeType === "image/webp" ? "webp" : "png"; // Default to PNG
 
     const filename = `generated_${Date.now()}.${extension}`;
     const attachment = new AttachmentBuilder(imageBuffer, { name: filename });
@@ -763,10 +646,7 @@ export async function execute(
           inline: true,
         },
         {
-          name: localizer(
-            locale,
-            "commands.generate.image.field_generation_time",
-          ),
+          name: localizer(locale, "commands.generate.image.field_generation_time"),
           value: `${generationTimeSeconds}s`,
           inline: true,
         },
@@ -788,9 +668,7 @@ export async function execute(
       files: [attachment],
     });
 
-    log.success(
-      `Successfully generated and sent image (${generationTimeSeconds}s)`,
-    );
+    log.success(`Successfully generated and sent image (${generationTimeSeconds}s)`);
   } catch (error) {
     // Handle errors
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -817,11 +695,7 @@ export async function execute(
     }
 
     // Check for content safety errors
-    if (
-      errorMessage.includes("safety") ||
-      errorMessage.includes("blocked") ||
-      errorMessage.includes("RECITATION")
-    ) {
+    if (errorMessage.includes("safety") || errorMessage.includes("blocked") || errorMessage.includes("RECITATION")) {
       await replyInfoEmbed(replyTarget, locale, {
         titleKey: "commands.generate.image.error_safety_title",
         descriptionKey: "commands.generate.image.error_safety_description",
@@ -834,8 +708,7 @@ export async function execute(
     // Generic error fallback
     await replyInfoEmbed(replyTarget, locale, {
       titleKey: "commands.generate.image.error_generation_failed_title",
-      descriptionKey:
-        "commands.generate.image.error_generation_failed_description",
+      descriptionKey: "commands.generate.image.error_generation_failed_description",
       descriptionVars: { error: errorMessage },
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,

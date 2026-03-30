@@ -4,19 +4,14 @@ import {
   buildExpressionResponseSchema,
   type ExpressionBatchResult,
 } from "@/providers/utils/structuredOutput";
-import type {
-  ProviderStructuredJsonRequest,
-  StructuredOutputResult,
-} from "@/types/provider/featureInterfaces";
+import type { ProviderStructuredJsonRequest, StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
 type OpenrouterStructuredOutputRequest = ProviderStructuredJsonRequest;
 type GenericStructuredOutputRequest = ProviderStructuredJsonRequest;
 
-type OpenrouterContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+type OpenrouterContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 type OpenrouterMessage =
   | { role: "system"; content: string }
@@ -32,9 +27,7 @@ export async function callOpenrouterStructuredJSON<T>(
   schemaName: string,
 ): Promise<StructuredOutputResult<T>> {
   try {
-    const contentParts: OpenrouterContentPart[] = [
-      { type: "text", text: request.userPrompt },
-    ];
+    const contentParts: OpenrouterContentPart[] = [{ type: "text", text: request.userPrompt }];
 
     if (request.images) {
       for (const image of request.images) {
@@ -56,9 +49,7 @@ export async function callOpenrouterStructuredJSON<T>(
     }
 
     const userContent =
-      contentParts.length === 1 && contentParts[0].type === "text"
-        ? contentParts[0].text
-        : contentParts;
+      contentParts.length === 1 && contentParts[0].type === "text" ? contentParts[0].text : contentParts;
 
     const messages: OpenrouterMessage[] = [
       {
@@ -90,28 +81,21 @@ export async function callOpenrouterStructuredJSON<T>(
       stream: false,
     };
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "OpenRouter structured JSON request failed",
-        new Error(errorBody),
-        {
-          errorType: "OpenrouterStructuredJSONHttpError",
-          metadata: { model: request.model, status: response.status },
-        },
-      );
+      log.error("OpenRouter structured JSON request failed", new Error(errorBody), {
+        errorType: "OpenrouterStructuredJSONHttpError",
+        metadata: { model: request.model, status: response.status },
+      });
       return {
         success: false,
         error: `OpenRouter request failed: ${response.status} ${response.statusText}`,
@@ -151,14 +135,10 @@ export async function callOpenrouterStructuredJSON<T>(
     try {
       parsed = JSON.parse(responseText);
     } catch (parseError) {
-      log.error(
-        "OpenRouter structured JSON parse failed",
-        parseError as Error,
-        {
-          errorType: "OpenrouterStructuredJSONParseError",
-          metadata: { model: request.model, responseText },
-        },
-      );
+      log.error("OpenRouter structured JSON parse failed", parseError as Error, {
+        errorType: "OpenrouterStructuredJSONParseError",
+        metadata: { model: request.model, responseText },
+      });
       return {
         success: false,
         error: "Invalid JSON response from OpenRouter.",
@@ -167,10 +147,7 @@ export async function callOpenrouterStructuredJSON<T>(
 
     const validationResult = zodSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        "OpenRouter structured JSON validation failed",
-        validationResult.error,
-      );
+      log.error("OpenRouter structured JSON validation failed", validationResult.error);
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,
@@ -200,9 +177,7 @@ export async function callOpenrouterStructuredOutput(
   const images = request.images ?? [];
 
   try {
-    const contentParts: OpenrouterContentPart[] = [
-      { type: "text", text: request.userPrompt },
-    ];
+    const contentParts: OpenrouterContentPart[] = [{ type: "text", text: request.userPrompt }];
 
     for (const image of images) {
       try {
@@ -225,9 +200,7 @@ export async function callOpenrouterStructuredOutput(
     }
 
     const userContent =
-      contentParts.length === 1 && contentParts[0].type === "text"
-        ? contentParts[0].text
-        : contentParts;
+      contentParts.length === 1 && contentParts[0].type === "text" ? contentParts[0].text : contentParts;
 
     const messages: OpenrouterMessage[] = [
       {
@@ -245,8 +218,7 @@ export async function callOpenrouterStructuredOutput(
       type: "json_schema" as const,
       json_schema: {
         name: "expression_batch_result",
-        description:
-          "Batch classification results for emoji and sticker expressions",
+        description: "Batch classification results for emoji and sticker expressions",
         schema: responseSchema,
       },
     };
@@ -261,31 +233,24 @@ export async function callOpenrouterStructuredOutput(
       stream: false,
     };
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "OpenRouter structured output request failed",
-        new Error(errorBody),
-        {
-          errorType: "OpenrouterStructuredOutputHttpError",
-          metadata: {
-            model: request.model,
-            status: response.status,
-          },
+      log.error("OpenRouter structured output request failed", new Error(errorBody), {
+        errorType: "OpenrouterStructuredOutputHttpError",
+        metadata: {
+          model: request.model,
+          status: response.status,
         },
-      );
+      });
       return {
         success: false,
         error: `OpenRouter request failed: ${response.status} ${response.statusText}`,
@@ -325,17 +290,13 @@ export async function callOpenrouterStructuredOutput(
     try {
       parsed = JSON.parse(responseText);
     } catch (parseError) {
-      log.error(
-        "OpenRouter structured output JSON parse failed",
-        parseError as Error,
-        {
-          errorType: "OpenrouterStructuredOutputParseError",
-          metadata: {
-            model: request.model,
-            responseText,
-          },
+      log.error("OpenRouter structured output JSON parse failed", parseError as Error, {
+        errorType: "OpenrouterStructuredOutputParseError",
+        metadata: {
+          model: request.model,
+          responseText,
         },
-      );
+      });
       return {
         success: false,
         error: "Invalid JSON response from OpenRouter.",
@@ -344,10 +305,7 @@ export async function callOpenrouterStructuredOutput(
 
     const validationResult = ExpressionBatchResultSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        "OpenRouter structured output validation failed",
-        validationResult.error,
-      );
+      log.error("OpenRouter structured output validation failed", validationResult.error);
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,

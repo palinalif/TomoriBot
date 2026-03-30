@@ -24,10 +24,7 @@ import {
   promptWithPaginatedModal,
   safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import type { SelectOption } from "@/types/discord/modal";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
@@ -51,10 +48,7 @@ async function performHistoryDocumentRemoval(
   targetTomoriId: number | null,
   documentId: number,
   userData: UserRow,
-  replyInteraction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
 ): Promise<void> {
   // Delete the document (chunks cascade via FK)
@@ -86,11 +80,7 @@ async function performHistoryDocumentRemoval(
       errorType: "DatabaseUpdateError",
       metadata: { command: "forget history", documentId },
     };
-    await log.error(
-      "Failed to delete history document row",
-      new Error("Document deletion returned no rows"),
-      context,
-    );
+    await log.error("Failed to delete history document row", new Error("Document deletion returned no rows"), context);
     await replyInfoEmbed(replyInteraction, locale, {
       titleKey: "general.errors.update_failed_title",
       descriptionKey: "general.errors.update_failed_description",
@@ -114,31 +104,21 @@ async function performHistoryDocumentRemoval(
 /**
  * Configures the /forget history subcommand options.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("history")
     .setDescription(localizer("en-US", "commands.forget.history.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer("en-US", "commands.forget.history.scope_description"),
-        )
+        .setDescription(localizer("en-US", "commands.forget.history.scope_description"))
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.forget.history.scope_choice_persona",
-            ),
+            name: localizer("en-US", "commands.forget.history.scope_choice_persona"),
             value: "persona",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.forget.history.scope_choice_serverwide",
-            ),
+            name: localizer("en-US", "commands.forget.history.scope_choice_serverwide"),
             value: "serverwide",
           },
         )
@@ -155,9 +135,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled =
-    process.env.RUN_ENV === "production" ||
-    process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
 
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
@@ -186,9 +164,7 @@ export async function execute(
     }
 
     // 2. Load Tomori state
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -200,12 +176,8 @@ export async function execute(
     }
 
     // 3. Check teaching permission
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
-    if (
-      !tomoriState.config.server_memteaching_enabled &&
-      !hasManagePermission
-    ) {
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
+    if (!tomoriState.config.server_memteaching_enabled && !hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.document.teaching_disabled_title",
         descriptionKey: "commands.teach.document.teaching_disabled_description",
@@ -217,15 +189,12 @@ export async function execute(
 
     // 4. Resolve scope
     const scopeInput = interaction.options.getString("scope");
-    const scope: HistoryScope =
-      scopeInput === "serverwide" ? "serverwide" : "persona";
+    const scope: HistoryScope = scopeInput === "serverwide" ? "serverwide" : "persona";
 
     // 5. Handle persona scope: show persona selector
     while (true) {
       if (scope === "persona") {
-        const allPersonas = await loadAllPersonasForServer(
-          interaction.guild?.id ?? interaction.user.id,
-        );
+        const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
         if (allPersonas.length === 0) {
           await replyInfoEmbed(interaction, locale, {
             titleKey: "general.errors.tomori_not_setup_title",
@@ -236,31 +205,23 @@ export async function execute(
           return;
         }
 
-        const personaSelection = await replyPaginatedPersonaChoicesV2(
-          interaction,
-          locale,
-          {
-            personas: allPersonas,
-            color: ColorCode.INFO,
-            preserveSelectedInteraction: true,
-            onSelect: async () => {},
-          },
-        );
+        const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        });
 
         if (!personaSelection.success) {
           if (personaSelection.reason === "cancelled") return;
           continue;
         }
-        if (
-          personaSelection.selectedIndex === undefined ||
-          !personaSelection.interaction
-        ) {
+        if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
           return;
         }
 
         personaSelectionInteraction = personaSelection.interaction;
-        const selectedPersona =
-          allPersonas[personaSelection.selectedIndex] ?? null;
+        const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
         if (!selectedPersona?.tomori_id) {
           await replyInfoEmbed(personaSelectionInteraction, locale, {
             titleKey: "general.errors.invalid_option_title",
@@ -308,30 +269,24 @@ export async function execute(
         value: doc.document_id.toString(),
       }));
 
-      const modalResult = await promptWithPaginatedModal(
-        selectionInteraction,
-        locale,
-        {
-          modalCustomId: MODAL_CUSTOM_ID,
-          modalTitleKey: "commands.forget.history.modal_title",
-          components: [
-            {
-              customId: DOCUMENT_SELECT_ID,
-              labelKey: "commands.forget.history.select_label",
-              descriptionKey: "commands.forget.history.select_description",
-              placeholder: "commands.forget.history.select_placeholder",
-              required: true,
-              options: documentOptions,
-            },
-          ],
-        },
-      );
+      const modalResult = await promptWithPaginatedModal(selectionInteraction, locale, {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.forget.history.modal_title",
+        components: [
+          {
+            customId: DOCUMENT_SELECT_ID,
+            labelKey: "commands.forget.history.select_label",
+            descriptionKey: "commands.forget.history.select_description",
+            placeholder: "commands.forget.history.select_placeholder",
+            required: true,
+            options: documentOptions,
+          },
+        ],
+      });
 
       // Handle modal outcome - loop back to persona picker on dismiss
       if (modalResult.outcome !== "submit") {
-        log.info(
-          `History document removal modal ${modalResult.outcome} for user ${userData.user_id}`,
-        );
+        log.info(`History document removal modal ${modalResult.outcome} for user ${userData.user_id}`);
         continue;
       }
 
@@ -380,16 +335,10 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Unexpected error in /forget history for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Unexpected error in /forget history for user ${userData.user_disc_id}`, error as Error, context);
 
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      !personaSelectionInteraction.deferred &&
-      !personaSelectionInteraction.replied
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
         ? personaSelectionInteraction
         : interaction;
     await replyInfoEmbed(errorReplyTarget, locale, {

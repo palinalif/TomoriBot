@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import type { ErrorContext } from "@/types/db/schema";
@@ -15,12 +11,8 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
  * Configure the /help setup subcommand
  * Guides new users through first-time server configuration
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("setup")
-    .setDescription(localizer("en-US", "commands.help.setup.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("setup").setDescription(localizer("en-US", "commands.help.setup.description"));
 
 /**
  * Execute the /help setup command
@@ -38,51 +30,21 @@ export async function execute(
 ): Promise<void> {
   try {
     // Get command mentions for cross-references
-    const helpApikeyMention = commandRegistry.getCommandMention(
-      "help",
-      "apikey",
-    );
-    const configSetupMention = commandRegistry.getCommandMention(
-      "config",
-      "setup",
-    );
-    const serverInitializeExpressionsMention =
-      commandRegistry.getCommandMention("server", "initialize", "expressions");
-    const serverTriggerMention = commandRegistry.getCommandMention(
-      "server",
-      "trigger",
-      "add",
-    );
-    const configPermissionsMention = commandRegistry.getCommandMention(
-      "config",
-      "permissions",
-    );
-    const serverAutotriggerMention = commandRegistry.getCommandMention(
-      "server",
-      "autotrigger",
-      "channels",
-    );
+    const helpApikeyMention = commandRegistry.getCommandMention("help", "apikey");
+    const configSetupMention = commandRegistry.getCommandMention("config", "setup");
+    const serverInitializeExpressionsMention = commandRegistry.getCommandMention("server", "initialize", "expressions");
+    const serverTriggerMention = commandRegistry.getCommandMention("server", "trigger", "add");
+    const configPermissionsMention = commandRegistry.getCommandMention("config", "permissions");
+    const serverAutotriggerMention = commandRegistry.getCommandMention("server", "autotrigger", "channels");
     const personaMention = commandRegistry.getCommandMention("persona");
     const serverMention = commandRegistry.getCommandMention("server");
     const personalMention = commandRegistry.getCommandMention("personal");
     const configMention = commandRegistry.getCommandMention("config");
     const teachMention = commandRegistry.getCommandMention("teach");
-    const helpFeaturesMention = commandRegistry.getCommandMention(
-      "help",
-      "features",
-    );
-    const helpMemoryMention = commandRegistry.getCommandMention(
-      "help",
-      "memory",
-    );
-    const helpCustomizationMention = commandRegistry.getCommandMention(
-      "help",
-      "customization",
-    );
-    const supportServerMention = commandRegistry.getCommandMention(
-      "support",
-      "discord",
-    );
+    const helpFeaturesMention = commandRegistry.getCommandMention("help", "features");
+    const helpMemoryMention = commandRegistry.getCommandMention("help", "memory");
+    const helpCustomizationMention = commandRegistry.getCommandMention("help", "customization");
+    const supportServerMention = commandRegistry.getCommandMention("support", "discord");
 
     // Use replySummaryEmbed to show structured setup guide
     await replySummaryEmbed(
@@ -130,16 +92,12 @@ export async function execute(
           },
           {
             nameKey: "commands.help.setup.need_help_title",
-            value: localizer(
-              locale,
-              "commands.help.setup.need_help_description",
-              {
-                helpFeatures: helpFeaturesMention,
-                helpMemory: helpMemoryMention,
-                helpCustomization: helpCustomizationMention,
-                supportServer: supportServerMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.setup.need_help_description", {
+              helpFeatures: helpFeaturesMention,
+              helpMemory: helpMemoryMention,
+              helpCustomization: helpCustomizationMention,
+              supportServer: supportServerMention,
+            }),
             inline: false,
           },
         ],
@@ -156,17 +114,10 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help setup command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help setup command", error as Error, context);
 
     // Inform user of error (ephemeral)
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -181,11 +132,7 @@ export async function execute(
       }
     } catch (replyError) {
       // Log if even the error reply fails
-      log.error(
-        "Failed to send error reply for /help setup",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help setup", replyError, context);
     }
   }
 }

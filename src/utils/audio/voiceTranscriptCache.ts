@@ -32,12 +32,8 @@ interface StoredEntry extends VoiceTranscriptEntry {
 const cache = new Map<string, StoredEntry>();
 
 function getTtlMs(): number {
-  const parsed = Number.parseInt(
-    process.env.VOICE_TRANSCRIPT_CACHE_TTL_MINUTES ?? "",
-    10,
-  );
-  const minutes =
-    Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TTL_MINUTES;
+  const parsed = Number.parseInt(process.env.VOICE_TRANSCRIPT_CACHE_TTL_MINUTES ?? "", 10);
+  const minutes = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TTL_MINUTES;
   return minutes * 60 * 1_000;
 }
 
@@ -45,9 +41,7 @@ function getTtlMs(): number {
  * Retrieve a cached transcript for a Discord message ID.
  * Returns null on miss or expiry (and evicts the stale entry).
  */
-export function getCachedVoiceTranscript(
-  messageId: string,
-): VoiceTranscriptEntry | null {
+export function getCachedVoiceTranscript(messageId: string): VoiceTranscriptEntry | null {
   const entry = cache.get(messageId);
   if (!entry) return null;
 
@@ -63,10 +57,6 @@ export function getCachedVoiceTranscript(
  * Store a transcript for a Discord message ID.
  * Overwrites any existing entry for the same ID.
  */
-export function setCachedVoiceTranscript(
-  messageId: string,
-  transcript: string,
-  source: "user_stt" | "tts",
-): void {
+export function setCachedVoiceTranscript(messageId: string, transcript: string, source: "user_stt" | "tts"): void {
   cache.set(messageId, { transcript, source, cachedAt: Date.now() });
 }

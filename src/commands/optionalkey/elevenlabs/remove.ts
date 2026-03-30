@@ -4,10 +4,7 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { deleteOptApiKey, hasOptApiKey } from "@/utils/security/crypto";
@@ -15,14 +12,8 @@ import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { localizer } from "@/utils/text/localizer";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.elevenlabs.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.elevenlabs.remove.description"));
 
 export async function execute(
   _client: Client,
@@ -45,9 +36,7 @@ export async function execute(
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -57,25 +46,18 @@ export async function execute(
       return;
     }
 
-    const hasKey = await hasOptApiKey(
-      tomoriState.server_id,
-      ELEVENLABS_SERVICE_NAME,
-    );
+    const hasKey = await hasOptApiKey(tomoriState.server_id, ELEVENLABS_SERVICE_NAME);
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.elevenlabs.remove.no_key_title",
-        descriptionKey:
-          "commands.optionalkey.elevenlabs.remove.no_key_description",
+        descriptionKey: "commands.optionalkey.elevenlabs.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const isDeleted = await deleteOptApiKey(
-      tomoriState.server_id,
-      ELEVENLABS_SERVICE_NAME,
-    );
+    const isDeleted = await deleteOptApiKey(tomoriState.server_id, ELEVENLABS_SERVICE_NAME);
     if (!isDeleted) {
       const context: ErrorContext = {
         tomoriId: tomoriState.tomori_id,
@@ -106,8 +88,7 @@ export async function execute(
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.optionalkey.elevenlabs.remove.success_title",
-      descriptionKey:
-        "commands.optionalkey.elevenlabs.remove.success_description",
+      descriptionKey: "commands.optionalkey.elevenlabs.remove.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });

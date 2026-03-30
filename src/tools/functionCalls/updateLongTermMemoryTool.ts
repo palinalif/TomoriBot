@@ -7,24 +7,14 @@
 
 import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { PrivacyLevel } from "../../types/db/schema";
 import { validateMemoryContent } from "../../utils/db/memoryLimits";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 import { sendStandardEmbed } from "../../utils/discord/embedHelper";
 import { convertMentions } from "../../utils/text/contextBuilder";
-import {
-  isBlacklisted,
-  loadUserRow,
-  getPrivacyLevel,
-  loadPersonalMemoriesForUserLineage,
-} from "@/utils/db/dbRead";
+import { isBlacklisted, loadUserRow, getPrivacyLevel, loadPersonalMemoriesForUserLineage } from "@/utils/db/dbRead";
 
 export class UpdateLongTermMemoryTool extends BaseTool {
   name = "update_long_term_memory";
@@ -38,8 +28,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
     properties: {
       memory_id: {
         type: "number",
-        description:
-          "The memory ID to replace. Use the ID shown in context (e.g., ID:24).",
+        description: "The memory ID to replace. Use the ID shown in context (e.g., ID:24).",
       },
       memory_content: {
         type: "string",
@@ -68,10 +57,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
     return context.tomoriState.config.self_teaching_enabled;
   }
 
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Validate parameters
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -98,23 +84,17 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 
     const memoryIdArg = args.memory_id;
     const memoryContentArg = args.memory_content;
-    let targetUserDiscordIdArg = args.target_user_discord_id as
-      | string
-      | undefined;
+    let targetUserDiscordIdArg = args.target_user_discord_id as string | undefined;
     let targetUserNicknameArg = args.target_user_nickname as string | undefined;
 
     // NovelAI GLM recovery: resolve missing or garbled user params from context.
     // GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
     // (e.g., last few digits off). When the model is clearly trying to update a personal
     // memory about the message author, resolve from context instead of failing.
-    if (
-      context.message?.author &&
-      (targetUserDiscordIdArg || targetUserNicknameArg)
-    ) {
+    if (context.message?.author && (targetUserDiscordIdArg || targetUserNicknameArg)) {
       const authorId = context.message.author.id;
       const guildMember = context.message.guild?.members.cache.get(authorId);
-      const authorDisplayName =
-        guildMember?.displayName ?? context.message.author.username;
+      const authorDisplayName = guildMember?.displayName ?? context.message.author.username;
 
       // 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
       if (targetUserDiscordIdArg && targetUserDiscordIdArg !== authorId) {
@@ -141,10 +121,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
 
       // 2. Auto-fill missing target_user_nickname from context
-      if (
-        !targetUserNicknameArg?.trim() &&
-        targetUserDiscordIdArg === authorId
-      ) {
+      if (!targetUserNicknameArg?.trim() && targetUserDiscordIdArg === authorId) {
         log.info(
           `Update memory tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
         );
@@ -155,12 +132,8 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       if (!targetUserDiscordIdArg?.trim() && targetUserNicknameArg?.trim()) {
         const providedLower = targetUserNicknameArg.toLowerCase();
         const authorNameLower = authorDisplayName.toLowerCase();
-        const authorUsernameLower =
-          context.message.author.username.toLowerCase();
-        if (
-          providedLower === authorNameLower ||
-          providedLower === authorUsernameLower
-        ) {
+        const authorUsernameLower = context.message.author.username.toLowerCase();
+        if (providedLower === authorNameLower || providedLower === authorUsernameLower) {
           log.info(
             `Update memory tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
           );
@@ -169,11 +142,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
     }
 
-    if (
-      typeof memoryIdArg !== "number" ||
-      !Number.isSafeInteger(memoryIdArg) ||
-      memoryIdArg <= 0
-    ) {
+    if (typeof memoryIdArg !== "number" || !Number.isSafeInteger(memoryIdArg) || memoryIdArg <= 0) {
       return {
         success: false,
         error: "The 'memory_id' argument was missing or invalid.",
@@ -187,12 +156,10 @@ export class UpdateLongTermMemoryTool extends BaseTool {
     if (typeof memoryContentArg !== "string" || !memoryContentArg.trim()) {
       return {
         success: false,
-        error:
-          "The 'memory_content' argument was missing, empty, or not a string.",
+        error: "The 'memory_content' argument was missing, empty, or not a string.",
         data: {
           status: "memory_update_failed_invalid_args",
-          reason:
-            "The 'memory_content' argument was missing, empty, or not a string.",
+          reason: "The 'memory_content' argument was missing, empty, or not a string.",
         },
       };
     }
@@ -218,14 +185,8 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       };
     }
 
-    const targetUserDiscordId =
-      typeof targetUserDiscordIdArg === "string"
-        ? targetUserDiscordIdArg.trim()
-        : "";
-    const targetUserNickname =
-      typeof targetUserNicknameArg === "string"
-        ? targetUserNicknameArg.trim()
-        : "";
+    const targetUserDiscordId = typeof targetUserDiscordIdArg === "string" ? targetUserDiscordIdArg.trim() : "";
+    const targetUserNickname = typeof targetUserNicknameArg === "string" ? targetUserNicknameArg.trim() : "";
     const hasTargetUserId = targetUserDiscordId.length > 0;
     const hasTargetUserNickname = targetUserNickname.length > 0;
 
@@ -246,9 +207,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 
     const tomoriState = context.tomoriState;
     if (!tomoriState?.server_id || !tomoriState.tomori_id) {
-      log.error(
-        "Missing server_id or tomori_id in Tomori state for memory update",
-      );
+      log.error("Missing server_id or tomori_id in Tomori state for memory update");
       return {
         success: false,
         error: "Internal bot error: Missing server context",
@@ -259,8 +218,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       };
     }
 
-    const serverDiscId =
-      "guild" in context.channel ? context.channel.guild.id : context.userId;
+    const serverDiscId = "guild" in context.channel ? context.channel.guild.id : context.userId;
     if (!serverDiscId) {
       log.error("Missing server Discord ID for memory update");
       return {
@@ -274,10 +232,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
     }
 
     const personaNickname =
-      context.personaUsername ||
-      tomoriState.tomori_nickname ||
-      context.client.user?.username ||
-      "TomoriBot";
+      context.personaUsername || tomoriState.tomori_nickname || context.client.user?.username || "TomoriBot";
 
     try {
       if (!isPersonalUpdate) {
@@ -292,11 +247,8 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 				`;
 
         if (updatedServerMemory) {
-          const resolvedTriggererUserId =
-            context.message?.author?.id || context.userId;
-          const triggererRow = resolvedTriggererUserId
-            ? await loadUserRow(resolvedTriggererUserId)
-            : null;
+          const resolvedTriggererUserId = context.message?.author?.id || context.userId;
+          const triggererRow = resolvedTriggererUserId ? await loadUserRow(resolvedTriggererUserId) : null;
           const processedMemoryContent = await convertMentions(
             newContent,
             context.client,
@@ -315,8 +267,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
               titleVars: {
                 persona_nickname: personaNickname,
               },
-              descriptionKey:
-                "genai.self_teach.server_memory_updated_description",
+              descriptionKey: "genai.self_teach.server_memory_updated_description",
               descriptionVars: {
                 memory_id: memoryId.toString(),
                 memory_content:
@@ -361,8 +312,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       if (targetUserDiscordId === context.client.user?.id) {
         return {
           success: false,
-          error:
-            "Cannot update personal memories about the bot. Use a server memory instead.",
+          error: "Cannot update personal memories about the bot. Use a server memory instead.",
           data: {
             status: "memory_update_failed_invalid_target",
             reason: "Personal memories cannot be updated about the bot itself.",
@@ -382,8 +332,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         };
       }
 
-      const guild =
-        "guild" in context.channel ? context.channel.guild : undefined;
+      const guild = "guild" in context.channel ? context.channel.guild : undefined;
       let guildMember = null;
       if (guild) {
         guildMember =
@@ -437,10 +386,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
 
       const userPrivacyLevel = await getPrivacyLevel(targetUserDiscordId);
-      if (
-        userPrivacyLevel === PrivacyLevel.PARTIAL ||
-        userPrivacyLevel === PrivacyLevel.FULL
-      ) {
+      if (userPrivacyLevel === PrivacyLevel.PARTIAL || userPrivacyLevel === PrivacyLevel.FULL) {
         return {
           success: false,
           error: `Cannot update personal memory: User ${targetUserNickname} has privacy restrictions.`,
@@ -452,14 +398,8 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
 
       const personaLineageId = tomoriState.persona_lineage_id ?? 0;
-      const personalMemories = await loadPersonalMemoriesForUserLineage(
-        targetUserRow.user_id,
-        personaLineageId,
-        true,
-      );
-      const targetMemory = personalMemories.find(
-        (memory) => memory.personal_memory_id === memoryId,
-      );
+      const personalMemories = await loadPersonalMemoriesForUserLineage(targetUserRow.user_id, personaLineageId, true);
+      const targetMemory = personalMemories.find((memory) => memory.personal_memory_id === memoryId);
       if (!targetMemory) {
         return {
           success: false,
@@ -484,9 +424,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 			`;
 
       if (!updatedMemory) {
-        log.error(
-          `Failed to update personal memory ${memoryId} for user ${targetUserRow.user_id}`,
-        );
+        log.error(`Failed to update personal memory ${memoryId} for user ${targetUserRow.user_id}`);
         return {
           success: false,
           error: "Failed to update personal memory",
@@ -513,9 +451,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         tomoriState?.config.personal_memories_enabled,
       );
 
-      const isUserBlacklisted = guild
-        ? await isBlacklisted(serverDiscId, targetUserDiscordId)
-        : false;
+      const isUserBlacklisted = guild ? await isBlacklisted(serverDiscId, targetUserDiscordId) : false;
       const footerKey = !tomoriState.config.personal_memories_enabled
         ? "genai.self_teach.personal_memory_footer_personalization_disabled"
         : isUserBlacklisted
@@ -532,8 +468,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
             user_nickname: userDisplayName,
             persona_nickname: personaNickname,
           },
-          descriptionKey:
-            "genai.self_teach.personal_memory_updated_description",
+          descriptionKey: "genai.self_teach.personal_memory_updated_description",
           descriptionVars: {
             user_nickname: userDisplayName,
             memory_id: memoryId.toString(),

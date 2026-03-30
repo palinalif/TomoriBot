@@ -32,10 +32,7 @@ const SILLY_TAVERN_METADATA_KEYS = new Set(["chara", "char"]);
 type PngTextChunk = {
   key: string;
   value: string;
-  type:
-    | typeof TEXT_CHUNK_TYPE
-    | typeof COMPRESSED_TEXT_CHUNK_TYPE
-    | typeof INTERNATIONAL_TEXT_CHUNK_TYPE;
+  type: typeof TEXT_CHUNK_TYPE | typeof COMPRESSED_TEXT_CHUNK_TYPE | typeof INTERNATIONAL_TEXT_CHUNK_TYPE;
 };
 
 /**
@@ -45,12 +42,7 @@ type PngTextChunk = {
  * @returns 32-bit unsigned integer
  */
 function readUint32(data: Uint8Array, offset: number): number {
-  return (
-    (data[offset] << 24) |
-    (data[offset + 1] << 16) |
-    (data[offset + 2] << 8) |
-    data[offset + 3]
-  );
+  return (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
 }
 
 /**
@@ -84,11 +76,7 @@ function stringToBytes(str: string): Uint8Array {
  * @param length - Number of bytes to include in CRC calculation
  * @returns 32-bit CRC32 checksum
  */
-function calculateCRC(
-  data: Uint8Array,
-  offset: number,
-  length: number,
-): number {
+function calculateCRC(data: Uint8Array, offset: number, length: number): number {
   // 1. Generate CRC32 lookup table (standard polynomial 0xEDB88320)
   const crcTable: number[] = [];
   for (let i = 0; i < 256; i++) {
@@ -130,11 +118,7 @@ function verifyPNGSignature(data: Uint8Array): boolean {
   return true;
 }
 
-function findNullByte(
-  data: Uint8Array,
-  start: number,
-  endExclusive: number,
-): number {
+function findNullByte(data: Uint8Array, start: number, endExclusive: number): number {
   for (let i = start; i < endExclusive; i++) {
     if (data[i] === 0) {
       return i;
@@ -153,11 +137,7 @@ function tryParseJSON(value: string): unknown | null {
 }
 
 function decodeBase64ToUTF8(value: string): string | null {
-  const normalized = value
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
+  const normalized = value.trim().replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
 
   if (!normalized) {
     return null;
@@ -176,11 +156,7 @@ function decodeBase64ToUTF8(value: string): string | null {
   return decodedBuffer.toString("utf8");
 }
 
-function parseTextChunk(
-  data: Uint8Array,
-  offset: number,
-  length: number,
-): PngTextChunk | null {
+function parseTextChunk(data: Uint8Array, offset: number, length: number): PngTextChunk | null {
   const chunkEnd = offset + length;
   const keyEnd = findNullByte(data, offset, chunkEnd);
   if (keyEnd <= offset) {
@@ -196,11 +172,7 @@ function parseTextChunk(
   return { key, value, type: TEXT_CHUNK_TYPE };
 }
 
-function parseCompressedTextChunk(
-  data: Uint8Array,
-  offset: number,
-  length: number,
-): PngTextChunk | null {
+function parseCompressedTextChunk(data: Uint8Array, offset: number, length: number): PngTextChunk | null {
   const chunkEnd = offset + length;
   const keyEnd = findNullByte(data, offset, chunkEnd);
   if (keyEnd <= offset || keyEnd + 2 > chunkEnd) {
@@ -226,11 +198,7 @@ function parseCompressedTextChunk(
   }
 }
 
-function parseInternationalTextChunk(
-  data: Uint8Array,
-  offset: number,
-  length: number,
-): PngTextChunk | null {
+function parseInternationalTextChunk(data: Uint8Array, offset: number, length: number): PngTextChunk | null {
   const chunkEnd = offset + length;
   const keyEnd = findNullByte(data, offset, chunkEnd);
   if (keyEnd <= offset || keyEnd + 5 > chunkEnd) {
@@ -286,12 +254,7 @@ function extractAllTextChunksFromPNGData(data: Uint8Array): PngTextChunk[] {
       break;
     }
 
-    const chunkType = String.fromCharCode(
-      data[offset],
-      data[offset + 1],
-      data[offset + 2],
-      data[offset + 3],
-    );
+    const chunkType = String.fromCharCode(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
     offset += 4;
 
     if (offset + length + 4 > data.length) {
@@ -334,9 +297,7 @@ export interface SillyTavernCardMetadata {
  * Extracts SillyTavern character card metadata from PNG metadata chunks.
  * Supports `tEXt`, `zTXt`, and `iTXt` chunks.
  */
-export function extractSillyTavernMetadataFromPNG(
-  pngBuffer: Buffer,
-): SillyTavernCardMetadata | null {
+export function extractSillyTavernMetadataFromPNG(pngBuffer: Buffer): SillyTavernCardMetadata | null {
   try {
     const data = new Uint8Array(pngBuffer);
     if (!verifyPNGSignature(data)) {
@@ -344,9 +305,7 @@ export function extractSillyTavernMetadataFromPNG(
     }
 
     const textChunks = extractAllTextChunksFromPNGData(data);
-    const candidates = textChunks.filter((chunk) =>
-      SILLY_TAVERN_METADATA_KEYS.has(chunk.key.toLowerCase()),
-    );
+    const candidates = textChunks.filter((chunk) => SILLY_TAVERN_METADATA_KEYS.has(chunk.key.toLowerCase()));
 
     // Process in reverse order so newest metadata wins when duplicates exist.
     for (const candidate of [...candidates].reverse()) {
@@ -385,10 +344,7 @@ export function extractSillyTavernMetadataFromPNG(
 
     return null;
   } catch (error) {
-    log.warn(
-      "Failed to extract SillyTavern metadata from PNG (continuing fallback path)",
-      error,
-    );
+    log.warn("Failed to extract SillyTavern metadata from PNG (continuing fallback path)", error);
     return null;
   }
 }
@@ -411,9 +367,7 @@ export function extractMetadataFromPNG(pngBuffer: Buffer): PresetExport | null {
 
     // 3. Parse supported text chunks and pick TomoriPreset entries
     const textChunks = extractAllTextChunksFromPNGData(data);
-    const presetChunks = textChunks.filter(
-      (chunk) => chunk.key === METADATA_KEY,
-    );
+    const presetChunks = textChunks.filter((chunk) => chunk.key === METADATA_KEY);
 
     let lastPreset: PresetExport | null = null;
     let presetCount = 0;
@@ -423,18 +377,13 @@ export function extractMetadataFromPNG(pngBuffer: Buffer): PresetExport | null {
         lastPreset = parsed;
         presetCount += 1;
       } catch (error) {
-        log.error(
-          "Failed to parse TomoriPreset JSON metadata:",
-          error as Error,
-        );
+        log.error("Failed to parse TomoriPreset JSON metadata:", error as Error);
       }
     }
 
     if (lastPreset) {
       if (presetCount > 1) {
-        log.warn(
-          `Multiple TomoriPreset metadata chunks found (${presetCount}); using the last one.`,
-        );
+        log.warn(`Multiple TomoriPreset metadata chunks found (${presetCount}); using the last one.`);
       } else {
         log.success("Successfully extracted TomoriPreset metadata from PNG");
       }
@@ -457,10 +406,7 @@ export function extractMetadataFromPNG(pngBuffer: Buffer): PresetExport | null {
  * @param metadata - PresetExport object to embed
  * @returns New PNG Buffer with embedded metadata
  */
-export function embedMetadataInPNG(
-  pngBuffer: Buffer,
-  metadata: PresetExport,
-): Buffer {
+export function embedMetadataInPNG(pngBuffer: Buffer, metadata: PresetExport): Buffer {
   try {
     // 1. Convert Buffer to Uint8Array for processing
     const data = new Uint8Array(pngBuffer);
@@ -479,12 +425,7 @@ export function embedMetadataInPNG(
       const length = readUint32(data, offset);
       offset += 4;
 
-      const chunkType = String.fromCharCode(
-        data[offset],
-        data[offset + 1],
-        data[offset + 2],
-        data[offset + 3],
-      );
+      const chunkType = String.fromCharCode(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
 
       if (chunkType === IEND_CHUNK_TYPE) {
         iendOffset = offset - 4; // Store position before IEND chunk
@@ -549,9 +490,7 @@ export function embedMetadataInPNG(
     // 8. Copy IEND chunk and everything after
     newPngData.set(data.slice(iendOffset), writeOffset);
 
-    log.success(
-      `Successfully embedded TomoriPreset metadata (${metadataJSON.length} bytes) into PNG`,
-    );
+    log.success(`Successfully embedded TomoriPreset metadata (${metadataJSON.length} bytes) into PNG`);
 
     // 9. Convert back to Buffer and return
     return Buffer.from(newPngData);

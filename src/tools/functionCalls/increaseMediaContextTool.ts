@@ -12,12 +12,7 @@
 import { log } from "@/utils/misc/logger";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { memoryGuard } from "@/utils/security/rateLimiter";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "@/types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "@/types/tool/interfaces";
 
 /**
  * Tool for expanding media context window to view media from older messages
@@ -74,9 +69,7 @@ export class IncreaseMediaContextTool extends BaseTool {
 
     // Require context with tomoriState
     if (!context?.tomoriState) {
-      log.warn(
-        "IncreaseMediaContextTool: No tomoriState in context, defaulting to unavailable",
-      );
+      log.warn("IncreaseMediaContextTool: No tomoriState in context, defaulting to unavailable");
       return false;
     }
 
@@ -106,36 +99,26 @@ export class IncreaseMediaContextTool extends BaseTool {
    * @param context - Tool execution context (used for validation)
    * @returns Promise resolving to tool result with restart signal
    */
-  async execute(
-    args: Record<string, unknown>,
-    _context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _context: ToolContext): Promise<ToolResult> {
     // 1. Extract and validate parameters
     const extendBy = (args.extend_by as number | undefined) ?? 10; // Default 10 if not provided
 
     // 2. Calculate maximum allowed extend_by
-    const configuredFetchLimit = normalizeMessageFetchLimit(
-      _context.tomoriState?.config.message_fetch_limit,
-    );
+    const configuredFetchLimit = normalizeMessageFetchLimit(_context.tomoriState?.config.message_fetch_limit);
     const currentMediaWindow = memoryGuard.getMediaWindow();
     const maxExtendBy = Math.max(0, configuredFetchLimit - currentMediaWindow);
 
     if (typeof extendBy !== "number" || extendBy < 1) {
-      log.warn(
-        `IncreaseMediaContextTool: Invalid extend_by value: ${extendBy}`,
-      );
+      log.warn(`IncreaseMediaContextTool: Invalid extend_by value: ${extendBy}`);
       return {
         success: false,
         error: "Invalid parameter",
-        message:
-          "extend_by must be a positive number (minimum 1). Example: extend_by=10",
+        message: "extend_by must be a positive number (minimum 1). Example: extend_by=10",
       };
     }
 
     if (extendBy > maxExtendBy) {
-      log.warn(
-        `IncreaseMediaContextTool: extend_by=${extendBy} exceeds maximum ${maxExtendBy}`,
-      );
+      log.warn(`IncreaseMediaContextTool: extend_by=${extendBy} exceeds maximum ${maxExtendBy}`);
       return {
         success: false,
         error: "Parameter out of range",
@@ -152,14 +135,11 @@ export class IncreaseMediaContextTool extends BaseTool {
     // 3. Check memory status
     const memoryStatus = memoryGuard.checkMemory();
     if (memoryStatus.status === "critical") {
-      log.warn(
-        "IncreaseMediaContextTool: Blocked due to critical memory pressure",
-      );
+      log.warn("IncreaseMediaContextTool: Blocked due to critical memory pressure");
       return {
         success: false,
         error: "Memory pressure",
-        message:
-          "Cannot expand media context right now due to high memory usage. Please try again in a moment.",
+        message: "Cannot expand media context right now due to high memory usage. Please try again in a moment.",
         data: {
           memory_status: memoryStatus.status,
           memory_used_mb: memoryStatus.heapUsedMB,

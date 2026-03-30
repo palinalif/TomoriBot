@@ -36,8 +36,7 @@ export interface ProviderPresetGenerationRequest {
   maxToolRounds?: number;
 }
 
-export interface ProviderCompactSummaryRequest
-  extends ProviderCapabilityCompactSummaryRequest {
+export interface ProviderCompactSummaryRequest extends ProviderCapabilityCompactSummaryRequest {
   providerName: string;
 }
 
@@ -66,9 +65,7 @@ export interface ProviderHistoryExtractionRequest {
 export async function generatePresetForProvider(
   request: ProviderPresetGenerationRequest,
 ): Promise<PresetGenerationResult> {
-  const capability = await resolvePresetGenerationCapability(
-    request.providerName,
-  );
+  const capability = await resolvePresetGenerationCapability(request.providerName);
   if (!capability) {
     return {
       error: `Preset generation is not implemented for provider ${request.providerName}.`,
@@ -91,9 +88,7 @@ export async function generatePresetForProvider(
 export async function generateConversationSummaryForProvider(
   request: ProviderCompactSummaryRequest,
 ): Promise<CompactConversationResult> {
-  const capability = await resolveConversationCompactionCapability(
-    request.providerName,
-  );
+  const capability = await resolveConversationCompactionCapability(request.providerName);
   if (!capability) {
     return {
       error: `Conversation compaction is not implemented for provider ${request.providerName}.`,
@@ -106,9 +101,7 @@ export async function generateConversationSummaryForProvider(
 export async function generateRoleplaySummaryForProvider(
   request: ProviderCompactSummaryRequest,
 ): Promise<CompactRoleplayResult> {
-  const capability = await resolveConversationCompactionCapability(
-    request.providerName,
-  );
+  const capability = await resolveConversationCompactionCapability(request.providerName);
   if (!capability) {
     return {
       error: `Roleplay compaction is not implemented for provider ${request.providerName}.`,
@@ -121,9 +114,7 @@ export async function generateRoleplaySummaryForProvider(
 export async function callExpressionInitializationForProvider(
   request: ProviderExpressionInitializationRequest,
 ): Promise<StructuredOutputResult<ExpressionBatchResult>> {
-  const capability = await resolveStructuredOutputCapability(
-    request.providerName,
-  );
+  const capability = await resolveStructuredOutputCapability(request.providerName);
   if (!capability) {
     return {
       success: false,
@@ -150,13 +141,9 @@ export async function callExpressionInitializationForProvider(
 export async function extractHistoryWindowForProvider(
   request: ProviderHistoryExtractionRequest,
 ): Promise<HistoryMemoryEntry[]> {
-  const capability = await resolveStructuredOutputCapability(
-    request.providerName,
-  );
+  const capability = await resolveStructuredOutputCapability(request.providerName);
   if (!capability) {
-    log.warn(
-      `History extraction is not implemented for provider ${request.providerName}.`,
-    );
+    log.warn(`History extraction is not implemented for provider ${request.providerName}.`);
     return [];
   }
 
@@ -172,18 +159,12 @@ export async function extractHistoryWindowForProvider(
     schemaName: "history_extraction_result",
   };
 
-  const result = await capability.callStructuredJSON(
-    structuredRequest,
-    responseSchema,
-    HistoryExtractionResultSchema,
-  );
+  const result = await capability.callStructuredJSON(structuredRequest, responseSchema, HistoryExtractionResultSchema);
 
   if (result.success) {
     return result.data.memories;
   }
 
-  log.warn(
-    `History extraction failed (${request.providerName}): ${result.error}`,
-  );
+  log.warn(`History extraction failed (${request.providerName}): ${result.error}`);
   return [];
 }

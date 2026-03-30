@@ -1,8 +1,4 @@
-import {
-  EmbedBuilder,
-  type BaseGuildTextChannel,
-  type Client,
-} from "discord.js";
+import { EmbedBuilder, type BaseGuildTextChannel, type Client } from "discord.js";
 import type { ThoughtLogPayload } from "@/types/provider/interfaces";
 import { getLlmDisplayName } from "@/utils/provider/modelDisplay";
 import { ColorCode, log } from "@/utils/misc/logger";
@@ -37,10 +33,7 @@ function takeEmbedChunk(
     };
   }
 
-  let splitIndex = Math.max(
-    value.lastIndexOf("\n", maxLength),
-    value.lastIndexOf(" ", maxLength),
-  );
+  let splitIndex = Math.max(value.lastIndexOf("\n", maxLength), value.lastIndexOf(" ", maxLength));
   if (splitIndex <= 0) {
     splitIndex = maxLength;
   } else {
@@ -68,10 +61,7 @@ function buildThoughtLogEmbeds(args: {
   }).slice(0, EMBED_DESCRIPTION_LIMIT);
   const footerText = localizer(locale, "genai.thought_log.footer", {
     provider: tomoriState.llm.llm_provider,
-    model: getLlmDisplayName(
-      tomoriState.llm,
-      tomoriState.config.custom_model_name,
-    ),
+    model: getLlmDisplayName(tomoriState.llm, tomoriState.config.custom_model_name),
   });
 
   const sections = [
@@ -106,18 +96,9 @@ function buildThoughtLogEmbeds(args: {
 
     while (remaining.length > 0) {
       const sectionHeader = `**${section.label}**\n`;
-      const prefix =
-        !metadataAttached && embeds.length === 0
-          ? `${description}\n\n${sectionHeader}`
-          : sectionHeader;
-      const availableLength = Math.max(
-        1,
-        EMBED_DESCRIPTION_LIMIT - prefix.length,
-      );
-      const { chunk, remaining: nextRemaining } = takeEmbedChunk(
-        remaining,
-        availableLength,
-      );
+      const prefix = !metadataAttached && embeds.length === 0 ? `${description}\n\n${sectionHeader}` : sectionHeader;
+      const availableLength = Math.max(1, EMBED_DESCRIPTION_LIMIT - prefix.length);
+      const { chunk, remaining: nextRemaining } = takeEmbedChunk(remaining, availableLength);
 
       embeds.push(
         new EmbedBuilder()
@@ -136,10 +117,7 @@ function buildThoughtLogEmbeds(args: {
   return embeds;
 }
 
-function appendThoughtSection(
-  existing?: string,
-  incoming?: string,
-): string | undefined {
+function appendThoughtSection(existing?: string, incoming?: string): string | undefined {
   const normalizedExisting = normalizeThoughtLogText(existing);
   const normalizedIncoming = normalizeThoughtLogText(incoming);
   if (!normalizedIncoming) {
@@ -177,13 +155,8 @@ export function mergeThoughtLogPayload(
   };
 }
 
-export function hasThoughtLogContent(
-  payload?: ThoughtLogPayload | null,
-): boolean {
-  return Boolean(
-    normalizeThoughtLogText(payload?.summary) ||
-      normalizeThoughtLogText(payload?.raw),
-  );
+export function hasThoughtLogContent(payload?: ThoughtLogPayload | null): boolean {
+  return Boolean(normalizeThoughtLogText(payload?.summary) || normalizeThoughtLogText(payload?.raw));
 }
 
 interface SendThoughtLogEmbedArgs {
@@ -224,10 +197,7 @@ async function resolveThoughtLogOwnerIdentity(
     return null;
   }
 
-  return await resolvePersonaWebhookIdentity(
-    owner.persona,
-    thoughtLogChannel.guild,
-  );
+  return await resolvePersonaWebhookIdentity(owner.persona, thoughtLogChannel.guild);
 }
 
 export async function sendThoughtLogEmbed({
@@ -243,9 +213,7 @@ export async function sendThoughtLogEmbed({
     return;
   }
 
-  const thoughtLogChannel = await client.channels
-    .fetch(thoughtLogChannelId)
-    .catch(() => null);
+  const thoughtLogChannel = await client.channels.fetch(thoughtLogChannelId).catch(() => null);
 
   if (
     !thoughtLogChannel ||
@@ -255,9 +223,7 @@ export async function sendThoughtLogEmbed({
       typeof thoughtLogChannel.isDMBased === "function" &&
       thoughtLogChannel.isDMBased())
   ) {
-    log.warn(
-      `Thought log channel ${thoughtLogChannelId} is missing or unavailable. Skipping thought log post.`,
-    );
+    log.warn(`Thought log channel ${thoughtLogChannelId} is missing or unavailable. Skipping thought log post.`);
     return;
   }
 
@@ -274,27 +240,14 @@ export async function sendThoughtLogEmbed({
       allowedMentions: { parse: [] as [] },
     }));
     const shouldUseWebhook =
-      owner &&
-      owner.type !== "default" &&
-      "fetchWebhooks" in thoughtLogChannel &&
-      "createWebhook" in thoughtLogChannel;
+      owner && owner.type !== "default" && "fetchWebhooks" in thoughtLogChannel && "createWebhook" in thoughtLogChannel;
 
     if (shouldUseWebhook) {
-      const webhookResult = await getOrCreateWebhook(
-        thoughtLogChannel as BaseGuildTextChannel,
-      );
-      const identity = await resolveThoughtLogOwnerIdentity(
-        owner,
-        thoughtLogChannel as BaseGuildTextChannel,
-      );
+      const webhookResult = await getOrCreateWebhook(thoughtLogChannel as BaseGuildTextChannel);
+      const identity = await resolveThoughtLogOwnerIdentity(owner, thoughtLogChannel as BaseGuildTextChannel);
 
       if (webhookResult.webhook && identity?.username) {
-        await sendWebhookMessagesWithIdentity(
-          webhookResult.webhook,
-          payloads,
-          identity,
-          thoughtLogChannel.id,
-        );
+        await sendWebhookMessagesWithIdentity(webhookResult.webhook, payloads, identity, thoughtLogChannel.id);
       } else {
         for (const payload of payloads) {
           await thoughtLogChannel.send(payload);
@@ -305,9 +258,7 @@ export async function sendThoughtLogEmbed({
         await thoughtLogChannel.send(payload);
       }
     }
-    log.info(
-      `Posted ${embeds.length} thought log embed(s) to channel ${thoughtLogChannelId}`,
-    );
+    log.info(`Posted ${embeds.length} thought log embed(s) to channel ${thoughtLogChannelId}`);
   } catch (error) {
     log.warn(
       `Failed to send thought log embed to channel ${thoughtLogChannelId}`,

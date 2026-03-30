@@ -5,11 +5,7 @@
  * Non-production stores avatars on the local filesystem under data/avatars.
  */
 
-import {
-  DeleteObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { PERSONA_LIMITS } from "@/utils/security/rateLimiter";
@@ -43,22 +39,13 @@ function getAvatarStorageConfig(): AvatarStorageConfig | null {
 
   const bucket = process.env.AVATAR_S3_BUCKET?.trim();
   if (!bucket) {
-    log.warn(
-      "[Avatar Storage] AVATAR_S3_BUCKET is missing; falling back to Discord CDN URLs.",
-    );
+    log.warn("[Avatar Storage] AVATAR_S3_BUCKET is missing; falling back to Discord CDN URLs.");
     return null;
   }
 
-  const region =
-    process.env.AVATAR_S3_REGION?.trim() ||
-    process.env.AWS_REGION?.trim() ||
-    "us-east-1";
-  const prefix = (process.env.AVATAR_S3_PREFIX || "avatars")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
-  const publicBaseUrl =
-    process.env.AVATAR_PUBLIC_BASE_URL?.trim() ||
-    `https://${bucket}.s3.${region}.amazonaws.com`;
+  const region = process.env.AVATAR_S3_REGION?.trim() || process.env.AWS_REGION?.trim() || "us-east-1";
+  const prefix = (process.env.AVATAR_S3_PREFIX || "avatars").replace(/^\/+/, "").replace(/\/+$/, "");
+  const publicBaseUrl = process.env.AVATAR_PUBLIC_BASE_URL?.trim() || `https://${bucket}.s3.${region}.amazonaws.com`;
 
   return {
     bucket,
@@ -76,14 +63,9 @@ function getS3Client(region: string): S3Client {
   return cachedClient;
 }
 
-function buildAvatarObjectKey(
-  config: AvatarStorageConfig,
-  options: AvatarUploadOptions,
-): string {
+function buildAvatarObjectKey(config: AvatarStorageConfig, options: AvatarUploadOptions): string {
   const timestamp = Date.now();
-  const serverSegment = options.serverDiscId
-    ? `servers/${options.serverDiscId}`
-    : "servers/unknown";
+  const serverSegment = options.serverDiscId ? `servers/${options.serverDiscId}` : "servers/unknown";
   return `${config.prefix}/${serverSegment}/personas/${options.personaId}/${timestamp}.png`;
 }
 
@@ -115,23 +97,15 @@ function resolveLocalAvatarPath(storedPath: string): string | null {
   const resolvedPath = path.resolve(process.cwd(), normalizedPath);
   const relativePath = path.relative(LOCAL_AVATAR_BASE_DIR, resolvedPath);
 
-  if (
-    relativePath === "" ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-  ) {
+  if (relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))) {
     return resolvedPath;
   }
 
-  log.warn(
-    `[Avatar Storage] Rejected path outside data/avatars: ${storedPath}`,
-  );
+  log.warn(`[Avatar Storage] Rejected path outside data/avatars: ${storedPath}`);
   return null;
 }
 
-function extractKeyFromAvatarUrl(
-  config: AvatarStorageConfig,
-  url: string,
-): string | null {
+function extractKeyFromAvatarUrl(config: AvatarStorageConfig, url: string): string | null {
   try {
     const parsed = new URL(url);
     const baseHost = new URL(config.publicBaseUrl).hostname;
@@ -173,9 +147,7 @@ export function isLocalPersonaAvatarPath(reference?: string | null): boolean {
   return resolveLocalAvatarPath(reference) !== null;
 }
 
-export function resolvePersonaAvatarPublicUrl(
-  reference?: string | null,
-): string | null {
+export function resolvePersonaAvatarPublicUrl(reference?: string | null): string | null {
   if (!reference) {
     return null;
   }
@@ -203,9 +175,7 @@ export function resolvePersonaAvatarPublicUrl(
   return `${publicBaseUrl}/${relativePath}`;
 }
 
-export async function loadStoredPersonaAvatarBuffer(
-  reference: string,
-): Promise<Buffer | null> {
+export async function loadStoredPersonaAvatarBuffer(reference: string): Promise<Buffer | null> {
   const trimmedReference = reference.trim();
   if (!trimmedReference) {
     return null;
@@ -231,17 +201,12 @@ export async function loadStoredPersonaAvatarBuffer(
   try {
     return await fs.readFile(absolutePath);
   } catch (error) {
-    log.warn(
-      `[Avatar Storage] Failed to load local persona avatar ${trimmedReference}`,
-      error,
-    );
+    log.warn(`[Avatar Storage] Failed to load local persona avatar ${trimmedReference}`, error);
     return null;
   }
 }
 
-export async function loadStoredPersonaAvatarDataUri(
-  reference: string,
-): Promise<string | null> {
+export async function loadStoredPersonaAvatarDataUri(reference: string): Promise<string | null> {
   const buffer = await loadStoredPersonaAvatarBuffer(reference);
   if (!buffer) {
     return null;
@@ -250,9 +215,7 @@ export async function loadStoredPersonaAvatarDataUri(
   return `data:image/png;base64,${buffer.toString("base64")}`;
 }
 
-export async function uploadPersonaAvatarToS3(
-  options: AvatarUploadOptions,
-): Promise<string | null> {
+export async function uploadPersonaAvatarToS3(options: AvatarUploadOptions): Promise<string | null> {
   const label = options.label ? ` (${options.label})` : "";
   if (IS_PRODUCTION) {
     const config = getAvatarStorageConfig();
@@ -274,15 +237,10 @@ export async function uploadPersonaAvatarToS3(
         }),
       );
       const publicUrl = buildPublicUrl(config, key);
-      log.success(
-        `[Avatar Storage] Uploaded persona avatar${label} to S3 (${publicUrl})`,
-      );
+      log.success(`[Avatar Storage] Uploaded persona avatar${label} to S3 (${publicUrl})`);
       return publicUrl;
     } catch (error) {
-      log.warn(
-        `[Avatar Storage] Failed to upload persona avatar${label} to S3`,
-        error,
-      );
+      log.warn(`[Avatar Storage] Failed to upload persona avatar${label} to S3`, error);
       return null;
     }
   }
@@ -296,22 +254,15 @@ export async function uploadPersonaAvatarToS3(
   try {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, options.buffer);
-    log.success(
-      `[Avatar Storage] Stored persona avatar${label} at ${storedPath}`,
-    );
+    log.success(`[Avatar Storage] Stored persona avatar${label} at ${storedPath}`);
     return normalizeStoredPath(storedPath);
   } catch (error) {
-    log.warn(
-      `[Avatar Storage] Failed to store persona avatar${label} locally`,
-      error,
-    );
+    log.warn(`[Avatar Storage] Failed to store persona avatar${label} locally`, error);
     return null;
   }
 }
 
-export async function deletePersonaAvatarFromS3(
-  reference: string,
-): Promise<boolean> {
+export async function deletePersonaAvatarFromS3(reference: string): Promise<boolean> {
   const target = reference.trim();
   if (!target) {
     return false;
@@ -356,24 +307,14 @@ export async function deletePersonaAvatarFromS3(
 
   try {
     await fs.unlink(absolutePath);
-    log.info(
-      `[Avatar Storage] Deleted local persona avatar ${normalizeStoredPath(target)}`,
-    );
+    log.info(`[Avatar Storage] Deleted local persona avatar ${normalizeStoredPath(target)}`);
     return true;
   } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
       return false;
     }
 
-    log.warn(
-      `[Avatar Storage] Failed to delete local persona avatar ${target}`,
-      error,
-    );
+    log.warn(`[Avatar Storage] Failed to delete local persona avatar ${target}`, error);
     return false;
   }
 }

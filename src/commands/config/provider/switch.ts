@@ -21,22 +21,11 @@ import {
   cleanupDeadChannelOverrides,
 } from "@/utils/db/dbWrite";
 import { invalidateAllChannelLlmCacheForServer } from "@/utils/cache/channelLlmCache";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-  type SavedProviderConfigUpsert,
-} from "@/types/db/schema";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriConfigSchema, type SavedProviderConfigUpsert } from "@/types/db/schema";
 import type { ProviderError } from "@/types/stream/interfaces";
 import type { SelectOption, ModalComponent } from "@/types/discord/modal";
 import { ProviderFactory } from "@/utils/provider/providerFactory";
@@ -60,14 +49,8 @@ const API_KEY_INPUT_ID = "api_key_input";
 const SAVE_CURRENT_SELECT_ID = "save_current_select";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("switch")
-    .setDescription(
-      localizer("en-US", "commands.config.provider.switch.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("switch").setDescription(localizer("en-US", "commands.config.provider.switch.description"));
 
 /**
  * Switches AI provider with automatic config save/restore.
@@ -125,33 +108,22 @@ export async function execute(
   }
 
   // 4. Build provider select options with "(saved)" indicator
-  const savedProviderSet = new Set(
-    savedConfigs.map((c) => c.provider.toLowerCase()),
-  );
-  const savedIndicator = localizer(
-    locale,
-    "commands.config.provider.switch.saved_indicator",
-  );
+  const savedProviderSet = new Set(savedConfigs.map((c) => c.provider.toLowerCase()));
+  const savedIndicator = localizer(locale, "commands.config.provider.switch.saved_indicator");
 
-  const providerSelectOptions: SelectOption[] = uniqueProviders.map(
-    (provider) => {
-      const isSaved = savedProviderSet.has(provider.toLowerCase());
-      return {
-        label: isSaved
-          ? `${getProviderDisplayName(provider)} ${savedIndicator}`
-          : getProviderDisplayName(provider),
-        value: provider.toLowerCase(),
-        description: undefined,
-      };
-    },
-  );
+  const providerSelectOptions: SelectOption[] = uniqueProviders.map((provider) => {
+    const isSaved = savedProviderSet.has(provider.toLowerCase());
+    return {
+      label: isSaved ? `${getProviderDisplayName(provider)} ${savedIndicator}` : getProviderDisplayName(provider),
+      value: provider.toLowerCase(),
+      description: undefined,
+    };
+  });
 
   // (save_current_select migrated to Checkbox in Phase 5 — no options array needed)
 
   // Track modal submit interaction for error handling in catch block
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
 
   try {
     // 6. Show modal with provider selection, optional API key, and save toggle
@@ -167,8 +139,7 @@ export async function execute(
       {
         customId: API_KEY_INPUT_ID,
         labelKey: "commands.config.provider.switch.api_key_label",
-        descriptionKey:
-          "commands.config.provider.switch.api_key_description_with_custom",
+        descriptionKey: "commands.config.provider.switch.api_key_description_with_custom",
         placeholder: "commands.config.provider.switch.api_key_placeholder",
         required: false,
         style: TextInputStyle.Short,
@@ -180,8 +151,7 @@ export async function execute(
         kind: "checkbox" as const,
         customId: SAVE_CURRENT_SELECT_ID,
         labelKey: "commands.config.provider.switch.save_current_label",
-        descriptionKey:
-          "commands.config.provider.switch.save_current_description",
+        descriptionKey: "commands.config.provider.switch.save_current_description",
         default: true,
       },
     ];
@@ -199,9 +169,7 @@ export async function execute(
 
     // 7. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Provider switch modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Provider switch modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -209,13 +177,10 @@ export async function execute(
     const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
     const apiKeyInput = modalResult.values?.[API_KEY_INPUT_ID]?.trim() || null;
     // Checkbox returns "true" (checked) or "false" (unchecked); default is "true" (pre-checked)
-    const saveCurrentChoice =
-      modalResult.values?.[SAVE_CURRENT_SELECT_ID] ?? "true";
+    const saveCurrentChoice = modalResult.values?.[SAVE_CURRENT_SELECT_ID] ?? "true";
 
     if (!modalSubmitInteraction || !selectedProvider) {
-      log.error(
-        "Provider switch modal result unexpectedly missing interaction or values",
-      );
+      log.error("Provider switch modal result unexpectedly missing interaction or values");
       return;
     }
 
@@ -225,17 +190,12 @@ export async function execute(
 
     // 8. Save current config if requested (and there's an API key to save)
     // Also snapshot current channel/persona LLM overrides for later restoration
-    if (
-      saveCurrentChoice === "true" &&
-      !isSameProvider &&
-      tomoriState.config.api_key
-    ) {
+    if (saveCurrentChoice === "true" && !isSameProvider && tomoriState.config.api_key) {
       // Load current overrides to include in snapshot
-      const [currentChannelOverrides, currentPersonaOverrides] =
-        await Promise.all([
-          getAllChannelLlmOverridesForServer(tomoriState.server_id),
-          loadPersonaLlmOverridesForServer(tomoriState.server_id),
-        ]);
+      const [currentChannelOverrides, currentPersonaOverrides] = await Promise.all([
+        getAllChannelLlmOverridesForServer(tomoriState.server_id),
+        loadPersonaLlmOverridesForServer(tomoriState.server_id),
+      ]);
 
       const currentConfig: SavedProviderConfigUpsert = {
         server_id: tomoriState.server_id,
@@ -245,8 +205,7 @@ export async function execute(
         llm_id: tomoriState.config.llm_id,
         diffusion_model_id: tomoriState.config.diffusion_model_id ?? null,
         embedding_model_id: tomoriState.config.embedding_model_id ?? null,
-        nai_diffusion_model_id:
-          tomoriState.config.nai_diffusion_model_id ?? null,
+        nai_diffusion_model_id: tomoriState.config.nai_diffusion_model_id ?? null,
         vision_llm_id: tomoriState.config.vision_llm_id ?? null,
         nai_preset_name: tomoriState.config.nai_preset_name ?? null,
         custom_endpoint_url: tomoriState.config.custom_endpoint_url ?? null,
@@ -261,10 +220,7 @@ export async function execute(
         llm_min_p: tomoriState.config.llm_min_p,
         llm_logit_biases: tomoriState.config.llm_logit_biases ?? [],
         channel_llm_overrides: currentChannelOverrides
-          .filter(
-            (o): o is typeof o & { llm: { llm_id: number } } =>
-              o.llm.llm_id != null,
-          )
+          .filter((o): o is typeof o & { llm: { llm_id: number } } => o.llm.llm_id != null)
           .map((o) => ({
             channel_disc_id: o.channelDiscId,
             llm_id: o.llm.llm_id,
@@ -272,27 +228,19 @@ export async function execute(
         persona_llm_overrides: currentPersonaOverrides,
       };
 
-      const saved = await upsertSavedProviderConfig(
-        tomoriState.server_id,
-        currentConfig,
-      );
+      const saved = await upsertSavedProviderConfig(tomoriState.server_id, currentConfig);
       if (saved) {
         log.info(
           `Saved current provider config for ${currentProvider} (with ${currentChannelOverrides.length} channel + ${currentPersonaOverrides.length} persona overrides) before switching to ${normalizedProvider}`,
         );
       } else {
-        log.warn(
-          `Failed to save current provider config for ${currentProvider} — continuing with switch`,
-        );
+        log.warn(`Failed to save current provider config for ${currentProvider} — continuing with switch`);
       }
     }
 
     // 9. Resolve new config: check for saved config for target provider
     // Use already-loaded savedConfigs array instead of a second DB query
-    const savedConfig =
-      savedConfigs.find(
-        (c) => c.provider.toLowerCase() === normalizedProvider,
-      ) ?? null;
+    const savedConfig = savedConfigs.find((c) => c.provider.toLowerCase() === normalizedProvider) ?? null;
     const hasApiKeyInput = apiKeyInput !== null && apiKeyInput.length > 0;
     const isRestoringFromSaved = savedConfig !== null && !hasApiKeyInput;
 
@@ -324,8 +272,7 @@ export async function execute(
       if (!savedConfig.api_key) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.provider.switch.first_time_no_key_title",
-          descriptionKey:
-            "commands.config.provider.switch.first_time_no_key_description",
+          descriptionKey: "commands.config.provider.switch.first_time_no_key_description",
           descriptionVars: {
             provider: getProviderDisplayName(normalizedProvider),
           },
@@ -334,9 +281,7 @@ export async function execute(
         return;
       }
 
-      log.info(
-        `Restoring saved config for provider ${normalizedProvider}, server ${tomoriState.server_id}`,
-      );
+      log.info(`Restoring saved config for provider ${normalizedProvider}, server ${tomoriState.server_id}`);
 
       encrypted = savedConfig.api_key;
       version = savedConfig.key_version;
@@ -355,17 +300,14 @@ export async function execute(
         if (!customEndpointUrl) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.custom.endpoint_url_invalid_title",
-            descriptionKey:
-              "commands.config.custom.endpoint_url_invalid_description",
+            descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
             color: ColorCode.ERROR,
           });
           return;
         }
-        const savedUrlValidation =
-          await validateRemoteMcpUrl(customEndpointUrl);
+        const savedUrlValidation = await validateRemoteMcpUrl(customEndpointUrl);
         if (!savedUrlValidation.valid) {
-          const validationMessage =
-            getCustomEndpointValidationMessage(savedUrlValidation);
+          const validationMessage = getCustomEndpointValidationMessage(savedUrlValidation);
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.custom.endpoint_url_invalid_title",
             descriptionKey: validationMessage.descriptionKey,
@@ -385,32 +327,20 @@ export async function execute(
             `Saved custom provider config for server ${tomoriState.server_id} is missing llm_id; prompting capabilities to rebuild custom model entry`,
           );
 
-          customCapabilitiesResult = await promptCustomCapabilities(
-            modalSubmitInteraction,
-            locale,
-            serverId,
-          );
+          customCapabilitiesResult = await promptCustomCapabilities(modalSubmitInteraction, locale, serverId);
 
-          if (
-            !customCapabilitiesResult.success ||
-            !customCapabilitiesResult.llmId
-          ) {
+          if (!customCapabilitiesResult.success || !customCapabilitiesResult.llmId) {
             await replyInfoEmbed(modalSubmitInteraction, locale, {
               titleKey: "general.errors.operation_failed_title",
               description:
-                customCapabilitiesResult.error ||
-                localizer(
-                  locale,
-                  "commands.config.custom.capabilities_timeout",
-                ),
+                customCapabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
               color: ColorCode.ERROR,
             });
             return;
           }
 
           newLlmId = customCapabilitiesResult.llmId;
-          customModelName =
-            customCapabilitiesResult.modelName || customModelName;
+          customModelName = customCapabilitiesResult.modelName || customModelName;
         }
 
         newDiffusionModelId = null;
@@ -434,8 +364,7 @@ export async function execute(
         // First-time custom with no URL
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.provider.switch.first_time_no_key_title",
-          descriptionKey:
-            "commands.config.provider.switch.first_time_no_key_description",
+          descriptionKey: "commands.config.provider.switch.first_time_no_key_description",
           descriptionVars: {
             provider: getProviderDisplayName(normalizedProvider),
           },
@@ -445,19 +374,14 @@ export async function execute(
       }
 
       // Use the provided endpoint URL, or fall back to saved one
-      const endpointUrl = hasApiKeyInput
-        ? apiKeyInput
-        : savedConfig?.custom_endpoint_url;
+      const endpointUrl = hasApiKeyInput ? apiKeyInput : savedConfig?.custom_endpoint_url;
 
-      const endpointUrlValidation = await validateRemoteMcpUrl(
-        endpointUrl ?? "",
-      );
+      const endpointUrlValidation = await validateRemoteMcpUrl(endpointUrl ?? "");
       if (!endpointUrl || !endpointUrlValidation.valid) {
         const validationMessage = endpointUrl
           ? getCustomEndpointValidationMessage(endpointUrlValidation)
           : {
-              descriptionKey:
-                "commands.config.custom.endpoint_url_invalid_description",
+              descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
             };
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.custom.endpoint_url_invalid_title",
@@ -471,18 +395,13 @@ export async function execute(
       customEndpointUrl = endpointUrl;
 
       // Show capabilities modal for custom model configuration
-      customCapabilitiesResult = await promptCustomCapabilities(
-        modalSubmitInteraction,
-        locale,
-        serverId,
-      );
+      customCapabilitiesResult = await promptCustomCapabilities(modalSubmitInteraction, locale, serverId);
 
       if (!customCapabilitiesResult.success) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.operation_failed_title",
           description:
-            customCapabilitiesResult.error ||
-            localizer(locale, "commands.config.custom.capabilities_timeout"),
+            customCapabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
           color: ColorCode.ERROR,
         });
         return;
@@ -491,9 +410,7 @@ export async function execute(
       customModelName = customCapabilitiesResult.modelName || null;
 
       // Use placeholder API key for custom provider
-      const placeholderResult = await encryptApiKey(
-        CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
-      );
+      const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
       encrypted = placeholderResult.encrypted;
       version = placeholderResult.version;
 
@@ -512,8 +429,7 @@ export async function execute(
         // First-time provider with no key
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.provider.switch.first_time_no_key_title",
-          descriptionKey:
-            "commands.config.provider.switch.first_time_no_key_description",
+          descriptionKey: "commands.config.provider.switch.first_time_no_key_description",
           descriptionVars: {
             provider: getProviderDisplayName(normalizedProvider),
           },
@@ -530,8 +446,7 @@ export async function execute(
         if (apiKeyToUse.length < 10) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.apikey.set.invalid_key_title",
-            descriptionKey:
-              "commands.config.apikey.set.invalid_key_description",
+            descriptionKey: "commands.config.apikey.set.invalid_key_description",
             color: ColorCode.ERROR,
           });
           return;
@@ -541,35 +456,26 @@ export async function execute(
         let validationResult: { valid: boolean; error?: ProviderError } = {
           valid: false,
         };
-        let providerInstance:
-          | Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>
-          | undefined;
+        let providerInstance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>> | undefined;
 
         try {
-          providerInstance =
-            await ProviderFactory.getProviderByName(normalizedProvider);
+          providerInstance = await ProviderFactory.getProviderByName(normalizedProvider);
           validationResult = await providerInstance.validateApiKey(apiKeyToUse);
         } catch (error) {
-          log.error(
-            `Error validating API key for provider ${normalizedProvider}`,
-            error as Error,
-          );
+          log.error(`Error validating API key for provider ${normalizedProvider}`, error as Error);
 
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
           if (errorMessage.includes("Unsupported provider")) {
             await replyInfoEmbed(modalSubmitInteraction, locale, {
               titleKey: "commands.config.apikey.set.unsupported_provider_title",
-              descriptionKey:
-                "commands.config.apikey.set.unsupported_provider_description",
+              descriptionKey: "commands.config.apikey.set.unsupported_provider_description",
               descriptionVars: { provider: selectedProvider },
               color: ColorCode.ERROR,
             });
           } else {
             await replyInfoEmbed(modalSubmitInteraction, locale, {
               titleKey: "commands.config.apikey.set.validation_error_title",
-              descriptionKey:
-                "commands.config.apikey.set.validation_error_description",
+              descriptionKey: "commands.config.apikey.set.validation_error_description",
               color: ColorCode.ERROR,
             });
           }
@@ -581,10 +487,7 @@ export async function execute(
           if (validationResult.error) {
             try {
               if (providerInstance) {
-                const formattedError = providerInstance.formatErrorDescription(
-                  validationResult.error,
-                  locale,
-                );
+                const formattedError = providerInstance.formatErrorDescription(validationResult.error, locale);
                 if (formattedError) {
                   errorDescription = formattedError;
                 }
@@ -612,10 +515,7 @@ export async function execute(
               "../../../utils/cache/novelaiSubscriptionCache"
             );
             refreshNAISub(guildIdForSubscription, apiKeyToUse).catch((err) => {
-              log.warn(
-                "Non-critical: failed to warm NovelAI subscription cache during provider switch",
-                err,
-              );
+              log.warn("Non-critical: failed to warm NovelAI subscription cache during provider switch", err);
             });
           }
         }
@@ -630,8 +530,7 @@ export async function execute(
         if (!savedConfig?.api_key) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.provider.switch.first_time_no_key_title",
-            descriptionKey:
-              "commands.config.provider.switch.first_time_no_key_description",
+            descriptionKey: "commands.config.provider.switch.first_time_no_key_description",
             descriptionVars: {
               provider: getProviderDisplayName(normalizedProvider),
             },
@@ -665,13 +564,11 @@ export async function execute(
         newLogitBiasEntries = savedConfig.llm_logit_biases ?? [];
       } else {
         // Fresh provider switch — load default models
-        const defaultModel =
-          await loadDefaultModelForProvider(normalizedProvider);
+        const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
         if (!defaultModel || !defaultModel.llm_id) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.apikey.set.no_default_model_title",
-            descriptionKey:
-              "commands.config.apikey.set.no_default_model_description",
+            descriptionKey: "commands.config.apikey.set.no_default_model_description",
             descriptionVars: {
               provider: getProviderDisplayName(normalizedProvider),
             },
@@ -708,9 +605,7 @@ export async function execute(
 						`
           )[0];
 
-          newDiffusionModelId = fallbackDiffusionModel
-            ? fallbackDiffusionModel.diffusion_model_id
-            : null;
+          newDiffusionModelId = fallbackDiffusionModel ? fallbackDiffusionModel.diffusion_model_id : null;
         } else {
           newDiffusionModelId = defaultDiffusionModel.diffusion_model_id;
         }
@@ -738,9 +633,7 @@ export async function execute(
 						`
           )[0];
 
-          newEmbeddingModelId = fallbackEmbeddingModel
-            ? fallbackEmbeddingModel.embedding_model_id
-            : null;
+          newEmbeddingModelId = fallbackEmbeddingModel ? fallbackEmbeddingModel.embedding_model_id : null;
         } else {
           newEmbeddingModelId = defaultEmbeddingModel.embedding_model_id;
         }
@@ -753,14 +646,8 @@ export async function execute(
     }
 
     // 11. Apply config to database
-    const targetLlm =
-      newLlmId === tomoriState.config.llm_id
-        ? tomoriState.llm
-        : await loadLlmById(newLlmId);
-    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(
-      newLogitBiasEntries,
-      targetLlm,
-    );
+    const targetLlm = newLlmId === tomoriState.config.llm_id ? tomoriState.llm : await loadLlmById(newLlmId);
+    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(newLogitBiasEntries, targetLlm);
     const newLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
@@ -798,9 +685,7 @@ export async function execute(
         metadata: {
           command: "config provider switch",
           selectedProvider,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -822,11 +707,7 @@ export async function execute(
     // 14. NovelAI auto-disable: when switching TO NovelAI for the first time
     // (not restoring a saved config), flip emoji and sticker usage off.
     // Runs BEFORE cache invalidation so a single invalidation covers both writes.
-    if (
-      !isSameProvider &&
-      normalizedProvider === "novelai" &&
-      !isRestoringFromSaved
-    ) {
+    if (!isSameProvider && normalizedProvider === "novelai" && !isRestoringFromSaved) {
       try {
         await sql`
 					UPDATE tomori_configs
@@ -834,13 +715,9 @@ export async function execute(
 					    sticker_usage_enabled = false
 					WHERE server_id = ${tomoriState.server_id}
 				`;
-        log.info(
-          `Auto-disabled emoji/sticker usage after switching to NovelAI for server ${tomoriState.server_id}`,
-        );
+        log.info(`Auto-disabled emoji/sticker usage after switching to NovelAI for server ${tomoriState.server_id}`);
       } catch (disableError) {
-        log.warn(
-          `Failed to auto-disable emoji/sticker for NovelAI switch: ${disableError}`,
-        );
+        log.warn(`Failed to auto-disable emoji/sticker for NovelAI switch: ${disableError}`);
       }
     }
 
@@ -869,10 +746,7 @@ export async function execute(
       const savedChannelOverrides = savedConfig?.channel_llm_overrides ?? [];
       const savedPersonaOverrides = savedConfig?.persona_llm_overrides ?? [];
 
-      if (
-        savedChannelOverrides.length > 0 ||
-        savedPersonaOverrides.length > 0
-      ) {
+      if (savedChannelOverrides.length > 0 || savedPersonaOverrides.length > 0) {
         restoreResult = await restoreOverridesFromSnapshot(
           tomoriState.server_id,
           savedChannelOverrides,
@@ -886,12 +760,8 @@ export async function execute(
       }
     } else if (!isSameProvider) {
       // Fresh switch (no saved config) — clear all overrides
-      const channelCleared = await clearAllChannelLlmOverridesForServer(
-        tomoriState.server_id,
-      );
-      const personaCleared = await clearAllPersonaLlmOverridesForServer(
-        tomoriState.server_id,
-      );
+      const channelCleared = await clearAllChannelLlmOverridesForServer(tomoriState.server_id);
+      const personaCleared = await clearAllPersonaLlmOverridesForServer(tomoriState.server_id);
       log.info(
         `Provider switch ${currentProvider}→${normalizedProvider}: ` +
           `channel overrides cleared=${channelCleared}, persona overrides cleared=${personaCleared}`,
@@ -901,14 +771,9 @@ export async function execute(
     // 14.1.1. Dead override cleanup: remove channel overrides for deleted channels
     // Runs on every switch (including same-provider) as a lightweight maintenance pass
     if (interaction.guild && validChannelIds.size > 0) {
-      const deadCleaned = await cleanupDeadChannelOverrides(
-        tomoriState.server_id,
-        validChannelIds,
-      );
+      const deadCleaned = await cleanupDeadChannelOverrides(tomoriState.server_id, validChannelIds);
       if (deadCleaned > 0) {
-        log.info(
-          `Cleaned up ${deadCleaned} dead channel override(s) during provider switch`,
-        );
+        log.info(`Cleaned up ${deadCleaned} dead channel override(s) during provider switch`);
       }
     }
 
@@ -920,9 +785,7 @@ export async function execute(
 
     // 14.3. Success message — always look up the active model by ID to handle
     // all cases correctly (same provider key update, restored config, fresh switch)
-    const modelNameRow = (
-      await sql`SELECT llm_codename FROM llms WHERE llm_id = ${newLlmId} LIMIT 1`
-    )[0];
+    const modelNameRow = (await sql`SELECT llm_codename FROM llms WHERE llm_id = ${newLlmId} LIMIT 1`)[0];
     const modelName =
       isCustomProvider(normalizedProvider) && customModelName?.trim()
         ? customModelName.trim()
@@ -952,30 +815,19 @@ export async function execute(
       };
 
       // Chat Model
-      trackConfig(
-        !!savedConfig.llm_id,
-        localizer(locale, `${keyBase}.config_label_chat_model`),
-      );
+      trackConfig(!!savedConfig.llm_id, localizer(locale, `${keyBase}.config_label_chat_model`));
 
       // Vision Model
-      trackConfig(
-        !!savedConfig.vision_llm_id,
-        localizer(locale, `${keyBase}.config_label_vision_model`),
-      );
+      trackConfig(!!savedConfig.vision_llm_id, localizer(locale, `${keyBase}.config_label_vision_model`));
 
       // Image Model (standard diffusion or NAI diffusion)
       trackConfig(
-        !!(
-          savedConfig.diffusion_model_id || savedConfig.nai_diffusion_model_id
-        ),
+        !!(savedConfig.diffusion_model_id || savedConfig.nai_diffusion_model_id),
         localizer(locale, `${keyBase}.config_label_image_model`),
       );
 
       // Embedding Model
-      trackConfig(
-        !!savedConfig.embedding_model_id,
-        localizer(locale, `${keyBase}.config_label_embedding_model`),
-      );
+      trackConfig(!!savedConfig.embedding_model_id, localizer(locale, `${keyBase}.config_label_embedding_model`));
 
       // Sampler Settings — group all sampler fields as one category
       const hasSamplers = [
@@ -986,10 +838,7 @@ export async function execute(
         savedConfig.llm_presence_penalty,
         savedConfig.llm_min_p,
       ].some((v) => v != null);
-      trackConfig(
-        hasSamplers,
-        localizer(locale, `${keyBase}.config_label_sampler_settings`),
-      );
+      trackConfig(hasSamplers, localizer(locale, `${keyBase}.config_label_sampler_settings`));
 
       // Fallback Models (with count)
       const fallbackCount = savedConfig.fallback_llm_ids?.length ?? 0;
@@ -1000,9 +849,7 @@ export async function execute(
           }),
         );
       } else {
-        noRestoreItems.push(
-          localizer(locale, `${keyBase}.config_label_fallback_models_none`),
-        );
+        noRestoreItems.push(localizer(locale, `${keyBase}.config_label_fallback_models_none`));
       }
 
       // Channel Overrides (use actual restore counts if available)
@@ -1014,9 +861,7 @@ export async function execute(
           }),
         );
       } else {
-        noRestoreItems.push(
-          localizer(locale, `${keyBase}.config_label_channel_overrides_none`),
-        );
+        noRestoreItems.push(localizer(locale, `${keyBase}.config_label_channel_overrides_none`));
       }
 
       // Persona Overrides (use actual restore counts if available)
@@ -1028,16 +873,11 @@ export async function execute(
           }),
         );
       } else {
-        noRestoreItems.push(
-          localizer(locale, `${keyBase}.config_label_persona_overrides_none`),
-        );
+        noRestoreItems.push(localizer(locale, `${keyBase}.config_label_persona_overrides_none`));
       }
 
       // Custom Endpoint (only relevant for custom providers)
-      trackConfig(
-        !!savedConfig.custom_endpoint_url,
-        localizer(locale, `${keyBase}.config_label_custom_endpoint`),
-      );
+      trackConfig(!!savedConfig.custom_endpoint_url, localizer(locale, `${keyBase}.config_label_custom_endpoint`));
 
       // Build the details string — each section separated by a blank line
       let restoredDetails = "";
@@ -1060,26 +900,18 @@ export async function execute(
     }
 
     let successDescriptionKey: string;
-    if (
-      !isSameProvider &&
-      normalizedProvider === "novelai" &&
-      !isRestoringFromSaved
-    ) {
-      successDescriptionKey =
-        "commands.config.provider.switch.success_novelai_description";
+    if (!isSameProvider && normalizedProvider === "novelai" && !isRestoringFromSaved) {
+      successDescriptionKey = "commands.config.provider.switch.success_novelai_description";
     } else if (
       !isSameProvider &&
       (normalizedProvider === "zai" || normalizedProvider === "zaicoding") &&
       !isRestoringFromSaved
     ) {
-      successDescriptionKey =
-        "commands.config.provider.switch.success_zai_description";
+      successDescriptionKey = "commands.config.provider.switch.success_zai_description";
     } else if (isRestoringFromSaved) {
-      successDescriptionKey =
-        "commands.config.provider.switch.success_restored_description";
+      successDescriptionKey = "commands.config.provider.switch.success_restored_description";
     } else {
-      successDescriptionKey =
-        "commands.config.provider.switch.success_description";
+      successDescriptionKey = "commands.config.provider.switch.success_description";
     }
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {

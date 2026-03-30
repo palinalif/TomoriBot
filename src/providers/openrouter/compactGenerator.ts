@@ -12,18 +12,13 @@ export type {
   ProviderCompactSummaryRequest as CompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 
-type OpenrouterContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+type OpenrouterContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 type OpenrouterMessage =
   | { role: "system"; content: string }
   | { role: "user"; content: string | OpenrouterContentPart[] };
 
-function buildUserContent(
-  userPrompt: string,
-  images?: Array<{ url: string }>,
-): string | OpenrouterContentPart[] {
+function buildUserContent(userPrompt: string, images?: Array<{ url: string }>): string | OpenrouterContentPart[] {
   if (!images || images.length === 0) {
     return userPrompt;
   }
@@ -66,32 +61,25 @@ export async function generateConversationSummaryOpenrouter(
       plugins: [{ id: "response-healing" }],
     };
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "OpenRouter compact summary request failed",
-        new Error(errorBody),
-        {
-          errorType: "OpenrouterCompactHttpError",
-          metadata: {
-            model: request.model,
-            status: response.status,
-            errorBody,
-          },
+      log.error("OpenRouter compact summary request failed", new Error(errorBody), {
+        errorType: "OpenrouterCompactHttpError",
+        metadata: {
+          model: request.model,
+          status: response.status,
+          errorBody,
         },
-      );
+      });
       return {
         error: `OpenRouter request failed (${response.status}): ${response.statusText}`,
       };
@@ -130,8 +118,7 @@ export async function generateConversationSummaryOpenrouter(
   } catch (error) {
     log.error("OpenRouter compact summary failed", error as Error);
     return {
-      error:
-        error instanceof Error ? error.message : "Unknown OpenRouter error",
+      error: error instanceof Error ? error.message : "Unknown OpenRouter error",
     };
   }
 }
@@ -172,32 +159,25 @@ export async function generateRoleplaySummaryOpenrouter(
       plugins: [{ id: "response-healing" }],
     };
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "OpenRouter roleplay summary request failed",
-        new Error(errorBody),
-        {
-          errorType: "OpenrouterRoleplaySummaryHttpError",
-          metadata: {
-            model: request.model,
-            status: response.status,
-            errorBody,
-          },
+      log.error("OpenRouter roleplay summary request failed", new Error(errorBody), {
+        errorType: "OpenrouterRoleplaySummaryHttpError",
+        metadata: {
+          model: request.model,
+          status: response.status,
+          errorBody,
         },
-      );
+      });
       return {
         error: `OpenRouter request failed (${response.status}): ${response.statusText}`,
       };
@@ -237,18 +217,11 @@ export async function generateRoleplaySummaryOpenrouter(
       parsed = JSON.parse(responseText) as CompactRoleplaySummary;
     } catch (parseError) {
       return {
-        error:
-          parseError instanceof Error
-            ? parseError.message
-            : "Invalid JSON response from OpenRouter",
+        error: parseError instanceof Error ? parseError.message : "Invalid JSON response from OpenRouter",
       };
     }
 
-    if (
-      !parsed ||
-      typeof parsed.overall_scene_summary !== "string" ||
-      !Array.isArray(parsed.characters)
-    ) {
+    if (!parsed || typeof parsed.overall_scene_summary !== "string" || !Array.isArray(parsed.characters)) {
       return { error: "Invalid roleplay summary format from OpenRouter" };
     }
 
@@ -256,8 +229,7 @@ export async function generateRoleplaySummaryOpenrouter(
   } catch (error) {
     log.error("OpenRouter roleplay summary failed", error as Error);
     return {
-      error:
-        error instanceof Error ? error.message : "Unknown OpenRouter error",
+      error: error instanceof Error ? error.message : "Unknown OpenRouter error",
     };
   }
 }

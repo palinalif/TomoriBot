@@ -4,19 +4,10 @@
  * Provides direct HTTP replacements for MCP-based Brave Search functions
  */
 
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-} from "../../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult } from "../../../types/tool/interfaces";
 import { log } from "../../../utils/misc/logger";
 import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
-import {
-  brave_web_search,
-  brave_image_search,
-  brave_video_search,
-  brave_news_search,
-} from "./toolImplementations";
+import { brave_web_search, brave_image_search, brave_video_search, brave_news_search } from "./toolImplementations";
 
 // =============================================
 // Base Brave Search Tool Class
@@ -108,17 +99,13 @@ export class BraveWebSearchTool extends BaseBraveSearchTool {
       },
       freshness: {
         type: "string" as const,
-        description:
-          "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
+        description: "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
       },
     },
     required: ["query"],
   };
 
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     try {
       // Check if web search is enabled for this server
       if (!this.isEnabled(context)) {
@@ -206,10 +193,7 @@ export class BraveImageSearchTool extends BaseBraveSearchTool {
     required: ["query"],
   };
 
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     try {
       // Check if web search is enabled for this server
       if (!this.isEnabled(context)) {
@@ -299,17 +283,13 @@ export class BraveVideoSearchTool extends BaseBraveSearchTool {
       },
       freshness: {
         type: "string" as const,
-        description:
-          "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
+        description: "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
       },
     },
     required: ["query"],
   };
 
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     try {
       // Check if web search is enabled for this server
       if (!this.isEnabled(context)) {
@@ -399,17 +379,13 @@ export class BraveNewsSearchTool extends BaseBraveSearchTool {
       },
       freshness: {
         type: "string" as const,
-        description:
-          "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
+        description: "Filter by content freshness (pd=day, pw=week, pm=month, py=year)",
       },
     },
     required: ["query"],
   };
 
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     try {
       // Check if web search is enabled for this server
       if (!this.isEnabled(context)) {

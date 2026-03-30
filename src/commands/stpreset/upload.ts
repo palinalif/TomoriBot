@@ -69,18 +69,14 @@ interface RawSTPreset {
  * Accepts a required JSON file attachment containing a SillyTavern preset.
  * @param subcommand - The subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("upload")
     .setDescription(localizer("en-US", "commands.stpreset.upload.description"))
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(
-          localizer("en-US", "commands.stpreset.upload.file_description"),
-        )
+        .setDescription(localizer("en-US", "commands.stpreset.upload.file_description"))
         .setRequired(true),
     );
 
@@ -128,9 +124,7 @@ function isCommentOnly(content: string): boolean {
  */
 function derivePresetName(filename: string): string {
   const name = filename.replace(/\.json$/i, "").trim();
-  return name.length > MAX_PRESET_NAME_LENGTH
-    ? name.slice(0, MAX_PRESET_NAME_LENGTH)
-    : name;
+  return name.length > MAX_PRESET_NAME_LENGTH ? name.slice(0, MAX_PRESET_NAME_LENGTH) : name;
 }
 
 // ─── Preset Parsing ──────────────────────────────────────────────────
@@ -342,12 +336,7 @@ export async function execute(
     const presetName = derivePresetName(attachment.name ?? "Unnamed Preset");
 
     // 10. Insert into database
-    const preset = await insertPresetWithNodes(
-      tomoriState.server_id,
-      presetName,
-      rawPreset,
-      nodes,
-    );
+    const preset = await insertPresetWithNodes(tomoriState.server_id, presetName, rawPreset, nodes);
 
     if (!preset) {
       await interaction.editReply({
@@ -364,9 +353,7 @@ export async function execute(
     // 12. Count node types for the summary
     const markerCount = nodes.filter((n) => n.is_marker).length;
     const toggleableCount = nodes.filter((n) => !n.is_marker).length;
-    const enabledCount = nodes.filter(
-      (n) => n.is_enabled && !n.is_marker,
-    ).length;
+    const enabledCount = nodes.filter((n) => n.is_enabled && !n.is_marker).length;
 
     // 13. Build filtering notes for the success embed
     const filterNotes: string[] = [];
@@ -412,11 +399,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "stpreset upload" },
     };
-    await log.error(
-      "Error executing /stpreset upload",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /stpreset upload", error as Error, context);
 
     await interaction.editReply({
       content: localizer(locale, "general.errors.unknown_error_description"),

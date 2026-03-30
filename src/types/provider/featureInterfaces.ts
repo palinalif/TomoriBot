@@ -29,9 +29,7 @@ export interface ProviderImageInput {
   mimeType?: string;
 }
 
-export type StructuredOutputResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string };
+export type StructuredOutputResult<T> = { success: true; data: T } | { success: false; error: string };
 
 export interface ProviderStructuredJsonRequest {
   apiKey: string;
@@ -151,30 +149,20 @@ export interface SupportsStructuredOutput {
 }
 
 export interface SupportsPresetGeneration {
-  generatePreset(
-    request: ProviderPresetGenerationRequest,
-  ): Promise<PresetGenerationResult>;
+  generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult>;
 }
 
 export interface SupportsConversationCompaction {
-  generateConversationSummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactConversationResult>;
-  generateRoleplaySummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactRoleplayResult>;
+  generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult>;
+  generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult>;
 }
 
 export interface SupportsLiveTokenCounting {
-  measureInputTokens(
-    request: ProviderLiveTokenCountRequest,
-  ): Promise<ProviderLiveTokenCountResult>;
+  measureInputTokens(request: ProviderLiveTokenCountRequest): Promise<ProviderLiveTokenCountResult>;
 }
 
 export interface SupportsNativeImageGeneration {
-  generateNativeImage(
-    request: ProviderNativeImageGenerationRequest,
-  ): Promise<ProviderNativeImageGenerationResult>;
+  generateNativeImage(request: ProviderNativeImageGenerationRequest): Promise<ProviderNativeImageGenerationResult>;
 }
 
 export interface ProviderCapabilityMap {

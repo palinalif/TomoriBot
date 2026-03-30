@@ -24,21 +24,12 @@ import {
   type Part,
   type ThinkingConfig,
 } from "@google/genai";
-import type {
-  FunctionCall,
-  ThoughtLogEntry,
-} from "../../types/provider/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "../../types/misc/context";
+import type { FunctionCall, ThoughtLogEntry } from "../../types/provider/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
-import {
-  buildPersonaSpeakerStopString,
-  mergeStopStrings,
-} from "../utils/stopStrings";
+import { buildPersonaSpeakerStopString, mergeStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -48,11 +39,7 @@ import type {
   StreamProvider,
 } from "../../types/stream/interfaces";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
-import {
-  parseVertexCompositeKey,
-  createVertexClient,
-  type VertexConfig,
-} from "./vertexClient";
+import { parseVertexCompositeKey, createVertexClient, type VertexConfig } from "./vertexClient";
 
 /**
  * Vertex-specific stream configuration extending the base StreamConfig
@@ -121,16 +108,13 @@ export class VertexStreamAdapter implements StreamProvider {
     systemInstruction?: string;
     contents: Content[];
   }> {
-    const { systemInstruction, dialogueContents } =
-      await this.assembleVertexContext(contextItems, [], undefined);
+    const { systemInstruction, dialogueContents } = await this.assembleVertexContext(contextItems, [], undefined);
 
     const contents = [...dialogueContents];
     let finalSystemInstruction = systemInstruction;
 
     if (systemInstruction && !this.supportsDeveloperInstruction(model)) {
-      contents.unshift(
-        this.createInBandSystemInstructionContent(systemInstruction),
-      );
+      contents.unshift(this.createInBandSystemInstructionContent(systemInstruction));
       finalSystemInstruction = undefined;
     }
 
@@ -143,10 +127,7 @@ export class VertexStreamAdapter implements StreamProvider {
   /**
    * Start streaming from Vertex AI
    */
-  async *startStream(
-    config: StreamConfig,
-    context: StreamContext,
-  ): AsyncGenerator<RawStreamChunk, void, unknown> {
+  async *startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown> {
     log.info("VertexStreamAdapter: Initializing Vertex AI streaming");
 
     // 1. Parse the composite key and create a Vertex client via ADC
@@ -175,25 +156,16 @@ export class VertexStreamAdapter implements StreamProvider {
     };
 
     // 3. Speaker guard setup (same as Google)
-    const personaSpeakerStop = buildPersonaSpeakerStopString(
-      context.tomoriState.tomori_nickname,
-    );
+    const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
     this.speakerGuardPendingTail = "";
     this.streamedTextTail = "";
     this.speakerGuardEnabled = Boolean(personaSpeakerStop);
-    this.activePersonaNameLower = (
-      context.tomoriState.tomori_nickname ?? ""
-    ).toLowerCase();
-    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
-      context.contextItems,
-    );
+    this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
+    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
     if (this.activePersonaNameLower) {
       this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
     }
-    const mergedStopSequences = mergeStopStrings(
-      requestConfig.stopSequences,
-      personaSpeakerStop,
-    );
+    const mergedStopSequences = mergeStopStrings(requestConfig.stopSequences, personaSpeakerStop);
     if (mergedStopSequences) {
       requestConfig.stopSequences = mergedStopSequences;
     }
@@ -205,17 +177,12 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     // 5. Assemble context (shared logic)
-    const payload = await this.buildTokenCountPayload(
-      context.contextItems,
-      config.model,
-    );
+    const payload = await this.buildTokenCountPayload(context.contextItems, config.model);
     const finalContents = [...payload.contents];
 
     if (payload.systemInstruction) {
       requestConfig.systemInstruction = payload.systemInstruction;
-      log.info(
-        `Assembled system instruction. Length: ${payload.systemInstruction.length}`,
-      );
+      log.info(`Assembled system instruction. Length: ${payload.systemInstruction.length}`);
     }
 
     // 6. Add tools if available
@@ -229,16 +196,11 @@ export class VertexStreamAdapter implements StreamProvider {
         role: "model",
         parts: context.currentTurnModelParts as Part[],
       });
-      log.info(
-        `Added ${context.currentTurnModelParts.length} accumulated model parts to API history.`,
-      );
+      log.info(`Added ${context.currentTurnModelParts.length} accumulated model parts to API history.`);
     }
 
     // 8. Add function interaction history
-    if (
-      context.functionInteractionHistory &&
-      context.functionInteractionHistory.length > 0
-    ) {
+    if (context.functionInteractionHistory && context.functionInteractionHistory.length > 0) {
       for (const item of context.functionInteractionHistory) {
         const functionCallPart: Part = {
           functionCall: {
@@ -247,8 +209,7 @@ export class VertexStreamAdapter implements StreamProvider {
           } as GoogleFunctionCall,
         };
         if (item.functionCall.thoughtSignature) {
-          functionCallPart.thoughtSignature =
-            item.functionCall.thoughtSignature;
+          functionCallPart.thoughtSignature = item.functionCall.thoughtSignature;
         }
 
         const modelParts: Part[] = [];
@@ -257,9 +218,7 @@ export class VertexStreamAdapter implements StreamProvider {
           for (const textPart of item.preToolCallTextParts) {
             modelParts.push(textPart as Part);
           }
-          log.info(
-            `Vertex: Including ${item.preToolCallTextParts.length} pre-tool-call text part(s) in model turn`,
-          );
+          log.info(`Vertex: Including ${item.preToolCallTextParts.length} pre-tool-call text part(s) in model turn`);
         }
 
         modelParts.push(functionCallPart);
@@ -274,16 +233,11 @@ export class VertexStreamAdapter implements StreamProvider {
 
         // Add image parts if present
         if (item.imageMetadata?.imageUrls) {
-          log.info(
-            `Adding ${item.imageMetadata.imageUrls.length} image(s) to function response for LLM visibility`,
-          );
+          log.info(`Adding ${item.imageMetadata.imageUrls.length} image(s) to function response for LLM visibility`);
 
           for (const imageInfo of item.imageMetadata.imageUrls) {
             try {
-              const optimized = await fetchAndOptimizeImage(
-                imageInfo.url,
-                imageInfo.mimeType || "image/jpeg",
-              );
+              const optimized = await fetchAndOptimizeImage(imageInfo.url, imageInfo.mimeType || "image/jpeg");
 
               responseParts.push({
                 inlineData: {
@@ -292,26 +246,17 @@ export class VertexStreamAdapter implements StreamProvider {
                 },
               });
 
-              log.success(
-                `Successfully added image to function response: ${imageInfo.url}`,
-              );
+              log.success(`Successfully added image to function response: ${imageInfo.url}`);
             } catch (imgErr) {
-              log.warn(
-                `Error processing image for function response: ${imageInfo.url}`,
-                {
-                  error:
-                    imgErr instanceof Error ? imgErr.message : String(imgErr),
-                },
-              );
+              log.warn(`Error processing image for function response: ${imageInfo.url}`, {
+                error: imgErr instanceof Error ? imgErr.message : String(imgErr),
+              });
             }
           }
         }
 
         // Surface Discord message IDs for image references
-        if (
-          item.imageMetadata?.messageIds &&
-          item.imageMetadata.messageIds.length > 0
-        ) {
+        if (item.imageMetadata?.messageIds && item.imageMetadata.messageIds.length > 0) {
           responseParts.push({
             text: `[System: Images were sent to Discord in message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`,
           });
@@ -326,9 +271,7 @@ export class VertexStreamAdapter implements StreamProvider {
 
     // 9. Ensure model is provided
     if (!config.model) {
-      throw new Error(
-        "Model must be specified in config. Use VertexProvider.getDefaultModel() if needed.",
-      );
+      throw new Error("Model must be specified in config. Use VertexProvider.getDefaultModel() if needed.");
     }
 
     log.info(`Generating content with Vertex AI model ${config.model}`);
@@ -347,20 +290,13 @@ export class VertexStreamAdapter implements StreamProvider {
       // 12. Yield each chunk (same normalisation pipeline as Google)
       for await (const chunkResponse of stream) {
         const normalizedChunk = this.normalizeVertexStreamChunk(chunkResponse);
-        const chunksToEmit =
-          this.splitChunkWithTextAndFunctionCalls(normalizedChunk);
+        const chunksToEmit = this.splitChunkWithTextAndFunctionCalls(normalizedChunk);
 
         for (const chunkToEmit of chunksToEmit) {
-          const deduplicatedChunk =
-            this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
-          const guardResult =
-            this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
+          const deduplicatedChunk = this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
+          const guardResult = this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
 
-          if (
-            this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-              guardResult.chunk,
-            )
-          ) {
+          if (this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(guardResult.chunk)) {
             const tailText = this.consumeSpeakerGuardPendingTail();
             if (tailText) {
               yield {
@@ -447,9 +383,7 @@ export class VertexStreamAdapter implements StreamProvider {
     return tail;
   }
 
-  private deduplicateChunkTextAgainstRecentStream(
-    chunk: VertexStreamChunk,
-  ): VertexStreamChunk {
+  private deduplicateChunkTextAgainstRecentStream(chunk: VertexStreamChunk): VertexStreamChunk {
     if (!chunk.text) {
       return chunk;
     }
@@ -473,11 +407,7 @@ export class VertexStreamAdapter implements StreamProvider {
   }
 
   private getTextDelta(chunkText: string): string {
-    if (
-      !chunkText ||
-      chunkText.length < VertexStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS ||
-      !this.streamedTextTail
-    ) {
+    if (!chunkText || chunkText.length < VertexStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS || !this.streamedTextTail) {
       return chunkText;
     }
 
@@ -487,15 +417,8 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     const maxOverlap = Math.min(seenTail.length, chunkText.length);
-    for (
-      let overlap = maxOverlap;
-      overlap >= VertexStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS;
-      overlap--
-    ) {
-      if (
-        seenTail.slice(seenTail.length - overlap) ===
-        chunkText.slice(0, overlap)
-      ) {
+    for (let overlap = maxOverlap; overlap >= VertexStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS; overlap--) {
+      if (seenTail.slice(seenTail.length - overlap) === chunkText.slice(0, overlap)) {
         return chunkText.slice(overlap);
       }
     }
@@ -509,12 +432,8 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     this.streamedTextTail += text;
-    if (
-      this.streamedTextTail.length > VertexStreamAdapter.STREAM_TEXT_TAIL_CHARS
-    ) {
-      this.streamedTextTail = this.streamedTextTail.slice(
-        -VertexStreamAdapter.STREAM_TEXT_TAIL_CHARS,
-      );
+    if (this.streamedTextTail.length > VertexStreamAdapter.STREAM_TEXT_TAIL_CHARS) {
+      this.streamedTextTail = this.streamedTextTail.slice(-VertexStreamAdapter.STREAM_TEXT_TAIL_CHARS);
     }
   }
 
@@ -551,9 +470,7 @@ export class VertexStreamAdapter implements StreamProvider {
       .join("");
   }
 
-  private extractFunctionCallsFromParts(
-    parts: unknown[],
-  ): GoogleFunctionCall[] {
+  private extractFunctionCallsFromParts(parts: unknown[]): GoogleFunctionCall[] {
     const extracted: GoogleFunctionCall[] = [];
 
     for (const part of parts) {
@@ -572,9 +489,7 @@ export class VertexStreamAdapter implements StreamProvider {
     return extracted;
   }
 
-  private extractTopLevelFunctionCalls(
-    chunk: VertexStreamChunk,
-  ): GoogleFunctionCall[] {
+  private extractTopLevelFunctionCalls(chunk: VertexStreamChunk): GoogleFunctionCall[] {
     const extracted: GoogleFunctionCall[] = [];
     const chunkObj = chunk as {
       functionCalls?: unknown;
@@ -603,9 +518,7 @@ export class VertexStreamAdapter implements StreamProvider {
     return extracted;
   }
 
-  private extractFunctionCallsFromChunk(
-    chunk: VertexStreamChunk,
-  ): GoogleFunctionCall[] {
+  private extractFunctionCallsFromChunk(chunk: VertexStreamChunk): GoogleFunctionCall[] {
     const topLevelCalls = this.extractTopLevelFunctionCalls(chunk);
     if (topLevelCalls.length > 0) {
       return topLevelCalls;
@@ -629,14 +542,8 @@ export class VertexStreamAdapter implements StreamProvider {
     return "";
   }
 
-  private splitChunkWithTextAndFunctionCalls(
-    chunk: VertexStreamChunk,
-  ): VertexStreamChunk[] {
-    if (
-      !chunk.text ||
-      !chunk.functionCalls ||
-      chunk.functionCalls.length === 0
-    ) {
+  private splitChunkWithTextAndFunctionCalls(chunk: VertexStreamChunk): VertexStreamChunk[] {
+    if (!chunk.text || !chunk.functionCalls || chunk.functionCalls.length === 0) {
       return [chunk];
     }
 
@@ -653,14 +560,8 @@ export class VertexStreamAdapter implements StreamProvider {
     ];
   }
 
-  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-    chunk: VertexStreamChunk,
-  ): boolean {
-    if (
-      !this.speakerGuardEnabled ||
-      this.speakerGuardPendingTail.length === 0 ||
-      Boolean(chunk.text)
-    ) {
+  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(chunk: VertexStreamChunk): boolean {
+    if (!this.speakerGuardEnabled || this.speakerGuardPendingTail.length === 0 || Boolean(chunk.text)) {
       return false;
     }
 
@@ -674,8 +575,7 @@ export class VertexStreamAdapter implements StreamProvider {
 
     if (
       chunk.promptFeedback?.blockReason &&
-      chunk.promptFeedback.blockReason !==
-        BlockedReason.BLOCKED_REASON_UNSPECIFIED
+      chunk.promptFeedback.blockReason !== BlockedReason.BLOCKED_REASON_UNSPECIFIED
     ) {
       return true;
     }
@@ -683,9 +583,7 @@ export class VertexStreamAdapter implements StreamProvider {
     return Boolean(chunk.candidates?.[0]?.finishReason);
   }
 
-  private collectKnownSpeakerNames(
-    contextItems: StructuredContextItem[],
-  ): Set<string> {
+  private collectKnownSpeakerNames(contextItems: StructuredContextItem[]): Set<string> {
     const names = new Set<string>();
 
     for (const item of contextItems) {
@@ -736,20 +634,12 @@ export class VertexStreamAdapter implements StreamProvider {
       if (!match) break;
 
       const rawLabel = match[1].trim();
-      if (
-        !isRegisteredOrReservedSpeakerLabel(
-          rawLabel,
-          this.knownSpeakerNamesLower,
-        )
-      ) {
+      if (!isRegisteredOrReservedSpeakerLabel(rawLabel, this.knownSpeakerNamesLower)) {
         continue;
       }
 
       const normalizedLabel = rawLabel.toLowerCase();
-      if (
-        this.activePersonaNameLower &&
-        normalizedLabel === this.activePersonaNameLower
-      ) {
+      if (this.activePersonaNameLower && normalizedLabel === this.activePersonaNameLower) {
         continue;
       }
 
@@ -784,10 +674,7 @@ export class VertexStreamAdapter implements StreamProvider {
     };
   }
 
-  private cloneChunkWithText(
-    chunk: VertexStreamChunk,
-    text: string,
-  ): VertexStreamChunk {
+  private cloneChunkWithText(chunk: VertexStreamChunk, text: string): VertexStreamChunk {
     return {
       text,
       functionCalls: chunk.functionCalls,
@@ -818,8 +705,7 @@ export class VertexStreamAdapter implements StreamProvider {
     // Check for content blocks from prompt feedback
     if (
       vertexChunk.promptFeedback?.blockReason &&
-      vertexChunk.promptFeedback.blockReason !==
-        BlockedReason.BLOCKED_REASON_UNSPECIFIED
+      vertexChunk.promptFeedback.blockReason !== BlockedReason.BLOCKED_REASON_UNSPECIFIED
     ) {
       const error: ProviderError = {
         type: "content_blocked",
@@ -834,10 +720,7 @@ export class VertexStreamAdapter implements StreamProvider {
 
     // Check for finish reason blocks
     const candidate = vertexChunk.candidates?.[0];
-    if (
-      candidate?.finishReason &&
-      this.isBlockingFinishReason(candidate.finishReason)
-    ) {
+    if (candidate?.finishReason && this.isBlockingFinishReason(candidate.finishReason)) {
       const error: ProviderError = {
         type: "content_blocked",
         message: `Response stopped/blocked. Reason: ${candidate.finishReason}`,
@@ -881,10 +764,7 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     // Check for text content
-    const textContent =
-      vertexChunk.text !== undefined
-        ? vertexChunk.text
-        : this.extractTextFromChunk(vertexChunk);
+    const textContent = vertexChunk.text !== undefined ? vertexChunk.text : this.extractTextFromChunk(vertexChunk);
     if (textContent) {
       return {
         type: "text",
@@ -966,10 +846,7 @@ export class VertexStreamAdapter implements StreamProvider {
           const parsedError = JSON.parse(jsonMatch[0]);
           googleApiError = parsedError.error || parsedError;
 
-          if (
-            googleApiError?.message &&
-            typeof googleApiError.message === "string"
-          ) {
+          if (googleApiError?.message && typeof googleApiError.message === "string") {
             try {
               const nestedError = JSON.parse(googleApiError.message);
               if (nestedError.error?.message) {
@@ -985,10 +862,7 @@ export class VertexStreamAdapter implements StreamProvider {
         }
       }
     } catch (parseError) {
-      log.warn(
-        "VertexStreamAdapter: Failed to parse API error structure",
-        parseError,
-      );
+      log.warn("VertexStreamAdapter: Failed to parse API error structure", parseError);
     }
 
     // Check for ADC / authentication errors (Vertex-specific)
@@ -1051,16 +925,10 @@ export class VertexStreamAdapter implements StreamProvider {
         ) {
           errorType = "rate_limit";
           retryable = true;
-        } else if (
-          errorMessage.includes("timeout") ||
-          errorMessage.includes("DEADLINE_EXCEEDED")
-        ) {
+        } else if (errorMessage.includes("timeout") || errorMessage.includes("DEADLINE_EXCEEDED")) {
           errorType = "timeout";
           retryable = true;
-        } else if (
-          errorMessage.includes("overloaded") ||
-          errorMessage.includes("UNAVAILABLE")
-        ) {
+        } else if (errorMessage.includes("overloaded") || errorMessage.includes("UNAVAILABLE")) {
           errorType = "provider_overloaded";
           retryable = true;
         } else if (
@@ -1140,18 +1008,14 @@ export class VertexStreamAdapter implements StreamProvider {
         if (messageKey === "unknown_default_message") {
           const maxErrorLength = 1000;
           const apiErrorSnippet =
-            error.message.length > maxErrorLength
-              ? `${error.message.substring(0, maxErrorLength)}...`
-              : error.message;
+            error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
           apiMessage += `\n\n**API Response:**\n${apiErrorSnippet}`;
         }
       } catch {
         apiMessage = localizer(locale, "genai.google.unknown_default_message");
         const maxErrorLength = 1000;
         const apiErrorSnippet =
-          error.message.length > maxErrorLength
-            ? `${error.message.substring(0, maxErrorLength)}...`
-            : error.message;
+          error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
         apiMessage += `\n\n**API Response:**\n${apiErrorSnippet}`;
       }
     }
@@ -1200,9 +1064,7 @@ export class VertexStreamAdapter implements StreamProvider {
         item.role === "system" ||
         (item.role === "user" &&
           item.metadataTag &&
-          VertexStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(
-            item.metadataTag,
-          ))
+          VertexStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(item.metadataTag))
       ) {
         if (itemTextContent) systemInstructionParts.push(itemTextContent);
       } else if (item.role === "user" || item.role === "model") {
@@ -1232,10 +1094,7 @@ export class VertexStreamAdapter implements StreamProvider {
                 }
               } else {
                 // Regular image processing
-                const optimized = await fetchAndOptimizeImage(
-                  part.uri,
-                  part.mimeType,
-                );
+                const optimized = await fetchAndOptimizeImage(part.uri, part.mimeType);
                 geminiParts.push({
                   inlineData: {
                     mimeType: optimized.mimeType,
@@ -1244,28 +1103,16 @@ export class VertexStreamAdapter implements StreamProvider {
                 });
               }
             } catch (imgErr) {
-              log.warn(
-                `VertexStreamAdapter: Image processing error ${part.uri}`,
-                {
-                  error:
-                    imgErr instanceof Error ? imgErr.message : String(imgErr),
-                },
-              );
+              log.warn(`VertexStreamAdapter: Image processing error ${part.uri}`, {
+                error: imgErr instanceof Error ? imgErr.message : String(imgErr),
+              });
             }
-          } else if (
-            part.type === "image" &&
-            "inlineData" in part &&
-            part.inlineData
-          ) {
+          } else if (part.type === "image" && "inlineData" in part && part.inlineData) {
             const inlineData = part.inlineData as {
               mimeType: string;
               data: string;
             };
-            if (
-              typeof inlineData === "object" &&
-              inlineData.mimeType &&
-              inlineData.data
-            ) {
+            if (typeof inlineData === "object" && inlineData.mimeType && inlineData.data) {
               if (inlineData.mimeType === "image/gif") {
                 const isProduction = process.env.RUN_ENV === "production";
                 if (isProduction) {
@@ -1290,39 +1137,29 @@ export class VertexStreamAdapter implements StreamProvider {
           } else if (part.type === "video" && part.uri && part.mimeType) {
             try {
               if ((part as { isYouTubeLink?: boolean }).isYouTubeLink) {
-                const isEnhancedContext = (
-                  part as { enhancedContext?: boolean }
-                ).enhancedContext;
+                const isEnhancedContext = (part as { enhancedContext?: boolean }).enhancedContext;
 
                 if (isEnhancedContext) {
                   geminiParts.push({
                     fileData: { fileUri: part.uri },
                   });
                 } else {
-                  log.info(
-                    `VertexStreamAdapter: Skipping YouTube auto-processing: ${part.uri}`,
-                  );
+                  log.info(`VertexStreamAdapter: Skipping YouTube auto-processing: ${part.uri}`);
                 }
               } else {
                 // Direct video uploads
                 const videoResponse = await fetch(part.uri);
                 if (!videoResponse.ok) {
-                  throw new Error(
-                    `Video fetch failed: ${videoResponse.status}`,
-                  );
+                  throw new Error(`Video fetch failed: ${videoResponse.status}`);
                 }
 
-                const contentLength =
-                  videoResponse.headers.get("content-length");
-                const fileSizeBytes = contentLength
-                  ? Number.parseInt(contentLength, 10)
-                  : 0;
+                const contentLength = videoResponse.headers.get("content-length");
+                const fileSizeBytes = contentLength ? Number.parseInt(contentLength, 10) : 0;
                 const maxInlineSize = 20 * 1024 * 1024;
 
                 if (fileSizeBytes > 0 && fileSizeBytes < maxInlineSize) {
                   const videoArrayBuffer = await videoResponse.arrayBuffer();
-                  const base64VideoData =
-                    Buffer.from(videoArrayBuffer).toString("base64");
+                  const base64VideoData = Buffer.from(videoArrayBuffer).toString("base64");
 
                   geminiParts.push({
                     inlineData: {
@@ -1333,15 +1170,9 @@ export class VertexStreamAdapter implements StreamProvider {
                 }
               }
             } catch (videoErr) {
-              log.warn(
-                `VertexStreamAdapter: Video processing error ${part.uri}`,
-                {
-                  error:
-                    videoErr instanceof Error
-                      ? videoErr.message
-                      : String(videoErr),
-                },
-              );
+              log.warn(`VertexStreamAdapter: Video processing error ${part.uri}`, {
+                error: videoErr instanceof Error ? videoErr.message : String(videoErr),
+              });
             }
           }
         }
@@ -1356,21 +1187,15 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     const systemInstruction =
-      systemInstructionParts.length > 0
-        ? systemInstructionParts.join("\n\n---\n\n")
-        : undefined;
+      systemInstructionParts.length > 0 ? systemInstructionParts.join("\n\n---\n\n") : undefined;
 
     return { systemInstruction, dialogueContents };
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────
 
-  private extractThoughtSignature(
-    vertexChunk: VertexStreamChunk,
-  ): string | undefined {
-    const directSignature = this.normalizeThoughtSignature(
-      vertexChunk.thoughtSignature,
-    );
+  private extractThoughtSignature(vertexChunk: VertexStreamChunk): string | undefined {
+    const directSignature = this.normalizeThoughtSignature(vertexChunk.thoughtSignature);
     if (directSignature) {
       return directSignature;
     }
@@ -1382,15 +1207,12 @@ export class VertexStreamAdapter implements StreamProvider {
 
     const functionCallPart = parts.find((part) => part.functionCall);
     const partSignature =
-      functionCallPart?.thoughtSignature ??
-      parts.find((part) => part.thoughtSignature)?.thoughtSignature;
+      functionCallPart?.thoughtSignature ?? parts.find((part) => part.thoughtSignature)?.thoughtSignature;
 
     return this.normalizeThoughtSignature(partSignature);
   }
 
-  private normalizeThoughtSignature(
-    signature?: string | Uint8Array,
-  ): string | undefined {
+  private normalizeThoughtSignature(signature?: string | Uint8Array): string | undefined {
     if (!signature) {
       return undefined;
     }
@@ -1406,9 +1228,7 @@ export class VertexStreamAdapter implements StreamProvider {
     return !normalizedModel.includes("gemma");
   }
 
-  private createInBandSystemInstructionContent(
-    systemInstruction: string,
-  ): Content {
+  private createInBandSystemInstructionContent(systemInstruction: string): Content {
     return {
       role: "user",
       parts: [
@@ -1421,9 +1241,7 @@ export class VertexStreamAdapter implements StreamProvider {
     };
   }
 
-  private convertGoogleFunctionCall(
-    googleFunctionCall: GoogleFunctionCall,
-  ): FunctionCall {
+  private convertGoogleFunctionCall(googleFunctionCall: GoogleFunctionCall): FunctionCall {
     return {
       name: googleFunctionCall.name ?? "",
       args: googleFunctionCall.args || {},
@@ -1442,19 +1260,14 @@ export class VertexStreamAdapter implements StreamProvider {
     ].includes(finishReason);
   }
 
-  private logSanitizedRequest(
-    requestConfig: GenerateContentConfig,
-    contents: Content[],
-  ): void {
+  private logSanitizedRequest(requestConfig: GenerateContentConfig, contents: Content[]): void {
     log.section("VertexStreamAdapter: Request Details");
 
     const sanitizedRequestConfig = {
       ...requestConfig,
       apiKey: undefined,
     };
-    log.info(
-      `Request Config: ${JSON.stringify(sanitizedRequestConfig, null, 2)}`,
-    );
+    log.info(`Request Config: ${JSON.stringify(sanitizedRequestConfig, null, 2)}`);
 
     const sanitizedContents = contents.map((content) => ({
       ...content,
@@ -1469,8 +1282,6 @@ export class VertexStreamAdapter implements StreamProvider {
           : part,
       ),
     }));
-    log.info(
-      `Contents (${contents.length} items): ${JSON.stringify(sanitizedContents, null, 2)}`,
-    );
+    log.info(`Contents (${contents.length} items): ${JSON.stringify(sanitizedContents, null, 2)}`);
   }
 }

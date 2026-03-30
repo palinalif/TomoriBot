@@ -11,18 +11,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { storeOptApiKey } from "../../../utils/security/crypto";
 import { updateTomoriConfig } from "../../../utils/db/dbWrite";
 
@@ -40,34 +33,20 @@ const VALIDATION_TIMEOUT_MS = 10_000;
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.novelai.set.description"),
-    )
+    .setDescription(localizer("en-US", "commands.optionalkey.novelai.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.optionalkey.novelai.set.key_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.optionalkey.novelai.set.key_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("disable_other_imggen")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.optionalkey.novelai.set.disable_other_imggen_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.optionalkey.novelai.set.disable_other_imggen_description"))
         .addChoices(
           {
             name: localizer("en-US", "commands.choices.enable"),
@@ -90,22 +69,16 @@ export const configureSubcommand = (
 async function validateNovelAiApiKey(apiKey: string): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      VALIDATION_TIMEOUT_MS,
-    );
+    const timeoutId = setTimeout(() => controller.abort(), VALIDATION_TIMEOUT_MS);
 
-    const response = await fetch(
-      `${NOVELAI_ACCOUNT_API_URL}/user/subscription`,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        signal: controller.signal,
+    const response = await fetch(`${NOVELAI_ACCOUNT_API_URL}/user/subscription`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
-    );
+      signal: controller.signal,
+    });
 
     clearTimeout(timeoutId);
     return response.ok;
@@ -147,24 +120,20 @@ export async function execute(
   try {
     // 3. Get the API key and optional flag from options
     apiKey = interaction.options.getString("key", true);
-    const disableOtherImggen =
-      interaction.options.getString("disable_other_imggen") === "enable";
+    const disableOtherImggen = interaction.options.getString("disable_other_imggen") === "enable";
 
     // 4. Basic format validation
     if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.novelai.set.invalid_key_title",
-        descriptionKey:
-          "commands.optionalkey.novelai.set.invalid_key_description",
+        descriptionKey: "commands.optionalkey.novelai.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
     // 5. Load the Tomori state for this server
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -177,25 +146,17 @@ export async function execute(
     // 6. Validate the API key by calling NovelAI subscription endpoint
     const isValid = await validateNovelAiApiKey(apiKey);
     if (!isValid) {
-      log.info(
-        `NovelAI API key validation failed for server ${tomoriState.server_id}`,
-      );
+      log.info(`NovelAI API key validation failed for server ${tomoriState.server_id}`);
       await replyInfoEmbed(interaction, locale, {
-        titleKey:
-          "commands.optionalkey.novelai.set.key_validation_failed_title",
-        descriptionKey:
-          "commands.optionalkey.novelai.set.key_validation_failed_description",
+        titleKey: "commands.optionalkey.novelai.set.key_validation_failed_title",
+        descriptionKey: "commands.optionalkey.novelai.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
     // 7. Store the validated API key
-    const isStored = await storeOptApiKey(
-      tomoriState.server_id,
-      "novelai",
-      apiKey,
-    );
+    const isStored = await storeOptApiKey(tomoriState.server_id, "novelai", apiKey);
 
     if (!isStored) {
       const context: ErrorContext = {

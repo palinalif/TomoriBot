@@ -12,11 +12,7 @@ import type {
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { exportPresetData } from "../../utils/db/presetExport";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
@@ -36,12 +32,8 @@ const PERSONA_EXPORT_JSON_TRUE = "true";
 /**
  * Configure the 'export' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("export")
-    .setDescription(localizer("en-US", "commands.persona.export.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("export").setDescription(localizer("en-US", "commands.persona.export.description"));
 
 /**
  * Executes the 'export' command
@@ -57,9 +49,7 @@ export async function execute(
   _userData: UserRow,
   locale: string,
 ): Promise<void> {
-  let responseInteraction:
-    | ChatInputCommandInteraction
-    | ModalSubmitInteraction = interaction;
+  let responseInteraction: ChatInputCommandInteraction | ModalSubmitInteraction = interaction;
 
   try {
     // 1. Resolve target persona via selector
@@ -71,14 +61,8 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.persona.export.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.persona.export.main_persona_description",
-            ),
+          ? localizer(locale, "commands.persona.export.alter_persona_description")
+          : localizer(locale, "commands.persona.export.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
 
@@ -92,39 +76,31 @@ export async function execute(
       return;
     }
 
-    const personaModalResult = await promptWithPaginatedModal(
-      interaction,
-      locale,
-      {
-        modalCustomId: PERSONA_EXPORT_MODAL_ID,
-        modalTitleKey: "commands.persona.export.persona_modal_title",
-        components: [
-          {
-            customId: PERSONA_EXPORT_SELECT_ID,
-            labelKey: "commands.persona.export.persona_select_label",
-            descriptionKey:
-              "commands.persona.export.persona_select_description",
-            placeholder: "commands.persona.export.persona_select_placeholder",
-            required: true,
-            options: personaSelectOptions,
-          },
-          {
-            // Checkbox: checked = export JSON (true), unchecked = skip (false).
-            // Value returned in modalResult.values[PERSONA_EXPORT_JSON_SELECT_ID] as "true"/"false".
-            kind: "checkbox" as const,
-            customId: PERSONA_EXPORT_JSON_SELECT_ID,
-            labelKey: "commands.persona.export.export_json_select_label",
-            descriptionKey:
-              "commands.persona.export.export_json_select_description",
-            default: false,
-          },
-        ],
-      },
-    );
+    const personaModalResult = await promptWithPaginatedModal(interaction, locale, {
+      modalCustomId: PERSONA_EXPORT_MODAL_ID,
+      modalTitleKey: "commands.persona.export.persona_modal_title",
+      components: [
+        {
+          customId: PERSONA_EXPORT_SELECT_ID,
+          labelKey: "commands.persona.export.persona_select_label",
+          descriptionKey: "commands.persona.export.persona_select_description",
+          placeholder: "commands.persona.export.persona_select_placeholder",
+          required: true,
+          options: personaSelectOptions,
+        },
+        {
+          // Checkbox: checked = export JSON (true), unchecked = skip (false).
+          // Value returned in modalResult.values[PERSONA_EXPORT_JSON_SELECT_ID] as "true"/"false".
+          kind: "checkbox" as const,
+          customId: PERSONA_EXPORT_JSON_SELECT_ID,
+          labelKey: "commands.persona.export.export_json_select_label",
+          descriptionKey: "commands.persona.export.export_json_select_description",
+          default: false,
+        },
+      ],
+    });
     if (personaModalResult.outcome !== "submit") {
-      log.info(
-        `Persona export select modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Persona export select modal ${personaModalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -134,16 +110,10 @@ export async function execute(
     }
     responseInteraction = modalSubmitInteraction;
 
-    const selectedPersonaId =
-      personaModalResult.values?.[PERSONA_EXPORT_SELECT_ID];
-    const exportJsonSelection =
-      personaModalResult.values?.[PERSONA_EXPORT_JSON_SELECT_ID] ??
-      PERSONA_EXPORT_JSON_FALSE;
+    const selectedPersonaId = personaModalResult.values?.[PERSONA_EXPORT_SELECT_ID];
+    const exportJsonSelection = personaModalResult.values?.[PERSONA_EXPORT_JSON_SELECT_ID] ?? PERSONA_EXPORT_JSON_FALSE;
     const exportJson = exportJsonSelection === PERSONA_EXPORT_JSON_TRUE;
-    const selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    const selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -157,10 +127,7 @@ export async function execute(
     await responseInteraction.deferReply();
 
     // 3. Export selected persona data from database
-    const exportResult = await exportPresetData(
-      serverDiscId,
-      selectedPersona.tomori_id,
-    );
+    const exportResult = await exportPresetData(serverDiscId, selectedPersona.tomori_id);
 
     if (!exportResult.success) {
       await responseInteraction.editReply({
@@ -189,10 +156,7 @@ export async function execute(
         export_type: "persona_readable",
         import_compatible: false,
         exported_at: new Date().toISOString(),
-        note: localizer(
-          locale,
-          "commands.persona.export.json_non_importable_note",
-        ),
+        note: localizer(locale, "commands.persona.export.json_non_importable_note"),
         persona: {
           tomori_id: selectedPersona.tomori_id ?? null,
           tomori_nickname: nickname,
@@ -203,12 +167,10 @@ export async function execute(
           attribute_list: presetData.data.attribute_list,
           sample_dialogues_in: presetData.data.sample_dialogues_in,
           sample_dialogues_out: presetData.data.sample_dialogues_out,
-          sample_dialogues: presetData.data.sample_dialogues_in.map(
-            (input, index) => ({
-              user_input: input,
-              persona_output: presetData.data.sample_dialogues_out[index] ?? "",
-            }),
-          ),
+          sample_dialogues: presetData.data.sample_dialogues_in.map((input, index) => ({
+            user_input: input,
+            persona_output: presetData.data.sample_dialogues_out[index] ?? "",
+          })),
           webhook_avatar_url: selectedPersona.webhook_avatar_url ?? null,
           alter_triggers: selectedPersona.alter_triggers ?? [],
           nai_tags: selectedPersona.nai_tags ?? [],
@@ -225,17 +187,11 @@ export async function execute(
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.persona.export.success_title"),
-            )
+            .setTitle(localizer(locale, "commands.persona.export.success_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.persona.export.success_description_json",
-                {
-                  nickname,
-                },
-              ),
+              localizer(locale, "commands.persona.export.success_description_json", {
+                nickname,
+              }),
             )
             .setColor(ColorCode.SUCCESS),
         ],
@@ -253,9 +209,7 @@ export async function execute(
     try {
       let selectedAvatarBuffer: Buffer | null = null;
       if (selectedPersona.is_alter && selectedPersona.webhook_avatar_url) {
-        const storedAvatarBuffer = await loadStoredPersonaAvatarBuffer(
-          selectedPersona.webhook_avatar_url,
-        );
+        const storedAvatarBuffer = await loadStoredPersonaAvatarBuffer(selectedPersona.webhook_avatar_url);
         if (storedAvatarBuffer) {
           try {
             selectedAvatarBuffer = await convertToPNG(storedAvatarBuffer);
@@ -277,22 +231,12 @@ export async function execute(
         // In DMs, getServerAvatar will return bot's default avatar when guild is null
         (await getServerAvatar(interaction.guild, client));
     } catch (error) {
-      log.error(
-        `Failed to get avatar for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`,
-        error as Error,
-      );
+      log.error(`Failed to get avatar for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}:`, error as Error);
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.persona.export.avatar_failed_title"),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.persona.export.avatar_failed_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.export.avatar_failed_title"))
+            .setDescription(localizer(locale, "commands.persona.export.avatar_failed_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -311,15 +255,8 @@ export async function execute(
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.persona.export.embed_failed_title"),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.persona.export.embed_failed_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.export.embed_failed_title"))
+            .setDescription(localizer(locale, "commands.persona.export.embed_failed_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -356,9 +293,7 @@ export async function execute(
       files: [attachment],
     });
 
-    log.success(
-      `Successfully exported preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`,
-    );
+    log.success(`Successfully exported preset for ${interaction.guild ? "guild" : "DM"} ${serverDiscId}: ${nickname}`);
   } catch (error) {
     log.error("Error executing preset export command:", error, {
       errorType: "CommandExecutionError",
@@ -378,9 +313,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });

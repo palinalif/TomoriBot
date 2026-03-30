@@ -6,29 +6,20 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { updateTomoriConfig } from "@/utils/db/dbWrite";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("thoughtlogs")
-    .setDescription(
-      localizer("en-US", "commands.server.thoughtlogs.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.thoughtlogs.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer("en-US", "commands.server.thoughtlogs.channel_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.thoughtlogs.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     );
@@ -57,8 +48,7 @@ export async function execute(
     if (selectedChannel.type !== ChannelType.GuildText) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.thoughtlogs.invalid_channel_title",
-        descriptionKey:
-          "commands.server.thoughtlogs.invalid_channel_description",
+        descriptionKey: "commands.server.thoughtlogs.invalid_channel_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -76,8 +66,7 @@ export async function execute(
     tomoriServerId = tomoriState.server_id;
 
     const currentChannelId = tomoriState.config.thought_log_channel_disc_id;
-    const nextChannelId =
-      currentChannelId === selectedChannel.id ? null : selectedChannel.id;
+    const nextChannelId = currentChannelId === selectedChannel.id ? null : selectedChannel.id;
     const updatedConfig = await updateTomoriConfig(tomoriState.server_id, {
       thought_log_channel_disc_id: nextChannelId,
     });

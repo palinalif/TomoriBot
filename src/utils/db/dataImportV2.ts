@@ -72,9 +72,7 @@ async function resolveServerId(serverDiscId: string): Promise<number | null> {
   return serverRows[0]?.server_id ?? null;
 }
 
-async function resolveMainTomoriId(
-  serverId: number,
-): Promise<number | undefined> {
+async function resolveMainTomoriId(serverId: number): Promise<number | undefined> {
   const mainPersonaRows = await sql<Array<{ tomori_id: number }>>`
 		SELECT tomori_id
 		FROM tomoris
@@ -86,9 +84,7 @@ async function resolveMainTomoriId(
   return mainPersonaRows[0]?.tomori_id;
 }
 
-function coerceLineageId(
-  value: number | string | bigint | null | undefined,
-): number | null {
+function coerceLineageId(value: number | string | bigint | null | undefined): number | null {
   if (typeof value === "bigint") {
     return Number(value);
   }
@@ -104,9 +100,7 @@ function coerceLineageId(
 async function resolveMainTomoriScope(
   serverId: number,
 ): Promise<{ tomoriId: number; personaLineageId: number } | null> {
-  const mainPersonaRows = await sql<
-    Array<{ tomori_id: number; persona_lineage_id: number | string | bigint }>
-  >`
+  const mainPersonaRows = await sql<Array<{ tomori_id: number; persona_lineage_id: number | string | bigint }>>`
 		SELECT tomori_id, persona_lineage_id
 		FROM tomoris
 		WHERE server_id = ${serverId}
@@ -121,10 +115,7 @@ async function resolveMainTomoriScope(
   }
 
   const personaLineageId = coerceLineageId(mainTomori.persona_lineage_id);
-  if (
-    typeof personaLineageId !== "number" ||
-    !Number.isFinite(personaLineageId)
-  ) {
+  if (typeof personaLineageId !== "number" || !Number.isFinite(personaLineageId)) {
     return null;
   }
 
@@ -178,10 +169,7 @@ export async function importPersonalMemories(
       },
     };
   } catch (error) {
-    log.error(
-      `Error importing personal memories for user ${userDiscId}:`,
-      error,
-    );
+    log.error(`Error importing personal memories for user ${userDiscId}:`, error);
     return {
       success: false,
       error: "commands.data.import.error_import_failed",
@@ -251,10 +239,7 @@ export async function importPersonalSettings(
       },
     };
   } catch (error) {
-    log.error(
-      `Error importing personal settings for user ${userDiscId}:`,
-      error,
-    );
+    log.error(`Error importing personal settings for user ${userDiscId}:`, error);
     return {
       success: false,
       error: "commands.data.import.error_import_failed",
@@ -262,10 +247,7 @@ export async function importPersonalSettings(
   }
 }
 
-export async function importServerConfig(
-  serverDiscId: string,
-  config: ServerConfigExport,
-): Promise<ImportResult> {
+export async function importServerConfig(serverDiscId: string, config: ServerConfigExport): Promise<ImportResult> {
   try {
     const serverId = await resolveServerId(serverDiscId);
     if (!serverId) {
@@ -386,10 +368,7 @@ export async function importServerConfig(
       },
     };
   } catch (error) {
-    log.error(
-      `Error importing server config for server ${serverDiscId}:`,
-      error,
-    );
+    log.error(`Error importing server config for server ${serverDiscId}:`, error);
     return {
       success: false,
       error: "commands.data.import.error_import_failed",
@@ -445,9 +424,7 @@ export async function importServerMemories(
           };
         }
         insertTomoriId = targetPersona.tomori_id;
-        targetPersonaLineageId = coerceLineageId(
-          targetPersona.persona_lineage_id,
-        );
+        targetPersonaLineageId = coerceLineageId(targetPersona.persona_lineage_id);
       } else {
         const mainScope = await resolveMainTomoriScope(serverId);
         insertTomoriId = mainScope?.tomoriId ?? null;
@@ -460,10 +437,7 @@ export async function importServerMemories(
       insertTomoriId = null;
     }
 
-    if (
-      typeof targetPersonaLineageId !== "number" ||
-      !Number.isFinite(targetPersonaLineageId)
-    ) {
+    if (typeof targetPersonaLineageId !== "number" || !Number.isFinite(targetPersonaLineageId)) {
       return {
         success: false,
         error: "commands.data.import.error_no_server_data",
@@ -514,10 +488,7 @@ export async function importServerMemories(
       },
     };
   } catch (error) {
-    log.error(
-      `Error importing server memories for server ${serverDiscId}:`,
-      error,
-    );
+    log.error(`Error importing server memories for server ${serverDiscId}:`, error);
     return {
       success: false,
       error: "commands.data.import.error_import_failed",
@@ -541,11 +512,7 @@ export async function importPersonalData(
     return settingsResult;
   }
 
-  const memoriesResult = await importPersonalMemories(
-    userDiscId,
-    importData.personal_memories,
-    personaLineageId,
-  );
+  const memoriesResult = await importPersonalMemories(userDiscId, importData.personal_memories, personaLineageId);
   if (!memoriesResult.success) {
     return memoriesResult;
   }
@@ -564,19 +531,15 @@ export async function importServerData(
   importData: ServerExportData,
   tomoriId?: number,
 ): Promise<ImportResult> {
-  const configResult = await importServerConfig(
-    serverDiscId,
-    importData.config,
-  );
+  const configResult = await importServerConfig(serverDiscId, importData.config);
   if (!configResult.success) {
     return configResult;
   }
 
-  const memoriesResult = await importServerMemories(
-    serverDiscId,
-    importData.server_memories,
-    { mode: "persona", tomoriId },
-  );
+  const memoriesResult = await importServerMemories(serverDiscId, importData.server_memories, {
+    mode: "persona",
+    tomoriId,
+  });
   if (!memoriesResult.success) {
     return memoriesResult;
   }
@@ -623,10 +586,7 @@ export function validateImportFile(jsonData: unknown): ImportValidationResult {
   if (type === "global_personal_memories") {
     const validated = globalPersonalMemoriesExportSchema.safeParse(jsonData);
     if (!validated.success) {
-      log.error(
-        "Global personal memories import validation failed:",
-        validated.error,
-      );
+      log.error("Global personal memories import validation failed:", validated.error);
       return {
         valid: false,
         error: "commands.data.import.error_invalid_personal_memories_format",

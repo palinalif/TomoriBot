@@ -7,11 +7,7 @@ import type {
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import {
   exportPersonaPersonalMemories,
@@ -31,36 +27,18 @@ const EXPORT_TYPE_PERSONAL_SETTINGS = "personal_settings";
 const EXPORT_TYPE_SERVER_CONFIG = "server_config";
 const EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES = "global_personal_memories";
 
-function getLocalizedExportTypeName(
-  locale: string,
-  exportType: string,
-): string {
+function getLocalizedExportTypeName(locale: string, exportType: string): string {
   switch (exportType) {
     case EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES:
-      return localizer(
-        locale,
-        "commands.data.export.type_choice_persona_personal_memories",
-      );
+      return localizer(locale, "commands.data.export.type_choice_persona_personal_memories");
     case EXPORT_TYPE_PERSONA_SERVER_MEMORIES:
-      return localizer(
-        locale,
-        "commands.data.export.type_choice_persona_server_memories",
-      );
+      return localizer(locale, "commands.data.export.type_choice_persona_server_memories");
     case EXPORT_TYPE_PERSONAL_SETTINGS:
-      return localizer(
-        locale,
-        "commands.data.export.type_choice_personal_settings",
-      );
+      return localizer(locale, "commands.data.export.type_choice_personal_settings");
     case EXPORT_TYPE_SERVER_CONFIG:
-      return localizer(
-        locale,
-        "commands.data.export.type_choice_server_config",
-      );
+      return localizer(locale, "commands.data.export.type_choice_server_config");
     case EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES:
-      return localizer(
-        locale,
-        "commands.data.export.type_choice_global_personal_memories",
-      );
+      return localizer(locale, "commands.data.export.type_choice_global_personal_memories");
     default:
       return exportType;
   }
@@ -69,53 +47,34 @@ function getLocalizedExportTypeName(
 /**
  * Configure the 'export' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("export")
     .setDescription(localizer("en-US", "commands.data.export.description"))
     .addStringOption((option) =>
       option
         .setName("type")
-        .setDescription(
-          localizer("en-US", "commands.data.export.type_description"),
-        )
+        .setDescription(localizer("en-US", "commands.data.export.type_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.data.export.type_choice_persona_personal_memories",
-            ),
+            name: localizer("en-US", "commands.data.export.type_choice_persona_personal_memories"),
             value: EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.export.type_choice_persona_server_memories",
-            ),
+            name: localizer("en-US", "commands.data.export.type_choice_persona_server_memories"),
             value: EXPORT_TYPE_PERSONA_SERVER_MEMORIES,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.export.type_choice_personal_settings",
-            ),
+            name: localizer("en-US", "commands.data.export.type_choice_personal_settings"),
             value: EXPORT_TYPE_PERSONAL_SETTINGS,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.export.type_choice_server_config",
-            ),
+            name: localizer("en-US", "commands.data.export.type_choice_server_config"),
             value: EXPORT_TYPE_SERVER_CONFIG,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.export.type_choice_global_personal_memories",
-            ),
+            name: localizer("en-US", "commands.data.export.type_choice_global_personal_memories"),
             value: EXPORT_TYPE_GLOBAL_PERSONAL_MEMORIES,
           },
         ),
@@ -137,9 +96,7 @@ export async function execute(
 ): Promise<void> {
   const exportType = interaction.options.getString("type", true);
   const serverDiscId = interaction.guild?.id ?? interaction.user.id;
-  let responseInteraction:
-    | ChatInputCommandInteraction
-    | ModalSubmitInteraction = interaction;
+  let responseInteraction: ChatInputCommandInteraction | ModalSubmitInteraction = interaction;
 
   try {
     let targetTomoriId: number | undefined;
@@ -147,8 +104,7 @@ export async function execute(
     let targetPersonaNickname: string | null = null;
 
     const needsPersonaSelection =
-      exportType === EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES ||
-      exportType === EXPORT_TYPE_PERSONA_SERVER_MEMORIES;
+      exportType === EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES || exportType === EXPORT_TYPE_PERSONA_SERVER_MEMORIES;
 
     if (needsPersonaSelection) {
       const personas = await loadAllPersonasForServer(serverDiscId);
@@ -158,14 +114,8 @@ export async function execute(
           label: safeSelectOptionText(persona.tomori_nickname),
           value: persona.tomori_id?.toString() ?? "",
           description: persona.is_alter
-            ? localizer(
-                locale,
-                "commands.data.export.alter_persona_description",
-              )
-            : localizer(
-                locale,
-                "commands.data.export.main_persona_description",
-              ),
+            ? localizer(locale, "commands.data.export.alter_persona_description")
+            : localizer(locale, "commands.data.export.main_persona_description"),
         }))
         .filter((option) => option.value !== "");
       if (personaSelectOptions.length === 0) {
@@ -178,28 +128,22 @@ export async function execute(
         return;
       }
 
-      const personaModalResult = await promptWithPaginatedModal(
-        interaction,
-        locale,
-        {
-          modalCustomId: EXPORT_PERSONA_MODAL_ID,
-          modalTitleKey: "commands.data.export.persona_modal_title",
-          components: [
-            {
-              customId: EXPORT_PERSONA_SELECT_ID,
-              labelKey: "commands.data.export.persona_select_label",
-              descriptionKey: "commands.data.export.persona_select_description",
-              placeholder: "commands.data.export.persona_select_placeholder",
-              required: true,
-              options: personaSelectOptions,
-            },
-          ],
-        },
-      );
+      const personaModalResult = await promptWithPaginatedModal(interaction, locale, {
+        modalCustomId: EXPORT_PERSONA_MODAL_ID,
+        modalTitleKey: "commands.data.export.persona_modal_title",
+        components: [
+          {
+            customId: EXPORT_PERSONA_SELECT_ID,
+            labelKey: "commands.data.export.persona_select_label",
+            descriptionKey: "commands.data.export.persona_select_description",
+            placeholder: "commands.data.export.persona_select_placeholder",
+            required: true,
+            options: personaSelectOptions,
+          },
+        ],
+      });
       if (personaModalResult.outcome !== "submit") {
-        log.info(
-          `Data export persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-        );
+        log.info(`Data export persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`);
         return;
       }
 
@@ -208,12 +152,8 @@ export async function execute(
         return;
       }
       responseInteraction = modalSubmitInteraction;
-      const selectedPersonaId =
-        personaModalResult.values?.[EXPORT_PERSONA_SELECT_ID];
-      const selectedPersona =
-        personas.find(
-          (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-        ) ?? null;
+      const selectedPersonaId = personaModalResult.values?.[EXPORT_PERSONA_SELECT_ID];
+      const selectedPersona = personas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
       if (!selectedPersona) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -229,11 +169,9 @@ export async function execute(
     }
 
     const requiresServerPermission =
-      exportType === EXPORT_TYPE_PERSONA_SERVER_MEMORIES ||
-      exportType === EXPORT_TYPE_SERVER_CONFIG;
+      exportType === EXPORT_TYPE_PERSONA_SERVER_MEMORIES || exportType === EXPORT_TYPE_SERVER_CONFIG;
     if (requiresServerPermission && interaction.guild) {
-      const hasPermission =
-        interaction.memberPermissions?.has("ManageGuild") ?? false;
+      const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
       if (!hasPermission) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.data.export.no_permission_title",
@@ -249,17 +187,12 @@ export async function execute(
 
     let exportResult: Awaited<ReturnType<typeof exportPersonalSettings>>;
     let filename: string;
-    const safeSlug = (targetPersonaNickname ?? "global")
-      .replace(/[^a-zA-Z0-9-_]/g, "_")
-      .slice(0, 32);
+    const safeSlug = (targetPersonaNickname ?? "global").replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 32);
     const timestamp = Date.now();
 
     switch (exportType) {
       case EXPORT_TYPE_PERSONA_PERSONAL_MEMORIES:
-        exportResult = await exportPersonaPersonalMemories(
-          interaction.user.id,
-          targetPersonaLineageId,
-        );
+        exportResult = await exportPersonaPersonalMemories(interaction.user.id, targetPersonaLineageId);
         filename = `tomori-personal-memories-${safeSlug}-${interaction.user.id}-${timestamp}.json`;
         break;
       case EXPORT_TYPE_PERSONA_SERVER_MEMORIES:
@@ -267,24 +200,14 @@ export async function execute(
           await responseInteraction.editReply({
             embeds: [
               new EmbedBuilder()
-                .setTitle(
-                  localizer(locale, "general.errors.invalid_option_title"),
-                )
-                .setDescription(
-                  localizer(
-                    locale,
-                    "general.errors.invalid_option_description",
-                  ),
-                )
+                .setTitle(localizer(locale, "general.errors.invalid_option_title"))
+                .setDescription(localizer(locale, "general.errors.invalid_option_description"))
                 .setColor(ColorCode.ERROR),
             ],
           });
           return;
         }
-        exportResult = await exportPersonaServerMemories(
-          serverDiscId,
-          targetTomoriId,
-        );
+        exportResult = await exportPersonaServerMemories(serverDiscId, targetTomoriId);
         filename = `tomori-server-memories-${safeSlug}-${serverDiscId}-${timestamp}.json`;
         break;
       case EXPORT_TYPE_PERSONAL_SETTINGS:
@@ -303,12 +226,8 @@ export async function execute(
         await responseInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(locale, "general.errors.invalid_option_title"),
-              )
-              .setDescription(
-                localizer(locale, "general.errors.invalid_option_description"),
-              )
+              .setTitle(localizer(locale, "general.errors.invalid_option_title"))
+              .setDescription(localizer(locale, "general.errors.invalid_option_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -365,17 +284,12 @@ export async function execute(
         ],
       });
     } catch (dmError) {
-      log.warn(
-        `Failed to send export DM to user ${interaction.user.id}:`,
-        dmError as Error,
-      );
+      log.warn(`Failed to send export DM to user ${interaction.user.id}:`, dmError as Error);
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "commands.data.export.dm_failed_title"))
-            .setDescription(
-              localizer(locale, "commands.data.export.dm_failed_description"),
-            )
+            .setDescription(localizer(locale, "commands.data.export.dm_failed_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -398,9 +312,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });

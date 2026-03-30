@@ -5,10 +5,7 @@
  */
 
 import { log } from "../misc/logger";
-import type {
-  LLMProvider,
-  ProviderInfo,
-} from "../../types/provider/interfaces";
+import type { LLMProvider, ProviderInfo } from "../../types/provider/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import * as path from "node:path";
 import { Glob } from "bun";
@@ -21,10 +18,7 @@ export namespace ProviderFactory {
   const providerInstances = new Map<string, LLMProvider>();
 
   // Map of provider names to their class constructors for lazy loading
-  const providerRegistry = new Map<
-    string,
-    () => Promise<new () => LLMProvider>
-  >();
+  const providerRegistry = new Map<string, () => Promise<new () => LLMProvider>>();
 
   // Flag to track if discovery has been run
   let discoveryComplete = false;
@@ -59,9 +53,7 @@ export namespace ProviderFactory {
         return;
       }
 
-      log.info(
-        `Found ${providerDirs.length} provider directories: ${providerDirs.join(", ")}`,
-      );
+      log.info(`Found ${providerDirs.length} provider directories: ${providerDirs.join(", ")}`);
 
       // 2. For each directory, check if it has a provider implementation file
       for (const dir of providerDirs) {
@@ -87,9 +79,7 @@ export namespace ProviderFactory {
             const ProviderClass = module[className];
 
             if (!ProviderClass) {
-              throw new Error(
-                `Provider class ${className} not found in ${importPath}`,
-              );
+              throw new Error(`Provider class ${className} not found in ${importPath}`);
             }
 
             return ProviderClass;
@@ -97,17 +87,12 @@ export namespace ProviderFactory {
 
           log.info(`Registered provider: ${providerName}`);
         } catch (error) {
-          log.error(
-            `Error registering provider ${providerName}`,
-            error as Error,
-          );
+          log.error(`Error registering provider ${providerName}`, error as Error);
         }
       }
 
       discoveryComplete = true;
-      log.success(
-        `Provider discovery complete. Registered ${providerRegistry.size} providers.`,
-      );
+      log.success(`Provider discovery complete. Registered ${providerRegistry.size} providers.`);
     } catch (error) {
       log.error("Error during provider discovery", error as Error);
       discoveryComplete = true; // Mark as complete to avoid retry loops
@@ -121,9 +106,7 @@ export namespace ProviderFactory {
    * @returns The provider instance
    * @throws Error if provider is not supported
    */
-  async function getProviderInstance(
-    providerName: string,
-  ): Promise<LLMProvider> {
+  async function getProviderInstance(providerName: string): Promise<LLMProvider> {
     // Ensure discovery has run
     await discoverProviders();
 
@@ -173,11 +156,7 @@ export namespace ProviderFactory {
         const info = tempInstance.getInfo();
 
         // Check if the normalized name matches any alias
-        if (
-          info.aliases?.some(
-            (alias) => alias.toLowerCase().trim() === normalizedName,
-          )
-        ) {
+        if (info.aliases?.some((alias) => alias.toLowerCase().trim() === normalizedName)) {
           // Found a match! Cache it properly
           providerInstances.set(info.name.toLowerCase(), tempInstance);
 
@@ -189,26 +168,19 @@ export namespace ProviderFactory {
             }
           }
 
-          log.info(
-            `Resolved alias "${normalizedName}" to provider "${info.name}"`,
-          );
+          log.info(`Resolved alias "${normalizedName}" to provider "${info.name}"`);
           return tempInstance;
         }
       } catch (error) {
-        log.warn(
-          `Failed to load provider ${registeredName} while checking aliases`,
-          {
-            error: error as Error,
-          },
-        );
+        log.warn(`Failed to load provider ${registeredName} while checking aliases`, {
+          error: error as Error,
+        });
       }
     }
 
     // 4. Provider not found
     const availableProviders = Array.from(providerRegistry.keys());
-    throw new Error(
-      `Unsupported provider: ${providerName}. Available providers: ${availableProviders.join(", ")}`,
-    );
+    throw new Error(`Unsupported provider: ${providerName}. Available providers: ${availableProviders.join(", ")}`);
   }
 
   /**
@@ -217,9 +189,7 @@ export namespace ProviderFactory {
    * @returns The appropriate provider instance
    * @throws Error if provider is not supported or not configured
    */
-  export async function getProvider(
-    tomoriState: TomoriState,
-  ): Promise<LLMProvider> {
+  export async function getProvider(tomoriState: TomoriState): Promise<LLMProvider> {
     if (!tomoriState.llm?.llm_provider) {
       throw new Error("No LLM provider configured in TomoriState");
     }
@@ -262,9 +232,7 @@ export namespace ProviderFactory {
    * @param providerName - Provider canonical name or alias
    * @returns The provider instance
    */
-  export async function getProviderByName(
-    providerName: string,
-  ): Promise<LLMProvider> {
+  export async function getProviderByName(providerName: string): Promise<LLMProvider> {
     return getProviderInstance(providerName);
   }
 
@@ -272,9 +240,7 @@ export namespace ProviderFactory {
    * Get all available providers and their information
    * @returns Array of provider information objects
    */
-  export async function getAvailableProviders(): Promise<
-    Array<{ name: string; info: ProviderInfo }>
-  > {
+  export async function getAvailableProviders(): Promise<Array<{ name: string; info: ProviderInfo }>> {
     // Ensure discovery has run
     await discoverProviders();
 
@@ -289,9 +255,7 @@ export namespace ProviderFactory {
           info: provider.getInfo(),
         });
       } catch (error) {
-        log.warn(
-          `Provider ${providerName} not available: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        log.warn(`Provider ${providerName} not available: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -303,9 +267,7 @@ export namespace ProviderFactory {
    * @param providerName - The provider name to check
    * @returns True if the provider is supported
    */
-  export async function isProviderSupported(
-    providerName: string,
-  ): Promise<boolean> {
+  export async function isProviderSupported(providerName: string): Promise<boolean> {
     // Ensure discovery has run
     await discoverProviders();
 
@@ -322,11 +284,7 @@ export namespace ProviderFactory {
         const provider = await getProviderInstance(registeredName);
         const info = provider.getInfo();
 
-        if (
-          info.aliases?.some(
-            (alias) => alias.toLowerCase().trim() === normalizedName,
-          )
-        ) {
+        if (info.aliases?.some((alias) => alias.toLowerCase().trim() === normalizedName)) {
           return true;
         }
       } catch (_error) {}
@@ -359,8 +317,6 @@ export namespace ProviderFactory {
  * @param tomoriState - The Tomori state
  * @returns The appropriate provider instance
  */
-export async function getProviderForTomori(
-  tomoriState: TomoriState,
-): Promise<LLMProvider> {
+export async function getProviderForTomori(tomoriState: TomoriState): Promise<LLMProvider> {
   return ProviderFactory.getProvider(tomoriState);
 }

@@ -14,16 +14,8 @@ import {
   promptWithPaginatedModal,
   safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriSchema,
-  type TomoriState,
-} from "../../types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { type UserRow, type ErrorContext, tomoriSchema, type TomoriState } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
@@ -44,10 +36,7 @@ async function performAttributeRemoval(
   tomoriState: TomoriState,
   attributeToRemove: string,
   userData: UserRow,
-  replyInteraction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
 ): Promise<void> {
   // Update the attribute_list in the database using array_remove
@@ -71,9 +60,7 @@ async function performAttributeRemoval(
       metadata: {
         command: "forget attribute",
         attributeToRemove,
-        validationErrors: validatedTomori.success
-          ? null
-          : validatedTomori.error.flatten(),
+        validationErrors: validatedTomori.success ? null : validatedTomori.error.flatten(),
       },
     };
 
@@ -114,14 +101,8 @@ async function performAttributeRemoval(
 }
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("attribute")
-    .setDescription(
-      localizer("en-US", "commands.forget.attribute.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("attribute").setDescription(localizer("en-US", "commands.forget.attribute.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -155,9 +136,7 @@ export async function execute(
 
   try {
     // 2. Load server's Tomori state (Rule 17)
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -169,9 +148,7 @@ export async function execute(
     }
 
     // Select target persona via paginated selector
-    const allPersonas = await loadAllPersonasForServer(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
     if (allPersonas.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -183,25 +160,18 @@ export async function execute(
     }
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
       if (!personaSelection.success) {
         if (personaSelection.reason === "cancelled") return;
         continue;
       }
-      if (
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
 
@@ -217,18 +187,13 @@ export async function execute(
       }
 
       // Check if user has Manage Server permission - admins can bypass teaching restriction
-      const hasManagePermission =
-        interaction.memberPermissions?.has("ManageGuild") ?? false;
+      const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
       // 4. Check if teaching is enabled
-      if (
-        !tomoriState.config.attribute_memteaching_enabled &&
-        !hasManagePermission
-      ) {
+      if (!tomoriState.config.attribute_memteaching_enabled && !hasManagePermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.teach.attribute.teaching_disabled_title",
-          descriptionKey:
-            "commands.teach.attribute.teaching_disabled_description",
+          descriptionKey: "commands.teach.attribute.teaching_disabled_description",
           color: ColorCode.ERROR,
           flags: MessageFlags.Ephemeral,
         });
@@ -249,38 +214,30 @@ export async function execute(
       }
 
       // 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
-      const attributeSelectOptions: SelectOption[] = currentAttributes.map(
-        (attribute, index) => ({
-          label: safeSelectOptionText(attribute),
-          value: index.toString(), // Use index to avoid truncation issues
-          description: undefined, // No description needed for attributes
-        }),
-      );
+      const attributeSelectOptions: SelectOption[] = currentAttributes.map((attribute, index) => ({
+        label: safeSelectOptionText(attribute),
+        value: index.toString(), // Use index to avoid truncation issues
+        description: undefined, // No description needed for attributes
+      }));
 
-      const modalResult = await promptWithPaginatedModal(
-        personaSelectionInteraction,
-        locale,
-        {
-          modalCustomId: MODAL_CUSTOM_ID,
-          modalTitleKey: "commands.forget.attribute.modal_title",
-          components: [
-            {
-              customId: ATTRIBUTE_SELECT_ID,
-              labelKey: "commands.forget.attribute.select_label",
-              descriptionKey: "commands.forget.attribute.select_description",
-              placeholder: "commands.forget.attribute.select_placeholder",
-              required: true,
-              options: attributeSelectOptions,
-            },
-          ],
-        },
-      );
+      const modalResult = await promptWithPaginatedModal(personaSelectionInteraction, locale, {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.forget.attribute.modal_title",
+        components: [
+          {
+            customId: ATTRIBUTE_SELECT_ID,
+            labelKey: "commands.forget.attribute.select_label",
+            descriptionKey: "commands.forget.attribute.select_description",
+            placeholder: "commands.forget.attribute.select_placeholder",
+            required: true,
+            options: attributeSelectOptions,
+          },
+        ],
+      });
 
       // Handle modal outcome - loop back to persona picker on dismiss
       if (modalResult.outcome !== "submit") {
-        log.info(
-          `Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`,
-        );
+        log.info(`Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`);
         continue;
       }
 
@@ -295,13 +252,7 @@ export async function execute(
       const attributeToRemove = currentAttributes[selectedIndex];
 
       // Perform the database update - let helper functions manage interaction state
-      await performAttributeRemoval(
-        selectedPersona,
-        attributeToRemove,
-        userData,
-        modalSubmitInteraction,
-        locale,
-      );
+      await performAttributeRemoval(selectedPersona, attributeToRemove, userData, modalSubmitInteraction, locale);
       break;
     }
   } catch (error) {
@@ -317,17 +268,11 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Unexpected error in /forget attribute for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Unexpected error in /forget attribute for user ${userData.user_disc_id}`, error as Error, context);
 
     // 16. Inform user of unknown error, prioritizing unacknowledged button interaction
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      !personaSelectionInteraction.deferred &&
-      !personaSelectionInteraction.replied
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
         ? personaSelectionInteraction
         : interaction;
     await replyInfoEmbed(errorReplyTarget, locale, {

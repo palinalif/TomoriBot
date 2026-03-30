@@ -7,10 +7,7 @@ import { log } from "@/utils/misc/logger";
  * Key format: "serverDiscId:channelDiscId:parentChannelDiscId:roleSignature"
  * TTL: 5 minutes (whitelists change infrequently)
  */
-const whitelistCache = new Map<
-  string,
-  { result: WhitelistCheckResult; expiresAt: number }
->();
+const whitelistCache = new Map<string, { result: WhitelistCheckResult; expiresAt: number }>();
 
 /**
  * Cache statistics for monitoring
@@ -22,10 +19,7 @@ let cacheMisses = 0;
  * Cache TTL in milliseconds (configurable via CHANNEL_WHITELIST_CACHE_TTL_MINUTES)
  * Default: 5 minutes
  */
-const CACHE_TTL_MINUTES = Number.parseInt(
-  process.env.CHANNEL_WHITELIST_CACHE_TTL_MINUTES || "5",
-  10,
-);
+const CACHE_TTL_MINUTES = Number.parseInt(process.env.CHANNEL_WHITELIST_CACHE_TTL_MINUTES || "5", 10);
 const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
 
 /**
@@ -45,10 +39,7 @@ function getCacheKey(
   let roleSignature = "unknown";
 
   if (memberRoleDiscIds !== undefined) {
-    roleSignature =
-      memberRoleDiscIds.length > 0
-        ? memberRoleDiscIds.slice().sort().join(",")
-        : "none";
+    roleSignature = memberRoleDiscIds.length > 0 ? memberRoleDiscIds.slice().sort().join(",") : "none";
   }
 
   const parentSig = parentChannelDiscId || "none";
@@ -69,36 +60,22 @@ export async function getCachedWhitelistStatus(
   memberRoleDiscIds?: string[],
   parentChannelDiscId?: string,
 ): Promise<WhitelistCheckResult> {
-  const cacheKey = getCacheKey(
-    serverDiscId,
-    channelDiscId,
-    memberRoleDiscIds,
-    parentChannelDiscId,
-  );
+  const cacheKey = getCacheKey(serverDiscId, channelDiscId, memberRoleDiscIds, parentChannelDiscId);
   const now = Date.now();
 
   // Check cache first
   const cached = whitelistCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     cacheHits++;
-    log.info(
-      `[Whitelist Cache] HIT - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`,
-    );
+    log.info(`[Whitelist Cache] HIT - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`);
     return cached.result;
   }
 
   // Cache miss - fetch from database
   cacheMisses++;
-  log.info(
-    `[Whitelist Cache] MISS - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`,
-  );
+  log.info(`[Whitelist Cache] MISS - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`);
 
-  const result = await checkChannelWhitelist(
-    serverDiscId,
-    channelDiscId,
-    memberRoleDiscIds,
-    parentChannelDiscId,
-  );
+  const result = await checkChannelWhitelist(serverDiscId, channelDiscId, memberRoleDiscIds, parentChannelDiscId);
 
   // Store in cache
   whitelistCache.set(cacheKey, {
@@ -116,10 +93,7 @@ export async function getCachedWhitelistStatus(
  * @param serverDiscId - Discord server ID (snowflake)
  * @param channelDiscId - Optional Discord channel ID (snowflake)
  */
-export function invalidateWhitelistCache(
-  serverDiscId: string,
-  channelDiscId?: string,
-): void {
+export function invalidateWhitelistCache(serverDiscId: string, channelDiscId?: string): void {
   if (channelDiscId) {
     // Invalidate all cached role-signature variants for this channel
     const prefix = `${serverDiscId}:${channelDiscId}:`;
@@ -130,9 +104,7 @@ export function invalidateWhitelistCache(
         deletedCount++;
       }
     }
-    log.info(
-      `[Whitelist Cache] Invalidated channel variants - ${prefix}* (deleted: ${deletedCount})`,
-    );
+    log.info(`[Whitelist Cache] Invalidated channel variants - ${prefix}* (deleted: ${deletedCount})`);
   } else {
     // Invalidate all channels for this server
     let deletedCount = 0;
@@ -145,9 +117,7 @@ export function invalidateWhitelistCache(
       }
     }
 
-    log.info(
-      `[Whitelist Cache] Invalidated all channels for server ${serverDiscId} (deleted: ${deletedCount})`,
-    );
+    log.info(`[Whitelist Cache] Invalidated all channels for server ${serverDiscId} (deleted: ${deletedCount})`);
   }
 }
 

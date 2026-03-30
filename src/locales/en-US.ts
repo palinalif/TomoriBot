@@ -127,8 +127,7 @@ export default {
       voice_transcription_failed_description: `I couldn't transcribe that audio message. Please try again or send the message as text instead.`,
     },
     tomori_busy_title: "Busy Replying to Someone Else!",
-    tomori_busy_replying:
-      "Currently responding to this message: {message_link}. Your message has been queued.",
+    tomori_busy_replying: "Currently responding to this message: {message_link}. Your message has been queued.",
   },
 
   rate_limit: {
@@ -155,8 +154,7 @@ export default {
     error_stream_timeout_title: "Connection Timeout",
 
     // Provider error format template: "{Provider name} Error Code {number}: {message from Google}. {tip from us}"
-    provider_error_format:
-      "{providerName} Error Code {errorCode}: {apiMessage}. {tip}",
+    provider_error_format: "{providerName} Error Code {errorCode}: {apiMessage}. {tip}",
     error_stream_timeout_description:
       "If this keeps happening, there might be a temporary issue with your chosen AI provider. Please try again later or use `/tool refresh` to refresh the context history.",
 
@@ -216,10 +214,8 @@ export default {
     // YouTube video processing messages
     video: {
       youtube_processing_title: "👁️  Watching YouTube Video...",
-      youtube_processing_description:
-        "I'm currently watching the YouTube video: {video_url}",
-      youtube_processing_footer:
-        "This may take a moment depending on the video length",
+      youtube_processing_description: "I'm currently watching the YouTube video: {video_url}",
+      youtube_processing_footer: "This may take a moment depending on the video length",
     },
 
     // Inline document reading messages (read_document tool)
@@ -231,25 +227,21 @@ export default {
     image: {
       generating_title: "🖼️  Generating Image...",
       generating_description: "Creating an image from the current prompt",
-      generating_with_references_description:
-        "Creating an image from the current prompt and reference image(s)",
+      generating_with_references_description: "Creating an image from the current prompt and reference image(s)",
       editing_title: "🖌️  Editing Image...",
-      editing_description:
-        "Editing the referenced image by targeting `{edit_target}`",
+      editing_description: "Editing the referenced image by targeting `{edit_target}`",
       generating_footer: "This may take a moment depending on provider load",
     },
 
     vision: {
       analyzing_title: "🖼️  Analyzing Image...",
-      analyzing_description:
-        "Current model is non-vision; using configured vision model to analyze images",
+      analyzing_description: "Current model is non-vision; using configured vision model to analyze images",
       analyzing_footer: "This may take a moment depending on image count",
     },
 
     gif: {
       processing_title: "🎞️  Processing GIF...",
-      processing_description:
-        "Extracting keyframes from the requested GIF for closer analysis",
+      processing_description: "Extracting keyframes from the requested GIF for closer analysis",
       processing_footer: "Large GIFs can take a bit longer",
     },
 
@@ -265,17 +257,14 @@ export default {
       response_stopped_description:
         "The response was interrupted for the following reason: {reason}. Make sure that content sent is not too large for the AI provider to handle. Run `/tool refresh` to clear conversation content.",
       prohibited_content_title: "Content Policy Violation",
-      prohibited_content_description:
-        "The response was blocked due to prohibited content detection.",
+      prohibited_content_description: "The response was blocked due to prohibited content detection.",
       prohibited_content_admin_notice_title: "Admin Notice",
       prohibited_content_admin_notice_description:
         "Check: messages (`/tool refresh`), personality/memories (`/data export`), blacklist problematic members (`/server blacklist`), or switch provider (`/config model`)",
-      streaming_failed_description:
-        "An issue while trying to stream the response.",
+      streaming_failed_description: "An issue while trying to stream the response.",
 
       // Error interaction messages
-      provider_error_interaction:
-        "Stream response blocked/stopped. Reason: {reason}.",
+      provider_error_interaction: "Stream response blocked/stopped. Reason: {reason}.",
       retry_message: "This error is temporary. You can try again later.",
 
       // Universal provider error titles and tips (moved from genai.google)
@@ -284,12 +273,10 @@ export default {
         "Please verify your API key and try again. If this error persists, report through `/support discord`",
 
       rate_limit_title: "🟡 Provider Rate Limit Exceeded",
-      rate_limit_title_all_rotation_keys:
-        "🟡 Provider Rate Limit Exceeded (All Rotation Keys)",
+      rate_limit_title_all_rotation_keys: "🟡 Provider Rate Limit Exceeded (All Rotation Keys)",
       rate_limit_tip:
         "Please wait a few minutes before trying again. If you have multiple personal keys, consider `/config apikey rotation`.",
-      model_fallback_hint:
-        "For better resilience, you can configure model failover with `/config model fallback`.",
+      model_fallback_hint: "For better resilience, you can configure model failover with `/config model fallback`.",
 
       content_blocked_title: "🔴️ Provider Content Filter",
       content_blocked_tip:
@@ -303,8 +290,7 @@ export default {
         "Provider is currently experiencing unexpectedly high usage, please try again later or swap to a different provider",
 
       unknown_title: "🔴 Provider Error",
-      unknown_tip:
-        "Please try again or use `/support discord` if this keeps happening",
+      unknown_tip: "Please try again or use `/support discord` if this keeps happening",
 
       flush_limit_title: "🟡️ Response Length Limit Reached",
       flush_limit_description:
@@ -343,8 +329,7 @@ export default {
       "504_default_message": "Your request took too long to process",
 
       // Content blocked errors (SAFETY, PROHIBITED_CONTENT, etc.)
-      content_blocked_default_message:
-        "Your content was blocked by safety filters",
+      content_blocked_default_message: "Your content was blocked by safety filters",
 
       // Generic fallback for unknown Google errors
       unknown_default_message: "An unexpected error occurred",
@@ -366,8 +351,7 @@ export default {
       "402_default_message": "You don't have enough Anlas credits",
 
       // 429 TOO_MANY_REQUESTS
-      "429_default_message":
-        "You're sending too many requests, please slow down",
+      "429_default_message": "You're sending too many requests, please slow down",
 
       // 503 SERVICE_UNAVAILABLE
       "503_default_message": "NovelAI servers are currently overloaded",
@@ -382,20 +366,17 @@ export default {
     // OpenRouter-specific error messages (provider-specific default messages only)
     openrouter: {
       // 400 BAD_REQUEST
-      "400_default_message":
-        "Bad request: invalid or missing params, or CORS issue",
+      "400_default_message": "Bad request: invalid or missing params, or CORS issue",
 
       // 401 UNAUTHORIZED
-      "401_default_message":
-        "Invalid credentials: OAuth session expired or disabled/invalid API key",
+      "401_default_message": "Invalid credentials: OAuth session expired or disabled/invalid API key",
 
       // 402 PAYMENT_REQUIRED
       "402_default_message":
         "Your account or API key has insufficient credits. Add more credits and retry the request.",
 
       // 403 FORBIDDEN
-      "403_default_message":
-        "Your chosen model requires moderation and your input was flagged",
+      "403_default_message": "Your chosen model requires moderation and your input was flagged",
 
       // 404 NOT_FOUND
       "404_default_message":
@@ -422,12 +403,10 @@ export default {
         "You are being rate limited. Please retry shortly, or use a different model that isn't free.",
 
       // 502 BAD_GATEWAY
-      "502_default_message":
-        "Your chosen model is down or we received an invalid response from it",
+      "502_default_message": "Your chosen model is down or we received an invalid response from it",
 
       // 503 SERVICE_UNAVAILABLE
-      "503_default_message":
-        "There is no available model provider that meets your routing requirements",
+      "503_default_message": "There is no available model provider that meets your routing requirements",
 
       // invalid_type error (parameter type mismatch)
       invalid_type_default_message:
@@ -438,26 +417,19 @@ export default {
     },
 
     deepseek: {
-      connection_refused:
-        "Could not connect to the DeepSeek API endpoint. Please try again later.",
+      connection_refused: "Could not connect to the DeepSeek API endpoint. Please try again later.",
 
-      "401_default_message":
-        "Your DeepSeek API key is invalid or does not have access to this model.",
+      "401_default_message": "Your DeepSeek API key is invalid or does not have access to this model.",
 
-      "402_default_message":
-        "Your DeepSeek account does not have sufficient credits for this request.",
+      "402_default_message": "Your DeepSeek account does not have sufficient credits for this request.",
 
-      "403_default_message":
-        "DeepSeek denied this request. Please verify your account and model access.",
+      "403_default_message": "DeepSeek denied this request. Please verify your account and model access.",
 
-      "404_default_message":
-        "The requested DeepSeek model or API route could not be found.",
+      "404_default_message": "The requested DeepSeek model or API route could not be found.",
 
-      "408_default_message":
-        "The DeepSeek request timed out before the provider responded.",
+      "408_default_message": "The DeepSeek request timed out before the provider responded.",
 
-      "429_default_message":
-        "DeepSeek is rate limiting this request. Please wait a moment and try again.",
+      "429_default_message": "DeepSeek is rate limiting this request. Please wait a moment and try again.",
 
       "429_plan_access_default_message":
         "Your DeepSeek subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
@@ -466,62 +438,46 @@ export default {
 
       "503_default_message": "DeepSeek is currently unavailable or overloaded.",
 
-      unknown_default_message:
-        "An unexpected error occurred while communicating with DeepSeek.",
+      unknown_default_message: "An unexpected error occurred while communicating with DeepSeek.",
     },
 
     nvidia: {
-      connection_refused:
-        "Could not connect to the NVIDIA API endpoint. Please try again later.",
+      connection_refused: "Could not connect to the NVIDIA API endpoint. Please try again later.",
 
-      "401_default_message":
-        "Your NVIDIA API key is invalid or does not have access to this model.",
+      "401_default_message": "Your NVIDIA API key is invalid or does not have access to this model.",
 
-      "402_default_message":
-        "Your NVIDIA account does not have sufficient credits for this request.",
+      "402_default_message": "Your NVIDIA account does not have sufficient credits for this request.",
 
-      "403_default_message":
-        "NVIDIA denied this request. Please verify your account and model access.",
+      "403_default_message": "NVIDIA denied this request. Please verify your account and model access.",
 
-      "404_default_message":
-        "The requested NVIDIA model or API route could not be found.",
+      "404_default_message": "The requested NVIDIA model or API route could not be found.",
 
-      "408_default_message":
-        "The NVIDIA request timed out before the provider responded.",
+      "408_default_message": "The NVIDIA request timed out before the provider responded.",
 
-      "429_default_message":
-        "NVIDIA is rate limiting this request. Please wait a moment and try again.",
+      "429_default_message": "NVIDIA is rate limiting this request. Please wait a moment and try again.",
 
       "500_default_message": "NVIDIA returned an internal server error.",
 
       "503_default_message": "NVIDIA is currently unavailable or overloaded.",
 
-      unknown_default_message:
-        "An unexpected error occurred while communicating with NVIDIA.",
+      unknown_default_message: "An unexpected error occurred while communicating with NVIDIA.",
     },
 
     // Z.ai provider error messages
     zai: {
-      connection_refused:
-        "Could not connect to the Z.ai API endpoint. Please try again later.",
+      connection_refused: "Could not connect to the Z.ai API endpoint. Please try again later.",
 
-      "401_default_message":
-        "Your Z.ai API key is invalid or does not have access to this model.",
+      "401_default_message": "Your Z.ai API key is invalid or does not have access to this model.",
 
-      "402_default_message":
-        "Your Z.ai account does not have sufficient credits for this request.",
+      "402_default_message": "Your Z.ai account does not have sufficient credits for this request.",
 
-      "403_default_message":
-        "Z.ai denied this request. Please verify your account and model access.",
+      "403_default_message": "Z.ai denied this request. Please verify your account and model access.",
 
-      "404_default_message":
-        "The requested Z.ai model or API route could not be found.",
+      "404_default_message": "The requested Z.ai model or API route could not be found.",
 
-      "429_default_message":
-        "Z.ai is rate limiting this request. Please wait a moment and try again.",
+      "429_default_message": "Z.ai is rate limiting this request. Please wait a moment and try again.",
 
-      "429_balance_default_message":
-        "Your Z.ai account does not have enough balance or credits for this request.",
+      "429_balance_default_message": "Your Z.ai account does not have enough balance or credits for this request.",
 
       "429_plan_access_default_message":
         "Your Z.ai subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
@@ -530,8 +486,7 @@ export default {
 
       "503_default_message": "Z.ai is currently unavailable or overloaded.",
 
-      unknown_default_message:
-        "An unexpected error occurred while communicating with Z.ai.",
+      unknown_default_message: "An unexpected error occurred while communicating with Z.ai.",
     },
 
     // Custom provider error messages (self-hosted OpenAI-compatible endpoints)
@@ -544,46 +499,34 @@ export default {
       "401_default_message":
         "Authentication failed. If your endpoint requires an API key, please check that it's configured correctly.",
 
-      "403_default_message":
-        "Access denied by the custom endpoint. Please check your endpoint's access controls.",
+      "403_default_message": "Access denied by the custom endpoint. Please check your endpoint's access controls.",
 
       "404_default_message":
         "Resource not found. For Ollama users: verify your model name is correct (use `/config setup` to update). Otherwise, check that your endpoint URL includes the proper path (e.g., /v1/chat/completions).",
 
-      "408_default_message":
-        "Request timed out. The custom endpoint took too long to respond.",
+      "408_default_message": "Request timed out. The custom endpoint took too long to respond.",
 
-      "429_default_message":
-        "Rate limited by the custom endpoint. Please wait a moment and try again.",
+      "429_default_message": "Rate limited by the custom endpoint. Please wait a moment and try again.",
 
-      "500_default_message":
-        "Internal server error from the custom endpoint. Please check your LLM server logs.",
+      "500_default_message": "Internal server error from the custom endpoint. Please check your LLM server logs.",
 
-      "502_default_message":
-        "Bad gateway error. The custom endpoint returned an invalid response.",
+      "502_default_message": "Bad gateway error. The custom endpoint returned an invalid response.",
 
-      "503_default_message":
-        "Custom endpoint is currently unavailable. Please ensure your LLM server is running.",
+      "503_default_message": "Custom endpoint is currently unavailable. Please ensure your LLM server is running.",
 
       // Generic fallback
-      unknown_default_message:
-        "An unexpected error occurred while communicating with the custom endpoint.",
+      unknown_default_message: "An unexpected error occurred while communicating with the custom endpoint.",
     },
 
     self_teach: {
-      server_memory_learned_title:
-        "🧠 {persona_nickname} Learned Something New!",
-      server_memory_learned_description:
-        "A server memory has been saved:\n`{memory_content}`",
+      server_memory_learned_title: "🧠 {persona_nickname} Learned Something New!",
+      server_memory_learned_description: "A server memory has been saved:\n`{memory_content}`",
       server_memory_updated_title: "📝 {persona_nickname} Updated a Memory!",
-      server_memory_updated_description:
-        "A server memory has been updated:\n`{memory_content}`",
-      personal_memory_learned_title:
-        "💡 {persona_nickname} Learned Something New about {user_nickname}!",
+      server_memory_updated_description: "A server memory has been updated:\n`{memory_content}`",
+      personal_memory_learned_title: "💡 {persona_nickname} Learned Something New about {user_nickname}!",
       personal_memory_learned_description:
         "A personal memory about {user_nickname} has been saved:\n`{memory_content}`",
-      personal_memory_updated_title:
-        "📝 {persona_nickname} Updated Memory about {user_nickname}!",
+      personal_memory_updated_title: "📝 {persona_nickname} Updated Memory about {user_nickname}!",
       personal_memory_updated_description:
         "A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
       server_memory_footer:
@@ -3233,14 +3176,11 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         // Checkbox select menu UI strings
         select_placeholder: "Select permissions to enable...",
         select_embed_title: "Configure Permissions",
-        select_embed_description:
-          "Select which permissions to enable. Checked = active, unchecked = disabled.",
+        select_embed_description: "Select which permissions to enable. Checked = active, unchecked = disabled.",
         no_changes_title: "No Changes Made",
-        no_changes_description:
-          "All permissions are already at the selected values.",
+        no_changes_description: "All permissions are already at the selected values.",
         timed_out_title: "Selection Timed Out",
-        timed_out_description:
-          "The permission menu timed out. No changes were applied.",
+        timed_out_description: "The permission menu timed out. No changes were applied.",
         set_description: `Enable or disable this permission for me.`,
         already_set_title: `Permission Already Set`,
         already_enabled_description: `The permission \`{permission_type}\` is already **enabled**.`,
@@ -3896,14 +3836,11 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         // Checkbox select menu UI strings
         select_placeholder: "Select what members can teach...",
         select_embed_title: "Member Teaching Permissions",
-        select_embed_description:
-          "Select which things non-admin members can **teach** me. Checked = allowed.",
+        select_embed_description: "Select which things non-admin members can **teach** me. Checked = allowed.",
         no_changes_title: "No Changes Made",
-        no_changes_description:
-          "All permissions are already at the selected values.",
+        no_changes_description: "All permissions are already at the selected values.",
         timed_out_title: "Selection Timed Out",
-        timed_out_description:
-          "The permission menu timed out. No changes were applied.",
+        timed_out_description: "The permission menu timed out. No changes were applied.",
         set_description: `Enable or disable this permission for members.`,
         success_title: `Member Permissions Updated`,
         success_description: `Updated **{count}** permission(s)\n`,
@@ -4512,13 +4449,11 @@ You can change this anytime using \`/personal privacy\`.`,
           title: "Generate Image",
           prompt_label: "Image Prompt",
           prompt_description: "Describe the image you want to generate",
-          prompt_placeholder:
-            "A cute short-haired elven anime girl eating a banana, manga style",
+          prompt_placeholder: "A cute short-haired elven anime girl eating a banana, manga style",
           image_upload_label: "Reference Image (Optional)",
           image_upload_2_label: "Reference Image 2 (Optional)",
           image_upload_3_label: "Reference Image 3 (Optional)",
-          image_upload_description:
-            "Upload a reference image for image-to-image generation",
+          image_upload_description: "Upload a reference image for image-to-image generation",
           aspect_ratio_label: "Aspect Ratio",
           aspect_ratio_description: "Select the desired aspect ratio",
           aspect_ratio_placeholder: "Choose aspect ratio...",
@@ -4546,38 +4481,28 @@ You can change this anytime using \`/personal privacy\`.`,
         wrong_provider_description:
           "Image generation requires a provider with native image generation support. Your current provider is **{current_provider}**.",
         no_api_key_title: "🔴 No API Key",
-        no_api_key_description:
-          "No API key configured. Please use `/config apikey set`.",
+        no_api_key_description: "No API key configured. Please use `/config apikey set`.",
         api_key_decrypt_failed_title: "🔴 API Key Error",
-        api_key_decrypt_failed_description:
-          "Failed to decrypt API key. Please reconfigure using `/config apikey set`.",
+        api_key_decrypt_failed_description: "Failed to decrypt API key. Please reconfigure using `/config apikey set`.",
         no_diffusion_model_title: "🔴 No Image Model",
-        no_diffusion_model_description:
-          "No diffusion model configured for your provider.",
+        no_diffusion_model_description: "No diffusion model configured for your provider.",
         error_billing_title: "🔴 Billing Required",
-        error_billing_description:
-          "Your API key requires billing to be enabled for image generation.",
+        error_billing_description: "Your API key requires billing to be enabled for image generation.",
         error_safety_title: "🔴 Content Blocked",
-        error_safety_description:
-          "Your prompt was blocked by safety filters. Please try a different prompt.",
+        error_safety_description: "Your prompt was blocked by safety filters. Please try a different prompt.",
         error_generation_failed_title: "🔴 Generation Failed",
-        error_generation_failed_description:
-          "Failed to generate image: {error}",
+        error_generation_failed_description: "Failed to generate image: {error}",
         invalid_image_title: "🔴 Invalid Image",
-        invalid_image_description:
-          "Please upload valid image files (PNG, JPG, etc.).",
+        invalid_image_description: "Please upload valid image files (PNG, JPG, etc.).",
         // Quota errors
         quota_exceeded_title: "🔴 Image Quota Exceeded",
-        quota_exceeded_description:
-          "You have reached your image generation quota. {reset_info}",
-        user_quota_exceeded_description:
-          "You have reached your daily image generation quota. {reset_info}",
+        quota_exceeded_description: "You have reached your image generation quota. {reset_info}",
+        user_quota_exceeded_description: "You have reached your daily image generation quota. {reset_info}",
         serverwide_quota_exceeded_description:
           "This server has reached its image generation quota for this period. {reset_info}",
         quota_resets_in_hours: "Quota resets in {hours} hour(s).",
         quota_resets_in_days: "Quota resets in {days} day(s).",
-        quota_exceeded_footer:
-          "This quota is configured by this server's managers via `/server quota`.",
+        quota_exceeded_footer: "This quota is configured by this server's managers via `/server quota`.",
       },
     },
   },

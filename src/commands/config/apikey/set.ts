@@ -5,36 +5,16 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  loadUniqueProviders,
-  loadDefaultModelForProvider,
-  loadLlmById,
-} from "../../../utils/db/dbRead";
-import {
-  clearAllChannelLlmOverridesForServer,
-  clearAllPersonaLlmOverridesForServer,
-} from "../../../utils/db/dbWrite";
+import { loadUniqueProviders, loadDefaultModelForProvider, loadLlmById } from "../../../utils/db/dbRead";
+import { clearAllChannelLlmOverridesForServer, clearAllPersonaLlmOverridesForServer } from "../../../utils/db/dbWrite";
 import { invalidateAllChannelLlmCacheForServer } from "../../../utils/cache/channelLlmCache";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal } from "../../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { ProviderError } from "../../../types/stream/interfaces";
-import type {
-  SelectOption,
-  ModalComponent,
-} from "../../../types/discord/modal";
+import type { SelectOption, ModalComponent } from "../../../types/discord/modal";
 import { ProviderFactory } from "../../../utils/provider/providerFactory";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { encryptApiKey } from "../../../utils/security/crypto";
@@ -55,14 +35,8 @@ const PROVIDER_SELECT_ID = "provider_select";
 const API_KEY_INPUT_ID = "api_key_input";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("set")
-    .setDescription(
-      localizer("en-US", "commands.config.apikey.set.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("set").setDescription(localizer("en-US", "commands.config.apikey.set.description"));
 
 /**
  * Sets the API key Tomori will use for this server with dynamic provider selection
@@ -115,18 +89,14 @@ export async function execute(
   }
 
   // 4. Create provider select options with descriptions
-  const providerSelectOptions: SelectOption[] = uniqueProviders.map(
-    (provider) => ({
-      label: getProviderDisplayName(provider),
-      value: provider.toLowerCase(),
-      description: undefined,
-    }),
-  );
+  const providerSelectOptions: SelectOption[] = uniqueProviders.map((provider) => ({
+    label: getProviderDisplayName(provider),
+    value: provider.toLowerCase(),
+    description: undefined,
+  }));
 
   // Track modal submit interaction for error handling in catch block
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
 
   try {
     // 5. Show modal with provider selection and API key input
@@ -167,9 +137,7 @@ export async function execute(
 
     // 6. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `API key set modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`API key set modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -201,8 +169,7 @@ export async function execute(
         const validationMessage = apiKey
           ? getCustomEndpointValidationMessage(urlValidation)
           : {
-              descriptionKey:
-                "commands.config.custom.endpoint_url_invalid_description",
+              descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
             };
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.custom.endpoint_url_invalid_title",
@@ -217,18 +184,13 @@ export async function execute(
       log.info(`Custom endpoint URL validated: ${customEndpointUrl}`);
 
       // Show capabilities selection for custom model
-      customCapabilitiesResult = await promptCustomCapabilities(
-        modalSubmitInteraction,
-        locale,
-        serverId,
-      );
+      customCapabilitiesResult = await promptCustomCapabilities(modalSubmitInteraction, locale, serverId);
 
       if (!customCapabilitiesResult.success) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.operation_failed_title",
           description:
-            customCapabilitiesResult.error ||
-            localizer(locale, "commands.config.custom.capabilities_timeout"),
+            customCapabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
           color: ColorCode.ERROR,
         });
         return;
@@ -239,9 +201,7 @@ export async function execute(
       );
 
       // Use placeholder API key for custom provider
-      const placeholderResult = await encryptApiKey(
-        CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
-      );
+      const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
       encrypted = placeholderResult.encrypted;
       version = placeholderResult.version;
     } else {
@@ -260,32 +220,24 @@ export async function execute(
       let validationResult: { valid: boolean; error?: ProviderError } = {
         valid: false,
       };
-      let providerInstance:
-        | Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>
-        | undefined;
+      let providerInstance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>> | undefined;
       try {
         const providerName = selectedProvider.toLowerCase();
 
         // Use factory to get provider instance directly by canonical name or alias
-        providerInstance =
-          await ProviderFactory.getProviderByName(providerName);
+        providerInstance = await ProviderFactory.getProviderByName(providerName);
 
         // Validate the API key with the provider
         validationResult = await providerInstance.validateApiKey(apiKey);
       } catch (error) {
-        log.error(
-          `Error validating API key for provider ${selectedProvider}`,
-          error as Error,
-        );
+        log.error(`Error validating API key for provider ${selectedProvider}`, error as Error);
 
         // Check if error is due to unsupported provider
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.includes("Unsupported provider")) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.apikey.set.unsupported_provider_title",
-            descriptionKey:
-              "commands.config.apikey.set.unsupported_provider_description",
+            descriptionKey: "commands.config.apikey.set.unsupported_provider_description",
             descriptionVars: {
               provider: selectedProvider,
             },
@@ -294,8 +246,7 @@ export async function execute(
         } else {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.apikey.set.validation_error_title",
-            descriptionKey:
-              "commands.config.apikey.set.validation_error_description",
+            descriptionKey: "commands.config.apikey.set.validation_error_description",
             color: ColorCode.ERROR,
           });
         }
@@ -309,10 +260,7 @@ export async function execute(
         if (validationResult.error) {
           try {
             if (providerInstance) {
-              const formattedError = providerInstance.formatErrorDescription(
-                validationResult.error,
-                locale,
-              );
+              const formattedError = providerInstance.formatErrorDescription(validationResult.error, locale);
               if (formattedError) {
                 errorDescription = formattedError;
               }
@@ -320,10 +268,7 @@ export async function execute(
               errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
             }
           } catch (providerError) {
-            log.warn(
-              "Failed to format provider error description",
-              providerError,
-            );
+            log.warn("Failed to format provider error description", providerError);
             errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
           }
         }
@@ -345,10 +290,7 @@ export async function execute(
             "../../../utils/cache/novelaiSubscriptionCache"
           );
           refreshNAISub(guildIdForSubscription, apiKey).catch((err) => {
-            log.warn(
-              "Non-critical: failed to warm NovelAI subscription cache during key set",
-              err,
-            );
+            log.warn("Non-critical: failed to warm NovelAI subscription cache during key set", err);
           });
         }
       }
@@ -393,16 +335,13 @@ export async function execute(
         newEmbeddingModelId = null;
       } else {
         // Regular provider: load default model for new provider
-        log.info(
-          `Provider changed from ${currentProvider} to ${newProvider}, loading default model`,
-        );
+        log.info(`Provider changed from ${currentProvider} to ${newProvider}, loading default model`);
         const defaultModel = await loadDefaultModelForProvider(newProvider);
 
         if (!defaultModel || !defaultModel.llm_id) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.apikey.set.no_default_model_title",
-            descriptionKey:
-              "commands.config.apikey.set.no_default_model_description",
+            descriptionKey: "commands.config.apikey.set.no_default_model_description",
             descriptionVars: {
               provider: getProviderDisplayName(newProvider),
             },
@@ -412,9 +351,7 @@ export async function execute(
         }
 
         newLlmId = defaultModel.llm_id;
-        log.info(
-          `Switching to default model for ${newProvider}: ${defaultModel.llm_codename} (ID: ${newLlmId})`,
-        );
+        log.info(`Switching to default model for ${newProvider}: ${defaultModel.llm_codename} (ID: ${newLlmId})`);
 
         // Load default diffusion model for new provider (for image generation)
         const defaultDiffusionModel = (
@@ -447,9 +384,7 @@ export async function execute(
             );
           } else {
             newDiffusionModelId = null;
-            log.info(
-              `No diffusion models available for ${newProvider} (image generation not supported)`,
-            );
+            log.info(`No diffusion models available for ${newProvider} (image generation not supported)`);
           }
         } else {
           newDiffusionModelId = defaultDiffusionModel.diffusion_model_id;
@@ -488,9 +423,7 @@ export async function execute(
             );
           } else {
             newEmbeddingModelId = null;
-            log.info(
-              `No embedding models available for ${newProvider} (document retrieval not supported)`,
-            );
+            log.info(`No embedding models available for ${newProvider} (document retrieval not supported)`);
           }
         } else {
           newEmbeddingModelId = defaultEmbeddingModel.embedding_model_id;
@@ -503,14 +436,8 @@ export async function execute(
 
     // 12. Update the config in the database (includes llm_id, diffusion_model_id, embedding_model_id, custom_endpoint_url, and custom_model_name if provider changed)
     const customModelName = customCapabilitiesResult?.modelName || null;
-    const targetLlm =
-      newLlmId === tomoriState.config.llm_id
-        ? tomoriState.llm
-        : await loadLlmById(newLlmId);
-    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(
-      tomoriState.config.llm_logit_biases ?? [],
-      targetLlm,
-    );
+    const targetLlm = newLlmId === tomoriState.config.llm_id ? tomoriState.llm : await loadLlmById(newLlmId);
+    const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(tomoriState.config.llm_logit_biases ?? [], targetLlm);
     const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
@@ -538,9 +465,7 @@ export async function execute(
         metadata: {
           command: "config apikeyset",
           selectedProvider,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -567,12 +492,8 @@ export async function execute(
     // Non-critical: log failures but do not abort the key-set flow.
     if (currentProvider !== newProvider) {
       invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
-      const channelCleared = await clearAllChannelLlmOverridesForServer(
-        tomoriState.server_id,
-      );
-      const personaCleared = await clearAllPersonaLlmOverridesForServer(
-        tomoriState.server_id,
-      );
+      const channelCleared = await clearAllChannelLlmOverridesForServer(tomoriState.server_id);
+      const personaCleared = await clearAllPersonaLlmOverridesForServer(tomoriState.server_id);
       log.info(
         `Provider change ${currentProvider}→${newProvider}: ` +
           `channel overrides cleared=${channelCleared}, persona overrides cleared=${personaCleared}`,
@@ -591,14 +512,10 @@ export async function execute(
 					    sticker_usage_enabled = false
 					WHERE server_id = ${tomoriState.server_id}
 				`;
-        log.info(
-          `Auto-disabled emoji/sticker usage after switching to NovelAI for server ${tomoriState.server_id}`,
-        );
+        log.info(`Auto-disabled emoji/sticker usage after switching to NovelAI for server ${tomoriState.server_id}`);
       } catch (disableError) {
         // Non-critical — log but don't fail the key update
-        log.warn(
-          `Failed to auto-disable emoji/sticker for NovelAI switch: ${disableError}`,
-        );
+        log.warn(`Failed to auto-disable emoji/sticker for NovelAI switch: ${disableError}`);
       }
     }
 
@@ -620,9 +537,7 @@ export async function execute(
     // Custom endpoint success copy always references {model_name}, even when the
     // provider stays on "custom" and the user is only reconfiguring the endpoint.
     if (isCustomProvider(newProvider)) {
-      descriptionVars.model_name =
-        customCapabilitiesResult?.modelName ||
-        localizer(locale, "general.unknown");
+      descriptionVars.model_name = customCapabilitiesResult?.modelName || localizer(locale, "general.unknown");
     } else if (currentProvider !== newProvider) {
       const defaultModel = await loadDefaultModelForProvider(newProvider);
       if (defaultModel) {
@@ -656,11 +571,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /config apikeyset for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config apikeyset for user ${userData.user_disc_id}`, error as Error, context);
 
     // Inform user of unknown error
     // Use modalSubmitInteraction if available (error after modal), otherwise interaction (error during modal)

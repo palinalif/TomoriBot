@@ -36,12 +36,7 @@ type FamilyResult = "ok" | "skipped" | "access-denied" | "error";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const MANIFEST_PATH = path.join(
-  import.meta.dir,
-  "..",
-  "tokenizers",
-  "manifest.json",
-);
+const MANIFEST_PATH = path.join(import.meta.dir, "..", "tokenizers", "manifest.json");
 const TOKENIZER_BASE_DIR = path.join(import.meta.dir, "..", "tokenizers");
 const HF_BASE_URL = "https://huggingface.co";
 
@@ -142,28 +137,16 @@ async function downloadFile(
  * @param repo       - The HuggingFace repo path (e.g. "google/gemma-3-4b-pt")
  * @param hasToken   - Whether HF_TOKEN was provided in the environment
  */
-function printAccessDeniedGuide(
-  familyName: string,
-  repo: string,
-  hasToken: boolean,
-): void {
+function printAccessDeniedGuide(familyName: string, repo: string, hasToken: boolean): void {
   if (hasToken) {
-    console.warn(
-      `  ⚠ ${familyName}: access denied — your HF_TOKEN may not have access to this repo.`,
-    );
+    console.warn(`  ⚠ ${familyName}: access denied — your HF_TOKEN may not have access to this repo.`);
     console.warn(`    Accept the model license at: ${HF_BASE_URL}/${repo}`);
     console.warn(`    Then re-run: bun run setup:tokenizers`);
   } else {
-    console.warn(
-      `  ⚠ ${familyName}: access denied — this model requires a HuggingFace access token.`,
-    );
-    console.warn(
-      `    1. Create a token at: https://huggingface.co/settings/tokens`,
-    );
+    console.warn(`  ⚠ ${familyName}: access denied — this model requires a HuggingFace access token.`);
+    console.warn(`    1. Create a token at: https://huggingface.co/settings/tokens`);
     console.warn(`    2. Accept the model license at: ${HF_BASE_URL}/${repo}`);
-    console.warn(
-      `    3. Set HF_TOKEN and re-run: HF_TOKEN=hf_xxx bun run setup:tokenizers`,
-    );
+    console.warn(`    3. Set HF_TOKEN and re-run: HF_TOKEN=hf_xxx bun run setup:tokenizers`);
   }
 }
 
@@ -237,9 +220,7 @@ async function main(): Promise<void> {
   if (hfToken) {
     console.log("HF_TOKEN is set — gated model access enabled");
   } else {
-    console.log(
-      "HF_TOKEN not set — open repos only (gated models will be skipped)",
-    );
+    console.log("HF_TOKEN not set — open repos only (gated models will be skipped)");
   }
 
   if (force) console.log("--force: re-downloading all families");
@@ -248,15 +229,11 @@ async function main(): Promise<void> {
   console.log("");
 
   // 2. Determine which families to process
-  const familiesToProcess = targetFamily
-    ? { [targetFamily]: manifest.families[targetFamily] }
-    : manifest.families;
+  const familiesToProcess = targetFamily ? { [targetFamily]: manifest.families[targetFamily] } : manifest.families;
 
   if (targetFamily && !manifest.families[targetFamily]) {
     console.error(`Unknown family: '${targetFamily}'`);
-    console.error(
-      `Available families: ${Object.keys(manifest.families).join(", ")}`,
-    );
+    console.error(`Available families: ${Object.keys(manifest.families).join(", ")}`);
     process.exit(1);
   }
 
@@ -275,21 +252,13 @@ async function main(): Promise<void> {
 
   const ok = Object.entries(results).filter(([, r]) => r === "ok");
   const skipped = Object.entries(results).filter(([, r]) => r === "skipped");
-  const denied = Object.entries(results).filter(
-    ([, r]) => r === "access-denied",
-  );
+  const denied = Object.entries(results).filter(([, r]) => r === "access-denied");
   const errors = Object.entries(results).filter(([, r]) => r === "error");
 
-  if (ok.length > 0)
-    console.log(`  ✓ Downloaded: ${ok.map(([n]) => n).join(", ")}`);
-  if (skipped.length > 0)
-    console.log(
-      `  - Skipped (complete): ${skipped.map(([n]) => n).join(", ")}`,
-    );
-  if (denied.length > 0)
-    console.warn(`  ⚠ Access denied: ${denied.map(([n]) => n).join(", ")}`);
-  if (errors.length > 0)
-    console.error(`  ✗ Errors: ${errors.map(([n]) => n).join(", ")}`);
+  if (ok.length > 0) console.log(`  ✓ Downloaded: ${ok.map(([n]) => n).join(", ")}`);
+  if (skipped.length > 0) console.log(`  - Skipped (complete): ${skipped.map(([n]) => n).join(", ")}`);
+  if (denied.length > 0) console.warn(`  ⚠ Access denied: ${denied.map(([n]) => n).join(", ")}`);
+  if (errors.length > 0) console.error(`  ✗ Errors: ${errors.map(([n]) => n).join(", ")}`);
 
   const failed = denied.length + errors.length;
 

@@ -1,16 +1,8 @@
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import {
-  MessageFlags,
-  type SlashCommandSubcommandBuilder,
-  EmbedBuilder,
-  ChannelType,
-} from "discord.js";
+import { MessageFlags, type SlashCommandSubcommandBuilder, EmbedBuilder, ChannelType } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal } from "@/utils/discord/interactionHelper";
 import type { UserRow } from "@/types/db/schema";
 
 /**
@@ -18,12 +10,8 @@ import type { UserRow } from "@/types/db/schema";
  * @param subcommand - The slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) => {
-  return subcommand
-    .setName("comment")
-    .setDescription(localizer("en-US", "commands.tool.comment.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) => {
+  return subcommand.setName("comment").setDescription(localizer("en-US", "commands.tool.comment.description"));
 };
 
 /**
@@ -73,10 +61,7 @@ export async function execute(
       {
         customId: "comment_content",
         labelKey: "commands.tool.comment.content_label",
-        placeholder: localizer(
-          locale,
-          "commands.tool.comment.content_placeholder",
-        ),
+        placeholder: localizer(locale, "commands.tool.comment.content_placeholder"),
         required: true,
         minLength: 1,
         maxLength: 4000,
@@ -86,11 +71,7 @@ export async function execute(
   });
 
   // 3. Process modal submission
-  if (
-    modalResult.outcome !== "submit" ||
-    !modalResult.values ||
-    !modalResult.interaction
-  ) {
+  if (modalResult.outcome !== "submit" || !modalResult.values || !modalResult.interaction) {
     return;
   }
 
@@ -106,25 +87,19 @@ export async function execute(
     const emoji = interaction.guild?.emojis.cache.find((e) => e.name === name);
     if (!emoji) return match;
     // Animated emojis use <a:name:id>, static use <:name:id>
-    return emoji.animated
-      ? `<a:${emoji.name}:${emoji.id}>`
-      : `<:${emoji.name}:${emoji.id}>`;
+    return emoji.animated ? `<a:${emoji.name}:${emoji.id}>` : `<:${emoji.name}:${emoji.id}>`;
   });
 
   // 5. Create embed with comment content
-  const embed = new EmbedBuilder()
-    .setDescription(commentContent)
-    .setColor(ColorCode.INFO);
+  const embed = new EmbedBuilder().setDescription(commentContent).setColor(ColorCode.INFO);
 
   // 6. Add footer showing who created the comment (with profile picture)
   const memberAvatarUrl = interaction.member
-    ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL(
-        {
-          size: 64,
-          extension: "png",
-          forceStatic: true,
-        },
-      )
+    ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
+        size: 64,
+        extension: "png",
+        forceStatic: true,
+      })
     : interaction.user.displayAvatarURL({
         size: 64,
         extension: "png",

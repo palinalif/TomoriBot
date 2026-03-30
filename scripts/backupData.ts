@@ -1,14 +1,7 @@
 import { $, sql } from "bun";
 import { log } from "../src/utils/misc/logger";
 import { config } from "dotenv";
-import {
-  existsSync,
-  mkdirSync,
-  copyFileSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-} from "node:fs";
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 config();
@@ -87,11 +80,7 @@ async function runBackup(): Promise<void> {
   }
 
   // 3. Build a timestamped bundle directory name
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/:/g, "-")
-    .replace(/\..+/, "")
-    .replace("T", "_");
+  const timestamp = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "").replace("T", "_");
   const bundleDir = join(backupsRoot, `backup_${timestamp}`);
   mkdirSync(bundleDir, { recursive: true });
 
@@ -109,9 +98,7 @@ async function runBackup(): Promise<void> {
     log.success("Database dump completed.");
   } catch (_error) {
     log.error("pg_dump failed. Ensure pg_dump is installed and in your PATH.");
-    log.info(
-      "  Windows: install PostgreSQL from https://www.postgresql.org/download/windows/",
-    );
+    log.info("  Windows: install PostgreSQL from https://www.postgresql.org/download/windows/");
     log.info("  macOS:   brew install postgresql");
     log.info("  Linux:   sudo apt-get install postgresql-client");
     process.exit(1);
@@ -122,9 +109,7 @@ async function runBackup(): Promise<void> {
   log.success("Config (.env) copied.");
 
   // 6. Write bundle manifest
-  const { version } = JSON.parse(
-    readFileSync(join(process.cwd(), "package.json"), "utf-8"),
-  ) as {
+  const { version } = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8")) as {
     version: string;
   };
   const manifest = {
@@ -137,9 +122,7 @@ async function runBackup(): Promise<void> {
   log.section("✅ Bundle Created!");
   log.info(`Location:    ${bundleDir}`);
   log.info("Contents:");
-  log.info(
-    "  database.sql     — PostgreSQL dump (restore with: bun run transfer-restore)",
-  );
+  log.info("  database.sql     — PostgreSQL dump (restore with: bun run transfer-restore)");
   log.info("  config.env       — Copy of your .env (review before restoring!)");
   log.info("  bundle_info.json — Bundle metadata");
   log.info("");
@@ -189,9 +172,7 @@ async function runRestore(bundlePath: string): Promise<void> {
   ] as [string, string][]) {
     if (!existsSync(path)) {
       log.error(`Missing required bundle file: ${label}`);
-      log.info(
-        "This bundle may be corrupt or was not created by `bun run backup`.",
-      );
+      log.info("This bundle may be corrupt or was not created by `bun run backup`.");
       process.exit(1);
     }
   }
@@ -212,20 +193,14 @@ async function runRestore(bundlePath: string): Promise<void> {
 
   if (existingTables.length > 0) {
     log.section("🛑 TARGET DATABASE IS NOT EMPTY");
-    log.info(
-      `Found ${existingTables.length} existing table(s) in the database.`,
-    );
+    log.info(`Found ${existingTables.length} existing table(s) in the database.`);
     log.info("Restoring into a non-empty database will cause conflicts:");
     log.info("  - CREATE TABLE statements will fail (tables already exist).");
     log.info("  - INSERT statements will fail on duplicate primary keys.");
-    log.info(
-      "  - psql continues past errors, leaving the database in a mixed state.",
-    );
+    log.info("  - psql continues past errors, leaving the database in a mixed state.");
     log.info("");
     log.info("Recommended: run `bun run nuke-db` first, then re-run restore.");
-    log.info(
-      "Type 'RESTORE ANYWAY' to force restore into the existing database,",
-    );
+    log.info("Type 'RESTORE ANYWAY' to force restore into the existing database,");
     log.info("or anything else to abort:");
 
     const forceResponse = await new Promise<string>((resolve) => {
@@ -248,15 +223,9 @@ async function runRestore(bundlePath: string): Promise<void> {
   log.section("⚠️ WARNING — Read before continuing");
   log.info("Restoring will:");
   log.info("  1. Overwrite your local .env with the bundled config.env.");
-  log.info(
-    "     ➜ After restore, update POSTGRES_HOST/PORT/USER/PASSWORD/DB in your .env",
-  );
-  log.info(
-    "       if this machine's database credentials differ from the source machine.",
-  );
-  log.info(
-    "  2. Restore the bundled database dump into your current DB connection.",
-  );
+  log.info("     ➜ After restore, update POSTGRES_HOST/PORT/USER/PASSWORD/DB in your .env");
+  log.info("       if this machine's database credentials differ from the source machine.");
+  log.info("  2. Restore the bundled database dump into your current DB connection.");
   log.info("Type 'RESTORE' (all caps) to proceed:");
 
   const response = await new Promise<string>((resolve) => {
@@ -294,12 +263,8 @@ async function runRestore(bundlePath: string): Promise<void> {
     await $`psql ${dbUrl} -f ${dbDumpPath}`;
     log.success("Database restored successfully.");
   } catch (_error) {
-    log.error(
-      "psql restore failed. Ensure psql is installed and in your PATH.",
-    );
-    log.info(
-      "  Windows: install PostgreSQL from https://www.postgresql.org/download/windows/",
-    );
+    log.error("psql restore failed. Ensure psql is installed and in your PATH.");
+    log.info("  Windows: install PostgreSQL from https://www.postgresql.org/download/windows/");
     log.info("  macOS:   brew install postgresql");
     log.info("  Linux:   sudo apt-get install postgresql-client");
     process.exit(1);
@@ -307,9 +272,7 @@ async function runRestore(bundlePath: string): Promise<void> {
 
   log.section("✅ Restore Complete!");
   log.info("Next steps:");
-  log.info(
-    "  1. Update POSTGRES_*, DISCORD_TOKEN, and CRYPTO_SECRET in .env if they differ on this machine.",
-  );
+  log.info("  1. Update POSTGRES_*, DISCORD_TOKEN, and CRYPTO_SECRET in .env if they differ on this machine.");
   log.info("  2. Run `bun install` to ensure dependencies are up to date.");
   log.info("  3. Start the bot with `bun run dev` or `bun run start`.");
 }
@@ -364,9 +327,7 @@ if (mode === "--backup") {
   if (!useLatest && (fromIndex === -1 || !args[fromIndex + 1])) {
     log.error("Provide either --latest or --from <bundle-dir>.");
     log.info("  bun run restore-backup --latest");
-    log.info(
-      "  bun run restore-backup --from backups/backup_2025-01-01_12-00-00",
-    );
+    log.info("  bun run restore-backup --from backups/backup_2025-01-01_12-00-00");
     process.exit(1);
   }
 

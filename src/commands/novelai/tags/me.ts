@@ -7,10 +7,7 @@ import {
 } from "discord.js";
 import { invalidateUserCache } from "@/utils/cache/userCache";
 import { sql } from "@/utils/db/client";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import type { UserRow } from "@/types/db/schema";
@@ -26,12 +23,8 @@ import {
 const MODAL_CUSTOM_ID = "novelai_tags_me_modal";
 const TAGS_INPUT_ID = "me_tags_input";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("me")
-    .setDescription(localizer("en-US", "commands.novelai.tags.me.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("me").setDescription(localizer("en-US", "commands.novelai.tags.me.description"));
 
 export async function execute(
   _client: Client,
@@ -116,10 +109,7 @@ export async function execute(
       return;
     }
 
-    if (
-      !validationResult.isValid &&
-      validationResult.reason === "tag_too_long"
-    ) {
+    if (!validationResult.isValid && validationResult.reason === "tag_too_long") {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.tags.me.tag_too_long_title",
         descriptionKey: "commands.novelai.tags.me.tag_too_long_description",

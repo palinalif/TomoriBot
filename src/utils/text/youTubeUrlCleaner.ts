@@ -100,10 +100,7 @@ export function removeYouTubeUrls(text: string, replacement = ""): string {
  * @param placeholder - Placeholder text template (default includes video ID)
  * @returns Text with YouTube URLs replaced with placeholders
  */
-export function replaceYouTubeUrlsWithPlaceholders(
-  text: string,
-  placeholder = "[YouTube video processed]",
-): string {
+export function replaceYouTubeUrlsWithPlaceholders(text: string, placeholder = "[YouTube video processed]"): string {
   let processedText = text;
 
   for (const pattern of YOUTUBE_URL_PATTERNS) {

@@ -9,10 +9,7 @@ import type {
 } from "discord.js";
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
-import {
-  DeepseekStreamAdapter,
-  type DeepseekStreamConfig,
-} from "@/providers/deepseek/deepseekStreamAdapter";
+import { DeepseekStreamAdapter, type DeepseekStreamConfig } from "@/providers/deepseek/deepseekStreamAdapter";
 import { getDeepseekToolAdapter } from "@/providers/deepseek/deepseekToolAdapter";
 import {
   createOpenAICompatibleHttpError,
@@ -54,18 +51,13 @@ import { BaseLLMProvider } from "@/types/provider/interfaces";
 import type { ProviderError, StreamContext } from "@/types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
-import {
-  type ToolStateForContext,
-  getAvailableToolsWithMCP,
-} from "@/tools/toolRegistry";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
 import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
-const DEEPSEEK_CHAT_COMPLETIONS_URL =
-  "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_BETA_CHAT_COMPLETIONS_URL =
-  "https://api.deepseek.com/beta/chat/completions";
+const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_BETA_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/beta/chat/completions";
 
 export interface DeepseekProviderConfig extends ProviderConfig {
   endpointUrl: string;
@@ -75,11 +67,7 @@ export interface DeepseekProviderConfig extends ProviderConfig {
 
 export class DeepseekProvider
   extends BaseLLMProvider
-  implements
-    LLMProvider,
-    SupportsStructuredOutput,
-    SupportsConversationCompaction,
-    SupportsPresetGeneration
+  implements LLMProvider, SupportsStructuredOutput, SupportsConversationCompaction, SupportsPresetGeneration
 {
   getInfo(): ProviderInfo {
     return deepseekProviderInfo;
@@ -102,11 +90,7 @@ export class DeepseekProvider
       });
 
       if (!response.ok) {
-        throw createOpenAICompatibleHttpError(
-          response.status,
-          response.statusText,
-          await response.text(),
-        );
+        throw createOpenAICompatibleHttpError(response.status, response.statusText, await response.text());
       }
 
       return { valid: true };
@@ -139,18 +123,14 @@ export class DeepseekProvider
     streamingContext?: StreamingContext,
   ): Promise<Array<Record<string, unknown>>> {
     if (!tomoriState.llm.has_tools) {
-      log.info(
-        "DeepSeek provider: Model does not support tools (seeded capability)",
-      );
+      log.info("DeepSeek provider: Model does not support tools (seeded capability)");
       return [];
     }
 
     try {
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
-        activePersonaHasElevenlabsVoice: Boolean(
-          tomoriState.elevenlabs_voice_id?.trim(),
-        ),
+        activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,
@@ -189,8 +169,7 @@ export class DeepseekProvider
 
         finalBuiltInTools = availableBuiltInTools.filter((tool) => {
           const isContextAvailable =
-            "isAvailableForContext" in tool &&
-            typeof tool.isAvailableForContext === "function"
+            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
               ? tool.isAvailableForContext("deepseek", minimalContext)
               : true;
 
@@ -215,10 +194,7 @@ export class DeepseekProvider
 
       return allToolsConfig;
     } catch (error) {
-      log.error(
-        `Failed to get tools for DeepSeek provider: ${tomoriState.llm.llm_codename}`,
-        error as Error,
-      );
+      log.error(`Failed to get tools for DeepSeek provider: ${tomoriState.llm.llm_codename}`, error as Error);
       return [];
     }
   }
@@ -227,10 +203,7 @@ export class DeepseekProvider
     return DEFAULT_DEEPSEEK_MODEL;
   }
 
-  async createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<DeepseekProviderConfig> {
+  async createConfig(tomoriState: TomoriState, apiKey: string): Promise<DeepseekProviderConfig> {
     const config: DeepseekProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey,
@@ -257,10 +230,7 @@ export class DeepseekProvider
     };
 
     // Attach runtime logit_bias map if the server has any active entries for this model
-    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(
-      tomoriState.config.llm_logit_biases ?? [],
-      tomoriState.llm,
-    );
+    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(tomoriState.config.llm_logit_biases ?? [], tomoriState.llm);
     if (Object.keys(runtimeLogitBias).length > 0) {
       config.logitBias = runtimeLogitBias;
     }
@@ -273,11 +243,7 @@ export class DeepseekProvider
   }
 
   async streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -299,9 +265,7 @@ export class DeepseekProvider
     personaUsername?: string,
     prefixStrippingName?: string,
   ): Promise<StreamResult> {
-    log.info(
-      `DeepseekProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`,
-    );
+    log.info(`DeepseekProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`);
 
     try {
       const deepseekConfig = config as DeepseekProviderConfig;
@@ -309,14 +273,11 @@ export class DeepseekProvider
         ...deepseekConfig,
         maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
         flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
-        flushBufferSizeCodeBlock:
-          DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+        flushBufferSizeCodeBlock: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
         inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
-        baseTypeSpeedMsPerChar:
-          DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+        baseTypeSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
         maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
-        minVisibleTypingDurationMs:
-          DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+        minVisibleTypingDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
         humanizerDegree: tomoriState.config.humanizer_degree,
         emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
         seesImages: tomoriState.llm.sees_images,
@@ -325,15 +286,11 @@ export class DeepseekProvider
       };
       if (streamingContext?.outputPrefill?.trim()) {
         streamConfig.endpointUrl = DEEPSEEK_BETA_CHAT_COMPLETIONS_URL;
-        log.info(
-          "DeepseekProvider: Using beta endpoint for assistant prefix completion",
-        );
+        log.info("DeepseekProvider: Using beta endpoint for assistant prefix completion");
       }
 
       if (streamingContext && tomoriState.llm.has_tools) {
-        log.info(
-          "DeepseekProvider: Reloading tools with streaming context for context-aware availability",
-        );
+        log.info("DeepseekProvider: Reloading tools with streaming context for context-aware availability");
         streamConfig.tools = await this.getTools(tomoriState, streamingContext);
       }
 
@@ -365,15 +322,9 @@ export class DeepseekProvider
 
       const orchestrator = new StreamOrchestrator();
       const adapter = new DeepseekStreamAdapter();
-      const result = await orchestrator.streamToDiscord(
-        adapter,
-        streamConfig,
-        streamContext,
-      );
+      const result = await orchestrator.streamToDiscord(adapter, streamConfig, streamContext);
 
-      log.info(
-        `DeepseekProvider: Streaming completed with status: ${result.status}`,
-      );
+      log.info(`DeepseekProvider: Streaming completed with status: ${result.status}`);
       return result;
     } catch (error) {
       log.error(
@@ -397,15 +348,11 @@ export class DeepseekProvider
     }
 
     if (!request.toolContext) {
-      log.warn(
-        "DeepSeek preset generation skipped search tools: no tool context available.",
-      );
+      log.warn("DeepSeek preset generation skipped search tools: no tool context available.");
       return undefined;
     }
 
-    const hasBraveApiKey = await isBraveSearchAvailable(
-      request.tomoriState.server_id,
-    );
+    const hasBraveApiKey = await isBraveSearchAvailable(request.tomoriState.server_id);
 
     if (!hasBraveApiKey) {
       const mcpManager = getMCPManager();
@@ -416,9 +363,7 @@ export class DeepseekProvider
 
     const toolStateForContext: ToolStateForContext = {
       server_id: request.tomoriState.server_id.toString(),
-      activePersonaHasElevenlabsVoice: Boolean(
-        request.tomoriState.elevenlabs_voice_id?.trim(),
-      ),
+      activePersonaHasElevenlabsVoice: Boolean(request.tomoriState.elevenlabs_voice_id?.trim()),
       llm: {
         llm_codename: request.tomoriState.llm.llm_codename,
         has_tools: request.tomoriState.llm.has_tools,
@@ -438,14 +383,10 @@ export class DeepseekProvider
       },
     };
 
-    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
-      "deepseek",
-      toolStateForContext,
-    );
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP("deepseek", toolStateForContext);
 
     const searchTools = builtInTools.filter(
-      (tool) =>
-        tool.category === "search" || tool.requiresFeatureFlag === "web_search",
+      (tool) => tool.category === "search" || tool.requiresFeatureFlag === "web_search",
     );
 
     const adapter = getDeepseekToolAdapter();
@@ -456,34 +397,23 @@ export class DeepseekProvider
     );
   }
 
-  async generatePreset(
-    request: ProviderPresetGenerationRequest,
-  ): Promise<PresetGenerationResult> {
+  async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const tools = await this.getPresetGenerationTools(request);
 
-    return await generatePresetFromPromptDeepseek(
-      request.apiKey,
-      request.params,
-      request.locale,
-      {
-        model: request.tomoriState.llm.llm_codename,
-        temperature: request.tomoriState.config.llm_temperature,
-        tools,
-        toolContext: request.toolContext,
-        maxToolRounds: request.maxToolRounds,
-      },
-    );
+    return await generatePresetFromPromptDeepseek(request.apiKey, request.params, request.locale, {
+      model: request.tomoriState.llm.llm_codename,
+      temperature: request.tomoriState.config.llm_temperature,
+      tools,
+      toolContext: request.toolContext,
+      maxToolRounds: request.maxToolRounds,
+    });
   }
 
-  async generateConversationSummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactConversationResult> {
+  async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
     return await generateConversationSummaryDeepseek(request);
   }
 
-  async generateRoleplaySummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactRoleplayResult> {
+  async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
     return await generateRoleplaySummaryDeepseek(request);
   }
 }

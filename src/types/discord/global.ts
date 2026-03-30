@@ -36,11 +36,7 @@ export interface BaseCommand {
   category: string;
   options?: ApplicationCommandOptionData[];
   permissionsRequired?: PermissionsBitField[];
-  callback: (
-    client: Client,
-    interaction: ChatInputCommandInteraction,
-    userData: UserRow,
-  ) => Promise<void>;
+  callback: (client: Client, interaction: ChatInputCommandInteraction, userData: UserRow) => Promise<void>;
 }
 
 // Local command interface (for file loading)

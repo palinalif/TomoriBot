@@ -9,11 +9,7 @@ import {
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  promptWithModal,
-  replyInfoEmbed,
-  replyPaginatedPersonaChoicesV2,
-} from "../../utils/discord/interactionHelper";
+import { promptWithModal, replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "../../utils/discord/interactionHelper";
 import type { TomoriState, UserRow } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
@@ -32,12 +28,8 @@ const FIELD_STARS = "nai_attg_stars";
  * @param subcommand - The subcommand builder to configure
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("attg")
-    .setDescription(localizer("en-US", "commands.novelai.attg.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("attg").setDescription(localizer("en-US", "commands.novelai.attg.description"));
 
 /**
  * Configure per-persona ATTG (Author/Title/Tags/Genre/Stars) metadata
@@ -100,26 +92,19 @@ export async function execute(
       // 3a. Show paginated persona selector.
       //    preserveSelectedInteraction=true leaves the ButtonInteraction unacknowledged
       //    so we can open a modal as the first response to it.
-      const personaResult = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          titleKey: "commands.novelai.attg.persona_select_title",
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaResult = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        titleKey: "commands.novelai.attg.persona_select_title",
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
       if (!personaResult.success) {
         if (personaResult.reason === "cancelled") return;
         continue;
       }
-      if (
-        personaResult.selectedIndex === undefined ||
-        !personaResult.interaction
-      ) {
+      if (personaResult.selectedIndex === undefined || !personaResult.interaction) {
         return;
       }
 
@@ -137,69 +122,60 @@ export async function execute(
 
       // 4. Open the ATTG five-field modal.
       //    Pre-fill fields from the persona's existing values (may be null).
-      const modalResult = await promptWithModal(
-        personaSelectionInteraction,
-        locale,
-        {
-          modalCustomId: MODAL_CUSTOM_ID,
-          modalTitleKey: "commands.novelai.attg.modal_title",
-          components: [
-            {
-              customId: FIELD_AUTHOR,
-              labelKey: "commands.novelai.attg.author_label",
-              placeholder: "commands.novelai.attg.author_placeholder",
-              style: TextInputStyle.Short,
-              required: false,
-              maxLength: 256,
-              value: selectedPersona.nai_attg_author ?? undefined,
-            },
-            {
-              customId: FIELD_TITLE,
-              labelKey: "commands.novelai.attg.title_label",
-              placeholder: "commands.novelai.attg.title_placeholder",
-              style: TextInputStyle.Short,
-              required: false,
-              maxLength: 256,
-              value: selectedPersona.nai_attg_title ?? undefined,
-            },
-            {
-              customId: FIELD_TAGS,
-              labelKey: "commands.novelai.attg.tags_label",
-              placeholder: "commands.novelai.attg.tags_placeholder",
-              style: TextInputStyle.Short,
-              required: false,
-              maxLength: 256,
-              value: selectedPersona.nai_attg_tags ?? undefined,
-            },
-            {
-              customId: FIELD_GENRE,
-              labelKey: "commands.novelai.attg.genre_label",
-              placeholder: "commands.novelai.attg.genre_placeholder",
-              style: TextInputStyle.Short,
-              required: false,
-              maxLength: 256,
-              value: selectedPersona.nai_attg_genre ?? undefined,
-            },
-            {
-              customId: FIELD_STARS,
-              labelKey: "commands.novelai.attg.stars_label",
-              placeholder: "commands.novelai.attg.stars_placeholder",
-              style: TextInputStyle.Short,
-              required: false,
-              maxLength: 1,
-              value:
-                selectedPersona.nai_attg_stars != null
-                  ? selectedPersona.nai_attg_stars.toString()
-                  : undefined,
-            },
-          ],
-        },
-      );
+      const modalResult = await promptWithModal(personaSelectionInteraction, locale, {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.novelai.attg.modal_title",
+        components: [
+          {
+            customId: FIELD_AUTHOR,
+            labelKey: "commands.novelai.attg.author_label",
+            placeholder: "commands.novelai.attg.author_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_author ?? undefined,
+          },
+          {
+            customId: FIELD_TITLE,
+            labelKey: "commands.novelai.attg.title_label",
+            placeholder: "commands.novelai.attg.title_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_title ?? undefined,
+          },
+          {
+            customId: FIELD_TAGS,
+            labelKey: "commands.novelai.attg.tags_label",
+            placeholder: "commands.novelai.attg.tags_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_tags ?? undefined,
+          },
+          {
+            customId: FIELD_GENRE,
+            labelKey: "commands.novelai.attg.genre_label",
+            placeholder: "commands.novelai.attg.genre_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 256,
+            value: selectedPersona.nai_attg_genre ?? undefined,
+          },
+          {
+            customId: FIELD_STARS,
+            labelKey: "commands.novelai.attg.stars_label",
+            placeholder: "commands.novelai.attg.stars_placeholder",
+            style: TextInputStyle.Short,
+            required: false,
+            maxLength: 1,
+            value: selectedPersona.nai_attg_stars != null ? selectedPersona.nai_attg_stars.toString() : undefined,
+          },
+        ],
+      });
 
       if (modalResult.outcome !== "submit") {
-        log.info(
-          `ATTG modal ${modalResult.outcome} for user ${userData.user_id}`,
-        );
+        log.info(`ATTG modal ${modalResult.outcome} for user ${userData.user_id}`);
         continue;
       }
 
@@ -218,12 +194,7 @@ export async function execute(
       let stars: number | null = null;
       if (starsRaw !== "") {
         const parsed = Number.parseInt(starsRaw, 10);
-        if (
-          Number.isNaN(parsed) ||
-          parsed < 1 ||
-          parsed > 5 ||
-          starsRaw !== parsed.toString()
-        ) {
+        if (Number.isNaN(parsed) || parsed < 1 || parsed > 5 || starsRaw !== parsed.toString()) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.novelai.attg.invalid_stars_title",
             descriptionKey: "commands.novelai.attg.invalid_stars_description",
@@ -298,8 +269,7 @@ export async function execute(
     await log.error("Error in /novelai attg command", error, context);
 
     // Reply to the most recent interaction we have
-    const errorInteraction =
-      modalSubmitInteraction ?? personaSelectionInteraction ?? interaction;
+    const errorInteraction = modalSubmitInteraction ?? personaSelectionInteraction ?? interaction;
 
     await replyInfoEmbed(errorInteraction, locale, {
       titleKey: "general.errors.unknown_error_title",

@@ -149,10 +149,7 @@ export interface RawDiscordWebSocketPacket {
 export interface ExtendedDiscordClient {
   /** WebSocket manager with handlePacket method */
   ws?: {
-    handlePacket?: (
-      packet: RawDiscordWebSocketPacket,
-      shard: RawDiscordShard,
-    ) => void;
+    handlePacket?: (packet: RawDiscordWebSocketPacket, shard: RawDiscordShard) => void;
     [key: string]: unknown;
   } & Record<string, unknown>;
   /** Additional client properties */

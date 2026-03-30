@@ -13,31 +13,13 @@ import {
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  getCachedAllPersonas,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, getCachedAllPersonas, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { invalidateChannelLlmCache } from "@/utils/cache/channelLlmCache";
 import { getAllChannelLlmOverridesForServer } from "@/utils/db/dbRead";
-import {
-  deleteChannelLlmOverride,
-  setPersonaLlmOverride,
-} from "@/utils/db/dbWrite";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-  LlmRow,
-} from "@/types/db/schema";
-import type {
-  CheckboxGroupOption,
-  ModalCheckboxGroupField,
-} from "@/types/discord/modal";
+import { deleteChannelLlmOverride, setPersonaLlmOverride } from "@/utils/db/dbWrite";
+import type { UserRow, ErrorContext, TomoriState, LlmRow } from "@/types/db/schema";
+import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
 
 const CHANNEL_CHECKBOX_ID_PREFIX = "channel_override_checkbox_group";
 const PERSONA_CHECKBOX_ID_PREFIX = "persona_override_checkbox_group";
@@ -55,14 +37,10 @@ type PersonaOverrideEntry = TomoriState & {
   tomori_id: number;
 };
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("modeloverride")
-    .setDescription(
-      localizer("en-US", "commands.config.remove.modeloverride.description"),
-    );
+    .setDescription(localizer("en-US", "commands.config.remove.modeloverride.description"));
 
 export async function execute(
   _client: Client,
@@ -99,8 +77,7 @@ export async function execute(
       getCachedAllPersonas(interaction.guild.id),
     ]);
     const personasWithOverride = allPersonas.filter(
-      (persona): persona is PersonaOverrideEntry =>
-        persona.persona_llm != null && persona.tomori_id != null,
+      (persona): persona is PersonaOverrideEntry => persona.persona_llm != null && persona.tomori_id != null,
     );
 
     if (channelOverrides.length === 0 && personasWithOverride.length === 0) {
@@ -120,14 +97,11 @@ export async function execute(
     if (checkboxGroups.length > MAX_GROUPS_PER_MODAL) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.remove.modeloverride.too_many_title",
-        descriptionKey:
-          "commands.config.remove.modeloverride.too_many_description",
+        descriptionKey: "commands.config.remove.modeloverride.too_many_description",
         descriptionVars: {
           channel_count: channelOverrides.length.toString(),
           persona_count: personasWithOverride.length.toString(),
-          total_count: (
-            channelOverrides.length + personasWithOverride.length
-          ).toString(),
+          total_count: (channelOverrides.length + personasWithOverride.length).toString(),
           max_entries: MAX_ENTRIES_PER_MODAL.toString(),
           max_groups: MAX_GROUPS_PER_MODAL.toString(),
         },
@@ -151,9 +125,7 @@ export async function execute(
     if (modalResult.outcome !== "submit") return;
 
     if (!modalResult.interaction) {
-      log.error(
-        "Model override removal modal unexpectedly missing interaction",
-      );
+      log.error("Model override removal modal unexpectedly missing interaction");
       return;
     }
     const modalInteraction = modalResult.interaction;
@@ -169,18 +141,13 @@ export async function execute(
       Math.ceil(personasWithOverride.length / MAX_OPTIONS_PER_GROUP),
     );
 
-    const channelOverridesToRemove = channelOverrides.filter(
-      (entry) => !checkedChannelIds.has(entry.channelDiscId),
-    );
-    const personasToClear = personasWithOverride.filter(
-      (persona) => !checkedPersonaIds.has(persona.tomori_id),
-    );
+    const channelOverridesToRemove = channelOverrides.filter((entry) => !checkedChannelIds.has(entry.channelDiscId));
+    const personasToClear = personasWithOverride.filter((persona) => !checkedPersonaIds.has(persona.tomori_id));
 
     if (channelOverridesToRemove.length === 0 && personasToClear.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "commands.config.remove.modeloverride.no_removals_title",
-        descriptionKey:
-          "commands.config.remove.modeloverride.no_removals_description",
+        descriptionKey: "commands.config.remove.modeloverride.no_removals_description",
         color: ColorCode.INFO,
       });
       return;
@@ -190,10 +157,7 @@ export async function execute(
       Promise.all(
         channelOverridesToRemove.map(async (entry) => ({
           entry,
-          deleted: await deleteChannelLlmOverride(
-            tomoriState.server_id,
-            entry.channelDiscId,
-          ),
+          deleted: await deleteChannelLlmOverride(tomoriState.server_id, entry.channelDiscId),
         })),
       ),
       Promise.all(
@@ -224,21 +188,14 @@ export async function execute(
       invalidateTomoriStateCache(interaction.guild.id);
     }
 
-    if (
-      failedChannelOverrides.length > 0 ||
-      failedPersonaOverrides.length > 0
-    ) {
+    if (failedChannelOverrides.length > 0 || failedPersonaOverrides.length > 0) {
       const context: ErrorContext = {
         serverId: tomoriState.server_id,
         errorType: "DatabaseDeleteError",
         metadata: {
           command: "config remove modeloverride",
-          failedChannelDiscIds: failedChannelOverrides.map(
-            (entry) => entry.channelDiscId,
-          ),
-          failedTomoriIds: failedPersonaOverrides.map(
-            (persona) => persona.tomori_id,
-          ),
+          failedChannelDiscIds: failedChannelOverrides.map((entry) => entry.channelDiscId),
+          failedTomoriIds: failedPersonaOverrides.map((persona) => persona.tomori_id),
         },
       };
       await log.error(
@@ -258,9 +215,7 @@ export async function execute(
     if (removedChannelOverrides.length > 0) {
       const channelMentions = removedChannelOverrides.map(
         (entry) =>
-          interaction.guild?.channels.cache
-            .get(entry.channelDiscId)
-            ?.toString() ?? `<#${entry.channelDiscId}>`,
+          interaction.guild?.channels.cache.get(entry.channelDiscId)?.toString() ?? `<#${entry.channelDiscId}>`,
       );
       removedSections.push(
         `**${localizer(locale, "commands.config.remove.modeloverride.channel_checkbox_label")}**\n${formatRemovedNames(channelMentions)}`,
@@ -274,8 +229,7 @@ export async function execute(
 
     await replyInfoEmbed(modalInteraction, locale, {
       titleKey: "commands.config.remove.modeloverride.success_title",
-      descriptionKey:
-        "commands.config.remove.modeloverride.success_description",
+      descriptionKey: "commands.config.remove.modeloverride.success_description",
       descriptionVars: {
         removed_overrides: removedSections.join("\n\n"),
       },
@@ -291,11 +245,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "config remove modeloverride" },
     };
-    await log.error(
-      "Error in /config remove modeloverride",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config remove modeloverride", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {
@@ -323,14 +273,11 @@ function buildChannelOverrideCheckboxGroups(
     const chunk = overrides.slice(i, i + MAX_OPTIONS_PER_GROUP);
     const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
     const options: CheckboxGroupOption[] = chunk.map((entry) => {
-      const channel = interaction.guild?.channels.cache.get(
-        entry.channelDiscId,
-      );
+      const channel = interaction.guild?.channels.cache.get(entry.channelDiscId);
       return {
         label: channel?.isTextBased()
           ? `#${channel.name}`
-          : (channel?.name ??
-            `Unknown (${entry.channelDiscId.substring(0, 10)}...)`),
+          : (channel?.name ?? `Unknown (${entry.channelDiscId.substring(0, 10)}...)`),
         value: entry.channelDiscId,
         description: formatLlmSummary(entry.llm),
         default: true,
@@ -345,9 +292,7 @@ function buildChannelOverrideCheckboxGroups(
           ? "commands.config.remove.modeloverride.channel_checkbox_label"
           : "commands.config.remove.modeloverride.channel_checkbox_label_continued",
       descriptionKey:
-        groupIndex === 0
-          ? "commands.config.remove.modeloverride.channel_checkbox_description"
-          : undefined,
+        groupIndex === 0 ? "commands.config.remove.modeloverride.channel_checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,
@@ -357,9 +302,7 @@ function buildChannelOverrideCheckboxGroups(
   return checkboxGroups;
 }
 
-function buildPersonaOverrideCheckboxGroups(
-  personasWithOverride: PersonaOverrideEntry[],
-): ModalCheckboxGroupField[] {
+function buildPersonaOverrideCheckboxGroups(personasWithOverride: PersonaOverrideEntry[]): ModalCheckboxGroupField[] {
   const checkboxGroups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < personasWithOverride.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -380,9 +323,7 @@ function buildPersonaOverrideCheckboxGroups(
           ? "commands.config.remove.modeloverride.persona_checkbox_label"
           : "commands.config.remove.modeloverride.persona_checkbox_label_continued",
       descriptionKey:
-        groupIndex === 0
-          ? "commands.config.remove.modeloverride.persona_checkbox_description"
-          : undefined,
+        groupIndex === 0 ? "commands.config.remove.modeloverride.persona_checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,

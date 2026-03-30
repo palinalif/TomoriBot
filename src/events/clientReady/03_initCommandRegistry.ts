@@ -20,10 +20,7 @@ export default async (client: Client): Promise<void> => {
       log.info(`Command registry entries: ${commands.join(", ")}`);
     }
   } catch (error) {
-    log.error(
-      "Failed to initialize command registry (non-critical)",
-      error as Error,
-    );
+    log.error("Failed to initialize command registry (non-critical)", error as Error);
     // Non-critical - bot can still function, but command mentions won't work
   }
 };

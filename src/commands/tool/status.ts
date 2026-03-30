@@ -36,11 +36,7 @@ import type {
   TomoriConfigRow,
 } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
-import {
-  CooldownType,
-  PrivacyLevel,
-  type TomoriState,
-} from "../../types/db/schema";
+import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/schema";
 import { formatBooleanLocalized } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
@@ -51,10 +47,7 @@ const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to cou
 const MEMORY_TRUNCATE_LENGTH = 100; // Max chars per memory snippet
 const ATTRIBUTE_TRUNCATE_LENGTH = 200; // Max chars per attribute snippet
 const DIALOGUE_TRUNCATE_LENGTH = 140; // Max chars per sample dialogue side
-const MAX_PROMPT_PREVIEW = Number.parseInt(
-  process.env.SYSPROMPT_SHOW_MAX_PREVIEW || "3800",
-  10,
-); // Max chars shown for system/persona prompts
+const MAX_PROMPT_PREVIEW = Number.parseInt(process.env.SYSPROMPT_SHOW_MAX_PREVIEW || "3800", 10); // Max chars shown for system/persona prompts
 
 /**
  * Returns a user-friendly label for a privacy level.
@@ -85,48 +78,26 @@ function getPrivacyLevelLabel(locale: string, level: PrivacyLevel): string {
 function getCooldownTypeLabel(locale: string, type: CooldownType): string {
   switch (type) {
     case CooldownType.OFF:
-      return localizer(
-        locale,
-        "commands.server.cooldown.triggers.type.choice_off",
-      );
+      return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
     case CooldownType.PER_USER:
-      return localizer(
-        locale,
-        "commands.server.cooldown.triggers.type.choice_per_user",
-      );
+      return localizer(locale, "commands.server.cooldown.triggers.type.choice_per_user");
     case CooldownType.PER_CHANNEL:
-      return localizer(
-        locale,
-        "commands.server.cooldown.triggers.type.choice_per_channel",
-      );
+      return localizer(locale, "commands.server.cooldown.triggers.type.choice_per_channel");
     case CooldownType.SERVER_WIDE:
-      return localizer(
-        locale,
-        "commands.server.cooldown.triggers.type.choice_server_wide",
-      );
+      return localizer(locale, "commands.server.cooldown.triggers.type.choice_server_wide");
     case CooldownType.STRICT_SERVER_WIDE:
-      return localizer(
-        locale,
-        "commands.server.cooldown.triggers.type.choice_strict_server_wide",
-      );
+      return localizer(locale, "commands.server.cooldown.triggers.type.choice_strict_server_wide");
     default:
-      return localizer(
-        locale,
-        "commands.server.cooldown.triggers.type.choice_off",
-      );
+      return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
   }
 }
 
 function truncateText(input: string, maxLength: number): string {
-  return input.length > maxLength
-    ? `${input.substring(0, maxLength)}...`
-    : input;
+  return input.length > maxLength ? `${input.substring(0, maxLength)}...` : input;
 }
 
 function formatQuotaLimitValue(locale: string, limit: number): string {
-  return limit === 0
-    ? localizer(locale, "commands.tool.status.field_quota_unlimited")
-    : String(limit);
+  return limit === 0 ? localizer(locale, "commands.tool.status.field_quota_unlimited") : String(limit);
 }
 
 /**
@@ -137,11 +108,7 @@ function formatQuotaLimitValue(locale: string, limit: number): string {
  * @param truncateLength - Max chars per item before truncation
  * @returns Formatted numbered list, or localized "None" if empty
  */
-function formatNumberedList(
-  items: string[],
-  locale: string,
-  truncateLength: number,
-): string {
+function formatNumberedList(items: string[], locale: string, truncateLength: number): string {
   if (items.length === 0) {
     return localizer(locale, "commands.choices.none");
   }
@@ -160,11 +127,7 @@ function formatNumberedList(
  * @param truncateLength - Max chars per item before truncation
  * @returns Formatted bullet list, or localized "None" if empty
  */
-function formatBulletList(
-  items: string[],
-  locale: string,
-  truncateLength: number,
-): string {
+function formatBulletList(items: string[], locale: string, truncateLength: number): string {
   if (items.length === 0) {
     return localizer(locale, "commands.choices.none");
   }
@@ -195,14 +158,8 @@ function formatSampleDialogues(
   }
 
   return Array.from({ length: pairCount }, (_, index) => {
-    const input = truncateText(
-      dialoguesIn[index] ?? localizer(locale, "commands.choices.none"),
-      truncateLength,
-    );
-    const output = truncateText(
-      dialoguesOut[index] ?? localizer(locale, "commands.choices.none"),
-      truncateLength,
-    );
+    const input = truncateText(dialoguesIn[index] ?? localizer(locale, "commands.choices.none"), truncateLength);
+    const output = truncateText(dialoguesOut[index] ?? localizer(locale, "commands.choices.none"), truncateLength);
     return `${index + 1}. ${input} -> ${output}`;
   }).join("\n");
 }
@@ -215,11 +172,7 @@ function formatSampleDialogues(
  * @param locale - User locale (for unknown channel label)
  * @returns Resolved channel mention string
  */
-async function resolveChannelMention(
-  client: Client,
-  id: string,
-  locale: string,
-): Promise<string> {
+async function resolveChannelMention(client: Client, id: string, locale: string): Promise<string> {
   try {
     const channel = await client.channels.fetch(id);
     return channel instanceof TextChannel ? channel.toString() : `<#${id}>`;
@@ -235,17 +188,11 @@ async function resolveChannelMention(
  * @param locale - User locale
  * @returns Formatted channel list string, or localized "None" if empty
  */
-async function formatChannelList(
-  client: Client,
-  ids: string[],
-  locale: string,
-): Promise<string> {
+async function formatChannelList(client: Client, ids: string[], locale: string): Promise<string> {
   if (ids.length === 0) {
     return localizer(locale, "commands.choices.none");
   }
-  const mentions = await Promise.all(
-    ids.map((id) => resolveChannelMention(client, id, locale)),
-  );
+  const mentions = await Promise.all(ids.map((id) => resolveChannelMention(client, id, locale)));
   return mentions.length <= MAX_ITEMS_DISPLAY
     ? mentions.join(", ")
     : localizer(locale, "commands.tool.status.item_count", {
@@ -262,11 +209,7 @@ async function formatChannelList(
  * @param locale - User locale
  * @returns Formatted whitelist string
  */
-async function formatWhitelistEntries(
-  client: Client,
-  entries: ChannelWhitelistRow[],
-  locale: string,
-): Promise<string> {
+async function formatWhitelistEntries(client: Client, entries: ChannelWhitelistRow[], locale: string): Promise<string> {
   // 1. No entries = whitelist is inactive (all channels can trigger)
   if (entries.length === 0) {
     return localizer(locale, "commands.tool.status.whitelist_all_allowed");
@@ -275,11 +218,7 @@ async function formatWhitelistEntries(
   // 2. Resolve each channel mention and build formatted lines
   const lines = await Promise.all(
     entries.map(async (entry, index) => {
-      const mention = await resolveChannelMention(
-        client,
-        entry.channel_disc_id,
-        locale,
-      );
+      const mention = await resolveChannelMention(client, entry.channel_disc_id, locale);
       if (entry.cooldown_type === null || entry.cooldown_length === null) {
         return `${index + 1}. ${mention} (${localizer(locale, "commands.choices.inherit_global")})`;
       }
@@ -288,10 +227,7 @@ async function formatWhitelistEntries(
       const typeLabel = getCooldownTypeLabel(locale, cooldownType);
 
       // 3. Include duration only when a real cooldown is set
-      const detail =
-        cooldownType === CooldownType.OFF
-          ? typeLabel
-          : `${typeLabel}, ${entry.cooldown_length}s`;
+      const detail = cooldownType === CooldownType.OFF ? typeLabel : `${typeLabel}, ${entry.cooldown_length}s`;
 
       return `${index + 1}. ${mention} (${detail})`;
     }),
@@ -307,15 +243,9 @@ async function formatWhitelistEntries(
  * @param locale - User locale
  * @returns Formatted role whitelist string
  */
-function formatWhitelistRolesEntries(
-  entries: RoleWhitelistRow[],
-  locale: string,
-): string {
+function formatWhitelistRolesEntries(entries: RoleWhitelistRow[], locale: string): string {
   if (entries.length === 0) {
-    return localizer(
-      locale,
-      "commands.tool.status.whitelist_roles_all_allowed",
-    );
+    return localizer(locale, "commands.tool.status.whitelist_roles_all_allowed");
   }
 
   return entries
@@ -347,20 +277,13 @@ async function formatRandomTriggers(
   const lines = await Promise.all(
     triggers.map(async (trigger, index) => {
       // 1. Resolve the channel mention
-      const mention = await resolveChannelMention(
-        client,
-        trigger.channel_disc_id,
-        locale,
-      );
+      const mention = await resolveChannelMention(client, trigger.channel_disc_id, locale);
 
       // 2. Resolve persona name (null tomori_id = random persona selection)
       const personaName =
         trigger.tomori_id != null
           ? (personaNameMap.get(trigger.tomori_id) ?? `ID:${trigger.tomori_id}`)
-          : localizer(
-              locale,
-              "commands.tool.status.random_trigger_persona_random",
-            );
+          : localizer(locale, "commands.tool.status.random_trigger_persona_random");
       const offsetSegment =
         trigger.random_offset_range != null && trigger.random_offset_range > 0
           ? ` +/-${trigger.random_offset_range}h`
@@ -395,11 +318,7 @@ async function formatChannelLlmOverrides(
   const lines = await Promise.all(
     overrides.map(async (entry, index) => {
       // 1. Resolve channel mention
-      const mention = await resolveChannelMention(
-        client,
-        entry.channelDiscId,
-        locale,
-      );
+      const mention = await resolveChannelMention(client, entry.channelDiscId, locale);
       // 2. Format: "N. #channel → model (provider)"
       return `${index + 1}. ${mention} → ${formatLlmDisplayLabel(entry.llm, customModelName)}`;
     }),
@@ -415,15 +334,9 @@ async function formatChannelLlmOverrides(
  * @param locale - User locale
  * @returns Formatted persona LLM override list string, or localized "None" if empty
  */
-function formatPersonaLlmOverrides(
-  personas: TomoriState[],
-  locale: string,
-  customModelName?: string | null,
-): string {
+function formatPersonaLlmOverrides(personas: TomoriState[], locale: string, customModelName?: string | null): string {
   // 1. Filter to personas with an explicit override, narrowing the type so llm is non-optional
-  const overrides = personas.filter(
-    (p): p is TomoriState & { persona_llm: LlmRow } => p.persona_llm != null,
-  );
+  const overrides = personas.filter((p): p is TomoriState & { persona_llm: LlmRow } => p.persona_llm != null);
 
   if (overrides.length === 0) {
     return localizer(locale, "commands.choices.none");
@@ -460,17 +373,12 @@ async function formatWelcomeChannel(
   }
 
   // 1. Resolve channel mention
-  const channelMention = await resolveChannelMention(
-    client,
-    welcomeChannelId,
-    locale,
-  );
+  const channelMention = await resolveChannelMention(client, welcomeChannelId, locale);
 
   // 2. Resolve persona name (null welcome_persona_id = random persona selection)
   const personaName =
     config.welcome_persona_id != null
-      ? (personaNameMap.get(config.welcome_persona_id) ??
-        `ID:${config.welcome_persona_id}`)
+      ? (personaNameMap.get(config.welcome_persona_id) ?? `ID:${config.welcome_persona_id}`)
       : localizer(locale, "commands.tool.status.random_trigger_persona_random");
 
   // 3. Format: "#channel · Persona"
@@ -480,39 +388,26 @@ async function formatWelcomeChannel(
 /**
  * Configures the 'status' subcommand with scope options.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("status")
     .setDescription(localizer("en-US", "commands.tool.status.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer("en-US", "commands.tool.status.scope_description"),
-        )
+        .setDescription(localizer("en-US", "commands.tool.status.scope_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.tool.status.scope_choice_personal",
-            ),
+            name: localizer("en-US", "commands.tool.status.scope_choice_personal"),
             value: "personal",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.tool.status.scope_choice_server",
-            ),
+            name: localizer("en-US", "commands.tool.status.scope_choice_server"),
             value: "server",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.tool.status.scope_choice_persona",
-            ),
+            name: localizer("en-US", "commands.tool.status.scope_choice_persona"),
             value: "persona",
           },
         ),
@@ -542,14 +437,8 @@ export async function execute(
         // 1. Load global personal memories (lineage 0 only)
         let globalPersonalMemoryList: string[] = [];
         if (userData.user_id) {
-          const personalMemoryRows = await loadPersonalMemoriesForUserLineage(
-            userData.user_id,
-            0,
-            false,
-          );
-          globalPersonalMemoryList = personalMemoryRows.map(
-            (row) => row.content,
-          );
+          const personalMemoryRows = await loadPersonalMemoriesForUserLineage(userData.user_id, 0, false);
+          globalPersonalMemoryList = personalMemoryRows.map((row) => row.content);
         }
 
         // 2. Format global personal memories (all shown, 100-char truncation each)
@@ -562,26 +451,21 @@ export async function execute(
 
         // 3. Get the user's active reminder count
         const reminderCount = await getUserReminderCount(interaction.user.id);
-        const rawImpersonationPrompt =
-          userData.impersonation_prompt?.trim() ?? null;
+        const rawImpersonationPrompt = userData.impersonation_prompt?.trim() ?? null;
         const impersonationPromptValue = rawImpersonationPrompt
           ? `\`\`\`\n${
               rawImpersonationPrompt.length > MAX_PROMPT_PREVIEW
                 ? `${rawImpersonationPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
                 : rawImpersonationPrompt
             }\n\`\`\``
-          : localizer(
-              locale,
-              "commands.tool.status.field_impersonation_prompt_not_set",
-            );
+          : localizer(locale, "commands.tool.status.field_impersonation_prompt_not_set");
 
         // 4. Build the single personal status page
         const personalPage: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.personal_title",
           descriptionKey: "commands.tool.status.personal_description",
           color: ColorCode.INFO,
-          footerKey:
-            "commands.tool.status.export_footer_global_personal_memories",
+          footerKey: "commands.tool.status.export_footer_global_personal_memories",
           fields: [
             {
               nameKey: "commands.tool.status.field_user_nickname",
@@ -595,10 +479,7 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_privacy",
-              value: getPrivacyLevelLabel(
-                locale,
-                userData.privacy_level ?? PrivacyLevel.MINIMAL,
-              ),
+              value: getPrivacyLevelLabel(locale, userData.privacy_level ?? PrivacyLevel.MINIMAL),
               inline: true,
             },
             {
@@ -612,8 +493,7 @@ export async function execute(
               inline: true,
             },
             {
-              nameKey:
-                "commands.tool.status.field_global_personal_memories_with_count",
+              nameKey: "commands.tool.status.field_global_personal_memories_with_count",
               nameVars: {
                 current: globalPersonalMemoriesCount,
                 max: limits.maxPersonalMemories,
@@ -624,12 +504,7 @@ export async function execute(
           ],
         };
 
-        await replyPaginatedStatusPages(
-          interaction,
-          locale,
-          [personalPage],
-          MessageFlags.Ephemeral,
-        );
+        await replyPaginatedStatusPages(interaction, locale, [personalPage], MessageFlags.Ephemeral);
         break;
       }
 
@@ -683,9 +558,7 @@ export async function execute(
         // 4. Format timezone (UTC+08:00 style)
         const timezoneOffset = config.timezone_offset;
         const timezoneSign = timezoneOffset >= 0 ? "+" : "-";
-        const timezoneHours = Math.abs(timezoneOffset)
-          .toString()
-          .padStart(2, "0");
+        const timezoneHours = Math.abs(timezoneOffset).toString().padStart(2, "0");
         const timezoneValue = `UTC${timezoneSign}${timezoneHours}:00`;
 
         // 5. Format cooldown type and duration
@@ -694,11 +567,9 @@ export async function execute(
         const cooldownLengthValue =
           cooldownType === CooldownType.OFF
             ? localizer(locale, "commands.choices.disabled")
-            : localizer(
-                locale,
-                "commands.tool.status.field_cooldown_length_value",
-                { seconds: config.cooldown_length },
-              );
+            : localizer(locale, "commands.tool.status.field_cooldown_length_value", {
+                seconds: config.cooldown_length,
+              });
         const autochThresholdMax =
           config.autoch_threshold_max > 0
             ? Math.max(config.autoch_threshold_max, config.autoch_threshold)
@@ -717,11 +588,9 @@ export async function execute(
             ? localizer(locale, "commands.choices.none")
             : blacklistedCount <= MAX_ITEMS_DISPLAY
               ? blacklistedMemberIds.map((id) => `<@${id}>`).join(", ")
-              : localizer(
-                  locale,
-                  "commands.tool.status.field_blacklisted_members_with_count",
-                  { current: blacklistedCount },
-                );
+              : localizer(locale, "commands.tool.status.field_blacklisted_members_with_count", {
+                  current: blacklistedCount,
+                });
 
         // 7. Format channel lists (auto-chat, RP, welcome, whitelist, random triggers, channel model overrides)
         const [
@@ -739,20 +608,13 @@ export async function execute(
           formatWelcomeChannel(client, config, personaNameMap, locale),
           formatChannelList(
             client,
-            config.thought_log_channel_disc_id
-              ? [config.thought_log_channel_disc_id]
-              : [],
+            config.thought_log_channel_disc_id ? [config.thought_log_channel_disc_id] : [],
             locale,
           ),
           formatWhitelistEntries(client, whitelistChannels, locale),
           formatWhitelistRolesEntries(whitelistRoles, locale),
           formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
-          formatChannelLlmOverrides(
-            client,
-            channelLlmOverrides,
-            locale,
-            config.custom_model_name,
-          ),
+          formatChannelLlmOverrides(client, channelLlmOverrides, locale, config.custom_model_name),
         ]);
 
         // 8. Format system prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
@@ -924,18 +786,12 @@ export async function execute(
           fields: [
             {
               nameKey: "commands.tool.status.field_personalization",
-              value: formatBooleanLocalized(
-                config.personal_memories_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.personal_memories_enabled, locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_self_teach",
-              value: formatBooleanLocalized(
-                config.self_teaching_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.self_teaching_enabled, locale),
               inline: true,
             },
             {
@@ -965,10 +821,7 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_sticker_usage",
-              value: formatBooleanLocalized(
-                config.sticker_usage_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.sticker_usage_enabled, locale),
               inline: true,
             },
             {
@@ -983,34 +836,22 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_server_memteaching",
-              value: formatBooleanLocalized(
-                config.server_memteaching_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.server_memteaching_enabled, locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_attribute_memteaching",
-              value: formatBooleanLocalized(
-                config.attribute_memteaching_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.attribute_memteaching_enabled, locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_sampledialogue_memteaching",
-              value: formatBooleanLocalized(
-                config.sampledialogue_memteaching_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.sampledialogue_memteaching_enabled, locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_hide_impersonation",
-              value: formatBooleanLocalized(
-                config.hide_impersonation_embeds,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.hide_impersonation_embeds, locale),
               inline: true,
             },
             {
@@ -1025,26 +866,17 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_uncensor_injection",
-              value: formatBooleanLocalized(
-                config.uncensor_injection_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.uncensor_injection_enabled, locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_uncensor_unicode",
-              value: formatBooleanLocalized(
-                config.uncensor_unicode_space_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.uncensor_unicode_space_enabled, locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_uncensor_sanitize",
-              value: formatBooleanLocalized(
-                config.uncensor_sanitize_enabled,
-                locale,
-              ),
+              value: formatBooleanLocalized(config.uncensor_sanitize_enabled, locale),
               inline: true,
             },
             {
@@ -1071,11 +903,7 @@ export async function execute(
         };
 
         // ── Page 6: Model Overrides ─────────────────────────────────────
-        const personaLlmOverridesValue = formatPersonaLlmOverrides(
-          allPersonas,
-          locale,
-          config.custom_model_name,
-        );
+        const personaLlmOverridesValue = formatPersonaLlmOverrides(allPersonas, locale, config.custom_model_name);
 
         const serverPage6: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.server_page6_title",
@@ -1108,27 +936,19 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_image_quota_daily_user",
-              value: formatQuotaLimitValue(
-                locale,
-                imageQuotaConfig.daily_user_quota,
-              ),
+              value: formatQuotaLimitValue(locale, imageQuotaConfig.daily_user_quota),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_image_quota_serverwide",
-              value: formatQuotaLimitValue(
-                locale,
-                imageQuotaConfig.serverwide_quota,
-              ),
+              value: formatQuotaLimitValue(locale, imageQuotaConfig.serverwide_quota),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_image_quota_reset_days",
-              value: localizer(
-                locale,
-                "commands.tool.status.field_quota_reset_days_value",
-                { days: imageQuotaConfig.serverwide_quota_resets_in },
-              ),
+              value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
+                days: imageQuotaConfig.serverwide_quota_resets_in,
+              }),
               inline: true,
             },
             {
@@ -1138,27 +958,19 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_text_quota_daily_user",
-              value: formatQuotaLimitValue(
-                locale,
-                textQuotaConfig.daily_user_quota,
-              ),
+              value: formatQuotaLimitValue(locale, textQuotaConfig.daily_user_quota),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_text_quota_serverwide",
-              value: formatQuotaLimitValue(
-                locale,
-                textQuotaConfig.serverwide_quota,
-              ),
+              value: formatQuotaLimitValue(locale, textQuotaConfig.serverwide_quota),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_text_quota_reset_days",
-              value: localizer(
-                locale,
-                "commands.tool.status.field_quota_reset_days_value",
-                { days: textQuotaConfig.serverwide_quota_resets_in },
-              ),
+              value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
+                days: textQuotaConfig.serverwide_quota_resets_in,
+              }),
               inline: true,
             },
           ],
@@ -1167,15 +979,7 @@ export async function execute(
         await replyPaginatedStatusPages(
           interaction,
           locale,
-          [
-            serverPage1,
-            serverPage2,
-            serverPage3,
-            serverPage4,
-            serverPage5,
-            serverPage6,
-            serverPage7,
-          ],
+          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5, serverPage6, serverPage7],
           MessageFlags.Ephemeral,
         );
         break;
@@ -1195,16 +999,12 @@ export async function execute(
         }
 
         // 2. Show paginated persona picker (Pattern 4 — preserves interaction)
-        const personaSelection = await replyPaginatedPersonaChoicesV2(
-          interaction,
-          locale,
-          {
-            personas: allPersonas,
-            color: ColorCode.INFO,
-            preserveSelectedInteraction: true,
-            onSelect: async () => {},
-          },
-        );
+        const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+          personas: allPersonas,
+          color: ColorCode.INFO,
+          preserveSelectedInteraction: true,
+          onSelect: async () => {},
+        });
 
         if (
           !personaSelection.success ||
@@ -1214,10 +1014,8 @@ export async function execute(
           return;
         }
 
-        const personaInteraction: ButtonInteraction =
-          personaSelection.interaction;
-        const selectedPersona =
-          allPersonas[personaSelection.selectedIndex] ?? null;
+        const personaInteraction: ButtonInteraction = personaSelection.interaction;
+        const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
 
         if (!selectedPersona?.tomori_id) {
           await replyInfoEmbed(personaInteraction, locale, {
@@ -1234,15 +1032,12 @@ export async function execute(
         // 3. Load persona-scoped personal memories for the requesting user
         let personaPersonalMemoryList: string[] = [];
         if (userData.user_id) {
-          const personaPersonalMemoryRows =
-            await loadPersonalMemoriesForUserLineage(
-              userData.user_id,
-              personaLineageId,
-              false,
-            );
-          personaPersonalMemoryList = personaPersonalMemoryRows.map(
-            (row) => row.content,
+          const personaPersonalMemoryRows = await loadPersonalMemoriesForUserLineage(
+            userData.user_id,
+            personaLineageId,
+            false,
           );
+          personaPersonalMemoryList = personaPersonalMemoryRows.map((row) => row.content);
         }
 
         // 4. Persona-scoped server memories are already attached to the persona state
@@ -1250,11 +1045,7 @@ export async function execute(
 
         // 5. Format attributes (all shown, 200-char truncation each)
         const attributesCount = selectedPersona.attribute_list.length;
-        const attributesValue = formatBulletList(
-          selectedPersona.attribute_list,
-          locale,
-          ATTRIBUTE_TRUNCATE_LENGTH,
-        );
+        const attributesValue = formatBulletList(selectedPersona.attribute_list, locale, ATTRIBUTE_TRUNCATE_LENGTH);
 
         // 6. Format sample dialogues with actual truncated content
         const dialogueCount = Math.max(
@@ -1276,11 +1067,7 @@ export async function execute(
           MEMORY_TRUNCATE_LENGTH,
         );
         const personaServerMemoriesCount = personaServerMemoryList.length;
-        const personaServerMemoriesValue = formatNumberedList(
-          personaServerMemoryList,
-          locale,
-          MEMORY_TRUNCATE_LENGTH,
-        );
+        const personaServerMemoriesValue = formatNumberedList(personaServerMemoryList, locale, MEMORY_TRUNCATE_LENGTH);
 
         // 8. Format alter/persona trigger words
         const alterTriggersValue =
@@ -1302,14 +1089,8 @@ export async function execute(
         // 10. Build persona model override value
         //     Shows the persona-specific LLM if set, otherwise "Server default"
         const personaModelValue = selectedPersona.persona_llm
-          ? formatLlmDisplayLabel(
-              selectedPersona.persona_llm,
-              selectedPersona.config.custom_model_name,
-            )
-          : localizer(
-              locale,
-              "commands.tool.status.persona_model_server_default",
-            );
+          ? formatLlmDisplayLabel(selectedPersona.persona_llm, selectedPersona.config.custom_model_name)
+          : localizer(locale, "commands.tool.status.persona_model_server_default");
 
         // 11. Format ATTG metadata block
         //     Each field is shown individually; null fields display as "None"
@@ -1318,10 +1099,7 @@ export async function execute(
         const attgTitle = selectedPersona.nai_attg_title ?? noneLabel;
         const attgTags = selectedPersona.nai_attg_tags ?? noneLabel;
         const attgGenre = selectedPersona.nai_attg_genre ?? noneLabel;
-        const attgStars =
-          selectedPersona.nai_attg_stars != null
-            ? `${selectedPersona.nai_attg_stars}★`
-            : noneLabel;
+        const attgStars = selectedPersona.nai_attg_stars != null ? `${selectedPersona.nai_attg_stars}★` : noneLabel;
         const attgAllUnset =
           !selectedPersona.nai_attg_author &&
           !selectedPersona.nai_attg_title &&
@@ -1340,10 +1118,7 @@ export async function execute(
                 ? `${rawPersonaPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
                 : rawPersonaPrompt
             }\n\`\`\``
-          : localizer(
-              locale,
-              "commands.tool.status.field_persona_prompt_not_set",
-            );
+          : localizer(locale, "commands.tool.status.field_persona_prompt_not_set");
 
         // ── Page 1: Identity ───────────────────────────────────────────
         const personaPage1: SummaryEmbedOptions = {
@@ -1386,8 +1161,7 @@ export async function execute(
           titleVars: { persona_name: personaName },
           descriptionKey: "commands.tool.status.persona_page2_description",
           color: ColorCode.INFO,
-          footerKey:
-            "commands.tool.status.export_footer_persona_attributes_and_dialogues",
+          footerKey: "commands.tool.status.export_footer_persona_attributes_and_dialogues",
           fields: [
             {
               nameKey: "commands.tool.status.field_attributes_with_count",
@@ -1407,8 +1181,7 @@ export async function execute(
           titleVars: { persona_name: personaName },
           descriptionKey: "commands.tool.status.persona_page3_description",
           color: ColorCode.INFO,
-          footerKey:
-            "commands.tool.status.export_footer_persona_attributes_and_dialogues",
+          footerKey: "commands.tool.status.export_footer_persona_attributes_and_dialogues",
           fields: [
             {
               nameKey: "commands.tool.status.field_sample_dialogues_with_count",
@@ -1431,8 +1204,7 @@ export async function execute(
           footerKey: "commands.tool.status.export_footer_persona_memories",
           fields: [
             {
-              nameKey:
-                "commands.tool.status.field_persona_personal_memories_with_count",
+              nameKey: "commands.tool.status.field_persona_personal_memories_with_count",
               nameVars: {
                 current: personaPersonalMemoriesCount,
                 max: limits.maxPersonalMemories,
@@ -1441,8 +1213,7 @@ export async function execute(
               inline: false,
             },
             {
-              nameKey:
-                "commands.tool.status.field_persona_server_memories_with_count",
+              nameKey: "commands.tool.status.field_persona_server_memories_with_count",
               nameVars: {
                 current: personaServerMemoriesCount,
                 max: limits.maxServerMemories,
@@ -1482,13 +1253,7 @@ export async function execute(
         await replyPaginatedStatusPages(
           personaInteraction,
           locale,
-          [
-            personaPage1,
-            personaPage2,
-            personaPage3,
-            personaPage4,
-            personaPage5,
-          ],
+          [personaPage1, personaPage2, personaPage3, personaPage4, personaPage5],
           MessageFlags.Ephemeral,
         );
         break;

@@ -14,16 +14,8 @@ import {
   promptWithPaginatedModal,
   safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriSchema,
-  type TomoriState,
-} from "../../types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { type UserRow, type ErrorContext, tomoriSchema, type TomoriState } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import type { SelectOption } from "../../types/discord/modal";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
@@ -67,9 +59,7 @@ async function repairMismatchedDialogues(
     return null;
   }
 
-  log.success(
-    `Self-healing complete: sample dialogues for tomori ${tomoriId} repaired to ${safeLength} pairs`,
-  );
+  log.success(`Self-healing complete: sample dialogues for tomori ${tomoriId} repaired to ${safeLength} pairs`);
 
   return {
     repairedIn: (updatedRow.sample_dialogues_in as string[]) ?? [],
@@ -93,10 +83,7 @@ async function performSampleDialogueRemoval(
   currentIn: string[],
   currentOut: string[],
   userData: UserRow,
-  replyInteraction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
 ): Promise<void> {
   // Get the item being removed (for display purposes)
@@ -139,9 +126,7 @@ async function performSampleDialogueRemoval(
       metadata: {
         command: "forget sampledialogue",
         selectedIndex,
-        validationErrors: validatedTomori.success
-          ? null
-          : validatedTomori.error.flatten(),
+        validationErrors: validatedTomori.success ? null : validatedTomori.error.flatten(),
       },
     };
 
@@ -175,28 +160,16 @@ async function performSampleDialogueRemoval(
     titleKey: "commands.forget.sampledialogue.success_title",
     descriptionKey: "commands.forget.sampledialogue.success_description",
     descriptionVars: {
-      input:
-        itemToRemoveIn.length > 50
-          ? `${itemToRemoveIn.slice(0, 50)}...`
-          : itemToRemoveIn,
-      output:
-        itemToRemoveOut.length > 50
-          ? `${itemToRemoveOut.slice(0, 50)}...`
-          : itemToRemoveOut,
+      input: itemToRemoveIn.length > 50 ? `${itemToRemoveIn.slice(0, 50)}...` : itemToRemoveIn,
+      output: itemToRemoveOut.length > 50 ? `${itemToRemoveOut.slice(0, 50)}...` : itemToRemoveOut,
     },
     color: ColorCode.SUCCESS,
   });
 }
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("sampledialogue")
-    .setDescription(
-      localizer("en-US", "commands.forget.sampledialogue.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("sampledialogue").setDescription(localizer("en-US", "commands.forget.sampledialogue.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -230,9 +203,7 @@ export async function execute(
 
   try {
     // 2. Load server's Tomori state (Rule 17)
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -244,9 +215,7 @@ export async function execute(
     }
 
     // Select target persona via paginated selector
-    const allPersonas = await loadAllPersonasForServer(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
     if (allPersonas.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -258,25 +227,18 @@ export async function execute(
     }
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
       if (!personaSelection.success) {
         if (personaSelection.reason === "cancelled") return;
         continue;
       }
-      if (
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
 
@@ -292,18 +254,13 @@ export async function execute(
       }
 
       // Check if user has Manage Server permission - admins can bypass teaching restriction
-      const hasManagePermission =
-        interaction.memberPermissions?.has("ManageGuild") ?? false;
+      const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
       // 4. Check if teaching is enabled - FIX: Access through config object
-      if (
-        !tomoriState.config.sampledialogue_memteaching_enabled &&
-        !hasManagePermission
-      ) {
+      if (!tomoriState.config.sampledialogue_memteaching_enabled && !hasManagePermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
-          descriptionKey:
-            "commands.teach.sampledialogue.teaching_disabled_description",
+          descriptionKey: "commands.teach.sampledialogue.teaching_disabled_description",
           color: ColorCode.ERROR,
           flags: MessageFlags.Ephemeral,
         });
@@ -316,11 +273,7 @@ export async function execute(
 
       // 6. Self-heal mismatched arrays before checking emptiness
       // This repairs corruption from the old array_remove() bug
-      if (
-        currentIn.length !== currentOut.length &&
-        currentIn.length > 0 &&
-        currentOut.length > 0
-      ) {
+      if (currentIn.length !== currentOut.length && currentIn.length > 0 && currentOut.length > 0) {
         const repaired = await repairMismatchedDialogues(
           selectedPersona.tomori_id,
           currentIn.length,
@@ -347,47 +300,38 @@ export async function execute(
       }
 
       // 8. Create dialogue select options for the modal
-      const dialogueSelectOptions: SelectOption[] = currentIn.map(
-        (input, index) => {
-          const output = currentOut[index];
-          const truncatedInput = safeSelectOptionText(input, 50);
-          const truncatedOutput = safeSelectOptionText(output, 50);
-          //const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
+      const dialogueSelectOptions: SelectOption[] = currentIn.map((input, index) => {
+        const output = currentOut[index];
+        const truncatedInput = safeSelectOptionText(input, 50);
+        const truncatedOutput = safeSelectOptionText(output, 50);
+        //const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
 
-          return {
-            label: safeSelectOptionText(truncatedInput),
-            value: index.toString(),
-            description: safeSelectOptionText(truncatedOutput),
-          };
-        },
-      );
+        return {
+          label: safeSelectOptionText(truncatedInput),
+          value: index.toString(),
+          description: safeSelectOptionText(truncatedOutput),
+        };
+      });
 
       // 9. Show the paginated modal with dialogue selection
-      const modalResult = await promptWithPaginatedModal(
-        personaSelectionInteraction,
-        locale,
-        {
-          modalCustomId: MODAL_CUSTOM_ID,
-          modalTitleKey: "commands.forget.sampledialogue.modal_title",
-          components: [
-            {
-              customId: DIALOGUE_SELECT_ID,
-              labelKey: "commands.forget.sampledialogue.select_label",
-              descriptionKey:
-                "commands.forget.sampledialogue.select_description",
-              placeholder: "commands.forget.sampledialogue.select_placeholder",
-              required: true,
-              options: dialogueSelectOptions,
-            },
-          ],
-        },
-      );
+      const modalResult = await promptWithPaginatedModal(personaSelectionInteraction, locale, {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.forget.sampledialogue.modal_title",
+        components: [
+          {
+            customId: DIALOGUE_SELECT_ID,
+            labelKey: "commands.forget.sampledialogue.select_label",
+            descriptionKey: "commands.forget.sampledialogue.select_description",
+            placeholder: "commands.forget.sampledialogue.select_placeholder",
+            required: true,
+            options: dialogueSelectOptions,
+          },
+        ],
+      });
 
       // 10. Handle modal outcome - loop back to persona picker on dismiss
       if (modalResult.outcome !== "submit") {
-        log.info(
-          `Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-        );
+        log.info(`Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
         continue;
       }
 
@@ -436,9 +380,7 @@ export async function execute(
 
     // 16. Inform user of unknown error, prioritizing unacknowledged button interaction
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      !personaSelectionInteraction.deferred &&
-      !personaSelectionInteraction.replied
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
         ? personaSelectionInteraction
         : interaction;
     await replyInfoEmbed(errorReplyTarget, locale, {

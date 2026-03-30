@@ -8,11 +8,7 @@ import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
-import {
-  loadActivePreset,
-  loadPresetsForServer,
-  deletePreset,
-} from "@/utils/db/stPresetDb";
+import { loadActivePreset, loadPresetsForServer, deletePreset } from "@/utils/db/stPresetDb";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 // ─── Subcommand Configuration ────────────────────────────────────────
@@ -22,12 +18,8 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
  * No options — removes the currently active preset for the server.
  * @param subcommand - The subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(localizer("en-US", "commands.stpreset.remove.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.stpreset.remove.description"));
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -111,11 +103,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "stpreset remove" },
     };
-    await log.error(
-      "Error executing /stpreset remove",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /stpreset remove", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),

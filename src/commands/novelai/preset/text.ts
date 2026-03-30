@@ -1,22 +1,11 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadNaiPresetsForModel } from "@/utils/db/dbRead";
 import { applyNaiPreset } from "@/utils/db/dbWrite";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import type { UserRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
 
@@ -36,14 +25,8 @@ const MODEL_TARGET_MAP: Record<string, "kayra" | "erato"> = {
 };
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("text")
-    .setDescription(
-      localizer("en-US", "commands.novelai.preset.text.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("text").setDescription(localizer("en-US", "commands.novelai.preset.text.description"));
 
 /**
  * Applies a NovelAI sampling preset to this server's text generation config.
@@ -99,8 +82,7 @@ export async function execute(
   if (!NAI_PRESET_MODELS.has(modelCodename)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.novelai.preset.text.not_kayra_erato_title",
-      descriptionKey:
-        "commands.novelai.preset.text.not_kayra_erato_description",
+      descriptionKey: "commands.novelai.preset.text.not_kayra_erato_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -117,9 +99,7 @@ export async function execute(
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
-    log.error(
-      `No NAI presets found for model target "${modelTarget}" — was seed.sql run?`,
-    );
+    log.error(`No NAI presets found for model target "${modelTarget}" — was seed.sql run?`);
     return;
   }
 
@@ -159,9 +139,7 @@ export async function execute(
   const selectedPresetName = modalResult.values![PRESET_SELECT_ID];
 
   // 9. Find the chosen preset in the loaded list
-  const chosenPreset = presets.find(
-    (p) => p.preset_name === selectedPresetName,
-  );
+  const chosenPreset = presets.find((p) => p.preset_name === selectedPresetName);
   if (!chosenPreset) {
     await replyInfoEmbed(modalInteraction, locale, {
       titleKey: "general.errors.invalid_option_title",
@@ -172,11 +150,7 @@ export async function execute(
   }
 
   // 10. Apply the preset — writes schema fields to tomori_configs + nai_preset_name
-  const updated = await applyNaiPreset(
-    tomoriState.server_id,
-    chosenPreset,
-    modelCodename,
-  );
+  const updated = await applyNaiPreset(tomoriState.server_id, chosenPreset, modelCodename);
   if (!updated) {
     await replyInfoEmbed(modalInteraction, locale, {
       titleKey: "general.errors.update_failed_title",

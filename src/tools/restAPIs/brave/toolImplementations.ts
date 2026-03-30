@@ -51,10 +51,7 @@ function getServerIdFromContext(context?: ToolContext): number | undefined {
  * @param context - Tool execution context with channel access
  * @param searchType - Type of search that was attempted
  */
-async function sendApiKeyErrorEmbed(
-  context?: ToolContext,
-  searchType = "search",
-) {
+async function sendApiKeyErrorEmbed(context?: ToolContext, searchType = "search") {
   if (!context?.channel) return;
 
   try {
@@ -134,11 +131,7 @@ export async function brave_web_search(
   try {
     // Validate required parameters
     if (!args.query || typeof args.query !== "string") {
-      return createToolResult(
-        false,
-        "Invalid or missing query parameter",
-        "Query is required and must be a string",
-      );
+      return createToolResult(false, "Invalid or missing query parameter", "Query is required and must be a string");
     }
 
     const serverId = getServerIdFromContext(context);
@@ -148,21 +141,16 @@ export async function brave_web_search(
     const searchParams = {
       q: args.query as string, // Already validated above
       country: typeof args.country === "string" ? args.country : undefined,
-      search_lang:
-        typeof args.search_lang === "string" ? args.search_lang : undefined,
+      search_lang: typeof args.search_lang === "string" ? args.search_lang : undefined,
       ui_lang: typeof args.ui_lang === "string" ? args.ui_lang : undefined,
       count: typeof args.count === "number" ? args.count : undefined,
       offset: typeof args.offset === "number" ? args.offset : undefined,
       safesearch:
-        args.safesearch === "off" ||
-        args.safesearch === "moderate" ||
-        args.safesearch === "strict"
+        args.safesearch === "off" || args.safesearch === "moderate" || args.safesearch === "strict"
           ? (args.safesearch as "off" | "moderate" | "strict")
           : undefined,
-      freshness:
-        typeof args.freshness === "string" ? args.freshness : undefined,
-      spellcheck:
-        typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
+      freshness: typeof args.freshness === "string" ? args.freshness : undefined,
+      spellcheck: typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
     };
 
     log.info(`Executing brave_web_search for query: "${searchParams.q}"`);
@@ -172,26 +160,12 @@ export async function brave_web_search(
 
     if (!result.success || !result.data) {
       // Check for specific error types
-      if (
-        result.statusCode &&
-        isBraveApiKeyError(result.error || "", result.statusCode)
-      ) {
+      if (result.statusCode && isBraveApiKeyError(result.error || "", result.statusCode)) {
         await sendApiKeyErrorEmbed(context, "web");
-        return createToolResult(
-          false,
-          "Brave Search API key is invalid or missing",
-          result.error,
-        );
+        return createToolResult(false, "Brave Search API key is invalid or missing", result.error);
       }
-      if (
-        result.statusCode &&
-        isBraveRateLimitError(result.error || "", result.statusCode)
-      ) {
-        return createToolResult(
-          false,
-          "Brave Search API rate limit exceeded",
-          result.error,
-        );
+      if (result.statusCode && isBraveRateLimitError(result.error || "", result.statusCode)) {
+        return createToolResult(false, "Brave Search API rate limit exceeded", result.error);
       }
 
       return createToolResult(false, "Web search failed", result.error);
@@ -203,9 +177,7 @@ export async function brave_web_search(
     // Add fetch capability reminder for agentic AI behavior
     const enhancedResults = addFetchCapabilityReminder(formattedResults);
 
-    log.info(
-      `Enhanced web search response with fetch capability reminder - Found ${enhancedResults.urlsFound} URLs`,
-    );
+    log.info(`Enhanced web search response with fetch capability reminder - Found ${enhancedResults.urlsFound} URLs`);
 
     return createToolResult(true, "Web search completed successfully", {
       source: "http",
@@ -233,11 +205,7 @@ export async function brave_web_search(
     });
   } catch (error) {
     log.error("Error in brave_web_search:", error as Error);
-    return createToolResult(
-      false,
-      "An unexpected error occurred during web search",
-      (error as Error).message,
-    );
+    return createToolResult(false, "An unexpected error occurred during web search", (error as Error).message);
   }
 }
 
@@ -247,18 +215,11 @@ export async function brave_web_search(
  * @param context - Tool execution context
  * @returns Search results
  */
-export async function brave_image_search(
-  args: Record<string, unknown>,
-  context?: ToolContext,
-): Promise<ToolResult> {
+export async function brave_image_search(args: Record<string, unknown>, context?: ToolContext): Promise<ToolResult> {
   try {
     // Validate required parameters
     if (!args.query || typeof args.query !== "string") {
-      return createToolResult(
-        false,
-        "Invalid or missing query parameter",
-        "Query is required and must be a string",
-      );
+      return createToolResult(false, "Invalid or missing query parameter", "Query is required and must be a string");
     }
 
     const serverId = getServerIdFromContext(context);
@@ -268,15 +229,11 @@ export async function brave_image_search(
     const searchParams = {
       q: args.query as string, // Already validated above
       country: typeof args.country === "string" ? args.country : undefined,
-      search_lang:
-        typeof args.search_lang === "string" ? args.search_lang : undefined,
+      search_lang: typeof args.search_lang === "string" ? args.search_lang : undefined,
       count: typeof args.count === "number" ? args.count : undefined,
       safesearch:
-        args.safesearch === "off" || args.safesearch === "strict"
-          ? (args.safesearch as "off" | "strict")
-          : undefined,
-      spellcheck:
-        typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
+        args.safesearch === "off" || args.safesearch === "strict" ? (args.safesearch as "off" | "strict") : undefined,
+      spellcheck: typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
     };
 
     log.info(`Executing brave_image_search for query: "${searchParams.q}"`);
@@ -286,26 +243,12 @@ export async function brave_image_search(
 
     if (!result.success || !result.data) {
       // Check for specific error types
-      if (
-        result.statusCode &&
-        isBraveApiKeyError(result.error || "", result.statusCode)
-      ) {
+      if (result.statusCode && isBraveApiKeyError(result.error || "", result.statusCode)) {
         await sendApiKeyErrorEmbed(context, "image");
-        return createToolResult(
-          false,
-          "Brave Search API key is invalid or missing",
-          result.error,
-        );
+        return createToolResult(false, "Brave Search API key is invalid or missing", result.error);
       }
-      if (
-        result.statusCode &&
-        isBraveRateLimitError(result.error || "", result.statusCode)
-      ) {
-        return createToolResult(
-          false,
-          "Brave Search API rate limit exceeded",
-          result.error,
-        );
+      if (result.statusCode && isBraveRateLimitError(result.error || "", result.statusCode)) {
+        return createToolResult(false, "Brave Search API rate limit exceeded", result.error);
       }
 
       return createToolResult(false, "Image search failed", result.error);
@@ -313,8 +256,7 @@ export async function brave_image_search(
 
     // Extract image URLs and process for Discord
     const allImageUrls = extractImageUrls(result.data);
-    const isSupportedImageUrl = (url: string): boolean =>
-      !url.toLowerCase().includes(".avif");
+    const isSupportedImageUrl = (url: string): boolean => !url.toLowerCase().includes(".avif");
     const imageUrls = allImageUrls.filter(isSupportedImageUrl);
     const skippedUrls = allImageUrls.filter((url) => !isSupportedImageUrl(url));
 
@@ -349,8 +291,7 @@ export async function brave_image_search(
             method: "GET",
             signal: controller.signal,
             headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             },
           });
 
@@ -417,14 +358,7 @@ export async function brave_image_search(
       }> => {
         try {
           // 1. Quick pattern filtering for known problematic domains
-          const badPatterns = [
-            /xxx\./i,
-            /\.onion\//i,
-            /localhost/i,
-            /127\.0\.0\.1/i,
-            /192\.168\./i,
-            /10\./i,
-          ];
+          const badPatterns = [/xxx\./i, /\.onion\//i, /localhost/i, /127\.0\.0\.1/i, /192\.168\./i, /10\./i];
 
           if (badPatterns.some((pattern) => pattern.test(imageUrl))) {
             return { url: imageUrl, valid: false, reason: "blocked_domain" };
@@ -438,26 +372,20 @@ export async function brave_image_search(
             method: "HEAD",
             signal: controller.signal,
             headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             },
           });
 
           clearTimeout(timeoutId);
 
           // Check if URL is accessible and is actually an image
-          if (
-            response.ok &&
-            response.headers.get("content-type")?.startsWith("image/")
-          ) {
+          if (response.ok && response.headers.get("content-type")?.startsWith("image/")) {
             // 3. Check content size - if >8MB, attempt compression
             const contentLength = response.headers.get("content-length");
             const discordLimit = 8 * 1024 * 1024; // 8MB Discord limit
 
             if (contentLength && parseInt(contentLength, 10) > discordLimit) {
-              log.info(
-                `Image ${imageUrl} is ${contentLength} bytes, attempting compression...`,
-              );
+              log.info(`Image ${imageUrl} is ${contentLength} bytes, attempting compression...`);
 
               // Attempt compression
               const compressionResult = await compressImage(imageUrl);
@@ -496,9 +424,7 @@ export async function brave_image_search(
       };
 
       // 1. Validate all URLs in parallel with overall timeout guarantee
-      log.info(
-        `Starting parallel validation of ${imageUrls.length} image URLs (2s total timeout)`,
-      );
+      log.info(`Starting parallel validation of ${imageUrls.length} image URLs (2s total timeout)`);
 
       // Create a shared results array to collect partial results during timeout
       const partialResults = new Map<
@@ -612,9 +538,7 @@ export async function brave_image_search(
         }
       }
 
-      log.info(
-        `Parallel validation complete: ${validatedUrls.length} valid, ${failedUrls.length} invalid`,
-      );
+      log.info(`Parallel validation complete: ${validatedUrls.length} valid, ${failedUrls.length} invalid`);
 
       // 3. Create Discord attachments for validated URLs (using compressed buffers when available)
       const attachmentCompressionFlags: boolean[] = [];
@@ -624,12 +548,9 @@ export async function brave_image_search(
           const compressedBuffer = compressedImageMap.get(imageUrl);
 
           // Use compressed buffer if available, otherwise use URL
-          const attachment = new (await import("discord.js")).AttachmentBuilder(
-            compressedBuffer || imageUrl,
-            {
-              name: `image_${i + 1}.jpg`,
-            },
-          );
+          const attachment = new (await import("discord.js")).AttachmentBuilder(compressedBuffer || imageUrl, {
+            name: `image_${i + 1}.jpg`,
+          });
           attachments.push(attachment);
           attachmentCompressionFlags.push(Boolean(compressedBuffer));
 
@@ -638,17 +559,12 @@ export async function brave_image_search(
               `Prepared Discord attachment for compressed image: ${imageUrl} (${compressedBuffer.length} bytes)`,
             );
           } else {
-            log.info(
-              `Prepared Discord attachment for validated image: ${imageUrl}`,
-            );
+            log.info(`Prepared Discord attachment for validated image: ${imageUrl}`);
           }
         } catch (attachmentError) {
           // This should rarely happen now since URLs are pre-validated
           failedUrls.push(validatedUrls[i]);
-          log.warn(
-            `Failed to create attachment for validated URL: ${validatedUrls[i]}`,
-            attachmentError as Error,
-          );
+          log.warn(`Failed to create attachment for validated URL: ${validatedUrls[i]}`, attachmentError as Error);
         }
       }
 
@@ -672,9 +588,7 @@ export async function brave_image_search(
                   {
                     username: context.personaUsername,
                     avatarUrl: context.personaAvatarUrl,
-                    avatarDataUri: context.personaAvatarUrl?.startsWith(
-                      "data:image/",
-                    )
+                    avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
                       ? context.personaAvatarUrl
                       : undefined,
                   },
@@ -682,9 +596,7 @@ export async function brave_image_search(
               : await context.channel.send({
                   files: attachments,
                 });
-          log.success(
-            `Sent ${attachments.length} validated image attachments to Discord`,
-          );
+          log.success(`Sent ${attachments.length} validated image attachments to Discord`);
           const sentAttachments = Array.from(sentMessage.attachments.values());
 
           // Return simplified response to LLM - no URLs or image data to prevent duplicate processing
@@ -722,16 +634,10 @@ export async function brave_image_search(
             imageMetadata,
           };
         } catch (sendError) {
-          log.error(
-            "Failed to send image attachments to Discord:",
-            sendError as Error,
-          );
+          log.error("Failed to send image attachments to Discord:", sendError as Error);
 
           // Fall back to formatted results if Discord sending fails
-          const formattedResults = formatBraveSearchResults(
-            result.data,
-            "image",
-          );
+          const formattedResults = formatBraveSearchResults(result.data, "image");
           return createToolResult(
             false,
             `Found ${validatedUrls.length} accessible images, but failed to send them to Discord due to a technical error. ${formattedResults}`,
@@ -756,11 +662,10 @@ export async function brave_image_search(
     // Fallback: no Discord channel available or no images found - return formatted results
     if (imageUrls.length === 0) {
       const queryTerm = args.query || "images";
-      return createToolResult(
-        false,
-        `Sorry, I couldn't find any ${queryTerm} images to show you.`,
-        { results: `No ${queryTerm} images found`, status: "no_results" },
-      );
+      return createToolResult(false, `Sorry, I couldn't find any ${queryTerm} images to show you.`, {
+        results: `No ${queryTerm} images found`,
+        status: "no_results",
+      });
     }
 
     // No Discord channel available - return formatted results
@@ -771,11 +676,7 @@ export async function brave_image_search(
     });
   } catch (error) {
     log.error("Error in brave_image_search:", error as Error);
-    return createToolResult(
-      false,
-      "An unexpected error occurred during image search",
-      (error as Error).message,
-    );
+    return createToolResult(false, "An unexpected error occurred during image search", (error as Error).message);
   }
 }
 
@@ -797,11 +698,7 @@ export async function brave_video_search(
   try {
     // Validate required parameters
     if (!args.query || typeof args.query !== "string") {
-      return createToolResult(
-        false,
-        "Invalid or missing query parameter",
-        "Query is required and must be a string",
-      );
+      return createToolResult(false, "Invalid or missing query parameter", "Query is required and must be a string");
     }
 
     const serverId = getServerIdFromContext(context);
@@ -811,21 +708,16 @@ export async function brave_video_search(
     const searchParams = {
       q: args.query as string, // Already validated above
       country: typeof args.country === "string" ? args.country : undefined,
-      search_lang:
-        typeof args.search_lang === "string" ? args.search_lang : undefined,
+      search_lang: typeof args.search_lang === "string" ? args.search_lang : undefined,
       ui_lang: typeof args.ui_lang === "string" ? args.ui_lang : undefined,
       count: typeof args.count === "number" ? args.count : undefined,
       offset: typeof args.offset === "number" ? args.offset : undefined,
       safesearch:
-        args.safesearch === "off" ||
-        args.safesearch === "moderate" ||
-        args.safesearch === "strict"
+        args.safesearch === "off" || args.safesearch === "moderate" || args.safesearch === "strict"
           ? (args.safesearch as "off" | "moderate" | "strict")
           : undefined,
-      freshness:
-        typeof args.freshness === "string" ? args.freshness : undefined,
-      spellcheck:
-        typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
+      freshness: typeof args.freshness === "string" ? args.freshness : undefined,
+      spellcheck: typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
     };
 
     log.info(`Executing brave_video_search for query: "${searchParams.q}"`);
@@ -835,26 +727,12 @@ export async function brave_video_search(
 
     if (!result.success || !result.data) {
       // Check for specific error types
-      if (
-        result.statusCode &&
-        isBraveApiKeyError(result.error || "", result.statusCode)
-      ) {
+      if (result.statusCode && isBraveApiKeyError(result.error || "", result.statusCode)) {
         await sendApiKeyErrorEmbed(context, "video");
-        return createToolResult(
-          false,
-          "Brave Search API key is invalid or missing",
-          result.error,
-        );
+        return createToolResult(false, "Brave Search API key is invalid or missing", result.error);
       }
-      if (
-        result.statusCode &&
-        isBraveRateLimitError(result.error || "", result.statusCode)
-      ) {
-        return createToolResult(
-          false,
-          "Brave Search API rate limit exceeded",
-          result.error,
-        );
+      if (result.statusCode && isBraveRateLimitError(result.error || "", result.statusCode)) {
+        return createToolResult(false, "Brave Search API rate limit exceeded", result.error);
       }
 
       return createToolResult(false, "Video search failed", result.error);
@@ -869,11 +747,7 @@ export async function brave_video_search(
     });
   } catch (error) {
     log.error("Error in brave_video_search:", error as Error);
-    return createToolResult(
-      false,
-      "An unexpected error occurred during video search",
-      (error as Error).message,
-    );
+    return createToolResult(false, "An unexpected error occurred during video search", (error as Error).message);
   }
 }
 
@@ -895,11 +769,7 @@ export async function brave_news_search(
   try {
     // Validate required parameters
     if (!args.query || typeof args.query !== "string") {
-      return createToolResult(
-        false,
-        "Invalid or missing query parameter",
-        "Query is required and must be a string",
-      );
+      return createToolResult(false, "Invalid or missing query parameter", "Query is required and must be a string");
     }
 
     const serverId = getServerIdFromContext(context);
@@ -909,21 +779,16 @@ export async function brave_news_search(
     const searchParams = {
       q: args.query as string, // Already validated above
       country: typeof args.country === "string" ? args.country : undefined,
-      search_lang:
-        typeof args.search_lang === "string" ? args.search_lang : undefined,
+      search_lang: typeof args.search_lang === "string" ? args.search_lang : undefined,
       ui_lang: typeof args.ui_lang === "string" ? args.ui_lang : undefined,
       count: typeof args.count === "number" ? args.count : undefined,
       offset: typeof args.offset === "number" ? args.offset : undefined,
       safesearch:
-        args.safesearch === "off" ||
-        args.safesearch === "moderate" ||
-        args.safesearch === "strict"
+        args.safesearch === "off" || args.safesearch === "moderate" || args.safesearch === "strict"
           ? (args.safesearch as "off" | "moderate" | "strict")
           : undefined,
-      freshness:
-        typeof args.freshness === "string" ? args.freshness : undefined,
-      spellcheck:
-        typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
+      freshness: typeof args.freshness === "string" ? args.freshness : undefined,
+      spellcheck: typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
     };
 
     log.info(`Executing brave_news_search for query: "${searchParams.q}"`);
@@ -933,25 +798,11 @@ export async function brave_news_search(
 
     if (!result.success || !result.data) {
       // Check for specific error types
-      if (
-        result.statusCode &&
-        isBraveApiKeyError(result.error || "", result.statusCode)
-      ) {
-        return createToolResult(
-          false,
-          "Brave Search API key is invalid or missing",
-          result.error,
-        );
+      if (result.statusCode && isBraveApiKeyError(result.error || "", result.statusCode)) {
+        return createToolResult(false, "Brave Search API key is invalid or missing", result.error);
       }
-      if (
-        result.statusCode &&
-        isBraveRateLimitError(result.error || "", result.statusCode)
-      ) {
-        return createToolResult(
-          false,
-          "Brave Search API rate limit exceeded",
-          result.error,
-        );
+      if (result.statusCode && isBraveRateLimitError(result.error || "", result.statusCode)) {
+        return createToolResult(false, "Brave Search API rate limit exceeded", result.error);
       }
 
       return createToolResult(false, "News search failed", result.error);
@@ -966,10 +817,6 @@ export async function brave_news_search(
     });
   } catch (error) {
     log.error("Error in brave_news_search:", error as Error);
-    return createToolResult(
-      false,
-      "An unexpected error occurred during news search",
-      (error as Error).message,
-    );
+    return createToolResult(false, "An unexpected error occurred during news search", (error as Error).message);
   }
 }

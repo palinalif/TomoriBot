@@ -26,11 +26,7 @@ interface Violation {
 /**
  * Types of violations that can be detected
  */
-type ViolationType =
-  | "missing_max_length"
-  | "exceeds_max_length"
-  | "exceeds_choice_limit"
-  | "exceeds_select_limit";
+type ViolationType = "missing_max_length" | "exceeds_max_length" | "exceeds_choice_limit" | "exceeds_select_limit";
 
 /**
  * Interface for analysis results
@@ -75,8 +71,7 @@ function checkStringLengthLimits(content: string, file: string): Violation[] {
         file,
         line: getLineNumber(content, match.index),
         type: "missing_max_length",
-        description:
-          "TextInputBuilder missing .setMaxLength() - should not exceed 256 characters",
+        description: "TextInputBuilder missing .setMaxLength() - should not exceed 256 characters",
       });
     }
     match = textInputPattern.exec(content);
@@ -107,21 +102,14 @@ function checkStringLengthLimits(content: string, file: string): Violation[] {
   while (match !== null) {
     const optionBlock = match[0];
     // Check if this block has setMaxLength and it's required (not autocomplete-only)
-    if (
-      !optionBlock.includes("setMaxLength") &&
-      !optionBlock.includes("setAutocomplete(true)")
-    ) {
+    if (!optionBlock.includes("setMaxLength") && !optionBlock.includes("setAutocomplete(true)")) {
       // Only flag if it's not just an autocomplete field
-      if (
-        optionBlock.includes("setRequired(true)") ||
-        optionBlock.includes("setDescription")
-      ) {
+      if (optionBlock.includes("setRequired(true)") || optionBlock.includes("setDescription")) {
         violations.push({
           file,
           line: getLineNumber(content, match.index),
           type: "missing_max_length",
-          description:
-            "SlashCommandStringOption missing .setMaxLength() - should not exceed 256 characters",
+          description: "SlashCommandStringOption missing .setMaxLength() - should not exceed 256 characters",
         });
       }
     }
@@ -186,8 +174,7 @@ function checkSelectMenuLimits(content: string, file: string): Violation[] {
     const menuBlock = match[1];
 
     // Look for .addOptions([...]) or .setOptions([...])
-    const optionsPattern =
-      /\.(addOptions|setOptions)\s*\(\s*\[([\s\S]*?)\]\s*\)/g;
+    const optionsPattern = /\.(addOptions|setOptions)\s*\(\s*\[([\s\S]*?)\]\s*\)/g;
     let optionsMatch: RegExpExecArray | null = optionsPattern.exec(menuBlock);
 
     while (optionsMatch !== null) {
@@ -242,11 +229,7 @@ async function analyzeDiscordLimits(): Promise<AnalysisResult> {
         const choiceViolations = checkChoiceLimits(content, file);
         const selectMenuViolations = checkSelectMenuLimits(content, file);
 
-        violations.push(
-          ...stringLengthViolations,
-          ...choiceViolations,
-          ...selectMenuViolations,
-        );
+        violations.push(...stringLengthViolations, ...choiceViolations, ...selectMenuViolations);
       } catch (readError) {
         log.warn(`Failed to read file: ${file}`, readError);
       }
@@ -259,10 +242,7 @@ async function analyzeDiscordLimits(): Promise<AnalysisResult> {
   // Count violations by type
   const violationsByType = new Map<ViolationType, number>();
   for (const violation of violations) {
-    violationsByType.set(
-      violation.type,
-      (violationsByType.get(violation.type) || 0) + 1,
-    );
+    violationsByType.set(violation.type, (violationsByType.get(violation.type) || 0) + 1);
   }
 
   return {
@@ -312,9 +292,7 @@ function displayResults(results: AnalysisResult): void {
     // Display each category
     for (const [type, violations] of violationsByType) {
       console.log(`\n⚠️  ${formatViolationType(type)} (${violations.length}):`);
-      for (const violation of violations.sort((a, b) =>
-        a.file.localeCompare(b.file),
-      )) {
+      for (const violation of violations.sort((a, b) => a.file.localeCompare(b.file))) {
         console.log(`  ❌ ${violation.file}:${violation.line}`);
         console.log(`     ${violation.description}`);
       }
@@ -339,9 +317,7 @@ function displayResults(results: AnalysisResult): void {
   if (results.violations.length === 0) {
     console.log("\n🎉 Perfect! All Discord API limits are respected!");
   } else {
-    console.log(
-      "\n⚠️  Please fix the violations above to ensure Discord API compliance.",
-    );
+    console.log("\n⚠️  Please fix the violations above to ensure Discord API compliance.");
   }
 
   console.log(`\n${"=".repeat(80)}`);

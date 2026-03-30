@@ -4,20 +4,13 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../../types/db/schema";
 import { ProviderFactory } from "../../../utils/provider/providerFactory";
-import {
-  addRotationKey,
-  purgeRotationKeys,
-  getRotationKeyCount,
-} from "../../../utils/security/keyRotation";
+import { addRotationKey, purgeRotationKeys, getRotationKeyCount } from "../../../utils/security/keyRotation";
 import { isCustomProvider } from "../../../utils/discord/customProviderModal";
 
 /** Action choices for the rotation command */
@@ -29,37 +22,22 @@ const ACTION_PURGE = "purge";
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("rotation")
-    .setDescription(
-      localizer("en-US", "commands.config.apikey.rotation.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.apikey.rotation.description"))
     .addStringOption((option) =>
       option
         .setName("action")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.apikey.rotation.action_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.apikey.rotation.action_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.config.apikey.rotation.action_add",
-            ),
+            name: localizer("en-US", "commands.config.apikey.rotation.action_add"),
             value: ACTION_ADD,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.config.apikey.rotation.action_purge",
-            ),
+            name: localizer("en-US", "commands.config.apikey.rotation.action_purge"),
             value: ACTION_PURGE,
           },
         ),
@@ -67,9 +45,7 @@ export const configureSubcommand = (
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(
-          localizer("en-US", "commands.config.apikey.rotation.key_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.apikey.rotation.key_description"))
         .setRequired(false),
     );
 
@@ -136,8 +112,7 @@ export async function execute(
   if (isCustomProvider(currentProvider)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.apikey.rotation.custom_provider_title",
-      descriptionKey:
-        "commands.config.apikey.rotation.custom_provider_description",
+      descriptionKey: "commands.config.apikey.rotation.custom_provider_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -202,8 +177,7 @@ async function handleAddAction(
   if (!apiKey) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.apikey.rotation.key_required_title",
-      descriptionKey:
-        "commands.config.apikey.rotation.key_required_description",
+      descriptionKey: "commands.config.apikey.rotation.key_required_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -234,20 +208,14 @@ async function handleAddAction(
         titleKey: "commands.config.apikey.set.key_validation_failed_title",
         description:
           validationResult.error?.message ||
-          localizer(
-            locale,
-            "commands.config.apikey.set.key_validation_failed_description",
-          ),
+          localizer(locale, "commands.config.apikey.set.key_validation_failed_description"),
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
   } catch (error) {
-    log.error(
-      `Error validating rotation API key for provider ${currentProvider}`,
-      error as Error,
-    );
+    log.error(`Error validating rotation API key for provider ${currentProvider}`, error as Error);
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.apikey.set.validation_error_title",
       descriptionKey: "commands.config.apikey.set.validation_error_description",
@@ -258,11 +226,7 @@ async function handleAddAction(
   }
 
   // 4. Add the key to the rotation pool
-  const success = await addRotationKey(
-    tomoriState.server_id,
-    currentProvider,
-    apiKey,
-  );
+  const success = await addRotationKey(tomoriState.server_id, currentProvider, apiKey);
 
   if (!success) {
     await replyInfoEmbed(interaction, locale, {
@@ -287,8 +251,7 @@ async function handleAddAction(
     descriptionKey: "commands.config.apikey.rotation.add_success_description",
     descriptionVars: {
       count: String(keyCount),
-      provider:
-        currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1),
+      provider: currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1),
     },
     color: ColorCode.SUCCESS,
     flags: MessageFlags.Ephemeral,
@@ -338,7 +301,5 @@ async function handlePurgeAction(
     flags: MessageFlags.Ephemeral,
   });
 
-  log.success(
-    `Purged ${deletedCount} rotation key(s) for server ${tomoriState.server_id}`,
-  );
+  log.success(`Purged ${deletedCount} rotation key(s) for server ${tomoriState.server_id}`);
 }

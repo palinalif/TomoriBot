@@ -3,43 +3,22 @@
  * Manual personality creation with simple form fields
  */
 
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { AttachmentBuilder, MessageFlags, EmbedBuilder } from "discord.js";
 import { TextInputStyle } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
-import {
-  memoryGuard,
-  PERSONA_LIMITS,
-  reservePersonaQuota,
-} from "../../utils/security/rateLimiter";
-import {
-  getMemoryLimits,
-  validateAttribute,
-  validateSampleDialogue,
-} from "../../utils/db/memoryLimits";
+import { memoryGuard, PERSONA_LIMITS, reservePersonaQuota } from "../../utils/security/rateLimiter";
+import { getMemoryLimits, validateAttribute, validateSampleDialogue } from "../../utils/db/memoryLimits";
 import { safeDownload } from "../../utils/security/safeDownload";
 import { getServerAvatar } from "../../utils/image/avatarHelper";
 import { centerCropToSquare } from "../../utils/image/imageProcessor";
 import { embedMetadataInPNG } from "../../utils/image/pngMetadata";
-import {
-  presetExportDataSchema,
-  PRESET_EXPORT_VERSION,
-} from "../../types/preset/presetExport";
+import { presetExportDataSchema, PRESET_EXPORT_VERSION } from "../../types/preset/presetExport";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
-import type {
-  PresetExport,
-  PresetExportData,
-} from "../../types/preset/presetExport";
+import type { PresetExport, PresetExportData } from "../../types/preset/presetExport";
 import type { ModalComponent } from "../../types/discord/modal";
 
 // Get memory limits from environment variables
@@ -75,12 +54,8 @@ function parsePersonaNameInput(input: string): string[] {
 /**
  * Configure the 'create' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("create")
-    .setDescription(localizer("en-US", "commands.persona.create.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("create").setDescription(localizer("en-US", "commands.persona.create.description"));
 
 /**
  * Executes the 'create' command
@@ -114,8 +89,7 @@ export async function execute(
       {
         customId: CHARACTER_NAME_ID,
         labelKey: "commands.persona.create.modal.character_name_label",
-        descriptionKey:
-          "commands.persona.create.modal.character_name_description",
+        descriptionKey: "commands.persona.create.modal.character_name_description",
         placeholder: "commands.persona.create.modal.character_name_placeholder",
         required: true,
         style: TextInputStyle.Short,
@@ -132,8 +106,7 @@ export async function execute(
       {
         customId: EXAMPLE_USER_ID,
         labelKey: "commands.persona.create.modal.example_user_label",
-        descriptionKey:
-          "commands.persona.create.modal.example_user_description",
+        descriptionKey: "commands.persona.create.modal.example_user_description",
         placeholder: "commands.persona.create.modal.example_user_placeholder",
         required: false,
         style: TextInputStyle.Paragraph,
@@ -204,20 +177,12 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.persona.create.desc_too_long_title"),
-            )
+            .setTitle(localizer(locale, "commands.persona.create.desc_too_long_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.persona.create.desc_too_long_description",
-                {
-                  current_length: characterDesc.length.toString(),
-                  max_allowed: (
-                    descValidation.maxAllowed || memoryLimits.maxAttributeLength
-                  ).toString(),
-                },
-              ),
+              localizer(locale, "commands.persona.create.desc_too_long_description", {
+                current_length: characterDesc.length.toString(),
+                max_allowed: (descValidation.maxAllowed || memoryLimits.maxAttributeLength).toString(),
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -232,24 +197,12 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.create.example_user_too_long_title",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.create.example_user_too_long_title"))
               .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.create.example_user_too_long_description",
-                  {
-                    current_length: exampleUser.length.toString(),
-                    max_allowed: (
-                      userDialogueValidation.maxAllowed ||
-                      memoryLimits.maxSampleDialogueLength
-                    ).toString(),
-                  },
-                ),
+                localizer(locale, "commands.persona.create.example_user_too_long_description", {
+                  current_length: exampleUser.length.toString(),
+                  max_allowed: (userDialogueValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
+                }),
               )
               .setColor(ColorCode.ERROR),
           ],
@@ -265,24 +218,12 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.create.example_bot_too_long_title",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.create.example_bot_too_long_title"))
               .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.create.example_bot_too_long_description",
-                  {
-                    current_length: exampleBot.length.toString(),
-                    max_allowed: (
-                      botDialogueValidation.maxAllowed ||
-                      memoryLimits.maxSampleDialogueLength
-                    ).toString(),
-                  },
-                ),
+                localizer(locale, "commands.persona.create.example_bot_too_long_description", {
+                  current_length: exampleBot.length.toString(),
+                  max_allowed: (botDialogueValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
+                }),
               )
               .setColor(ColorCode.ERROR),
           ],
@@ -294,16 +235,12 @@ export async function execute(
     // 6. Reserve persona operation quota (atomic check+increment for DDoS protection)
     const quotaReserve = reservePersonaQuota(interaction.user.id);
     if (!quotaReserve.allowed) {
-      const resetTime = quotaReserve.resetAt
-        ? new Date(quotaReserve.resetAt).toLocaleString(locale)
-        : "unknown";
+      const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
 
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "rate_limit.error_quota_exceeded_title"),
-            )
+            .setTitle(localizer(locale, "rate_limit.error_quota_exceeded_title"))
             .setDescription(
               localizer(locale, "rate_limit.error_quota_exceeded_description", {
                 reset_time: resetTime,
@@ -326,26 +263,18 @@ export async function execute(
         // Preserve modal inputs for user convenience
         const embed = new EmbedBuilder()
           .setTitle(localizer(locale, "rate_limit.error_memory_critical_title"))
-          .setDescription(
-            localizer(locale, "rate_limit.error_memory_critical_description"),
-          )
+          .setDescription(localizer(locale, "rate_limit.error_memory_critical_description"))
           .setColor(ColorCode.ERROR);
 
         // Add modal inputs as fields (excluding image)
         const memoryErrorFields = [
           {
-            name: localizer(
-              locale,
-              "commands.persona.create.field_character_name",
-            ),
+            name: localizer(locale, "commands.persona.create.field_character_name"),
             value: characterNameInput.substring(0, 1024) || "N/A",
             inline: false,
           },
           {
-            name: localizer(
-              locale,
-              "commands.persona.create.field_character_desc",
-            ),
+            name: localizer(locale, "commands.persona.create.field_character_desc"),
             value: characterDesc.substring(0, 1024) || "N/A",
             inline: false,
           },
@@ -354,20 +283,14 @@ export async function execute(
         // Only add sample dialogue fields if they were provided
         if (exampleUser) {
           memoryErrorFields.push({
-            name: localizer(
-              locale,
-              "commands.persona.create.field_example_user",
-            ),
+            name: localizer(locale, "commands.persona.create.field_example_user"),
             value: exampleUser.substring(0, 1024) || "N/A",
             inline: false,
           });
         }
         if (exampleBot) {
           memoryErrorFields.push({
-            name: localizer(
-              locale,
-              "commands.persona.create.field_example_bot",
-            ),
+            name: localizer(locale, "commands.persona.create.field_example_bot"),
             value: exampleBot.substring(0, 1024) || "N/A",
             inline: false,
           });
@@ -386,18 +309,8 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.create.invalid_image_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.create.invalid_image_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.create.invalid_image_title"))
+              .setDescription(localizer(locale, "commands.persona.create.invalid_image_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -423,11 +336,7 @@ export async function execute(
         }
 
         await modalSubmitInteraction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(localizer(locale, errorKey))
-              .setColor(ColorCode.ERROR),
-          ],
+          embeds: [new EmbedBuilder().setTitle(localizer(locale, errorKey)).setColor(ColorCode.ERROR)],
         });
         return;
       }
@@ -455,10 +364,7 @@ export async function execute(
     if (!validationResult.success) {
       // Log detailed validation errors
       log.error("Created preset failed validation:");
-      log.error(
-        "Validation errors:",
-        JSON.stringify(validationResult.error.format(), null, 2),
-      );
+      log.error("Validation errors:", JSON.stringify(validationResult.error.format(), null, 2));
       log.error("Preset data:", JSON.stringify(presetData, null, 2));
 
       // Extract specific error messages for user
@@ -469,12 +375,7 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.persona.create.validation_failed_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.create.validation_failed_title"))
             .setDescription(
               `${localizer(
                 locale,
@@ -502,18 +403,8 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.create.image_processing_failed_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.create.image_processing_failed_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.create.image_processing_failed_title"))
+              .setDescription(localizer(locale, "commands.persona.create.image_processing_failed_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -530,18 +421,8 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(
-                localizer(
-                  locale,
-                  "commands.persona.create.avatar_fetch_failed_title",
-                ),
-              )
-              .setDescription(
-                localizer(
-                  locale,
-                  "commands.persona.create.avatar_fetch_failed_description",
-                ),
-              )
+              .setTitle(localizer(locale, "commands.persona.create.avatar_fetch_failed_title"))
+              .setDescription(localizer(locale, "commands.persona.create.avatar_fetch_failed_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -567,18 +448,8 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.persona.create.metadata_embed_failed_title",
-              ),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.persona.create.metadata_embed_failed_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.persona.create.metadata_embed_failed_title"))
+            .setDescription(localizer(locale, "commands.persona.create.metadata_embed_failed_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -598,10 +469,7 @@ export async function execute(
     const isDM = !interaction.guild;
 
     // Truncate description if too long for embed
-    const descriptionPreview =
-      characterDesc.length > 200
-        ? `${characterDesc.substring(0, 200)}...`
-        : characterDesc;
+    const descriptionPreview = characterDesc.length > 200 ? `${characterDesc.substring(0, 200)}...` : characterDesc;
 
     // Build embed fields array
     const embedFields = [];
@@ -609,20 +477,11 @@ export async function execute(
     // Only add dialogue field if sample dialogues were provided
     if (hasSampleDialogue && exampleUser && exampleBot) {
       // Truncate dialogue examples if too long
-      const userPreview =
-        exampleUser.length > 100
-          ? `${exampleUser.substring(0, 100)}...`
-          : exampleUser;
-      const botPreview =
-        exampleBot.length > 100
-          ? `${exampleBot.substring(0, 100)}...`
-          : exampleBot;
+      const userPreview = exampleUser.length > 100 ? `${exampleUser.substring(0, 100)}...` : exampleUser;
+      const botPreview = exampleBot.length > 100 ? `${exampleBot.substring(0, 100)}...` : exampleBot;
 
       embedFields.push({
-        name: localizer(
-          locale,
-          "commands.persona.create.success_dialogue_title",
-        ),
+        name: localizer(locale, "commands.persona.create.success_dialogue_title"),
         value: `**User:** ${userPreview}\n**Bot:** ${botPreview}`,
         inline: false,
       });
@@ -630,14 +489,8 @@ export async function execute(
 
     // Add next steps field
     embedFields.push({
-      name: localizer(
-        locale,
-        "commands.persona.create.success_next_steps_title",
-      ),
-      value: localizer(
-        locale,
-        "commands.persona.create.success_next_steps_description",
-      ),
+      name: localizer(locale, "commands.persona.create.success_next_steps_title"),
+      value: localizer(locale, "commands.persona.create.success_next_steps_description"),
       inline: false,
     });
 
@@ -660,10 +513,7 @@ export async function execute(
     // Add DM-specific footer if in DM
     if (isDM) {
       successEmbed.setFooter({
-        text: localizer(
-          locale,
-          "commands.persona.create.avatar_update_skipped_dm",
-        ),
+        text: localizer(locale, "commands.persona.create.avatar_update_skipped_dm"),
       });
     }
 
@@ -677,8 +527,7 @@ export async function execute(
     log.success(`Preset created successfully for: ${characterName}`);
   } catch (error) {
     log.error("Error in preset create command:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
     // Try to send error embed if possible
     try {

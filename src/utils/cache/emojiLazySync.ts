@@ -18,16 +18,10 @@ import { syncEmojisToDatabase } from "../db/emojiStickerSync";
  * @param forceFetch - Force fetch even if cache is fresh (default: false)
  * @returns True if sync was performed, false if cache was fresh
  */
-export async function lazySyncGuildEmojis(
-  guild: Guild,
-  serverId: number,
-  forceFetch = false,
-): Promise<boolean> {
+export async function lazySyncGuildEmojis(guild: Guild, serverId: number, forceFetch = false): Promise<boolean> {
   try {
     // 1. Check when emojis were last synced for this server
-    const [lastSync] = await sql<
-      Array<{ last_updated: Date; emoji_count: number }>
-    >`
+    const [lastSync] = await sql<Array<{ last_updated: Date; emoji_count: number }>>`
 			SELECT
 				MAX(updated_at) as last_updated,
 				COUNT(*) as emoji_count
@@ -67,8 +61,7 @@ export async function lazySyncGuildEmojis(
       lastSync.emoji_count === 0 ||
       !lastSync.last_updated ||
       hasCountMismatch ||
-      now.getTime() - new Date(lastSync.last_updated).getTime() >
-        CACHE_DURATION_MS;
+      now.getTime() - new Date(lastSync.last_updated).getTime() > CACHE_DURATION_MS;
 
     if (!needsFetch) {
       log.info(
@@ -86,9 +79,7 @@ export async function lazySyncGuildEmojis(
           ? "no emojis in DB"
           : "cache stale";
 
-    log.info(
-      `Lazy fetching emojis for guild ${guild.name} (${guild.id})... Reason: ${refreshReason}`,
-    );
+    log.info(`Lazy fetching emojis for guild ${guild.name} (${guild.id})... Reason: ${refreshReason}`);
     log.info(`[Emoji Lazy Sync] Using server_id: ${serverId}`);
 
     // 6. Fetch emojis from Discord API (if not already fetched in step 3)
@@ -97,9 +88,7 @@ export async function lazySyncGuildEmojis(
     }
     const currentEmojis = Array.from(guild.emojis.cache.values());
 
-    log.info(
-      `Fetched ${currentEmojis.length} emoji(s) from Discord for guild ${guild.name}`,
-    );
+    log.info(`Fetched ${currentEmojis.length} emoji(s) from Discord for guild ${guild.name}`);
 
     // 7. Sync to database using shared helper
     await sql.transaction(async (tx) => {
@@ -110,15 +99,11 @@ export async function lazySyncGuildEmojis(
 
     return true;
   } catch (error) {
-    log.error(
-      `Failed to lazy sync emojis for guild ${guild.name} (${guild.id}):`,
-      error,
-      {
-        serverId,
-        errorType: "EmojiLazySyncError",
-        metadata: { guildId: guild.id },
-      },
-    );
+    log.error(`Failed to lazy sync emojis for guild ${guild.name} (${guild.id}):`, error, {
+      serverId,
+      errorType: "EmojiLazySyncError",
+      metadata: { guildId: guild.id },
+    });
     // Don't throw - allow the bot to continue with possibly stale data
     return false;
   }

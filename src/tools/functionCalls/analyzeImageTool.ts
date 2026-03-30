@@ -7,11 +7,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { Part } from "@google/genai";
 import { BaseTool } from "@/types/tool/interfaces";
-import type {
-  ToolContext,
-  ToolResult,
-  ToolParameterSchema,
-} from "@/types/tool/interfaces";
+import type { ToolContext, ToolResult, ToolParameterSchema } from "@/types/tool/interfaces";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
@@ -105,10 +101,7 @@ export class AnalyzeImageTool extends BaseTool {
    * 4. Route the images to the vision model's API
    * 5. Return the analysis result
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const messageId = args.message_id as string;
     const prompt = (args.prompt as string) || DEFAULT_VISION_PROMPT;
 
@@ -125,8 +118,7 @@ export class AnalyzeImageTool extends BaseTool {
     if (!visionLlm) {
       return {
         success: false,
-        error:
-          "No vision model configured. Use /config model vision to set one.",
+        error: "No vision model configured. Use /config model vision to set one.",
       };
     }
 
@@ -161,10 +153,7 @@ export class AnalyzeImageTool extends BaseTool {
 
       // 5. Decrypt the API key
       const keyVersion = context.tomoriState.config.key_version || 1;
-      const apiKey = await decryptApiKey(
-        context.tomoriState.config.api_key,
-        keyVersion,
-      );
+      const apiKey = await decryptApiKey(context.tomoriState.config.api_key, keyVersion);
 
       if (!apiKey) {
         return {
@@ -184,27 +173,14 @@ export class AnalyzeImageTool extends BaseTool {
       let analysisResult: string;
 
       if (provider === "google") {
-        analysisResult = await this.callGoogleVision(
-          apiKey,
-          apiModelName,
-          images,
-          prompt,
-        );
+        analysisResult = await this.callGoogleVision(apiKey, apiModelName, images, prompt);
       } else {
         // OpenAI-compatible providers (openrouter, zai, zaicoding, deepseek, custom)
         const endpointUrl = this.getEndpointUrl(provider, context);
-        analysisResult = await this.callOpenAICompatibleVision(
-          apiKey,
-          apiModelName,
-          endpointUrl,
-          images,
-          prompt,
-        );
+        analysisResult = await this.callOpenAICompatibleVision(apiKey, apiModelName, endpointUrl, images, prompt);
       }
 
-      log.info(
-        `Vision analysis completed: ${images.length} image(s) analyzed via ${provider}/${apiModelName}`,
-      );
+      log.info(`Vision analysis completed: ${images.length} image(s) analyzed via ${provider}/${apiModelName}`);
 
       return {
         success: true,
@@ -212,12 +188,8 @@ export class AnalyzeImageTool extends BaseTool {
         message: analysisResult,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      log.error(
-        `Vision analysis failed for message ${messageId}:`,
-        error as Error,
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error(`Vision analysis failed for message ${messageId}:`, error as Error);
       return {
         success: false,
         error: `Image analysis failed: ${errorMessage}`,
@@ -240,9 +212,7 @@ export class AnalyzeImageTool extends BaseTool {
     // Custom provider: use the configured endpoint URL
     const customUrl = context.tomoriState.config.custom_endpoint_url;
     if (customUrl) {
-      return customUrl.endsWith("/chat/completions")
-        ? customUrl
-        : `${customUrl}/chat/completions`;
+      return customUrl.endsWith("/chat/completions") ? customUrl : `${customUrl}/chat/completions`;
     }
 
     // Fallback: OpenAI default
@@ -266,9 +236,7 @@ export class AnalyzeImageTool extends BaseTool {
     prompt: string,
   ): Promise<string> {
     // Build the content array with text prompt and image parts
-    const contentParts: Array<Record<string, unknown>> = [
-      { type: "text", text: prompt },
-    ];
+    const contentParts: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
 
     for (const image of images) {
       contentParts.push({
@@ -312,9 +280,7 @@ export class AnalyzeImageTool extends BaseTool {
 
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error(
-        "Vision API returned an empty response. The model may not support image inputs.",
-      );
+      throw new Error("Vision API returned an empty response. The model may not support image inputs.");
     }
 
     return content;
@@ -385,9 +351,7 @@ export class AnalyzeImageTool extends BaseTool {
     }> = [];
 
     // 2a. Direct image attachments
-    const imageAttachments = message.attachments.filter((attachment) =>
-      attachment.contentType?.startsWith("image/"),
-    );
+    const imageAttachments = message.attachments.filter((attachment) => attachment.contentType?.startsWith("image/"));
     for (const attachment of imageAttachments.values()) {
       imageUrls.push({
         url: attachment.url,
@@ -424,14 +388,10 @@ export class AnalyzeImageTool extends BaseTool {
     }
 
     if (imageUrls.length === 0) {
-      throw new Error(
-        `No images found in message ${messageId} (checked attachments, embeds, and stickers)`,
-      );
+      throw new Error(`No images found in message ${messageId} (checked attachments, embeds, and stickers)`);
     }
 
-    log.info(
-      `Found ${imageUrls.length} image(s) in message ${messageId} for vision analysis`,
-    );
+    log.info(`Found ${imageUrls.length} image(s) in message ${messageId} for vision analysis`);
 
     // 3. Convert each image URL to base64, respecting size limit
     const inlineDataArray: Array<{ mimeType: string; data: string }> = [];
@@ -441,9 +401,7 @@ export class AnalyzeImageTool extends BaseTool {
       try {
         const imageResponse = await fetch(imageInfo.url);
         if (!imageResponse.ok) {
-          log.warn(
-            `Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`,
-          );
+          log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`);
           continue;
         }
 
@@ -451,9 +409,7 @@ export class AnalyzeImageTool extends BaseTool {
 
         // Check cumulative size limit
         if (totalBytes + imageArrayBuffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
-          log.warn(
-            `Skipping image from ${imageInfo.source}: would exceed ${MAX_TOTAL_IMAGE_BYTES} byte limit`,
-          );
+          log.warn(`Skipping image from ${imageInfo.source}: would exceed ${MAX_TOTAL_IMAGE_BYTES} byte limit`);
           continue;
         }
 
@@ -465,14 +421,9 @@ export class AnalyzeImageTool extends BaseTool {
           data: base64Data,
         });
 
-        log.info(
-          `Fetched image from ${imageInfo.source} (${imageArrayBuffer.byteLength} bytes)`,
-        );
+        log.info(`Fetched image from ${imageInfo.source} (${imageArrayBuffer.byteLength} bytes)`);
       } catch (imgErr) {
-        log.warn(
-          `Failed to process image from ${imageInfo.source}:`,
-          imgErr as Error,
-        );
+        log.warn(`Failed to process image from ${imageInfo.source}:`, imgErr as Error);
       }
     }
 

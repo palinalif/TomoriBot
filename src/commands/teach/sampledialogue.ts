@@ -14,22 +14,11 @@ import {
 } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import type { SelectOption } from "../../types/discord/modal";
-import {
-  checkSampleDialogueLimit,
-  getMemoryLimits,
-  validateSampleDialogue,
-} from "../../utils/db/memoryLimits";
+import { checkSampleDialogueLimit, getMemoryLimits, validateSampleDialogue } from "../../utils/db/memoryLimits";
 import {
   dedupeSampleDialoguePairs,
   formatTextArrayLiteral,
@@ -48,14 +37,8 @@ const BOT_INPUT_ID = "bot_input";
 const SAMPLE_DIALOGUE_FILE_UPLOAD_ID = "sampledialogue_file_upload";
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("sampledialogue")
-    .setDescription(
-      localizer("en-US", "commands.teach.sampledialogue.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("sampledialogue").setDescription(localizer("en-US", "commands.teach.sampledialogue.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -88,15 +71,12 @@ export async function execute(
 
   try {
     // 2. Check if user has Manage Server permission - used for blacklist and teaching restriction bypass
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
     // 3. Check blacklisting only for guild contexts
     // Users with Manage Server permission can bypass blacklist (they can unblacklist themselves anyway)
     if (interaction.guild) {
-      const blacklisted =
-        (await isBlacklisted(interaction.guild.id, interaction.user.id)) ??
-        false;
+      const blacklisted = (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
       if (blacklisted && !hasManagePermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.user_blacklisted_title",
@@ -109,9 +89,7 @@ export async function execute(
     }
 
     // 4. Load server's Tomori state (Rule 17)
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
 
     // 5. Check if Tomori is set up and if sample dialogue teaching is enabled
     if (!tomoriState) {
@@ -125,23 +103,15 @@ export async function execute(
     }
 
     // 6. Resolve target persona options
-    const allPersonas = await loadAllPersonasForServer(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
     const personaSelectOptions: SelectOption[] = allPersonas
       .filter((persona) => persona.tomori_id !== undefined)
       .map((persona) => ({
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.teach.sampledialogue.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.teach.sampledialogue.main_persona_description",
-            ),
+          ? localizer(locale, "commands.teach.sampledialogue.alter_persona_description")
+          : localizer(locale, "commands.teach.sampledialogue.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
     if (personaSelectOptions.length === 0) {
@@ -156,14 +126,10 @@ export async function execute(
 
     // 7. Check if sample dialogue teaching is enabled and if user has bypass permissions
     // Access config directly from tomoriState
-    if (
-      !tomoriState.config.sampledialogue_memteaching_enabled &&
-      !hasManagePermission
-    ) {
+    if (!tomoriState.config.sampledialogue_memteaching_enabled && !hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
-        descriptionKey:
-          "commands.teach.sampledialogue.teaching_disabled_description",
+        descriptionKey: "commands.teach.sampledialogue.teaching_disabled_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -179,18 +145,15 @@ export async function execute(
         {
           customId: PERSONA_SELECT_ID,
           labelKey: "commands.teach.sampledialogue.persona_select_label",
-          descriptionKey:
-            "commands.teach.sampledialogue.persona_select_description",
-          placeholder:
-            "commands.teach.sampledialogue.persona_select_placeholder",
+          descriptionKey: "commands.teach.sampledialogue.persona_select_description",
+          placeholder: "commands.teach.sampledialogue.persona_select_placeholder",
           required: true,
           options: personaSelectOptions,
         },
         {
           customId: USER_INPUT_ID,
           labelKey: "commands.teach.sampledialogue.user_input_label",
-          descriptionKey:
-            "commands.teach.sampledialogue.user_input_description",
+          descriptionKey: "commands.teach.sampledialogue.user_input_description",
           placeholder: "commands.teach.sampledialogue.user_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: false,
@@ -208,8 +171,7 @@ export async function execute(
         {
           customId: SAMPLE_DIALOGUE_FILE_UPLOAD_ID,
           labelKey: "commands.teach.sampledialogue.batch_file_label",
-          descriptionKey:
-            "commands.teach.sampledialogue.batch_file_description",
+          descriptionKey: "commands.teach.sampledialogue.batch_file_description",
           minValues: 0,
           maxValues: 1,
           required: false,
@@ -219,9 +181,7 @@ export async function execute(
 
     // 10. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Sample dialogue add modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Sample dialogue add modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -231,10 +191,7 @@ export async function execute(
     // Resolve selected persona from modal
     // biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees value
     const selectedPersonaId = modalResult.values![PERSONA_SELECT_ID];
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -246,8 +203,7 @@ export async function execute(
 
     const typedUserInput = modalResult.values?.[USER_INPUT_ID]?.trim() ?? "";
     const typedBotInput = modalResult.values?.[BOT_INPUT_ID]?.trim() ?? "";
-    const uploadedTextFile =
-      modalResult.attachments?.[SAMPLE_DIALOGUE_FILE_UPLOAD_ID];
+    const uploadedTextFile = modalResult.attachments?.[SAMPLE_DIALOGUE_FILE_UPLOAD_ID];
 
     const pendingDialogues: Array<{ userInput: string; botInput: string }> = [];
 
@@ -255,8 +211,7 @@ export async function execute(
       if (!typedUserInput || !typedBotInput) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.sampledialogue.no_input_title",
-          descriptionKey:
-            "commands.teach.sampledialogue.manual_pair_required_description",
+          descriptionKey: "commands.teach.sampledialogue.manual_pair_required_description",
           color: ColorCode.ERROR,
           flags: MessageFlags.Ephemeral,
         });
@@ -293,13 +248,10 @@ export async function execute(
       const parsedBatch = parseSampleDialogueBatch(uploadResult.text);
       if (!parsedBatch.isValid) {
         const expectedPrefix =
-          parsedBatch.error?.code === "invalid_bot_prefix"
-            ? "{bot}: or {{char}}:"
-            : "{user}: or {{user}}:";
+          parsedBatch.error?.code === "invalid_bot_prefix" ? "{bot}: or {{char}}:" : "{user}: or {{user}}:";
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.sampledialogue.invalid_batch_format_title",
-          descriptionKey:
-            "commands.teach.sampledialogue.invalid_batch_format_description",
+          descriptionKey: "commands.teach.sampledialogue.invalid_batch_format_description",
           descriptionVars: {
             line_number: (parsedBatch.error?.lineNumber ?? 1).toString(),
             expected_prefix: expectedPrefix,
@@ -331,14 +283,10 @@ export async function execute(
       if (!userInputValidation.isValid) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.sampledialogue.user_input_too_long_title",
-          descriptionKey:
-            "commands.teach.sampledialogue.user_input_too_long_description",
+          descriptionKey: "commands.teach.sampledialogue.user_input_too_long_description",
           descriptionVars: {
             current_length: dialogue.userInput.length.toString(),
-            max_allowed: (
-              userInputValidation.maxAllowed ||
-              memoryLimits.maxSampleDialogueLength
-            ).toString(),
+            max_allowed: (userInputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
           },
           color: ColorCode.ERROR,
         });
@@ -349,14 +297,10 @@ export async function execute(
       if (!botInputValidation.isValid) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.sampledialogue.bot_input_too_long_title",
-          descriptionKey:
-            "commands.teach.sampledialogue.bot_input_too_long_description",
+          descriptionKey: "commands.teach.sampledialogue.bot_input_too_long_description",
           descriptionVars: {
             current_length: dialogue.botInput.length.toString(),
-            max_allowed: (
-              botInputValidation.maxAllowed ||
-              memoryLimits.maxSampleDialogueLength
-            ).toString(),
+            max_allowed: (botInputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
           },
           color: ColorCode.ERROR,
         });
@@ -367,17 +311,10 @@ export async function execute(
     const currentUserDialogues = selectedPersona.sample_dialogues_in || [];
     const currentBotDialogues = selectedPersona.sample_dialogues_out || [];
     const existingDialogues = new Set<string>();
-    const existingLength = Math.min(
-      currentUserDialogues.length,
-      currentBotDialogues.length,
-    );
+    const existingLength = Math.min(currentUserDialogues.length, currentBotDialogues.length);
     for (let i = 0; i < existingLength; i += 1) {
       existingDialogues.add(
-        `${currentUserDialogues[i]?.trim().toLowerCase()}|||${currentBotDialogues[
-          i
-        ]
-          ?.trim()
-          .toLowerCase()}`,
+        `${currentUserDialogues[i]?.trim().toLowerCase()}|||${currentBotDialogues[i]?.trim().toLowerCase()}`,
       );
     }
 
@@ -397,13 +334,9 @@ export async function execute(
     }
 
     // 12. Check sample dialogue limit after persona resolution
-    const dialogueLimitCheck = await checkSampleDialogueLimit(
-      selectedPersona.tomori_id,
-    );
-    const currentCount =
-      dialogueLimitCheck.currentCount ?? currentUserDialogues.length;
-    const maxAllowed =
-      dialogueLimitCheck.maxAllowed ?? memoryLimits.maxSampleDialogues;
+    const dialogueLimitCheck = await checkSampleDialogueLimit(selectedPersona.tomori_id);
+    const currentCount = dialogueLimitCheck.currentCount ?? currentUserDialogues.length;
+    const maxAllowed = dialogueLimitCheck.maxAllowed ?? memoryLimits.maxSampleDialogues;
     const availableSlots = Math.max(0, maxAllowed - currentCount);
 
     if (dialoguesToAdd.length > availableSlots) {
@@ -494,13 +427,9 @@ export async function execute(
       botInput: "",
     };
     const userPreview =
-      firstDialogue.userInput.length > 96
-        ? `${firstDialogue.userInput.slice(0, 96)}...`
-        : firstDialogue.userInput;
+      firstDialogue.userInput.length > 96 ? `${firstDialogue.userInput.slice(0, 96)}...` : firstDialogue.userInput;
     const botPreview =
-      firstDialogue.botInput.length > 96
-        ? `${firstDialogue.botInput.slice(0, 96)}...`
-        : firstDialogue.botInput;
+      firstDialogue.botInput.length > 96 ? `${firstDialogue.botInput.slice(0, 96)}...` : firstDialogue.botInput;
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey:
@@ -539,8 +468,7 @@ export async function execute(
     await log.error("Error in /teach sampledialogue command", error, context);
 
     const errorReplyInteraction =
-      modalSubmitInteraction ??
-      (interaction.replied || interaction.deferred ? interaction : null);
+      modalSubmitInteraction ?? (interaction.replied || interaction.deferred ? interaction : null);
     if (errorReplyInteraction) {
       await replyInfoEmbed(errorReplyInteraction, locale, {
         titleKey: "general.errors.unknown_error_title",

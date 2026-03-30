@@ -3,10 +3,7 @@ import type {
   ProviderNativeImageGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
-import {
-  toZaiApiModelName,
-  ZAI_GENERAL_IMAGES_GENERATIONS_URL,
-} from "@/providers/zai/zaiShared";
+import { toZaiApiModelName, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 
 /**
  * Aspect ratio to pixel size mapping for Z.ai image generation.
@@ -52,22 +49,19 @@ export async function generateZaiNativeImage(
   }
 
   // 1. Send generation request to Z.ai
-  const response = await fetch(
-    request.endpointUrl || ZAI_GENERAL_IMAGES_GENERATIONS_URL,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${request.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: apiModel,
-        prompt: request.prompt,
-        size,
-        quality: "hd",
-      }),
+  const response = await fetch(request.endpointUrl || ZAI_GENERAL_IMAGES_GENERATIONS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${request.apiKey}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      model: apiModel,
+      prompt: request.prompt,
+      size,
+      quality: "hd",
+    }),
+  });
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -79,9 +73,7 @@ export async function generateZaiNativeImage(
         size,
       },
     });
-    throw new Error(
-      `Z.ai image generation failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Z.ai image generation failed: ${response.status} ${response.statusText}`);
   }
 
   // 2. Parse response — expects { data: [{ url }] }
@@ -100,14 +92,10 @@ export async function generateZaiNativeImage(
   // 3. Fetch the image from the URL and convert to base64
   const imageResponse = await fetch(imageUrl);
   if (!imageResponse.ok) {
-    log.error(
-      "Failed to fetch generated image from Z.ai URL",
-      new Error(`HTTP ${imageResponse.status}`),
-      {
-        errorType: "ZaiImageFetchError",
-        metadata: { model: apiModel, imageUrl },
-      },
-    );
+    log.error("Failed to fetch generated image from Z.ai URL", new Error(`HTTP ${imageResponse.status}`), {
+      errorType: "ZaiImageFetchError",
+      metadata: { model: apiModel, imageUrl },
+    });
     return { imageData: null, mimeType: null };
   }
 

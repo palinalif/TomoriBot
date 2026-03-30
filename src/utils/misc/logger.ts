@@ -47,8 +47,7 @@ const pinoLogger = pino({
           colorize: false,
           translateTime: "HH:MM:ss",
           ignore: "pid,hostname",
-          customLevels:
-            "trace:10,debug:20,info:30,section:31,success:35,warn:40,error:50,rateLimit:55,fatal:60",
+          customLevels: "trace:10,debug:20,info:30,section:31,success:35,warn:40,error:50,rateLimit:55,fatal:60",
         },
       }
     : undefined,
@@ -67,8 +66,7 @@ const colors = {
   brightYellow: "\x1b[93m",
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 const toLoggableError = (err: unknown): Error | Record<string, unknown> => {
   if (err instanceof Error) return err;
@@ -105,9 +103,7 @@ export const log = {
    * @param msg - The message to log.
    */
   info: (msg: string) => {
-    pinoLogger.info(
-      shouldHideLogs ? msg : `${colors.cyan}${msg}${colors.reset}`,
-    );
+    pinoLogger.info(shouldHideLogs ? msg : `${colors.cyan}${msg}${colors.reset}`);
   },
 
   /**
@@ -117,9 +113,7 @@ export const log = {
   success: (msg: string) => {
     // Pino adds custom level methods at runtime, but TypeScript doesn't know about them
     // biome-ignore lint/suspicious/noExplicitAny: Custom Pino level added at runtime
-    (pinoLogger as any).success(
-      shouldHideLogs ? `✓ ${msg}` : `${colors.green}✓ ${msg}${colors.reset}`,
-    );
+    (pinoLogger as any).success(shouldHideLogs ? `✓ ${msg}` : `${colors.green}✓ ${msg}${colors.reset}`);
   },
 
   /**
@@ -128,9 +122,7 @@ export const log = {
    * @param err - Optional error object to include.
    */
   warn: (msg: string, err?: unknown) => {
-    const coloredMsg = shouldHideLogs
-      ? msg
-      : `${colors.yellow}${msg}${colors.reset}`;
+    const coloredMsg = shouldHideLogs ? msg : `${colors.yellow}${msg}${colors.reset}`;
     if (err) {
       pinoLogger.warn({ err: toLoggableError(err) }, coloredMsg);
     } else {
@@ -145,9 +137,7 @@ export const log = {
    * @param metadata - Optional metadata object with rate limit details.
    */
   rateLimit: (msg: string, metadata?: Record<string, unknown>) => {
-    const coloredMsg = shouldHideLogs
-      ? msg
-      : `${colors.brightYellow}${msg}${colors.reset}`;
+    const coloredMsg = shouldHideLogs ? msg : `${colors.brightYellow}${msg}${colors.reset}`;
     // Pino adds custom level methods at runtime, but TypeScript doesn't know about them
     // biome-ignore lint/suspicious/noExplicitAny: Custom Pino level added at runtime
     const logger = pinoLogger as any;
@@ -165,14 +155,8 @@ export const log = {
    * @param err - The actual Error object or unknown error data (optional).
    * @param context - Optional context containing IDs and metadata for DB logging.
    */
-  error: async (
-    msg: string,
-    err?: unknown,
-    context?: ErrorContext,
-  ): Promise<void> => {
-    const coloredMsg = shouldHideLogs
-      ? msg
-      : `${colors.red}${msg}${colors.reset}`;
+  error: async (msg: string, err?: unknown, context?: ErrorContext): Promise<void> => {
+    const coloredMsg = shouldHideLogs ? msg : `${colors.red}${msg}${colors.reset}`;
 
     // 1. Log to console using Pino
     if (err) {
@@ -203,9 +187,7 @@ export const log = {
       error_type: context?.errorType ?? "GenericError",
       error_message: `${msg} - ${errorMessage}`,
       stack_trace: stackTrace,
-      error_metadata: context?.metadata
-        ? JSON.stringify(context.metadata)
-        : null,
+      error_metadata: context?.metadata ? JSON.stringify(context.metadata) : null,
     };
 
     // 4. Attempt to insert into the database
@@ -222,14 +204,8 @@ export const log = {
             `;
     } catch (dbError) {
       // Log DB insertion failure - avoid infinite recursion by using console directly
-      console.error(
-        "\x1b[31m[DB LOG ERROR]\x1b[0m Failed to log error to database:",
-      );
-      console.error(
-        dbError instanceof Error
-          ? (dbError.stack ?? dbError.message)
-          : String(dbError),
-      );
+      console.error("\x1b[31m[DB LOG ERROR]\x1b[0m Failed to log error to database:");
+      console.error(dbError instanceof Error ? (dbError.stack ?? dbError.message) : String(dbError));
       console.error("Original error payload:", dbPayload);
     }
   },
@@ -239,9 +215,7 @@ export const log = {
    * @param msg - The section title.
    */
   section: (msg: string) => {
-    const coloredMsg = shouldHideLogs
-      ? `\n=== ${msg} ===`
-      : `${colors.magenta}\n=== ${msg} ===${colors.reset}`;
+    const coloredMsg = shouldHideLogs ? `\n=== ${msg} ===` : `${colors.magenta}\n=== ${msg} ===${colors.reset}`;
     // Pino adds custom level methods at runtime, but TypeScript doesn't know about them
     // biome-ignore lint/suspicious/noExplicitAny: Custom Pino level added at runtime
     (pinoLogger as any).section(coloredMsg);

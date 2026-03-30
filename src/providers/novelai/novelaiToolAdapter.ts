@@ -81,16 +81,11 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
         parameters: this.cloneParameterSchema(tool.parameters),
       };
 
-      log.info(
-        `NovelAI adapter: Converted tool '${tool.name}' to OpenAI format`,
-      );
+      log.info(`NovelAI adapter: Converted tool '${tool.name}' to OpenAI format`);
 
       return openaiFunction;
     } catch (error) {
-      log.error(
-        `NovelAI adapter: Failed to convert tool '${tool.name}'`,
-        error as Error,
-      );
+      log.error(`NovelAI adapter: Failed to convert tool '${tool.name}'`, error as Error);
       throw error;
     }
   }
@@ -112,10 +107,7 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
             resultText = data.summary;
           } else if (data.message && typeof data.message === "string") {
             resultText = data.message;
-          } else if (
-            data.selectionReason &&
-            typeof data.selectionReason === "string"
-          ) {
+          } else if (data.selectionReason && typeof data.selectionReason === "string") {
             resultText = data.selectionReason;
           } else {
             const relevantData = this.extractRelevantData(data);
@@ -130,17 +122,13 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
         };
       }
 
-      const errorText =
-        result.message || result.error || "Tool execution failed";
+      const errorText = result.message || result.error || "Tool execution failed";
 
       return {
         content: `Error: ${errorText}`,
       };
     } catch (error) {
-      log.error(
-        "NovelAI adapter: Failed to convert tool result",
-        error as Error,
-      );
+      log.error("NovelAI adapter: Failed to convert tool result", error as Error);
 
       return {
         content: "Error: Failed to process tool result",
@@ -164,10 +152,7 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
         function: this.convertTool(tool),
       }));
     } catch (error) {
-      log.error(
-        "NovelAI adapter: Failed to convert tools array",
-        error as Error,
-      );
+      log.error("NovelAI adapter: Failed to convert tools array", error as Error);
       return [];
     }
   }
@@ -185,11 +170,7 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
     serverId?: number,
     allowedMCPFunctions?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    return this.getAllToolsInOpenAIFormat(
-      builtInTools,
-      serverId,
-      allowedMCPFunctions,
-    );
+    return this.getAllToolsInOpenAIFormat(builtInTools, serverId, allowedMCPFunctions);
   }
 
   /**
@@ -223,25 +204,18 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
       // Filter built-in tools based on Brave API key availability
       let filteredBuiltInTools = builtInTools;
       if (!hasBraveApiKey) {
-        filteredBuiltInTools = builtInTools.filter(
-          (tool) => !braveSearchToolNames.includes(tool.name),
-        );
+        filteredBuiltInTools = builtInTools.filter((tool) => !braveSearchToolNames.includes(tool.name));
         const excludedCount = builtInTools.length - filteredBuiltInTools.length;
         if (excludedCount > 0) {
-          log.info(
-            `NovelAI adapter: Excluded ${excludedCount} Brave search tools (no API key)`,
-          );
+          log.info(`NovelAI adapter: Excluded ${excludedCount} Brave search tools (no API key)`);
         }
       }
 
       // Convert filtered built-in tools
       if (filteredBuiltInTools.length > 0) {
-        const builtInToolsFormatted =
-          this.convertToolsArray(filteredBuiltInTools);
+        const builtInToolsFormatted = this.convertToolsArray(filteredBuiltInTools);
         allTools.push(...builtInToolsFormatted);
-        log.info(
-          `NovelAI adapter: Converted ${filteredBuiltInTools.length} built-in tools`,
-        );
+        log.info(`NovelAI adapter: Converted ${filteredBuiltInTools.length} built-in tools`);
       }
 
       // Add MCP tools if available
@@ -269,17 +243,17 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
           try {
             const geminiTool = await mcpTool.tool();
             if (geminiTool.functionDeclarations) {
-              const declarations = (
-                geminiTool.functionDeclarations as Record<string, unknown>[]
-              ).filter((declaration) => {
-                const functionName = declaration.name as string;
+              const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter(
+                (declaration) => {
+                  const functionName = declaration.name as string;
 
-                if (disabledMCPFunctions.includes(functionName)) {
-                  return false;
-                }
+                  if (disabledMCPFunctions.includes(functionName)) {
+                    return false;
+                  }
 
-                return allowedFunctionSet.has(functionName);
-              });
+                  return allowedFunctionSet.has(functionName);
+                },
+              );
 
               if (declarations.length > 0) {
                 for (const declaration of declarations) {
@@ -288,8 +262,7 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
                   };
                   if ("parametersJsonSchema" in declaration) {
                     delete openAIDeclaration.parametersJsonSchema;
-                    openAIDeclaration.parameters =
-                      declaration.parametersJsonSchema;
+                    openAIDeclaration.parameters = declaration.parametersJsonSchema;
                   }
 
                   allTools.push({
@@ -301,25 +274,17 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
               }
             }
           } catch (error) {
-            log.warn(
-              "NovelAI adapter: Failed to extract functions from MCP tool:",
-              error as Error,
-            );
+            log.warn("NovelAI adapter: Failed to extract functions from MCP tool:", error as Error);
           }
         }
 
-        log.info(
-          `NovelAI adapter: Added ${addedMCPToolsCount} MCP tools using centralized filtering`,
-        );
+        log.info(`NovelAI adapter: Added ${addedMCPToolsCount} MCP tools using centralized filtering`);
       }
 
       log.info(`NovelAI adapter: Total tools: ${allTools.length}`);
       return allTools;
     } catch (error) {
-      log.error(
-        "NovelAI adapter: Failed to get all tools in OpenAI format",
-        error as Error,
-      );
+      log.error("NovelAI adapter: Failed to get all tools in OpenAI format", error as Error);
       return [];
     }
   }
@@ -340,25 +305,18 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
       for (const mcpTool of mcpTools) {
         try {
           const geminiTool = await mcpTool.tool();
-          const mcpFunctionNames =
-            geminiTool.functionDeclarations?.map((f) => f.name) || [];
+          const mcpFunctionNames = geminiTool.functionDeclarations?.map((f) => f.name) || [];
           if (mcpFunctionNames.includes(functionName)) {
             return true;
           }
         } catch (error) {
-          log.warn(
-            "NovelAI adapter: Error checking MCP tool functions:",
-            error as Error,
-          );
+          log.warn("NovelAI adapter: Error checking MCP tool functions:", error as Error);
         }
       }
 
       return false;
     } catch (error) {
-      log.error(
-        "NovelAI adapter: Error checking if function is MCP:",
-        error as Error,
-      );
+      log.error("NovelAI adapter: Error checking if function is MCP:", error as Error);
       return false;
     }
   }
@@ -376,27 +334,16 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
     context?: ToolContext,
   ): Promise<TypedMCPToolResult> {
     try {
-      log.info(
-        `NovelAI adapter: Executing MCP function: ${functionName} with args: ${JSON.stringify(args)}`,
-      );
+      log.info(`NovelAI adapter: Executing MCP function: ${functionName} with args: ${JSON.stringify(args)}`);
 
       const executor = getMCPExecutor();
-      const result = await executor.executeMCPFunction(
-        functionName,
-        args,
-        context,
-      );
+      const result = await executor.executeMCPFunction(functionName, args, context);
 
-      log.info(
-        `NovelAI adapter: MCP function ${functionName} completed successfully`,
-      );
+      log.info(`NovelAI adapter: MCP function ${functionName} completed successfully`);
 
       return result;
     } catch (error) {
-      log.error(
-        `NovelAI adapter: Failed to execute MCP function ${functionName}`,
-        error as Error,
-      );
+      log.error(`NovelAI adapter: Failed to execute MCP function ${functionName}`, error as Error);
 
       return {
         success: false,
@@ -421,13 +368,9 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
       }
 
       // Validate parameter types are supported
-      for (const [paramName, paramSchema] of Object.entries(
-        tool.parameters.properties,
-      )) {
+      for (const [paramName, paramSchema] of Object.entries(tool.parameters.properties)) {
         if (!this.isSupportedParameterSchema(paramSchema)) {
-          log.warn(
-            `Tool '${tool.name}' has unsupported parameter schema (param: ${paramName})`,
-          );
+          log.warn(`Tool '${tool.name}' has unsupported parameter schema (param: ${paramName})`);
           return false;
         }
       }
@@ -446,16 +389,8 @@ export class NovelaiToolAdapter implements MCPCapableToolAdapter {
     return JSON.parse(JSON.stringify(schema)) as OpenAIObjectSchema;
   }
 
-  private isSupportedParameterSchema(
-    schema: ToolParameterPropertySchema,
-  ): boolean {
-    const supportedTypes: ToolParameterType[] = [
-      "string",
-      "number",
-      "boolean",
-      "array",
-      "object",
-    ];
+  private isSupportedParameterSchema(schema: ToolParameterPropertySchema): boolean {
+    const supportedTypes: ToolParameterType[] = ["string", "number", "boolean", "array", "object"];
 
     if (!supportedTypes.includes(schema.type)) {
       return false;

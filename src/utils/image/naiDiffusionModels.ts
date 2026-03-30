@@ -10,10 +10,7 @@ export type ResolvedNaiDiffusionModel = {
   source: NaiDiffusionModelSource;
 };
 
-type NaiDiffusionModelConfig = Pick<
-  TomoriConfigRow,
-  "diffusion_model_id" | "nai_diffusion_model_id"
->;
+type NaiDiffusionModelConfig = Pick<TomoriConfigRow, "diffusion_model_id" | "nai_diffusion_model_id">;
 
 export type DiffusionModelFields = {
   diffusion_model_id: number;
@@ -27,9 +24,7 @@ export type DiffusionModelFields = {
   is_uncensored: boolean;
 };
 
-export async function getDiffusionModelById(
-  diffusionModelId: number,
-): Promise<DiffusionModelFields | null> {
+export async function getDiffusionModelById(diffusionModelId: number): Promise<DiffusionModelFields | null> {
   const [model] = await sql<DiffusionModelFields[]>`
 		SELECT
 			diffusion_model_id,
@@ -49,9 +44,7 @@ export async function getDiffusionModelById(
   return model ?? null;
 }
 
-export async function getNovelAiDiffusionModels(): Promise<
-  DiffusionModelFields[]
-> {
+export async function getNovelAiDiffusionModels(): Promise<DiffusionModelFields[]> {
   return sql<DiffusionModelFields[]>`
 		SELECT
 			diffusion_model_id,
@@ -90,24 +83,17 @@ export async function getDefaultNovelAiDiffusionModel(): Promise<DiffusionModelF
 	`;
 
   if (!defaultModel) {
-    throw new Error(
-      "No default NovelAI diffusion model found in database. Please seed the database.",
-    );
+    throw new Error("No default NovelAI diffusion model found in database. Please seed the database.");
   }
 
   return defaultModel;
 }
 
-export function getLocalizedDiffusionModelDescription(
-  model: DiffusionModelFields,
-  locale: string,
-): string {
+export function getLocalizedDiffusionModelDescription(model: DiffusionModelFields, locale: string): string {
   const normalizedLocale = locale.toLowerCase().split("-")[0];
-  const description =
-    normalizedLocale === "ja" ? model.ja_description : model.model_description;
+  const description = normalizedLocale === "ja" ? model.ja_description : model.model_description;
 
-  const baseDescription =
-    description ?? model.model_description ?? `${model.provider} model`;
+  const baseDescription = description ?? model.model_description ?? `${model.provider} model`;
 
   const flags: string[] = [];
   if (model.is_free) flags.push("FREE");
@@ -117,13 +103,9 @@ export function getLocalizedDiffusionModelDescription(
   return `${flagPrefix}${baseDescription}`;
 }
 
-export async function resolveNaiDiffusionModel(
-  config: NaiDiffusionModelConfig,
-): Promise<ResolvedNaiDiffusionModel> {
+export async function resolveNaiDiffusionModel(config: NaiDiffusionModelConfig): Promise<ResolvedNaiDiffusionModel> {
   if (config.nai_diffusion_model_id != null) {
-    const overrideModel = await getDiffusionModelById(
-      config.nai_diffusion_model_id,
-    );
+    const overrideModel = await getDiffusionModelById(config.nai_diffusion_model_id);
     if (overrideModel?.provider === "novelai") {
       return {
         diffusionModelId: overrideModel.diffusion_model_id,

@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { EmbedBuilder, MessageFlags } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
@@ -11,12 +7,8 @@ import type { UserRow } from "@/types/db/schema";
 /**
  * Configure the 'terms' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("terms")
-    .setDescription(localizer("en-US", "commands.legal.terms.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("terms").setDescription(localizer("en-US", "commands.legal.terms.description"));
 
 /**
  * Executes the 'terms' command

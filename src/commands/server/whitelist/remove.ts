@@ -1,33 +1,13 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import {
-  getAllWhitelistChannels,
-  removeChannelWhitelist,
-} from "@/utils/db/channelWhitelist";
-import {
-  getAllWhitelistRoles,
-  removeRoleWhitelist,
-} from "@/utils/db/roleWhitelist";
+import { getAllWhitelistChannels, removeChannelWhitelist } from "@/utils/db/channelWhitelist";
+import { getAllWhitelistRoles, removeRoleWhitelist } from "@/utils/db/roleWhitelist";
 import { invalidateWhitelistCache } from "@/utils/cache/channelWhitelistCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
-import type {
-  ErrorContext,
-  RoleWhitelistRow,
-  UserRow,
-} from "@/types/db/schema";
-import type {
-  CheckboxGroupOption,
-  ModalCheckboxGroupField,
-} from "@/types/discord/modal";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
+import type { ErrorContext, RoleWhitelistRow, UserRow } from "@/types/db/schema";
+import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
 import { CooldownType } from "@/types/db/schema";
 
 /**
@@ -44,14 +24,8 @@ const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
  * Configure the /server whitelist remove subcommand
  * Allows server managers to remove channels and roles from the whitelist
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.server.whitelist.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.server.whitelist.remove.description"));
 
 /**
  * Execute the /server whitelist remove command
@@ -106,27 +80,21 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
         titleKey: "commands.server.whitelist.remove.no_entries_title",
-        descriptionKey:
-          "commands.server.whitelist.remove.no_entries_description",
+        descriptionKey: "commands.server.whitelist.remove.no_entries_description",
       });
       return;
     }
 
     // 5. Discord checkbox groups allow at most 10 options each and 5 groups per modal
-    const channelGroupCount = Math.ceil(
-      whitelistChannels.length / MAX_OPTIONS_PER_GROUP,
-    );
-    const roleGroupCount = Math.ceil(
-      whitelistRoles.length / MAX_OPTIONS_PER_GROUP,
-    );
+    const channelGroupCount = Math.ceil(whitelistChannels.length / MAX_OPTIONS_PER_GROUP);
+    const roleGroupCount = Math.ceil(whitelistRoles.length / MAX_OPTIONS_PER_GROUP);
     const totalGroupCount = channelGroupCount + roleGroupCount;
 
     if (totalGroupCount > MAX_GROUPS_PER_MODAL) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
         titleKey: "commands.server.whitelist.remove.too_many_entries_title",
-        descriptionKey:
-          "commands.server.whitelist.remove.too_many_entries_description",
+        descriptionKey: "commands.server.whitelist.remove.too_many_entries_description",
         descriptionVars: {
           channel_count: whitelistChannels.length.toString(),
           role_count: whitelistRoles.length.toString(),
@@ -147,9 +115,7 @@ export async function execute(
 
       for (const entry of chunk) {
         try {
-          const channel = await interaction.guild.channels.fetch(
-            entry.channel_disc_id,
-          );
+          const channel = await interaction.guild.channels.fetch(entry.channel_disc_id);
           const description = getWhitelistChannelSummary(entry, locale);
 
           options.push({
@@ -179,10 +145,7 @@ export async function execute(
           groupIndex === 0
             ? "commands.server.whitelist.remove.checkbox_label"
             : "commands.server.whitelist.remove.checkbox_label_continued",
-        descriptionKey:
-          groupIndex === 0
-            ? "commands.server.whitelist.remove.checkbox_description"
-            : undefined,
+        descriptionKey: groupIndex === 0 ? "commands.server.whitelist.remove.checkbox_description" : undefined,
         minValues: 0,
         required: false,
         options,
@@ -201,10 +164,7 @@ export async function execute(
           groupIndex === 0
             ? "commands.server.whitelist.remove.role_checkbox_label"
             : "commands.server.whitelist.remove.role_checkbox_label_continued",
-        descriptionKey:
-          groupIndex === 0
-            ? "commands.server.whitelist.remove.role_checkbox_description"
-            : undefined,
+        descriptionKey: groupIndex === 0 ? "commands.server.whitelist.remove.role_checkbox_description" : undefined,
         minValues: 0,
         required: false,
         options,
@@ -220,9 +180,7 @@ export async function execute(
 
     // 8. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Whitelist removal modal ${modalResult.outcome} for user ${user.user_id}`,
-      );
+      log.info(`Whitelist removal modal ${modalResult.outcome} for user ${user.user_id}`);
       return;
     }
 
@@ -232,19 +190,14 @@ export async function execute(
     const checkedRoleIds = new Set<string>();
 
     for (let groupIndex = 0; groupIndex < channelGroupCount; groupIndex++) {
-      const groupValues =
-        modalResult.multiValues?.[
-          `${CHANNEL_CHECKBOX_ID_PREFIX}_${groupIndex}`
-        ] ?? [];
+      const groupValues = modalResult.multiValues?.[`${CHANNEL_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
       for (const channelId of groupValues) {
         checkedChannelIds.add(channelId);
       }
     }
 
     for (let groupIndex = 0; groupIndex < roleGroupCount; groupIndex++) {
-      const groupValues =
-        modalResult.multiValues?.[`${ROLE_CHECKBOX_ID_PREFIX}_${groupIndex}`] ??
-        [];
+      const groupValues = modalResult.multiValues?.[`${ROLE_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
       for (const roleId of groupValues) {
         checkedRoleIds.add(roleId);
       }
@@ -275,29 +228,19 @@ export async function execute(
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         color: ColorCode.INFO,
         titleKey: "commands.server.whitelist.remove.no_removals_title",
-        descriptionKey:
-          "commands.server.whitelist.remove.no_removals_description",
+        descriptionKey: "commands.server.whitelist.remove.no_removals_description",
       });
       return;
     }
 
     // 12. Remove all unchecked entries from the whitelist
     const [channelResults, roleResults] = await Promise.all([
-      Promise.all(
-        channelsToRemove.map((channelId) =>
-          removeChannelWhitelist(tomoriState.server_id, channelId),
-        ),
-      ),
-      Promise.all(
-        rolesToRemove.map((roleId) =>
-          removeRoleWhitelist(tomoriState.server_id, roleId),
-        ),
-      ),
+      Promise.all(channelsToRemove.map((channelId) => removeChannelWhitelist(tomoriState.server_id, channelId))),
+      Promise.all(rolesToRemove.map((roleId) => removeRoleWhitelist(tomoriState.server_id, roleId))),
     ]);
 
     const failedRemovals =
-      channelResults.filter((result) => !result).length +
-      roleResults.filter((result) => !result).length;
+      channelResults.filter((result) => !result).length + roleResults.filter((result) => !result).length;
 
     if (failedRemovals > 0) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -346,9 +289,7 @@ export async function execute(
               ? formatRemovedNames(removedChannelNames)
               : localizer(locale, "general.none"),
           roles_removed:
-            removedRoleNames.length > 0
-              ? formatRemovedNames(removedRoleNames)
-              : localizer(locale, "general.none"),
+            removedRoleNames.length > 0 ? formatRemovedNames(removedRoleNames) : localizer(locale, "general.none"),
         },
       },
       undefined,
@@ -358,11 +299,7 @@ export async function execute(
       `Whitelist entries removed in server ${interaction.guildId}: channels=[${channelsToRemove.join(", ")}], roles=[${rolesToRemove.join(", ")}]`,
     );
   } catch (error) {
-    log.error(
-      "Error executing /server whitelist remove command",
-      error,
-      errorContext,
-    );
+    log.error("Error executing /server whitelist remove command", error, errorContext);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {
@@ -416,9 +353,7 @@ function getWhitelistChannelSummary(
   }
 
   const cooldownTypeName = getCooldownTypeName(entry.cooldown_type, locale);
-  return entry.cooldown_type === CooldownType.OFF
-    ? cooldownTypeName
-    : `${cooldownTypeName}, ${entry.cooldown_length}s`;
+  return entry.cooldown_type === CooldownType.OFF ? cooldownTypeName : `${cooldownTypeName}, ${entry.cooldown_length}s`;
 }
 
 /**
@@ -427,10 +362,7 @@ function getWhitelistChannelSummary(
  * @param locale - The locale to use for localization
  * @returns Localized cooldown type name
  */
-function getCooldownTypeName(
-  cooldownType: CooldownType,
-  locale: string,
-): string {
+function getCooldownTypeName(cooldownType: CooldownType, locale: string): string {
   const key = getCooldownTypeKey(cooldownType);
   return localizer(locale, `commands.config.cooldown.type.choice_${key}`);
 }

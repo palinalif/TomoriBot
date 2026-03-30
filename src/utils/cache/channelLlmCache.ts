@@ -18,19 +18,13 @@ import { log } from "@/utils/misc/logger";
  * Value is null when we know there is NO override (negative cache entry),
  * or an LlmRow when an override is set.
  */
-const channelLlmCache = new Map<
-  string,
-  { llm: LlmRow | null; expiresAt: number }
->();
+const channelLlmCache = new Map<string, { llm: LlmRow | null; expiresAt: number }>();
 
 /**
  * Cache TTL matches TomoriState cache TTL to keep effective-LLM results consistent.
  * Defaults to 10 minutes (same as TOMORI_STATE_CACHE_TTL_MINUTES).
  */
-const CACHE_TTL_MINUTES = Number.parseInt(
-  process.env.TOMORI_STATE_CACHE_TTL_MINUTES || "10",
-  10,
-);
+const CACHE_TTL_MINUTES = Number.parseInt(process.env.TOMORI_STATE_CACHE_TTL_MINUTES || "10", 10);
 const CACHE_TTL_MS = CACHE_TTL_MINUTES * 60 * 1000;
 
 /**
@@ -53,10 +47,7 @@ function getCacheKey(serverId: number, channelDiscId: string): string {
  * @param channelDiscId - Discord channel snowflake ID
  * @returns The overriding LlmRow, or null if no channel override is set
  */
-export async function getCachedChannelLlm(
-  serverId: number,
-  channelDiscId: string,
-): Promise<LlmRow | null> {
+export async function getCachedChannelLlm(serverId: number, channelDiscId: string): Promise<LlmRow | null> {
   const key = getCacheKey(serverId, channelDiscId);
   const now = Date.now();
 
@@ -75,10 +66,7 @@ export async function getCachedChannelLlm(
 
     return llm;
   } catch (error) {
-    log.error(
-      `[ChannelLlmCache] Failed to fetch channel LLM override for ${key}:`,
-      error,
-    );
+    log.error(`[ChannelLlmCache] Failed to fetch channel LLM override for ${key}:`, error);
     return null; // fail open — fall back to global model
   }
 }
@@ -91,11 +79,7 @@ export async function getCachedChannelLlm(
  * @param channelDiscId - Discord channel snowflake ID
  * @param llm - The LlmRow that was just written (or null to cache "no override")
  */
-export function setChannelLlmCache(
-  serverId: number,
-  channelDiscId: string,
-  llm: LlmRow | null,
-): void {
+export function setChannelLlmCache(serverId: number, channelDiscId: string, llm: LlmRow | null): void {
   const key = getCacheKey(serverId, channelDiscId);
   channelLlmCache.set(key, { llm, expiresAt: Date.now() + CACHE_TTL_MS });
 }
@@ -107,10 +91,7 @@ export function setChannelLlmCache(
  * @param serverId - Database integer server ID
  * @param channelDiscId - Discord channel snowflake ID
  */
-export function invalidateChannelLlmCache(
-  serverId: number,
-  channelDiscId: string,
-): void {
+export function invalidateChannelLlmCache(serverId: number, channelDiscId: string): void {
   const key = getCacheKey(serverId, channelDiscId);
   channelLlmCache.delete(key);
   log.info(`[ChannelLlmCache] Invalidated cache for ${key}`);
@@ -130,7 +111,5 @@ export function invalidateAllChannelLlmCacheForServer(serverId: number): void {
       count++;
     }
   }
-  log.info(
-    `[ChannelLlmCache] Invalidated ${count} channel override entries for server ${serverId}`,
-  );
+  log.info(`[ChannelLlmCache] Invalidated ${count} channel override entries for server ${serverId}`);
 }

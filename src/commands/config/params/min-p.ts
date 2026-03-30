@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
 // Neutral value: 0.0 = disabled (no minimum probability cutoff)
@@ -24,20 +17,14 @@ const MIN_P_MAX = 1.0;
 const MIN_P_DEFAULT = 0.0;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("min-p")
-    .setDescription(
-      localizer("en-US", "commands.config.params.min-p.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.params.min-p.description"))
     .addNumberOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer("en-US", "commands.config.params.min-p.value_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.params.min-p.value_description"))
         .setMinValue(MIN_P_MIN)
         .setMaxValue(MIN_P_MAX)
         .setRequired(true),
@@ -80,8 +67,7 @@ export async function execute(
     if (newValue < MIN_P_MIN || newValue > MIN_P_MAX) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.min-p.invalid_value_title",
-        descriptionKey:
-          "commands.config.params.min-p.invalid_value_description",
+        descriptionKey: "commands.config.params.min-p.invalid_value_description",
         descriptionVars: {
           min: MIN_P_MIN.toFixed(1),
           max: MIN_P_MAX.toFixed(1),
@@ -137,9 +123,7 @@ export async function execute(
           command: "config params min-p",
           guildId: interaction.guild?.id,
           newValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -193,11 +177,7 @@ export async function execute(
         valueAttempted: interaction.options.getNumber("value"),
       },
     };
-    await log.error(
-      `Error executing /config params min-p for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config params min-p for user ${userData.user_disc_id}`, error as Error, context);
 
     if (interaction.deferred && !interaction.replied) {
       await interaction.followUp({

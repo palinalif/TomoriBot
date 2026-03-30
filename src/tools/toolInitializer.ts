@@ -30,43 +30,23 @@ export async function initializeTools(): Promise<void> {
     let totalDiscovered = 0;
 
     // 2. Auto-discover built-in function call tools
-    const functionCallsPath = path.join(
-      process.cwd(),
-      "src",
-      "tools",
-      "functionCalls",
-    );
+    const functionCallsPath = path.join(process.cwd(), "src", "tools", "functionCalls");
     const functionCallFiles = getAllFiles(functionCallsPath).filter(
       (file) => !file.endsWith("index.ts"), // Skip index.ts
     );
 
-    log.info(
-      `Scanning ${functionCallFiles.length} files in functionCalls directory...`,
-    );
+    log.info(`Scanning ${functionCallFiles.length} files in functionCalls directory...`);
 
     for (const toolFile of functionCallFiles) {
-      const discovered = await discoverAndRegisterTools(
-        toolFile,
-        "functionCalls",
-      );
+      const discovered = await discoverAndRegisterTools(toolFile, "functionCalls");
       totalDiscovered += discovered;
     }
 
     // 3. Auto-discover Brave Search tools
-    const braveToolsPath = path.join(
-      process.cwd(),
-      "src",
-      "tools",
-      "restAPIs",
-      "brave",
-    );
-    const braveToolFiles = getAllFiles(braveToolsPath).filter((file) =>
-      file.endsWith("braveTools.ts"),
-    );
+    const braveToolsPath = path.join(process.cwd(), "src", "tools", "restAPIs", "brave");
+    const braveToolFiles = getAllFiles(braveToolsPath).filter((file) => file.endsWith("braveTools.ts"));
 
-    log.info(
-      `Scanning ${braveToolFiles.length} files in Brave tools directory...`,
-    );
+    log.info(`Scanning ${braveToolFiles.length} files in Brave tools directory...`);
 
     for (const braveFile of braveToolFiles) {
       const discovered = await discoverAndRegisterTools(braveFile, "brave");
@@ -95,10 +75,7 @@ export async function initializeTools(): Promise<void> {
  * @param source - Source identifier for logging (e.g., "functionCalls", "brave")
  * @returns Number of tools discovered and registered from this file
  */
-async function discoverAndRegisterTools(
-  filePath: string,
-  source: string,
-): Promise<number> {
+async function discoverAndRegisterTools(filePath: string, source: string): Promise<number> {
   let discoveredCount = 0;
 
   try {
@@ -109,19 +86,14 @@ async function discoverAndRegisterTools(
     for (const [exportName, exportedItem] of Object.entries(toolModule)) {
       try {
         // Check if this export is a class constructor that extends BaseTool
-        if (
-          typeof exportedItem === "function" &&
-          exportedItem.prototype instanceof BaseTool
-        ) {
+        if (typeof exportedItem === "function" && exportedItem.prototype instanceof BaseTool) {
           // 3. Instantiate the tool class
           const toolInstance = new (exportedItem as new () => BaseTool)();
 
           // 4. Register with the tool registry
           ToolRegistry.registerTool(toolInstance);
 
-          log.info(
-            `Auto-registered [${source}]: ${toolInstance.name} (${toolInstance.category}) from ${exportName}`,
-          );
+          log.info(`Auto-registered [${source}]: ${toolInstance.name} (${toolInstance.category}) from ${exportName}`);
 
           discoveredCount++;
         }
@@ -134,11 +106,7 @@ async function discoverAndRegisterTools(
             source,
           },
         };
-        await log.error(
-          `Failed to register tool export '${exportName}' from ${filePath}:`,
-          error as Error,
-          context,
-        );
+        await log.error(`Failed to register tool export '${exportName}' from ${filePath}:`, error as Error, context);
       }
     }
   } catch (error) {
@@ -149,11 +117,7 @@ async function discoverAndRegisterTools(
         source,
       },
     };
-    await log.error(
-      `Failed to import tool file: ${filePath}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Failed to import tool file: ${filePath}`, error as Error, context);
   }
 
   return discoveredCount;

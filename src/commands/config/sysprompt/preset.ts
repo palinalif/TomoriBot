@@ -9,15 +9,8 @@ import type { UserRow, SystemPromptPresetRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { loadSystemPromptPresets } from "@/utils/db/dbRead";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 
 // Modal configuration constants
@@ -92,21 +85,17 @@ export async function execute(
     }
 
     // 6. Create preset options for the select menu with locale-specific descriptions
-    const presetSelectOptions: SelectOption[] = presets.map(
-      (preset: SystemPromptPresetRow) => {
-        // 1. Determine which description to use based on user's locale
-        const description =
-          locale === "ja" && preset.ja_description
-            ? preset.ja_description
-            : preset.system_prompt_preset_desc;
+    const presetSelectOptions: SelectOption[] = presets.map((preset: SystemPromptPresetRow) => {
+      // 1. Determine which description to use based on user's locale
+      const description =
+        locale === "ja" && preset.ja_description ? preset.ja_description : preset.system_prompt_preset_desc;
 
-        return {
-          label: safeSelectOptionText(preset.system_prompt_preset_name),
-          value: safeSelectOptionText(preset.system_prompt_preset_name),
-          description: safeSelectOptionText(description),
-        };
-      },
-    );
+      return {
+        label: safeSelectOptionText(preset.system_prompt_preset_name),
+        value: safeSelectOptionText(preset.system_prompt_preset_name),
+        description: safeSelectOptionText(description),
+      };
+    });
 
     // 7. Show the modal with preset selection
     const modalResult = await promptWithRawModal(
@@ -142,16 +131,14 @@ export async function execute(
 
     // 10. Find the selected preset
     const selectedPreset = presets.find(
-      (preset: SystemPromptPresetRow) =>
-        preset.system_prompt_preset_name === selectedPresetName,
+      (preset: SystemPromptPresetRow) => preset.system_prompt_preset_name === selectedPresetName,
     );
 
     // 11. Validate selection
     if (!selectedPreset) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.prompt.preset.invalid_preset_title",
-        descriptionKey:
-          "commands.config.prompt.preset.invalid_preset_description",
+        descriptionKey: "commands.config.prompt.preset.invalid_preset_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -181,9 +168,7 @@ export async function execute(
       flags: MessageFlags.Ephemeral,
     });
 
-    log.info(
-      `System prompt preset "${selectedPreset.system_prompt_preset_name}" applied for server ${serverId}`,
-    );
+    log.info(`System prompt preset "${selectedPreset.system_prompt_preset_name}" applied for server ${serverId}`);
   } catch (error) {
     log.error("Failed to apply system prompt preset:", error as Error);
 

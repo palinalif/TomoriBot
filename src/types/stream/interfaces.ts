@@ -44,13 +44,7 @@ export interface ProcessedChunk {
  * Provider-specific error with normalized format
  */
 export interface ProviderError {
-  type:
-    | "api_error"
-    | "rate_limit"
-    | "content_blocked"
-    | "timeout"
-    | "provider_overloaded"
-    | "unknown";
+  type: "api_error" | "rate_limit" | "content_blocked" | "timeout" | "provider_overloaded" | "unknown";
   message: string;
   code?: string;
   retryable: boolean;
@@ -92,13 +86,7 @@ export interface StreamConfig extends ProviderConfig {
  */
 export interface StreamContext {
   // Discord context
-  channel:
-    | BaseGuildTextChannel
-    | BaseGuildVoiceChannel
-    | DMChannel
-    | NewsChannel
-    | TextChannel
-    | AnyThreadChannel;
+  channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | NewsChannel | TextChannel | AnyThreadChannel;
   client: Client;
   initialInteraction?: CommandInteraction;
   replyToMessage?: Message;
@@ -183,10 +171,7 @@ export interface StreamProvider {
    * @param context - Streaming context with Discord and app state
    * @returns AsyncGenerator that yields raw chunks from the provider
    */
-  startStream(
-    config: StreamConfig,
-    context: StreamContext,
-  ): AsyncGenerator<RawStreamChunk, void, unknown>;
+  startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown>;
 
   /**
    * Convert a raw provider chunk into normalized ProcessedChunk format
@@ -243,11 +228,7 @@ export interface StreamOrchestrator {
    * @param context - Discord and application context
    * @returns Promise<StreamResult> - Outcome of the streaming operation
    */
-  streamToDiscord(
-    provider: StreamProvider,
-    config: StreamConfig,
-    context: StreamContext,
-  ): Promise<StreamResult>;
+  streamToDiscord(provider: StreamProvider, config: StreamConfig, context: StreamContext): Promise<StreamResult>;
 }
 
 /**
@@ -262,9 +243,5 @@ export interface StreamConfigFactory {
    * @param provider - Provider name for configuration customization
    * @returns Provider-specific streaming configuration
    */
-  createStreamConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-    provider: string,
-  ): StreamConfig;
+  createStreamConfig(tomoriState: TomoriState, apiKey: string, provider: string): StreamConfig;
 }

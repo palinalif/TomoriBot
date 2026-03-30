@@ -7,10 +7,7 @@ import type { RoleWhitelistRow } from "@/types/db/schema";
  * @param roleDiscId - Discord role ID (snowflake)
  * @returns The upserted role whitelist row
  */
-export async function upsertRoleWhitelist(
-  serverId: number,
-  roleDiscId: string,
-): Promise<RoleWhitelistRow> {
+export async function upsertRoleWhitelist(serverId: number, roleDiscId: string): Promise<RoleWhitelistRow> {
   const [result] = await sql`
 		INSERT INTO role_whitelist (server_id, role_disc_id)
 		VALUES (${serverId}, ${roleDiscId})
@@ -32,10 +29,7 @@ export async function upsertRoleWhitelist(
  * @param roleDiscId - Discord role ID (snowflake)
  * @returns True if a row was deleted, false if not found
  */
-export async function removeRoleWhitelist(
-  serverId: number,
-  roleDiscId: string,
-): Promise<boolean> {
+export async function removeRoleWhitelist(serverId: number, roleDiscId: string): Promise<boolean> {
   const result = await sql`
 		DELETE FROM role_whitelist
 		WHERE server_id = ${serverId} AND role_disc_id = ${roleDiscId}
@@ -49,9 +43,7 @@ export async function removeRoleWhitelist(
  * @param serverId - Database server ID
  * @returns Array of role whitelist rows
  */
-export async function getAllWhitelistRoles(
-  serverId: number,
-): Promise<RoleWhitelistRow[]> {
+export async function getAllWhitelistRoles(serverId: number): Promise<RoleWhitelistRow[]> {
   const result = await sql`
 		SELECT * FROM role_whitelist
 		WHERE server_id = ${serverId}
@@ -67,10 +59,7 @@ export async function getAllWhitelistRoles(
  * @param roleDiscId - Discord role ID (snowflake)
  * @returns True if the role is whitelisted
  */
-export async function isRoleWhitelisted(
-  serverId: number,
-  roleDiscId: string,
-): Promise<boolean> {
+export async function isRoleWhitelisted(serverId: number, roleDiscId: string): Promise<boolean> {
   const [row] = await sql`
 		SELECT 1
 		FROM role_whitelist

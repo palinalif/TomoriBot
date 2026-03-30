@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import type { ErrorContext } from "@/types/db/schema";
@@ -15,12 +11,8 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
  * Configure the /help matrix subcommand
  * Explains Matrix bridge setup, usage, and current limitations
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("matrix")
-    .setDescription(localizer("en-US", "commands.help.matrix.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("matrix").setDescription(localizer("en-US", "commands.help.matrix.description"));
 
 /**
  * Execute the /help matrix command
@@ -37,18 +29,9 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   try {
-    const serverMatrixLinkMention = commandRegistry.getCommandMention(
-      "server",
-      "matrix",
-      "link",
-    );
-    const supportServerMention = commandRegistry.getCommandMention(
-      "support",
-      "discord",
-    );
-    const botUserId =
-      process.env.MATRIX_BOT_USER_ID ??
-      localizer(locale, "commands.help.matrix.bot_user_fallback");
+    const serverMatrixLinkMention = commandRegistry.getCommandMention("server", "matrix", "link");
+    const supportServerMention = commandRegistry.getCommandMention("support", "discord");
+    const botUserId = process.env.MATRIX_BOT_USER_ID ?? localizer(locale, "commands.help.matrix.bot_user_fallback");
 
     await replySummaryEmbed(
       interaction,
@@ -68,13 +51,9 @@ export async function execute(
           },
           {
             nameKey: "commands.help.matrix.room_id_title",
-            value: localizer(
-              locale,
-              "commands.help.matrix.room_id_description",
-              {
-                serverMatrixLink: serverMatrixLinkMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.matrix.room_id_description", {
+              serverMatrixLink: serverMatrixLinkMention,
+            }),
             inline: false,
           },
           {
@@ -84,23 +63,16 @@ export async function execute(
           },
           {
             nameKey: "commands.help.matrix.limitations_title",
-            value: localizer(
-              locale,
-              "commands.help.matrix.limitations_description",
-            ),
+            value: localizer(locale, "commands.help.matrix.limitations_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.matrix.troubleshooting_title",
-            value: localizer(
-              locale,
-              "commands.help.matrix.troubleshooting_description",
-              {
-                botUserId,
-                serverMatrixLink: serverMatrixLinkMention,
-                supportServer: supportServerMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.matrix.troubleshooting_description", {
+              botUserId,
+              serverMatrixLink: serverMatrixLinkMention,
+              supportServer: supportServerMention,
+            }),
             inline: false,
           },
         ],
@@ -116,16 +88,9 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help matrix command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help matrix command", error as Error, context);
 
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -139,11 +104,7 @@ export async function execute(
         });
       }
     } catch (replyError) {
-      log.error(
-        "Failed to send error reply for /help matrix",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help matrix", replyError, context);
     }
   }
 }

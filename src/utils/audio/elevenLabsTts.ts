@@ -57,9 +57,7 @@ function inferAudioOutputMetadata(outputFormat: string): {
   };
 }
 
-export async function synthesizeSpeechWithElevenLabs(
-  request: ElevenLabsTtsRequest,
-): Promise<ElevenLabsTtsResult> {
+export async function synthesizeSpeechWithElevenLabs(request: ElevenLabsTtsRequest): Promise<ElevenLabsTtsResult> {
   if (!request.apiKey.trim()) {
     return {
       success: false,
@@ -107,9 +105,7 @@ export async function synthesizeSpeechWithElevenLabs(
         body: JSON.stringify({
           text: rawScript,
           model_id: request.modelId ?? config.modelId,
-          ...(request.voiceSettings
-            ? { voice_settings: request.voiceSettings }
-            : {}),
+          ...(request.voiceSettings ? { voice_settings: request.voiceSettings } : {}),
         }),
         signal: controller.signal,
       },
@@ -149,8 +145,7 @@ export async function synthesizeSpeechWithElevenLabs(
     return {
       success: true,
       audioBuffer,
-      contentType:
-        response.headers.get("content-type") ?? outputMetadata.contentType,
+      contentType: response.headers.get("content-type") ?? outputMetadata.contentType,
       extension: outputMetadata.extension,
       cleanedCaptionText: captionText,
       modelUsed: request.modelId ?? config.modelId,

@@ -1,28 +1,14 @@
-import {
-  ChannelType,
-  type Client,
-  type GuildMember,
-  type Message,
-  type TextChannel,
-} from "discord.js";
+import { ChannelType, type Client, type GuildMember, type Message, type TextChannel } from "discord.js";
 import { GoogleGenAI } from "@google/genai";
 import type { Part } from "@google/genai";
 import type { StructuredContextItem } from "@/types/misc/context";
 import type { EnhancedImageContent } from "@/types/tool/enhancedContextTypes";
 import type { TomoriState } from "@/types/db/schema";
 import { ContextItemTag } from "@/types/misc/context";
-import tomoriChat, {
-  suppressNextSelfReply,
-} from "@/events/messageCreate/tomoriChat";
-import {
-  getCachedAllPersonas,
-  getCachedTomoriState,
-} from "@/utils/cache/tomoriStateCache";
+import tomoriChat, { suppressNextSelfReply } from "@/events/messageCreate/tomoriChat";
+import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { registerUser } from "@/utils/db/dbWrite";
-import {
-  buildForcedMentionsForUser,
-  ensureDiscordUserMention,
-} from "@/utils/discord/mentionHelper";
+import { buildForcedMentionsForUser, ensureDiscordUserMention } from "@/utils/discord/mentionHelper";
 import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName";
 import { downloadImage } from "@/utils/image/avatarHelper";
 import { log } from "@/utils/misc/logger";
@@ -63,10 +49,7 @@ async function callGoogleVisionForAvatar(
   prompt: string,
 ): Promise<string> {
   const genAI = new GoogleGenAI({ apiKey });
-  const parts: Part[] = [
-    { text: prompt },
-    { inlineData: { data: base64Image, mimeType: "image/png" } },
-  ];
+  const parts: Part[] = [{ text: prompt }, { inlineData: { data: base64Image, mimeType: "image/png" } }];
   const result = await genAI.models.generateContent({
     model,
     contents: [{ role: "user", parts }],
@@ -136,10 +119,7 @@ async function callOpenAICompatibleVisionForAvatar(
  * @param persona - The chosen greeting persona (must have vision_llm configured)
  * @returns Text description from the vision model, or null if analysis fails
  */
-async function getAvatarVisionDescription(
-  member: GuildMember,
-  persona: TomoriState,
-): Promise<string | null> {
+async function getAvatarVisionDescription(member: GuildMember, persona: TomoriState): Promise<string | null> {
   const visionLlm = persona.vision_llm;
   if (!visionLlm || !persona.config.api_key) return null;
 
@@ -160,22 +140,13 @@ async function getAvatarVisionDescription(
   // 3. Resolve provider name and API model codename
   const provider = visionLlm.llm_provider.toLowerCase();
   const apiModelName =
-    provider === "zai" || provider === "zaicoding"
-      ? toZaiApiModelName(visionLlm.llm_codename)
-      : visionLlm.llm_codename;
+    provider === "zai" || provider === "zaicoding" ? toZaiApiModelName(visionLlm.llm_codename) : visionLlm.llm_codename;
 
-  log.info(
-    `newUser: Delegating avatar analysis to vision model ${provider}/${apiModelName} for member ${member.id}`,
-  );
+  log.info(`newUser: Delegating avatar analysis to vision model ${provider}/${apiModelName} for member ${member.id}`);
 
   // 4. Route to the appropriate provider API
   if (provider === "google") {
-    return await callGoogleVisionForAvatar(
-      apiKey,
-      apiModelName,
-      base64Image,
-      WELCOME_AVATAR_VISION_PROMPT,
-    );
+    return await callGoogleVisionForAvatar(apiKey, apiModelName, base64Image, WELCOME_AVATAR_VISION_PROMPT);
   }
 
   // 5. Resolve endpoint URL for OpenAI-compatible providers
@@ -205,8 +176,7 @@ async function buildWelcomeContextItem(params: {
   /** Text description from vision model — used when the primary model cannot see images */
   avatarDescription?: string;
 }): Promise<StructuredContextItem> {
-  const { member, additionalPrompt, includeAvatarContext, avatarDescription } =
-    params;
+  const { member, additionalPrompt, includeAvatarContext, avatarDescription } = params;
   const displayName = resolvePreferredDiscordDisplayName({
     memberDisplayName: member.displayName,
     user: member.user,
@@ -227,9 +197,7 @@ async function buildWelcomeContextItem(params: {
     try {
       const avatarBuffer = await downloadImage(avatarUrl);
       const base64Avatar = avatarBuffer.toString("base64");
-      sentences.push(
-        "What their avatar looks like has been attached as an image for your information.",
-      );
+      sentences.push("What their avatar looks like has been attached as an image for your information.");
       parts.push({
         type: "image",
         uri: `data:image/png;base64,${base64Avatar}`,
@@ -240,16 +208,11 @@ async function buildWelcomeContextItem(params: {
         },
       } as EnhancedImageContent);
     } catch (error) {
-      log.warn(
-        `Failed to load avatar context for welcome message (${member.id}):`,
-        error,
-      );
+      log.warn(`Failed to load avatar context for welcome message (${member.id}):`, error);
     }
   } else if (avatarDescription) {
     // Non-vision primary model with vision_llm: include the pre-analyzed text description
-    sentences.push(
-      `Their profile picture has been analyzed by a vision model: ${avatarDescription}`,
-    );
+    sentences.push(`Their profile picture has been analyzed by a vision model: ${avatarDescription}`);
   }
 
   sentences.push(additionalPrompt);
@@ -265,10 +228,7 @@ async function buildWelcomeContextItem(params: {
   };
 }
 
-async function triggerWelcomeMessage(
-  client: Client,
-  member: GuildMember,
-): Promise<void> {
+async function triggerWelcomeMessage(client: Client, member: GuildMember): Promise<void> {
   const tomoriState = await getCachedTomoriState(member.guild.id);
   if (!tomoriState) return;
 
@@ -276,34 +236,25 @@ async function triggerWelcomeMessage(
   const additionalPrompt = tomoriState.config.welcome_prompt?.trim();
   if (!welcomeChannelId || !additionalPrompt) return;
 
-  const rawChannel = await member.guild.channels
-    .fetch(welcomeChannelId)
-    .catch(() => null);
+  const rawChannel = await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
   if (!rawChannel || rawChannel.type !== ChannelType.GuildText) {
-    log.warn(
-      `Skipping welcome for ${member.user.tag}: configured welcome channel ${welcomeChannelId} is unavailable`,
-    );
+    log.warn(`Skipping welcome for ${member.user.tag}: configured welcome channel ${welcomeChannelId} is unavailable`);
     return;
   }
 
   const welcomeChannel = rawChannel as TextChannel;
   const allPersonas = await getCachedAllPersonas(member.guild.id);
-  const availablePersonas =
-    allPersonas.length > 0 ? allPersonas : [tomoriState];
+  const availablePersonas = allPersonas.length > 0 ? allPersonas : [tomoriState];
   const selectedWelcomePersonaId = tomoriState.config.welcome_persona_id;
   const chosenPersona =
     selectedWelcomePersonaId === null
       ? availablePersonas[Math.floor(Math.random() * availablePersonas.length)]
-      : (availablePersonas.find(
-          (persona) => persona.tomori_id === selectedWelcomePersonaId,
-        ) ??
+      : (availablePersonas.find((persona) => persona.tomori_id === selectedWelcomePersonaId) ??
         availablePersonas.find((persona) => !persona.is_alter) ??
         availablePersonas[0]);
 
   if (!chosenPersona?.tomori_id) {
-    log.warn(
-      `Skipping welcome for ${member.user.tag}: no persona could be resolved`,
-    );
+    log.warn(`Skipping welcome for ${member.user.tag}: no persona could be resolved`);
     return;
   }
 
@@ -312,23 +263,15 @@ async function triggerWelcomeMessage(
     const messages = await welcomeChannel.messages.fetch({ limit: 1 });
     lastMessage = messages.first();
   } catch (error) {
-    log.warn(
-      `Failed to fetch welcome anchor message from channel ${welcomeChannel.id}:`,
-      error,
-    );
+    log.warn(`Failed to fetch welcome anchor message from channel ${welcomeChannel.id}:`, error);
   }
 
   if (!lastMessage) {
     try {
       lastMessage = await welcomeChannel.send({ content: "\u2800" });
-      log.info(
-        `Seeded placeholder message in welcome channel ${welcomeChannel.id}`,
-      );
+      log.info(`Seeded placeholder message in welcome channel ${welcomeChannel.id}`);
     } catch (error) {
-      log.warn(
-        `Failed to seed placeholder message in welcome channel ${welcomeChannel.id}:`,
-        error,
-      );
+      log.warn(`Failed to seed placeholder message in welcome channel ${welcomeChannel.id}:`, error);
     }
   }
 
@@ -343,16 +286,10 @@ async function triggerWelcomeMessage(
 
   if (!includeAvatarContext && chosenPersona.vision_llm) {
     try {
-      avatarDescription =
-        (await getAvatarVisionDescription(member, chosenPersona)) ?? undefined;
-      log.success(
-        `Obtained vision description for welcome avatar of member ${member.id}`,
-      );
+      avatarDescription = (await getAvatarVisionDescription(member, chosenPersona)) ?? undefined;
+      log.success(`Obtained vision description for welcome avatar of member ${member.id}`);
     } catch (error) {
-      log.warn(
-        `Failed to get vision description for welcome (${member.id}):`,
-        error,
-      );
+      log.warn(`Failed to get vision description for welcome (${member.id}):`, error);
     }
   }
 
@@ -362,11 +299,7 @@ async function triggerWelcomeMessage(
     includeAvatarContext,
     avatarDescription,
   });
-  const forcedMentions = await buildForcedMentionsForUser(
-    member.id,
-    client,
-    member.guild,
-  );
+  const forcedMentions = await buildForcedMentionsForUser(member.id, client, member.guild);
   const welcomeStartTime = Date.now();
 
   suppressNextSelfReply(welcomeChannel.id);
@@ -422,9 +355,7 @@ async function triggerWelcomeMessage(
 const handler = async (_client: Client, member: GuildMember): Promise<void> => {
   try {
     const userLanguage = member.guild.preferredLocale;
-    log.info(
-      `New user ${member.user.tag} joined server, registering with language: ${userLanguage}`,
-    );
+    log.info(`New user ${member.user.tag} joined server, registering with language: ${userLanguage}`);
 
     const userData = await registerUser(
       member.id,

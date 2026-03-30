@@ -37,13 +37,10 @@ const DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS = 3500;
 
 function getMatrixEmbedChunkMaxChars(): number {
   const parsed = Number.parseInt(
-    process.env.MATRIX_EMBED_CHUNK_MAX_CHARS ??
-      `${DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS}`,
+    process.env.MATRIX_EMBED_CHUNK_MAX_CHARS ?? `${DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS}`,
     10,
   );
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MATRIX_EMBED_CHUNK_MAX_CHARS;
 }
 
 const MATRIX_EMBED_CHUNK_MAX_CHARS = getMatrixEmbedChunkMaxChars();
@@ -68,10 +65,7 @@ function stripDiscordMarkdown(text: string): string {
 /**
  * Append a non-empty text fragment to the embed serialization output.
  */
-function pushEmbedTextPart(
-  parts: string[],
-  value: string | null | undefined,
-): void {
+function pushEmbedTextPart(parts: string[], value: string | null | undefined): void {
   if (!value) return;
   const normalized = stripDiscordMarkdown(value);
   if (!normalized) return;
@@ -81,11 +75,7 @@ function pushEmbedTextPart(
 /**
  * Append a URL-like fragment once while preserving source order.
  */
-function pushEmbedUrlPart(
-  parts: string[],
-  seen: Set<string>,
-  value: string | null | undefined,
-): void {
+function pushEmbedUrlPart(parts: string[], seen: Set<string>, value: string | null | undefined): void {
   if (!value) return;
   const normalized = value.trim();
   if (!normalized || seen.has(normalized)) return;
@@ -124,9 +114,7 @@ function serializeEmbedToText(embed: Embed): string {
 
   if (embed.timestamp) {
     const parsed = new Date(embed.timestamp);
-    parts.push(
-      Number.isNaN(parsed.getTime()) ? embed.timestamp : parsed.toISOString(),
-    );
+    parts.push(Number.isNaN(parsed.getTime()) ? embed.timestamp : parsed.toISOString());
   }
 
   pushEmbedTextPart(parts, embed.footer?.text);
@@ -183,11 +171,7 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
  * @returns HTML-safe string with &, <, >, " replaced by their entity equivalents
  */
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /**
@@ -248,19 +232,14 @@ function resolveDiscordTextForMatrix(
       // Discord snowflake mention — resolve via message.mentions.users
       const user = message.mentions.users.get(snowflake);
       const displayName =
-        message.guild?.members.cache.get(snowflake)?.displayName ??
-        user?.displayName ??
-        user?.username ??
-        snowflake;
+        message.guild?.members.cache.get(snowflake)?.displayName ?? user?.displayName ?? user?.username ?? snowflake;
       const matrixId = getMatrixIdForDisplayName(displayName);
 
       if (matrixId) {
         mentionedIds.push(matrixId);
         hasMatrixMentions = true;
         bodyParts.push(matrixId);
-        htmlParts.push(
-          `<a href="https://matrix.to/#/${matrixId}">${escapeHtml(displayName)}</a>`,
-        );
+        htmlParts.push(`<a href="https://matrix.to/#/${matrixId}">${escapeHtml(displayName)}</a>`);
       } else {
         // Discord-only user — strip <@id>, keep their display name
         bodyParts.push(displayName);
@@ -274,9 +253,7 @@ function resolveDiscordTextForMatrix(
         mentionedIds.push(matrixId);
         hasMatrixMentions = true;
         bodyParts.push(matrixId);
-        htmlParts.push(
-          `<a href="https://matrix.to/#/${matrixId}">${escapeHtml(internalName)}</a>`,
-        );
+        htmlParts.push(`<a href="https://matrix.to/#/${matrixId}">${escapeHtml(internalName)}</a>`);
       } else {
         // Discord-only or unknown user — strip @{} wrapper, keep name
         bodyParts.push(internalName);
@@ -310,9 +287,7 @@ function embedToMatrixTextChunks(embed: Embed): string[] {
   const chunks = splitTextIntoChunks(serialized, MATRIX_EMBED_CHUNK_MAX_CHARS);
   if (chunks.length <= 1) return chunks;
 
-  return chunks.map(
-    (chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`,
-  );
+  return chunks.map((chunk, index) => `[${index + 1}/${chunks.length}]\n${chunk}`);
 }
 
 /**
@@ -331,9 +306,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
 
   // 3. Only relay messages that originate from TomoriBot itself
   //    (main persona bot account OR alter persona webhook messages)
-  const allPersonas: TomoriState[] = await getCachedAllPersonas(
-    message.guild.id,
-  );
+  const allPersonas: TomoriState[] = await getCachedAllPersonas(message.guild.id);
   if (!isSelfTriggerMessage(message, allPersonas)) return;
 
   // 4. Check if this channel has a linked Matrix room (cached DB lookup)
@@ -362,9 +335,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
   } else {
     // Alter persona webhook — match by username (case-insensitive)
     const authornameLower = message.author.username.toLowerCase();
-    persona = allPersonas.find(
-      (p) => p.tomori_nickname?.toLowerCase() === authornameLower,
-    );
+    persona = allPersonas.find((p) => p.tomori_nickname?.toLowerCase() === authornameLower);
 
     // Warn if no persona matched — the fallback uses the webhook username as the
     // virtual user localpart, which may create an orphaned Matrix user
@@ -375,8 +346,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
       );
     }
 
-    avatarUrl =
-      resolvePersonaAvatarPublicUrl(persona?.webhook_avatar_url) ?? null;
+    avatarUrl = resolvePersonaAvatarPublicUrl(persona?.webhook_avatar_url) ?? null;
   }
 
   // Fall back to username if no matching persona is found
@@ -388,10 +358,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
   //    Matrix clients highlight and notify the mentioned user (MSC3952).
   const rawText = message.content.trim();
   if (rawText) {
-    const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(
-      rawText,
-      message,
-    );
+    const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(rawText, message);
     try {
       await sendToMatrixRoom(
         roomId,
@@ -402,19 +369,13 @@ const handler = async (client: Client, message: Message): Promise<void> => {
         mentionedIds.length > 0 ? mentionedIds : undefined,
       );
     } catch (error) {
-      log.warn(
-        `Matrix relay: failed to relay message to room ${roomId}`,
-        error,
-      );
+      log.warn(`Matrix relay: failed to relay message to room ${roomId}`, error);
     }
   }
 
   // 7. Relay each file attachment as a Matrix media event
   //    Uses proxyURL for stability (Discord CDN proxy avoids expiry issues)
-  const mediaTimeoutMs = Number.parseInt(
-    process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000",
-    10,
-  );
+  const mediaTimeoutMs = Number.parseInt(process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000", 10);
 
   for (const attachment of message.attachments.values()) {
     // 7a. Skip attachments that exceed the configured size limit (shared constant
@@ -433,9 +394,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
         signal: AbortSignal.timeout(mediaTimeoutMs),
       });
       if (!response.ok) {
-        log.warn(
-          `Matrix relay: failed to fetch attachment "${attachment.name}" (${response.status})`,
-        );
+        log.warn(`Matrix relay: failed to fetch attachment "${attachment.name}" (${response.status})`);
         continue;
       }
 
@@ -454,10 +413,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
         avatarUrl,
       );
     } catch (error) {
-      log.warn(
-        `Matrix relay: failed to relay attachment "${attachment.name}" to room ${roomId}`,
-        error,
-      );
+      log.warn(`Matrix relay: failed to relay attachment "${attachment.name}" to room ${roomId}`, error);
     }
   }
 
@@ -469,10 +425,7 @@ const handler = async (client: Client, message: Message): Promise<void> => {
     if (chunks.length === 0) continue;
 
     for (const [chunkIndex, chunk] of chunks.entries()) {
-      const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(
-        chunk,
-        message,
-      );
+      const { body, formattedBody, mentionedIds } = resolveDiscordTextForMatrix(chunk, message);
       try {
         await sendToMatrixRoom(
           roomId,

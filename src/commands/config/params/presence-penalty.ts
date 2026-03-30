@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
 // Neutral value: 0.0 = no penalty applied
@@ -25,33 +18,21 @@ const PRESENCE_PENALTY_STORED_MAX = 1.99;
 const PRESENCE_PENALTY_DEFAULT = 0.0;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("presence-penalty")
-    .setDescription(
-      localizer("en-US", "commands.config.params.presence-penalty.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.params.presence-penalty.description"))
     .addNumberOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.params.presence-penalty.value_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.params.presence-penalty.value_description"))
         .setMinValue(PRESENCE_PENALTY_MIN)
         .setMaxValue(PRESENCE_PENALTY_INPUT_MAX)
         .setRequired(true),
     );
 
 function normalizePresencePenalty(value: number): number {
-  return Math.max(
-    PRESENCE_PENALTY_MIN,
-    Math.min(PRESENCE_PENALTY_STORED_MAX, value),
-  );
+  return Math.max(PRESENCE_PENALTY_MIN, Math.min(PRESENCE_PENALTY_STORED_MAX, value));
 }
 
 /**
@@ -90,14 +71,10 @@ export async function execute(
     const newValue = normalizePresencePenalty(requestedValue);
 
     // 4. Additional validation (Discord already handles min/max, but just in case)
-    if (
-      requestedValue < PRESENCE_PENALTY_MIN ||
-      requestedValue > PRESENCE_PENALTY_INPUT_MAX
-    ) {
+    if (requestedValue < PRESENCE_PENALTY_MIN || requestedValue > PRESENCE_PENALTY_INPUT_MAX) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.presence-penalty.invalid_value_title",
-        descriptionKey:
-          "commands.config.params.presence-penalty.invalid_value_description",
+        descriptionKey: "commands.config.params.presence-penalty.invalid_value_description",
         descriptionVars: {
           min: PRESENCE_PENALTY_MIN.toFixed(1),
           max: PRESENCE_PENALTY_INPUT_MAX.toFixed(1),
@@ -119,13 +96,11 @@ export async function execute(
     }
 
     // 6. Check if the value is already set to the same value
-    const currentValue =
-      tomoriState.config.llm_presence_penalty ?? PRESENCE_PENALTY_DEFAULT;
+    const currentValue = tomoriState.config.llm_presence_penalty ?? PRESENCE_PENALTY_DEFAULT;
     if (Math.abs(newValue - currentValue) < 0.001) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.presence-penalty.already_set_title",
-        descriptionKey:
-          "commands.config.params.presence-penalty.already_set_description",
+        descriptionKey: "commands.config.params.presence-penalty.already_set_description",
         descriptionVars: {
           presence_penalty: newValue.toFixed(2),
         },
@@ -156,9 +131,7 @@ export async function execute(
           guildId: interaction.guild?.id,
           requestedValue,
           normalizedValue: newValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -183,8 +156,7 @@ export async function execute(
     // 10. Success message
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.params.presence-penalty.success_title",
-      descriptionKey:
-        "commands.config.params.presence-penalty.success_description",
+      descriptionKey: "commands.config.params.presence-penalty.success_description",
       descriptionVars: {
         presence_penalty: newValue.toFixed(2),
         previous_presence_penalty: currentValue.toFixed(2),
@@ -214,9 +186,7 @@ export async function execute(
         normalizedValue:
           interaction.options.getNumber("value") === null
             ? null
-            : normalizePresencePenalty(
-                interaction.options.getNumber("value", true),
-              ),
+            : normalizePresencePenalty(interaction.options.getNumber("value", true)),
       },
     };
     await log.error(

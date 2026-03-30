@@ -21,8 +21,7 @@ const cache = new Map<number, GuildMcpConfigCacheEntry>();
  * Cache TTL in milliseconds. Default: 5 minutes.
  * Configurable via GUILD_MCP_CONFIG_CACHE_TTL_MINUTES env var.
  */
-const CACHE_TTL_MS =
-  (Number(process.env.GUILD_MCP_CONFIG_CACHE_TTL_MINUTES) || 5) * 60 * 1000;
+const CACHE_TTL_MS = (Number(process.env.GUILD_MCP_CONFIG_CACHE_TTL_MINUTES) || 5) * 60 * 1000;
 
 /** Cache statistics for monitoring */
 let cacheHits = 0;
@@ -40,9 +39,7 @@ let cacheMisses = 0;
  * @param serverId - Internal server_id (FK to servers table)
  * @returns Array of GuildMcpServerRow (may be empty if none registered)
  */
-export async function getCachedGuildMcpConfigs(
-  serverId: number,
-): Promise<GuildMcpServerRow[]> {
+export async function getCachedGuildMcpConfigs(serverId: number): Promise<GuildMcpServerRow[]> {
   const now = Date.now();
   const entry = cache.get(serverId);
 
@@ -70,16 +67,11 @@ export async function getCachedGuildMcpConfigs(
 
     return configs;
   } catch (error) {
-    log.error(
-      `[GuildMcpConfigCache] Failed to load configs for server ${serverId}`,
-      error,
-    );
+    log.error(`[GuildMcpConfigCache] Failed to load configs for server ${serverId}`, error);
 
     // Return stale cache if available (graceful degradation)
     if (entry) {
-      log.warn(
-        `[GuildMcpConfigCache] Returning stale cache for server ${serverId} due to error`,
-      );
+      log.warn(`[GuildMcpConfigCache] Returning stale cache for server ${serverId} due to error`);
       return entry.configs;
     }
 
@@ -94,9 +86,7 @@ export async function getCachedGuildMcpConfigs(
  * @param serverId - Internal server_id
  * @returns Array of enabled GuildMcpServerRow
  */
-export async function getCachedEnabledGuildMcpConfigs(
-  serverId: number,
-): Promise<GuildMcpServerRow[]> {
+export async function getCachedEnabledGuildMcpConfigs(serverId: number): Promise<GuildMcpServerRow[]> {
   const configs = await getCachedGuildMcpConfigs(serverId);
   return configs.filter((c) => c.is_enabled);
 }
@@ -126,9 +116,7 @@ export function clearGuildMcpConfigCache(): void {
   cacheHits = 0;
   cacheMisses = 0;
 
-  log.info(
-    `[GuildMcpConfigCache] Cleared entire cache (${previousSize} entries)`,
-  );
+  log.info(`[GuildMcpConfigCache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**
@@ -143,8 +131,7 @@ export function getGuildMcpConfigCacheStats(): {
   cacheSize: number;
 } {
   const total = cacheHits + cacheMisses;
-  const hitRate =
-    total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
+  const hitRate = total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
 
   return {
     hits: cacheHits,

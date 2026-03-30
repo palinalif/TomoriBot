@@ -5,15 +5,9 @@ import {
   type ModalSubmitInteraction,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { sql } from "@/utils/db/client";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import type { UserRow } from "@/types/db/schema";
@@ -30,14 +24,8 @@ import {
 const MODAL_CUSTOM_ID = "novelai_tags_style_modal";
 const TAGS_INPUT_ID = "style_tags_input";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("style")
-    .setDescription(
-      localizer("en-US", "commands.novelai.tags.style.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("style").setDescription(localizer("en-US", "commands.novelai.tags.style.description"));
 
 export async function execute(
   _client: Client,
@@ -76,9 +64,7 @@ export async function execute(
   let modalSubmitInteraction: ModalSubmitInteraction | null = null;
 
   try {
-    const currentTagsValue = formatNaiTagsForModalValue(
-      tomoriState.config.nai_style_tags,
-    );
+    const currentTagsValue = formatNaiTagsForModalValue(tomoriState.config.nai_style_tags);
     const modalResult = await promptWithRawModal(interaction, locale, {
       modalCustomId: MODAL_CUSTOM_ID,
       modalTitleKey: "commands.novelai.tags.style.modal_title",
@@ -105,9 +91,7 @@ export async function execute(
     const tagsInput = modalResult.values?.[TAGS_INPUT_ID] ?? "";
 
     if (tagsInput.trim().length === 0) {
-      const defaultTagArrayLiteral = formatTextArrayLiteral(
-        DEFAULT_NAI_STYLE_TAGS,
-      );
+      const defaultTagArrayLiteral = formatTextArrayLiteral(DEFAULT_NAI_STYLE_TAGS);
       const cleared = await sql<Array<{ tomori_config_id: number }>>`
 				UPDATE tomori_configs
 				SET nai_style_tags = ${defaultTagArrayLiteral}::TEXT[]
@@ -158,10 +142,7 @@ export async function execute(
       return;
     }
 
-    if (
-      !validationResult.isValid &&
-      validationResult.reason === "tag_too_long"
-    ) {
+    if (!validationResult.isValid && validationResult.reason === "tag_too_long") {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.tags.style.tag_too_long_title",
         descriptionKey: "commands.novelai.tags.style.tag_too_long_description",

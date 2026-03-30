@@ -37,10 +37,7 @@ IMPORTANT GUIDELINES:
  * @param previousRestatements - Last few restatements from the previous window (for deduplication context)
  * @returns The user prompt string
  */
-export function buildExtractionUserPrompt(
-  formattedMessages: string,
-  previousRestatements: string[] = [],
-): string {
+export function buildExtractionUserPrompt(formattedMessages: string, previousRestatements: string[] = []): string {
   let prompt = "";
 
   // 1. Add deduplication context from previous window

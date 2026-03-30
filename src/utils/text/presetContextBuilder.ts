@@ -15,16 +15,9 @@
  * This avoids refactoring the 2800+ line contextBuilder.ts while reusing all existing logic.
  */
 
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "@/types/misc/context";
+import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import type { CachedPresetData } from "@/utils/cache/stPresetCache";
-import {
-  resolvePresetMacros,
-  type MacroContext,
-  type ResolvedNode,
-} from "./stPresetEngine";
+import { resolvePresetMacros, type MacroContext, type ResolvedNode } from "./stPresetEngine";
 import { convertMentions } from "./contextBuilder";
 import { log } from "@/utils/misc/logger";
 import type { Client } from "discord.js";
@@ -106,11 +99,7 @@ const TOMORI_ONLY_DIALOGUE_TAGS = new Set([
  * (server info, memories, emojis, stickers).
  * These are flushed AFTER the anchor marker's items.
  */
-const KNOWLEDGE_FLUSH_ANCHORS = new Set([
-  "charPersonality",
-  "charDescription",
-  "main",
-]);
+const KNOWLEDGE_FLUSH_ANCHORS = new Set(["charPersonality", "charDescription", "main"]);
 
 /**
  * Markers that trigger flushing of TomoriBot-only dialogue-adjacent blocks
@@ -156,13 +145,8 @@ function buildMacroContext(params: PresetMacroParams): MacroContext {
  * @param contextItems - Native buildContext() output
  * @returns Map of tag → array of items
  */
-function groupByTag(
-  contextItems: StructuredContextItem[],
-): Map<ContextItemTag | "untagged", StructuredContextItem[]> {
-  const buckets = new Map<
-    ContextItemTag | "untagged",
-    StructuredContextItem[]
-  >();
+function groupByTag(contextItems: StructuredContextItem[]): Map<ContextItemTag | "untagged", StructuredContextItem[]> {
+  const buckets = new Map<ContextItemTag | "untagged", StructuredContextItem[]>();
 
   for (const item of contextItems) {
     const key = item.metadataTag ?? "untagged";
@@ -244,9 +228,7 @@ function batchMergeDepthInjections(
   }
 
   if (historyIndices.length === 0) {
-    log.warn(
-      `[Preset Builder] Cannot merge ${injections.length} depth injection(s) — no dialogue history items found`,
-    );
+    log.warn(`[Preset Builder] Cannot merge ${injections.length} depth injection(s) — no dialogue history items found`);
     return;
   }
 
@@ -255,10 +237,7 @@ function batchMergeDepthInjections(
 
   for (const injection of injections) {
     const targetHistoryIndex = historyIndices.length - 1 - injection.depth;
-    const clampedIndex = Math.max(
-      0,
-      Math.min(targetHistoryIndex, historyIndices.length - 1),
-    );
+    const clampedIndex = Math.max(0, Math.min(targetHistoryIndex, historyIndices.length - 1));
     const actualIndex = historyIndices[clampedIndex];
 
     const group = groupedByTarget.get(actualIndex);
@@ -320,10 +299,7 @@ export async function reassembleWithPreset(
 
   // ── Step 1: Resolve preset macros ──
   const macroContext = buildMacroContext(macroParams);
-  const { resolved, expandedContentMacros } = resolvePresetMacros(
-    nodes,
-    macroContext,
-  );
+  const { resolved, expandedContentMacros } = resolvePresetMacros(nodes, macroContext);
 
   // ── Step 2: Group native items into buckets ──
   const buckets = groupByTag(nativeOutput.contextItems);
@@ -382,10 +358,7 @@ export async function reassembleWithPreset(
     }
 
     // Also flush RAG if it hasn't been consumed by a worldInfo marker
-    const ragItems = pullBucket(
-      buckets,
-      ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS,
-    );
+    const ragItems = pullBucket(buckets, ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS);
     if (ragItems.length > 0) {
       contextItems.push(...ragItems);
     }

@@ -1,11 +1,6 @@
 import path from "node:path";
 import { Glob } from "bun";
-import type {
-  LocaleObject,
-  Locales,
-  LocaleValue,
-  LocalizerVariables,
-} from "../../types/discord/global";
+import type { LocaleObject, Locales, LocaleValue, LocalizerVariables } from "../../types/discord/global";
 import { log } from "../misc/logger";
 
 // 1. Initialize locales object
@@ -37,11 +32,7 @@ function dedent(str: string): string {
   const indentRegex = new RegExp(`^${indent}`);
 
   // Remove indent from all lines (except completely empty lines)
-  return lines
-    .map((line) =>
-      line.trim().length > 0 ? line.replace(indentRegex, "") : line,
-    )
-    .join("\n");
+  return lines.map((line) => (line.trim().length > 0 ? line.replace(indentRegex, "") : line)).join("\n");
 }
 
 /**
@@ -80,9 +71,7 @@ export async function initializeLocalizer(): Promise<void> {
 
     // Log loaded locales for verification during startup
     if (Object.keys(locales).length > 0) {
-      log.success(
-        `Successfully loaded locales: [${Object.keys(locales).join(", ")}]`,
-      );
+      log.success(`Successfully loaded locales: [${Object.keys(locales).join(", ")}]`);
       isInitialized = true;
     } else {
       log.warn("No locale files were loaded. Check the src/locales directory.");
@@ -130,11 +119,7 @@ function processLocaleStrings(obj: unknown): LocaleValue {
  * @param variables - Key-value pairs to replace placeholders in the localized string.
  * @returns The localized string, or the key itself if not found.
  */
-export const localizer = (
-  locale: string,
-  key: string,
-  variables: LocalizerVariables = {},
-): string => {
+export const localizer = (locale: string, key: string, variables: LocalizerVariables = {}): string => {
   // Check if localization system is initialized
   if (!isInitialized) {
     log.warn(`Localization system not initialized when requesting key: ${key}`);
@@ -160,11 +145,7 @@ export const localizer = (
 
   // 3. Traverse the locale object using the key parts
   for (const k of keys) {
-    if (
-      typeof translation !== "object" ||
-      translation === null ||
-      !Object.hasOwn(translation, k)
-    ) {
+    if (typeof translation !== "object" || translation === null || !Object.hasOwn(translation, k)) {
       // If path is invalid, return the key
       return key;
     }
@@ -194,9 +175,7 @@ export const localizer = (
 export function getSupportedLocales(): string[] {
   // Return empty array if not initialized to avoid errors
   if (!isInitialized) {
-    log.warn(
-      "Localization system not initialized when requesting supported locales",
-    );
+    log.warn("Localization system not initialized when requesting supported locales");
     return [];
   }
 
@@ -266,17 +245,10 @@ export function getDefaultBotName(locale: string): string {
 export function getBaseTriggerWords(locale: string): string[] {
   // 1. Check if localization system is initialized
   if (!isInitialized) {
-    log.warn(
-      "Localization system not initialized when requesting base trigger words",
-    );
+    log.warn("Localization system not initialized when requesting base trigger words");
     // Fallback to environment variable or hardcoded defaults
     return (
-      process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
-        "tomori",
-        "tomo",
-        "トモリ",
-        "ともり",
-      ]
+      process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || ["tomori", "tomo", "トモリ", "ともり"]
     );
   }
 
@@ -297,15 +269,10 @@ export function getBaseTriggerWords(locale: string): string[] {
     localeData.general.defaults !== null &&
     "base_trigger_words" in localeData.general.defaults
   ) {
-    const triggerWords = (
-      localeData.general.defaults as Record<string, unknown>
-    ).base_trigger_words;
+    const triggerWords = (localeData.general.defaults as Record<string, unknown>).base_trigger_words;
 
     // 4. Validate it's an array of strings
-    if (
-      Array.isArray(triggerWords) &&
-      triggerWords.every((word) => typeof word === "string")
-    ) {
+    if (Array.isArray(triggerWords) && triggerWords.every((word) => typeof word === "string")) {
       return triggerWords as string[];
     }
   }
@@ -313,11 +280,6 @@ export function getBaseTriggerWords(locale: string): string[] {
   // 5. Fallback to environment variables with hardcoded defaults
   // This ensures backward compatibility with existing environment variable configuration
   return (
-    process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
-      "tomori",
-      "tomo",
-      "トモリ",
-      "ともり",
-    ]
+    process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || ["tomori", "tomo", "トモリ", "ともり"]
   );
 }

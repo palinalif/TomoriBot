@@ -6,10 +6,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import type { SelectOption } from "@/types/discord/modal";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { sql } from "@/utils/db/client";
 import {
   DEFAULT_NAI_CFG_RESCALE,
@@ -21,10 +18,7 @@ import {
   NAI_IMAGE_SAMPLERS,
   resolveNaiImageParams,
 } from "@/utils/image/naiImageParams";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import type { UserRow } from "@/types/db/schema";
@@ -45,18 +39,10 @@ type ValidationResult<T> =
       descriptionVars?: Record<string, string>;
     };
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("params")
-    .setDescription(
-      localizer("en-US", "commands.novelai.image.params.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("params").setDescription(localizer("en-US", "commands.novelai.image.params.description"));
 
-function getSamplerLabelKey(
-  sampler: (typeof NAI_IMAGE_SAMPLERS)[number],
-): string {
+function getSamplerLabelKey(sampler: (typeof NAI_IMAGE_SAMPLERS)[number]): string {
   switch (sampler) {
     case "k_euler_ancestral":
       return "commands.novelai.image.params.sampler_option_k_euler_ancestral";
@@ -74,48 +60,30 @@ function getSamplerLabelKey(
 }
 
 function appendDefaultSuffix(locale: string, label: string): string {
-  return `${label}${localizer(
-    locale,
-    "commands.novelai.image.params.option_default_suffix",
-  )}`;
+  return `${label}${localizer(locale, "commands.novelai.image.params.option_default_suffix")}`;
 }
 
 function createSamplerOptions(locale: string): SelectOption[] {
   return NAI_IMAGE_SAMPLERS.map((sampler) => {
     const baseLabel = localizer(locale, getSamplerLabelKey(sampler));
     return {
-      label:
-        sampler === DEFAULT_NAI_IMAGE_SAMPLER
-          ? appendDefaultSuffix(locale, baseLabel)
-          : baseLabel,
+      label: sampler === DEFAULT_NAI_IMAGE_SAMPLER ? appendDefaultSuffix(locale, baseLabel) : baseLabel,
       value: sampler,
     };
   });
 }
 
-function getSamplerPlaceholder(
-  locale: string,
-  currentSampler: string | null | undefined,
-): string {
+function getSamplerPlaceholder(locale: string, currentSampler: string | null | undefined): string {
   if (currentSampler) {
-    return localizer(
-      locale,
-      "commands.novelai.image.params.sampler_placeholder_current",
-      {
-        sampler: currentSampler,
-      },
-    );
+    return localizer(locale, "commands.novelai.image.params.sampler_placeholder_current", {
+      sampler: currentSampler,
+    });
   }
 
-  return localizer(
-    locale,
-    "commands.novelai.image.params.sampler_placeholder_default",
-  );
+  return localizer(locale, "commands.novelai.image.params.sampler_placeholder_default");
 }
 
-function getNoiseScheduleLabelKey(
-  noiseSchedule: (typeof NAI_IMAGE_NOISE_SCHEDULES)[number],
-): string {
+function getNoiseScheduleLabelKey(noiseSchedule: (typeof NAI_IMAGE_NOISE_SCHEDULES)[number]): string {
   switch (noiseSchedule) {
     case "karras":
       return "commands.novelai.image.params.noise_schedule_option_karras";
@@ -128,38 +96,22 @@ function getNoiseScheduleLabelKey(
 
 function createNoiseScheduleOptions(locale: string): SelectOption[] {
   return NAI_IMAGE_NOISE_SCHEDULES.map((noiseSchedule) => {
-    const baseLabel = localizer(
-      locale,
-      getNoiseScheduleLabelKey(noiseSchedule),
-    );
+    const baseLabel = localizer(locale, getNoiseScheduleLabelKey(noiseSchedule));
     return {
-      label:
-        noiseSchedule === DEFAULT_NAI_IMAGE_NOISE_SCHEDULE
-          ? appendDefaultSuffix(locale, baseLabel)
-          : baseLabel,
+      label: noiseSchedule === DEFAULT_NAI_IMAGE_NOISE_SCHEDULE ? appendDefaultSuffix(locale, baseLabel) : baseLabel,
       value: noiseSchedule,
     };
   });
 }
 
-function getNoiseSchedulePlaceholder(
-  locale: string,
-  currentNoiseSchedule: string | null | undefined,
-): string {
+function getNoiseSchedulePlaceholder(locale: string, currentNoiseSchedule: string | null | undefined): string {
   if (currentNoiseSchedule) {
-    return localizer(
-      locale,
-      "commands.novelai.image.params.noise_schedule_placeholder_current",
-      {
-        noise_schedule: currentNoiseSchedule,
-      },
-    );
+    return localizer(locale, "commands.novelai.image.params.noise_schedule_placeholder_current", {
+      noise_schedule: currentNoiseSchedule,
+    });
   }
 
-  return localizer(
-    locale,
-    "commands.novelai.image.params.noise_schedule_placeholder_default",
-  );
+  return localizer(locale, "commands.novelai.image.params.noise_schedule_placeholder_default");
 }
 
 function parseOptionalInteger(
@@ -175,12 +127,7 @@ function parseOptionalInteger(
   }
 
   const parsed = Number.parseInt(trimmed, 10);
-  if (
-    Number.isNaN(parsed) ||
-    parsed < min ||
-    parsed > max ||
-    trimmed !== parsed.toString()
-  ) {
+  if (Number.isNaN(parsed) || parsed < min || parsed > max || trimmed !== parsed.toString()) {
     return {
       success: false,
       titleKey,
@@ -347,10 +294,7 @@ export async function execute(
           customId: SAMPLER_INPUT_ID,
           labelKey: "commands.novelai.image.params.sampler_label",
           descriptionKey: "commands.novelai.image.params.sampler_description",
-          placeholder: getSamplerPlaceholder(
-            locale,
-            tomoriState.config.nai_sampler,
-          ),
+          placeholder: getSamplerPlaceholder(locale, tomoriState.config.nai_sampler),
           required: false,
           options: createSamplerOptions(locale),
         },
@@ -362,10 +306,7 @@ export async function execute(
           style: TextInputStyle.Short,
           required: false,
           maxLength: 2,
-          value:
-            tomoriState.config.nai_steps != null
-              ? tomoriState.config.nai_steps.toString()
-              : undefined,
+          value: tomoriState.config.nai_steps != null ? tomoriState.config.nai_steps.toString() : undefined,
         },
         {
           customId: SCALE_INPUT_ID,
@@ -375,36 +316,25 @@ export async function execute(
           style: TextInputStyle.Short,
           required: false,
           maxLength: 8,
-          value:
-            tomoriState.config.nai_scale != null
-              ? tomoriState.config.nai_scale.toString()
-              : undefined,
+          value: tomoriState.config.nai_scale != null ? tomoriState.config.nai_scale.toString() : undefined,
         },
         {
           customId: NOISE_SCHEDULE_INPUT_ID,
           labelKey: "commands.novelai.image.params.noise_schedule_label",
-          descriptionKey:
-            "commands.novelai.image.params.noise_schedule_description",
-          placeholder: getNoiseSchedulePlaceholder(
-            locale,
-            tomoriState.config.nai_noise_schedule,
-          ),
+          descriptionKey: "commands.novelai.image.params.noise_schedule_description",
+          placeholder: getNoiseSchedulePlaceholder(locale, tomoriState.config.nai_noise_schedule),
           required: false,
           options: createNoiseScheduleOptions(locale),
         },
         {
           customId: CFG_RESCALE_INPUT_ID,
           labelKey: "commands.novelai.image.params.cfg_rescale_label",
-          descriptionKey:
-            "commands.novelai.image.params.cfg_rescale_description",
+          descriptionKey: "commands.novelai.image.params.cfg_rescale_description",
           placeholder: "commands.novelai.image.params.cfg_rescale_placeholder",
           style: TextInputStyle.Short,
           required: false,
           maxLength: 8,
-          value:
-            tomoriState.config.nai_cfg_rescale != null
-              ? tomoriState.config.nai_cfg_rescale.toString()
-              : undefined,
+          value: tomoriState.config.nai_cfg_rescale != null ? tomoriState.config.nai_cfg_rescale.toString() : undefined,
         },
       ],
     });
@@ -421,10 +351,7 @@ export async function execute(
     const noiseScheduleInput = modalResult.values?.[NOISE_SCHEDULE_INPUT_ID];
     const cfgRescaleInput = modalResult.values?.[CFG_RESCALE_INPUT_ID] ?? "";
 
-    const samplerValidation = resolveSamplerSelection(
-      samplerInput,
-      tomoriState.config.nai_sampler,
-    );
+    const samplerValidation = resolveSamplerSelection(samplerInput, tomoriState.config.nai_sampler);
     if (!samplerValidation.success) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: samplerValidation.titleKey,

@@ -1,9 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  BytePairEncodingCore,
-  type RawBytePairRanks,
-} from "gpt-tokenizer/BytePairEncodingCore";
+import { BytePairEncodingCore, type RawBytePairRanks } from "gpt-tokenizer/BytePairEncodingCore";
 import { log } from "@/utils/misc/logger";
 import { getTokenizerAssetDir } from "@/utils/provider/tokenizerAssetDir";
 
@@ -18,8 +15,7 @@ export const LOCAL_LOGIT_BIAS_TOKENIZER_FAMILY_VALUES = [
   "nemotron3",
 ] as const;
 
-export type LocalLogitBiasTokenizerFamily =
-  (typeof LOCAL_LOGIT_BIAS_TOKENIZER_FAMILY_VALUES)[number];
+export type LocalLogitBiasTokenizerFamily = (typeof LOCAL_LOGIT_BIAS_TOKENIZER_FAMILY_VALUES)[number];
 
 type LocalTokenizerEncoder = (text: string) => number[];
 type LocalTokenizerJsonMode = "byte_level" | "sentencepiece" | "plain";
@@ -65,17 +61,11 @@ interface TekkenFile {
   special_tokens?: Record<string, TekkenTokenEntry> | TekkenTokenEntry[];
 }
 
-const tokenizerCache = new Map<
-  LocalLogitBiasTokenizerFamily,
-  LocalTokenizerEncoder | null
->();
+const tokenizerCache = new Map<LocalLogitBiasTokenizerFamily, LocalTokenizerEncoder | null>();
 const utf8Encoder = new TextEncoder();
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const byteLevelCharToByte = buildByteLevelCharToByteMap();
-const defaultTiktokenRegexByFamily: Record<
-  LocalLogitBiasTokenizerFamily,
-  RegExp | null
-> = {
+const defaultTiktokenRegexByFamily: Record<LocalLogitBiasTokenizerFamily, RegExp | null> = {
   deepseek_v3_r1: null,
   qwen3_5: null,
   mistral_small3: null,
@@ -99,9 +89,7 @@ const defaultTiktokenRegexByFamily: Record<
   nemotron3: null,
 };
 
-export function getLocalLogitBiasTokenizerEncoder(
-  family: LocalLogitBiasTokenizerFamily,
-): LocalTokenizerEncoder | null {
+export function getLocalLogitBiasTokenizerEncoder(family: LocalLogitBiasTokenizerFamily): LocalTokenizerEncoder | null {
   if (tokenizerCache.has(family)) {
     return tokenizerCache.get(family) ?? null;
   }
@@ -168,10 +156,7 @@ export function resolveLocalLogitBiasTokenizerFamily(
     return "glm_zai";
   }
 
-  if (
-    normalizedTokenizer.includes("step") ||
-    normalizedModelCodename.includes("step-3.5")
-  ) {
+  if (normalizedTokenizer.includes("step") || normalizedModelCodename.includes("step-3.5")) {
     return "stepfun_step35";
   }
 
@@ -183,29 +168,19 @@ export function resolveLocalLogitBiasTokenizerFamily(
     return "kimi_k2";
   }
 
-  if (
-    normalizedTokenizer.includes("gemma") ||
-    normalizedModelCodename.includes("gemma-3")
-  ) {
+  if (normalizedTokenizer.includes("gemma") || normalizedModelCodename.includes("gemma-3")) {
     return "gemma3";
   }
 
-  if (
-    normalizedTokenizer.includes("nemotron") ||
-    normalizedModelCodename.includes("nemotron-3")
-  ) {
+  if (normalizedTokenizer.includes("nemotron") || normalizedModelCodename.includes("nemotron-3")) {
     return "nemotron3";
   }
 
   return null;
 }
 
-export function isLocalLogitBiasTokenizerFamily(
-  value: string,
-): value is LocalLogitBiasTokenizerFamily {
-  return LOCAL_LOGIT_BIAS_TOKENIZER_FAMILY_VALUES.includes(
-    value as LocalLogitBiasTokenizerFamily,
-  );
+export function isLocalLogitBiasTokenizerFamily(value: string): value is LocalLogitBiasTokenizerFamily {
+  return LOCAL_LOGIT_BIAS_TOKENIZER_FAMILY_VALUES.includes(value as LocalLogitBiasTokenizerFamily);
 }
 
 function loadTokenizerEncoderFromAssetDir(
@@ -226,31 +201,21 @@ function loadTokenizerEncoderFromAssetDir(
 
   const tiktokenModelPath = path.join(assetDir, "tiktoken.model");
   if (fs.existsSync(tiktokenModelPath)) {
-    const encoder = buildTiktokenEncoder(
-      tiktokenModelPath,
-      defaultTiktokenRegexByFamily[family],
-    );
+    const encoder = buildTiktokenEncoder(tiktokenModelPath, defaultTiktokenRegexByFamily[family]);
     return (text) => encoder.encodeNative(text);
   }
 
   const tokenizerModelPath = path.join(assetDir, "tokenizer.model");
   if (fs.existsSync(tokenizerModelPath)) {
-    const encoder = buildTiktokenEncoder(
-      tokenizerModelPath,
-      defaultTiktokenRegexByFamily[family],
-    );
+    const encoder = buildTiktokenEncoder(tokenizerModelPath, defaultTiktokenRegexByFamily[family]);
     return (text) => encoder.encodeNative(text);
   }
 
-  throw new Error(
-    `No supported tokenizer asset found in ${assetDir} for ${family}`,
-  );
+  throw new Error(`No supported tokenizer asset found in ${assetDir} for ${family}`);
 }
 
 function buildTokenizerJsonEncoder(filePath: string): BytePairEncodingCore {
-  const data = JSON.parse(
-    fs.readFileSync(filePath, "utf8"),
-  ) as TokenizerJsonFile;
+  const data = JSON.parse(fs.readFileSync(filePath, "utf8")) as TokenizerJsonFile;
   const vocab = data.model?.vocab ?? {};
   const tokenizerMode = detectTokenizerJsonMode(data, vocab);
   const bytePairRankDecoder: Array<string | readonly number[]> = [];
@@ -288,8 +253,7 @@ function buildTekkenEncoder(filePath: string): BytePairEncodingCore {
 
   for (const tokenEntry of data.vocab ?? []) {
     const rank = tokenEntry.rank;
-    if (typeof rank !== "number" || !Number.isInteger(rank) || rank < 0)
-      continue;
+    if (typeof rank !== "number" || !Number.isInteger(rank) || rank < 0) continue;
     bytePairRankDecoder[rank] = decodeTekkenToken(tokenEntry);
   }
 
@@ -298,8 +262,7 @@ function buildTekkenEncoder(filePath: string): BytePairEncodingCore {
     : Object.values(data.special_tokens ?? {});
   for (const tokenEntry of specialTokens) {
     const rank = tokenEntry.rank;
-    if (typeof rank !== "number" || !Number.isInteger(rank) || rank < 0)
-      continue;
+    if (typeof rank !== "number" || !Number.isInteger(rank) || rank < 0) continue;
     if (bytePairRankDecoder[rank] !== undefined) continue;
     bytePairRankDecoder[rank] = decodeTekkenToken(tokenEntry);
   }
@@ -315,10 +278,7 @@ function buildTekkenEncoder(filePath: string): BytePairEncodingCore {
   });
 }
 
-function buildTiktokenEncoder(
-  filePath: string,
-  tokenSplitRegex: RegExp | null,
-): BytePairEncodingCore {
+function buildTiktokenEncoder(filePath: string, tokenSplitRegex: RegExp | null): BytePairEncodingCore {
   const bytePairRankDecoder: Array<string | readonly number[]> = [];
   const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
 
@@ -330,9 +290,7 @@ function buildTiktokenEncoder(
     const rank = Number.parseInt(rawRank, 10);
     if (!rawToken || !Number.isInteger(rank) || rank < 0) continue;
 
-    bytePairRankDecoder[rank] = decodeTokenBytes(
-      Buffer.from(rawToken, "base64"),
-    );
+    bytePairRankDecoder[rank] = decodeTokenBytes(Buffer.from(rawToken, "base64"));
   }
 
   if (!tokenSplitRegex) {
@@ -345,10 +303,7 @@ function buildTiktokenEncoder(
   });
 }
 
-function detectTokenizerJsonMode(
-  data: TokenizerJsonFile,
-  vocab: Record<string, number>,
-): LocalTokenizerJsonMode {
+function detectTokenizerJsonMode(data: TokenizerJsonFile, vocab: Record<string, number>): LocalTokenizerJsonMode {
   if (
     containsTokenizerNodeType(data.pre_tokenizer, "ByteLevel") ||
     containsTokenizerNodeType(data.decoder, "ByteLevel")
@@ -358,9 +313,7 @@ function detectTokenizerJsonMode(
 
   if (
     data.model?.byte_fallback ||
-    Object.keys(vocab).some(
-      (token) => token.includes("▁") || /<0x[0-9A-Fa-f]{2}>/.test(token),
-    )
+    Object.keys(vocab).some((token) => token.includes("▁") || /<0x[0-9A-Fa-f]{2}>/.test(token))
   ) {
     return "sentencepiece";
   }
@@ -368,10 +321,7 @@ function detectTokenizerJsonMode(
   return "plain";
 }
 
-function decodeTokenizerJsonToken(
-  token: string,
-  mode: LocalTokenizerJsonMode,
-): string | readonly number[] {
+function decodeTokenizerJsonToken(token: string, mode: LocalTokenizerJsonMode): string | readonly number[] {
   switch (mode) {
     case "byte_level":
       return decodeByteLevelToken(token);
@@ -382,9 +332,7 @@ function decodeTokenizerJsonToken(
   }
 }
 
-function decodeTekkenToken(
-  tokenEntry: TekkenTokenEntry,
-): string | readonly number[] {
+function decodeTekkenToken(tokenEntry: TekkenTokenEntry): string | readonly number[] {
   if (typeof tokenEntry.token_bytes === "string") {
     return decodeTokenBytes(Buffer.from(tokenEntry.token_bytes, "base64"));
   }
@@ -433,9 +381,7 @@ function decodeSentencePieceToken(token: string): string | readonly number[] {
   return decodeTokenBytes(bytes);
 }
 
-function decodeTokenBytes(
-  bytes: ArrayLike<number>,
-): string | readonly number[] {
+function decodeTokenBytes(bytes: ArrayLike<number>): string | readonly number[] {
   const normalized = Uint8Array.from(bytes);
 
   try {
@@ -445,16 +391,10 @@ function decodeTokenBytes(
   }
 }
 
-function extractTokenizerJsonRegex(
-  data: TokenizerJsonFile,
-  mode: LocalTokenizerJsonMode,
-): RegExp {
+function extractTokenizerJsonRegex(data: TokenizerJsonFile, mode: LocalTokenizerJsonMode): RegExp {
   const splitRegexSources = collectSplitRegexSources(data.pre_tokenizer);
   if (splitRegexSources.length > 0) {
-    return new RegExp(
-      splitRegexSources.map((source) => `(?:${source})`).join("|"),
-      "gu",
-    );
+    return new RegExp(splitRegexSources.map((source) => `(?:${source})`).join("|"), "gu");
   }
 
   if (mode === "sentencepiece") {
@@ -468,10 +408,7 @@ function collectSplitRegexSources(node: LocalTokenizerConfigNode): string[] {
   if (!node) return [];
 
   if (node.type === "Sequence") {
-    const childNodes = [
-      ...(node.pretokenizers ?? []),
-      ...(node.decoders ?? []),
-    ];
+    const childNodes = [...(node.pretokenizers ?? []), ...(node.decoders ?? [])];
     return childNodes.flatMap((child) => collectSplitRegexSources(child));
   }
 
@@ -482,16 +419,13 @@ function collectSplitRegexSources(node: LocalTokenizerConfigNode): string[] {
   return [];
 }
 
-function containsTokenizerNodeType(
-  node: LocalTokenizerConfigNode,
-  expectedType: string,
-): boolean {
+function containsTokenizerNodeType(node: LocalTokenizerConfigNode, expectedType: string): boolean {
   if (!node) return false;
   if (node.type === expectedType) return true;
   if (node.type !== "Sequence") return false;
 
-  return [...(node.pretokenizers ?? []), ...(node.decoders ?? [])].some(
-    (child) => containsTokenizerNodeType(child, expectedType),
+  return [...(node.pretokenizers ?? []), ...(node.decoders ?? [])].some((child) =>
+    containsTokenizerNodeType(child, expectedType),
   );
 }
 
@@ -510,10 +444,5 @@ function buildByteLevelCharToByteMap(): Map<string, number> {
     extraCodePoint++;
   }
 
-  return new Map(
-    bytes.map((value, index) => [
-      String.fromCodePoint(codePoints[index]),
-      value,
-    ]),
-  );
+  return new Map(bytes.map((value, index) => [String.fromCodePoint(codePoints[index]), value]));
 }

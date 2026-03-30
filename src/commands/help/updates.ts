@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
@@ -13,10 +9,7 @@ import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 const GITHUB_REPO = process.env.GITHUB_REPO || "Bredrumb/TomoriBot";
 
 /** Timeout in milliseconds for the GitHub API fetch */
-const GITHUB_API_TIMEOUT_MS = Number.parseInt(
-  process.env.GITHUB_API_TIMEOUT_MS || "10000",
-  10,
-);
+const GITHUB_API_TIMEOUT_MS = Number.parseInt(process.env.GITHUB_API_TIMEOUT_MS || "10000", 10);
 
 /** Discord embed description character limit */
 const EMBED_DESCRIPTION_LIMIT = 4096;
@@ -36,12 +29,8 @@ interface GitHubRelease {
  * Configure the /help updates subcommand.
  * Posts the latest TomoriBot release notes as a public embed.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("updates")
-    .setDescription(localizer("en-US", "commands.help.updates.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("updates").setDescription(localizer("en-US", "commands.help.updates.description"));
 
 /**
  * Extracts the first markdown image URL from release notes.
@@ -155,11 +144,7 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help updates command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help updates command", error as Error, context);
 
     // replyInfoEmbed detects the deferred state and uses editReply automatically
     try {
@@ -169,11 +154,7 @@ export async function execute(
         color: ColorCode.ERROR,
       });
     } catch (replyError) {
-      log.error(
-        "Failed to send error reply for /help updates",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help updates", replyError, context);
     }
   }
 }

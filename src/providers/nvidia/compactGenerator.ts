@@ -16,18 +16,11 @@ import type {
 import { callNvidiaStructuredJSON } from "@/providers/nvidia/nvidiaStructuredOutput";
 import { NVIDIA_CHAT_COMPLETIONS_URL } from "@/providers/nvidia/nvidiaConstants";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
-import {
-  buildRoleplaySchema,
-  CompactRoleplaySummarySchema,
-} from "@/providers/utils/compactCommon";
+import { buildRoleplaySchema, CompactRoleplaySummarySchema } from "@/providers/utils/compactCommon";
 
-type NvidiaContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+type NvidiaContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
-type NvidiaMessage =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string | NvidiaContentPart[] };
+type NvidiaMessage = { role: "system"; content: string } | { role: "user"; content: string | NvidiaContentPart[] };
 
 /**
  * Build the user content for a compact summary request, optionally
@@ -53,14 +46,10 @@ async function buildNvidiaCompactUserContent(
         },
       });
     } catch (fetchError) {
-      log.error(
-        `Error fetching NVIDIA compact summary image ${image.url}`,
-        fetchError as Error,
-        {
-          errorType: "NvidiaCompactImageFetchError",
-          metadata: { imageUrl: image.url },
-        },
-      );
+      log.error(`Error fetching NVIDIA compact summary image ${image.url}`, fetchError as Error, {
+        errorType: "NvidiaCompactImageFetchError",
+        metadata: { imageUrl: image.url },
+      });
     }
   }
 
@@ -83,10 +72,7 @@ export async function generateConversationSummaryNvidia(
     }
 
     // 1. Build the user content (text + optional images)
-    const userContent = await buildNvidiaCompactUserContent(
-      request.userPrompt,
-      request.images,
-    );
+    const userContent = await buildNvidiaCompactUserContent(request.userPrompt, request.images);
 
     const messages: NvidiaMessage[] = [];
     if (request.systemPrompt) {

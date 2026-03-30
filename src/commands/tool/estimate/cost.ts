@@ -1,24 +1,14 @@
 import { GoogleGenAI, type CountTokensParameters } from "@google/genai";
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  replySummaryEmbed,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, replySummaryEmbed } from "@/utils/discord/interactionHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { getAvailableToolsForContext } from "@/tools/toolRegistry";
-import {
-  getCachedTomoriState,
-  getCachedAllPersonas,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { buildContext } from "@/utils/text/contextBuilder";
 import { getEmojiPenaltyDirective } from "@/utils/text/emojiPenalty";
@@ -30,25 +20,13 @@ import {
 } from "@/utils/cache/openrouterCapabilityCache";
 import { getGeminiTokenLimits } from "@/utils/cache/geminiCapabilityCache";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "@/types/misc/context";
+import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { getCachedPrivacyLevel } from "@/utils/cache/userCache";
-import {
-  GoogleProvider,
-  type GoogleProviderConfig,
-} from "@/providers/google/googleProvider";
+import { GoogleProvider, type GoogleProviderConfig } from "@/providers/google/googleProvider";
 import { GoogleStreamAdapter } from "@/providers/google/googleStreamAdapter";
-import {
-  OpenrouterProvider,
-  type OpenrouterProviderConfig,
-} from "@/providers/openrouter/openrouterProvider";
+import { OpenrouterProvider, type OpenrouterProviderConfig } from "@/providers/openrouter/openrouterProvider";
 import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
-import {
-  DeepseekProvider,
-  type DeepseekProviderConfig,
-} from "@/providers/deepseek/deepseekProvider";
+import { DeepseekProvider, type DeepseekProviderConfig } from "@/providers/deepseek/deepseekProvider";
 import { buildOpenAICompatibleMessages } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
 import {
   getProviderDisplayName,
@@ -89,51 +67,19 @@ const MENTION_PING_RULE_CHARS_EST = 300;
 const EMOJI_USAGE_RULES_CHARS_EST = 340;
 const STICKER_USAGE_RULES_CHARS_EST = 270; // header + footer, excluding per-sticker lines
 
-const EST_OUTPUT_SHORT = parseIntegerEnv(
-  process.env.HELP_COST_EST_OUTPUT_SHORT,
-  80,
-  1,
-);
-const EST_OUTPUT_TYPICAL = parseIntegerEnv(
-  process.env.HELP_COST_EST_OUTPUT_TYPICAL,
-  220,
-  1,
-);
-const EST_OUTPUT_LONG = parseIntegerEnv(
-  process.env.HELP_COST_EST_OUTPUT_LONG,
-  500,
-  1,
-);
-const GOOGLE_INPUT_PRICE_PER_MILLION = parseFloatEnv(
-  process.env.HELP_COST_GOOGLE_INPUT_PRICE_PER_MILLION,
-  0.3,
-  0,
-);
-const GOOGLE_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
-  process.env.HELP_COST_GOOGLE_OUTPUT_PRICE_PER_MILLION,
-  2.5,
-  0,
-);
-const DEEPSEEK_INPUT_PRICE_PER_MILLION = parseFloatEnv(
-  process.env.HELP_COST_DEEPSEEK_INPUT_PRICE_PER_MILLION,
-  0.28,
-  0,
-);
+const EST_OUTPUT_SHORT = parseIntegerEnv(process.env.HELP_COST_EST_OUTPUT_SHORT, 80, 1);
+const EST_OUTPUT_TYPICAL = parseIntegerEnv(process.env.HELP_COST_EST_OUTPUT_TYPICAL, 220, 1);
+const EST_OUTPUT_LONG = parseIntegerEnv(process.env.HELP_COST_EST_OUTPUT_LONG, 500, 1);
+const GOOGLE_INPUT_PRICE_PER_MILLION = parseFloatEnv(process.env.HELP_COST_GOOGLE_INPUT_PRICE_PER_MILLION, 0.3, 0);
+const GOOGLE_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(process.env.HELP_COST_GOOGLE_OUTPUT_PRICE_PER_MILLION, 2.5, 0);
+const DEEPSEEK_INPUT_PRICE_PER_MILLION = parseFloatEnv(process.env.HELP_COST_DEEPSEEK_INPUT_PRICE_PER_MILLION, 0.28, 0);
 const DEEPSEEK_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
   process.env.HELP_COST_DEEPSEEK_OUTPUT_PRICE_PER_MILLION,
   0.42,
   0,
 );
-const ZAI_GENERAL_INPUT_PRICE_PER_MILLION = parseFloatEnv(
-  process.env.HELP_COST_ZAI_INPUT_PRICE_PER_MILLION,
-  0.6,
-  0,
-);
-const ZAI_GENERAL_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(
-  process.env.HELP_COST_ZAI_OUTPUT_PRICE_PER_MILLION,
-  2.2,
-  0,
-);
+const ZAI_GENERAL_INPUT_PRICE_PER_MILLION = parseFloatEnv(process.env.HELP_COST_ZAI_INPUT_PRICE_PER_MILLION, 0.6, 0);
+const ZAI_GENERAL_OUTPUT_PRICE_PER_MILLION = parseFloatEnv(process.env.HELP_COST_ZAI_OUTPUT_PRICE_PER_MILLION, 2.2, 0);
 const ZAICODING_INPUT_PRICE_PER_MILLION = parseFloatEnv(
   process.env.HELP_COST_ZAICODING_INPUT_PRICE_PER_MILLION,
   1.0,
@@ -257,22 +203,14 @@ interface DeepseekProbeResponse {
   usage?: DeepseekProbeUsage;
 }
 
-function parseIntegerEnv(
-  value: string | undefined,
-  fallback: number,
-  minimum: number,
-): number {
+function parseIntegerEnv(value: string | undefined, fallback: number, minimum: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) return fallback;
   return Math.max(minimum, parsed);
 }
 
-function parseFloatEnv(
-  value: string | undefined,
-  fallback: number,
-  minimum: number,
-): number {
+function parseFloatEnv(value: string | undefined, fallback: number, minimum: number): number {
   if (!value) return fallback;
   const parsed = Number.parseFloat(value);
   if (Number.isNaN(parsed)) return fallback;
@@ -305,16 +243,9 @@ function charsToTokensJson(chars: number): number {
  * @param avgMessageChars - Average characters per message (excluding speaker prefix)
  * @returns Estimated token count
  */
-function estimateChatHistoryTokens(
-  messageCount: number,
-  avgMessageChars: number,
-): number {
-  const totalChars =
-    messageCount * (avgMessageChars + AVG_SPEAKER_PREFIX_CHARS);
-  return (
-    charsToTokensText(totalChars) +
-    messageCount * TOKENS_PER_CHAT_MESSAGE_OVERHEAD
-  );
+function estimateChatHistoryTokens(messageCount: number, avgMessageChars: number): number {
+  const totalChars = messageCount * (avgMessageChars + AVG_SPEAKER_PREFIX_CHARS);
+  return charsToTokensText(totalChars) + messageCount * TOKENS_PER_CHAT_MESSAGE_OVERHEAD;
 }
 
 /**
@@ -386,13 +317,9 @@ function buildScenarioEstimates(): {
   const minimum: ScenarioEstimate = {
     name: "Minimum",
     components: {
-      systemPersonality: charsToTokensText(
-        450 + DEFAULT_SYSTEM_PROMPT_CHARS_EST + MENTION_PING_RULE_CHARS_EST,
-      ), // Short description + default system prompt + mention rule
+      systemPersonality: charsToTokensText(450 + DEFAULT_SYSTEM_PROMPT_CHARS_EST + MENTION_PING_RULE_CHARS_EST), // Short description + default system prompt + mention rule
       serverInfo: charsToTokensText(220), // Basic server info
-      serverEmojis: charsToTokensText(
-        EMOJI_USAGE_RULES_CHARS_EST + 60 + 10 * 34,
-      ), // Rules + header + 10 emoji codes
+      serverEmojis: charsToTokensText(EMOJI_USAGE_RULES_CHARS_EST + 60 + 10 * 34), // Rules + header + 10 emoji codes
       serverStickers: 0,
       serverMemories: 0,
       userMemories: 0,
@@ -416,13 +343,9 @@ function buildScenarioEstimates(): {
     name: "Average",
     components: {
       // Persona attributes (commonly 6 items) + fixed system prompt blocks.
-      systemPersonality: charsToTokensText(
-        6 * 700 + DEFAULT_SYSTEM_PROMPT_CHARS_EST + MENTION_PING_RULE_CHARS_EST,
-      ),
+      systemPersonality: charsToTokensText(6 * 700 + DEFAULT_SYSTEM_PROMPT_CHARS_EST + MENTION_PING_RULE_CHARS_EST),
       serverInfo: charsToTokensText(260),
-      serverEmojis: charsToTokensText(
-        EMOJI_USAGE_RULES_CHARS_EST + 60 + 10 * 34,
-      ),
+      serverEmojis: charsToTokensText(EMOJI_USAGE_RULES_CHARS_EST + 60 + 10 * 34),
       // Approximate: small sticker list exists, but not huge.
       serverStickers: charsToTokensText(STICKER_USAGE_RULES_CHARS_EST + 8 * 70),
       serverMemories: charsToTokensText(10 * avgMemoryChars + 80), // + heading/formatting
@@ -453,28 +376,17 @@ function buildScenarioEstimates(): {
           MENTION_PING_RULE_CHARS_EST,
       ),
       serverInfo: charsToTokensText(450), // Detailed description
-      serverEmojis: charsToTokensText(
-        EMOJI_USAGE_RULES_CHARS_EST + 60 + 10 * 34,
-      ),
-      serverStickers: charsToTokensText(
-        STICKER_USAGE_RULES_CHARS_EST + 25 * 90,
-      ),
-      serverMemories: charsToTokensText(
-        limits.maxServerMemories * limits.maxMemoryLength,
-      ),
-      userMemories: charsToTokensText(
-        5 * limits.maxPersonalMemories * limits.maxMemoryLength,
-      ),
+      serverEmojis: charsToTokensText(EMOJI_USAGE_RULES_CHARS_EST + 60 + 10 * 34),
+      serverStickers: charsToTokensText(STICKER_USAGE_RULES_CHARS_EST + 25 * 90),
+      serverMemories: charsToTokensText(limits.maxServerMemories * limits.maxMemoryLength),
+      userMemories: charsToTokensText(5 * limits.maxPersonalMemories * limits.maxMemoryLength),
       userStatus: charsToTokensText(5 * 300), // activities can bloat presence strings
       reminders: charsToTokensText(5 * (100 + 3 * 160)), // 3 reminders per user
       currentContext: charsToTokensText(240),
       // Tool schemas tend to be constant; add a little headroom for MCP / extra schemas.
       toolSchemas: Math.round(baseToolSchemaTokens * 1.25),
       // Max sample dialogues (pairs), using the separate MAX_SAMPLE_DIALOGUE_LENGTH
-      sampleDialogues: estimateChatHistoryTokens(
-        limits.maxSampleDialogues * 2,
-        limits.maxSampleDialogueLength,
-      ),
+      sampleDialogues: estimateChatHistoryTokens(limits.maxSampleDialogues * 2, limits.maxSampleDialogueLength),
       conversationHistory: estimateChatHistoryTokens(80, 350),
     },
     outputTokens: EST_OUTPUT_LONG, // Detailed response (multi-paragraph explanation)
@@ -526,9 +438,7 @@ function normalizeTailDirective(text: string): string {
   return trimmed;
 }
 
-function buildCombinedTailDirectiveMessage(
-  directives: string[],
-): StructuredContextItem | null {
+function buildCombinedTailDirectiveMessage(directives: string[]): StructuredContextItem | null {
   const normalized = directives
     .map((directive) => normalizeTailDirective(directive))
     .filter((directive) => directive.length > 0);
@@ -552,9 +462,7 @@ function buildEmojiCdnUrl(emojiId: string): string {
   return `https://cdn.discordapp.com/emojis/${emojiId}.png`;
 }
 
-function extractEmojiImageAttachments(
-  content: string,
-): HelpCostSimplifiedMessage["imageAttachments"] {
+function extractEmojiImageAttachments(content: string): HelpCostSimplifiedMessage["imageAttachments"] {
   const attachments: HelpCostSimplifiedMessage["imageAttachments"] = [];
   if (!content) return attachments;
 
@@ -600,14 +508,10 @@ function isImageMimeType(mimeType: string | null | undefined): boolean {
 
 function isVideoMimeType(mimeType: string | null | undefined): boolean {
   if (!mimeType) return false;
-  return SUPPORTED_VIDEO_MIME_TYPES.some((supported) =>
-    mimeType.startsWith(supported),
-  );
+  return SUPPORTED_VIDEO_MIME_TYPES.some((supported) => mimeType.startsWith(supported));
 }
 
-function parseOpenRouterPromptTokens(
-  usage: OpenRouterProbeUsage | undefined,
-): number | undefined {
+function parseOpenRouterPromptTokens(usage: OpenRouterProbeUsage | undefined): number | undefined {
   const value = usage?.promptTokens ?? usage?.prompt_tokens;
   if (typeof value !== "number" || Number.isNaN(value) || value < 0) {
     return undefined;
@@ -615,9 +519,7 @@ function parseOpenRouterPromptTokens(
   return Math.round(value);
 }
 
-function parseDeepseekPromptTokens(
-  usage: DeepseekProbeUsage | undefined,
-): number | undefined {
+function parseDeepseekPromptTokens(usage: DeepseekProbeUsage | undefined): number | undefined {
   const value = usage?.promptTokens ?? usage?.prompt_tokens;
   if (typeof value !== "number" || Number.isNaN(value) || value < 0) {
     return undefined;
@@ -625,9 +527,7 @@ function parseDeepseekPromptTokens(
   return Math.round(value);
 }
 
-function parseOpenRouterNativePromptTokens(
-  payload: unknown,
-): number | undefined {
+function parseOpenRouterNativePromptTokens(payload: unknown): number | undefined {
   if (!payload || typeof payload !== "object") return undefined;
 
   const record = payload as Record<string, unknown>;
@@ -667,10 +567,7 @@ function formatPricePerMillion(value: number): string {
 
 function resolveProvider(providerName: string): LiveProvider | null {
   const normalizedProvider = normalizeProviderName(providerName);
-  const implementation = resolveProviderFeatureImplementation(
-    normalizedProvider,
-    "liveTokenCounting",
-  );
+  const implementation = resolveProviderFeatureImplementation(normalizedProvider, "liveTokenCounting");
   if (normalizedProvider === "google" && implementation === "google") {
     return "google";
   }
@@ -680,10 +577,7 @@ function resolveProvider(providerName: string): LiveProvider | null {
   if (normalizedProvider === "deepseek" && implementation === "deepseek") {
     return "deepseek";
   }
-  if (
-    (normalizedProvider === "zai" || normalizedProvider === "zaicoding") &&
-    implementation === "zai"
-  ) {
+  if ((normalizedProvider === "zai" || normalizedProvider === "zaicoding") && implementation === "zai") {
     return normalizedProvider;
   }
   return null;
@@ -707,12 +601,7 @@ function getTriggererName(interaction: ChatInputCommandInteraction): string {
   ) {
     return interaction.member.nick;
   }
-  return (
-    interaction.user.displayName ||
-    interaction.user.globalName ||
-    interaction.user.username ||
-    "User"
-  );
+  return interaction.user.displayName || interaction.user.globalName || interaction.user.username || "User";
 }
 
 async function buildRuntimeParityContext(
@@ -728,8 +617,7 @@ async function buildRuntimeParityContext(
 
   const serverDiscId = interaction.guild?.id ?? interaction.user.id;
   const personas = await getCachedAllPersonas(serverDiscId);
-  const mainPersona =
-    personas.find((persona) => !persona.is_alter) ?? tomoriState;
+  const mainPersona = personas.find((persona) => !persona.is_alter) ?? tomoriState;
   const personaByNickname = new Map<string, TomoriState>();
   for (const persona of personas) {
     if (!persona.tomori_nickname) continue;
@@ -739,9 +627,7 @@ async function buildRuntimeParityContext(
     }
   }
 
-  const messageFetchLimit = normalizeMessageFetchLimit(
-    tomoriState.config.message_fetch_limit,
-  );
+  const messageFetchLimit = normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit);
   const fetchedMessages = await textChannel.messages.fetch({
     limit: messageFetchLimit,
   });
@@ -765,17 +651,12 @@ async function buildRuntimeParityContext(
     let personaName: string | null = null;
 
     if (message.author.id === client.user?.id) {
-      authorName =
-        mainPersona.tomori_nickname ??
-        tomoriState.tomori_nickname ??
-        message.author.username;
+      authorName = mainPersona.tomori_nickname ?? tomoriState.tomori_nickname ?? message.author.username;
       authorType = "persona";
       personaName = authorName;
     } else if (message.webhookId) {
       const webhookName = message.author.username?.trim();
-      const matchedPersona = webhookName
-        ? personaByNickname.get(webhookName.toLowerCase())
-        : undefined;
+      const matchedPersona = webhookName ? personaByNickname.get(webhookName.toLowerCase()) : undefined;
 
       if (matchedPersona) {
         authorName = matchedPersona.tomori_nickname;
@@ -855,10 +736,7 @@ async function buildRuntimeParityContext(
 
     const messageContent = message.content?.trim() ? message.content : null;
     const mediaSourceMessageIds =
-      hasLocalMedia &&
-      (imageAttachments.length > 0 || videoAttachments.length > 0)
-        ? [message.id]
-        : undefined;
+      hasLocalMedia && (imageAttachments.length > 0 || videoAttachments.length > 0) ? [message.id] : undefined;
 
     const previousMessage = simplifiedMessages[simplifiedMessages.length - 1];
     if (
@@ -869,29 +747,16 @@ async function buildRuntimeParityContext(
     ) {
       previousMessage.content += `\n${messageContent}`;
       if (imageAttachments.length > 0) {
-        previousMessage.imageAttachments = [
-          ...previousMessage.imageAttachments,
-          ...imageAttachments,
-        ];
+        previousMessage.imageAttachments = [...previousMessage.imageAttachments, ...imageAttachments];
       }
       if (videoAttachments.length > 0) {
-        previousMessage.videoAttachments = [
-          ...previousMessage.videoAttachments,
-          ...videoAttachments,
-        ];
+        previousMessage.videoAttachments = [...previousMessage.videoAttachments, ...videoAttachments];
       }
       if (mediaSourceMessageIds?.length) {
-        const mergedIds = [
-          ...(previousMessage.mediaSourceMessageIds ?? []),
-          ...mediaSourceMessageIds,
-        ];
+        const mergedIds = [...(previousMessage.mediaSourceMessageIds ?? []), ...mediaSourceMessageIds];
         previousMessage.mediaSourceMessageIds = [...new Set(mergedIds)];
       }
-    } else if (
-      messageContent ||
-      imageAttachments.length > 0 ||
-      videoAttachments.length > 0
-    ) {
+    } else if (messageContent || imageAttachments.length > 0 || videoAttachments.length > 0) {
       simplifiedMessages.push({
         id: message.id,
         authorId: effectiveAuthorId,
@@ -918,14 +783,9 @@ async function buildRuntimeParityContext(
     : "name" in textChannel && typeof textChannel.name === "string"
       ? textChannel.name
       : "Unknown Channel";
-  const channelDesc =
-    !isDMChannel && "topic" in textChannel ? textChannel.topic : null;
-  const serverName = isDMChannel
-    ? "Direct Message"
-    : interaction.guild?.name || "Unknown Server";
-  const serverDescription = isDMChannel
-    ? null
-    : interaction.guild?.description || null;
+  const channelDesc = !isDMChannel && "topic" in textChannel ? textChannel.topic : null;
+  const serverName = isDMChannel ? "Direct Message" : interaction.guild?.name || "Unknown Server";
+  const serverDescription = isDMChannel ? null : interaction.guild?.description || null;
 
   const contextBuild = await buildContext({
     guildId: serverDiscId,
@@ -934,17 +794,13 @@ async function buildRuntimeParityContext(
     simplifiedMessageHistory: simplifiedMessages,
     userList: Array.from(userListSet),
     matrixUsers: new Map<string, string>(),
-    syntheticUsers: new Map<
-      string,
-      { displayName: string; type: "persona" | "webhook" }
-    >(),
+    syntheticUsers: new Map<string, { displayName: string; type: "persona" | "webhook" }>(),
     channelDesc,
     channelName,
     channelId: interaction.channelId,
     client,
     triggererName: getTriggererName(interaction),
-    tomoriNickname:
-      tomoriState.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",
+    tomoriNickname: tomoriState.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",
     tomoriAttributes: tomoriState.attribute_list,
     tomoriConfig: tomoriState.config,
     personaPrompt: tomoriState.persona_prompt ?? null,
@@ -960,20 +816,9 @@ async function buildRuntimeParityContext(
     isOpenRouterCapabilityCacheReady()
   ) {
     const tokenLimits = getOpenRouterTokenLimits(tomoriState.llm.llm_codename);
-    const openrouterTruncationOutputCap = parseIntegerEnv(
-      process.env.OPENROUTER_MAX_OUTPUT_TOKENS,
-      8192,
-      1,
-    );
-    if (
-      tokenLimits &&
-      tokenLimits.contextLength > 0 &&
-      tokenLimits.maxCompletionTokens
-    ) {
-      const truncationMaxCompletionTokens = Math.min(
-        tokenLimits.maxCompletionTokens,
-        openrouterTruncationOutputCap,
-      );
+    const openrouterTruncationOutputCap = parseIntegerEnv(process.env.OPENROUTER_MAX_OUTPUT_TOKENS, 8192, 1);
+    if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+      const truncationMaxCompletionTokens = Math.min(tokenLimits.maxCompletionTokens, openrouterTruncationOutputCap);
       const { truncated, totalDropped } = truncateDialogueHistory(
         contextSegments,
         tokenLimits.contextLength,
@@ -985,11 +830,7 @@ async function buildRuntimeParityContext(
     }
   } else if (provider === "google") {
     const tokenLimits = getGeminiTokenLimits(tomoriState.llm.llm_codename);
-    if (
-      tokenLimits &&
-      tokenLimits.contextLength > 0 &&
-      tokenLimits.maxCompletionTokens
-    ) {
+    if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
       const { truncated, totalDropped } = truncateDialogueHistory(
         contextSegments,
         tokenLimits.contextLength,
@@ -1027,15 +868,9 @@ async function measureGoogleInputTokens(
   contextItems: StructuredContextItem[],
 ): Promise<LiveCostMeasurement> {
   const provider = new GoogleProvider();
-  const providerConfig = (await provider.createConfig(
-    tomoriState,
-    apiKey,
-  )) as GoogleProviderConfig;
+  const providerConfig = (await provider.createConfig(tomoriState, apiKey)) as GoogleProviderConfig;
   const adapter = new GoogleStreamAdapter();
-  const payload = await adapter.buildTokenCountPayload(
-    contextItems,
-    providerConfig.model,
-  );
+  const payload = await adapter.buildTokenCountPayload(contextItems, providerConfig.model);
   const tokenCountContents = [...payload.contents];
   const inBandPrelude: typeof tokenCountContents = [];
 
@@ -1060,9 +895,7 @@ async function measureGoogleInputTokens(
       role: "user",
       parts: [
         {
-          text: buildGoogleInBandToolSchemasText(
-            providerConfig.tools as unknown[],
-          ),
+          text: buildGoogleInBandToolSchemasText(providerConfig.tools as unknown[]),
         },
       ],
     });
@@ -1079,11 +912,7 @@ async function measureGoogleInputTokens(
   const response = await genAI.models.countTokens(countRequest);
 
   const measuredTokens = response.totalTokens;
-  if (
-    typeof measuredTokens !== "number" ||
-    Number.isNaN(measuredTokens) ||
-    measuredTokens < 0
-  ) {
+  if (typeof measuredTokens !== "number" || Number.isNaN(measuredTokens) || measuredTokens < 0) {
     throw new Error("Google countTokens did not return totalTokens");
   }
 
@@ -1106,30 +935,22 @@ async function fetchOpenRouterNativePromptTokens(
   }
 
   try {
-    const response = await fetch(
-      `https://openrouter.ai/api/v1/generation/${encodeURIComponent(generationId)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "application/json",
-        },
+    const response = await fetch(`https://openrouter.ai/api/v1/generation/${encodeURIComponent(generationId)}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
       },
-    );
+    });
 
     if (!response.ok) {
-      log.warn(
-        `/tool estimate cost OpenRouter generation lookup failed (${response.status}) for ${generationId}`,
-      );
+      log.warn(`/tool estimate cost OpenRouter generation lookup failed (${response.status}) for ${generationId}`);
       return undefined;
     }
 
     const data = (await response.json()) as unknown;
     return parseOpenRouterNativePromptTokens(data);
   } catch (error) {
-    log.warn(
-      `/tool estimate cost OpenRouter generation lookup error for ${generationId}`,
-      error as Error,
-    );
+    log.warn(`/tool estimate cost OpenRouter generation lookup error for ${generationId}`, error as Error);
     return undefined;
   }
 }
@@ -1160,10 +981,7 @@ async function measureOpenRouterInputTokens(
   contextItems: StructuredContextItem[],
 ): Promise<LiveCostMeasurement> {
   const provider = new OpenrouterProvider();
-  const providerConfig = (await provider.createConfig(
-    tomoriState,
-    apiKey,
-  )) as OpenrouterProviderConfig;
+  const providerConfig = (await provider.createConfig(tomoriState, apiKey)) as OpenrouterProviderConfig;
   const adapter = new OpenrouterStreamAdapter();
   const messages = await adapter.buildProbeMessages(
     contextItems,
@@ -1172,32 +990,24 @@ async function measureOpenRouterInputTokens(
   );
   const requestBody = buildOpenRouterProbeRequest(providerConfig, messages);
 
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(requestBody),
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
-  );
+    body: JSON.stringify(requestBody),
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `OpenRouter probe failed (${response.status}): ${errorText.slice(0, 400)}`,
-    );
+    throw new Error(`OpenRouter probe failed (${response.status}): ${errorText.slice(0, 400)}`);
   }
 
   const data = (await response.json()) as OpenRouterProbeResponse;
   const usagePromptTokens = parseOpenRouterPromptTokens(data.usage);
-  const nativePromptTokens = await fetchOpenRouterNativePromptTokens(
-    data.id,
-    apiKey,
-  );
+  const nativePromptTokens = await fetchOpenRouterNativePromptTokens(data.id, apiKey);
   const measuredPromptTokens = nativePromptTokens ?? usagePromptTokens;
 
   if (measuredPromptTokens === undefined) {
@@ -1210,9 +1020,7 @@ async function measureOpenRouterInputTokens(
 
   const pricing = getOpenRouterPricing(providerConfig.model);
   if (!pricing) {
-    throw new Error(
-      `OpenRouter pricing cache miss for model ${providerConfig.model}`,
-    );
+    throw new Error(`OpenRouter pricing cache miss for model ${providerConfig.model}`);
   }
 
   return {
@@ -1231,10 +1039,7 @@ async function measureDeepseekInputTokens(
   contextItems: StructuredContextItem[],
 ): Promise<LiveCostMeasurement> {
   const provider = new DeepseekProvider();
-  const providerConfig = (await provider.createConfig(
-    tomoriState,
-    apiKey,
-  )) as DeepseekProviderConfig;
+  const providerConfig = (await provider.createConfig(tomoriState, apiKey)) as DeepseekProviderConfig;
   const messages = await buildOpenAICompatibleMessages({
     adapterName: "ToolEstimateCostDeepSeek",
     contextItems,
@@ -1269,9 +1074,7 @@ async function measureDeepseekInputTokens(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `DeepSeek probe failed (${response.status}): ${errorText.slice(0, 400)}`,
-    );
+    throw new Error(`DeepSeek probe failed (${response.status}): ${errorText.slice(0, 400)}`);
   }
 
   const data = (await response.json()) as DeepseekProbeResponse;
@@ -1308,10 +1111,7 @@ async function measureZaiInputTokens(
   contextItems: StructuredContextItem[],
 ): Promise<LiveCostMeasurement> {
   const provider = await ProviderFactory.getProviderByName(providerName);
-  const providerConfig = (await provider.createConfig(
-    tomoriState,
-    apiKey,
-  )) as ZaiFamilyProviderConfig;
+  const providerConfig = (await provider.createConfig(tomoriState, apiKey)) as ZaiFamilyProviderConfig;
   const messages = await buildOpenAICompatibleMessages({
     adapterName: "ToolEstimateCostZai",
     contextItems,
@@ -1347,9 +1147,7 @@ async function measureZaiInputTokens(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `Z.ai probe failed (${response.status}): ${errorText.slice(0, 400)}`,
-    );
+    throw new Error(`Z.ai probe failed (${response.status}): ${errorText.slice(0, 400)}`);
   }
 
   // Reuse DeepSeek probe response type — same OpenAI-compatible usage format
@@ -1365,13 +1163,9 @@ async function measureZaiInputTokens(
     model: providerConfig.model,
     inputTokens: measuredPromptTokens,
     inputPricePerMillion:
-      providerName === "zaicoding"
-        ? ZAICODING_INPUT_PRICE_PER_MILLION
-        : ZAI_GENERAL_INPUT_PRICE_PER_MILLION,
+      providerName === "zaicoding" ? ZAICODING_INPUT_PRICE_PER_MILLION : ZAI_GENERAL_INPUT_PRICE_PER_MILLION,
     outputPricePerMillion:
-      providerName === "zaicoding"
-        ? ZAICODING_OUTPUT_PRICE_PER_MILLION
-        : ZAI_GENERAL_OUTPUT_PRICE_PER_MILLION,
+      providerName === "zaicoding" ? ZAICODING_OUTPUT_PRICE_PER_MILLION : ZAI_GENERAL_OUTPUT_PRICE_PER_MILLION,
   };
 }
 
@@ -1405,14 +1199,10 @@ async function sendLiveEstimateEmbed(
   const fields = [
     {
       nameKey: "commands.tool.estimate.cost.current_input_title",
-      value: localizer(
-        locale,
-        "commands.tool.estimate.cost.current_input_value",
-        {
-          inputTokens: measurement.inputTokens.toLocaleString(),
-          inputCost: `$${inputCost.toFixed(5)}`,
-        },
-      ),
+      value: localizer(locale, "commands.tool.estimate.cost.current_input_value", {
+        inputTokens: measurement.inputTokens.toLocaleString(),
+        inputCost: `$${inputCost.toFixed(5)}`,
+      }),
       inline: false,
     },
     ...outputBands.map((band) => {
@@ -1424,18 +1214,12 @@ async function sendLiveEstimateEmbed(
       );
       return {
         nameKey: band.titleKey,
-        value: localizer(
-          locale,
-          "commands.tool.estimate.cost.current_output_band_value",
-          {
-            outputTokens: band.outputTokens.toLocaleString(),
-            totalTokens: (
-              measurement.inputTokens + band.outputTokens
-            ).toLocaleString(),
-            costPerMessage: `$${totalCost.toFixed(5)}`,
-            costPer100: `$${(totalCost * 100).toFixed(3)}`,
-          },
-        ),
+        value: localizer(locale, "commands.tool.estimate.cost.current_output_band_value", {
+          outputTokens: band.outputTokens.toLocaleString(),
+          totalTokens: (measurement.inputTokens + band.outputTokens).toLocaleString(),
+          costPerMessage: `$${totalCost.toFixed(5)}`,
+          costPer100: `$${(totalCost * 100).toFixed(3)}`,
+        }),
         inline: false,
       };
     }),
@@ -1475,87 +1259,51 @@ async function sendLegacyEstimateEmbed(
   const avgInputTokens = calculateTotalInputTokens(scenarios.average);
   const maxInputTokens = calculateTotalInputTokens(scenarios.maximum);
 
-  const minCost = calculateCost(
-    minInputTokens,
-    scenarios.minimum.outputTokens,
-    inputPrice,
-    outputPrice,
-  );
-  const avgCost = calculateCost(
-    avgInputTokens,
-    scenarios.average.outputTokens,
-    inputPrice,
-    outputPrice,
-  );
-  const maxCost = calculateCost(
-    maxInputTokens,
-    scenarios.maximum.outputTokens,
-    inputPrice,
-    outputPrice,
-  );
+  const minCost = calculateCost(minInputTokens, scenarios.minimum.outputTokens, inputPrice, outputPrice);
+  const avgCost = calculateCost(avgInputTokens, scenarios.average.outputTokens, inputPrice, outputPrice);
+  const maxCost = calculateCost(maxInputTokens, scenarios.maximum.outputTokens, inputPrice, outputPrice);
 
   const fields = [
     ...(showFallbackNotice
       ? [
           {
             nameKey: "commands.tool.estimate.cost.fallback_notice_title",
-            value: localizer(
-              locale,
-              "commands.tool.estimate.cost.fallback_notice_value",
-            ),
+            value: localizer(locale, "commands.tool.estimate.cost.fallback_notice_value"),
             inline: false,
           },
         ]
       : []),
     {
       nameKey: "commands.tool.estimate.cost.minimum_scenario_title",
-      value: localizer(
-        locale,
-        "commands.tool.estimate.cost.minimum_scenario_value",
-        {
-          inputTokens: minInputTokens.toLocaleString(),
-          outputTokens: scenarios.minimum.outputTokens.toLocaleString(),
-          totalTokens: (
-            minInputTokens + scenarios.minimum.outputTokens
-          ).toLocaleString(),
-          costPerMessage: `$${minCost.toFixed(5)}`,
-          costPer100: `$${(minCost * 100).toFixed(3)}`,
-        },
-      ),
+      value: localizer(locale, "commands.tool.estimate.cost.minimum_scenario_value", {
+        inputTokens: minInputTokens.toLocaleString(),
+        outputTokens: scenarios.minimum.outputTokens.toLocaleString(),
+        totalTokens: (minInputTokens + scenarios.minimum.outputTokens).toLocaleString(),
+        costPerMessage: `$${minCost.toFixed(5)}`,
+        costPer100: `$${(minCost * 100).toFixed(3)}`,
+      }),
       inline: false,
     },
     {
       nameKey: "commands.tool.estimate.cost.average_scenario_title",
-      value: localizer(
-        locale,
-        "commands.tool.estimate.cost.average_scenario_value",
-        {
-          inputTokens: avgInputTokens.toLocaleString(),
-          outputTokens: scenarios.average.outputTokens.toLocaleString(),
-          totalTokens: (
-            avgInputTokens + scenarios.average.outputTokens
-          ).toLocaleString(),
-          costPerMessage: `$${avgCost.toFixed(5)}`,
-          costPer100: `$${(avgCost * 100).toFixed(3)}`,
-        },
-      ),
+      value: localizer(locale, "commands.tool.estimate.cost.average_scenario_value", {
+        inputTokens: avgInputTokens.toLocaleString(),
+        outputTokens: scenarios.average.outputTokens.toLocaleString(),
+        totalTokens: (avgInputTokens + scenarios.average.outputTokens).toLocaleString(),
+        costPerMessage: `$${avgCost.toFixed(5)}`,
+        costPer100: `$${(avgCost * 100).toFixed(3)}`,
+      }),
       inline: false,
     },
     {
       nameKey: "commands.tool.estimate.cost.maximum_scenario_title",
-      value: localizer(
-        locale,
-        "commands.tool.estimate.cost.maximum_scenario_value",
-        {
-          inputTokens: maxInputTokens.toLocaleString(),
-          outputTokens: scenarios.maximum.outputTokens.toLocaleString(),
-          totalTokens: (
-            maxInputTokens + scenarios.maximum.outputTokens
-          ).toLocaleString(),
-          costPerMessage: `$${maxCost.toFixed(5)}`,
-          costPer100: `$${(maxCost * 100).toFixed(3)}`,
-        },
-      ),
+      value: localizer(locale, "commands.tool.estimate.cost.maximum_scenario_value", {
+        inputTokens: maxInputTokens.toLocaleString(),
+        outputTokens: scenarios.maximum.outputTokens.toLocaleString(),
+        totalTokens: (maxInputTokens + scenarios.maximum.outputTokens).toLocaleString(),
+        costPerMessage: `$${maxCost.toFixed(5)}`,
+        costPer100: `$${(maxCost * 100).toFixed(3)}`,
+      }),
       inline: false,
     },
     {
@@ -1584,17 +1332,13 @@ async function sendLegacyEstimateEmbed(
   );
 }
 
-async function sendNoCostProviderEmbed(
-  interaction: ChatInputCommandInteraction,
-  locale: string,
-): Promise<void> {
+async function sendNoCostProviderEmbed(interaction: ChatInputCommandInteraction, locale: string): Promise<void> {
   await replyInfoEmbed(
     interaction,
     locale,
     {
       titleKey: "commands.tool.estimate.cost.title",
-      descriptionKey:
-        "commands.tool.estimate.cost.no_cost_provider_description",
+      descriptionKey: "commands.tool.estimate.cost.no_cost_provider_description",
       color: ColorCode.INFO,
     },
     MessageFlags.Ephemeral,
@@ -1625,14 +1369,8 @@ async function sendLiveEstimateUnavailableEmbed(
  * Configure the /tool estimate cost subcommand
  * Shows users estimated API costs for paid providers
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("cost")
-    .setDescription(
-      localizer("en-US", "commands.tool.estimate.cost.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("cost").setDescription(localizer("en-US", "commands.tool.estimate.cost.description"));
 
 /**
  * Execute the /tool estimate cost command
@@ -1674,92 +1412,51 @@ export async function execute(
 
     const provider = resolveProvider(tomoriState.llm.llm_provider);
     if (!provider) {
-      await sendLiveEstimateUnavailableEmbed(
-        interaction,
-        locale,
-        tomoriState.llm.llm_provider,
-      );
+      await sendLiveEstimateUnavailableEmbed(interaction, locale, tomoriState.llm.llm_provider);
       return;
     }
 
     let decryptedApiKey = "";
     try {
       const keyVersion = tomoriState.config.key_version || 1;
-      decryptedApiKey = await decryptApiKey(
-        tomoriState.config.api_key,
-        keyVersion,
-      );
+      decryptedApiKey = await decryptApiKey(tomoriState.config.api_key, keyVersion);
     } catch (decryptError) {
       await log.error(
         "/tool estimate cost failed to decrypt API key for live counting",
         decryptError as Error,
         errorContext,
       );
-      await sendLiveEstimateUnavailableEmbed(
-        interaction,
-        locale,
-        tomoriState.llm.llm_provider,
-      );
+      await sendLiveEstimateUnavailableEmbed(interaction, locale, tomoriState.llm.llm_provider);
       return;
     }
 
     if (!decryptedApiKey.trim()) {
-      await sendLiveEstimateUnavailableEmbed(
-        interaction,
-        locale,
-        tomoriState.llm.llm_provider,
-      );
+      await sendLiveEstimateUnavailableEmbed(interaction, locale, tomoriState.llm.llm_provider);
       return;
     }
 
     let contextItems: StructuredContextItem[];
     try {
-      contextItems = await buildRuntimeParityContext(
-        client,
-        interaction,
-        tomoriState,
-        provider,
-      );
+      contextItems = await buildRuntimeParityContext(client, interaction, tomoriState, provider);
     } catch (contextError) {
       await log.error(
         "/tool estimate cost failed to build runtime-parity context",
         contextError as Error,
         errorContext,
       );
-      await sendLiveEstimateUnavailableEmbed(
-        interaction,
-        locale,
-        tomoriState.llm.llm_provider,
-      );
+      await sendLiveEstimateUnavailableEmbed(interaction, locale, tomoriState.llm.llm_provider);
       return;
     }
 
     try {
       const measurement =
         provider === "google"
-          ? await measureGoogleInputTokens(
-              tomoriState,
-              decryptedApiKey,
-              contextItems,
-            )
+          ? await measureGoogleInputTokens(tomoriState, decryptedApiKey, contextItems)
           : provider === "openrouter"
-            ? await measureOpenRouterInputTokens(
-                tomoriState,
-                decryptedApiKey,
-                contextItems,
-              )
+            ? await measureOpenRouterInputTokens(tomoriState, decryptedApiKey, contextItems)
             : provider === "deepseek"
-              ? await measureDeepseekInputTokens(
-                  tomoriState,
-                  decryptedApiKey,
-                  contextItems,
-                )
-              : await measureZaiInputTokens(
-                  provider,
-                  tomoriState,
-                  decryptedApiKey,
-                  contextItems,
-                );
+              ? await measureDeepseekInputTokens(tomoriState, decryptedApiKey, contextItems)
+              : await measureZaiInputTokens(provider, tomoriState, decryptedApiKey, contextItems);
       await sendLiveEstimateEmbed(interaction, locale, measurement);
     } catch (countError) {
       await log.error(
@@ -1774,23 +1471,12 @@ export async function execute(
           },
         },
       );
-      await sendLiveEstimateUnavailableEmbed(
-        interaction,
-        locale,
-        tomoriState.llm.llm_provider,
-      );
+      await sendLiveEstimateUnavailableEmbed(interaction, locale, tomoriState.llm.llm_provider);
     }
   } catch (error) {
-    await log.error(
-      "Error executing /tool estimate cost command",
-      error as Error,
-      errorContext,
-    );
+    await log.error("Error executing /tool estimate cost command", error as Error, errorContext);
 
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -1804,11 +1490,7 @@ export async function execute(
         });
       }
     } catch (replyError) {
-      log.error(
-        "Failed to send error reply for /tool estimate cost",
-        replyError,
-        errorContext,
-      );
+      log.error("Failed to send error reply for /tool estimate cost", replyError, errorContext);
     }
   }
 }

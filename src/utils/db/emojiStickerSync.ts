@@ -34,11 +34,7 @@ interface SyncConfig<TDiscord, TDatabase> {
    * @param serverId - Internal database server ID
    * @returns Database row object ready for insert
    */
-  mapToDatabase: (
-    item: TDiscord,
-    existing: ExistingMetadata | undefined,
-    serverId: number,
-  ) => TDatabase;
+  mapToDatabase: (item: TDiscord, existing: ExistingMetadata | undefined, serverId: number) => TDatabase;
 
   /**
    * Extract Discord snowflake ID from item
@@ -58,10 +54,7 @@ interface SyncConfig<TDiscord, TDatabase> {
  * @param config - Configuration object for table structure and mapping
  * @returns Number of items synced successfully
  */
-async function syncItemsToDatabase<
-  TDiscord,
-  TDatabase extends Record<string, unknown>,
->(
+async function syncItemsToDatabase<TDiscord, TDatabase extends Record<string, unknown>>(
   tx: TransactionSql,
   serverId: number,
   currentItems: TDiscord[],
@@ -97,9 +90,7 @@ async function syncItemsToDatabase<
     const [beforeCount] = await tx.unsafe(`
 			SELECT COUNT(*) as count FROM ${config.tableName} WHERE server_id = ${serverId}
 		`);
-    log.info(
-      `[Sync] BEFORE bulk insert: ${beforeCount.count} ${config.tableName} exist`,
-    );
+    log.info(`[Sync] BEFORE bulk insert: ${beforeCount.count} ${config.tableName} exist`);
 
     // 4b. Perform bulk upsert using individual INSERT statements
     // Note: Tried UNNEST and sql(array) but both have issues with transaction context
@@ -146,9 +137,7 @@ async function syncItemsToDatabase<
     const [afterCount] = await tx.unsafe(`
 			SELECT COUNT(*) as count FROM ${config.tableName} WHERE server_id = ${serverId}
 		`);
-    log.success(
-      `[Sync] AFTER bulk insert: ${afterCount.count} ${config.tableName} in database`,
-    );
+    log.success(`[Sync] AFTER bulk insert: ${afterCount.count} ${config.tableName} in database`);
   }
 
   // 5. Delete items that no longer exist in Discord (stale cleanup)
@@ -165,14 +154,11 @@ async function syncItemsToDatabase<
     // Find items to delete (exist in DB but not in Discord)
     const currentIdSet = new Set(currentDiscordIds);
     const toDelete = dbItemsForCleanup.filter(
-      (item: { [key: string]: string }) =>
-        !currentIdSet.has(item[config.idColumnName]),
+      (item: { [key: string]: string }) => !currentIdSet.has(item[config.idColumnName]),
     );
 
     if (toDelete.length > 0) {
-      log.info(
-        `[Sync] Found ${toDelete.length} stale ${config.tableName} to delete`,
-      );
+      log.info(`[Sync] Found ${toDelete.length} stale ${config.tableName} to delete`);
 
       // Delete them one by one (avoiding array syntax issues)
       // Use separate queries for emojis vs stickers to avoid SQL injection
@@ -214,9 +200,7 @@ async function syncItemsToDatabase<
     }
 
     if (deletedCount > 0) {
-      log.info(
-        `[Sync] Removed all ${deletedCount} ${config.tableName} (none in Discord)`,
-      );
+      log.info(`[Sync] Removed all ${deletedCount} ${config.tableName} (none in Discord)`);
     }
   }
 
@@ -227,9 +211,7 @@ async function syncItemsToDatabase<
 		WHERE server_id = ${serverId}
 	`);
 
-  log.info(
-    `[Sync] PRE-COMMIT verification: ${verifyCount.count} ${config.tableName} in transaction`,
-  );
+  log.info(`[Sync] PRE-COMMIT verification: ${verifyCount.count} ${config.tableName} in transaction`);
 
   // 7. Verify count matches expected (throw error to trigger rollback if mismatch)
   // Convert to number to ensure type safety in comparison
@@ -237,9 +219,7 @@ async function syncItemsToDatabase<
   const expectedCount = currentItems.length;
 
   if (actualCount !== expectedCount) {
-    log.error(
-      `[Sync] CRITICAL: Pre-commit count mismatch! Expected ${expectedCount}, got ${actualCount}`,
-    );
+    log.error(`[Sync] CRITICAL: Pre-commit count mismatch! Expected ${expectedCount}, got ${actualCount}`);
     throw new Error(
       `Sync transaction integrity violation: expected ${expectedCount} items, but transaction has ${actualCount}`,
     );
@@ -281,9 +261,7 @@ export async function syncEmojisToDatabase(
 
     mapToDatabase: (emoji, existing, sid) => {
       const emotionKey =
-        existing?.emotion_key && existing.emotion_key.trim().length > 0
-          ? existing.emotion_key
-          : "unset";
+        existing?.emotion_key && existing.emotion_key.trim().length > 0 ? existing.emotion_key : "unset";
 
       return {
         server_id: sid,
@@ -334,16 +312,13 @@ export async function syncStickersToDatabase(
 
     mapToDatabase: (sticker, existing, sid) => {
       const emotionKey =
-        existing?.emotion_key && existing.emotion_key.trim().length > 0
-          ? existing.emotion_key
-          : "unset";
+        existing?.emotion_key && existing.emotion_key.trim().length > 0 ? existing.emotion_key : "unset";
 
       return {
         server_id: sid,
         sticker_disc_id: sticker.id,
         sticker_name: sticker.name,
-        sticker_desc:
-          (existing?.sticker_desc as string) ?? sticker.description ?? "",
+        sticker_desc: (existing?.sticker_desc as string) ?? sticker.description ?? "",
         emotion_key: emotionKey,
         sticker_format: sticker.format,
       };

@@ -1,8 +1,5 @@
 import type { z } from "zod";
-import type {
-  ProviderStructuredJsonRequest,
-  StructuredOutputResult,
-} from "@/types/provider/featureInterfaces";
+import type { ProviderStructuredJsonRequest, StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import {
   toZaiApiModelName,
@@ -37,9 +34,7 @@ function buildExampleJsonFromSchema(schema: unknown): unknown {
   const schemaType = record.type;
   if (schemaType === "object") {
     const properties =
-      record.properties && typeof record.properties === "object"
-        ? (record.properties as Record<string, unknown>)
-        : {};
+      record.properties && typeof record.properties === "object" ? (record.properties as Record<string, unknown>) : {};
     const example: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(properties)) {
       example[key] = buildExampleJsonFromSchema(value);
@@ -52,10 +47,7 @@ function buildExampleJsonFromSchema(schema: unknown): unknown {
   }
 
   if (schemaType === "integer" || schemaType === "number") {
-    const minimum =
-      typeof record.minimum === "number" && Number.isFinite(record.minimum)
-        ? record.minimum
-        : 0;
+    const minimum = typeof record.minimum === "number" && Number.isFinite(record.minimum) ? record.minimum : 0;
     return minimum;
   }
 
@@ -128,11 +120,7 @@ export async function callZaiStructuredJSON<T>(
       messages: [
         {
           role: "system",
-          content: buildZaiStructuredSystemPrompt(
-            request.systemPrompt,
-            responseSchema,
-            request.schemaName,
-          ),
+          content: buildZaiStructuredSystemPrompt(request.systemPrompt, responseSchema, request.schemaName),
         },
         {
           role: "user",
@@ -163,17 +151,14 @@ export async function callZaiStructuredJSON<T>(
     }
 
     // 3. Send the request
-    const response = await fetch(
-      request.endpointUrl || ZAI_GENERAL_CHAT_COMPLETIONS_URL,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(request.endpointUrl || ZAI_GENERAL_CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -220,8 +205,7 @@ export async function callZaiStructuredJSON<T>(
       });
       return {
         success: false,
-        error:
-          "Z.ai returned an empty structured output response. Retry the request.",
+        error: "Z.ai returned an empty structured output response. Retry the request.",
       };
     }
 
@@ -247,10 +231,7 @@ export async function callZaiStructuredJSON<T>(
     // 6. Validate with Zod
     const validationResult = zodSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        "Z.ai structured JSON validation failed",
-        validationResult.error,
-      );
+      log.error("Z.ai structured JSON validation failed", validationResult.error);
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,

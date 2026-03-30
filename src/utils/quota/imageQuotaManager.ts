@@ -1,16 +1,8 @@
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import type { SQL } from "bun";
-import type {
-  ImageQuotaConfigRow,
-  ImageQuotaRow,
-  ServerwideQuotaRow,
-} from "@/types/db/schema";
-import {
-  imageQuotaConfigSchema,
-  imageQuotaSchema,
-  serverwideQuotaSchema,
-} from "@/types/db/schema";
+import type { ImageQuotaConfigRow, ImageQuotaRow, ServerwideQuotaRow } from "@/types/db/schema";
+import { imageQuotaConfigSchema, imageQuotaSchema, serverwideQuotaSchema } from "@/types/db/schema";
 
 /**
  * Result of quota check operations
@@ -27,9 +19,7 @@ export interface QuotaCheckResult {
  * Get or create server's quota configuration
  * Creates default config if not exists (10 daily user quota, unlimited serverwide)
  */
-export async function getQuotaConfig(
-  serverId: number,
-): Promise<ImageQuotaConfigRow> {
+export async function getQuotaConfig(serverId: number): Promise<ImageQuotaConfigRow> {
   try {
     // 1. Try to fetch existing config
     const [existing] = await sql<
@@ -124,10 +114,7 @@ export async function checkUserDailyQuota(
  * Check if server has remaining server-wide quota
  * Returns remaining quota and whether generation is allowed
  */
-export async function checkServerwideQuota(
-  serverId: number,
-  config: ImageQuotaConfigRow,
-): Promise<QuotaCheckResult> {
+export async function checkServerwideQuota(serverId: number, config: ImageQuotaConfigRow): Promise<QuotaCheckResult> {
   // 1. If serverwide quota is 0 (unlimited), allow
   if (config.serverwide_quota === 0) {
     return { allowed: true };
@@ -209,10 +196,7 @@ export async function checkServerwideQuota(
  * Check all quotas (user daily + server-wide)
  * Returns combined result indicating if generation is allowed
  */
-export async function checkImageQuota(
-  serverId: number,
-  userDiscId: string,
-): Promise<QuotaCheckResult> {
+export async function checkImageQuota(serverId: number, userDiscId: string): Promise<QuotaCheckResult> {
   try {
     // 1. Get quota configuration
     const config = await getQuotaConfig(serverId);
@@ -252,10 +236,7 @@ export async function checkImageQuota(
  * Increment both user daily and server-wide quotas after successful image generation
  * Should only be called AFTER image generation succeeds
  */
-export async function incrementImageQuota(
-  serverId: number,
-  userDiscId: string,
-): Promise<void> {
+export async function incrementImageQuota(serverId: number, userDiscId: string): Promise<void> {
   try {
     const today = new Date().toISOString().split("T")[0];
 

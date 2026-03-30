@@ -1,22 +1,14 @@
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client, Message } from "discord.js";
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from "discord.js";
-import {
-  promptWithPaginatedModal,
-  replyInfoEmbed,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { promptWithPaginatedModal, replyInfoEmbed, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import type { UserRow } from "../../types/db/schema";
 import type { ModalComponent, SelectOption } from "../../types/discord/modal";
 import tomoriChat from "../../events/messageCreate/tomoriChat";
-import {
-  loadAllPersonasForServer,
-  loadSmartestModel,
-  loadTomoriState,
-} from "../../utils/db/dbRead";
+import { loadAllPersonasForServer, loadSmartestModel, loadTomoriState } from "../../utils/db/dbRead";
 import {
   checkMessageTriggerCooldownWithWhitelist,
   setMessageTriggerCooldownWithWhitelist,
@@ -29,12 +21,8 @@ import { getCooldownTypeFooterKey } from "../../utils/db/messageCooldown";
  * @param subcommand - The slash command subcommand builder
  * @returns The configured subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("respond")
-    .setDescription(localizer("en-US", "commands.bot.respond.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("respond").setDescription(localizer("en-US", "commands.bot.respond.description"));
 
 /**
  * Execute the respond command - manually trigger Tomori to respond to the latest message
@@ -72,9 +60,7 @@ export async function execute(
 
   // Get the guild channel (we know it exists from check above, but need type narrowing)
   // Check both regular channels and threads
-  const guildChannel =
-    interaction.guild.channels.cache.get(interaction.channel.id) ??
-    interaction.channel;
+  const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
 
   // Verify it's a guild-based channel with permissions
   if (!("permissionsFor" in guildChannel)) {
@@ -87,10 +73,7 @@ export async function execute(
   }
 
   const permissions = guildChannel.permissionsFor(botMember);
-  if (
-    !permissions?.has(PermissionFlagsBits.ViewChannel) ||
-    !permissions?.has(PermissionFlagsBits.ReadMessageHistory)
-  ) {
+  if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.ReadMessageHistory)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.respond.missing_permissions_title",
       descriptionKey: "commands.bot.respond.missing_permissions_description",
@@ -159,9 +142,7 @@ export async function execute(
   const mainPersona = allPersonas.find((p) => !p.is_alter);
 
   let selectedPersona = mainPersona;
-  let replyInteraction:
-    | ChatInputCommandInteraction
-    | import("discord.js").ModalSubmitInteraction = interaction;
+  let replyInteraction: ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction = interaction;
   let manualPrompt: string | undefined;
 
   // Build modal components (persona select if alters exist, plus optional prompt)
@@ -172,18 +153,12 @@ export async function execute(
       {
         label: safeSelectOptionText(mainPersona.tomori_nickname),
         value: "0", // main is index 0
-        description: localizer(
-          locale,
-          "commands.bot.respond.main_persona_description",
-        ),
+        description: localizer(locale, "commands.bot.respond.main_persona_description"),
       },
       ...alterPersonas.map((persona, index) => ({
         label: safeSelectOptionText(persona.tomori_nickname),
         value: (index + 1).toString(), // alters start at index 1
-        description: localizer(
-          locale,
-          "commands.bot.respond.alter_persona_description",
-        ),
+        description: localizer(locale, "commands.bot.respond.alter_persona_description"),
       })),
     ];
     modalComponents.push({
@@ -232,9 +207,7 @@ export async function execute(
   });
 
   if (modalResult.outcome !== "submit") {
-    log.info(
-      `Respond modal ${modalResult.outcome} for user ${interaction.user.id}`,
-    );
+    log.info(`Respond modal ${modalResult.outcome} for user ${interaction.user.id}`);
     return;
   }
 
@@ -246,18 +219,12 @@ export async function execute(
   // and async work (e.g. loadSmartestModel) must not run before acknowledgment
   const hideEmbed = tomoriState.config.hide_respond_embed;
   await replyInteraction.deferReply({
-    flags: hideEmbed
-      ? MessageFlags.Ephemeral | MessageFlags.SuppressNotifications
-      : MessageFlags.SuppressNotifications,
+    flags: hideEmbed ? MessageFlags.Ephemeral | MessageFlags.SuppressNotifications : MessageFlags.SuppressNotifications,
   });
 
-  const selectedIndex = Number.parseInt(
-    modalResult.values?.persona_choice ?? "0",
-    10,
-  );
+  const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
   if (alterPersonas.length > 0 && mainPersona) {
-    selectedPersona =
-      selectedIndex === 0 ? mainPersona : alterPersonas[selectedIndex - 1];
+    selectedPersona = selectedIndex === 0 ? mainPersona : alterPersonas[selectedIndex - 1];
     log.info(
       `User ${interaction.user.id} selected persona ${selectedPersona.tomori_nickname} (ID: ${selectedPersona.tomori_id}) for manual respond`,
     );
@@ -283,15 +250,8 @@ export async function execute(
       await replyInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.bot.respond.no_smart_model_title"),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.bot.respond.no_smart_model_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.bot.respond.no_smart_model_title"))
+            .setDescription(localizer(locale, "commands.bot.respond.no_smart_model_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -307,18 +267,12 @@ export async function execute(
     const latestMessage = messages.first();
 
     if (!latestMessage) {
-      log.warn(
-        `No messages found in channel ${interaction.channel.id} for manual respond command.`,
-      );
+      log.warn(`No messages found in channel ${interaction.channel.id} for manual respond command.`);
       await replyInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.bot.respond.no_messages_title"),
-            )
-            .setDescription(
-              localizer(locale, "commands.bot.respond.no_messages_description"),
-            )
+            .setTitle(localizer(locale, "commands.bot.respond.no_messages_title"))
+            .setDescription(localizer(locale, "commands.bot.respond.no_messages_description"))
             .setColor(ColorCode.WARN),
         ],
       });
@@ -328,9 +282,7 @@ export async function execute(
     // 6. Build success embed
     const successEmbed = new EmbedBuilder()
       .setTitle(localizer(locale, "commands.bot.respond.success_title"))
-      .setDescription(
-        localizer(locale, "commands.bot.respond.success_description"),
-      )
+      .setDescription(localizer(locale, "commands.bot.respond.success_description"))
       .setColor(ColorCode.SUCCESS);
 
     // Add footer notice if embed is visible
@@ -418,10 +370,7 @@ export async function execute(
         flags: MessageFlags.Ephemeral,
       });
     } catch (followUpError) {
-      log.error(
-        "Failed to send error followup for bot respond command:",
-        followUpError,
-      );
+      log.error("Failed to send error followup for bot respond command:", followUpError);
     }
   }
 }

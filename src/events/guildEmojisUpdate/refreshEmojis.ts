@@ -12,18 +12,12 @@ import { invalidateEmojiStickerCache } from "../../utils/cache/emojiStickerCache
  * @param _client - Discord client instance (unused)
  * @param args - Event arguments (expected: GuildEmoji or [GuildEmoji, GuildEmoji])
  */
-const handleGuildEmojisUpdate: EventFunction = async (
-  _client: Client,
-  ...args: EventArg[]
-): Promise<void> => {
+const handleGuildEmojisUpdate: EventFunction = async (_client: Client, ...args: EventArg[]): Promise<void> => {
   // 1. Identify the GuildEmoji and Guild from the event arguments
   // The first argument should always be a GuildEmoji object for these events
   const emoji = args[0];
   if (!(emoji instanceof GuildEmoji) || !emoji.guild) {
-    log.warn(
-      "guildEmojisUpdate event triggered without a valid GuildEmoji or Guild.",
-      { args },
-    );
+    log.warn("guildEmojisUpdate event triggered without a valid GuildEmoji or Guild.", { args });
     return; // Cannot proceed without guild info
   }
   const guild: Guild = emoji.guild;
@@ -41,9 +35,7 @@ const handleGuildEmojisUpdate: EventFunction = async (
         `;
 
     if (!serverRow || !serverRow.server_id) {
-      log.warn(
-        `Received emoji update for guild ${guild.id} but server is not registered in DB. Skipping refresh.`,
-      );
+      log.warn(`Received emoji update for guild ${guild.id} but server is not registered in DB. Skipping refresh.`);
       return; // Server not setup, nothing to refresh
     }
     // biome-ignore lint/style/noNonNullAssertion: Row existence guarantees server_id is present (Rule 8)
@@ -53,9 +45,7 @@ const handleGuildEmojisUpdate: EventFunction = async (
     // CRITICAL: Must fetch() to ensure cache is complete - cache may be incomplete on startup
     await guild.emojis.fetch();
     const currentEmojis = Array.from(guild.emojis.cache.values());
-    log.info(
-      `Fetched and cached ${currentEmojis.length} emojis for guild ${guild.id}. Refreshing DB...`,
-    );
+    log.info(`Fetched and cached ${currentEmojis.length} emojis for guild ${guild.id}. Refreshing DB...`);
 
     // 4. Sync emojis to database using shared helper
     await sql.transaction(async (tx) => {
@@ -67,9 +57,7 @@ const handleGuildEmojisUpdate: EventFunction = async (
     // biome-ignore lint/style/noNonNullAssertion: serverId is guaranteed to exist after checks above
     invalidateEmojiStickerCache(serverId!);
 
-    log.success(
-      `Successfully refreshed emojis for guild ${guild.id} (Server ID: ${serverId}).`,
-    );
+    log.success(`Successfully refreshed emojis for guild ${guild.id} (Server ID: ${serverId}).`);
   } catch (error) {
     // Rule 22: Log error with context
     const context: ErrorContext = {
@@ -77,11 +65,7 @@ const handleGuildEmojisUpdate: EventFunction = async (
       errorType: "EmojiRefreshError", // Specific error type
       metadata: { guildId: guild.id, eventArgsCount: args.length },
     };
-    await log.error(
-      `Failed to refresh emojis for guild ${guild.id}`,
-      error,
-      context,
-    );
+    await log.error(`Failed to refresh emojis for guild ${guild.id}`, error, context);
   }
 };
 

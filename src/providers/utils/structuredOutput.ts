@@ -11,21 +11,15 @@ import { getAllEmotionKeys } from "@/types/misc/emotions";
  * Zod schema for a single expression (emoji or sticker) classification result
  */
 export const ExpressionClassificationSchema = z.object({
-  name: z
-    .string()
-    .describe("The emoji or sticker name (case-insensitive match)"),
+  name: z.string().describe("The emoji or sticker name (case-insensitive match)"),
   emotion_key: z
     .enum(getAllEmotionKeys() as [string, ...string[]])
-    .describe(
-      "One of the 28 emotion categories that best matches the visual expression",
-    ),
+    .describe("One of the 28 emotion categories that best matches the visual expression"),
   description: z
     .string()
     .min(10)
     .max(200)
-    .describe(
-      "One concise sentence describing the visual appearance (10-200 characters)",
-    ),
+    .describe("One concise sentence describing the visual appearance (10-200 characters)"),
 });
 
 /**
@@ -38,9 +32,7 @@ export const ExpressionBatchResultSchema = z.object({
 /**
  * Type for a single expression classification result
  */
-export type ExpressionClassification = z.infer<
-  typeof ExpressionClassificationSchema
->;
+export type ExpressionClassification = z.infer<typeof ExpressionClassificationSchema>;
 
 /**
  * Type for the complete batch result
@@ -50,17 +42,13 @@ export type ExpressionBatchResult = z.infer<typeof ExpressionBatchResultSchema>;
 /**
  * Build JSON schema object for structured output (shared across providers)
  */
-export function buildExpressionResponseSchema(
-  expectedExpressionCount?: number,
-) {
+export function buildExpressionResponseSchema(expectedExpressionCount?: number) {
   return {
     type: "object" as const,
     properties: {
       expressions: {
         type: "array" as const,
-        ...(typeof expectedExpressionCount === "number"
-          ? { maxItems: expectedExpressionCount }
-          : {}),
+        ...(typeof expectedExpressionCount === "number" ? { maxItems: expectedExpressionCount } : {}),
         items: {
           type: "object" as const,
           properties: {
@@ -71,15 +59,13 @@ export function buildExpressionResponseSchema(
             emotion_key: {
               type: "string" as const,
               enum: getAllEmotionKeys(),
-              description:
-                "One of the 28 emotion categories that best matches the visual expression",
+              description: "One of the 28 emotion categories that best matches the visual expression",
             },
             description: {
               type: "string" as const,
               minLength: 10,
               maxLength: 200,
-              description:
-                "One concise sentence describing the visual appearance",
+              description: "One concise sentence describing the visual appearance",
             },
           },
           required: ["name", "emotion_key", "description"],

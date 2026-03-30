@@ -1,8 +1,5 @@
 import { log } from "@/utils/misc/logger";
-import {
-  sendStandardEmbed,
-  type WebhookEmbedContext,
-} from "@/utils/discord/embedHelper";
+import { sendStandardEmbed, type WebhookEmbedContext } from "@/utils/discord/embedHelper";
 import type { StandardEmbedOptions } from "@/types/discord/embed";
 
 type ToolProgressChannel = Parameters<typeof sendStandardEmbed>[0];
@@ -17,9 +14,6 @@ export async function sendToolProgressNotice(
   try {
     await sendStandardEmbed(channel, locale, options, webhookContext);
   } catch (error) {
-    log.warn(
-      `${logLabel}: Failed to send progress notification embed`,
-      error as Error,
-    );
+    log.warn(`${logLabel}: Failed to send progress notification embed`, error as Error);
   }
 }

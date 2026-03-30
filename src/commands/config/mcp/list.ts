@@ -21,12 +21,8 @@ const SERVER_TYPE_LABEL_KEYS: Record<string, string> = {
  * Configure the /config mcp list subcommand.
  * @param subcommand - The subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("list")
-    .setDescription(localizer("en-US", "commands.config.mcp.list.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("list").setDescription(localizer("en-US", "commands.config.mcp.list.description"));
 
 /**
  * Execute /config mcp list.
@@ -115,11 +111,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "config mcp list" },
     };
-    await log.error(
-      "Error executing /config mcp list",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /config mcp list", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),

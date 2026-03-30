@@ -166,9 +166,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
         formattedMessage = `${formattedMessage.substring(0, MAX_CONTENT_LENGTH)}\n\n[Content truncated due to length - this represents a portion of the full page content]`;
       }
 
-      log.info(
-        `Fetch completed successfully for ${url} - Content length: ${resultText.length} characters`,
-      );
+      log.info(`Fetch completed successfully for ${url} - Content length: ${resultText.length} characters`);
 
       return {
         success: true,
@@ -262,10 +260,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
         },
       };
     } catch (error) {
-      log.error(
-        `Error processing standard Fetch result for ${functionName}:`,
-        error as Error,
-      );
+      log.error(`Error processing standard Fetch result for ${functionName}:`, error as Error);
       return {
         success: false,
         message: `Failed to process ${functionName} result`,

@@ -13,15 +13,10 @@ export const DEFAULT_MESSAGE_FETCH_LIMIT = 80;
  * @param value - Candidate configured value
  * @returns Clamped integer fetch limit
  */
-export function normalizeMessageFetchLimit(
-  value: number | null | undefined,
-): number {
+export function normalizeMessageFetchLimit(value: number | null | undefined): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return DEFAULT_MESSAGE_FETCH_LIMIT;
   }
 
-  return Math.min(
-    MAX_MESSAGE_FETCH_LIMIT,
-    Math.max(MIN_MESSAGE_FETCH_LIMIT, Math.trunc(value)),
-  );
+  return Math.min(MAX_MESSAGE_FETCH_LIMIT, Math.max(MIN_MESSAGE_FETCH_LIMIT, Math.trunc(value)));
 }

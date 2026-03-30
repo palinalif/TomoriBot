@@ -15,24 +15,14 @@ import type {
   AnyThreadChannel,
   Webhook,
 } from "discord.js";
-import type {
-  MCPServerResponse,
-  EnhancedMCPServerConfig,
-  TypedMCPToolResult,
-  MCPExecutionContext,
-} from "./mcpTypes";
+import type { MCPServerResponse, EnhancedMCPServerConfig, TypedMCPToolResult, MCPExecutionContext } from "./mcpTypes";
 import type { FunctionResponseImageMetadata } from "../provider/interfaces";
 
 /**
  * Tool parameter schema definition
  * Provider-agnostic parameter specification
  */
-export type ToolParameterType =
-  | "string"
-  | "number"
-  | "boolean"
-  | "array"
-  | "object";
+export type ToolParameterType = "string" | "number" | "boolean" | "array" | "object";
 
 interface ToolParameterSchemaBase {
   type: ToolParameterType;
@@ -118,13 +108,7 @@ export interface StreamingContext {
  */
 export interface ToolContext {
   // Discord context
-  channel:
-    | BaseGuildTextChannel
-    | BaseGuildVoiceChannel
-    | DMChannel
-    | NewsChannel
-    | TextChannel
-    | AnyThreadChannel;
+  channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | NewsChannel | TextChannel | AnyThreadChannel;
   client: Client;
   message?: Message;
 
@@ -177,14 +161,9 @@ export type ToolModelCapabilityKey =
   | "sees_youtube"
   | "supports_structoutput";
 
-export type ToolModelCapabilityRequirements = Partial<
-  Pick<LlmRow, ToolModelCapabilityKey>
->;
+export type ToolModelCapabilityRequirements = Partial<Pick<LlmRow, ToolModelCapabilityKey>>;
 
-export type ToolAvailabilityLlmState = Pick<
-  LlmRow,
-  "llm_codename" | ToolModelCapabilityKey
->;
+export type ToolAvailabilityLlmState = Pick<LlmRow, "llm_codename" | ToolModelCapabilityKey>;
 
 /**
  * Generic tool interface
@@ -200,10 +179,7 @@ export interface Tool {
   parameters: ToolParameterSchema;
 
   // Execution method
-  execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult>;
+  execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 
   // Provider compatibility check
   isAvailableFor(provider: string): boolean;
@@ -231,10 +207,7 @@ export abstract class BaseTool implements Tool {
   }
 
   // Abstract execution method to be implemented by each tool
-  abstract execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult>;
+  abstract execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 
   /**
    * Helper method to validate required parameters
@@ -251,11 +224,7 @@ export abstract class BaseTool implements Tool {
 
     // Check required parameters
     for (const requiredParam of this.parameters.required) {
-      if (
-        !(requiredParam in args) ||
-        args[requiredParam] === undefined ||
-        args[requiredParam] === null
-      ) {
+      if (!(requiredParam in args) || args[requiredParam] === undefined || args[requiredParam] === null) {
         missingParams.push(requiredParam);
       }
     }
@@ -266,9 +235,7 @@ export abstract class BaseTool implements Tool {
 
       const paramSchema = this.parameters.properties[paramName];
       if (paramSchema) {
-        errors.push(
-          ...this.validateParameterValue(paramValue, paramSchema, paramName),
-        );
+        errors.push(...this.validateParameterValue(paramValue, paramSchema, paramName));
       }
     }
 
@@ -279,38 +246,24 @@ export abstract class BaseTool implements Tool {
     };
   }
 
-  private validateParameterValue(
-    value: unknown,
-    schema: ToolParameterPropertySchema,
-    path: string,
-  ): string[] {
+  private validateParameterValue(value: unknown, schema: ToolParameterPropertySchema, path: string): string[] {
     const errors: string[] = [];
     const actualType = Array.isArray(value) ? "array" : typeof value;
 
     if (schema.type !== actualType) {
-      errors.push(
-        `Parameter '${path}' expected type '${schema.type}' but got '${actualType}'`,
-      );
+      errors.push(`Parameter '${path}' expected type '${schema.type}' but got '${actualType}'`);
       return errors;
     }
 
     if (schema.enum && typeof value === "string") {
       if (!schema.enum.includes(value)) {
-        errors.push(
-          `Parameter '${path}' must be one of: ${schema.enum.join(", ")}`,
-        );
+        errors.push(`Parameter '${path}' must be one of: ${schema.enum.join(", ")}`);
       }
     }
 
     if (schema.type === "array") {
       for (const [index, item] of (value as unknown[]).entries()) {
-        errors.push(
-          ...this.validateParameterValue(
-            item,
-            schema.items,
-            `${path}[${index}]`,
-          ),
-        );
+        errors.push(...this.validateParameterValue(item, schema.items, `${path}[${index}]`));
       }
       return errors;
     }
@@ -330,21 +283,11 @@ export abstract class BaseTool implements Tool {
 
       for (const [key, nestedValue] of Object.entries(objectValue)) {
         const nestedSchema = schema.properties[key];
-        if (
-          !nestedSchema ||
-          nestedValue === undefined ||
-          nestedValue === null
-        ) {
+        if (!nestedSchema || nestedValue === undefined || nestedValue === null) {
           continue;
         }
 
-        errors.push(
-          ...this.validateParameterValue(
-            nestedValue,
-            nestedSchema,
-            `${path}.${key}`,
-          ),
-        );
+        errors.push(...this.validateParameterValue(nestedValue, nestedSchema, `${path}.${key}`));
       }
     }
 
@@ -608,9 +551,5 @@ export interface ToolRegistryInterface {
    * @param context - Execution context
    * @returns Tool execution result
    */
-  executeTool(
-    toolName: string,
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult>;
+  executeTool(toolName: string, args: Record<string, unknown>, context: ToolContext): Promise<ToolResult>;
 }

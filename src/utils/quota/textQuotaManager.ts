@@ -1,16 +1,8 @@
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import type { SQL } from "bun";
-import type {
-  TextQuotaConfigRow,
-  TextQuotaRow,
-  TextServerwideQuotaRow,
-} from "@/types/db/schema";
-import {
-  textQuotaConfigSchema,
-  textQuotaSchema,
-  textServerwideQuotaSchema,
-} from "@/types/db/schema";
+import type { TextQuotaConfigRow, TextQuotaRow, TextServerwideQuotaRow } from "@/types/db/schema";
+import { textQuotaConfigSchema, textQuotaSchema, textServerwideQuotaSchema } from "@/types/db/schema";
 
 /**
  * Result of text quota check operations
@@ -27,14 +19,10 @@ export interface TextQuotaCheckResult {
  * Get or create server's text quota configuration
  * Creates default config if not exists (unlimited by default)
  */
-export async function getTextQuotaConfig(
-  serverId: number,
-): Promise<TextQuotaConfigRow> {
+export async function getTextQuotaConfig(serverId: number): Promise<TextQuotaConfigRow> {
   try {
     // 1. Try to fetch existing config
-    const [existing] = await sql<
-      TextQuotaConfigRow[]
-    >`SELECT * FROM text_quota_configs WHERE server_id = ${serverId}`;
+    const [existing] = await sql<TextQuotaConfigRow[]>`SELECT * FROM text_quota_configs WHERE server_id = ${serverId}`;
 
     if (existing) {
       return textQuotaConfigSchema.parse(existing);
@@ -209,10 +197,7 @@ export async function checkServerwideTextQuota(
  * Check all text quotas (user daily + server-wide)
  * Returns combined result indicating if trigger is allowed
  */
-export async function checkTextQuota(
-  serverId: number,
-  userDiscId: string,
-): Promise<TextQuotaCheckResult> {
+export async function checkTextQuota(serverId: number, userDiscId: string): Promise<TextQuotaCheckResult> {
   try {
     // 1. Get quota configuration
     const config = await getTextQuotaConfig(serverId);
@@ -223,11 +208,7 @@ export async function checkTextQuota(
     }
 
     // 3. Check user daily quota first (most common limit)
-    const userCheck = await checkUserDailyTextQuota(
-      serverId,
-      userDiscId,
-      config,
-    );
+    const userCheck = await checkUserDailyTextQuota(serverId, userDiscId, config);
     if (!userCheck.allowed) {
       return userCheck;
     }
@@ -256,10 +237,7 @@ export async function checkTextQuota(
  * Increment both user daily and server-wide text quotas after successful generation
  * Should only be called AFTER a text response succeeds
  */
-export async function incrementTextQuota(
-  serverId: number,
-  userDiscId: string,
-): Promise<void> {
+export async function incrementTextQuota(serverId: number, userDiscId: string): Promise<void> {
   try {
     const today = new Date().toISOString().split("T")[0];
 
@@ -315,9 +293,7 @@ export async function cleanupOldTextQuotas(): Promise<number> {
  * Manually reset server-wide text quota (admin override)
  * Creates new quota period starting now
  */
-export async function resetTextServerwideQuota(
-  serverId: number,
-): Promise<void> {
+export async function resetTextServerwideQuota(serverId: number): Promise<void> {
   try {
     const config = await getTextQuotaConfig(serverId);
 

@@ -8,16 +8,8 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { GUARDS_ENABLED, MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { extractGifKeyframes } from "@/utils/media/gifProcessor";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "@/types/tool/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "@/types/misc/context";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "@/types/tool/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 
 /**
  * Tool for processing GIF attachments on-demand in development environments
@@ -70,9 +62,7 @@ export class ProcessGifTool extends BaseTool {
   isAvailableFor(_provider: string): boolean {
     // Block in production to prevent memory exhaustion
     if (GUARDS_ENABLED) {
-      log.info(
-        "ProcessGifTool: Blocked in production mode (GUARDS_ENABLED = true)",
-      );
+      log.info("ProcessGifTool: Blocked in production mode (GUARDS_ENABLED = true)");
       return false;
     }
 
@@ -94,9 +84,7 @@ export class ProcessGifTool extends BaseTool {
 
     // Require context with tomoriState
     if (!context?.tomoriState) {
-      log.warn(
-        "ProcessGifTool: No tomoriState in context, defaulting to unavailable",
-      );
+      log.warn("ProcessGifTool: No tomoriState in context, defaulting to unavailable");
       return false;
     }
 
@@ -112,9 +100,7 @@ export class ProcessGifTool extends BaseTool {
 
     // Check for GIF processing disable flag during enhanced context restart
     if (context?.streamContext?.disableGifProcessing) {
-      log.info(
-        "ProcessGifTool: Temporarily disabled during enhanced context restart",
-      );
+      log.info("ProcessGifTool: Temporarily disabled during enhanced context restart");
       return false;
     }
 
@@ -139,10 +125,7 @@ export class ProcessGifTool extends BaseTool {
    * @param context - Tool execution context with Discord client access
    * @returns Promise resolving to tool result with restart signal
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // 1. Extract and validate parameters
     const messageId = args.message_id as string;
     const reason = (args.reason as string | undefined) || "No reason provided";
@@ -152,20 +135,15 @@ export class ProcessGifTool extends BaseTool {
       return {
         success: false,
         error: "Missing required parameter: message_id",
-        message:
-          "I need a message ID to process a GIF. Please provide the message ID containing the GIF.",
+        message: "I need a message ID to process a GIF. Please provide the message ID containing the GIF.",
       };
     }
 
-    log.info(
-      `ProcessGifTool: Starting GIF processing for message ${messageId} - Reason: ${reason}`,
-    );
+    log.info(`ProcessGifTool: Starting GIF processing for message ${messageId} - Reason: ${reason}`);
 
     try {
       // 2. Fetch recent messages from the channel (last 100)
-      log.info(
-        `ProcessGifTool: Fetching recent messages from channel ${context.channel.id}`,
-      );
+      log.info(`ProcessGifTool: Fetching recent messages from channel ${context.channel.id}`);
       const recentMessages = await context.channel.messages.fetch({
         limit: 100,
       });
@@ -173,9 +151,7 @@ export class ProcessGifTool extends BaseTool {
       // 3. Find the target message by ID
       const targetMessage = recentMessages.get(messageId);
       if (!targetMessage) {
-        log.warn(
-          `ProcessGifTool: Message ${messageId} not found in recent 100 messages`,
-        );
+        log.warn(`ProcessGifTool: Message ${messageId} not found in recent 100 messages`);
         return {
           success: false,
           error: "Message not found",
@@ -200,22 +176,17 @@ export class ProcessGifTool extends BaseTool {
             url: attachment.url,
             size: attachment.size,
           };
-          log.info(
-            `ProcessGifTool: Found GIF attachment - URL: ${attachment.url}, Size: ${attachment.size} bytes`,
-          );
+          log.info(`ProcessGifTool: Found GIF attachment - URL: ${attachment.url}, Size: ${attachment.size} bytes`);
           break;
         }
       }
 
       if (!gifAttachment) {
-        log.warn(
-          `ProcessGifTool: No GIF attachment found in message ${messageId}`,
-        );
+        log.warn(`ProcessGifTool: No GIF attachment found in message ${messageId}`);
         return {
           success: false,
           error: "No GIF found",
-          message:
-            "That message doesn't contain a GIF attachment. Please provide a message ID with a GIF.",
+          message: "That message doesn't contain a GIF attachment. Please provide a message ID with a GIF.",
           data: {
             status: "no_gif_found",
             message_id: messageId,
@@ -227,9 +198,7 @@ export class ProcessGifTool extends BaseTool {
       const maxSizeBytes = MEDIA_LIMITS.MAX_GIF_SIZE_MB * 1024 * 1024;
       if (gifAttachment.size > maxSizeBytes) {
         const sizeMB = (gifAttachment.size / (1024 * 1024)).toFixed(2);
-        log.warn(
-          `ProcessGifTool: GIF too large (${sizeMB} MB > ${MEDIA_LIMITS.MAX_GIF_SIZE_MB} MB)`,
-        );
+        log.warn(`ProcessGifTool: GIF too large (${sizeMB} MB > ${MEDIA_LIMITS.MAX_GIF_SIZE_MB} MB)`);
         return {
           success: false,
           error: "GIF too large",
@@ -268,9 +237,7 @@ export class ProcessGifTool extends BaseTool {
       const processedFrames = await extractGifKeyframes(gifAttachment.url);
       const processingTime = Date.now() - startTime;
 
-      log.success(
-        `ProcessGifTool: Extracted ${processedFrames.length} keyframes in ${processingTime}ms`,
-      );
+      log.success(`ProcessGifTool: Extracted ${processedFrames.length} keyframes in ${processingTime}ms`);
 
       // 7. Create StructuredContextItem with processed frames
       // Include both standard ContextPart fields AND inlineData for Gemini provider
@@ -318,10 +285,7 @@ export class ProcessGifTool extends BaseTool {
       };
 
       // 8. Store in static map for enhanced context restart
-      ProcessGifTool.pendingEnhancedContextItems.set(
-        messageId,
-        enhancedContextItem,
-      );
+      ProcessGifTool.pendingEnhancedContextItems.set(messageId, enhancedContextItem);
       log.info(
         `ProcessGifTool: Stored ${processedFrames.length} frames in pending context map for message ${messageId}`,
       );
@@ -341,10 +305,7 @@ export class ProcessGifTool extends BaseTool {
       };
     } catch (error) {
       // Comprehensive error handling with categorization
-      log.error(
-        `ProcessGifTool: Failed to process GIF for message ${messageId}`,
-        error as Error,
-      );
+      log.error(`ProcessGifTool: Failed to process GIF for message ${messageId}`, error as Error);
 
       let errorMessage = "Failed to process GIF due to an unexpected error.";
       let errorStatus = "gif_processing_failed";
@@ -352,16 +313,13 @@ export class ProcessGifTool extends BaseTool {
       if (error instanceof Error) {
         // Categorize errors for better UX
         if (error.message.includes("timeout")) {
-          errorMessage =
-            "GIF processing timed out (exceeded 30 seconds). The GIF might be too complex or too large.";
+          errorMessage = "GIF processing timed out (exceeded 30 seconds). The GIF might be too complex or too large.";
           errorStatus = "processing_timeout";
         } else if (error.message.includes("fetch")) {
-          errorMessage =
-            "Failed to download the GIF. The URL might be invalid or expired.";
+          errorMessage = "Failed to download the GIF. The URL might be invalid or expired.";
           errorStatus = "fetch_failed";
         } else if (error.message.includes("parse")) {
-          errorMessage =
-            "Failed to parse the GIF file. The file might be corrupted or in an unsupported format.";
+          errorMessage = "Failed to parse the GIF file. The file might be corrupted or in an unsupported format.";
           errorStatus = "parse_failed";
         } else {
           // Include error message for debugging
@@ -387,11 +345,8 @@ export class ProcessGifTool extends BaseTool {
    * @param messageId - Discord message ID containing the GIF
    * @returns Enhanced context item if found, undefined otherwise
    */
-  static getPendingEnhancedContext(
-    messageId: string,
-  ): StructuredContextItem | undefined {
-    const contextItem =
-      ProcessGifTool.pendingEnhancedContextItems.get(messageId);
+  static getPendingEnhancedContext(messageId: string): StructuredContextItem | undefined {
+    const contextItem = ProcessGifTool.pendingEnhancedContextItems.get(messageId);
     if (contextItem) {
       // Remove from map to prevent memory leaks
       ProcessGifTool.pendingEnhancedContextItems.delete(messageId);

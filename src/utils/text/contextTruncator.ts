@@ -51,9 +51,7 @@ export function truncateDialogueHistory(
 ): TruncationResult {
   // 1. Calculate the safe input budget: reserve maxCompletionTokens for output,
   //    then apply a 10% margin to absorb tokenizer estimation error
-  const safeInputBudget = Math.floor(
-    (contextLength - maxCompletionTokens) * 0.9,
-  );
+  const safeInputBudget = Math.floor((contextLength - maxCompletionTokens) * 0.9);
 
   // 2. Work on a mutable copy to avoid modifying the caller's array
   const items = [...contextItems];
@@ -62,10 +60,7 @@ export function truncateDialogueHistory(
 
   const findNewestDialogueUserIndex = (): number => {
     for (let i = items.length - 1; i >= 0; i--) {
-      if (
-        items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
-        items[i].role === "user"
-      ) {
+      if (items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY && items[i].role === "user") {
         return i;
       }
     }
@@ -97,20 +92,14 @@ export function truncateDialogueHistory(
       if (i === newestDialogueUserIdx) {
         break;
       }
-      if (
-        items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY &&
-        items[i].role === "model"
-      ) {
+      if (items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY && items[i].role === "model") {
         followingModelIdx = i;
         break;
       }
     }
 
     if (followingModelIdx !== -1) {
-      items.splice(
-        oldestDroppableUserIdx,
-        followingModelIdx - oldestDroppableUserIdx + 1,
-      );
+      items.splice(oldestDroppableUserIdx, followingModelIdx - oldestDroppableUserIdx + 1);
     } else {
       items.splice(oldestDroppableUserIdx, 1);
     }

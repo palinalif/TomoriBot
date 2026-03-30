@@ -4,11 +4,7 @@ import {
   normalizeTranscriptText,
 } from "@/utils/audio/elevenLabsShared";
 
-export type ElevenLabsSttErrorKind =
-  | "missing_api_key"
-  | "timeout"
-  | "request_failed"
-  | "invalid_response";
+export type ElevenLabsSttErrorKind = "missing_api_key" | "timeout" | "request_failed" | "invalid_response";
 
 export interface ElevenLabsSttRequest {
   apiKey: string;
@@ -28,9 +24,7 @@ export interface ElevenLabsSttResult {
   details?: string;
 }
 
-export async function transcribeWithElevenLabs(
-  request: ElevenLabsSttRequest,
-): Promise<ElevenLabsSttResult> {
+export async function transcribeWithElevenLabs(request: ElevenLabsSttRequest): Promise<ElevenLabsSttResult> {
   if (!request.apiKey.trim()) {
     return {
       success: false,
@@ -54,17 +48,14 @@ export async function transcribeWithElevenLabs(
     );
     formData.append("model_id", request.modelId ?? config.modelId);
 
-    const response = await fetch(
-      `${ELEVENLABS_API_BASE_URL}/v1/speech-to-text`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": request.apiKey,
-        },
-        body: formData,
-        signal: controller.signal,
+    const response = await fetch(`${ELEVENLABS_API_BASE_URL}/v1/speech-to-text`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": request.apiKey,
       },
-    );
+      body: formData,
+      signal: controller.signal,
+    });
 
     clearTimeout(timeoutId);
 
@@ -80,10 +71,7 @@ export async function transcribeWithElevenLabs(
         success: false,
         errorKind: "request_failed",
         statusCode: response.status,
-        details:
-          typeof responseJson?.detail === "string"
-            ? responseJson.detail
-            : `HTTP ${response.status}`,
+        details: typeof responseJson?.detail === "string" ? responseJson.detail : `HTTP ${response.status}`,
       };
     }
 
@@ -103,10 +91,7 @@ export async function transcribeWithElevenLabs(
       };
     }
 
-    const transcriptText = normalizeTranscriptText(
-      rawTranscript,
-      config.maxTranscriptChars,
-    );
+    const transcriptText = normalizeTranscriptText(rawTranscript, config.maxTranscriptChars);
     if (!transcriptText) {
       return {
         success: false,
@@ -120,9 +105,7 @@ export async function transcribeWithElevenLabs(
       success: true,
       transcriptText,
       modelUsed:
-        typeof responseJson?.model_id === "string"
-          ? responseJson.model_id
-          : (request.modelId ?? config.modelId),
+        typeof responseJson?.model_id === "string" ? responseJson.model_id : (request.modelId ?? config.modelId),
       detectedLanguage:
         typeof responseJson?.language_code === "string"
           ? responseJson.language_code

@@ -6,22 +6,11 @@ import {
   type ModalSubmitInteraction,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-  type TomoriConfigRow,
-} from "../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriConfigSchema, type TomoriConfigRow } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import { hasOptApiKey } from "@/utils/security/crypto";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
@@ -34,14 +23,8 @@ import type { CheckboxGroupOption } from "@/types/discord/modal";
 const PERMISSIONS_CHECKBOX_ID = "config_permissions_checkbox";
 
 // Rule 21: Configure the subcommand — no options needed, UI is a checkbox modal
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("permissions")
-    .setDescription(
-      localizer("en-US", "commands.config.permissions.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("permissions").setDescription(localizer("en-US", "commands.config.permissions.description"));
 
 /**
  * Defines all configurable permissions for the checkbox modal.
@@ -188,26 +171,19 @@ export async function execute(
     // 3. Determine which permissions to show (voicemessage requires ElevenLabs key)
     let activeDefinitions = PERMISSION_DEFINITIONS;
     if (tomoriState.server_id) {
-      const hasElevenLabsKey = await hasOptApiKey(
-        tomoriState.server_id,
-        ELEVENLABS_SERVICE_NAME,
-      );
+      const hasElevenLabsKey = await hasOptApiKey(tomoriState.server_id, ELEVENLABS_SERVICE_NAME);
       if (!hasElevenLabsKey) {
-        activeDefinitions = PERMISSION_DEFINITIONS.filter(
-          (def) => !def.requiresElevenLabs,
-        );
+        activeDefinitions = PERMISSION_DEFINITIONS.filter((def) => !def.requiresElevenLabs);
       }
     }
 
     // 4. Build checkbox options, pre-checking currently-enabled permissions
-    const checkboxOptions: CheckboxGroupOption[] = activeDefinitions.map(
-      (def) => ({
-        label: localizer(locale, def.labelKey),
-        value: def.value,
-        description: localizer(locale, def.descKey),
-        default: def.getState(tomoriState.config),
-      }),
-    );
+    const checkboxOptions: CheckboxGroupOption[] = activeDefinitions.map((def) => ({
+      label: localizer(locale, def.labelKey),
+      value: def.value,
+      description: localizer(locale, def.descKey),
+      default: def.getState(tomoriState.config),
+    }));
 
     // 5. Show the checkbox modal — first interaction acknowledgment
     const modalResult = await promptWithRawModal(
@@ -221,8 +197,7 @@ export async function execute(
             kind: "checkboxGroup",
             customId: PERMISSIONS_CHECKBOX_ID,
             labelKey: "commands.config.permissions.select_placeholder",
-            descriptionKey:
-              "commands.config.permissions.select_embed_description",
+            descriptionKey: "commands.config.permissions.select_embed_description",
             minValues: 0,
             required: false,
             options: checkboxOptions,
@@ -241,9 +216,7 @@ export async function execute(
     modalInteraction = modalResult.interaction;
 
     // 6. Determine which permissions changed
-    const newlyEnabled = new Set(
-      modalResult.multiValues?.[PERMISSIONS_CHECKBOX_ID] ?? [],
-    );
+    const newlyEnabled = new Set(modalResult.multiValues?.[PERMISSIONS_CHECKBOX_ID] ?? []);
     const changes: Array<{
       dbColumn: string;
       isEnabled: boolean;
@@ -294,9 +267,7 @@ export async function execute(
             guildId: interaction.guild?.id ?? interaction.user.id,
             dbColumn: change.dbColumn,
             isEnabled: change.isEnabled,
-            validationErrors: validatedConfig.success
-              ? null
-              : validatedConfig.error.flatten(),
+            validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
           },
         };
         await log.error(
@@ -320,18 +291,12 @@ export async function execute(
     invalidateTomoriStateCache(guildKey);
 
     // 10. Build the success result embed listing what was enabled/disabled
-    const enabledLabels = changes
-      .filter((c) => c.isEnabled)
-      .map((c) => `\`${c.label}\``);
-    const disabledLabels = changes
-      .filter((c) => !c.isEnabled)
-      .map((c) => `\`${c.label}\``);
+    const enabledLabels = changes.filter((c) => c.isEnabled).map((c) => `\`${c.label}\``);
+    const disabledLabels = changes.filter((c) => !c.isEnabled).map((c) => `\`${c.label}\``);
 
-    let resultDescription = localizer(
-      locale,
-      "commands.config.permissions.success_description",
-      { count: changes.length },
-    );
+    let resultDescription = localizer(locale, "commands.config.permissions.success_description", {
+      count: changes.length,
+    });
     if (enabledLabels.length > 0) {
       resultDescription += `\n✅ **Enabled:** ${enabledLabels.join(", ")}`;
     }
@@ -342,9 +307,7 @@ export async function execute(
     await modalInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.config.permissions.success_title"),
-          )
+          .setTitle(localizer(locale, "commands.config.permissions.success_title"))
           .setDescription(resultDescription)
           .setColor(ColorCode.SUCCESS),
       ],
@@ -370,11 +333,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /config permissions for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config permissions for user ${userData.user_disc_id}`, error as Error, context);
 
     // 12. Inform user of unknown error
     // Use modalInteraction (auto-deferred) if available since the original

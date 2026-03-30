@@ -20,29 +20,15 @@ import type { ModalResult, SelectOption } from "@/types/discord/modal";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
-import {
-  type ElevenLabsVoiceCatalogEntry,
-  fetchElevenLabsVoiceCatalog,
-} from "@/utils/audio/elevenLabsVoiceCatalog";
+import { type ElevenLabsVoiceCatalogEntry, fetchElevenLabsVoiceCatalog } from "@/utils/audio/elevenLabsVoiceCatalog";
 
 const VOICE_SELECT_MODAL_ID = "config_voice_elevenlabs_modal";
 const VOICE_SELECT_ID = "voice_select";
 const CLEAR_VOICE_VALUE = "__clear__";
 
-function buildVoiceDescription(
-  voice: ElevenLabsVoiceCatalogEntry,
-  locale: string,
-): string {
-  const summaryParts = [
-    voice.category,
-    voice.labels.gender,
-    voice.labels.age,
-    voice.labels.accent,
-  ]
-    .filter(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
-    )
+function buildVoiceDescription(voice: ElevenLabsVoiceCatalogEntry, locale: string): string {
+  const summaryParts = [voice.category, voice.labels.gender, voice.labels.age, voice.labels.accent]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .map((value) => value.trim());
 
   if (summaryParts.length > 0) {
@@ -53,29 +39,14 @@ function buildVoiceDescription(
     return safeSelectOptionText(voice.description);
   }
 
-  return safeSelectOptionText(
-    localizer(
-      locale,
-      "commands.config.voice.elevenlabs.voice_available_description",
-    ),
-  );
+  return safeSelectOptionText(localizer(locale, "commands.config.voice.elevenlabs.voice_available_description"));
 }
 
-function buildVoiceOptions(
-  voices: ElevenLabsVoiceCatalogEntry[],
-  locale: string,
-): SelectOption[] {
+function buildVoiceOptions(voices: ElevenLabsVoiceCatalogEntry[], locale: string): SelectOption[] {
   const clearOption: SelectOption = {
-    label: safeSelectOptionText(
-      localizer(locale, "commands.config.voice.elevenlabs.clear_choice_label"),
-    ),
+    label: safeSelectOptionText(localizer(locale, "commands.config.voice.elevenlabs.clear_choice_label")),
     value: CLEAR_VOICE_VALUE,
-    description: safeSelectOptionText(
-      localizer(
-        locale,
-        "commands.config.voice.elevenlabs.clear_choice_description",
-      ),
-    ),
+    description: safeSelectOptionText(localizer(locale, "commands.config.voice.elevenlabs.clear_choice_description")),
   };
 
   return [
@@ -88,14 +59,8 @@ function buildVoiceOptions(
   ];
 }
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("elevenlabs")
-    .setDescription(
-      localizer("en-US", "commands.config.voice.elevenlabs.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("elevenlabs").setDescription(localizer("en-US", "commands.config.voice.elevenlabs.description"));
 
 export async function execute(
   _client: Client,
@@ -158,8 +123,7 @@ export async function execute(
       );
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.voice.elevenlabs.voice_fetch_failed_title",
-        descriptionKey:
-          "commands.config.voice.elevenlabs.voice_fetch_failed_description",
+        descriptionKey: "commands.config.voice.elevenlabs.voice_fetch_failed_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -170,8 +134,7 @@ export async function execute(
     if (availableVoices.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.voice.elevenlabs.no_voices_title",
-        descriptionKey:
-          "commands.config.voice.elevenlabs.no_voices_description",
+        descriptionKey: "commands.config.voice.elevenlabs.no_voices_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -179,30 +142,22 @@ export async function execute(
     }
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          titleKey: "commands.config.voice.elevenlabs.select_persona_title",
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        titleKey: "commands.config.voice.elevenlabs.select_persona_title",
+        onSelect: async () => {},
+      });
       if (!personaSelection.success) {
         if (personaSelection.reason !== "cancelled") continue;
         return;
       }
-      if (
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
 
-      const personaButtonInteraction =
-        personaSelection.interaction as ButtonInteraction;
+      const personaButtonInteraction = personaSelection.interaction as ButtonInteraction;
       selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
         await replyInfoEmbed(personaButtonInteraction, locale, {
@@ -213,26 +168,20 @@ export async function execute(
         return;
       }
 
-      modalResult = await promptWithPaginatedModal(
-        personaButtonInteraction,
-        locale,
-        {
-          modalCustomId: VOICE_SELECT_MODAL_ID,
-          modalTitleKey: "commands.config.voice.elevenlabs.modal_title",
-          components: [
-            {
-              customId: VOICE_SELECT_ID,
-              labelKey: "commands.config.voice.elevenlabs.select_label",
-              descriptionKey:
-                "commands.config.voice.elevenlabs.select_description",
-              placeholder:
-                "commands.config.voice.elevenlabs.select_placeholder",
-              required: true,
-              options: buildVoiceOptions(availableVoices, locale),
-            },
-          ],
-        },
-      );
+      modalResult = await promptWithPaginatedModal(personaButtonInteraction, locale, {
+        modalCustomId: VOICE_SELECT_MODAL_ID,
+        modalTitleKey: "commands.config.voice.elevenlabs.modal_title",
+        components: [
+          {
+            customId: VOICE_SELECT_ID,
+            labelKey: "commands.config.voice.elevenlabs.select_label",
+            descriptionKey: "commands.config.voice.elevenlabs.select_description",
+            placeholder: "commands.config.voice.elevenlabs.select_placeholder",
+            required: true,
+            options: buildVoiceOptions(availableVoices, locale),
+          },
+        ],
+      });
       if (modalResult.outcome !== "submit" || !modalResult.interaction) {
         continue;
       }
@@ -251,9 +200,7 @@ export async function execute(
       const nextVoice =
         selectedVoiceId === CLEAR_VOICE_VALUE
           ? null
-          : (availableVoices.find(
-              (voice) => voice.voiceId === selectedVoiceId,
-            ) ?? null);
+          : (availableVoices.find((voice) => voice.voiceId === selectedVoiceId) ?? null);
       if (selectedVoiceId !== CLEAR_VOICE_VALUE && !nextVoice) {
         await replyInfoEmbed(modalInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",

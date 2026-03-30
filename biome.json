@@ -5,7 +5,13 @@
     "ignoreUnknown": false,
     "includes": ["**/*", "!!**/node_modules", "!!**/dist", "!!**/tokenizers"]
   },
-  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120,
+    "lineEnding": "crlf"
+  },
   "assist": {
     "actions": {
       "source": {
@@ -29,7 +35,9 @@
     }
   },
   "javascript": {
-    "formatter": { "quoteStyle": "double" }
+    "formatter": {
+      "quoteStyle": "double"
+    }
   },
   "json": {
     "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 }

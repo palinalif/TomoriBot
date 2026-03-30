@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { EmbedBuilder, MessageFlags } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
@@ -11,12 +7,8 @@ import type { UserRow } from "@/types/db/schema";
 /**
  * Configure the 'privacy' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("privacy")
-    .setDescription(localizer("en-US", "commands.legal.privacy.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("privacy").setDescription(localizer("en-US", "commands.legal.privacy.description"));
 
 /**
  * Executes the 'privacy' command
@@ -40,9 +32,7 @@ export async function execute(
   // 2. Create embed with title, description, and link
   const embed = new EmbedBuilder()
     .setTitle(localizer(locale, "commands.legal.privacy.title"))
-    .setDescription(
-      localizer(locale, "commands.legal.privacy.description_text"),
-    )
+    .setDescription(localizer(locale, "commands.legal.privacy.description_text"))
     .addFields({
       name: localizer(locale, "commands.legal.privacy.link_title"),
       value: githubUrl,

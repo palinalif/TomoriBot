@@ -114,22 +114,11 @@ export interface ValidationResult {
  * Zod schema for preset export data validation
  */
 export const presetExportDataSchema = z.object({
-  tomori_nickname: z
-    .string()
-    .min(1, "Nickname cannot be empty")
-    .max(100, "Nickname too long"),
-  attribute_list: z
-    .array(z.string().max(MAX_STRING_LENGTH))
-    .max(ABSOLUTE_MAX_ATTRIBUTES),
-  sample_dialogues_in: z
-    .array(z.string().max(MAX_STRING_LENGTH))
-    .max(ABSOLUTE_MAX_SAMPLE_DIALOGUES),
-  sample_dialogues_out: z
-    .array(z.string().max(MAX_STRING_LENGTH))
-    .max(ABSOLUTE_MAX_SAMPLE_DIALOGUES),
-  trigger_words: z
-    .array(z.string().max(MAX_STRING_LENGTH))
-    .max(ABSOLUTE_MAX_TRIGGER_WORDS),
+  tomori_nickname: z.string().min(1, "Nickname cannot be empty").max(100, "Nickname too long"),
+  attribute_list: z.array(z.string().max(MAX_STRING_LENGTH)).max(ABSOLUTE_MAX_ATTRIBUTES),
+  sample_dialogues_in: z.array(z.string().max(MAX_STRING_LENGTH)).max(ABSOLUTE_MAX_SAMPLE_DIALOGUES),
+  sample_dialogues_out: z.array(z.string().max(MAX_STRING_LENGTH)).max(ABSOLUTE_MAX_SAMPLE_DIALOGUES),
+  trigger_words: z.array(z.string().max(MAX_STRING_LENGTH)).max(ABSOLUTE_MAX_TRIGGER_WORDS),
   persona_prompt: z.string().max(MAX_STRING_LENGTH).nullable().optional(),
   persona_lineage_id: z
     .preprocess((value) => {

@@ -13,26 +13,20 @@ import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("blacklist")
     .setDescription(localizer("en-US", "commands.server.blacklist.description"))
     .addUserOption((option) =>
       option
         .setName("member")
-        .setDescription(
-          localizer("en-US", "commands.server.blacklist.member_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.blacklist.member_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("action")
-        .setDescription(
-          localizer("en-US", "commands.server.blacklist.action_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.blacklist.action_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -80,8 +74,7 @@ export async function execute(
     if (targetDiscordUser.bot) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.blacklist.cannot_blacklist_bot_title",
-        descriptionKey:
-          "commands.server.blacklist.cannot_blacklist_bot_description",
+        descriptionKey: "commands.server.blacklist.cannot_blacklist_bot_description",
         descriptionVars: {
           user_name: targetDiscordUser.username,
         },
@@ -105,8 +98,7 @@ export async function execute(
     if (!tomoriState.config.personal_memories_enabled) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.blacklist.personalization_disabled_title",
-        descriptionKey:
-          "commands.server.blacklist.personalization_disabled_description",
+        descriptionKey: "commands.server.blacklist.personalization_disabled_description",
         color: ColorCode.WARN,
       });
       return;
@@ -126,8 +118,7 @@ export async function execute(
     if (action === "add" && isAlreadyBlacklisted) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.blacklist.already_blacklisted_title",
-        descriptionKey:
-          "commands.server.blacklist.already_blacklisted_description",
+        descriptionKey: "commands.server.blacklist.already_blacklisted_description",
         descriptionVars: {
           user_name: targetDiscordUser.username,
         },
@@ -156,17 +147,13 @@ export async function execute(
                 INSERT INTO personalization_blacklist (server_id, user_disc_id)
                 VALUES (${tomoriState.server_id}, ${targetDiscordUser.id})
             `;
-      log.info(
-        `Added user ${targetDiscordUser.id} to blacklist for server ${tomoriState.server_id}`,
-      );
+      log.info(`Added user ${targetDiscordUser.id} to blacklist for server ${tomoriState.server_id}`);
     } else {
       await sql`
                 DELETE FROM personalization_blacklist
                 WHERE server_id = ${tomoriState.server_id} AND user_disc_id = ${targetDiscordUser.id}
             `;
-      log.info(
-        `Removed user ${targetDiscordUser.id} from blacklist for server ${tomoriState.server_id}`,
-      );
+      log.info(`Removed user ${targetDiscordUser.id} from blacklist for server ${tomoriState.server_id}`);
     }
 
     // 9. Invalidate blacklist cache so next message gets fresh data
@@ -216,11 +203,7 @@ export async function execute(
         action: interaction.options.getString("action", true),
       },
     };
-    await log.error(
-      `Error executing /config blacklist for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config blacklist for user ${userData.user_disc_id}`, error as Error, context);
 
     // 11. Inform user of unknown error
     // Check if the interaction has already been replied to or deferred

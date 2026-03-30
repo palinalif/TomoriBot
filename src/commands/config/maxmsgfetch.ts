@@ -1,19 +1,8 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  type ErrorContext,
-  type UserRow,
-  tomoriConfigSchema,
-} from "@/types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { type ErrorContext, type UserRow, tomoriConfigSchema } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
@@ -24,20 +13,14 @@ import {
 } from "@/utils/discord/messageFetchLimit";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("maxmsgfetch")
-    .setDescription(
-      localizer("en-US", "commands.config.maxmsgfetch.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.maxmsgfetch.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(
-          localizer("en-US", "commands.config.maxmsgfetch.limit_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.maxmsgfetch.limit_description"))
         .setMinValue(MIN_MESSAGE_FETCH_LIMIT)
         .setMaxValue(MAX_MESSAGE_FETCH_LIMIT)
         .setRequired(true),
@@ -76,8 +59,7 @@ export async function execute(
     if (limit < MIN_MESSAGE_FETCH_LIMIT || limit > MAX_MESSAGE_FETCH_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.maxmsgfetch.limit.invalid_range_title",
-        descriptionKey:
-          "commands.config.maxmsgfetch.limit.invalid_range_description",
+        descriptionKey: "commands.config.maxmsgfetch.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_MESSAGE_FETCH_LIMIT.toString(),
           max: MAX_MESSAGE_FETCH_LIMIT.toString(),
@@ -97,13 +79,11 @@ export async function execute(
       return;
     }
 
-    const currentLimit =
-      tomoriState.config.message_fetch_limit ?? DEFAULT_MESSAGE_FETCH_LIMIT;
+    const currentLimit = tomoriState.config.message_fetch_limit ?? DEFAULT_MESSAGE_FETCH_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.maxmsgfetch.limit.already_set_title",
-        descriptionKey:
-          "commands.config.maxmsgfetch.limit.already_set_description",
+        descriptionKey: "commands.config.maxmsgfetch.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -156,11 +136,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -190,11 +166,7 @@ export async function execute(
         options: interaction.options?.data,
       },
     };
-    await log.error(
-      "Error in /config maxmsgfetch limit command",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config maxmsgfetch limit command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

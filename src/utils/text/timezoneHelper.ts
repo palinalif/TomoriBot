@@ -99,15 +99,7 @@ function getDayOfWeek(date: Date): string {
   const dayOfWeek = date.getUTCDay();
   return Number.isNaN(dayOfWeek)
     ? ""
-    : [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-      ][dayOfWeek];
+    : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dayOfWeek];
 }
 
 /**
@@ -123,11 +115,7 @@ function getDayOfWeek(date: Date): string {
  * formatTimeWithOffset(date, 8);  // Custom formatting in UTC+8
  * ```
  */
-export function formatTimeWithOffset(
-  date: Date,
-  offsetHours: number,
-  options?: Intl.DateTimeFormatOptions,
-): string {
+export function formatTimeWithOffset(date: Date, offsetHours: number, options?: Intl.DateTimeFormatOptions): string {
   // 1. Apply offset to the date
   const utcTime = date.getTime();
   const offsetTime = new Date(utcTime + offsetHours * 3600000);
@@ -160,10 +148,7 @@ export function formatTimeWithOffset(
  * parseTimeWithOffset("2025-09-05_14:30", 8);  // Returns UTC Date
  * ```
  */
-export function parseTimeWithOffset(
-  timeStr: string,
-  offsetHours: number,
-): Date | null {
+export function parseTimeWithOffset(timeStr: string, offsetHours: number): Date | null {
   // 1. Validate format using regex
   const timePattern = /^(\d{4})-(\d{2})-(\d{2})_(\d{2}):(\d{2})$/;
   const match = timeStr.match(timePattern);
@@ -181,16 +166,7 @@ export function parseTimeWithOffset(
   const minute = Number.parseInt(minuteStr, 10);
 
   // 3. Validate ranges
-  if (
-    month < 0 ||
-    month > 11 ||
-    day < 1 ||
-    day > 31 ||
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59
-  ) {
+  if (month < 0 || month > 11 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
     return null; // Invalid values
   }
 

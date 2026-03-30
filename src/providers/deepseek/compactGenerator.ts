@@ -15,13 +15,9 @@ import type {
   ProviderCompactSummaryRequest,
 } from "@/types/provider/featureInterfaces";
 import { callDeepseekStructuredJSON } from "@/providers/deepseek/deepseekStructuredOutput";
-import {
-  buildRoleplaySchema,
-  CompactRoleplaySummarySchema,
-} from "@/providers/utils/compactCommon";
+import { buildRoleplaySchema, CompactRoleplaySummarySchema } from "@/providers/utils/compactCommon";
 
-const DEEPSEEK_CHAT_COMPLETIONS_URL =
-  "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
 
 /**
  * Generate a plain-text conversation summary using the DeepSeek API.
@@ -69,18 +65,14 @@ export async function generateConversationSummaryDeepseek(
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "DeepSeek compact summary request failed",
-        new Error(errorBody),
-        {
-          errorType: "DeepseekCompactHttpError",
-          metadata: {
-            model: request.model,
-            status: response.status,
-            errorBody,
-          },
+      log.error("DeepSeek compact summary request failed", new Error(errorBody), {
+        errorType: "DeepseekCompactHttpError",
+        metadata: {
+          model: request.model,
+          status: response.status,
+          errorBody,
         },
-      );
+      });
       return {
         error: `DeepSeek request failed (${response.status}): ${response.statusText}`,
       };

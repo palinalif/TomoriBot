@@ -83,8 +83,7 @@ if (secrets.MATRIX_HS_TOKEN) {
   process.env.MATRIX_HS_TOKEN = secrets.MATRIX_HS_TOKEN;
 }
 if (secrets.MATRIX_APPSERVICE_PUBLIC_URL) {
-  process.env.MATRIX_APPSERVICE_PUBLIC_URL =
-    secrets.MATRIX_APPSERVICE_PUBLIC_URL;
+  process.env.MATRIX_APPSERVICE_PUBLIC_URL = secrets.MATRIX_APPSERVICE_PUBLIC_URL;
 }
 
 // Optional Top.gg integration token
@@ -197,21 +196,12 @@ if ((process.env.RUN_ENV || "development") !== "production") {
  * @param maxRetries - Maximum number of retry attempts
  * @param delayMs - Delay between retries in milliseconds
  */
-async function initializeDatabase(
-  maxRetries = 3,
-  delayMs = 1000,
-): Promise<void> {
+async function initializeDatabase(maxRetries = 3, delayMs = 1000): Promise<void> {
   const schemaPath = path.join(import.meta.dir, "db", "schema.sql");
   const ragSchemaPath = path.join(import.meta.dir, "db", "schema_rag.sql");
-  const stPresetSchemaPath = path.join(
-    import.meta.dir,
-    "db",
-    "schema_stpreset.sql",
-  );
+  const stPresetSchemaPath = path.join(import.meta.dir, "db", "schema_stpreset.sql");
   const seedPath = path.join(import.meta.dir, "db", "seed.sql");
-  const ragEnabled =
-    process.env.RUN_ENV === "production" ||
-    process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -223,9 +213,7 @@ async function initializeDatabase(
         await sql.file(ragSchemaPath);
         log.success("PostgreSQL RAG schema verified");
       } else {
-        log.info(
-          "Skipping RAG schema init (set ACTIVATE_LOCAL_RAG=true to enable in non-production).",
-        );
+        log.info("Skipping RAG schema init (set ACTIVATE_LOCAL_RAG=true to enable in non-production).");
       }
 
       // Initialize ST preset schema (always-on — lightweight tables)
@@ -253,10 +241,7 @@ async function initializeDatabase(
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       } else {
         // Non-retryable error or max retries exceeded
-        log.error(
-          `PostgreSQL database initialization failed after ${attempt} attempts:`,
-          err,
-        );
+        log.error(`PostgreSQL database initialization failed after ${attempt} attempts:`, err);
         process.exit(1);
       }
     }
@@ -268,14 +253,10 @@ await initializeDatabase();
 // Clean up expired cooldowns on startup (development alternative to pg_cron)
 log.section("Cleaning up expired cooldowns...");
 try {
-  const { cleanupExpiredCooldowns } = await import(
-    "./utils/db/cooldownsCleanup"
-  );
+  const { cleanupExpiredCooldowns } = await import("./utils/db/cooldownsCleanup");
   const cleanupResult = await cleanupExpiredCooldowns();
   if (cleanupResult.success) {
-    log.success(
-      `Cooldowns cleanup completed: ${cleanupResult.deletedCount} expired entries removed`,
-    );
+    log.success(`Cooldowns cleanup completed: ${cleanupResult.deletedCount} expired entries removed`);
   } else {
     log.warn(`Cooldowns cleanup failed: ${cleanupResult.error}`);
   }
@@ -301,9 +282,7 @@ try {
 		`;
 
     if (!extensionCheck?.available) {
-      log.warn(
-        "pg_cron extension not available - using startup cleanup method",
-      );
+      log.warn("pg_cron extension not available - using startup cleanup method");
     } else {
       // 2. Enable pg_cron extension
       await sql`CREATE EXTENSION IF NOT EXISTS pg_cron;`;
@@ -329,15 +308,11 @@ try {
 					current_user
 				)
 			`;
-      log.success(
-        `pg_cron job for cooldown cleanup scheduled/verified for ${host}:${port}`,
-      );
+      log.success(`pg_cron job for cooldown cleanup scheduled/verified for ${host}:${port}`);
     }
   }
 } catch (err) {
-  log.info(
-    `pg_cron setup failed (non-critical): ${err instanceof Error ? err.message : err}`,
-  );
+  log.info(`pg_cron setup failed (non-critical): ${err instanceof Error ? err.message : err}`);
   log.info("Cooldown cleanup will be handled by startup method instead");
 }
 
@@ -370,15 +345,12 @@ try {
 // Initialize OpenRouter capability cache
 log.section("Initializing OpenRouter Capability Cache...");
 try {
-  const { initializeOpenRouterCapabilityCache } = await import(
-    "./utils/cache/openrouterCapabilityCache"
-  );
+  const { initializeOpenRouterCapabilityCache } = await import("./utils/cache/openrouterCapabilityCache");
   await initializeOpenRouterCapabilityCache();
   log.success("OpenRouter capability cache initialized successfully");
 } catch (error) {
   log.warn(
-    "Failed to initialize OpenRouter capability cache (non-critical) - " +
-      "will fall back to database flags",
+    "Failed to initialize OpenRouter capability cache (non-critical) - " + "will fall back to database flags",
     error,
   );
   // Non-critical error - bot will use database flags as fallback
@@ -388,18 +360,14 @@ try {
 log.section("Initializing Preset Avatar Cache...");
 try {
   const { loadAllPresets } = await import("./utils/db/dbRead");
-  const { initializePresetAvatarCache } = await import(
-    "./utils/image/avatarHelper"
-  );
+  const { initializePresetAvatarCache } = await import("./utils/image/avatarHelper");
 
   const presets = await loadAllPresets();
   if (presets && presets.length > 0) {
     await initializePresetAvatarCache(presets);
     log.success("Preset avatar cache initialized successfully");
   } else {
-    log.warn(
-      "No presets found to cache - avatar cache will be empty (non-critical)",
-    );
+    log.warn("No presets found to cache - avatar cache will be empty (non-critical)");
   }
 } catch (error) {
   log.warn("Failed to initialize preset avatar cache (non-critical)", error);
@@ -416,9 +384,7 @@ try {
   // contains circular references that crash JSON serialization inside log.warn()
   const safeMsg = error instanceof Error ? error.message : String(error);
   const safeStack = error instanceof Error ? error.stack : undefined;
-  log.warn(
-    `Matrix bridge initialization failed (non-critical): ${safeMsg}\n${safeStack ?? ""}`,
-  );
+  log.warn(`Matrix bridge initialization failed (non-critical): ${safeMsg}\n${safeStack ?? ""}`);
   // Non-critical error — bot functions normally without the Matrix bridge
 }
 
@@ -450,9 +416,7 @@ try {
 // Initialize random trigger timer system
 log.section("Initializing Random Trigger System...");
 try {
-  const { initializeRandomTriggerTimer } = await import(
-    "./timers/randomTriggerTimer"
-  );
+  const { initializeRandomTriggerTimer } = await import("./timers/randomTriggerTimer");
 
   // Start random trigger timer after client is ready
   client.once("clientReady", () => {
@@ -482,9 +446,7 @@ try {
 // Initialize quota cleanup system
 log.section("Initializing Upload Quota System...");
 try {
-  const { initializeQuotaCleanup } = await import(
-    "./utils/security/rateLimiter"
-  );
+  const { initializeQuotaCleanup } = await import("./utils/security/rateLimiter");
 
   initializeQuotaCleanup();
   log.success("Upload quota tracking system initialized");
@@ -554,9 +516,7 @@ if ((process.env.RUN_ENV || "development") === "production") {
 
   // Bind to localhost only (not externally accessible)
   healthCheckServer.listen(3000, "127.0.0.1", () => {
-    log.success(
-      "Health check server listening on http://127.0.0.1:3000/health",
-    );
+    log.success("Health check server listening on http://127.0.0.1:3000/health");
   });
 
   // Handle health check server errors

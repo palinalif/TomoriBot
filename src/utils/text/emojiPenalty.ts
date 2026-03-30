@@ -35,16 +35,10 @@ function loadEmojiPenaltyConfig(): EmojiPenaltyConfig {
   const enabled = process.env.EMOJI_PENALTY_ENABLED !== "false";
 
   // 2. Load lookback count (default: 3 messages)
-  const lookbackCount = Number.parseInt(
-    process.env.EMOJI_PENALTY_LOOKBACK || "3",
-    10,
-  );
+  const lookbackCount = Number.parseInt(process.env.EMOJI_PENALTY_LOOKBACK || "3", 10);
 
   // 3. Load max emoji threshold (default: 1, meaning 2+ triggers penalty)
-  const maxEmojis = Number.parseInt(
-    process.env.EMOJI_PENALTY_THRESHOLD || "1",
-    10,
-  );
+  const maxEmojis = Number.parseInt(process.env.EMOJI_PENALTY_THRESHOLD || "1", 10);
 
   return {
     enabled,
@@ -72,10 +66,7 @@ function extractTextFromContextItem(item: StructuredContextItem): string {
  * @param config - Optional threshold configuration (loads from env if not provided)
  * @returns True if emoji usage exceeds threshold, false otherwise
  */
-export function shouldApplyEmojiPenalty(
-  contextItems: StructuredContextItem[],
-  config?: EmojiPenaltyConfig,
-): boolean {
+export function shouldApplyEmojiPenalty(contextItems: StructuredContextItem[], config?: EmojiPenaltyConfig): boolean {
   // 1. Load config from environment if not provided
   const penaltyConfig = config ?? loadEmojiPenaltyConfig();
 
@@ -86,14 +77,10 @@ export function shouldApplyEmojiPenalty(
   // 3. Filter for bot messages in dialogue history (role: "model")
   //    We only care about actual dialogue, not system prompts or sample dialogues
   const botMessages = contextItems.filter(
-    (item) =>
-      item.role === "model" &&
-      item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
+    (item) => item.role === "model" && item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
   );
 
-  log.info(
-    `[Emoji Penalty] Found ${botMessages.length} bot messages in dialogue history`,
-  );
+  log.info(`[Emoji Penalty] Found ${botMessages.length} bot messages in dialogue history`);
 
   // 4. If no bot messages exist at all, no penalty needed
   if (botMessages.length === 0) {
@@ -102,10 +89,7 @@ export function shouldApplyEmojiPenalty(
   }
 
   // 5. Get the last N bot messages (or all available if fewer than lookback)
-  const messagesToCheck = Math.min(
-    botMessages.length,
-    penaltyConfig.lookbackCount,
-  );
+  const messagesToCheck = Math.min(botMessages.length, penaltyConfig.lookbackCount);
   const recentBotMessages = botMessages.slice(-messagesToCheck);
 
   log.info(
@@ -126,15 +110,11 @@ export function shouldApplyEmojiPenalty(
   }
 
   log.info(`[Emoji Penalty] Analyzed messages:\n${emojiCounts.join("\n")}`);
-  log.info(
-    `[Emoji Penalty] Total: ${totalCustomEmojis} custom emojis (threshold: ${penaltyConfig.maxEmojis})`,
-  );
+  log.info(`[Emoji Penalty] Total: ${totalCustomEmojis} custom emojis (threshold: ${penaltyConfig.maxEmojis})`);
 
   // 7. Check if threshold exceeded
   const shouldTrigger = totalCustomEmojis > penaltyConfig.maxEmojis;
-  log.info(
-    `[Emoji Penalty] ${shouldTrigger ? "TRIGGERING" : "NOT triggering"} penalty (custom emojis only)`,
-  );
+  log.info(`[Emoji Penalty] ${shouldTrigger ? "TRIGGERING" : "NOT triggering"} penalty (custom emojis only)`);
 
   return shouldTrigger;
 }
@@ -152,9 +132,7 @@ function buildEmojiPenaltyText(speakerLabel?: string | null): string {
     : "You have been using emojis too frequently in recent messages. Respond to this message without using any emojis to maintain natural conversation flow.";
 }
 
-export function generateEmojiPenaltyMessage(
-  speakerLabel?: string | null,
-): StructuredContextItem {
+export function generateEmojiPenaltyMessage(speakerLabel?: string | null): StructuredContextItem {
   // Create a natural-sounding reminder message
   // It appears as a user message to be close to generation point
   const penaltyText = `[System: ${buildEmojiPenaltyText(speakerLabel)}]`;
@@ -224,10 +202,7 @@ function loadUniqueEmojiConfig(): UniqueEmojiConfig {
   const enabled = process.env.EMOJI_UNIQUE_ENABLED !== "false";
 
   // 2. Load lookback count (default: 5 messages)
-  const lookbackCount = Number.parseInt(
-    process.env.EMOJI_UNIQUE_LOOKBACK || "5",
-    10,
-  );
+  const lookbackCount = Number.parseInt(process.env.EMOJI_UNIQUE_LOOKBACK || "5", 10);
 
   return {
     enabled,
@@ -255,9 +230,7 @@ export function getRecentlyUsedCustomEmojis(
 
   // 3. Filter for bot messages in dialogue history
   const botMessages = contextItems.filter(
-    (item) =>
-      item.role === "model" &&
-      item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
+    (item) => item.role === "model" && item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
   );
 
   // 4. If no bot messages exist, return empty set
@@ -266,10 +239,7 @@ export function getRecentlyUsedCustomEmojis(
   }
 
   // 5. Get the last N bot messages (or all available if fewer)
-  const messagesToCheck = Math.min(
-    botMessages.length,
-    uniqueConfig.lookbackCount,
-  );
+  const messagesToCheck = Math.min(botMessages.length, uniqueConfig.lookbackCount);
   const recentBotMessages = botMessages.slice(-messagesToCheck);
 
   // 6. Extract all custom emojis from recent messages
@@ -296,10 +266,7 @@ export function getRecentlyUsedCustomEmojis(
  * @param contextItems - Full context history to check for recent emoji usage
  * @returns Filtered text with duplicate custom emojis removed
  */
-export function filterDuplicateCustomEmojis(
-  generatedText: string,
-  contextItems: StructuredContextItem[],
-): string {
+export function filterDuplicateCustomEmojis(generatedText: string, contextItems: StructuredContextItem[]): string {
   // 1. Get recently used custom emojis
   const recentlyUsed = getRecentlyUsedCustomEmojis(contextItems);
 
@@ -321,9 +288,7 @@ export function filterDuplicateCustomEmojis(
 
   // 5. If no duplicates found, return original text
   if (emojisToRemove.size === 0) {
-    log.info(
-      "[Unique Emoji] No duplicate custom emojis found in generated text",
-    );
+    log.info("[Unique Emoji] No duplicate custom emojis found in generated text");
     return generatedText;
   }
 
@@ -335,13 +300,8 @@ export function filterDuplicateCustomEmojis(
   // NOTE: An empty result is intentionally allowed — it means the segment was purely
   // duplicate emojis, and the orchestrator's empty-segment guard will drop it cleanly.
   const compactFiltered = filtered.replace(/\s+/g, "");
-  if (
-    compactFiltered.length > 0 &&
-    /^[.,!?;:。！？、，]+$/.test(compactFiltered)
-  ) {
-    log.info(
-      "[Unique Emoji] Skipping duplicate filter because result became punctuation-only",
-    );
+  if (compactFiltered.length > 0 && /^[.,!?;:。！？、，]+$/.test(compactFiltered)) {
+    log.info("[Unique Emoji] Skipping duplicate filter because result became punctuation-only");
     return generatedText;
   }
 

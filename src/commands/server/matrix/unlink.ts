@@ -25,23 +25,14 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 /**
  * Configure the /server matrix unlink subcommand builder.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("unlink")
-    .setDescription(
-      localizer("en-US", "commands.server.matrix.unlink.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.matrix.unlink.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.matrix.unlink.channel_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.matrix.unlink.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     );

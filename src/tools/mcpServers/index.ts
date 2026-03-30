@@ -4,17 +4,11 @@
  */
 
 // Import handlers for internal use
-import {
-  BraveSearchHandler,
-  getBraveSearchHandler,
-} from "./brave-search/braveSearchHandler";
+import { BraveSearchHandler, getBraveSearchHandler } from "./brave-search/braveSearchHandler";
 
 import { FetchHandler, getFetchHandler } from "./fetch/fetchHandler";
 
-import {
-  DuckDuckGoHandler,
-  getDuckDuckGoHandler,
-} from "./duckduckgo-search/duckduckgoHandler";
+import { DuckDuckGoHandler, getDuckDuckGoHandler } from "./duckduckgo-search/duckduckgoHandler";
 
 import type { MCPServerBehaviorHandler } from "../../types/tool/mcpTypes";
 
@@ -75,9 +69,7 @@ export function getAllMCPHandlers(): MCPServerBehaviorHandler[] {
  * @param serverName - Name of the MCP server
  * @returns Handler instance or null if not found
  */
-export function getMCPHandlerByName(
-  serverName: string,
-): MCPServerBehaviorHandler | null {
+export function getMCPHandlerByName(serverName: string): MCPServerBehaviorHandler | null {
   const handlers = getAllMCPHandlers();
   return handlers.find((handler) => handler.serverName === serverName) || null;
 }

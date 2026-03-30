@@ -6,16 +6,9 @@ import type {
 } from "discord.js";
 import type { SelectOption } from "@/types/discord/modal";
 import type { UserRow } from "@/types/db/schema";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { sql } from "@/utils/db/client";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import {
   getDiffusionModelById,
   getLocalizedDiffusionModelDescription,
@@ -30,20 +23,11 @@ const MODAL_CUSTOM_ID = "novelai_image_model_modal";
 const MODEL_SELECT_ID = "nai_diffusion_model_id";
 const AUTOMATIC_OPTION_VALUE = "automatic";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("model")
-    .setDescription(
-      localizer("en-US", "commands.novelai.image.model.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("model").setDescription(localizer("en-US", "commands.novelai.image.model.description"));
 
 function appendDefaultSuffix(locale: string, label: string): string {
-  return `${label}${localizer(
-    locale,
-    "commands.novelai.image.params.option_default_suffix",
-  )}`;
+  return `${label}${localizer(locale, "commands.novelai.image.params.option_default_suffix")}`;
 }
 
 function createModelOptions(
@@ -53,23 +37,16 @@ function createModelOptions(
   const automaticOption: SelectOption = {
     label: localizer(locale, "commands.novelai.image.model.automatic_label"),
     value: AUTOMATIC_OPTION_VALUE,
-    description: localizer(
-      locale,
-      "commands.novelai.image.model.automatic_description",
-    ),
+    description: localizer(locale, "commands.novelai.image.model.automatic_description"),
   };
 
   const modelOptions = models.map((model) => {
-    const label = model.is_default
-      ? appendDefaultSuffix(locale, model.codename)
-      : model.codename;
+    const label = model.is_default ? appendDefaultSuffix(locale, model.codename) : model.codename;
 
     return {
       label: safeSelectOptionText(label),
       value: model.diffusion_model_id.toString(),
-      description: safeSelectOptionText(
-        getLocalizedDiffusionModelDescription(model, locale),
-      ),
+      description: safeSelectOptionText(getLocalizedDiffusionModelDescription(model, locale)),
     };
   });
 
@@ -124,14 +101,13 @@ export async function execute(
   let modalSubmitInteraction: ModalSubmitInteraction | null = null;
 
   try {
-    const [availableModels, currentOverrideModel, currentResolvedModel] =
-      await Promise.all([
-        getNovelAiDiffusionModels(),
-        tomoriState.config.nai_diffusion_model_id != null
-          ? getDiffusionModelById(tomoriState.config.nai_diffusion_model_id)
-          : Promise.resolve(null),
-        resolveNaiDiffusionModel(tomoriState.config),
-      ]);
+    const [availableModels, currentOverrideModel, currentResolvedModel] = await Promise.all([
+      getNovelAiDiffusionModels(),
+      tomoriState.config.nai_diffusion_model_id != null
+        ? getDiffusionModelById(tomoriState.config.nai_diffusion_model_id)
+        : Promise.resolve(null),
+      resolveNaiDiffusionModel(tomoriState.config),
+    ]);
 
     if (!availableModels.length) {
       await replyInfoEmbed(interaction, locale, {
@@ -152,20 +128,12 @@ export async function execute(
           descriptionKey: "commands.novelai.image.model.select_description",
           placeholder:
             currentOverrideModel?.provider === "novelai"
-              ? localizer(
-                  locale,
-                  "commands.novelai.image.model.select_placeholder_current_override",
-                  {
-                    model: currentOverrideModel.codename,
-                  },
-                )
-              : localizer(
-                  locale,
-                  "commands.novelai.image.model.select_placeholder_current_automatic",
-                  {
-                    model: currentResolvedModel.codename,
-                  },
-                ),
+              ? localizer(locale, "commands.novelai.image.model.select_placeholder_current_override", {
+                  model: currentOverrideModel.codename,
+                })
+              : localizer(locale, "commands.novelai.image.model.select_placeholder_current_automatic", {
+                  model: currentResolvedModel.codename,
+                }),
           required: true,
           options: createModelOptions(locale, availableModels),
         },
@@ -184,17 +152,13 @@ export async function execute(
     if (!selectedValue) {
       await replyInfoEmbed(submitInteraction, locale, {
         titleKey: "commands.novelai.image.model.invalid_model_title",
-        descriptionKey:
-          "commands.novelai.image.model.invalid_model_description",
+        descriptionKey: "commands.novelai.image.model.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    const nextOverrideModelId =
-      selectedValue === AUTOMATIC_OPTION_VALUE
-        ? null
-        : Number.parseInt(selectedValue, 10);
+    const nextOverrideModelId = selectedValue === AUTOMATIC_OPTION_VALUE ? null : Number.parseInt(selectedValue, 10);
 
     if (
       selectedValue !== AUTOMATIC_OPTION_VALUE &&
@@ -202,8 +166,7 @@ export async function execute(
     ) {
       await replyInfoEmbed(submitInteraction, locale, {
         titleKey: "commands.novelai.image.model.invalid_model_title",
-        descriptionKey:
-          "commands.novelai.image.model.invalid_model_description",
+        descriptionKey: "commands.novelai.image.model.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -212,32 +175,23 @@ export async function execute(
     const selectedModel =
       nextOverrideModelId == null
         ? null
-        : (availableModels.find(
-            (model) => model.diffusion_model_id === nextOverrideModelId,
-          ) ?? null);
+        : (availableModels.find((model) => model.diffusion_model_id === nextOverrideModelId) ?? null);
 
     if (nextOverrideModelId != null && !selectedModel) {
       await replyInfoEmbed(submitInteraction, locale, {
         titleKey: "commands.novelai.image.model.invalid_model_title",
-        descriptionKey:
-          "commands.novelai.image.model.invalid_model_description",
+        descriptionKey: "commands.novelai.image.model.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    if (
-      (nextOverrideModelId ?? null) ===
-      (tomoriState.config.nai_diffusion_model_id ?? null)
-    ) {
+    if ((nextOverrideModelId ?? null) === (tomoriState.config.nai_diffusion_model_id ?? null)) {
       await replyInfoEmbed(submitInteraction, locale, {
         titleKey: "commands.novelai.image.model.already_selected_title",
-        descriptionKey:
-          "commands.novelai.image.model.already_selected_description",
+        descriptionKey: "commands.novelai.image.model.already_selected_description",
         descriptionVars: {
-          mode:
-            selectedModel?.codename ??
-            localizer(locale, "commands.novelai.image.model.automatic_label"),
+          mode: selectedModel?.codename ?? localizer(locale, "commands.novelai.image.model.automatic_label"),
         },
         color: ColorCode.WARN,
       });
@@ -271,9 +225,7 @@ export async function execute(
       titleKey: "commands.novelai.image.model.success_title",
       descriptionKey: "commands.novelai.image.model.success_description",
       descriptionVars: {
-        mode:
-          selectedModel?.codename ??
-          localizer(locale, "commands.novelai.image.model.automatic_label"),
+        mode: selectedModel?.codename ?? localizer(locale, "commands.novelai.image.model.automatic_label"),
         effective_model: resolvedModel.codename,
         source: localizer(locale, getSourceLabelKey(resolvedModel.source)),
       },

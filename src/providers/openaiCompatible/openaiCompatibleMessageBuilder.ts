@@ -1,11 +1,5 @@
-import type {
-  FunctionCall,
-  FunctionResponseImageMetadata,
-} from "@/types/provider/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "@/types/misc/context";
+import type { FunctionCall, FunctionResponseImageMetadata } from "@/types/provider/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
@@ -52,9 +46,7 @@ export async function buildOpenAICompatibleMessages(
 
     if (
       item.role === "system" ||
-      (item.role === "user" &&
-        item.metadataTag &&
-        SYSTEM_INSTRUCTION_TAGS.includes(item.metadataTag))
+      (item.role === "user" && item.metadataTag && SYSTEM_INSTRUCTION_TAGS.includes(item.metadataTag))
     ) {
       if (itemTextContent) {
         systemInstructionParts.push(itemTextContent);
@@ -95,10 +87,7 @@ export async function buildOpenAICompatibleMessages(
 
     if (role === "assistant") {
       const assistantText = contentParts
-        .filter(
-          (part): part is { type: "text"; text: string } =>
-            part.type === "text" && typeof part.text === "string",
-        )
+        .filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
         .map((part) => part.text)
         .join("\n");
 
@@ -133,10 +122,7 @@ export async function buildOpenAICompatibleMessages(
       continue;
     }
 
-    const content =
-      contentParts.length === 1 && contentParts[0].type === "text"
-        ? contentParts[0].text
-        : contentParts;
+    const content = contentParts.length === 1 && contentParts[0].type === "text" ? contentParts[0].text : contentParts;
 
     messages.push({
       role,
@@ -168,23 +154,16 @@ export async function buildOpenAICompatibleMessages(
         role: "system",
         content: systemContent,
       });
-      log.info(
-        `${options.adapterName}: Assembled system message (${systemContent.length} chars)`,
-      );
+      log.info(`${options.adapterName}: Assembled system message (${systemContent.length} chars)`);
     }
   }
 
-  if (
-    options.functionInteractionHistory &&
-    options.functionInteractionHistory.length > 0
-  ) {
+  if (options.functionInteractionHistory && options.functionInteractionHistory.length > 0) {
     for (const interaction of options.functionInteractionHistory) {
       const toolCallId = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const preToolCallContent = (interaction.preToolCallTextParts ?? [])
         .map((part) => part.text)
-        .filter(
-          (text): text is string => typeof text === "string" && text.length > 0,
-        )
+        .filter((text): text is string => typeof text === "string" && text.length > 0)
         .join("");
 
       const assistantMessage: Record<string, unknown> = {
@@ -202,8 +181,7 @@ export async function buildOpenAICompatibleMessages(
         ],
       };
       if (interaction.functionCall.deepseekReasoningContent) {
-        assistantMessage.reasoning_content =
-          interaction.functionCall.deepseekReasoningContent;
+        assistantMessage.reasoning_content = interaction.functionCall.deepseekReasoningContent;
         log.info(
           `${options.adapterName}: Preserving DeepSeek reasoning_content for tool '${interaction.functionCall.name}'`,
         );
@@ -252,18 +230,14 @@ export async function buildOpenAICompatibleMessages(
   if (options.currentTurnModelParts.length > 0) {
     const prefillText = options.currentTurnModelParts
       .map((part) => part.text)
-      .filter(
-        (text): text is string => typeof text === "string" && text.length > 0,
-      )
+      .filter((text): text is string => typeof text === "string" && text.length > 0)
       .join("");
     if (prefillText) {
       messages.push({
         role: "assistant",
         content: prefillText,
       });
-      log.info(
-        `${options.adapterName}: Appended prefill assistant message (${prefillText.length} chars)`,
-      );
+      log.info(`${options.adapterName}: Appended prefill assistant message (${prefillText.length} chars)`);
     }
   }
 
@@ -288,8 +262,7 @@ export function logSanitizedOpenAICompatibleRequest(
         }
 
         const imageUrlField =
-          (part as { image_url?: { url?: string } }).image_url ||
-          (part as { imageUrl?: { url?: string } }).imageUrl;
+          (part as { image_url?: { url?: string } }).image_url || (part as { imageUrl?: { url?: string } }).imageUrl;
         if (!imageUrlField?.url?.startsWith("data:")) {
           return part;
         }
@@ -305,9 +278,7 @@ export function logSanitizedOpenAICompatibleRequest(
     };
   });
 
-  log.info(
-    `${adapterName}: Request structure:\n${JSON.stringify(sanitized, null, 2)}`,
-  );
+  log.info(`${adapterName}: Request structure:\n${JSON.stringify(sanitized, null, 2)}`);
 }
 
 async function convertImagePartToOpenAIContentPart(

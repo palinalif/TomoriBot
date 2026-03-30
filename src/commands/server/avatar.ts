@@ -8,25 +8,15 @@ import type {
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { safeDownload } from "../../utils/security/safeDownload";
-import {
-  memoryGuard,
-  reserveAvatarQuota,
-} from "../../utils/security/rateLimiter";
+import { memoryGuard, reserveAvatarQuota } from "../../utils/security/rateLimiter";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
 import { convertToPNG } from "../../utils/image/imageProcessor";
-import {
-  deletePersonaAvatarFromS3,
-  uploadPersonaAvatarToS3,
-} from "../../utils/storage/avatarStorage";
+import { deletePersonaAvatarFromS3, uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 
 const PERSONA_SELECT_MODAL_ID = "server_avatar_persona_modal";
@@ -36,18 +26,14 @@ const PERSONA_SELECT_ID = "persona_select";
  * @param subcommand - SlashCommandSubcommandBuilder instance
  * @returns Configured subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("avatar")
     .setDescription(localizer("en-US", "commands.server.avatar.description"))
     .addAttachmentOption((option) =>
       option
         .setName("image")
-        .setDescription(
-          localizer("en-US", "commands.server.avatar.image_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.avatar.image_description"))
         .setRequired(false),
     );
 
@@ -71,10 +57,7 @@ function validateImage(attachment: Attachment): {
 
   // 2. Check content type
   const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/gif"];
-  if (
-    !attachment.contentType ||
-    !allowedTypes.includes(attachment.contentType)
-  ) {
+  if (!attachment.contentType || !allowedTypes.includes(attachment.contentType)) {
     return {
       isValid: false,
       error: "INVALID_FORMAT",
@@ -176,9 +159,7 @@ async function updateGuildAvatar(
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.error(
-        `Failed to update guild avatar: ${response.status} ${response.statusText} - ${errorText}`,
-      );
+      log.error(`Failed to update guild avatar: ${response.status} ${response.statusText} - ${errorText}`);
       return {
         success: false,
         error: "api_error",
@@ -235,9 +216,7 @@ export async function execute(
     return;
   }
 
-  let responseInteraction:
-    | ChatInputCommandInteraction
-    | ModalSubmitInteraction = interaction;
+  let responseInteraction: ChatInputCommandInteraction | ModalSubmitInteraction = interaction;
   let selectedPersona: TomoriState | null = null;
 
   try {
@@ -249,14 +228,8 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.server.avatar.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.server.avatar.main_persona_description",
-            ),
+          ? localizer(locale, "commands.server.avatar.alter_persona_description")
+          : localizer(locale, "commands.server.avatar.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
     if (personaSelectOptions.length === 0) {
@@ -285,9 +258,7 @@ export async function execute(
     });
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Server avatar persona select modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Server avatar persona select modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -298,10 +269,7 @@ export async function execute(
     responseInteraction = modalSubmitInteraction;
 
     const selectedPersonaId = modalResult.values?.[PERSONA_SELECT_ID];
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -320,12 +288,8 @@ export async function execute(
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "rate_limit.error_memory_critical_title"),
-            )
-            .setDescription(
-              localizer(locale, "rate_limit.error_memory_critical_description"),
-            )
+            .setTitle(localizer(locale, "rate_limit.error_memory_critical_title"))
+            .setDescription(localizer(locale, "rate_limit.error_memory_critical_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -335,16 +299,12 @@ export async function execute(
     // 5. Reserve avatar quota (atomic check+increment for per-server DDoS protection)
     const quotaReserve = reserveAvatarQuota(interaction.guild.id);
     if (!quotaReserve.allowed) {
-      const resetTime = quotaReserve.resetAt
-        ? new Date(quotaReserve.resetAt).toLocaleString(locale)
-        : "unknown";
+      const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
 
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "rate_limit.error_quota_exceeded_title"),
-            )
+            .setTitle(localizer(locale, "rate_limit.error_quota_exceeded_title"))
             .setDescription(
               localizer(locale, "rate_limit.error_quota_exceeded_description", {
                 reset_time: resetTime,
@@ -455,10 +415,7 @@ export async function execute(
       const avatarDataUri = downloadResult.dataUri!;
 
       // 10. Update guild avatar for main persona via Discord API with timeout protection
-      const updateResult = await updateGuildAvatar(
-        interaction.guild.id,
-        avatarDataUri,
-      );
+      const updateResult = await updateGuildAvatar(interaction.guild.id, avatarDataUri);
 
       if (updateResult.success) {
         // Quota already reserved at step 5 - no increment needed
@@ -517,10 +474,7 @@ export async function execute(
       }
 
       if (persistedAvatarUrl) {
-        if (
-          selectedPersona.webhook_avatar_url &&
-          selectedPersona.webhook_avatar_url !== persistedAvatarUrl
-        ) {
+        if (selectedPersona.webhook_avatar_url && selectedPersona.webhook_avatar_url !== persistedAvatarUrl) {
           await deletePersonaAvatarFromS3(selectedPersona.webhook_avatar_url);
         }
 

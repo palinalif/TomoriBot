@@ -1,8 +1,5 @@
 import type { z } from "zod";
-import type {
-  ProviderStructuredJsonRequest,
-  StructuredOutputResult,
-} from "@/types/provider/featureInterfaces";
+import type { ProviderStructuredJsonRequest, StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 
 type DeepseekStructuredOutputRequest = ProviderStructuredJsonRequest;
@@ -29,9 +26,7 @@ function buildExampleJsonFromSchema(schema: unknown): unknown {
   const schemaType = record.type;
   if (schemaType === "object") {
     const properties =
-      record.properties && typeof record.properties === "object"
-        ? (record.properties as Record<string, unknown>)
-        : {};
+      record.properties && typeof record.properties === "object" ? (record.properties as Record<string, unknown>) : {};
     const example: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(properties)) {
       example[key] = buildExampleJsonFromSchema(value);
@@ -44,10 +39,7 @@ function buildExampleJsonFromSchema(schema: unknown): unknown {
   }
 
   if (schemaType === "integer" || schemaType === "number") {
-    const minimum =
-      typeof record.minimum === "number" && Number.isFinite(record.minimum)
-        ? record.minimum
-        : 0;
+    const minimum = typeof record.minimum === "number" && Number.isFinite(record.minimum) ? record.minimum : 0;
     return minimum;
   }
 
@@ -109,11 +101,7 @@ export async function callDeepseekStructuredJSON<T>(
       messages: [
         {
           role: "system",
-          content: buildDeepseekStructuredSystemPrompt(
-            request.systemPrompt,
-            responseSchema,
-            request.schemaName,
-          ),
+          content: buildDeepseekStructuredSystemPrompt(request.systemPrompt, responseSchema, request.schemaName),
         },
         {
           role: "user",
@@ -142,17 +130,13 @@ export async function callDeepseekStructuredJSON<T>(
 
     if (!response.ok) {
       const errorBody = await response.text();
-      log.error(
-        "DeepSeek structured JSON request failed",
-        new Error(errorBody),
-        {
-          errorType: "DeepseekStructuredJSONHttpError",
-          metadata: {
-            model: request.model,
-            status: response.status,
-          },
+      log.error("DeepSeek structured JSON request failed", new Error(errorBody), {
+        errorType: "DeepseekStructuredJSONHttpError",
+        metadata: {
+          model: request.model,
+          status: response.status,
         },
-      );
+      });
       return {
         success: false,
         error: `DeepSeek request failed: ${response.status} ${response.statusText}`,
@@ -188,8 +172,7 @@ export async function callDeepseekStructuredJSON<T>(
       });
       return {
         success: false,
-        error:
-          "DeepSeek returned an empty structured output response. Retry the request.",
+        error: "DeepSeek returned an empty structured output response. Retry the request.",
       };
     }
 
@@ -213,10 +196,7 @@ export async function callDeepseekStructuredJSON<T>(
 
     const validationResult = zodSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        "DeepSeek structured JSON validation failed",
-        validationResult.error,
-      );
+      log.error("DeepSeek structured JSON validation failed", validationResult.error);
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,

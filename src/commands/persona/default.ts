@@ -8,31 +8,12 @@ import {
 } from "discord.js";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import {
-  loadAllPersonasForServer,
-  loadPresetRowsByLocale,
-} from "../../utils/db/dbRead";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
-import {
-  localizer,
-  getBaseTriggerWords,
-  getDefaultBotName,
-} from "../../utils/text/localizer";
+import { loadAllPersonasForServer, loadPresetRowsByLocale } from "../../utils/db/dbRead";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { localizer, getBaseTriggerWords, getDefaultBotName } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriSchema,
-  type TomoriPresetRow,
-} from "../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriSchema, type TomoriPresetRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
@@ -42,10 +23,7 @@ import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
 function isUniqueViolation(error: unknown): boolean {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "23505"
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505"
   );
 }
 
@@ -89,13 +67,8 @@ function toPgTextArrayLiteral(values: string[]): string {
   return `{${values.map((value) => `"${value.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 }
 
-function resolvePresetTriggerWords(
-  preset: TomoriPresetRow,
-  locale: string,
-): string[] {
-  const presetTriggerWords = dedupeCaseInsensitive(
-    preset.preset_trigger_words ?? [],
-  );
+function resolvePresetTriggerWords(preset: TomoriPresetRow, locale: string): string[] {
+  const presetTriggerWords = dedupeCaseInsensitive(preset.preset_trigger_words ?? []);
   if (presetTriggerWords.length > 0) {
     return presetTriggerWords;
   }
@@ -111,11 +84,7 @@ function capitalizeTriggerFallbackName(candidate: string): string {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1).toLowerCase()}`;
 }
 
-function resolveAvailablePersonaName(
-  defaultName: string,
-  triggerWords: string[],
-  takenNames: string[],
-): string | null {
+function resolveAvailablePersonaName(defaultName: string, triggerWords: string[], takenNames: string[]): string | null {
   const taken = new Set(takenNames.map((name) => normalizeForComparison(name)));
   const candidates = [defaultName, ...triggerWords];
 
@@ -125,8 +94,7 @@ function resolveAvailablePersonaName(
       continue;
     }
 
-    const resolvedCandidate =
-      index === 0 ? trimmed : capitalizeTriggerFallbackName(trimmed);
+    const resolvedCandidate = index === 0 ? trimmed : capitalizeTriggerFallbackName(trimmed);
     if (!taken.has(normalizeForComparison(resolvedCandidate))) {
       return resolvedCandidate;
     }
@@ -149,8 +117,7 @@ function resolvePresetLineageId(preset: TomoriPresetRow): number | null {
   if (normalizedName.includes("bratty")) return 716;
   if (normalizedName.includes("gloomy")) return 1770;
   if (normalizedName.includes("shy")) return 3585;
-  if (normalizedName.includes("default") || normalizedName.includes("boyish"))
-    return 4;
+  if (normalizedName.includes("default") || normalizedName.includes("boyish")) return 4;
   return null;
 }
 
@@ -173,9 +140,7 @@ function decodeBase64DataUri(dataUri: string): Buffer | null {
   }
 }
 
-async function getPresetAvatarBuffer(
-  preset: TomoriPresetRow,
-): Promise<Buffer | null> {
+async function getPresetAvatarBuffer(preset: TomoriPresetRow): Promise<Buffer | null> {
   const cachedAvatarDataUri = getCachedPresetAvatar(preset.tomori_preset_id);
   if (cachedAvatarDataUri) {
     const decoded = decodeBase64DataUri(cachedAvatarDataUri);
@@ -193,41 +158,28 @@ async function getPresetAvatarBuffer(
     const absolutePath = path.join(process.cwd(), presetAvatarPath);
     return await readFile(absolutePath);
   } catch (error) {
-    log.warn(
-      `Failed to load preset avatar file "${presetAvatarPath}" for preset ${preset.tomori_preset_id}`,
-      error,
-    );
+    log.warn(`Failed to load preset avatar file "${presetAvatarPath}" for preset ${preset.tomori_preset_id}`, error);
     return null;
   }
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("default")
     .setDescription(localizer("en-US", "commands.persona.default.description"))
     .addStringOption((option) =>
       option
         .setName("type")
-        .setDescription(
-          localizer("en-US", "commands.persona.default.type_description"),
-        )
+        .setDescription(localizer("en-US", "commands.persona.default.type_description"))
         .setRequired(false)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.persona.default.type_choice_default",
-            ),
+            name: localizer("en-US", "commands.persona.default.type_choice_default"),
             value: "default",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.persona.default.type_choice_alter",
-            ),
+            name: localizer("en-US", "commands.persona.default.type_choice_alter"),
             value: "alter",
           },
         ),
@@ -260,16 +212,12 @@ export async function execute(
     return;
   }
 
-  const targetType =
-    (interaction.options.getString(
-      "type",
-    ) as PersonaDefaultTargetType | null) ?? DEFAULT_TARGET_TYPE;
+  const targetType = (interaction.options.getString("type") as PersonaDefaultTargetType | null) ?? DEFAULT_TARGET_TYPE;
 
   if (targetType === "alter" && !interaction.guild) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.persona.import.alter_dm_not_allowed_title",
-      descriptionKey:
-        "commands.persona.import.alter_dm_not_allowed_description",
+      descriptionKey: "commands.persona.import.alter_dm_not_allowed_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -278,8 +226,7 @@ export async function execute(
 
   // 2. Check permissions (ManageGuild required in guilds)
   if (interaction.guild) {
-    const hasPermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
     if (!hasPermission) {
       await replyInfoEmbed(interaction, locale, {
@@ -320,13 +267,11 @@ export async function execute(
     }
 
     // 6. Create preset options for the select menu using full descriptions
-    const presetSelectOptions: SelectOption[] = presets.map(
-      (preset: TomoriPresetRow) => ({
-        label: safeSelectOptionText(preset.tomori_preset_name),
-        value: safeSelectOptionText(preset.tomori_preset_name),
-        description: safeSelectOptionText(preset.tomori_preset_desc),
-      }),
-    );
+    const presetSelectOptions: SelectOption[] = presets.map((preset: TomoriPresetRow) => ({
+      label: safeSelectOptionText(preset.tomori_preset_name),
+      value: safeSelectOptionText(preset.tomori_preset_name),
+      description: safeSelectOptionText(preset.tomori_preset_desc),
+    }));
 
     // 7. Show the modal with preset selection
     const modalResult = await promptWithRawModal(
@@ -351,9 +296,7 @@ export async function execute(
 
     // 8. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Preset selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Preset selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -364,10 +307,7 @@ export async function execute(
     const selectedPresetName = modalResult.values![PRESET_SELECT_ID];
 
     // 9. Find the selected preset - let helper functions manage interaction state
-    const selectedPreset = presets.find(
-      (preset: TomoriPresetRow) =>
-        preset.tomori_preset_name === selectedPresetName,
-    );
+    const selectedPreset = presets.find((preset: TomoriPresetRow) => preset.tomori_preset_name === selectedPresetName);
 
     if (!selectedPreset) {
       await modalSubmitInteraction.editReply({
@@ -377,32 +317,20 @@ export async function execute(
     }
 
     // 10. Build preset payloads for database update/insert
-    const attributeArrayLiteral = toPgTextArrayLiteral(
-      selectedPreset.preset_attribute_list,
-    );
+    const attributeArrayLiteral = toPgTextArrayLiteral(selectedPreset.preset_attribute_list);
     const presetPersonaPrompt = selectedPreset.tomori_preset_desc || null;
-    const inArrayLiteral = toPgTextArrayLiteral(
-      selectedPreset.preset_sample_dialogues_in,
-    );
-    const outArrayLiteral = toPgTextArrayLiteral(
-      selectedPreset.preset_sample_dialogues_out,
-    );
+    const inArrayLiteral = toPgTextArrayLiteral(selectedPreset.preset_sample_dialogues_in);
+    const outArrayLiteral = toPgTextArrayLiteral(selectedPreset.preset_sample_dialogues_out);
 
-    const presetTriggerWords = resolvePresetTriggerWords(
-      selectedPreset,
-      locale,
-    );
+    const presetTriggerWords = resolvePresetTriggerWords(selectedPreset, locale);
     const triggerWordsArrayLiteral = toPgTextArrayLiteral(presetTriggerWords);
     const defaultBotName = getDefaultBotName(locale);
     const resolvedLineageId = resolvePresetLineageId(selectedPreset);
     const shouldUseResolvedLineageId = resolvedLineageId !== null;
 
     const allPersonas = await loadAllPersonasForServer(serverDiscId);
-    const allPersonaNames = allPersonas.map(
-      (persona) => persona.tomori_nickname,
-    );
-    const mainPersona =
-      allPersonas.find((persona) => !persona.is_alter) ?? tomoriState;
+    const allPersonaNames = allPersonas.map((persona) => persona.tomori_nickname);
+    const mainPersona = allPersonas.find((persona) => !persona.is_alter) ?? tomoriState;
 
     if (targetType === "default") {
       const targetPersonaId = mainPersona.tomori_id ?? tomoriState.tomori_id;
@@ -478,9 +406,7 @@ export async function execute(
             targetType,
             preset: selectedPreset.tomori_preset_name,
             presetId: selectedPreset.tomori_preset_id,
-            validationErrors: validationResult.success
-              ? null
-              : validationResult.error.flatten(),
+            validationErrors: validationResult.success ? null : validationResult.error.flatten(),
           },
         };
         await log.error(
@@ -509,10 +435,7 @@ export async function execute(
       if (!isDM) {
         try {
           if (interaction.guild?.members.me) {
-            const nicknameToSet =
-              resolvedPersonaName === defaultBotName
-                ? null
-                : resolvedPersonaName;
+            const nicknameToSet = resolvedPersonaName === defaultBotName ? null : resolvedPersonaName;
             try {
               await interaction.guild.members.me.setNickname(nicknameToSet);
               log.info(
@@ -521,16 +444,12 @@ export async function execute(
               );
             } catch (error) {
               nicknameUpdateFailed = true;
-              log.warn(
-                `Failed to update guild nickname after applying preset (non-fatal): ${error}`,
-              );
+              log.warn(`Failed to update guild nickname after applying preset (non-fatal): ${error}`);
             }
           }
 
           if (interaction.guild) {
-            const cachedAvatar = getCachedPresetAvatar(
-              selectedPreset.tomori_preset_id,
-            );
+            const cachedAvatar = getCachedPresetAvatar(selectedPreset.tomori_preset_id);
 
             const avatarValue = cachedAvatar || null;
             const endpoint = `https://discord.com/api/v10/guilds/${interaction.guild.id}/members/@me`;
@@ -547,88 +466,57 @@ export async function execute(
               const actionDescription = cachedAvatar
                 ? `Set preset avatar for "${selectedPreset.tomori_preset_name}"`
                 : "Reset guild avatar to bot default";
-              log.info(
-                `${actionDescription} for guild ${interaction.guild.id} after applying preset`,
-              );
+              log.info(`${actionDescription} for guild ${interaction.guild.id} after applying preset`);
             } else {
               avatarUpdateFailed = true;
-              log.warn(
-                `Failed to update guild avatar: ${response.status} ${response.statusText}`,
-              );
+              log.warn(`Failed to update guild avatar: ${response.status} ${response.statusText}`);
             }
           }
         } catch (avatarError) {
           avatarUpdateFailed = true;
-          log.warn(
-            `Failed to update avatar or nickname after applying preset: ${avatarError}`,
-          );
+          log.warn(`Failed to update avatar or nickname after applying preset: ${avatarError}`);
         }
       }
 
-      const triggerSummary =
-        presetTriggerWords.length > 0 ? presetTriggerWords.join(", ") : "N/A";
-      const detailedSuccessDescription = localizer(
-        locale,
-        "commands.persona.default.success_details_description",
-        {
-          preset_name: selectedPreset.tomori_preset_name,
-          nickname: resolvedPersonaName,
-          attribute_count: selectedPreset.preset_attribute_list.length,
-          dialogue_count: selectedPreset.preset_sample_dialogues_in.length,
-          trigger_word_count: presetTriggerWords.length,
-          triggers: triggerSummary,
-        },
-      );
+      const triggerSummary = presetTriggerWords.length > 0 ? presetTriggerWords.join(", ") : "N/A";
+      const detailedSuccessDescription = localizer(locale, "commands.persona.default.success_details_description", {
+        preset_name: selectedPreset.tomori_preset_name,
+        nickname: resolvedPersonaName,
+        attribute_count: selectedPreset.preset_attribute_list.length,
+        dialogue_count: selectedPreset.preset_sample_dialogues_in.length,
+        trigger_word_count: presetTriggerWords.length,
+        triggers: triggerSummary,
+      });
 
       const descriptionLines = [detailedSuccessDescription];
       if (nicknameUpdateFailed) {
-        descriptionLines.push(
-          localizer(locale, "commands.persona.import.nickname_update_failed"),
-        );
+        descriptionLines.push(localizer(locale, "commands.persona.import.nickname_update_failed"));
       }
       if (avatarUpdateFailed) {
-        descriptionLines.push(
-          localizer(locale, "commands.persona.import.avatar_update_failed"),
-        );
+        descriptionLines.push(localizer(locale, "commands.persona.import.avatar_update_failed"));
       }
 
       const successEmbed = new EmbedBuilder()
         .setTitle(localizer(locale, "commands.persona.default.success_title"))
         .setDescription(descriptionLines.join("\n\n"))
-        .setColor(
-          isDM || avatarUpdateFailed || nicknameUpdateFailed
-            ? ColorCode.WARN
-            : ColorCode.SUCCESS,
-        );
+        .setColor(isDM || avatarUpdateFailed || nicknameUpdateFailed ? ColorCode.WARN : ColorCode.SUCCESS);
 
       const footerParts: string[] = [];
       if (isDM) {
-        footerParts.push(
-          localizer(
-            locale,
-            "commands.persona.default.avatar_update_skipped_dm",
-          ),
-        );
+        footerParts.push(localizer(locale, "commands.persona.default.avatar_update_skipped_dm"));
       } else if (avatarUpdateFailed) {
-        footerParts.push(
-          localizer(locale, "commands.persona.default.avatar_update_failed"),
-        );
+        footerParts.push(localizer(locale, "commands.persona.default.avatar_update_failed"));
       }
-      footerParts.push(
-        localizer(locale, "commands.persona.import.refresh_reminder"),
-      );
+      footerParts.push(localizer(locale, "commands.persona.import.refresh_reminder"));
       successEmbed.setFooter({ text: footerParts.join(" • ") });
 
       const presetAvatarBuffer = await getPresetAvatarBuffer(selectedPreset);
       let avatarAttachment: AttachmentBuilder | null = null;
       if (presetAvatarBuffer) {
-        const sanitizedNickname = sanitizeAttachmentFilenamePart(
-          resolvedPersonaName,
-          {
-            fallback: "persona",
-            maxLength: 50,
-          },
-        );
+        const sanitizedNickname = sanitizeAttachmentFilenamePart(resolvedPersonaName, {
+          fallback: "persona",
+          maxLength: 50,
+        });
         const timestamp = Date.now();
         const avatarFilename = `persona-default-${sanitizedNickname}-${timestamp}.png`;
         avatarAttachment = new AttachmentBuilder(presetAvatarBuffer, {
@@ -643,9 +531,7 @@ export async function execute(
           embeds: [
             new EmbedBuilder()
               .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-              .setDescription(
-                localizer(locale, "general.errors.unknown_error_description"),
-              )
+              .setDescription(localizer(locale, "general.errors.unknown_error_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -664,23 +550,13 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.persona.default.success_title"),
-            )
+            .setTitle(localizer(locale, "commands.persona.default.success_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.persona.default.success_confirmation",
-                {
-                  nickname: resolvedPersonaName,
-                },
-              ),
+              localizer(locale, "commands.persona.default.success_confirmation", {
+                nickname: resolvedPersonaName,
+              }),
             )
-            .setColor(
-              avatarUpdateFailed || nicknameUpdateFailed
-                ? ColorCode.WARN
-                : ColorCode.SUCCESS,
-            ),
+            .setColor(avatarUpdateFailed || nicknameUpdateFailed ? ColorCode.WARN : ColorCode.SUCCESS),
         ],
       });
       return;
@@ -701,11 +577,7 @@ export async function execute(
       return;
     }
 
-    const resolvedAlterName = resolveAvailablePersonaName(
-      defaultBotName,
-      presetTriggerWords,
-      allPersonaNames,
-    );
+    const resolvedAlterName = resolveAvailablePersonaName(defaultBotName, presetTriggerWords, allPersonaNames);
     if (!resolvedAlterName) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.persona.name_conflict_title",
@@ -729,8 +601,7 @@ export async function execute(
       (trigger) => !allTriggerWords.has(normalizeForComparison(trigger)),
     );
     const hasNoTriggers = uniqueAlterTriggers.length === 0;
-    const alterTriggerWordsArrayLiteral =
-      toPgTextArrayLiteral(uniqueAlterTriggers);
+    const alterTriggerWordsArrayLiteral = toPgTextArrayLiteral(uniqueAlterTriggers);
 
     let insertedAlterRow: unknown;
     if (shouldUseResolvedLineageId) {
@@ -827,26 +698,15 @@ export async function execute(
       localizer(locale, "commands.persona.import.alter_success_description", {
         nickname: resolvedAlterName,
         trigger_count: uniqueAlterTriggers.length,
-        triggers:
-          uniqueAlterTriggers.length > 0
-            ? uniqueAlterTriggers.join(", ")
-            : "N/A",
+        triggers: uniqueAlterTriggers.length > 0 ? uniqueAlterTriggers.join(", ") : "N/A",
       }),
     ];
     if (hasNoTriggers) {
-      descriptionParts.push(
-        "\n\n" +
-          localizer(
-            locale,
-            "commands.persona.import.alter_no_triggers_warning",
-          ),
-      );
+      descriptionParts.push(`\n\n${localizer(locale, "commands.persona.import.alter_no_triggers_warning")}`);
     }
 
     const successEmbed = new EmbedBuilder()
-      .setTitle(
-        localizer(locale, "commands.persona.import.alter_success_title"),
-      )
+      .setTitle(localizer(locale, "commands.persona.import.alter_success_title"))
       .setDescription(descriptionParts.join(""))
       .setColor(hasNoTriggers ? ColorCode.WARN : ColorCode.SUCCESS)
       .setFooter({
@@ -856,13 +716,10 @@ export async function execute(
     const presetAvatarBuffer = await getPresetAvatarBuffer(selectedPreset);
     let avatarAttachment: AttachmentBuilder | null = null;
     if (presetAvatarBuffer) {
-      const sanitizedNickname = sanitizeAttachmentFilenamePart(
-        resolvedAlterName,
-        {
-          fallback: "persona",
-          maxLength: 50,
-        },
-      );
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(resolvedAlterName, {
+        fallback: "persona",
+        maxLength: 50,
+      });
       const timestamp = Date.now();
       const avatarFilename = `persona-default-alter-${sanitizedNickname}-${timestamp}.png`;
       avatarAttachment = new AttachmentBuilder(presetAvatarBuffer, {
@@ -871,19 +728,14 @@ export async function execute(
       successEmbed.setImage(`attachment://${avatarFilename}`);
     }
 
-    const successChannel =
-      modalSubmitInteraction.channel ?? interaction.channel;
+    const successChannel = modalSubmitInteraction.channel ?? interaction.channel;
     if (!successChannel || !("send" in successChannel)) {
-      log.error(
-        "No channel available for persona default alter success message",
-      );
+      log.error("No channel available for persona default alter success message");
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -913,9 +765,7 @@ export async function execute(
 					WHERE tomori_id = ${newAlterId}
 				`;
       } else {
-        log.warn(
-          `Failed to persist preset avatar for alter persona ${newAlterId}`,
-        );
+        log.warn(`Failed to persist preset avatar for alter persona ${newAlterId}`);
       }
     }
 
@@ -929,18 +779,12 @@ export async function execute(
     await modalSubmitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(
-            localizer(locale, "commands.persona.import.alter_success_title"),
-          )
+          .setTitle(localizer(locale, "commands.persona.import.alter_success_title"))
           .setDescription(
-            localizer(
-              locale,
-              "commands.persona.import.alter_success_confirmation",
-              {
-                nickname: resolvedAlterName,
-                trigger_count: uniqueAlterTriggers.length,
-              },
-            ),
+            localizer(locale, "commands.persona.import.alter_success_confirmation", {
+              nickname: resolvedAlterName,
+              trigger_count: uniqueAlterTriggers.length,
+            }),
           )
           .setColor(hasNoTriggers ? ColorCode.WARN : ColorCode.SUCCESS),
       ],
@@ -978,11 +822,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /persona default for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /persona default for user ${userData.user_disc_id}`, error as Error, context);
 
     // 14. Inform user of unknown error
     if (!interaction.replied && !interaction.deferred) {

@@ -38,8 +38,7 @@ interface CacheEntry {
  * Cache duration: configurable via env, default 10 minutes.
  * Matches the tomoriStateCache TTL since preset changes are similarly infrequent.
  */
-const CACHE_DURATION_MS =
-  (Number(process.env.ST_PRESET_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
+const CACHE_DURATION_MS = (Number(process.env.ST_PRESET_CACHE_TTL_MINUTES) || 10) * 60 * 1000;
 
 // ─── Cache Storage ──────────────────────────────────────────────────────
 
@@ -59,9 +58,7 @@ let cacheMisses = 0;
  * @param serverId - Internal numeric server_id (FK to servers table)
  * @returns Cached preset data or null
  */
-export async function getCachedActivePreset(
-  serverId: number,
-): Promise<CachedPresetData | null> {
+export async function getCachedActivePreset(serverId: number): Promise<CachedPresetData | null> {
   const now = Date.now();
   const entry = cache.get(serverId);
 
@@ -73,9 +70,7 @@ export async function getCachedActivePreset(
       return entry.data;
     }
     // Stale — fall through to refresh
-    log.info(
-      `[ST Preset Cache] STALE for server_id ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`,
-    );
+    log.info(`[ST Preset Cache] STALE for server_id ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // 2. Cache miss or stale — load from DB
@@ -91,9 +86,7 @@ export async function getCachedActivePreset(
 
     // 3. Validate preset_id exists (should always be present on loaded DB rows)
     if (preset.preset_id == null) {
-      log.error(
-        `[ST Preset Cache] Active preset for server_id ${serverId} has no preset_id — skipping`,
-      );
+      log.error(`[ST Preset Cache] Active preset for server_id ${serverId} has no preset_id — skipping`);
       cache.set(serverId, { data: null, cachedAt: now });
       return null;
     }
@@ -110,16 +103,11 @@ export async function getCachedActivePreset(
 
     return data;
   } catch (error) {
-    log.error(
-      `[ST Preset Cache] Failed to load active preset for server_id ${serverId}`,
-      error,
-    );
+    log.error(`[ST Preset Cache] Failed to load active preset for server_id ${serverId}`, error);
 
     // Return stale data if available (graceful fallback)
     if (entry) {
-      log.warn(
-        `[ST Preset Cache] Returning stale cache for server_id ${serverId} due to error`,
-      );
+      log.warn(`[ST Preset Cache] Returning stale cache for server_id ${serverId} due to error`);
       return entry.data;
     }
 

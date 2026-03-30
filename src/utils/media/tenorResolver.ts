@@ -15,9 +15,7 @@ import { log } from "../misc/logger";
  * const gifUrl = await resolveTenorUrl("https://tenor.com/view/example-gif-123");
  * // Returns: "https://media.tenor.com/example.gif"
  */
-export async function resolveTenorUrl(
-  tenorViewUrl: string,
-): Promise<string | null> {
+export async function resolveTenorUrl(tenorViewUrl: string): Promise<string | null> {
   try {
     log.info(`Tenor Resolver: Resolving Tenor URL: ${tenorViewUrl}`);
 
@@ -29,9 +27,7 @@ export async function resolveTenorUrl(
     // 1. Fetch the Tenor page HTML
     const response = await fetch(tenorViewUrl);
     if (!response.ok) {
-      log.warn(
-        `Tenor Resolver: Failed to fetch Tenor page: ${response.status}`,
-      );
+      log.warn(`Tenor Resolver: Failed to fetch Tenor page: ${response.status}`);
       return null;
     }
 
@@ -47,19 +43,14 @@ export async function resolveTenorUrl(
     // 3. Method 2 (Fallback): Use regex to find media URLs matching the slug
     const regexMediaUrl = extractViaRegex(html, urlSlug);
     if (regexMediaUrl) {
-      log.success(
-        `Tenor Resolver: Resolved via regex method: ${regexMediaUrl}`,
-      );
+      log.success(`Tenor Resolver: Resolved via regex method: ${regexMediaUrl}`);
       return regexMediaUrl;
     }
 
     log.warn("Tenor Resolver: Could not extract GIF URL from Tenor page");
     return null;
   } catch (error) {
-    log.error(
-      "Tenor Resolver: Error resolving Tenor URL",
-      error instanceof Error ? error : new Error(String(error)),
-    );
+    log.error("Tenor Resolver: Error resolving Tenor URL", error instanceof Error ? error : new Error(String(error)));
     return null;
   }
 }
@@ -70,9 +61,7 @@ export async function resolveTenorUrl(
 function extractFromGifJson(html: string): string | null {
   try {
     // Look for <script id="gif-json"> tag
-    const gifJsonMatch = html.match(
-      /<script[^>]*id=["']gif-json["'][^>]*>(.*?)<\/script>/s,
-    );
+    const gifJsonMatch = html.match(/<script[^>]*id=["']gif-json["'][^>]*>(.*?)<\/script>/s);
 
     if (!gifJsonMatch) {
       return null;
@@ -108,9 +97,7 @@ function extractFromGifJson(html: string): string | null {
 function extractViaRegex(html: string, urlSlug: string): string | null {
   try {
     // Try to find ALL media.tenor.com URLs in the HTML
-    const allMediaTenorMatches = html.match(
-      /https?:\/\/media\.tenor\.com\/[^\s"'<>]+\.(gif|mp4|webm|png)/gi,
-    );
+    const allMediaTenorMatches = html.match(/https?:\/\/media\.tenor\.com\/[^\s"'<>]+\.(gif|mp4|webm|png)/gi);
 
     if (!allMediaTenorMatches || allMediaTenorMatches.length === 0) {
       return null;
@@ -127,10 +114,7 @@ function extractViaRegex(html: string, urlSlug: string): string | null {
 
       // Check if the slug contains the filename (filename is usually a subset of the full slug)
       // Example: slug "tsukimura-dark-souls-death-学園-idolmaster" contains filename "tsukimura-dark-souls-death"
-      return (
-        decodedSlug.includes(filenameWithoutExt) &&
-        filenameWithoutExt.length > 5
-      ); // Ensure meaningful match (avoid short strings)
+      return decodedSlug.includes(filenameWithoutExt) && filenameWithoutExt.length > 5; // Ensure meaningful match (avoid short strings)
     });
 
     for (const url of matchingUrls) {

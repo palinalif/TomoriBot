@@ -15,9 +15,7 @@ if (!process.env.DATABASE_URL) {
   const database = process.env.POSTGRES_DB || "tomodb";
 
   if (!password) {
-    log.error(
-      "POSTGRES_PASSWORD (or DATABASE_URL) is required but not set in .env",
-    );
+    log.error("POSTGRES_PASSWORD (or DATABASE_URL) is required but not set in .env");
     process.exit(1);
   }
 
@@ -35,9 +33,7 @@ if (!process.env.DATABASE_URL) {
  */
 async function nukeDatabase() {
   log.section("⚠️ DATABASE DESTRUCTION SCRIPT ⚠️");
-  log.info(
-    "This will DELETE ALL TABLES and DATA in the connected PostgreSQL database.",
-  );
+  log.info("This will DELETE ALL TABLES and DATA in the connected PostgreSQL database.");
   log.info("Run `bun run backup` first if you want to preserve your data.");
 
   // 1. Discover all tables in the public schema at runtime
@@ -49,9 +45,7 @@ async function nukeDatabase() {
 	`;
 
   if (tableRows.length === 0) {
-    log.info(
-      "No tables found in the public schema. Database is already empty.",
-    );
+    log.info("No tables found in the public schema. Database is already empty.");
     process.exit(0);
   }
 
@@ -95,9 +89,7 @@ async function nukeDatabase() {
 
     log.section("Database successfully nuked! 💣");
     log.info("To restore from a backup:  bun run restore-backup --latest");
-    log.info(
-      "To start completely fresh: bun run dev  (bot auto-initializes the schema)",
-    );
+    log.info("To start completely fresh: bun run dev  (bot auto-initializes the schema)");
   } catch (error) {
     log.error("Error during database nuke process:", error);
   } finally {

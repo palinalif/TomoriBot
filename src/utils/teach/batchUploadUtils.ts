@@ -7,10 +7,7 @@ export const BATCH_UPLOAD_MAX_SIZE_MB = 1;
 const SAMPLE_USER_PREFIX = /^(?:\{user\}|\{\{user\}\})\s*:\s*(.+)$/i;
 const SAMPLE_BOT_PREFIX = /^(?:\{bot\}|\{\{char\}\})\s*:?\s*(.+)$/i;
 
-export type TxtUploadReadError =
-  | "invalid_format"
-  | "file_too_large"
-  | "download_failed";
+export type TxtUploadReadError = "invalid_format" | "file_too_large" | "download_failed";
 
 export interface TxtUploadReadResult {
   isValid: boolean;
@@ -67,16 +64,12 @@ export function dedupeCaseInsensitive(items: string[]): string[] {
   return deduped;
 }
 
-export function dedupeSampleDialoguePairs(
-  pairs: SampleDialoguePair[],
-): SampleDialoguePair[] {
+export function dedupeSampleDialoguePairs(pairs: SampleDialoguePair[]): SampleDialoguePair[] {
   const deduped: SampleDialoguePair[] = [];
   const seen = new Set<string>();
 
   for (const pair of pairs) {
-    const key = `${pair.userInput.trim().toLowerCase()}|||${pair.botInput
-      .trim()
-      .toLowerCase()}`;
+    const key = `${pair.userInput.trim().toLowerCase()}|||${pair.botInput.trim().toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push({
@@ -88,9 +81,7 @@ export function dedupeSampleDialoguePairs(
   return deduped;
 }
 
-export async function readTxtUpload(
-  attachment: APIAttachment,
-): Promise<TxtUploadReadResult> {
+export async function readTxtUpload(attachment: APIAttachment): Promise<TxtUploadReadResult> {
   const filename = attachment.filename?.toLowerCase() ?? "";
   if (!filename.endsWith(".txt")) {
     return {
@@ -108,10 +99,7 @@ export async function readTxtUpload(
   if (!downloadResult.success || !downloadResult.buffer) {
     return {
       isValid: false,
-      error:
-        downloadResult.error === "size_exceeded"
-          ? "file_too_large"
-          : "download_failed",
+      error: downloadResult.error === "size_exceeded" ? "file_too_large" : "download_failed",
     };
   }
 
@@ -126,9 +114,7 @@ export async function readTxtUpload(
   };
 }
 
-export function parseSampleDialogueBatch(
-  text: string,
-): SampleDialogueParseResult {
+export function parseSampleDialogueBatch(text: string): SampleDialogueParseResult {
   const lines = getNonEmptyNumberedLines(text);
 
   if (lines.length % 2 !== 0) {

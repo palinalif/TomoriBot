@@ -1,28 +1,12 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { loadAvailableModelsForProvider } from "../../../utils/db/dbRead";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  type LlmRow,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, type LlmRow, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 
 // Modal configuration constants
@@ -43,11 +27,9 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
   // Normalize locale to handle variations (e.g., "ja-JP" -> "ja")
   const normalizedLocale = locale.toLowerCase().split("-")[0];
 
-  const description =
-    normalizedLocale === "ja" ? model.ja_description : model.llm_description;
+  const description = normalizedLocale === "ja" ? model.ja_description : model.llm_description;
 
-  const baseDescription =
-    description || model.llm_description || `${model.llm_provider} model`;
+  const baseDescription = description || model.llm_description || `${model.llm_provider} model`;
 
   // Build flags array based on model capabilities
   const flags: string[] = [];
@@ -62,14 +44,8 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("vision")
-    .setDescription(
-      localizer("en-US", "commands.config.model.vision.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("vision").setDescription(localizer("en-US", "commands.config.model.vision.description"));
 
 /**
  * Sets a dedicated vision model for image analysis.
@@ -137,9 +113,7 @@ export async function execute(
   }
 
   // Track modal state for error handling
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: LlmRow | null = null;
 
   try {
@@ -147,9 +121,7 @@ export async function execute(
     const modelSelectOptions: SelectOption[] = [
       // "None" option to clear the vision model
       {
-        label: safeSelectOptionText(
-          localizer(locale, "commands.config.model.vision.clear_option"),
-        ),
+        label: safeSelectOptionText(localizer(locale, "commands.config.model.vision.clear_option")),
         value: CLEAR_VISION_VALUE,
         description: "",
       },
@@ -157,9 +129,7 @@ export async function execute(
       ...visionModels.map((model) => ({
         label: safeSelectOptionText(model.llm_codename),
         value: safeSelectOptionText(model.llm_codename),
-        description: safeSelectOptionText(
-          getLocalizedDescription(model, userData.language_pref),
-        ),
+        description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)),
       })),
     ];
 
@@ -186,9 +156,7 @@ export async function execute(
 
     // 7. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Vision model selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Vision model selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -237,15 +205,12 @@ export async function execute(
     }
 
     // 9. Find the selected vision model by codename
-    selectedModel =
-      visionModels.find((model) => model.llm_codename === selectedValue) ??
-      null;
+    selectedModel = visionModels.find((model) => model.llm_codename === selectedValue) ?? null;
 
     if (!selectedModel) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.vision.invalid_model_title",
-        descriptionKey:
-          "commands.config.model.vision.invalid_model_description",
+        descriptionKey: "commands.config.model.vision.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -255,8 +220,7 @@ export async function execute(
     if (selectedModel.llm_id === tomoriState.config.vision_llm_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.vision.already_selected_title",
-        descriptionKey:
-          "commands.config.model.vision.already_selected_description",
+        descriptionKey: "commands.config.model.vision.already_selected_description",
         descriptionVars: { model_name: selectedModel.llm_codename },
         color: ColorCode.WARN,
       });
@@ -284,9 +248,7 @@ export async function execute(
           guildId: serverId,
           selectedModelCodename: selectedModel.llm_codename,
           targetVisionLlmId: selectedModel.llm_id,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -335,11 +297,7 @@ export async function execute(
         targetVisionLlmIdAttempted: selectedModel?.llm_id,
       },
     };
-    await log.error(
-      `Error executing /config model vision for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config model vision for user ${userData.user_disc_id}`, error as Error, context);
 
     const replyTarget = modalSubmitInteraction ?? interaction;
     await replyInfoEmbed(replyTarget, locale, {

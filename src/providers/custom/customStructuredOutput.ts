@@ -7,10 +7,7 @@ import {
   parseCustomJsonResponse,
   shouldFallbackStructuredMode,
 } from "@/providers/custom/customOpenAICompatibleUtils";
-import type {
-  ProviderStructuredJsonRequest,
-  StructuredOutputResult,
-} from "@/types/provider/featureInterfaces";
+import type { ProviderStructuredJsonRequest, StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,10 +48,7 @@ function getRequiredObjectKeys(schema: Record<string, unknown>): string[] {
   return required.filter((key): key is string => typeof key === "string");
 }
 
-function matchesArrayItemShape(
-  value: unknown,
-  arraySchema: Record<string, unknown>,
-): boolean {
+function matchesArrayItemShape(value: unknown, arraySchema: Record<string, unknown>): boolean {
   if (!isRecord(value)) {
     return false;
   }
@@ -72,18 +66,12 @@ function matchesArrayItemShape(
   return requiredKeys.every((key) => key in value);
 }
 
-function matchesArrayItemListShape(
-  value: unknown,
-  arraySchema: Record<string, unknown>,
-): boolean {
+function matchesArrayItemListShape(value: unknown, arraySchema: Record<string, unknown>): boolean {
   if (!Array.isArray(value)) {
     return false;
   }
 
-  return (
-    value.length === 0 ||
-    value.every((item) => matchesArrayItemShape(item, arraySchema))
-  );
+  return value.length === 0 || value.every((item) => matchesArrayItemShape(item, arraySchema));
 }
 
 function normalizeExpressionItemAliases(value: unknown): unknown {
@@ -93,10 +81,7 @@ function normalizeExpressionItemAliases(value: unknown): unknown {
 
   const normalized = { ...value };
 
-  if (
-    !("emotion_key" in normalized) &&
-    typeof normalized.emotion === "string"
-  ) {
+  if (!("emotion_key" in normalized) && typeof normalized.emotion === "string") {
     normalized.emotion_key = normalized.emotion;
   }
 
@@ -113,10 +98,7 @@ function normalizeExpressionItemAliases(value: unknown): unknown {
   return normalized;
 }
 
-function normalizeStructuredResponseAliases(
-  parsed: unknown,
-  responseSchema: Record<string, unknown>,
-): unknown {
+function normalizeStructuredResponseAliases(parsed: unknown, responseSchema: Record<string, unknown>): unknown {
   const rootArraySchema = getSingleRootArraySchema(responseSchema);
   if (!rootArraySchema) {
     return parsed;
@@ -138,9 +120,7 @@ function normalizeStructuredResponseAliases(
   const normalized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed)) {
     if (Array.isArray(value)) {
-      normalized[key] = value.map((item) =>
-        normalizeExpressionItemAliases(item),
-      );
+      normalized[key] = value.map((item) => normalizeExpressionItemAliases(item));
       continue;
     }
 
@@ -150,10 +130,7 @@ function normalizeStructuredResponseAliases(
   return normalized;
 }
 
-function normalizeStructuredResponseShape(
-  parsed: unknown,
-  responseSchema: Record<string, unknown>,
-): unknown {
+function normalizeStructuredResponseShape(parsed: unknown, responseSchema: Record<string, unknown>): unknown {
   const rootArraySchema = getSingleRootArraySchema(responseSchema);
   if (!rootArraySchema) {
     return parsed;
@@ -177,18 +154,14 @@ function normalizeStructuredResponseShape(
     };
   }
 
-  const arrayCandidates = Object.values(parsed).filter((value) =>
-    matchesArrayItemListShape(value, arraySchema),
-  );
+  const arrayCandidates = Object.values(parsed).filter((value) => matchesArrayItemListShape(value, arraySchema));
   if (arrayCandidates.length === 1) {
     return {
       [rootKey]: arrayCandidates[0],
     };
   }
 
-  const objectCandidates = Object.values(parsed).filter((value) =>
-    matchesArrayItemShape(value, arraySchema),
-  );
+  const objectCandidates = Object.values(parsed).filter((value) => matchesArrayItemShape(value, arraySchema));
   if (objectCandidates.length === 1) {
     return {
       [rootKey]: [objectCandidates[0]],
@@ -222,9 +195,7 @@ async function executeStructuredJsonRequest<T>(params: {
   });
 
   const body: Record<string, unknown> = {
-    ...(params.request.model !== "other-model"
-      ? { model: params.request.model }
-      : {}),
+    ...(params.request.model !== "other-model" ? { model: params.request.model } : {}),
     messages,
     temperature: params.request.temperature ?? 1.0,
     max_tokens: params.request.maxOutputTokens ?? 8192,
@@ -244,18 +215,14 @@ async function executeStructuredJsonRequest<T>(params: {
   });
 
   if (!response.success) {
-    log.error(
-      `${params.logLabel} request failed`,
-      new Error(response.error.errorBody),
-      {
-        errorType: "CustomStructuredJSONHttpError",
-        metadata: {
-          model: params.request.model,
-          status: response.error.status,
-          statusText: response.error.statusText,
-        },
+    log.error(`${params.logLabel} request failed`, new Error(response.error.errorBody), {
+      errorType: "CustomStructuredJSONHttpError",
+      metadata: {
+        model: params.request.model,
+        status: response.error.status,
+        statusText: response.error.statusText,
       },
-    );
+    });
     return {
       success: false,
       error:
@@ -268,9 +235,7 @@ async function executeStructuredJsonRequest<T>(params: {
     };
   }
 
-  const responseText = extractCustomResponseText(
-    response.data.choices?.[0]?.message?.content,
-  );
+  const responseText = extractCustomResponseText(response.data.choices?.[0]?.message?.content);
   if (!responseText) {
     return {
       success: false,
@@ -291,35 +256,24 @@ async function executeStructuredJsonRequest<T>(params: {
     });
     return {
       success: false,
-      error:
-        parseError instanceof Error
-          ? parseError.message
-          : "Invalid JSON response from custom endpoint.",
+      error: parseError instanceof Error ? parseError.message : "Invalid JSON response from custom endpoint.",
     };
   }
 
-  const aliasNormalizedParsed = normalizeStructuredResponseAliases(
-    parsed,
-    params.responseSchema,
-  );
-  const normalizedParsed = normalizeStructuredResponseShape(
-    aliasNormalizedParsed,
-    params.responseSchema,
-  );
+  const aliasNormalizedParsed = normalizeStructuredResponseAliases(parsed, params.responseSchema);
+  const normalizedParsed = normalizeStructuredResponseShape(aliasNormalizedParsed, params.responseSchema);
 
   if (aliasNormalizedParsed !== parsed) {
     log.warn(`${params.logLabel} normalized response aliases`, {
       model: params.request.model,
-      normalizationTarget:
-        Object.keys(params.responseSchema.properties ?? {})[0] ?? null,
+      normalizationTarget: Object.keys(params.responseSchema.properties ?? {})[0] ?? null,
     });
   }
 
   if (normalizedParsed !== aliasNormalizedParsed) {
     log.warn(`${params.logLabel} normalized response shape`, {
       model: params.request.model,
-      normalizationTarget:
-        Object.keys(params.responseSchema.properties ?? {})[0] ?? null,
+      normalizationTarget: Object.keys(params.responseSchema.properties ?? {})[0] ?? null,
     });
   }
 
@@ -374,31 +328,19 @@ export async function callCustomStructuredJSON<T>(
     };
   }
 
-  if (
-    !shouldFallbackStructuredMode(
-      jsonSchemaResult.status ?? 0,
-      jsonSchemaResult.errorBody ?? "",
-    )
-  ) {
+  if (!shouldFallbackStructuredMode(jsonSchemaResult.status ?? 0, jsonSchemaResult.errorBody ?? "")) {
     return {
       success: false,
       error: jsonSchemaResult.error,
     };
   }
 
-  log.warn(
-    "Custom structured JSON schema mode unsupported, retrying with json_object fallback.",
-    {
-      model: request.model,
-      status: jsonSchemaResult.status ?? null,
-    },
-  );
+  log.warn("Custom structured JSON schema mode unsupported, retrying with json_object fallback.", {
+    model: request.model,
+    status: jsonSchemaResult.status ?? null,
+  });
 
-  const promptSteeredSystemPrompt = buildSchemaSteeredSystemPrompt(
-    request.systemPrompt,
-    responseSchema,
-    schemaName,
-  );
+  const promptSteeredSystemPrompt = buildSchemaSteeredSystemPrompt(request.systemPrompt, responseSchema, schemaName);
 
   const jsonObjectResult = await executeStructuredJsonRequest({
     request,
@@ -418,25 +360,17 @@ export async function callCustomStructuredJSON<T>(
     };
   }
 
-  if (
-    !shouldFallbackStructuredMode(
-      jsonObjectResult.status ?? 0,
-      jsonObjectResult.errorBody ?? "",
-    )
-  ) {
+  if (!shouldFallbackStructuredMode(jsonObjectResult.status ?? 0, jsonObjectResult.errorBody ?? "")) {
     return {
       success: false,
       error: jsonObjectResult.error,
     };
   }
 
-  log.warn(
-    "Custom json_object mode unsupported, retrying without response_format.",
-    {
-      model: request.model,
-      status: jsonObjectResult.status ?? null,
-    },
-  );
+  log.warn("Custom json_object mode unsupported, retrying without response_format.", {
+    model: request.model,
+    status: jsonObjectResult.status ?? null,
+  });
 
   const plainJsonResult = await executeStructuredJsonRequest({
     request,

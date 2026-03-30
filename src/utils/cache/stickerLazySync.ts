@@ -18,16 +18,10 @@ import { syncStickersToDatabase } from "../db/emojiStickerSync";
  * @param forceFetch - Force fetch even if cache is fresh (default: false)
  * @returns True if sync was performed, false if cache was fresh
  */
-export async function lazySyncGuildStickers(
-  guild: Guild,
-  serverId: number,
-  forceFetch = false,
-): Promise<boolean> {
+export async function lazySyncGuildStickers(guild: Guild, serverId: number, forceFetch = false): Promise<boolean> {
   try {
     // 1. Check when stickers were last synced for this server
-    const [lastSync] = await sql<
-      Array<{ last_updated: Date; sticker_count: number }>
-    >`
+    const [lastSync] = await sql<Array<{ last_updated: Date; sticker_count: number }>>`
 			SELECT
 				MAX(updated_at) as last_updated,
 				COUNT(*) as sticker_count
@@ -67,8 +61,7 @@ export async function lazySyncGuildStickers(
       lastSync.sticker_count === 0 ||
       !lastSync.last_updated ||
       hasCountMismatch ||
-      now.getTime() - new Date(lastSync.last_updated).getTime() >
-        CACHE_DURATION_MS;
+      now.getTime() - new Date(lastSync.last_updated).getTime() > CACHE_DURATION_MS;
 
     if (!needsFetch) {
       log.info(
@@ -86,9 +79,7 @@ export async function lazySyncGuildStickers(
           ? "no stickers in DB"
           : "cache stale";
 
-    log.info(
-      `Lazy fetching stickers for guild ${guild.name} (${guild.id})... Reason: ${refreshReason}`,
-    );
+    log.info(`Lazy fetching stickers for guild ${guild.name} (${guild.id})... Reason: ${refreshReason}`);
     log.info(`[Sticker Lazy Sync] Using server_id: ${serverId}`);
 
     // 6. Fetch stickers from Discord API (if not already fetched in step 3)
@@ -97,9 +88,7 @@ export async function lazySyncGuildStickers(
     }
     const currentStickers = Array.from(guild.stickers.cache.values());
 
-    log.info(
-      `Fetched ${currentStickers.length} sticker(s) from Discord for guild ${guild.name}`,
-    );
+    log.info(`Fetched ${currentStickers.length} sticker(s) from Discord for guild ${guild.name}`);
 
     // 7. Sync to database using shared helper
     await sql.transaction(async (tx) => {
@@ -110,15 +99,11 @@ export async function lazySyncGuildStickers(
 
     return true;
   } catch (error) {
-    log.error(
-      `Failed to lazy sync stickers for guild ${guild.name} (${guild.id}):`,
-      error,
-      {
-        serverId,
-        errorType: "StickerLazySyncError",
-        metadata: { guildId: guild.id },
-      },
-    );
+    log.error(`Failed to lazy sync stickers for guild ${guild.name} (${guild.id}):`, error, {
+      serverId,
+      errorType: "StickerLazySyncError",
+      metadata: { guildId: guild.id },
+    });
     // Don't throw - allow the bot to continue with possibly stale data
     return false;
   }

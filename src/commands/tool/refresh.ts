@@ -9,12 +9,8 @@ import { clearShortTermMemoryForChannel } from "../../utils/cache/shortTermMemor
 /**
  * Configures the 'refresh' subcommand.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("refresh")
-    .setDescription(localizer("en-US", "commands.tool.refresh.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("refresh").setDescription(localizer("en-US", "commands.tool.refresh.description"));
 
 /**
  * Executes the 'refresh' command.
@@ -33,9 +29,7 @@ export async function execute(
   // Clear all short-term memories for this channel (for all users)
   if (interaction.channel) {
     clearShortTermMemoryForChannel(interaction.channel.id);
-    log.info(
-      `[refreshCommand] Cleared short-term memories for channel - channelId=${interaction.channel.id}`,
-    );
+    log.info(`[refreshCommand] Cleared short-term memories for channel - channelId=${interaction.channel.id}`);
   }
 
   // Send an embed that includes the keyword "refresh" in the description

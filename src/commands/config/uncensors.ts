@@ -4,53 +4,33 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("uncensors")
     .setDescription(localizer("en-US", "commands.config.uncensors.description"))
     .addStringOption((option) =>
       option
         .setName("uncensor")
-        .setDescription(
-          localizer("en-US", "commands.config.uncensors.option_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.uncensors.option_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.config.uncensors.injection_option",
-            ),
+            name: localizer("en-US", "commands.config.uncensors.injection_option"),
             value: "injection",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.config.uncensors.unicode_spaces_option",
-            ),
+            name: localizer("en-US", "commands.config.uncensors.unicode_spaces_option"),
             value: "unicode_spaces",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.config.uncensors.sanitize_option",
-            ),
+            name: localizer("en-US", "commands.config.uncensors.sanitize_option"),
             value: "sanitize",
           },
         ),
@@ -58,9 +38,7 @@ export const configureSubcommand = (
     .addStringOption((option) =>
       option
         .setName("set")
-        .setDescription(
-          localizer("en-US", "commands.config.uncensors.set_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.uncensors.set_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -96,9 +74,7 @@ export async function execute(
     const setAction = interaction.options.getString("set", true);
     const isEnabled = setAction === "enable";
 
-    const tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -129,9 +105,7 @@ export async function execute(
         currentSetting = tomoriState.config.uncensor_sanitize_enabled;
         break;
       default:
-        log.error(
-          `Invalid uncensorChoice received in /config uncensors: ${uncensorChoice}`,
-        );
+        log.error(`Invalid uncensorChoice received in /config uncensors: ${uncensorChoice}`);
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.invalid_option_title",
           descriptionKey: "general.errors.invalid_option_description",
@@ -174,9 +148,7 @@ export async function execute(
           uncensorChoice,
           dbColumnName,
           isEnabled,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -205,10 +177,7 @@ export async function execute(
     });
 
     if (uncensorChoice === "injection" && isEnabled) {
-      description += `\n\n${localizer(
-        locale,
-        "commands.config.uncensors.injection_ack_notice",
-      )}`;
+      description += `\n\n${localizer(locale, "commands.config.uncensors.injection_ack_notice")}`;
     }
 
     await replyInfoEmbed(interaction, locale, {
@@ -238,11 +207,7 @@ export async function execute(
         actionAttempted: interaction.options.getString("set"),
       },
     };
-    await log.error(
-      `Error executing /config uncensors for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config uncensors for user ${userData.user_disc_id}`, error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({

@@ -438,8 +438,4 @@ export type BraveSearchResponse =
 /**
  * All possible search result types
  */
-export type BraveSearchResult =
-  | WebResult
-  | ImageResult
-  | VideoResult
-  | NewsResult;
+export type BraveSearchResult = WebResult | ImageResult | VideoResult | NewsResult;

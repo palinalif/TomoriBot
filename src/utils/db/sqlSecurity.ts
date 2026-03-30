@@ -8,11 +8,7 @@
  * and maintainability - when schemas change, security whitelists update automatically.
  */
 
-import type {
-  UserRow,
-  TomoriRow,
-  TomoriConfigRow,
-} from "../../types/db/schema";
+import type { UserRow, TomoriRow, TomoriConfigRow } from "../../types/db/schema";
 import { log } from "../misc/logger";
 
 // Extract allowed field names from Zod schemas

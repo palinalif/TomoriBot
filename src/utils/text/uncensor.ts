@@ -35,13 +35,8 @@ const DEFAULT_SENSITIVE_WORDS = [
 ];
 
 const DEFAULT_WORD_SET = buildWordSet(DEFAULT_SENSITIVE_WORDS);
-const PROFANE_WORD_SET = buildWordSet(
-  Array.isArray(profaneWords) ? profaneWords : [],
-);
-const COMBINED_WORD_SET = new Set<string>([
-  ...DEFAULT_WORD_SET,
-  ...PROFANE_WORD_SET,
-]);
+const PROFANE_WORD_SET = buildWordSet(Array.isArray(profaneWords) ? profaneWords : []);
+const COMBINED_WORD_SET = new Set<string>([...DEFAULT_WORD_SET, ...PROFANE_WORD_SET]);
 
 export interface UncensorInputOptions {
   unicodeSpacesEnabled?: boolean;
@@ -60,10 +55,7 @@ export interface UncensorInjectionOptions {
   unicodeSpacesEnabled?: boolean;
 }
 
-export function applyUncensorInputTransforms(
-  text: string,
-  options?: UncensorInputOptions,
-): string {
+export function applyUncensorInputTransforms(text: string, options?: UncensorInputOptions): string {
   if (!text) return text;
   if (!options?.unicodeSpacesEnabled && !options?.sanitizeEnabled) return text;
 
@@ -82,10 +74,7 @@ export function applyUncensorInputTransforms(
   return restore(working);
 }
 
-export function applyUncensorOutputTransforms(
-  text: string,
-  options?: UncensorOutputOptions,
-): string {
+export function applyUncensorOutputTransforms(text: string, options?: UncensorOutputOptions): string {
   if (!text) return text;
   if (!options?.unicodeSpacesEnabled && !options?.sanitizeEnabled) return text;
 
@@ -105,9 +94,7 @@ export function applyUncensorOutputTransforms(
   return working;
 }
 
-export function buildUncensorInjectionText(
-  options?: UncensorInjectionOptions,
-): string | null {
+export function buildUncensorInjectionText(options?: UncensorInjectionOptions): string | null {
   if (!options?.injectionEnabled && !options?.unicodeSpacesEnabled) {
     return null;
   }
@@ -119,9 +106,7 @@ export function buildUncensorInjectionText(
     );
   }
   if (options?.unicodeSpacesEnabled) {
-    parts.push(
-      `Use the Unicode space character "${UNICODE_SPACE}" instead of a normal space in your output. ➛`,
-    );
+    parts.push(`Use the Unicode space character "${UNICODE_SPACE}" instead of a normal space in your output. ➛`);
   }
 
   if (parts.length === 0) return null;

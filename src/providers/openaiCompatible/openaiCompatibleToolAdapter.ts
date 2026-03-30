@@ -32,16 +32,11 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
         parameters: this.cloneParameterSchema(tool.parameters),
       };
 
-      log.info(
-        `${this.providerName} adapter: Converted tool '${tool.name}' to OpenAI-compatible format`,
-      );
+      log.info(`${this.providerName} adapter: Converted tool '${tool.name}' to OpenAI-compatible format`);
 
       return openaiFunction;
     } catch (error) {
-      log.error(
-        `${this.providerName} adapter: Failed to convert tool '${tool.name}'`,
-        error as Error,
-      );
+      log.error(`${this.providerName} adapter: Failed to convert tool '${tool.name}'`, error as Error);
       throw error;
     }
   }
@@ -58,10 +53,7 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
             resultText = data.summary;
           } else if (data.message && typeof data.message === "string") {
             resultText = data.message;
-          } else if (
-            data.selectionReason &&
-            typeof data.selectionReason === "string"
-          ) {
+          } else if (data.selectionReason && typeof data.selectionReason === "string") {
             resultText = data.selectionReason;
           } else {
             const relevantData = this.extractRelevantData(data);
@@ -76,17 +68,13 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
         };
       }
 
-      const errorText =
-        result.message || result.error || "Tool execution failed";
+      const errorText = result.message || result.error || "Tool execution failed";
 
       return {
         content: `Error: ${errorText}`,
       };
     } catch (error) {
-      log.error(
-        `${this.providerName} adapter: Failed to convert tool result`,
-        error as Error,
-      );
+      log.error(`${this.providerName} adapter: Failed to convert tool result`, error as Error);
 
       return {
         content: "Error: Failed to process tool result",
@@ -99,11 +87,7 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
     serverId?: number,
     allowedMCPFunctions?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    return await this.getAllToolsInOpenAICompatibleFormat(
-      builtInTools,
-      serverId,
-      allowedMCPFunctions,
-    );
+    return await this.getAllToolsInOpenAICompatibleFormat(builtInTools, serverId, allowedMCPFunctions);
   }
 
   async getAllToolsInOpenAIFormat(
@@ -111,11 +95,7 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
     serverId?: number,
     allowedMCPFunctions?: string[],
   ): Promise<Array<Record<string, unknown>>> {
-    return await this.getAllToolsInOpenAICompatibleFormat(
-      builtInTools,
-      serverId,
-      allowedMCPFunctions,
-    );
+    return await this.getAllToolsInOpenAICompatibleFormat(builtInTools, serverId, allowedMCPFunctions);
   }
 
   async getAllToolsInOpenAICompatibleFormat(
@@ -139,34 +119,22 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
 
       let filteredBuiltInTools = builtInTools;
       if (!hasBraveApiKey) {
-        filteredBuiltInTools = builtInTools.filter(
-          (tool) => !braveSearchToolNames.includes(tool.name),
-        );
+        filteredBuiltInTools = builtInTools.filter((tool) => !braveSearchToolNames.includes(tool.name));
         const excludedCount = builtInTools.length - filteredBuiltInTools.length;
         if (excludedCount > 0) {
-          log.info(
-            `${this.providerName} adapter: Excluded ${excludedCount} Brave search tools (no API key)`,
-          );
+          log.info(`${this.providerName} adapter: Excluded ${excludedCount} Brave search tools (no API key)`);
         }
       }
 
       if (filteredBuiltInTools.length > 0) {
         allTools.push(...this.convertToolsArray(filteredBuiltInTools));
-        log.info(
-          `${this.providerName} adapter: Converted ${filteredBuiltInTools.length} built-in tools`,
-        );
+        log.info(`${this.providerName} adapter: Converted ${filteredBuiltInTools.length} built-in tools`);
       }
 
       const mcpManager = getMCPManager();
       if (mcpManager.isReady() && allowedMCPFunctions) {
         let addedMCPToolsCount = 0;
-        const disabledDDGFunctions = [
-          "felo-search",
-          "iask-search",
-          "monica-search",
-          "fetch-url",
-          "url-metadata",
-        ];
+        const disabledDDGFunctions = ["felo-search", "iask-search", "monica-search", "fetch-url", "url-metadata"];
         const allowedFunctionSet = new Set(allowedMCPFunctions);
 
         for (const mcpTool of mcpManager.getMCPTools()) {
@@ -176,15 +144,15 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
               continue;
             }
 
-            const declarations = (
-              geminiTool.functionDeclarations as Record<string, unknown>[]
-            ).filter((declaration) => {
-              const functionName = declaration.name as string;
-              if (disabledDDGFunctions.includes(functionName)) {
-                return false;
-              }
-              return allowedFunctionSet.has(functionName);
-            });
+            const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter(
+              (declaration) => {
+                const functionName = declaration.name as string;
+                if (disabledDDGFunctions.includes(functionName)) {
+                  return false;
+                }
+                return allowedFunctionSet.has(functionName);
+              },
+            );
 
             if (declarations.length === 0) {
               continue;
@@ -206,16 +174,11 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
             }
             addedMCPToolsCount++;
           } catch (error) {
-            log.warn(
-              `${this.providerName} adapter: Failed to extract functions from MCP tool`,
-              error as Error,
-            );
+            log.warn(`${this.providerName} adapter: Failed to extract functions from MCP tool`, error as Error);
           }
         }
 
-        log.info(
-          `${this.providerName} adapter: Added ${addedMCPToolsCount} MCP tools using centralized filtering`,
-        );
+        log.info(`${this.providerName} adapter: Added ${addedMCPToolsCount} MCP tools using centralized filtering`);
       }
 
       // Add guild MCP tools (per-guild remote servers)
@@ -233,9 +196,9 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
                 continue;
               }
 
-              const declarations = (
-                geminiTool.functionDeclarations as Record<string, unknown>[]
-              ).filter((decl) => allowedFunctionSet.has(decl.name as string));
+              const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[]).filter((decl) =>
+                allowedFunctionSet.has(decl.name as string),
+              );
 
               for (const declaration of declarations) {
                 const openAIDeclaration: Record<string, unknown> = {
@@ -243,8 +206,7 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
                 };
                 if ("parametersJsonSchema" in declaration) {
                   delete openAIDeclaration.parametersJsonSchema;
-                  openAIDeclaration.parameters =
-                    declaration.parametersJsonSchema;
+                  openAIDeclaration.parameters = declaration.parametersJsonSchema;
                 }
 
                 allTools.push({
@@ -254,33 +216,22 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
                 addedGuildToolsCount++;
               }
             } catch (error) {
-              log.warn(
-                `${this.providerName} adapter: Failed to extract guild MCP tool declarations`,
-                error as Error,
-              );
+              log.warn(`${this.providerName} adapter: Failed to extract guild MCP tool declarations`, error as Error);
             }
           }
 
           if (addedGuildToolsCount > 0) {
-            log.info(
-              `${this.providerName} adapter: Added ${addedGuildToolsCount} guild MCP tool(s)`,
-            );
+            log.info(`${this.providerName} adapter: Added ${addedGuildToolsCount} guild MCP tool(s)`);
           }
         } catch (error) {
-          log.warn(
-            `${this.providerName} adapter: Failed to get guild MCP tools`,
-            error as Error,
-          );
+          log.warn(`${this.providerName} adapter: Failed to get guild MCP tools`, error as Error);
         }
       }
 
       log.info(`${this.providerName} adapter: Total tools: ${allTools.length}`);
       return allTools;
     } catch (error) {
-      log.error(
-        `${this.providerName} adapter: Failed to get all tools in OpenAI-compatible format`,
-        error as Error,
-      );
+      log.error(`${this.providerName} adapter: Failed to get all tools in OpenAI-compatible format`, error as Error);
       return [];
     }
   }
@@ -298,9 +249,9 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
           continue;
         }
 
-        const hasFunction = (
-          geminiTool.functionDeclarations as Record<string, unknown>[]
-        ).some((declaration) => declaration.name === functionName);
+        const hasFunction = (geminiTool.functionDeclarations as Record<string, unknown>[]).some(
+          (declaration) => declaration.name === functionName,
+        );
         if (hasFunction) {
           return true;
         }
@@ -308,12 +259,9 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
 
       return false;
     } catch (error) {
-      log.warn(
-        `${this.providerName} adapter: Error checking if function ${functionName} is MCP function`,
-        {
-          error: error as Error,
-        },
-      );
+      log.warn(`${this.providerName} adapter: Error checking if function ${functionName} is MCP function`, {
+        error: error as Error,
+      });
       return false;
     }
   }
@@ -329,21 +277,12 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
       );
 
       const executor = getMCPExecutor();
-      const result = await executor.executeMCPFunction(
-        functionName,
-        args,
-        context,
-      );
+      const result = await executor.executeMCPFunction(functionName, args, context);
 
-      log.info(
-        `${this.providerName} adapter: MCP function ${functionName} completed successfully`,
-      );
+      log.info(`${this.providerName} adapter: MCP function ${functionName} completed successfully`);
       return result;
     } catch (error) {
-      log.error(
-        `${this.providerName} adapter: Failed to execute MCP function ${functionName}`,
-        error as Error,
-      );
+      log.error(`${this.providerName} adapter: Failed to execute MCP function ${functionName}`, error as Error);
       return {
         success: false,
         message: `Failed to execute MCP function: ${error instanceof Error ? error.message : String(error)}`,
@@ -354,29 +293,20 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
   validateToolCompatibility(tool: Tool): boolean {
     try {
       if (!tool.name || !tool.description || !tool.parameters) {
-        log.warn(
-          `${this.providerName} adapter: Tool validation failed: missing required fields`,
-        );
+        log.warn(`${this.providerName} adapter: Tool validation failed: missing required fields`);
         return false;
       }
 
-      for (const [_paramName, paramSchema] of Object.entries(
-        tool.parameters.properties,
-      )) {
+      for (const [_paramName, paramSchema] of Object.entries(tool.parameters.properties)) {
         if (!this.isSupportedParameterSchema(paramSchema)) {
-          log.warn(
-            `${this.providerName} adapter: Tool '${tool.name}' has unsupported parameter schema`,
-          );
+          log.warn(`${this.providerName} adapter: Tool '${tool.name}' has unsupported parameter schema`);
           return false;
         }
       }
 
       return true;
     } catch (error) {
-      log.error(
-        `${this.providerName} adapter: Tool validation error for '${tool.name}'`,
-        error as Error,
-      );
+      log.error(`${this.providerName} adapter: Tool validation error for '${tool.name}'`, error as Error);
       return false;
     }
   }
@@ -392,30 +322,17 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
         function: this.convertTool(tool),
       }));
     } catch (error) {
-      log.error(
-        `${this.providerName} adapter: Failed to convert tools array`,
-        error as Error,
-      );
+      log.error(`${this.providerName} adapter: Failed to convert tools array`, error as Error);
       return [];
     }
   }
 
-  private cloneParameterSchema(
-    schema: Tool["parameters"],
-  ): OpenAICompatibleObjectSchema {
+  private cloneParameterSchema(schema: Tool["parameters"]): OpenAICompatibleObjectSchema {
     return JSON.parse(JSON.stringify(schema)) as OpenAICompatibleObjectSchema;
   }
 
-  private isSupportedParameterSchema(
-    schema: ToolParameterPropertySchema,
-  ): boolean {
-    const supportedTypes: ToolParameterType[] = [
-      "string",
-      "number",
-      "boolean",
-      "array",
-      "object",
-    ];
+  private isSupportedParameterSchema(schema: ToolParameterPropertySchema): boolean {
+    const supportedTypes: ToolParameterType[] = ["string", "number", "boolean", "array", "object"];
 
     if (!supportedTypes.includes(schema.type)) {
       return false;
@@ -449,12 +366,9 @@ export class OpenAICompatibleToolAdapter implements MCPCapableToolAdapter {
 
       return JSON.stringify(relevantData, null, 2);
     } catch (error) {
-      log.warn(
-        `${this.providerName} adapter: Failed to extract relevant data`,
-        {
-          error: error as Error,
-        },
-      );
+      log.warn(`${this.providerName} adapter: Failed to extract relevant data`, {
+        error: error as Error,
+      });
       return null;
     }
   }

@@ -14,26 +14,14 @@
 
 import { createRequire } from "node:module";
 import type * as MatrixAppserviceBridge from "matrix-appservice-bridge";
-import type {
-  Intent,
-  WeakEvent,
-  Request as BridgeRequest,
-} from "matrix-appservice-bridge";
+import type { Intent, WeakEvent, Request as BridgeRequest } from "matrix-appservice-bridge";
 
 // Bun's ESM→CJS static analyzer cannot resolve Object.defineProperty-based
 // re-exports used by matrix-appservice-bridge. Load at runtime via require()
 // and cast to the package's own types (which are resolved by import type above).
 const _require = createRequire(import.meta.url);
-const { Bridge, AppServiceRegistration } = _require(
-  "matrix-appservice-bridge",
-) as typeof MatrixAppserviceBridge;
-import {
-  EmbedBuilder,
-  MessageFlags,
-  type BaseGuildTextChannel,
-  type Client,
-  type TextBasedChannel,
-} from "discord.js";
+const { Bridge, AppServiceRegistration } = _require("matrix-appservice-bridge") as typeof MatrixAppserviceBridge;
+import { EmbedBuilder, MessageFlags, type BaseGuildTextChannel, type Client, type TextBasedChannel } from "discord.js";
 import type { ReminderRow } from "@/types/db/schema";
 import { isBridgeUserId } from "@/utils/bridge";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
@@ -67,9 +55,7 @@ let matrixBridge: MatrixAppserviceBridge.Bridge | null = null;
  * Cache TTL for channel-room link DB lookups.
  * Configurable via MATRIX_LINK_CACHE_TTL_MINUTES (default: 5 minutes).
  */
-const CACHE_TTL_MS =
-  Number.parseInt(process.env.MATRIX_LINK_CACHE_TTL_MINUTES || "5", 10) *
-  60_000;
+const CACHE_TTL_MS = Number.parseInt(process.env.MATRIX_LINK_CACHE_TTL_MINUTES || "5", 10) * 60_000;
 
 /**
  * Maximum attachment size (in bytes) to relay in either direction.
@@ -78,30 +64,19 @@ const CACHE_TTL_MS =
  * Exported so matrixRelay.ts can enforce the same limit on Discord→Matrix uploads.
  */
 export const MATRIX_MAX_ATTACHMENT_BYTES =
-  Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) *
-  1024 *
-  1024;
+  Number.parseInt(process.env.MATRIX_MAX_ATTACHMENT_MB || "8", 10) * 1024 * 1024;
 
 /**
  * Timeout in milliseconds for Matrix media download/upload requests.
  * Configurable via MATRIX_MEDIA_TIMEOUT_MS (default: 15 000 ms).
  */
-const MATRIX_MEDIA_TIMEOUT_MS = Number.parseInt(
-  process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000",
-  10,
-);
+const MATRIX_MEDIA_TIMEOUT_MS = Number.parseInt(process.env.MATRIX_MEDIA_TIMEOUT_MS || "15000", 10);
 
 /** Cache: Discord channel ID → linked Matrix room ID (null = known-not-linked). */
-const channelLinkCache = new Map<
-  string,
-  { roomId: string | null; cachedAt: number }
->();
+const channelLinkCache = new Map<string, { roomId: string | null; cachedAt: number }>();
 
 /** Cache: Matrix room ID → linked Discord channel ID (null = known-not-linked). */
-const roomLinkCache = new Map<
-  string,
-  { channelDiscId: string | null; cachedAt: number }
->();
+const roomLinkCache = new Map<string, { channelDiscId: string | null; cachedAt: number }>();
 
 /**
  * In-memory cache of provisioned persona intents.
@@ -122,10 +97,7 @@ const ensuredRoomMemberships = new Set<string>();
  * When the cap is reached, the oldest entry (by insertion order) is evicted.
  * 500 events ≈ the last ~500 bot messages per session — enough for any realistic reply chain.
  */
-const MAX_TRACKED_SENT_EVENTS = Number.parseInt(
-  process.env.MATRIX_MAX_TRACKED_SENT_EVENTS || "500",
-  10,
-);
+const MAX_TRACKED_SENT_EVENTS = Number.parseInt(process.env.MATRIX_MAX_TRACKED_SENT_EVENTS || "500", 10);
 const MAX_REPLY_SNIPPET_CHARS = 120;
 
 /**
@@ -171,9 +143,7 @@ export const pendingMatrixReplyChannels = new Set<string>();
  * @param displayName - The user's display name as seen by the AI (e.g., "bred")
  * @returns The full Matrix ID (e.g., "@bred:localhost"), or undefined if unknown
  */
-export function getMatrixIdForDisplayName(
-  displayName: string,
-): string | undefined {
+export function getMatrixIdForDisplayName(displayName: string): string | undefined {
   return matrixDisplayNameToId.get(displayName);
 }
 
@@ -184,9 +154,7 @@ export function getMatrixIdForDisplayName(
  * @param matrixUserId - Full Matrix user ID (e.g., "@bred:localhost")
  * @returns Display name/localpart used in context (e.g., "bred"), or undefined if unknown
  */
-export function getDisplayNameForMatrixId(
-  matrixUserId: string,
-): string | undefined {
+export function getDisplayNameForMatrixId(matrixUserId: string): string | undefined {
   for (const [displayName, mappedId] of matrixDisplayNameToId.entries()) {
     if (mappedId === matrixUserId) {
       return displayName;
@@ -216,9 +184,7 @@ export function getDisplayNameForMatrixId(
  *
  * @param discordClient - Discord.js client, forwarded to the event handler for channel lookups
  */
-export async function initializeMatrixClient(
-  discordClient: Client,
-): Promise<void> {
+export async function initializeMatrixClient(discordClient: Client): Promise<void> {
   const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
   const asToken = process.env.MATRIX_ACCESS_TOKEN; // appservice → homeserver
   const hsToken = process.env.MATRIX_HS_TOKEN; // homeserver → appservice
@@ -231,10 +197,7 @@ export async function initializeMatrixClient(
     return;
   }
 
-  const port = Number.parseInt(
-    process.env.MATRIX_APPSERVICE_PORT || "9993",
-    10,
-  );
+  const port = Number.parseInt(process.env.MATRIX_APPSERVICE_PORT || "9993", 10);
   const configuredPublicUrl = process.env.MATRIX_APPSERVICE_PUBLIC_URL?.trim();
   const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
   let hasValidPublicUrl = false;
@@ -244,9 +207,7 @@ export async function initializeMatrixClient(
     try {
       const parsedUrl = new URL(configuredPublicUrl);
       const isHttps = parsedUrl.protocol === "https:";
-      const isLocalHttp =
-        parsedUrl.protocol === "http:" &&
-        localhostHosts.has(parsedUrl.hostname);
+      const isLocalHttp = parsedUrl.protocol === "http:" && localhostHosts.has(parsedUrl.hostname);
       hasValidPublicUrl = isHttps || isLocalHttp;
       if (hasValidPublicUrl) {
         registrationUrl = configuredPublicUrl;
@@ -293,11 +254,9 @@ export async function initializeMatrixClient(
       controller: {
         // onEvent is typed void (not Promise<void>) — fire-and-forget the async handler
         onEvent: (request: BridgeRequest<WeakEvent>): void => {
-          void handleMatrixEvent(request, discordClient, botUserId).catch(
-            (error) => {
-              log.warn("Matrix bridge: uncaught error in event handler", error);
-            },
-          );
+          void handleMatrixEvent(request, discordClient, botUserId).catch((error) => {
+            log.warn("Matrix bridge: uncaught error in event handler", error);
+          });
         },
         // Route bridge internal logs through our logger (errors only to reduce noise)
         onLog: (_text: string, isError: boolean): void => {
@@ -322,9 +281,7 @@ export async function initializeMatrixClient(
     // that crash JSON serialization inside our logger
     const safeMsg = error instanceof Error ? error.message : String(error);
     const safeStack = error instanceof Error ? error.stack : undefined;
-    log.error(
-      `Matrix bridge: failed to initialize appservice: ${safeMsg}\n${safeStack ?? ""}`,
-    );
+    log.error(`Matrix bridge: failed to initialize appservice: ${safeMsg}\n${safeStack ?? ""}`);
     matrixBridge = null;
   }
 }
@@ -364,9 +321,7 @@ async function sendMatrixNotice(roomId: string, text: string): Promise<void> {
  *
  * @param roomId - The invited Matrix room ID
  */
-export async function sendMatrixInviteSetupNotice(
-  roomId: string,
-): Promise<void> {
+export async function sendMatrixInviteSetupNotice(roomId: string): Promise<void> {
   await sendMatrixNotice(
     roomId,
     localizer("en-US", "matrix.notices.invited", {
@@ -387,11 +342,7 @@ export async function sendMatrixInviteSetupNotice(
  * @param locale      - Locale of the Discord admin who linked the room
  * @param channelName - Name of the Discord channel linked to the room
  */
-export async function sendMatrixLinkedSetupNotice(
-  roomId: string,
-  locale: string,
-  channelName: string,
-): Promise<void> {
+export async function sendMatrixLinkedSetupNotice(roomId: string, locale: string, channelName: string): Promise<void> {
   await sendMatrixNotice(
     roomId,
     localizer(locale, "matrix.notices.linked", {
@@ -409,10 +360,7 @@ export async function sendMatrixLinkedSetupNotice(
  * so no explicit stop call is needed for normal response times.
  * Configurable via MATRIX_TYPING_TIMEOUT_MS (default: 60 000 ms).
  */
-const MATRIX_TYPING_TIMEOUT_MS = Number.parseInt(
-  process.env.MATRIX_TYPING_TIMEOUT_MS || "60000",
-  10,
-);
+const MATRIX_TYPING_TIMEOUT_MS = Number.parseInt(process.env.MATRIX_TYPING_TIMEOUT_MS || "60000", 10);
 
 /**
  * Send or clear a typing indicator in a Matrix room as the given persona virtual user.
@@ -427,11 +375,7 @@ const MATRIX_TYPING_TIMEOUT_MS = Number.parseInt(
  * @param personaName - Persona display name used to derive the virtual user localpart
  * @param isTyping    - true to start typing, false to clear it immediately
  */
-export async function sendMatrixTypingIndicator(
-  roomId: string,
-  personaName: string,
-  isTyping: boolean,
-): Promise<void> {
+export async function sendMatrixTypingIndicator(roomId: string, personaName: string, isTyping: boolean): Promise<void> {
   const homeserverUrl = process.env.MATRIX_HOMESERVER_URL;
   const asToken = process.env.MATRIX_ACCESS_TOKEN;
   const serverName = process.env.MATRIX_SERVER_NAME;
@@ -447,11 +391,7 @@ export async function sendMatrixTypingIndicator(
     // The ?user_id query param tells the homeserver to act as the virtual persona user
     // (standard Matrix appservice masquerading protocol).
     const url = `${homeserverUrl}/_matrix/client/v3/rooms/${encodedRoomId}/typing/${encodedUserId}?user_id=${encodedUserId}`;
-    const body = JSON.stringify(
-      isTyping
-        ? { typing: true, timeout: MATRIX_TYPING_TIMEOUT_MS }
-        : { typing: false },
-    );
+    const body = JSON.stringify(isTyping ? { typing: true, timeout: MATRIX_TYPING_TIMEOUT_MS } : { typing: false });
 
     await fetch(url, {
       method: "PUT",
@@ -496,8 +436,7 @@ export async function joinMatrixRoom(roomId: string): Promise<void> {
 function getJoinViaServers(roomId: string): string[] | undefined {
   const localServer = process.env.MATRIX_SERVER_NAME?.trim();
   const roomDelimiter = roomId.indexOf(":");
-  const roomServer =
-    roomDelimiter === -1 ? undefined : roomId.slice(roomDelimiter + 1).trim();
+  const roomServer = roomDelimiter === -1 ? undefined : roomId.slice(roomDelimiter + 1).trim();
 
   const viaServers = new Set<string>();
   if (roomServer) {
@@ -527,10 +466,7 @@ function getJoinViaServers(roomId: string): string[] | undefined {
  * @param avatarUrl   - CDN URL of the persona's avatar image, or null if none
  * @returns The provisioned Intent, or null if the bridge is not configured
  */
-export async function getPersonaIntent(
-  personaName: string,
-  avatarUrl: string | null,
-): Promise<Intent | null> {
+export async function getPersonaIntent(personaName: string, avatarUrl: string | null): Promise<Intent | null> {
   if (!matrixBridge) return null;
 
   const serverName = process.env.MATRIX_SERVER_NAME;
@@ -620,9 +556,7 @@ export async function sendToMatrixRoom(
     if (personaName) {
       const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
       const userId = `@${localpart}:${serverName}`;
-      intent =
-        (await getPersonaIntent(personaName, avatarUrl ?? null)) ??
-        matrixBridge.getIntent();
+      intent = (await getPersonaIntent(personaName, avatarUrl ?? null)) ?? matrixBridge.getIntent();
 
       // Pre-invite and join before sending: private rooms reject auto-join without an invite
       await ensurePersonaInRoom(intent, userId, localpart, roomId);
@@ -651,11 +585,7 @@ export async function sendToMatrixRoom(
     // Capture event_id so incoming Matrix replies to this message can be detected
     const response = await intent.sendMessage(roomId, messageContent);
     if (personaName && (response as { event_id?: string })?.event_id) {
-      trackSentMatrixEvent(
-        (response as { event_id: string }).event_id,
-        personaName,
-        text,
-      );
+      trackSentMatrixEvent((response as { event_id: string }).event_id, personaName, text);
     }
   } catch (error) {
     log.warn(`Matrix bridge: failed to send message to room ${roomId}`, error);
@@ -693,9 +623,7 @@ export async function sendAttachmentToMatrixRoom(
     if (personaName) {
       const localpart = `_tomori_${personaName.toLowerCase().replace(/[^a-z0-9_]/g, "_")}`;
       const userId = `@${localpart}:${serverName}`;
-      intent =
-        (await getPersonaIntent(personaName, avatarUrl ?? null)) ??
-        matrixBridge.getIntent();
+      intent = (await getPersonaIntent(personaName, avatarUrl ?? null)) ?? matrixBridge.getIntent();
 
       // Pre-invite and join before uploading/sending (same as sendToMatrixRoom)
       await ensurePersonaInRoom(intent, userId, localpart, roomId);
@@ -736,10 +664,7 @@ export async function sendAttachmentToMatrixRoom(
       trackSentMatrixEvent(mediaResponse.event_id, personaName);
     }
   } catch (error) {
-    log.warn(
-      `Matrix bridge: failed to send attachment to room ${roomId}`,
-      error,
-    );
+    log.warn(`Matrix bridge: failed to send attachment to room ${roomId}`, error);
   }
 }
 
@@ -751,9 +676,7 @@ export async function sendAttachmentToMatrixRoom(
  * @param channelDiscId - The Discord channel ID to look up
  * @returns The linked Matrix room ID, or null if not linked
  */
-export async function getLinkedMatrixRoom(
-  channelDiscId: string,
-): Promise<string | null> {
+export async function getLinkedMatrixRoom(channelDiscId: string): Promise<string | null> {
   const now = Date.now();
   const cached = channelLinkCache.get(channelDiscId);
 
@@ -782,9 +705,7 @@ export async function getLinkedMatrixRoom(
  * @param matrixRoomId - The Matrix room ID to look up
  * @returns The linked Discord channel ID, or null if not linked
  */
-export async function getDiscordChannelForRoom(
-  matrixRoomId: string,
-): Promise<string | null> {
+export async function getDiscordChannelForRoom(matrixRoomId: string): Promise<string | null> {
   const now = Date.now();
   const cached = roomLinkCache.get(matrixRoomId);
 
@@ -839,10 +760,7 @@ export async function isRoomEncrypted(roomId: string): Promise<boolean> {
  * @param channelDiscId - The Discord channel ID whose cache entry to clear
  * @param matrixRoomId  - Optional: the Matrix room ID whose cache entry to also clear
  */
-export function invalidateMatrixLinkCache(
-  channelDiscId: string,
-  matrixRoomId?: string,
-): void {
+export function invalidateMatrixLinkCache(channelDiscId: string, matrixRoomId?: string): void {
   channelLinkCache.delete(channelDiscId);
   if (matrixRoomId) {
     roomLinkCache.delete(matrixRoomId);
@@ -869,9 +787,7 @@ export function resolveBridgeUserId(rawId: string): string {
   if (rawId.includes(":") && !rawId.startsWith("@")) {
     const withAt = `@${rawId}`;
     if (isBridgeUserId(withAt)) {
-      log.info(
-        `Bridge: Restored missing @ prefix in user ID: "${rawId}" → "${withAt}"`,
-      );
+      log.info(`Bridge: Restored missing @ prefix in user ID: "${rawId}" → "${withAt}"`);
       return withAt;
     }
   }
@@ -916,9 +832,7 @@ export async function sendMatrixReminderMention(
   // The AI uses @{localpart} format (e.g., "@{bred}") when mentioning Matrix users.
   // Use the localpart from user_discord_id for reliable detection — the user_nickname
   // field may differ from the localpart (e.g., "bredrumb" vs localpart "bred").
-  const matrixLocalpart = reminder.user_discord_id
-    .split(":")[0]
-    .replace(/^@/, "");
+  const matrixLocalpart = reminder.user_discord_id.split(":")[0].replace(/^@/, "");
   const mentionPlaceholder = `@{${matrixLocalpart}}`;
 
   try {
@@ -929,13 +843,10 @@ export async function sendMatrixReminderMention(
 
     const relevantMessages = recentMessages.filter(
       (message) =>
-        (message.author.id === botUserId || message.webhookId) &&
-        message.createdTimestamp >= reminderStartTime - 1000,
+        (message.author.id === botUserId || message.webhookId) && message.createdTimestamp >= reminderStartTime - 1000,
     );
 
-    const hasMention = relevantMessages.some((message) =>
-      message.content.includes(mentionPlaceholder),
-    );
+    const hasMention = relevantMessages.some((message) => message.content.includes(mentionPlaceholder));
 
     if (!hasMention) {
       // AI did not mention the user — send a proper Matrix mention ping.
@@ -943,10 +854,7 @@ export async function sendMatrixReminderMention(
       // Formatted body: anchor tag rendered as a clickable, highlighted mention
       // m.mentions: MSC3952 field so the homeserver notifies the user directly
       const matrixId = reminder.user_discord_id;
-      const safeName = reminder.user_nickname
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const safeName = reminder.user_nickname.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
       await sendToMatrixRoom(
         matrixRoomId,
@@ -957,15 +865,10 @@ export async function sendMatrixReminderMention(
         [matrixId],
       );
 
-      log.info(
-        `Matrix: Added fallback mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`,
-      );
+      log.info(`Matrix: Added fallback mention for reminder ${reminder.reminder_id} to ensure recipient is pinged`);
     }
   } catch (error) {
-    log.warn(
-      `Matrix: Failed to ensure mention for reminder ${reminder.reminder_id}:`,
-      error,
-    );
+    log.warn(`Matrix: Failed to ensure mention for reminder ${reminder.reminder_id}:`, error);
   }
 }
 
@@ -1049,9 +952,7 @@ async function getPersonaReplyEventMetadata(
     };
     // Virtual persona users follow the pattern @_tomori_*:serverName
     const isPersonaReply =
-      typeof data.sender === "string" &&
-      data.sender.startsWith("@_tomori_") &&
-      data.sender.endsWith(`:${serverName}`);
+      typeof data.sender === "string" && data.sender.startsWith("@_tomori_") && data.sender.endsWith(`:${serverName}`);
     if (!isPersonaReply) {
       return { isPersonaReply: false };
     }
@@ -1074,11 +975,7 @@ async function getPersonaReplyEventMetadata(
  * @param personaName - The display name of the persona that sent the message
  * @param sentText    - The plain message body sent to Matrix (used to build a reply snippet)
  */
-function trackSentMatrixEvent(
-  eventId: string,
-  personaName: string,
-  sentText?: string,
-): void {
+function trackSentMatrixEvent(eventId: string, personaName: string, sentText?: string): void {
   if (sentEventPersonas.size >= MAX_TRACKED_SENT_EVENTS) {
     // Map preserves insertion order — first key is the oldest entry
     const oldestKey = sentEventPersonas.keys().next().value;
@@ -1119,12 +1016,7 @@ function stripMatrixReplyFallback(body: string): string {
  * @param localpart - The localpart portion (e.g., "_tomori_lilya"), used as cache key
  * @param roomId    - The Matrix room ID to ensure membership in
  */
-async function ensurePersonaInRoom(
-  intent: Intent,
-  userId: string,
-  localpart: string,
-  roomId: string,
-): Promise<void> {
+async function ensurePersonaInRoom(intent: Intent, userId: string, localpart: string, roomId: string): Promise<void> {
   const cacheKey = `${roomId}:${localpart}`;
   if (ensuredRoomMemberships.has(cacheKey)) return;
 
@@ -1147,9 +1039,7 @@ async function ensurePersonaInRoom(
     log.info(`Matrix appservice: ${userId} joined room ${roomId}`);
   } catch (error) {
     const safeMsg = error instanceof Error ? error.message : String(error);
-    log.warn(
-      `Matrix appservice: failed to ensure ${userId} in ${roomId}: ${safeMsg}`,
-    );
+    log.warn(`Matrix appservice: failed to ensure ${userId} in ${roomId}: ${safeMsg}`);
   }
 }
 
@@ -1160,17 +1050,13 @@ async function ensurePersonaInRoom(
  * @param url - The HTTP(S) URL of the avatar image to download
  * @returns `{ buffer, mimeType }` on success, null on failure
  */
-async function downloadAvatar(
-  url: string,
-): Promise<{ buffer: Buffer; mimeType: string } | null> {
+async function downloadAvatar(url: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(MATRIX_MEDIA_TIMEOUT_MS),
     });
     if (!response.ok) {
-      log.warn(
-        `Matrix appservice: avatar fetch failed (${response.status}) for ${url}`,
-      );
+      log.warn(`Matrix appservice: avatar fetch failed (${response.status}) for ${url}`);
       return null;
     }
     const arrayBuffer = await response.arrayBuffer();
@@ -1218,17 +1104,12 @@ async function downloadMatrixMedia(
     });
 
     if (!response.ok) {
-      log.warn(
-        `Matrix bridge: media fetch failed (${response.status}) for ${httpUrl}`,
-      );
+      log.warn(`Matrix bridge: media fetch failed (${response.status}) for ${httpUrl}`);
       return null;
     }
 
     // 4. Secondary size guard via Content-Length header (if provided)
-    const contentLength = Number.parseInt(
-      response.headers.get("content-length") ?? "0",
-      10,
-    );
+    const contentLength = Number.parseInt(response.headers.get("content-length") ?? "0", 10);
     if (contentLength > MATRIX_MAX_ATTACHMENT_BYTES) {
       return null;
     }
@@ -1240,8 +1121,7 @@ async function downloadMatrixMedia(
       return null;
     }
 
-    const mimeType =
-      response.headers.get("content-type") ?? "application/octet-stream";
+    const mimeType = response.headers.get("content-type") ?? "application/octet-stream";
     return { buffer, mimeType };
   } catch (error) {
     log.warn(`Matrix bridge: failed to download media from ${httpUrl}`, error);
@@ -1260,15 +1140,10 @@ async function downloadMatrixMedia(
  * @param channel       - The Discord text channel to post the embed to
  * @param channelDiscId - The Discord channel ID (for cache invalidation)
  */
-async function handleMatrixRefresh(
-  channel: BaseGuildTextChannel,
-  channelDiscId: string,
-): Promise<void> {
+async function handleMatrixRefresh(channel: BaseGuildTextChannel, channelDiscId: string): Promise<void> {
   // 1. Clear short-term memory cache for this channel (same as /tool refresh does)
   clearShortTermMemoryForChannel(channelDiscId);
-  log.info(
-    `Matrix /refresh: cleared short-term memories for channel ${channelDiscId}`,
-  );
+  log.info(`Matrix /refresh: cleared short-term memories for channel ${channelDiscId}`);
 
   // 2. Build the refresh embed using en-US locale as the canonical reset marker
   const embed = new EmbedBuilder()
@@ -1291,10 +1166,7 @@ async function handleMatrixRefresh(
  * @param roomId  - Matrix room ID where typing should be cleared
  * @returns Number of persona typing indicators attempted
  */
-async function clearMatrixTypingIndicatorsForChannel(
-  channel: BaseGuildTextChannel,
-  roomId: string,
-): Promise<number> {
+async function clearMatrixTypingIndicatorsForChannel(channel: BaseGuildTextChannel, roomId: string): Promise<number> {
   const personaNames = new Set<string>();
 
   try {
@@ -1306,20 +1178,13 @@ async function clearMatrixTypingIndicatorsForChannel(
       }
     }
   } catch (error) {
-    log.warn(
-      `Matrix /kill: failed to load personas for typing clear in channel ${channel.id}`,
-      error,
-    );
+    log.warn(`Matrix /kill: failed to load personas for typing clear in channel ${channel.id}`, error);
   }
 
   personaNames.add(process.env.DEFAULT_BOTNAME || "Tomori");
 
   const names = Array.from(personaNames);
-  await Promise.all(
-    names.map((personaName) =>
-      sendMatrixTypingIndicator(roomId, personaName, false),
-    ),
-  );
+  await Promise.all(names.map((personaName) => sendMatrixTypingIndicator(roomId, personaName, false)));
   return names.length;
 }
 
@@ -1361,9 +1226,7 @@ async function handleMatrixEvent(
       await sendMatrixInviteSetupNotice(event.room_id);
     } catch (err) {
       const safeMsg = err instanceof Error ? err.message : String(err);
-      log.warn(
-        `Matrix bridge: failed to auto-accept invite to ${event.room_id}: ${safeMsg}`,
-      );
+      log.warn(`Matrix bridge: failed to auto-accept invite to ${event.room_id}: ${safeMsg}`);
     }
     return;
   }
@@ -1374,9 +1237,7 @@ async function handleMatrixEvent(
   // 3. Loop prevention: ignore messages from the bot account or any persona virtual user.
   //    The domain suffix check prevents a remote user named @_tomori_*:evil.org from
   //    accidentally (or maliciously) matching our appservice's virtual user namespace.
-  const isOwnVirtualUser =
-    event.sender.startsWith("@_tomori_") &&
-    event.sender.endsWith(`:${serverName}`);
+  const isOwnVirtualUser = event.sender.startsWith("@_tomori_") && event.sender.endsWith(`:${serverName}`);
   if (event.sender === botUserId || isOwnVirtualUser) return;
 
   // 4. Look up the linked Discord channel (cached DB query)
@@ -1384,9 +1245,7 @@ async function handleMatrixEvent(
   if (!channelDiscId) return;
 
   // 5. Fetch the Discord channel
-  const channel = await discordClient.channels
-    .fetch(channelDiscId)
-    .catch(() => null);
+  const channel = await discordClient.channels.fetch(channelDiscId).catch(() => null);
   if (!channel?.isTextBased() || channel.isDMBased()) return;
 
   // 6. Build the webhook username from the sender's Matrix ID
@@ -1398,8 +1257,7 @@ async function handleMatrixEvent(
   // @{displayName} placeholders in bot responses to proper Matrix mention links.
   // The localpart is what the AI sees as the display name after prefix stripping.
   matrixDisplayNameToId.set(senderLocalpart, event.sender);
-  const username =
-    rawUsername.length > 80 ? `${rawUsername.slice(0, 77)}...` : rawUsername;
+  const username = rawUsername.length > 80 ? `${rawUsername.slice(0, 77)}...` : rawUsername;
 
   // 7. Extract content fields and detect Matrix reply structure
   const content = event.content;
@@ -1407,12 +1265,8 @@ async function handleMatrixEvent(
   const rawBody = (content.body as string | undefined)?.trim();
 
   // Detect whether this is a Matrix reply (m.relates_to.m.in_reply_to)
-  const relatesTo = content["m.relates_to"] as
-    | Record<string, unknown>
-    | undefined;
-  const inReplyTo = relatesTo?.["m.in_reply_to"] as
-    | { event_id?: string }
-    | undefined;
+  const relatesTo = content["m.relates_to"] as Record<string, unknown> | undefined;
+  const inReplyTo = relatesTo?.["m.in_reply_to"] as { event_id?: string } | undefined;
   const replyEventId = inReplyTo?.event_id;
 
   // Always strip the Matrix reply fallback quote block from the body.
@@ -1420,16 +1274,10 @@ async function handleMatrixEvent(
   const bodyText = rawBody ? stripMatrixReplyFallback(rawBody) : rawBody;
 
   // 8. Branch on msgtype: relay media events as Discord file attachments
-  const isMediaMsg =
-    msgtype === "m.image" ||
-    msgtype === "m.video" ||
-    msgtype === "m.file" ||
-    msgtype === "m.audio";
+  const isMediaMsg = msgtype === "m.image" || msgtype === "m.video" || msgtype === "m.file" || msgtype === "m.audio";
 
   if (isMediaMsg) {
-    const { webhook: mediaWebhook } = await getOrCreateWebhook(
-      channel as BaseGuildTextChannel,
-    );
+    const { webhook: mediaWebhook } = await getOrCreateWebhook(channel as BaseGuildTextChannel);
     if (!mediaWebhook) return;
 
     const mxcUrl = content.url as string | undefined;
@@ -1452,12 +1300,7 @@ async function handleMatrixEvent(
     if (mxcUrl) {
       const homeserverUrl = process.env.MATRIX_HOMESERVER_URL ?? "";
       const asToken = process.env.MATRIX_ACCESS_TOKEN ?? "";
-      const media = await downloadMatrixMedia(
-        mxcUrl,
-        homeserverUrl,
-        asToken,
-        knownSize,
-      );
+      const media = await downloadMatrixMedia(mxcUrl, homeserverUrl, asToken, knownSize);
 
       if (media) {
         await mediaWebhook.send({
@@ -1489,8 +1332,9 @@ async function handleMatrixEvent(
     let clearedQueueCount = 0;
 
     try {
-      const { isChannelProcessingLocked, clearChannelProcessingQueue } =
-        await import("@/events/messageCreate/tomoriChat");
+      const { isChannelProcessingLocked, clearChannelProcessingQueue } = await import(
+        "@/events/messageCreate/tomoriChat"
+      );
 
       hasActiveStream = isChannelProcessingLocked(channelDiscId);
       clearedQueueCount = clearChannelProcessingQueue(channelDiscId);
@@ -1499,17 +1343,13 @@ async function handleMatrixEvent(
         StreamOrchestrator.requestStop(channelDiscId, event.sender);
       }
     } catch (error) {
-      log.warn(
-        `Matrix /kill: failed to stop stream/clear queue for channel ${channelDiscId}`,
-        error,
-      );
+      log.warn(`Matrix /kill: failed to stop stream/clear queue for channel ${channelDiscId}`, error);
     }
 
-    const clearedTypingPersonaCount =
-      await clearMatrixTypingIndicatorsForChannel(
-        channel as BaseGuildTextChannel,
-        event.room_id,
-      );
+    const clearedTypingPersonaCount = await clearMatrixTypingIndicatorsForChannel(
+      channel as BaseGuildTextChannel,
+      event.room_id,
+    );
 
     log.info(
       `Stop/clear requested via Matrix /kill by user ${event.sender} in channel ${channelDiscId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s). Cleared Matrix typing for ${clearedTypingPersonaCount} persona(s).`,
@@ -1537,22 +1377,14 @@ async function handleMatrixEvent(
     const repliedPersonaEvent = sentEventPersonas.get(replyEventId);
     if (repliedPersonaEvent) {
       // Fast path: event was sent in this session — persona name is known
-      const quotedSnippet = repliedPersonaEvent.replySnippet
-        ? ` "${repliedPersonaEvent.replySnippet}"`
-        : "";
+      const quotedSnippet = repliedPersonaEvent.replySnippet ? ` "${repliedPersonaEvent.replySnippet}"` : "";
       replyContext = `[System: ${senderLocalpart} is replying to ${repliedPersonaEvent.personaName}'s message${quotedSnippet}]`;
       pendingMatrixReplyChannels.add(channelDiscId);
     } else {
       // Slow path: fetch the original event and check if it was sent by a virtual persona user
-      const replyMetadata = await getPersonaReplyEventMetadata(
-        event.room_id,
-        replyEventId,
-        serverName,
-      );
+      const replyMetadata = await getPersonaReplyEventMetadata(event.room_id, replyEventId, serverName);
       if (replyMetadata.isPersonaReply) {
-        const quotedSnippet = replyMetadata.replySnippet
-          ? ` "${replyMetadata.replySnippet}"`
-          : "";
+        const quotedSnippet = replyMetadata.replySnippet ? ` "${replyMetadata.replySnippet}"` : "";
         replyContext = `[System: ${senderLocalpart} is replying to another person's message${quotedSnippet}]`;
         pendingMatrixReplyChannels.add(channelDiscId);
       }

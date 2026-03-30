@@ -8,11 +8,7 @@ import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
@@ -30,53 +26,34 @@ const DELETE_TYPE_GLOBAL_PERSONAL_MEMORIES = "global_personal_memories";
 /**
  * Configure the 'delete' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("delete")
     .setDescription(localizer("en-US", "commands.data.delete.description"))
     .addStringOption((option) =>
       option
         .setName("type")
-        .setDescription(
-          localizer("en-US", "commands.data.delete.type_description"),
-        )
+        .setDescription(localizer("en-US", "commands.data.delete.type_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.data.delete.type_choice_persona_personal_memories",
-            ),
+            name: localizer("en-US", "commands.data.delete.type_choice_persona_personal_memories"),
             value: DELETE_TYPE_PERSONA_PERSONAL_MEMORIES,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.delete.type_choice_persona_server_memories",
-            ),
+            name: localizer("en-US", "commands.data.delete.type_choice_persona_server_memories"),
             value: DELETE_TYPE_PERSONA_SERVER_MEMORIES,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.delete.type_choice_personal_settings",
-            ),
+            name: localizer("en-US", "commands.data.delete.type_choice_personal_settings"),
             value: DELETE_TYPE_PERSONAL_SETTINGS,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.delete.type_choice_server_config",
-            ),
+            name: localizer("en-US", "commands.data.delete.type_choice_server_config"),
             value: DELETE_TYPE_SERVER_CONFIG,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.data.delete.type_choice_global_personal_memories",
-            ),
+            name: localizer("en-US", "commands.data.delete.type_choice_global_personal_memories"),
             value: DELETE_TYPE_GLOBAL_PERSONAL_MEMORIES,
           },
         ),
@@ -84,9 +61,7 @@ export const configureSubcommand = (
     .addStringOption((option) =>
       option
         .setName("confirmation")
-        .setDescription(
-          localizer("en-US", "commands.data.delete.confirmation_description"),
-        )
+        .setDescription(localizer("en-US", "commands.data.delete.confirmation_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -117,17 +92,14 @@ export async function execute(
   const deleteType = interaction.options.getString("type", true);
   const confirmation = interaction.options.getString("confirmation", true);
   const serverDiscId = interaction.guild?.id ?? interaction.user.id;
-  let responseInteraction:
-    | ChatInputCommandInteraction
-    | ModalSubmitInteraction = interaction;
+  let responseInteraction: ChatInputCommandInteraction | ModalSubmitInteraction = interaction;
   let selectedPersona: TomoriState | null = null;
 
   try {
     if (confirmation !== "yes") {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.data.delete.confirmation_required_title",
-        descriptionKey:
-          "commands.data.delete.confirmation_required_description",
+        descriptionKey: "commands.data.delete.confirmation_required_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -135,11 +107,9 @@ export async function execute(
     }
 
     const requiresServerPermission =
-      deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES ||
-      deleteType === DELETE_TYPE_SERVER_CONFIG;
+      deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES || deleteType === DELETE_TYPE_SERVER_CONFIG;
     if (requiresServerPermission && interaction.guild) {
-      const hasPermission =
-        interaction.memberPermissions?.has("ManageGuild") ?? false;
+      const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
       if (!hasPermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.data.delete.no_permission_title",
@@ -152,8 +122,7 @@ export async function execute(
     }
 
     const needsPersonaSelection =
-      deleteType === DELETE_TYPE_PERSONA_PERSONAL_MEMORIES ||
-      deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES;
+      deleteType === DELETE_TYPE_PERSONA_PERSONAL_MEMORIES || deleteType === DELETE_TYPE_PERSONA_SERVER_MEMORIES;
     if (needsPersonaSelection) {
       const allPersonas = await loadAllPersonasForServer(serverDiscId);
       const personaSelectOptions: SelectOption[] = allPersonas
@@ -162,14 +131,8 @@ export async function execute(
           label: safeSelectOptionText(persona.tomori_nickname),
           value: persona.tomori_id?.toString() ?? "",
           description: persona.is_alter
-            ? localizer(
-                locale,
-                "commands.data.delete.alter_persona_description",
-              )
-            : localizer(
-                locale,
-                "commands.data.delete.main_persona_description",
-              ),
+            ? localizer(locale, "commands.data.delete.alter_persona_description")
+            : localizer(locale, "commands.data.delete.main_persona_description"),
         }))
         .filter((option) => option.value !== "");
       if (personaSelectOptions.length === 0) {
@@ -182,28 +145,22 @@ export async function execute(
         return;
       }
 
-      const personaModalResult = await promptWithPaginatedModal(
-        interaction,
-        locale,
-        {
-          modalCustomId: DELETE_PERSONA_MODAL_ID,
-          modalTitleKey: "commands.data.delete.persona_modal_title",
-          components: [
-            {
-              customId: DELETE_PERSONA_SELECT_ID,
-              labelKey: "commands.data.delete.persona_select_label",
-              descriptionKey: "commands.data.delete.persona_select_description",
-              placeholder: "commands.data.delete.persona_select_placeholder",
-              required: true,
-              options: personaSelectOptions,
-            },
-          ],
-        },
-      );
+      const personaModalResult = await promptWithPaginatedModal(interaction, locale, {
+        modalCustomId: DELETE_PERSONA_MODAL_ID,
+        modalTitleKey: "commands.data.delete.persona_modal_title",
+        components: [
+          {
+            customId: DELETE_PERSONA_SELECT_ID,
+            labelKey: "commands.data.delete.persona_select_label",
+            descriptionKey: "commands.data.delete.persona_select_description",
+            placeholder: "commands.data.delete.persona_select_placeholder",
+            required: true,
+            options: personaSelectOptions,
+          },
+        ],
+      });
       if (personaModalResult.outcome !== "submit") {
-        log.info(
-          `Data delete persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-        );
+        log.info(`Data delete persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`);
         return;
       }
 
@@ -213,12 +170,8 @@ export async function execute(
       }
       responseInteraction = modalSubmitInteraction;
 
-      const selectedPersonaId =
-        personaModalResult.values?.[DELETE_PERSONA_SELECT_ID];
-      selectedPersona =
-        allPersonas.find(
-          (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-        ) ?? null;
+      const selectedPersonaId = personaModalResult.values?.[DELETE_PERSONA_SELECT_ID];
+      selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
       if (!selectedPersona?.tomori_id) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -258,8 +211,7 @@ export async function execute(
       if (deletedMemories.length === 0) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.data.delete.no_data_title",
-          descriptionKey:
-            "commands.data.delete.no_persona_memories_description",
+          descriptionKey: "commands.data.delete.no_persona_memories_description",
           descriptionVars: {
             persona_name: selectedPersona?.tomori_nickname ?? "persona",
           },
@@ -270,8 +222,7 @@ export async function execute(
 
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.data.delete.success_memory_scope_title",
-        descriptionKey:
-          "commands.data.delete.success_persona_memories_description",
+        descriptionKey: "commands.data.delete.success_persona_memories_description",
         descriptionVars: {
           persona_name: selectedPersona?.tomori_nickname ?? "persona",
           memory_count: deletedMemories.length.toString(),
@@ -315,8 +266,7 @@ export async function execute(
 
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.data.delete.success_memory_scope_title",
-        descriptionKey:
-          "commands.data.delete.success_global_memories_description",
+        descriptionKey: "commands.data.delete.success_global_memories_description",
         descriptionVars: { memory_count: deletedMemories.length.toString() },
         color: ColorCode.SUCCESS,
       });
@@ -346,8 +296,7 @@ export async function execute(
 
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.data.delete.success_personal_settings_title",
-        descriptionKey:
-          "commands.data.delete.success_personal_settings_description",
+        descriptionKey: "commands.data.delete.success_personal_settings_description",
         color: ColorCode.SUCCESS,
       });
       return;
@@ -380,8 +329,7 @@ export async function execute(
       if (deletedMemories.length === 0) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.data.delete.no_server_data_title",
-          descriptionKey:
-            "commands.data.delete.no_persona_server_memories_description",
+          descriptionKey: "commands.data.delete.no_persona_server_memories_description",
           descriptionVars: {
             persona_name: selectedPersona?.tomori_nickname ?? "persona",
           },
@@ -393,8 +341,7 @@ export async function execute(
       invalidateTomoriStateCache(serverDiscId);
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.data.delete.success_memory_scope_title",
-        descriptionKey:
-          "commands.data.delete.success_persona_server_memories_description",
+        descriptionKey: "commands.data.delete.success_persona_server_memories_description",
         descriptionVars: {
           persona_name: selectedPersona?.tomori_nickname ?? "persona",
           memory_count: deletedMemories.length.toString(),
@@ -490,8 +437,7 @@ export async function execute(
       invalidateTomoriStateCache(serverDiscId);
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.data.delete.success_server_config_title",
-        descriptionKey:
-          "commands.data.delete.success_server_config_description",
+        descriptionKey: "commands.data.delete.success_server_config_description",
         color: ColorCode.SUCCESS,
       });
       return;
@@ -514,11 +460,7 @@ export async function execute(
       },
     };
 
-    await log.error(
-      `Error executing /data delete for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /data delete for user ${userData.user_disc_id}`, error as Error, context);
 
     if (responseInteraction.deferred || responseInteraction.replied) {
       await replyInfoEmbed(responseInteraction, locale, {

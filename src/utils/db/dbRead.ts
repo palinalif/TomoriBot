@@ -54,11 +54,7 @@ function parseJsonBytea(value: unknown): Buffer | null {
   if (value instanceof Uint8Array) return Buffer.from(value);
   if (typeof value !== "string") return null;
 
-  const normalized = value.startsWith("\\x")
-    ? value.slice(2)
-    : value.startsWith("0x")
-      ? value.slice(2)
-      : value;
+  const normalized = value.startsWith("\\x") ? value.slice(2) : value.startsWith("0x") ? value.slice(2) : value;
 
   if (!/^[0-9a-fA-F]*$/.test(normalized) || normalized.length % 2 !== 0) {
     return null;
@@ -95,9 +91,7 @@ function normalizeTomoriConfigFromJson(rawConfig: unknown): unknown {
     const value = normalizedConfig[key];
     if (typeof value === "string" || typeof value === "number") {
       const parsedDate = new Date(value);
-      normalizedConfig[key] = Number.isNaN(parsedDate.getTime())
-        ? undefined
-        : parsedDate;
+      normalizedConfig[key] = Number.isNaN(parsedDate.getTime()) ? undefined : parsedDate;
     }
   }
 
@@ -108,9 +102,7 @@ function normalizeTomoriConfigFromJson(rawConfig: unknown): unknown {
  * Loads and validates a server config row through JSON projection to avoid
  * Bun/Postgres INT[] binary decoding failures.
  */
-async function loadTomoriConfigRowByServerId(
-  serverId: number,
-): Promise<TomoriConfigRow | null> {
+async function loadTomoriConfigRowByServerId(serverId: number): Promise<TomoriConfigRow | null> {
   const configRows = await sql<TomoriConfigJsonResult[]>`
 		SELECT to_jsonb(tc) AS config
 		FROM tomori_configs tc
@@ -125,10 +117,7 @@ async function loadTomoriConfigRowByServerId(
   const normalized = normalizeTomoriConfigFromJson(configRows[0].config);
   const parsedConfig = tomoriConfigSchema.safeParse(normalized);
   if (!parsedConfig.success) {
-    log.error(
-      `Invalid server-scoped tomori config for server_id ${serverId}:`,
-      parsedConfig.error.flatten(),
-    );
+    log.error(`Invalid server-scoped tomori config for server_id ${serverId}:`, parsedConfig.error.flatten());
     return null;
   }
 
@@ -138,9 +127,7 @@ async function loadTomoriConfigRowByServerId(
 /**
  * Loads and validates a legacy tomori config row by tomori_id through JSON projection.
  */
-async function loadTomoriConfigRowByTomoriId(
-  tomoriId: number,
-): Promise<TomoriConfigRow | null> {
+async function loadTomoriConfigRowByTomoriId(tomoriId: number): Promise<TomoriConfigRow | null> {
   const configRows = await sql<TomoriConfigJsonResult[]>`
 		SELECT to_jsonb(tc) AS config
 		FROM tomori_configs tc
@@ -155,10 +142,7 @@ async function loadTomoriConfigRowByTomoriId(
   const normalized = normalizeTomoriConfigFromJson(configRows[0].config);
   const parsedConfig = tomoriConfigSchema.safeParse(normalized);
   if (!parsedConfig.success) {
-    log.error(
-      `Invalid legacy tomori config for tomori_id ${tomoriId}:`,
-      parsedConfig.error.flatten(),
-    );
+    log.error(`Invalid legacy tomori config for tomori_id ${tomoriId}:`, parsedConfig.error.flatten());
     return null;
   }
 
@@ -180,9 +164,7 @@ export async function getLlmsByIds(ids: number[]): Promise<LlmRow[]> {
     //    Avoid ANY($1) array binding here - Bun SQL can intermittently fail on
     //    integer-array parameters with protocol error 08P01.
     const distinctIds = Array.from(new Set(ids));
-    const placeholders = distinctIds
-      .map((_, index) => `$${index + 1}`)
-      .join(", ");
+    const placeholders = distinctIds.map((_, index) => `$${index + 1}`).join(", ");
     const rows = await sql.unsafe(
       `
 			SELECT * FROM llms
@@ -198,10 +180,7 @@ export async function getLlmsByIds(ids: number[]): Promise<LlmRow[]> {
       if (parsed.success && parsed.data.llm_id !== undefined) {
         rowMap.set(parsed.data.llm_id, parsed.data);
       } else if (!parsed.success) {
-        log.warn(
-          `Invalid LLM row for id ${row.llm_id}:`,
-          parsed.error.flatten(),
-        );
+        log.warn(`Invalid LLM row for id ${row.llm_id}:`, parsed.error.flatten());
       }
     }
 
@@ -223,9 +202,7 @@ export async function getLlmsByIds(ids: number[]): Promise<LlmRow[]> {
  * @param target - The model target: "kayra" or "erato"
  * @returns Array of validated NaiPresetRow objects, or empty array on error
  */
-export async function loadNaiPresetsForModel(
-  target: "kayra" | "erato",
-): Promise<NaiPresetRow[]> {
+export async function loadNaiPresetsForModel(target: "kayra" | "erato"): Promise<NaiPresetRow[]> {
   try {
     const rows = await sql`
 			SELECT * FROM nai_presets
@@ -239,10 +216,7 @@ export async function loadNaiPresetsForModel(
       if (parsed.success) {
         presets.push(parsed.data);
       } else {
-        log.warn(
-          `Invalid nai_preset row for target ${target}:`,
-          parsed.error.flatten(),
-        );
+        log.warn(`Invalid nai_preset row for target ${target}:`, parsed.error.flatten());
       }
     }
     return presets;
@@ -258,9 +232,7 @@ export async function loadNaiPresetsForModel(
  * @param serverDiscId - The Discord ID of the server.
  * @returns The validated TomoriState object, or null if not found or invalid.
  */
-export async function loadTomoriState(
-  serverDiscId: string,
-): Promise<TomoriState | null> {
+export async function loadTomoriState(serverDiscId: string): Promise<TomoriState | null> {
   try {
     // 1. Load main persona row using server Discord ID
     const tomoriRows = await sql`
@@ -286,16 +258,12 @@ export async function loadTomoriState(
 
     // Backward compatibility: fall back to tomori_id if server_id config missing
     if (!configData) {
-      log.warn(
-        `No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${tomoriId}`,
-      );
+      log.warn(`No server-scoped config found for server ${serverDiscId}; falling back to tomori_id ${tomoriId}`);
       configData = await loadTomoriConfigRowByTomoriId(tomoriId);
     }
 
     if (!configData) {
-      log.error(
-        `Found Tomori (${tomoriId}) but no config for server ${serverDiscId}`,
-      );
+      log.error(`Found Tomori (${tomoriId}) but no config for server ${serverDiscId}`);
       return null;
     }
 
@@ -312,9 +280,7 @@ export async function loadTomoriState(
 			`;
 
       if (!llmRows.length) {
-        log.error(
-          `Found Tomori config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
-        );
+        log.error(`Found Tomori config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`);
         return null;
       }
       llmData = llmRows[0] as LlmRow;
@@ -329,16 +295,11 @@ export async function loadTomoriState(
 		`;
     let personaConfig: PersonaConfigRow | null = null;
     if (personaConfigRows.length > 0) {
-      const parsedPersonaConfig = personaConfigSchema.safeParse(
-        personaConfigRows[0],
-      );
+      const parsedPersonaConfig = personaConfigSchema.safeParse(personaConfigRows[0]);
       if (parsedPersonaConfig.success) {
         personaConfig = parsedPersonaConfig.data;
       } else {
-        log.warn(
-          `Invalid persona config row for tomori ${tomoriId}:`,
-          parsedPersonaConfig.error.flatten(),
-        );
+        log.warn(`Invalid persona config row for tomori ${tomoriId}:`, parsedPersonaConfig.error.flatten());
       }
     }
 
@@ -350,9 +311,7 @@ export async function loadTomoriState(
         : typeof rawLineageId === "string"
           ? Number(rawLineageId)
           : (rawLineageId ?? 0);
-    const personaLineageId = Number.isFinite(parsedPersonaLineageId)
-      ? parsedPersonaLineageId
-      : 0;
+    const personaLineageId = Number.isFinite(parsedPersonaLineageId) ? parsedPersonaLineageId : 0;
     const serverMemoriesRows = await sql`
 			SELECT content
 			FROM server_memories
@@ -362,9 +321,7 @@ export async function loadTomoriState(
 		`;
 
     // Extract memory content strings into an array
-    const serverMemories = serverMemoriesRows.map(
-      (row: { content: string }) => row.content,
-    );
+    const serverMemories = serverMemoriesRows.map((row: { content: string }) => row.content);
 
     // 6. Load API key rotation pool for this server (if any)
     const rotationKeysRows = await sql`
@@ -381,9 +338,7 @@ export async function loadTomoriState(
         rotationKeys.push(parsed.data);
       } else {
         const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-        log.warn(
-          `Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
-        );
+        log.warn(`Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`);
       }
     }
 
@@ -401,10 +356,7 @@ export async function loadTomoriState(
         if (parsedPreset.success) {
           naiPreset = parsedPreset.data;
         } else {
-          log.warn(
-            `Invalid nai_preset row for preset "${presetName}":`,
-            parsedPreset.error.flatten(),
-          );
+          log.warn(`Invalid nai_preset row for preset "${presetName}":`, parsedPreset.error.flatten());
         }
       }
     }
@@ -412,8 +364,7 @@ export async function loadTomoriState(
     // 8. Load fallback LLMs if any are configured for this server
     const rawFallbackIds = configData.fallback_llm_ids;
     const fallbackLlmIds = configData.fallback_llm_ids;
-    const fallbackLlms =
-      fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
+    const fallbackLlms = fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
     if (FALLBACK_DEBUG_ENABLED) {
       log.info(
         `[FallbackDebug][loadTomoriState] server_disc_id=${serverDiscId} server_id=${serverId} raw_fallback_ids=${JSON.stringify(rawFallbackIds)} parsed_fallback_ids=[${fallbackLlmIds.join(", ")}] resolved_fallbacks=[${fallbackLlms.map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
@@ -436,9 +387,7 @@ export async function loadTomoriState(
 
     // 10. Combine and validate the full state
     const fallbackTriggerWords =
-      tomoriData.is_alter === true
-        ? (tomoriData.alter_triggers ?? [])
-        : (configData.trigger_words ?? []);
+      tomoriData.is_alter === true ? (tomoriData.alter_triggers ?? []) : (configData.trigger_words ?? []);
     const combinedState = {
       ...tomoriData,
       config: configData,
@@ -456,10 +405,7 @@ export async function loadTomoriState(
     const parsedState = tomoriStateSchema.safeParse(combinedState);
 
     if (!parsedState.success) {
-      log.error(
-        `Failed to validate combined Tomori state for server ${serverDiscId}:`,
-        parsedState.error.flatten(),
-      );
+      log.error(`Failed to validate combined Tomori state for server ${serverDiscId}:`, parsedState.error.flatten());
       return null;
     }
 
@@ -479,9 +425,7 @@ export async function loadTomoriState(
  * @param serverDiscId - The Discord ID of the server.
  * @returns Array of validated TomoriState objects (main first, then alters), or empty array if error/not found.
  */
-export async function loadAllPersonasForServer(
-  serverDiscId: string,
-): Promise<TomoriState[]> {
+export async function loadAllPersonasForServer(serverDiscId: string): Promise<TomoriState[]> {
   return (
     (await withCachedPlanRetry(async () => {
       try {
@@ -505,9 +449,7 @@ export async function loadAllPersonasForServer(
         let configData = await loadTomoriConfigRowByServerId(serverId);
 
         if (!configData) {
-          const mainTomoriRow =
-            tomoriRows.find((row: TomoriRow) => row.is_alter === false) ??
-            tomoriRows[0];
+          const mainTomoriRow = tomoriRows.find((row: TomoriRow) => row.is_alter === false) ?? tomoriRows[0];
           const fallbackTomoriId = mainTomoriRow?.tomori_id;
           if (fallbackTomoriId) {
             log.warn(
@@ -518,17 +460,14 @@ export async function loadAllPersonasForServer(
         }
 
         if (!configData) {
-          log.error(
-            `No config found for server ${serverDiscId}; cannot build persona states`,
-          );
+          log.error(`No config found for server ${serverDiscId}; cannot build persona states`);
           return [];
         }
 
         // 3. Resolve server-scoped fallback LLM chain once.
         const rawFallbackIds = configData.fallback_llm_ids;
         const fallbackLlmIds = configData.fallback_llm_ids;
-        const fallbackLlms =
-          fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
+        const fallbackLlms = fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
         if (FALLBACK_DEBUG_ENABLED) {
           log.info(
             `[FallbackDebug][loadAllPersonasForServer] server_disc_id=${serverDiscId} server_id=${serverId} raw_fallback_ids=${JSON.stringify(rawFallbackIds)} parsed_fallback_ids=[${fallbackLlmIds.join(", ")}] resolved_fallbacks=[${fallbackLlms.map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
@@ -538,9 +477,7 @@ export async function loadAllPersonasForServer(
         // 4. Load LLM data once (with cache fallback)
         let llmData = getCachedLLM(configData.llm_id);
         if (!llmData) {
-          log.info(
-            `Cache miss for LLM ID ${configData.llm_id}, querying database`,
-          );
+          log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
           const llmRows = await sql`
 						SELECT * FROM llms
 						WHERE llm_id = ${configData.llm_id}
@@ -548,9 +485,7 @@ export async function loadAllPersonasForServer(
 					`;
 
           if (!llmRows.length) {
-            log.error(
-              `Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
-            );
+            log.error(`Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`);
             return [];
           }
           llmData = llmRows[0] as LlmRow;
@@ -569,14 +504,8 @@ export async function loadAllPersonasForServer(
           if (parsed.success) {
             rotationKeys.push(parsed.data);
           } else {
-            const errorDetails = JSON.stringify(
-              parsed.error.flatten(),
-              null,
-              2,
-            );
-            log.warn(
-              `Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`,
-            );
+            const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
+            log.warn(`Invalid rotation key row for server ${serverDiscId}:\n${errorDetails}`);
           }
         }
 
@@ -593,10 +522,7 @@ export async function loadAllPersonasForServer(
           if (parsed.success) {
             personaConfigMap.set(parsed.data.tomori_id, parsed.data);
           } else {
-            log.warn(
-              `Invalid persona config row for server ${serverDiscId}:`,
-              parsed.error.flatten(),
-            );
+            log.warn(`Invalid persona config row for server ${serverDiscId}:`, parsed.error.flatten());
           }
         }
 
@@ -620,14 +546,8 @@ export async function loadAllPersonasForServer(
               : typeof row.persona_lineage_id === "string"
                 ? Number(row.persona_lineage_id)
                 : row.persona_lineage_id;
-          if (
-            typeof lineageId !== "number" ||
-            !Number.isFinite(lineageId) ||
-            lineageId < 0
-          ) {
-            log.warn(
-              `Skipping server memory with invalid persona_lineage_id for server ${serverDiscId}`,
-            );
+          if (typeof lineageId !== "number" || !Number.isFinite(lineageId) || lineageId < 0) {
+            log.warn(`Skipping server memory with invalid persona_lineage_id for server ${serverDiscId}`);
             continue;
           }
           const existing = memoriesByLineage.get(lineageId) ?? [];
@@ -638,9 +558,7 @@ export async function loadAllPersonasForServer(
         // 8. Load vision model if configured (server-scoped, loaded once for all personas)
         let visionLlm: LlmRow | undefined;
         if (configData.vision_llm_id) {
-          visionLlm = getCachedLLM(configData.vision_llm_id) as
-            | LlmRow
-            | undefined;
+          visionLlm = getCachedLLM(configData.vision_llm_id) as LlmRow | undefined;
           if (!visionLlm) {
             const visionLlmRows = await sql`
 							SELECT * FROM llms WHERE llm_id = ${configData.vision_llm_id} LIMIT 1
@@ -656,9 +574,7 @@ export async function loadAllPersonasForServer(
         for (const tomoriRow of tomoriRows) {
           const tomoriId = tomoriRow.tomori_id;
           if (!tomoriId) {
-            log.warn(
-              `Skipping persona with missing tomori_id for server ${serverDiscId}`,
-            );
+            log.warn(`Skipping persona with missing tomori_id for server ${serverDiscId}`);
             continue;
           }
 
@@ -667,9 +583,7 @@ export async function loadAllPersonasForServer(
           // Resolve persona-specific LLM override if set (cache first, DB fallback)
           let personaLlm: LlmRow | undefined;
           if (personaConfig?.llm_id) {
-            personaLlm = getCachedLLM(personaConfig.llm_id) as
-              | LlmRow
-              | undefined;
+            personaLlm = getCachedLLM(personaConfig.llm_id) as LlmRow | undefined;
             if (!personaLlm) {
               const personaLlmRows = await sql`
 								SELECT * FROM llms WHERE llm_id = ${personaConfig.llm_id} LIMIT 1
@@ -681,9 +595,7 @@ export async function loadAllPersonasForServer(
           }
 
           const fallbackTriggerWords =
-            tomoriRow.is_alter === true
-              ? (tomoriRow.alter_triggers ?? [])
-              : (configData.trigger_words ?? []);
+            tomoriRow.is_alter === true ? (tomoriRow.alter_triggers ?? []) : (configData.trigger_words ?? []);
           const rawPersonaLineageId = tomoriRow.persona_lineage_id;
           const parsedPersonaLineageId =
             typeof rawPersonaLineageId === "bigint"
@@ -691,9 +603,7 @@ export async function loadAllPersonasForServer(
               : typeof rawPersonaLineageId === "string"
                 ? Number(rawPersonaLineageId)
                 : (rawPersonaLineageId ?? 0);
-          const personaLineageId = Number.isFinite(parsedPersonaLineageId)
-            ? parsedPersonaLineageId
-            : 0;
+          const personaLineageId = Number.isFinite(parsedPersonaLineageId) ? parsedPersonaLineageId : 0;
           // Personas sharing lineage intentionally share server memories.
           const serverMemories = memoriesByLineage.get(personaLineageId) ?? [];
 
@@ -729,10 +639,7 @@ export async function loadAllPersonasForServer(
 
         return personas;
       } catch (error) {
-        log.error(
-          `Error loading all personas for server ${serverDiscId}:`,
-          error,
-        );
+        log.error(`Error loading all personas for server ${serverDiscId}:`, error);
         // Throw a typed error so the cache layer can distinguish
         // "DB unreachable" from "server genuinely has no data" (which returns [])
         throw new DatabaseUnavailableError(
@@ -766,10 +673,7 @@ export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
       // Validate the row against the schema
       const parsedUser = userSchema.safeParse(rows[0]);
       if (!parsedUser.success) {
-        log.error(
-          `Failed to validate user data for ID ${userDiscId}:`,
-          parsedUser.error.flatten(),
-        );
+        log.error(`Failed to validate user data for ID ${userDiscId}:`, parsedUser.error.flatten());
         return null;
       }
 
@@ -786,9 +690,7 @@ export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
  * @param tomoriId - Internal persona ID.
  * @returns PersonaConfigRow or null if not found/invalid.
  */
-export async function loadPersonaConfigRow(
-  tomoriId: number,
-): Promise<PersonaConfigRow | null> {
+export async function loadPersonaConfigRow(tomoriId: number): Promise<PersonaConfigRow | null> {
   try {
     const rows = await sql`
 			SELECT *
@@ -803,10 +705,7 @@ export async function loadPersonaConfigRow(
 
     const parsed = personaConfigSchema.safeParse(rows[0]);
     if (!parsed.success) {
-      log.warn(
-        `Failed to validate persona config for tomori ${tomoriId}:`,
-        parsed.error.flatten(),
-      );
+      log.warn(`Failed to validate persona config for tomori ${tomoriId}:`, parsed.error.flatten());
       return null;
     }
 
@@ -858,19 +757,13 @@ export async function loadPersonalMemoriesForUserLineage(
       if (parsed.success) {
         parsedRows.push(parsed.data);
       } else {
-        log.warn(
-          `Skipping invalid personal memory row for user ${userId}:`,
-          parsed.error.flatten(),
-        );
+        log.warn(`Skipping invalid personal memory row for user ${userId}:`, parsed.error.flatten());
       }
     }
 
     return parsedRows;
   } catch (error) {
-    log.error(
-      `Error loading personal memories for user ${userId} and lineage ${personaLineageId}:`,
-      error,
-    );
+    log.error(`Error loading personal memories for user ${userId} and lineage ${personaLineageId}:`, error);
     return [];
   }
 }
@@ -881,10 +774,7 @@ export async function loadPersonalMemoriesForUserLineage(
  * @param userDiscId - Discord user ID.
  * @returns true if user is blacklisted, false otherwise.
  */
-export async function isBlacklisted(
-  serverDiscId: string,
-  userDiscId: string,
-): Promise<boolean> {
+export async function isBlacklisted(serverDiscId: string, userDiscId: string): Promise<boolean> {
   try {
     // Use EXISTS for efficiency - now using user_disc_id directly
     const result = await sql`
@@ -901,10 +791,7 @@ export async function isBlacklisted(
     // biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists
     return result[0]!.exists;
   } catch (error) {
-    log.error(
-      `Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`,
-      error,
-    );
+    log.error(`Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`, error);
     return false; // Default to false on error to avoid blocking personalization unintentionally
   }
 }
@@ -921,9 +808,7 @@ export async function isBlacklisted(
  * @param userDiscId - The Discord ID of the user to check
  * @returns The user's privacy level (0, 1, or 2), defaults to 0 (MINIMAL) if user not found
  */
-export async function getPrivacyLevel(
-  userDiscId: string,
-): Promise<import("@/types/db/schema").PrivacyLevel> {
+export async function getPrivacyLevel(userDiscId: string): Promise<import("@/types/db/schema").PrivacyLevel> {
   const { PrivacyLevel } = await import("@/types/db/schema");
 
   try {
@@ -937,9 +822,7 @@ export async function getPrivacyLevel(
 
     // 2. If user doesn't exist, return MINIMAL (default - most permissive)
     if (!result.length) {
-      log.info(
-        `User ${userDiscId} not found, defaulting to privacy level MINIMAL`,
-      );
+      log.info(`User ${userDiscId} not found, defaulting to privacy level MINIMAL`);
       return PrivacyLevel.MINIMAL;
     }
 
@@ -947,9 +830,7 @@ export async function getPrivacyLevel(
     // biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists when length > 0
     const level = result[0]!.privacy_level;
     if (![0, 1, 2].includes(level)) {
-      log.warn(
-        `Invalid privacy level ${level} for user ${userDiscId}, defaulting to MINIMAL`,
-      );
+      log.warn(`Invalid privacy level ${level} for user ${userDiscId}, defaulting to MINIMAL`);
       return PrivacyLevel.MINIMAL;
     }
 
@@ -980,9 +861,7 @@ export async function isPrivacyOptedOut(userDiscId: string): Promise<boolean> {
  * @param userDiscId - Discord user ID
  * @returns True if user has opted in to cross-server sharing, false otherwise
  */
-export async function getCrossServerShortTermMemoryOptIn(
-  userDiscId: string,
-): Promise<boolean> {
+export async function getCrossServerShortTermMemoryOptIn(userDiscId: string): Promise<boolean> {
   try {
     // 1. Try to get from user cache
     const { getCachedUserRow } = await import("@/utils/cache/userCache");
@@ -1000,10 +879,7 @@ export async function getCrossServerShortTermMemoryOptIn(
 
     return user?.shortterm_cache_crossserver_opt_in ?? false;
   } catch (error) {
-    log.error(
-      `Error checking cross-server short-term memory opt-in for user ${userDiscId}:`,
-      error,
-    );
+    log.error(`Error checking cross-server short-term memory opt-in for user ${userDiscId}:`, error);
     return false; // Default to disabled on error
   }
 }
@@ -1013,22 +889,16 @@ export async function getCrossServerShortTermMemoryOptIn(
  * @param internalServerId - The internal database ID of the server.
  * @returns An array of validated ServerEmojiRow objects, or null if none found or error.
  */
-export async function loadServerEmojis(
-  internalServerId: number,
-): Promise<ServerEmojiRow[] | null> {
+export async function loadServerEmojis(internalServerId: number): Promise<ServerEmojiRow[] | null> {
   try {
-    log.info(
-      `[loadServerEmojis] Querying emojis for server_id: ${internalServerId}`,
-    );
+    log.info(`[loadServerEmojis] Querying emojis for server_id: ${internalServerId}`);
     const emojiRows = await sql`
 			SELECT *
 			FROM server_emojis
 			WHERE server_id = ${internalServerId}
 		`;
 
-    log.info(
-      `[loadServerEmojis] Found ${emojiRows.length} emoji row(s) from query`,
-    );
+    log.info(`[loadServerEmojis] Found ${emojiRows.length} emoji row(s) from query`);
 
     if (!emojiRows || emojiRows.length === 0) {
       log.info(`No custom emojis found for server ID ${internalServerId}.`);
@@ -1039,16 +909,11 @@ export async function loadServerEmojis(
     const parsedEmojis = serverEmojiSchema.array().safeParse(emojiRows);
 
     if (!parsedEmojis.success) {
-      log.error(
-        `Failed to validate emojis for server ID ${internalServerId}:`,
-        parsedEmojis.error.flatten(),
-      );
+      log.error(`Failed to validate emojis for server ID ${internalServerId}:`, parsedEmojis.error.flatten());
       return null;
     }
 
-    log.info(
-      `[loadServerEmojis] Validated ${parsedEmojis.data.length} emoji(s) successfully`,
-    );
+    log.info(`[loadServerEmojis] Validated ${parsedEmojis.data.length} emoji(s) successfully`);
     return parsedEmojis.data;
   } catch (error) {
     log.error(`Error loading emojis for server ID ${internalServerId}:`, error);
@@ -1061,9 +926,7 @@ export async function loadServerEmojis(
  * @param includeDeprecated - Whether to include deprecated models in the results (default: false).
  * @returns An array of validated LlmRow objects, or null if none found or error.
  */
-export async function loadAvailableLlms(
-  includeDeprecated = false,
-): Promise<LlmRow[] | null> {
+export async function loadAvailableLlms(includeDeprecated = false): Promise<LlmRow[] | null> {
   try {
     // 1. Fetch rows from the llms table, filtering deprecated models unless explicitly included
     const llmRows = includeDeprecated
@@ -1088,10 +951,7 @@ export async function loadAvailableLlms(
 
     // 4. Handle validation failure
     if (!parsedLlms.success) {
-      log.error(
-        "Failed to validate LLM data from database:",
-        parsedLlms.error.flatten(),
-      );
+      log.error("Failed to validate LLM data from database:", parsedLlms.error.flatten());
       return null;
     }
 
@@ -1145,9 +1005,7 @@ export async function loadAvailableModelsForProvider(
 
     // 2. Check if any rows were returned
     if (!modelRows || modelRows.length === 0) {
-      log.warn(
-        `No available models found for provider: ${normalizedProviderName}`,
-      );
+      log.warn(`No available models found for provider: ${normalizedProviderName}`);
       return null;
     }
 
@@ -1156,24 +1014,16 @@ export async function loadAvailableModelsForProvider(
 
     // 4. Handle validation failure
     if (!parsedModels.success) {
-      log.error(
-        `Failed to validate model data for provider ${normalizedProviderName}:`,
-        parsedModels.error.flatten(),
-      );
+      log.error(`Failed to validate model data for provider ${normalizedProviderName}:`, parsedModels.error.flatten());
       return null;
     }
 
     // 5. Return the validated array of LLM rows
-    log.info(
-      `Found ${parsedModels.data.length} available models for ${normalizedProviderName}`,
-    );
+    log.info(`Found ${parsedModels.data.length} available models for ${normalizedProviderName}`);
     return parsedModels.data;
   } catch (error) {
     // 6. Log any unexpected errors during the database query
-    log.error(
-      `Error loading available models for provider ${normalizedProviderName}:`,
-      error,
-    );
+    log.error(`Error loading available models for provider ${normalizedProviderName}:`, error);
     return null;
   }
 }
@@ -1208,10 +1058,7 @@ export async function loadLlmById(llmId: number): Promise<LlmRow | null> {
 
     const parsed = llmSchema.safeParse(llmRows[0]);
     if (!parsed.success) {
-      log.error(
-        `Failed to validate model data for llm_id ${llmId}:`,
-        parsed.error.flatten(),
-      );
+      log.error(`Failed to validate model data for llm_id ${llmId}:`, parsed.error.flatten());
       return null;
     }
 
@@ -1275,9 +1122,7 @@ export async function loadDefaultModelForProvider(
 
     // 2. Check if any model was found
     if (!modelRows || modelRows.length === 0) {
-      log.error(
-        `No available models found for provider: ${normalizedProviderName}`,
-      );
+      log.error(`No available models found for provider: ${normalizedProviderName}`);
       return null;
     }
 
@@ -1286,19 +1131,14 @@ export async function loadDefaultModelForProvider(
     const parsedModel = llmSchema.safeParse(selectedModel);
 
     if (!parsedModel.success) {
-      log.error(
-        `Failed to validate model data for provider ${normalizedProviderName}:`,
-        parsedModel.error.flatten(),
-      );
+      log.error(`Failed to validate model data for provider ${normalizedProviderName}:`, parsedModel.error.flatten());
       return null;
     }
 
     // 4. Log appropriate message based on whether we got the default or a fallback
     const isDefaultModel = selectedModel.is_default === true;
     if (isDefaultModel) {
-      log.info(
-        `Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
-      );
+      log.info(`Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`);
     } else {
       log.warn(
         `No default model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.llm_codename}`,
@@ -1308,10 +1148,7 @@ export async function loadDefaultModelForProvider(
     return parsedModel.data;
   } catch (error) {
     // 5. Log any unexpected errors during the database query
-    log.error(
-      `Error loading default model for provider ${normalizedProviderName}:`,
-      error,
-    );
+    log.error(`Error loading default model for provider ${normalizedProviderName}:`, error);
     return null;
   }
 }
@@ -1352,9 +1189,7 @@ export async function loadAvailableEmbeddingModelsForProvider(
 			`;
 
     if (!modelRows || modelRows.length === 0) {
-      log.warn(
-        `No available embedding models found for provider: ${normalizedProviderName}`,
-      );
+      log.warn(`No available embedding models found for provider: ${normalizedProviderName}`);
       return null;
     }
 
@@ -1367,15 +1202,10 @@ export async function loadAvailableEmbeddingModelsForProvider(
       return null;
     }
 
-    log.info(
-      `Found ${parsedModels.data.length} embedding models for ${normalizedProviderName}`,
-    );
+    log.info(`Found ${parsedModels.data.length} embedding models for ${normalizedProviderName}`);
     return parsedModels.data;
   } catch (error) {
-    log.error(
-      `Error loading embedding models for provider ${normalizedProviderName}:`,
-      error,
-    );
+    log.error(`Error loading embedding models for provider ${normalizedProviderName}:`, error);
     return null;
   }
 }
@@ -1423,9 +1253,7 @@ export async function loadDefaultEmbeddingModelForProvider(
 
     const modelRows = await modelQuery;
     if (!modelRows || modelRows.length === 0) {
-      log.error(
-        `No available embedding models found for provider: ${normalizedProviderName}`,
-      );
+      log.error(`No available embedding models found for provider: ${normalizedProviderName}`);
       return null;
     }
 
@@ -1441,9 +1269,7 @@ export async function loadDefaultEmbeddingModelForProvider(
 
     const isDefaultModel = selectedModel.is_default === true;
     if (isDefaultModel) {
-      log.info(
-        `Found default embedding model for ${normalizedProviderName}: ${parsedModel.data.codename}`,
-      );
+      log.info(`Found default embedding model for ${normalizedProviderName}: ${parsedModel.data.codename}`);
     } else {
       log.warn(
         `No default embedding model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.codename}`,
@@ -1452,10 +1278,7 @@ export async function loadDefaultEmbeddingModelForProvider(
 
     return parsedModel.data;
   } catch (error) {
-    log.error(
-      `Error loading default embedding model for provider ${normalizedProviderName}:`,
-      error,
-    );
+    log.error(`Error loading default embedding model for provider ${normalizedProviderName}:`, error);
     return null;
   }
 }
@@ -1465,9 +1288,7 @@ export async function loadDefaultEmbeddingModelForProvider(
  * @param embeddingModelId - The embedding model ID to load.
  * @returns The EmbeddingModelRow if found and valid, otherwise null.
  */
-export async function loadEmbeddingModelById(
-  embeddingModelId: number,
-): Promise<EmbeddingModelRow | null> {
+export async function loadEmbeddingModelById(embeddingModelId: number): Promise<EmbeddingModelRow | null> {
   try {
     const rows = await sql`
 			SELECT * FROM embedding_models
@@ -1482,10 +1303,7 @@ export async function loadEmbeddingModelById(
 
     const parsed = embeddingModelSchema.safeParse(rows[0]);
     if (!parsed.success) {
-      log.error(
-        `Failed to validate embedding model data for ID ${embeddingModelId}:`,
-        parsed.error.flatten(),
-      );
+      log.error(`Failed to validate embedding model data for ID ${embeddingModelId}:`, parsed.error.flatten());
       return null;
     }
 
@@ -1502,10 +1320,7 @@ export async function loadEmbeddingModelById(
  * @param includeDeprecated - Whether to include deprecated models (default: false).
  * @returns A promise that resolves to the first smartest LlmRow found, or null if none found.
  */
-export async function loadSmartestModel(
-  providerName: string,
-  includeDeprecated = false,
-): Promise<LlmRow | null> {
+export async function loadSmartestModel(providerName: string, includeDeprecated = false): Promise<LlmRow | null> {
   // Input validation
   if (!providerName || providerName.trim().length === 0) {
     log.error("Provider name cannot be empty");
@@ -1541,9 +1356,7 @@ export async function loadSmartestModel(
 
     // 2. Check if any row was returned
     if (!smartModelRows || smartModelRows.length === 0) {
-      log.warn(
-        `No smartest model found for provider: ${normalizedProviderName}`,
-      );
+      log.warn(`No smartest model found for provider: ${normalizedProviderName}`);
       return null;
     }
 
@@ -1560,16 +1373,11 @@ export async function loadSmartestModel(
     }
 
     // 5. Return the validated LLM row
-    log.info(
-      `Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
-    );
+    log.info(`Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`);
     return parsedModel.data;
   } catch (error) {
     // 6. Log any unexpected errors during the database query
-    log.error(
-      `Error loading smartest model for provider ${normalizedProviderName}:`,
-      error,
-    );
+    log.error(`Error loading smartest model for provider ${normalizedProviderName}:`, error);
     return null;
   }
 }
@@ -1581,9 +1389,7 @@ export async function loadSmartestModel(
  * @param includeDeprecated - Whether to include providers that only have deprecated models (default: false).
  * @returns An array of unique provider names, or null if error or none found.
  */
-export async function loadUniqueProviders(
-  includeDeprecated = false,
-): Promise<string[] | null> {
+export async function loadUniqueProviders(includeDeprecated = false): Promise<string[] | null> {
   try {
     // 1. Query for providers that have at least one available model (filtering deprecated unless explicitly included)
     const providerQuery = includeDeprecated
@@ -1624,9 +1430,7 @@ export async function loadUniqueProviders(
     // 4. Convert back to array, sorted by the normalized keys
     const providers = Array.from(providerMap.values()).sort();
 
-    log.info(
-      `Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`,
-    );
+    log.info(`Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`);
     return providers;
   } catch (error) {
     // 5. Log any unexpected errors during the database query
@@ -1671,9 +1475,7 @@ export async function loadPresetOptions(
       };
     });
 
-    log.info(
-      `Found ${presetOptions.length} personality presets for selection menu.`,
-    );
+    log.info(`Found ${presetOptions.length} personality presets for selection menu.`);
     return presetOptions;
   } catch (error) {
     // 4. Log any unexpected errors during the database query
@@ -1713,9 +1515,7 @@ export async function loadPresetOptionsByLocale(
 			`;
 
       if (presetRows.length > 0) {
-        log.info(
-          `No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`,
-        );
+        log.info(`No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`);
       }
     }
 
@@ -1729,17 +1529,13 @@ export async function loadPresetOptionsByLocale(
 			`;
 
       if (presetRows.length > 0) {
-        log.info(
-          `No presets found for locale '${locale}', falling back to English presets.`,
-        );
+        log.info(`No presets found for locale '${locale}', falling back to English presets.`);
       }
     }
 
     // 4. Check if any rows were returned after all fallback attempts
     if (!presetRows || presetRows.length === 0) {
-      log.warn(
-        `No personality presets found for locale '${locale}' or any fallback language.`,
-      );
+      log.warn(`No personality presets found for locale '${locale}' or any fallback language.`);
       return null;
     }
 
@@ -1757,16 +1553,11 @@ export async function loadPresetOptionsByLocale(
       };
     });
 
-    log.info(
-      `Found ${presetOptions.length} personality presets for locale '${locale}' (selection menu).`,
-    );
+    log.info(`Found ${presetOptions.length} personality presets for locale '${locale}' (selection menu).`);
     return presetOptions;
   } catch (error) {
     // 6. Log any unexpected errors during the database query
-    log.error(
-      `Error loading preset options for locale '${locale}' from database:`,
-      error,
-    );
+    log.error(`Error loading preset options for locale '${locale}' from database:`, error);
     return null;
   }
 }
@@ -1778,9 +1569,7 @@ export async function loadPresetOptionsByLocale(
  * @param locale - The locale code to filter by (e.g., 'en-US', 'ja')
  * @returns An array of TomoriPresetRow objects, or null if error or none found.
  */
-export async function loadPresetRowsByLocale(
-  locale: string,
-): Promise<TomoriPresetRow[] | null> {
+export async function loadPresetRowsByLocale(locale: string): Promise<TomoriPresetRow[] | null> {
   try {
     // 1. Try exact locale match (e.g., 'ja')
     let presets = await sql`
@@ -1799,9 +1588,7 @@ export async function loadPresetRowsByLocale(
 			`;
 
       if (presets.length > 0) {
-        log.info(
-          `No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`,
-        );
+        log.info(`No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`);
       }
     }
 
@@ -1814,30 +1601,21 @@ export async function loadPresetRowsByLocale(
 			`;
 
       if (presets.length > 0) {
-        log.info(
-          `No presets found for locale '${locale}', falling back to English presets.`,
-        );
+        log.info(`No presets found for locale '${locale}', falling back to English presets.`);
       }
     }
 
     // 4. Check if any rows were returned after all fallback attempts
     if (!presets || presets.length === 0) {
-      log.warn(
-        `No personality presets found for locale '${locale}' or any fallback language.`,
-      );
+      log.warn(`No personality presets found for locale '${locale}' or any fallback language.`);
       return null;
     }
 
-    log.info(
-      `Found ${presets.length} personality preset rows for locale '${locale}'.`,
-    );
+    log.info(`Found ${presets.length} personality preset rows for locale '${locale}'.`);
     return presets as TomoriPresetRow[];
   } catch (error) {
     // 5. Log any unexpected errors during the database query
-    log.error(
-      `Error loading preset rows for locale '${locale}' from database:`,
-      error,
-    );
+    log.error(`Error loading preset rows for locale '${locale}' from database:`, error);
     return null;
   }
 }
@@ -1871,9 +1649,7 @@ export async function loadAllPresets(): Promise<TomoriPresetRow[] | null> {
  * Loads all system prompt presets from the database
  * @returns Promise that resolves to array of SystemPromptPresetRow or null on error
  */
-export async function loadSystemPromptPresets(): Promise<
-  SystemPromptPresetRow[] | null
-> {
+export async function loadSystemPromptPresets(): Promise<SystemPromptPresetRow[] | null> {
   try {
     // 1. Query all system prompt presets ordered by ID
     const presets = await sql`
@@ -1905,9 +1681,7 @@ export async function loadSystemPromptPresets(): Promise<
  * @returns A promise that resolves to an array of ServerStickerRow or null if server not found/error.
  *          Returns an empty array if the server is found but has no stickers.
  */
-export async function loadServerStickers(
-  serverDiscId: string,
-): Promise<ServerStickerRow[] | null> {
+export async function loadServerStickers(serverDiscId: string): Promise<ServerStickerRow[] | null> {
   try {
     // 1. Get the internal server_id from server_disc_id
     const [server] = await sql`
@@ -1915,9 +1689,7 @@ export async function loadServerStickers(
         `;
 
     if (!server || !server.server_id) {
-      log.warn(
-        `Server not found in DB with Discord ID: ${serverDiscId} when trying to load stickers.`,
-      );
+      log.warn(`Server not found in DB with Discord ID: ${serverDiscId} when trying to load stickers.`);
       return null; // Server itself not found
     }
     // biome-ignore lint/style/noNonNullAssertion: server check guarantees server_id (Rule 8)
@@ -1932,15 +1704,11 @@ export async function loadServerStickers(
 
     if (!stickersData) {
       // This case should ideally not happen with current bun-postgres; an empty array is more likely.
-      log.warn(
-        `Stickers data was unexpectedly null for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
-      );
+      log.warn(`Stickers data was unexpectedly null for server ID: ${serverId} (Discord ID: ${serverDiscId})`);
       return []; // Treat as no stickers found
     }
     if (stickersData.length === 0) {
-      log.info(
-        `No stickers found in DB for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
-      );
+      log.info(`No stickers found in DB for server ID: ${serverId} (Discord ID: ${serverDiscId})`);
       return []; // Explicitly return empty array if no stickers
     }
 
@@ -1957,15 +1725,10 @@ export async function loadServerStickers(
         // Optionally skip adding invalid stickers
       }
     }
-    log.info(
-      `Loaded ${validatedStickers.length} stickers for server ID ${serverId}.`,
-    );
+    log.info(`Loaded ${validatedStickers.length} stickers for server ID ${serverId}.`);
     return validatedStickers;
   } catch (error) {
-    log.error(
-      `Error loading stickers for server Discord ID ${serverDiscId}:`,
-      error,
-    );
+    log.error(`Error loading stickers for server Discord ID ${serverDiscId}:`, error);
     return null; // Error during DB operation
   }
 }
@@ -1985,9 +1748,7 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
 			`;
 
       if (!reminderData) {
-        log.warn(
-          "Reminders data was unexpectedly null when fetching due reminders",
-        );
+        log.warn("Reminders data was unexpectedly null when fetching due reminders");
         return [];
       }
 
@@ -2023,9 +1784,7 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
  * @param reminderId - The ID of the reminder to load
  * @returns The ReminderRow object if found, null otherwise
  */
-export async function getReminderById(
-  reminderId: number,
-): Promise<ReminderRow | null> {
+export async function getReminderById(reminderId: number): Promise<ReminderRow | null> {
   try {
     const [reminderData] = await sql`
 			SELECT * FROM reminders
@@ -2060,9 +1819,7 @@ export async function getReminderById(
  * @param userDiscordId - The Discord ID of the user
  * @returns The count of active reminders for the user, or 0 if error
  */
-export async function getUserReminderCount(
-  userDiscordId: string,
-): Promise<number> {
+export async function getUserReminderCount(userDiscordId: string): Promise<number> {
   try {
     const [result] = await sql`
 			SELECT COUNT(*) as reminder_count
@@ -2138,9 +1895,7 @@ export async function getPendingRemindersForUser(
     }
 
     if (!reminderData) {
-      log.warn(
-        `Reminders data was unexpectedly null when fetching pending reminders for user ${userDiscordId}`,
-      );
+      log.warn(`Reminders data was unexpectedly null when fetching pending reminders for user ${userDiscordId}`);
       return [];
     }
 
@@ -2162,15 +1917,10 @@ export async function getPendingRemindersForUser(
       }
     }
 
-    log.info(
-      `Found ${validatedReminders.length} pending reminders for user ${userDiscordId}`,
-    );
+    log.info(`Found ${validatedReminders.length} pending reminders for user ${userDiscordId}`);
     return validatedReminders;
   } catch (error) {
-    log.error(
-      `Error loading pending reminders for user ${userDiscordId}:`,
-      error,
-    );
+    log.error(`Error loading pending reminders for user ${userDiscordId}:`, error);
     return null;
   }
 }
@@ -2193,10 +1943,7 @@ export async function getBraveApiKeyStatus(serverId: number): Promise<boolean> {
     // 2. Return true if key exists (even if encrypted), false otherwise
     return result && result.length > 0;
   } catch (error) {
-    log.error(
-      `Error checking Brave API key status for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error checking Brave API key status for server ${serverId}:`, error);
     return false;
   }
 }
@@ -2206,9 +1953,7 @@ export async function getBraveApiKeyStatus(serverId: number): Promise<boolean> {
  * @param serverId - The internal server ID (from servers table)
  * @returns Array of Discord user IDs, or empty array if none or error
  */
-export async function getBlacklistedMemberIds(
-  serverId: number,
-): Promise<string[]> {
+export async function getBlacklistedMemberIds(serverId: number): Promise<string[]> {
   try {
     // 1. Query personalization_blacklist table for blacklisted members
     const result = await sql`
@@ -2223,18 +1968,11 @@ export async function getBlacklistedMemberIds(
     }
 
     // 3. Map to array of Discord IDs
-    const memberIds = result.map(
-      (row: unknown) => (row as { user_disc_id: string }).user_disc_id,
-    );
-    log.info(
-      `Found ${memberIds.length} blacklisted members for server ${serverId}`,
-    );
+    const memberIds = result.map((row: unknown) => (row as { user_disc_id: string }).user_disc_id);
+    log.info(`Found ${memberIds.length} blacklisted members for server ${serverId}`);
     return memberIds;
   } catch (error) {
-    log.error(
-      `Error loading blacklisted members for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error loading blacklisted members for server ${serverId}:`, error);
     return [];
   }
 }
@@ -2265,10 +2003,7 @@ export async function getDueRandomTriggers(): Promise<RandomTriggerRow[]> {
       if (parsed.success) {
         validated.push(parsed.data);
       } else {
-        log.warn(
-          `Skipping invalid random trigger row (id=${row.trigger_id}):`,
-          parsed.error,
-        );
+        log.warn(`Skipping invalid random trigger row (id=${row.trigger_id}):`, parsed.error);
       }
     }
     return validated;
@@ -2285,9 +2020,7 @@ export async function getDueRandomTriggers(): Promise<RandomTriggerRow[]> {
  * @param serverId - The database server_id.
  * @returns Array of RandomTriggerRow records, or empty array on error.
  */
-export async function getServerRandomTriggers(
-  serverId: number,
-): Promise<RandomTriggerRow[]> {
+export async function getServerRandomTriggers(serverId: number): Promise<RandomTriggerRow[]> {
   try {
     // 1. Fetch all triggers for this server ordered by creation date
     const rows = await sql`
@@ -2305,10 +2038,7 @@ export async function getServerRandomTriggers(
       if (parsed.success) {
         validated.push(parsed.data);
       } else {
-        log.warn(
-          `Skipping invalid random trigger row (id=${row.trigger_id}):`,
-          parsed.error,
-        );
+        log.warn(`Skipping invalid random trigger row (id=${row.trigger_id}):`, parsed.error);
       }
     }
     return validated;
@@ -2325,9 +2055,7 @@ export async function getServerRandomTriggers(
  * @param serverId - The database server_id.
  * @returns The count of triggers, or 0 on error.
  */
-export async function getServerRandomTriggerCount(
-  serverId: number,
-): Promise<number> {
+export async function getServerRandomTriggerCount(serverId: number): Promise<number> {
   try {
     // 1. Count triggers for this server
     const [row] = await sql<Array<{ count: string | number }>>`
@@ -2370,10 +2098,7 @@ export async function getRandomTriggerByPersonaAndChannel(
     // 2. Validate and return
     const parsed = randomTriggerSchema.safeParse(row);
     if (!parsed.success) {
-      log.warn(
-        `Invalid random trigger row for persona ${tomoriId} in channel ${channelDiscId}:`,
-        parsed.error,
-      );
+      log.warn(`Invalid random trigger row for persona ${tomoriId} in channel ${channelDiscId}:`, parsed.error);
       return null;
     }
     return parsed.data;
@@ -2394,10 +2119,7 @@ export async function getRandomTriggerByPersonaAndChannel(
  * @param channelDiscId - Discord channel ID (snowflake string)
  * @returns Resolved LlmRow for the override, or null if not set
  */
-export async function getChannelLlmOverride(
-  serverId: number,
-  channelDiscId: string,
-): Promise<LlmRow | null> {
+export async function getChannelLlmOverride(serverId: number, channelDiscId: string): Promise<LlmRow | null> {
   try {
     // 1. Query channel override row
     const overrideRows = await sql`
@@ -2415,16 +2137,12 @@ export async function getChannelLlmOverride(
     const cached = getCachedLLM(llmId);
     if (cached) return cached as LlmRow;
 
-    const llmRows =
-      await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
+    const llmRows = await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
     if (!llmRows.length) return null;
 
     return llmRows[0] as LlmRow;
   } catch (error) {
-    log.error(
-      `Error fetching channel LLM override for server ${serverId} channel ${channelDiscId}:`,
-      error,
-    );
+    log.error(`Error fetching channel LLM override for server ${serverId} channel ${channelDiscId}:`, error);
     return null;
   }
 }
@@ -2461,8 +2179,7 @@ export async function getAllChannelLlmOverridesForServer(
         });
         continue;
       }
-      const llmRows =
-        await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
+      const llmRows = await sql`SELECT * FROM llms WHERE llm_id = ${llmId} LIMIT 1`;
       if (llmRows.length) {
         results.push({
           channelDiscId: row.channel_disc_id as string,
@@ -2472,10 +2189,7 @@ export async function getAllChannelLlmOverridesForServer(
     }
     return results;
   } catch (error) {
-    log.error(
-      `Error fetching all channel LLM overrides for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error fetching all channel LLM overrides for server ${serverId}:`, error);
     return [];
   }
 }
@@ -2504,10 +2218,7 @@ export async function loadPersonaLlmOverridesForServer(
       llm_id: row.llm_id,
     }));
   } catch (error) {
-    log.error(
-      `Error loading persona LLM overrides for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error loading persona LLM overrides for server ${serverId}:`, error);
     return [];
   }
 }
@@ -2518,9 +2229,7 @@ export async function loadPersonaLlmOverridesForServer(
  * @param serverId - The database server_id (numeric)
  * @returns Array of saved provider configs, or empty array on error/no results
  */
-export async function loadSavedProviderConfigs(
-  serverId: number,
-): Promise<SavedProviderConfigRow[]> {
+export async function loadSavedProviderConfigs(serverId: number): Promise<SavedProviderConfigRow[]> {
   try {
     const rows = await sql`
 			SELECT * FROM saved_provider_configs
@@ -2546,10 +2255,7 @@ export async function loadSavedProviderConfigs(
     }
     return validated;
   } catch (error) {
-    log.error(
-      `Error loading saved provider configs for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error loading saved provider configs for server ${serverId}:`, error);
     return [];
   }
 }
@@ -2578,17 +2284,12 @@ export async function loadSavedProviderConfig(
 
     const parsed = savedProviderConfigSchema.safeParse(rows[0]);
     if (!parsed.success) {
-      log.warn(
-        `Invalid saved provider config for server ${serverId}, provider ${provider}: ${parsed.error.message}`,
-      );
+      log.warn(`Invalid saved provider config for server ${serverId}, provider ${provider}: ${parsed.error.message}`);
       return null;
     }
     return parsed.data;
   } catch (error) {
-    log.error(
-      `Error loading saved provider config for server ${serverId}, provider ${provider}:`,
-      error,
-    );
+    log.error(`Error loading saved provider config for server ${serverId}, provider ${provider}:`, error);
     return null;
   }
 }

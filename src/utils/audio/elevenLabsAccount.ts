@@ -23,9 +23,7 @@ export interface ElevenLabsAccountValidationResult {
   details?: string;
 }
 
-export async function validateElevenLabsApiKey(
-  apiKey: string,
-): Promise<ElevenLabsAccountValidationResult> {
+export async function validateElevenLabsApiKey(apiKey: string): Promise<ElevenLabsAccountValidationResult> {
   if (!apiKey.trim()) {
     return {
       success: false,
@@ -64,10 +62,7 @@ export async function validateElevenLabsApiKey(
     // (including 403) means the key authenticated but lacks this specific scope,
     // which is still a valid key.
     if (response.status === 401) {
-      const detail =
-        typeof responseJson?.detail === "string"
-          ? responseJson.detail
-          : `HTTP 401`;
+      const detail = typeof responseJson?.detail === "string" ? responseJson.detail : `HTTP 401`;
       return {
         success: false,
         errorKind: "request_failed",

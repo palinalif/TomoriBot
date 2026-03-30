@@ -40,9 +40,7 @@ export async function buildForcedMentionsForUser(
     member = await guild.members.fetch(userId).catch(() => null);
   }
 
-  const fallbackUser = member
-    ? null
-    : await client.users.fetch(userId).catch(() => null);
+  const fallbackUser = member ? null : await client.users.fetch(userId).catch(() => null);
 
   addHandle(member?.nickname);
   addHandle(member?.user.globalName ?? fallbackUser?.globalName);
@@ -63,28 +61,16 @@ export async function ensureDiscordUserMention(params: {
   contextLabel: string;
   fallbackSender?: (content: string) => Promise<boolean>;
 }): Promise<void> {
-  const {
-    client,
-    channel,
-    targetUserId,
-    afterMessageId,
-    triggerStartTime,
-    contextLabel,
-    fallbackSender,
-  } = params;
+  const { client, channel, targetUserId, afterMessageId, triggerStartTime, contextLabel, fallbackSender } = params;
 
   const botUserId = client.user?.id;
   if (!botUserId) {
-    log.warn(
-      `Cannot verify mention for ${contextLabel}: bot user not available`,
-    );
+    log.warn(`Cannot verify mention for ${contextLabel}: bot user not available`);
     return;
   }
 
   if (!("messages" in channel)) {
-    log.warn(
-      `Cannot verify mention for ${contextLabel}: channel does not support message fetching`,
-    );
+    log.warn(`Cannot verify mention for ${contextLabel}: channel does not support message fetching`);
     return;
   }
 
@@ -96,8 +82,7 @@ export async function ensureDiscordUserMention(params: {
 
     const relevantMessages = recentMessages.filter(
       (message) =>
-        (message.author.id === botUserId || message.webhookId) &&
-        message.createdTimestamp >= triggerStartTime - 1000,
+        (message.author.id === botUserId || message.webhookId) && message.createdTimestamp >= triggerStartTime - 1000,
     );
 
     if (relevantMessages.size === 0) {
@@ -117,15 +102,11 @@ export async function ensureDiscordUserMention(params: {
     if (hasMention) return;
 
     if (!("send" in channel)) {
-      log.warn(
-        `Cannot send fallback mention for ${contextLabel}: channel does not support sending`,
-      );
+      log.warn(`Cannot send fallback mention for ${contextLabel}: channel does not support sending`);
       return;
     }
 
-    const sentViaFallback = fallbackSender
-      ? await fallbackSender(mentionToken)
-      : false;
+    const sentViaFallback = fallbackSender ? await fallbackSender(mentionToken) : false;
 
     if (!sentViaFallback) {
       await (channel as SendableChannel).send({

@@ -111,10 +111,7 @@ export function formatMessagesForExtraction(
   const nicknameToTomoriId = new Map<string, number>();
   for (const persona of serverPersonas) {
     if (persona.tomori_id !== undefined) {
-      nicknameToTomoriId.set(
-        persona.tomori_nickname.toLowerCase(),
-        persona.tomori_id,
-      );
+      nicknameToTomoriId.set(persona.tomori_nickname.toLowerCase(), persona.tomori_id);
     }
   }
 
@@ -167,8 +164,7 @@ export function formatMessagesForExtraction(
     // 7. Determine author name
     //    Strip "[Matrix|@user:host] " prefix from Matrix bridge webhook messages
     //    so TomoriBot sees just the display name (e.g., "Neko Neechan") in context
-    const rawAuthorName =
-      msg.member?.displayName ?? msg.author?.username ?? "Unknown";
+    const rawAuthorName = msg.member?.displayName ?? msg.author?.username ?? "Unknown";
     const authorName = stripBridgePrefix(rawAuthorName);
 
     // 8. Build formatted line

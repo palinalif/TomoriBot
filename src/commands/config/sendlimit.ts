@@ -1,14 +1,7 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { tomoriConfigSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
@@ -20,18 +13,14 @@ const MAX_LIMIT = 40;
 const DEFAULT_LIMIT = 0;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("sendlimit")
     .setDescription(localizer("en-US", "commands.config.sendlimit.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(
-          localizer("en-US", "commands.config.sendlimit.limit_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.sendlimit.limit_description"))
         .setMinValue(MIN_LIMIT)
         .setMaxValue(MAX_LIMIT)
         .setRequired(true),
@@ -154,11 +143,7 @@ export async function execute(
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error(
-        "Failed to validate updated config",
-        validatedConfig.error,
-        context,
-      );
+      await log.error("Failed to validate updated config", validatedConfig.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -195,11 +180,7 @@ export async function execute(
         options: interaction.options?.data,
       },
     };
-    await log.error(
-      "Error in /config sendlimit command",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config sendlimit command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

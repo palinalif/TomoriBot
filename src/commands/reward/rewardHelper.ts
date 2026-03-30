@@ -1,20 +1,13 @@
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client, Message } from "discord.js";
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from "discord.js";
-import {
-  promptWithPaginatedModal,
-  replyInfoEmbed,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { promptWithPaginatedModal, replyInfoEmbed, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import type { UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import tomoriChat from "../../events/messageCreate/tomoriChat";
-import {
-  loadAllPersonasForServer,
-  loadTomoriState,
-} from "../../utils/db/dbRead";
+import { loadAllPersonasForServer, loadTomoriState } from "../../utils/db/dbRead";
 
 /**
  * Creates a reward subcommand handler pair (configureSubcommand + execute).
@@ -37,11 +30,7 @@ export function createRewardCommand(rewardName: string) {
    * @returns The configured subcommand
    */
   const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-    subcommand
-      .setName(rewardName)
-      .setDescription(
-        localizer("en-US", `commands.reward.${rewardName}.description`),
-      );
+    subcommand.setName(rewardName).setDescription(localizer("en-US", `commands.reward.${rewardName}.description`));
 
   /**
    * Execute the reward command — display embed and trigger a bot response
@@ -78,9 +67,7 @@ export function createRewardCommand(rewardName: string) {
     }
 
     // Get the guild channel — check both regular channels and threads
-    const guildChannel =
-      interaction.guild.channels.cache.get(interaction.channel.id) ??
-      interaction.channel;
+    const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
 
     // Verify it's a guild-based channel with permissions
     if (!("permissionsFor" in guildChannel)) {
@@ -123,9 +110,7 @@ export function createRewardCommand(rewardName: string) {
     const mainPersona = allPersonas.find((p) => !p.is_alter);
 
     let selectedPersona = mainPersona;
-    let replyInteraction:
-      | ChatInputCommandInteraction
-      | import("discord.js").ModalSubmitInteraction = interaction;
+    let replyInteraction: ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction = interaction;
 
     // If alters exist, show persona selection modal
     if (alterPersonas.length > 0 && mainPersona) {
@@ -133,18 +118,12 @@ export function createRewardCommand(rewardName: string) {
         {
           label: safeSelectOptionText(mainPersona.tomori_nickname),
           value: "0",
-          description: localizer(
-            locale,
-            "commands.bot.respond.main_persona_description",
-          ),
+          description: localizer(locale, "commands.bot.respond.main_persona_description"),
         },
         ...alterPersonas.map((persona, index) => ({
           label: safeSelectOptionText(persona.tomori_nickname),
           value: (index + 1).toString(),
-          description: localizer(
-            locale,
-            "commands.bot.respond.alter_persona_description",
-          ),
+          description: localizer(locale, "commands.bot.respond.alter_persona_description"),
         })),
       ];
 
@@ -163,9 +142,7 @@ export function createRewardCommand(rewardName: string) {
       });
 
       if (modalResult.outcome !== "submit") {
-        log.info(
-          `Reward ${rewardName} persona selection ${modalResult.outcome} for user ${interaction.user.id}`,
-        );
+        log.info(`Reward ${rewardName} persona selection ${modalResult.outcome} for user ${interaction.user.id}`);
         return;
       }
 
@@ -173,12 +150,8 @@ export function createRewardCommand(rewardName: string) {
         replyInteraction = modalResult.interaction;
       }
 
-      const selectedIndex = Number.parseInt(
-        modalResult.values?.persona_choice ?? "0",
-        10,
-      );
-      selectedPersona =
-        selectedIndex === 0 ? mainPersona : alterPersonas[selectedIndex - 1];
+      const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
+      selectedPersona = selectedIndex === 0 ? mainPersona : alterPersonas[selectedIndex - 1];
 
       log.info(
         `User ${interaction.user.id} selected persona ${selectedPersona.tomori_nickname} (ID: ${selectedPersona.tomori_id}) for ${rewardName} reward`,
@@ -187,16 +160,11 @@ export function createRewardCommand(rewardName: string) {
 
     try {
       const botName =
-        selectedPersona?.tomori_nickname ??
-        tomoriState.tomori_nickname ??
-        process.env.DEFAULT_BOTNAME ??
-        "Tomori";
+        selectedPersona?.tomori_nickname ?? tomoriState.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori";
 
       // 5. Build reward embed (always public)
       const rewardEmbed = new EmbedBuilder()
-        .setTitle(
-          localizer(locale, `commands.reward.${rewardName}.embed_title`),
-        )
+        .setTitle(localizer(locale, `commands.reward.${rewardName}.embed_title`))
         .setDescription(
           localizer(locale, `commands.reward.${rewardName}.embed_description`, {
             user: `<@${interaction.user.id}>`,
@@ -218,9 +186,7 @@ export function createRewardCommand(rewardName: string) {
       const latestMessage = messages.first();
 
       if (!latestMessage) {
-        log.warn(
-          `No messages found in channel ${interaction.channel.id} for ${rewardName} reward command.`,
-        );
+        log.warn(`No messages found in channel ${interaction.channel.id} for ${rewardName} reward command.`);
         return;
       }
 
@@ -263,17 +229,11 @@ export function createRewardCommand(rewardName: string) {
 
       try {
         await replyInteraction.followUp({
-          content: localizer(
-            locale,
-            "general.errors.unknown_error_description",
-          ),
+          content: localizer(locale, "general.errors.unknown_error_description"),
           flags: MessageFlags.Ephemeral,
         });
       } catch (followUpError) {
-        log.error(
-          `Failed to send error followup for reward ${rewardName} command:`,
-          followUpError,
-        );
+        log.error(`Failed to send error followup for reward ${rewardName} command:`, followUpError);
       }
     }
   }

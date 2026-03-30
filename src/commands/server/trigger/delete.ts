@@ -16,17 +16,8 @@ import {
   safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
-import {
-  type UserRow,
-  type ErrorContext,
-  personaConfigSchema,
-  type TomoriState,
-} from "@/types/db/schema";
-import type {
-  CheckboxGroupOption,
-  ModalCheckboxGroupField,
-  SelectOption,
-} from "@/types/discord/modal";
+import { type UserRow, type ErrorContext, personaConfigSchema, type TomoriState } from "@/types/db/schema";
+import type { CheckboxGroupOption, ModalCheckboxGroupField, SelectOption } from "@/types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
@@ -40,14 +31,8 @@ const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 const formatTextArrayLiteral = (items: string[]): string =>
   `{${items.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("delete")
-    .setDescription(
-      localizer("en-US", "commands.server.trigger.delete.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("delete").setDescription(localizer("en-US", "commands.server.trigger.delete.description"));
 
 export async function execute(
   _client: Client,
@@ -65,10 +50,7 @@ export async function execute(
   }
 
   let tomoriState: TomoriState | null = null;
-  let responseInteraction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction = interaction;
+  let responseInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction = interaction;
   let selectedPersona: TomoriState | null = null;
 
   try {
@@ -88,25 +70,18 @@ export async function execute(
     }
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(
-        interaction,
-        locale,
-        {
-          personas: allPersonas,
-          color: ColorCode.INFO,
-          preserveSelectedInteraction: true,
-          onSelect: async () => {},
-        },
-      );
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
 
       if (!personaSelection.success) {
         if (personaSelection.reason !== "cancelled") continue;
         return;
       }
-      if (
-        personaSelection.selectedIndex === undefined ||
-        !personaSelection.interaction
-      ) {
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
         return;
       }
 
@@ -129,8 +104,7 @@ export async function execute(
       if (currentTriggerWords.length === 0) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.server.trigger.delete.no_triggers_title",
-          descriptionKey:
-            "commands.server.trigger.delete.no_triggers_description",
+          descriptionKey: "commands.server.trigger.delete.no_triggers_description",
           color: ColorCode.WARN,
         });
         return;
@@ -148,9 +122,7 @@ export async function execute(
         return;
       }
 
-      const triggerGroupCount = Math.ceil(
-        currentTriggerWords.length / MAX_OPTIONS_PER_GROUP,
-      );
+      const triggerGroupCount = Math.ceil(currentTriggerWords.length / MAX_OPTIONS_PER_GROUP);
       const checkboxGroups = buildTriggerCheckboxGroups(currentTriggerWords);
 
       const triggerModalResult = await promptWithRawModal(
@@ -165,9 +137,7 @@ export async function execute(
       );
 
       if (triggerModalResult.outcome !== "submit") {
-        log.info(
-          `Trigger delete modal ${triggerModalResult.outcome} for user ${userData.user_id}`,
-        );
+        log.info(`Trigger delete modal ${triggerModalResult.outcome} for user ${userData.user_id}`);
         continue;
       }
 
@@ -180,23 +150,17 @@ export async function execute(
 
       const checkedIndices = new Set<number>();
       for (let groupIndex = 0; groupIndex < triggerGroupCount; groupIndex++) {
-        const groupValues =
-          triggerModalResult.multiValues?.[
-            `${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`
-          ] ?? [];
+        const groupValues = triggerModalResult.multiValues?.[`${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
         for (const index of groupValues) {
           checkedIndices.add(Number.parseInt(index, 10));
         }
       }
 
-      const removedIndices = currentTriggerWords.flatMap((_, index) =>
-        checkedIndices.has(index) ? [] : [index],
-      );
+      const removedIndices = currentTriggerWords.flatMap((_, index) => (checkedIndices.has(index) ? [] : [index]));
       if (removedIndices.length === 0) {
         await replyInfoEmbed(triggerModalInteraction, locale, {
           titleKey: "commands.server.trigger.delete.no_removals_title",
-          descriptionKey:
-            "commands.server.trigger.delete.no_removals_description",
+          descriptionKey: "commands.server.trigger.delete.no_removals_description",
           color: ColorCode.INFO,
         });
         return;
@@ -256,45 +220,35 @@ async function handlePaginatedTriggerRemovalFallback(
   locale: string,
   guildId: string,
 ): Promise<void> {
-  const triggerOptions: SelectOption[] = currentTriggerWords.map(
-    (trigger, index) => ({
-      label: safeSelectOptionText(trigger, 50),
-      value: index.toString(),
-    }),
-  );
+  const triggerOptions: SelectOption[] = currentTriggerWords.map((trigger, index) => ({
+    label: safeSelectOptionText(trigger, 50),
+    value: index.toString(),
+  }));
 
-  const triggerModalResult = await promptWithPaginatedModal(
-    responseInteraction,
-    locale,
-    {
-      modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.server.trigger.delete.modal_title",
-      components: [
-        {
-          customId: TRIGGER_SELECT_ID,
-          labelKey: "commands.server.trigger.delete.select_label",
-          descriptionKey: "commands.server.trigger.delete.select_description",
-          placeholder: "commands.server.trigger.delete.select_placeholder",
-          required: true,
-          options: triggerOptions,
-        },
-      ],
-    },
-  );
+  const triggerModalResult = await promptWithPaginatedModal(responseInteraction, locale, {
+    modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
+    modalTitleKey: "commands.server.trigger.delete.modal_title",
+    components: [
+      {
+        customId: TRIGGER_SELECT_ID,
+        labelKey: "commands.server.trigger.delete.select_label",
+        descriptionKey: "commands.server.trigger.delete.select_description",
+        placeholder: "commands.server.trigger.delete.select_placeholder",
+        required: true,
+        options: triggerOptions,
+      },
+    ],
+  });
 
   if (triggerModalResult.outcome !== "submit") {
-    log.info(
-      `Trigger delete fallback modal ${triggerModalResult.outcome} for user ${userData.user_id}`,
-    );
+    log.info(`Trigger delete fallback modal ${triggerModalResult.outcome} for user ${userData.user_id}`);
     return;
   }
 
   const triggerModalInteraction = triggerModalResult.interaction;
   const selectedTriggerIndex = triggerModalResult.values?.[TRIGGER_SELECT_ID];
   if (!triggerModalInteraction || !selectedTriggerIndex) {
-    log.error(
-      "Trigger fallback modal result unexpectedly missing interaction or values",
-    );
+    log.error("Trigger fallback modal result unexpectedly missing interaction or values");
     return;
   }
 
@@ -325,12 +279,8 @@ async function performTriggerWordRemoval(
   guildId: string,
 ): Promise<void> {
   const removedIndexSet = new Set(removedIndices);
-  const remainingTriggerWords = currentTriggerWords.filter(
-    (_, index) => !removedIndexSet.has(index),
-  );
-  const removedTriggerWords = currentTriggerWords.filter((_, index) =>
-    removedIndexSet.has(index),
-  );
+  const remainingTriggerWords = currentTriggerWords.filter((_, index) => !removedIndexSet.has(index));
+  const removedTriggerWords = currentTriggerWords.filter((_, index) => removedIndexSet.has(index));
 
   if (removedTriggerWords.length === 0) {
     await replyInfoEmbed(replyInteraction, locale, {
@@ -347,9 +297,7 @@ async function performTriggerWordRemoval(
 		ON CONFLICT (tomori_id) DO NOTHING
 	`;
 
-  const triggerWordsArrayLiteral = formatTextArrayLiteral(
-    remainingTriggerWords,
-  );
+  const triggerWordsArrayLiteral = formatTextArrayLiteral(remainingTriggerWords);
   const [updatedRow] = await sql`
 		UPDATE persona_configs
 		SET trigger_words = ${triggerWordsArrayLiteral}::text[]
@@ -369,9 +317,7 @@ async function performTriggerWordRemoval(
         guildId,
         removedIndices,
         removedTriggerWords,
-        validationErrors: validatedConfig.success
-          ? null
-          : validatedConfig.error.flatten(),
+        validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
       },
     };
     await log.error(
@@ -406,9 +352,7 @@ async function performTriggerWordRemoval(
   });
 }
 
-function buildTriggerCheckboxGroups(
-  currentTriggerWords: string[],
-): ModalCheckboxGroupField[] {
+function buildTriggerCheckboxGroups(currentTriggerWords: string[]): ModalCheckboxGroupField[] {
   const checkboxGroups: ModalCheckboxGroupField[] = [];
 
   for (let i = 0; i < currentTriggerWords.length; i += MAX_OPTIONS_PER_GROUP) {
@@ -427,10 +371,7 @@ function buildTriggerCheckboxGroups(
         groupIndex === 0
           ? "commands.server.trigger.delete.checkbox_label"
           : "commands.server.trigger.delete.checkbox_label_continued",
-      descriptionKey:
-        groupIndex === 0
-          ? "commands.server.trigger.delete.checkbox_description"
-          : undefined,
+      descriptionKey: groupIndex === 0 ? "commands.server.trigger.delete.checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,

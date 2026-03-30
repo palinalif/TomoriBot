@@ -1,11 +1,6 @@
 import { AttachmentBuilder, Routes } from "discord.js";
 import type { Webhook } from "discord.js";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolParameterSchema,
-  type ToolResult,
-} from "@/types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
 import { synthesizeSpeechWithElevenLabs } from "@/utils/audio/elevenLabsTts";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
@@ -45,9 +40,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
   };
 
   private resolveThreadId(context: ToolContext): string | undefined {
-    return "isThread" in context.channel &&
-      typeof context.channel.isThread === "function" &&
-      context.channel.isThread()
+    return "isThread" in context.channel && typeof context.channel.isThread === "function" && context.channel.isThread()
       ? context.channel.id
       : undefined;
   }
@@ -81,16 +74,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
     threadId?: string;
   }): Promise<string | undefined> {
     try {
-      const {
-        webhook,
-        audioBuffer,
-        mimeType,
-        filename,
-        voiceMeta,
-        username,
-        avatarUrl,
-        threadId,
-      } = options;
+      const { webhook, audioBuffer, mimeType, filename, voiceMeta, username, avatarUrl, threadId } = options;
 
       if (!webhook.token) return undefined;
 
@@ -118,35 +102,24 @@ export class GenerateVoiceMessageTool extends BaseTool {
       }
 
       form.append("payload_json", JSON.stringify(payloadJson));
-      form.append(
-        "files[0]",
-        new Blob([new Uint8Array(audioBuffer)], { type: mimeType }),
-        filename,
-      );
+      form.append("files[0]", new Blob([new Uint8Array(audioBuffer)], { type: mimeType }), filename);
 
       // ?wait=true is required to receive a Message object back (otherwise 204)
-      const threadParam = threadId
-        ? `&thread_id=${encodeURIComponent(threadId)}`
-        : "";
+      const threadParam = threadId ? `&thread_id=${encodeURIComponent(threadId)}` : "";
       const url = `${DISCORD_API_BASE}/webhooks/${webhook.id}/${webhook.token}?wait=true${threadParam}`;
 
       const response = await fetch(url, { method: "POST", body: form });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "unknown");
-        log.warn(
-          `[VoiceWaveform] Discord API rejected native voice message: HTTP ${response.status} — ${errorText}`,
-        );
+        log.warn(`[VoiceWaveform] Discord API rejected native voice message: HTTP ${response.status} — ${errorText}`);
         return undefined;
       }
 
       const data = (await response.json()) as { id?: string };
       return data.id;
     } catch (error) {
-      log.warn(
-        "[VoiceWaveform] Exception during native voice message send",
-        error,
-      );
+      log.warn("[VoiceWaveform] Exception during native voice message send", error);
       return undefined;
     }
   }
@@ -185,35 +158,25 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
 
       form.append("payload_json", JSON.stringify(payloadJson));
-      form.append(
-        "files[0]",
-        new Blob([new Uint8Array(audioBuffer)], { type: mimeType }),
-        filename,
-      );
+      form.append("files[0]", new Blob([new Uint8Array(audioBuffer)], { type: mimeType }), filename);
 
       // Post directly to the channel via bot identity.
       // passThroughBody: true prevents the REST manager from JSON-serializing
       // the FormData body, which would corrupt the multipart boundary.
       // channel.id is correct for both regular channels and threads.
-      const data = (await channel.client.rest.post(
-        Routes.channelMessages(channel.id),
-        { body: form, passThroughBody: true },
-      )) as { id?: string };
+      const data = (await channel.client.rest.post(Routes.channelMessages(channel.id), {
+        body: form,
+        passThroughBody: true,
+      })) as { id?: string };
 
       return data.id;
     } catch (error) {
-      log.warn(
-        "[VoiceWaveform] Exception during bot REST voice message send",
-        error,
-      );
+      log.warn("[VoiceWaveform] Exception during bot REST voice message send", error);
       return undefined;
     }
   }
 
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
       return {
@@ -240,10 +203,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
     }
 
-    const apiKey = await getOptApiKey(
-      context.tomoriState.server_id,
-      ELEVENLABS_SERVICE_NAME,
-    );
+    const apiKey = await getOptApiKey(context.tomoriState.server_id, ELEVENLABS_SERVICE_NAME);
     if (!apiKey) {
       return {
         success: false,
@@ -260,38 +220,26 @@ export class GenerateVoiceMessageTool extends BaseTool {
     if (!synthesisResult.success || !synthesisResult.audioBuffer) {
       return {
         success: false,
-        error:
-          synthesisResult.details ||
-          "Failed to generate the ElevenLabs voice message.",
+        error: synthesisResult.details || "Failed to generate the ElevenLabs voice message.",
       };
     }
 
-    const attachmentName = this.buildAttachmentName(
-      title,
-      synthesisResult.extension ?? "mp3",
-    );
+    const attachmentName = this.buildAttachmentName(title, synthesisResult.extension ?? "mp3");
     const threadId = this.resolveThreadId(context);
     const captionText = synthesisResult.cleanedCaptionText ?? "";
     // Strip any MIME parameters (e.g. "audio/mpeg; codecs=mp3" → "audio/mpeg")
     // Discord rejects waveform/duration_secs when the content type isn't a
     // bare audio/* type — it falls back to application/octet-stream otherwise.
-    const mimeType = (synthesisResult.contentType ?? "audio/mpeg")
-      .split(";")[0]
-      .trim();
+    const mimeType = (synthesisResult.contentType ?? "audio/mpeg").split(";")[0].trim();
 
     // Attempt to generate waveform + duration for Discord's native voice
     // message UI. Falls back gracefully to a plain attachment if it fails.
-    const voiceMeta = await generateVoiceMessageMetadata(
-      synthesisResult.audioBuffer,
-      mimeType,
-    );
+    const voiceMeta = await generateVoiceMessageMetadata(synthesisResult.audioBuffer, mimeType);
 
     let sentMessageId: string | undefined;
 
     if (!voiceMeta) {
-      log.warn(
-        "[VoiceWaveform] Waveform generation returned null — falling back to plain attachment",
-      );
+      log.warn("[VoiceWaveform] Waveform generation returned null — falling back to plain attachment");
     }
 
     // --- Native voice message path ---
@@ -312,15 +260,11 @@ export class GenerateVoiceMessageTool extends BaseTool {
           threadId,
         });
         if (!sentMessageId) {
-          log.warn(
-            "[VoiceWaveform] Webhook REST send failed — trying bot REST path",
-          );
+          log.warn("[VoiceWaveform] Webhook REST send failed — trying bot REST path");
         }
       } else if (context.webhook && !context.webhook.token) {
         // Log when the webhook object exists but Discord nulled out its token
-        log.warn(
-          `[VoiceWaveform] Webhook token is null (id=${context.webhook.id}) — trying bot REST path`,
-        );
+        log.warn(`[VoiceWaveform] Webhook token is null (id=${context.webhook.id}) — trying bot REST path`);
       }
 
       if (!sentMessageId) {
@@ -333,9 +277,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
           voiceMeta,
         });
         if (!sentMessageId) {
-          log.warn(
-            "[VoiceWaveform] Bot REST send failed — falling back to plain attachment",
-          );
+          log.warn("[VoiceWaveform] Bot REST send failed — falling back to plain attachment");
         }
       }
     }
@@ -361,9 +303,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
           {
             username: context.personaUsername,
             avatarUrl: context.personaAvatarUrl,
-            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
-              ? context.personaAvatarUrl
-              : undefined,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
           },
         );
         sentMessageId = sentMessage.id;
@@ -387,11 +327,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
     // In chat mode, also post the script as a visible blockquote text message
     // so users can read what was said without playing the audio. The LLM will
     // see it naturally from chat history; no extra context injection needed.
-    if (
-      sentMessageId &&
-      captionText &&
-      context.tomoriState.config.voice_transcript_chat_mode
-    ) {
+    if (sentMessageId && captionText && context.tomoriState.config.voice_transcript_chat_mode) {
       const quotedCaption = `> ${captionText.replace(/\n/g, "\n> ")}`;
       try {
         if (context.webhook && context.personaUsername) {
@@ -405,9 +341,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
             {
               username: context.personaUsername,
               avatarUrl: context.personaAvatarUrl,
-              avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
-                ? context.personaAvatarUrl
-                : undefined,
+              avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
             },
           );
         } else {
@@ -420,10 +354,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
           `[VoiceChat] Posted TTS transcript | msg=${sentMessageId} | persona="${context.personaUsername ?? "bot"}"`,
         );
       } catch (error) {
-        log.warn(
-          `[VoiceChat] Failed to post TTS transcript for msg=${sentMessageId}`,
-          error,
-        );
+        log.warn(`[VoiceChat] Failed to post TTS transcript for msg=${sentMessageId}`, error);
       }
     }
 

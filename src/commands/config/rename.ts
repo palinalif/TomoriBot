@@ -9,11 +9,7 @@ import {
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import {
   type UserRow,
   type ErrorContext,
@@ -34,20 +30,13 @@ const NEW_NAME_INPUT_ID = "new_name_input";
 
 function isUniqueViolation(error: unknown): boolean {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "23505"
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505"
   );
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("rename")
-    .setDescription(localizer("en-US", "commands.config.rename.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("rename").setDescription(localizer("en-US", "commands.config.rename.description"));
 
 /**
  * Changes what Tomori refers to herself in context and in chat.
@@ -99,14 +88,8 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.config.rename.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.config.rename.main_persona_description",
-            ),
+          ? localizer(locale, "commands.config.rename.alter_persona_description")
+          : localizer(locale, "commands.config.rename.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
     if (personaSelectOptions.length === 0) {
@@ -145,9 +128,7 @@ export async function execute(
       ],
     });
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Rename modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Rename modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -162,10 +143,7 @@ export async function execute(
     attemptedNickname = modalResult.values?.[NEW_NAME_INPUT_ID] ?? "";
     const newNickname = attemptedNickname.trim();
 
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -176,10 +154,7 @@ export async function execute(
     }
 
     // 4. Validate nickname length
-    if (
-      newNickname.length < NICKNAME_MIN_LENGTH ||
-      newNickname.length > NICKNAME_MAX_LENGTH
-    ) {
+    if (newNickname.length < NICKNAME_MIN_LENGTH || newNickname.length > NICKNAME_MAX_LENGTH) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.rename.invalid_length_title",
         descriptionKey: "commands.config.rename.invalid_length",
@@ -253,9 +228,7 @@ export async function execute(
           table: "tomoris",
           guildId: serverDiscId,
           newNickname,
-          validationErrors: validatedTomori.success
-            ? null
-            : validatedTomori.error.flatten(),
+          validationErrors: validatedTomori.success ? null : validatedTomori.error.flatten(),
         },
       };
       await log.error(
@@ -280,16 +253,10 @@ export async function execute(
     const updatedTriggers = [...currentTriggers]; // Create a mutable copy
 
     // Case-insensitive check if the nickname exists
-    if (
-      !currentTriggers.some(
-        (trigger) => trigger.toLowerCase() === newNickname.toLowerCase(),
-      )
-    ) {
+    if (!currentTriggers.some((trigger) => trigger.toLowerCase() === newNickname.toLowerCase())) {
       updatedTriggers.push(newNickname);
       triggerUpdateNeeded = true;
-      log.info(
-        `Adding new nickname '${newNickname}' to trigger words for tomori ${selectedPersona.tomori_id}`,
-      );
+      log.info(`Adding new nickname '${newNickname}' to trigger words for tomori ${selectedPersona.tomori_id}`);
     } else {
       log.info(
         `Nickname '${newNickname}' already exists in trigger words for tomori ${selectedPersona.tomori_id}. Skipping update.`,
@@ -323,9 +290,7 @@ export async function execute(
             guildId: serverDiscId,
             newNickname,
             updatedTriggers, // Log the array we tried to set
-            validationErrors: validatedConfig.success
-              ? null
-              : validatedConfig.error.flatten(),
+            validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
           },
         };
         // Log this as a warning since the primary nickname update succeeded,
@@ -350,25 +315,20 @@ export async function execute(
         });
         return; // Stop execution after informing about partial success
       }
-      log.success(
-        `Successfully updated trigger words for tomori ${selectedPersona.tomori_id}`,
-      );
+      log.success(`Successfully updated trigger words for tomori ${selectedPersona.tomori_id}`);
     }
     // --- Transaction End (Conceptually) ---
 
     // 12. Update bot's server nickname only when renaming the main persona
     let nicknameUpdateSuccess = false;
-    const attemptedGuildNicknameSync =
-      Boolean(interaction.guild) && selectedPersona.is_alter !== true;
+    const attemptedGuildNicknameSync = Boolean(interaction.guild) && selectedPersona.is_alter !== true;
     if (attemptedGuildNicknameSync && interaction.guild) {
       try {
         const botMember = await interaction.guild.members.fetchMe();
         if (botMember) {
           await botMember.setNickname(newNickname);
           nicknameUpdateSuccess = true;
-          log.success(
-            `Successfully updated bot nickname to '${newNickname}' in guild ${interaction.guild.id}`,
-          );
+          log.success(`Successfully updated bot nickname to '${newNickname}' in guild ${interaction.guild.id}`);
         }
       } catch (nicknameError) {
         // Log the error but don't fail the entire command
@@ -409,10 +369,7 @@ export async function execute(
         titleKey: "commands.persona.name_conflict_title",
         descriptionKey: "commands.persona.name_conflict_description",
         descriptionVars: {
-          name:
-            attemptedNickname?.trim() ??
-            modalResult?.values?.[NEW_NAME_INPUT_ID] ??
-            "",
+          name: attemptedNickname?.trim() ?? modalResult?.values?.[NEW_NAME_INPUT_ID] ?? "",
         },
         color: ColorCode.ERROR,
       });
@@ -433,11 +390,7 @@ export async function execute(
         nicknameAttempted: attemptedNickname,
       },
     };
-    await log.error(
-      `Error executing /config rename for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config rename for user ${userData.user_disc_id}`, error as Error, context);
 
     // 16. Inform user of unknown error
     await replyInfoEmbed(errorReplyInteraction, locale, {

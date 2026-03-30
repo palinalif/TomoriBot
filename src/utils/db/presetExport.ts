@@ -19,10 +19,7 @@ import {
  * @param targetTomoriId - Optional persona ID to export; defaults to current main persona
  * @returns ExportResult containing the exported preset data or error
  */
-export async function exportPresetData(
-  serverDiscId: string,
-  targetTomoriId?: number,
-): Promise<ExportResult> {
+export async function exportPresetData(serverDiscId: string, targetTomoriId?: number): Promise<ExportResult> {
   try {
     // 1. Get internal server ID
     const serverRows = await sql`
@@ -192,10 +189,7 @@ export async function exportPresetData(
     // 5. Validate export data structure
     const validated = presetExportSchema.safeParse(exportData);
     if (!validated.success) {
-      log.error(
-        `Preset export validation failed for server ${serverDiscId}:`,
-        validated.error,
-      );
+      log.error(`Preset export validation failed for server ${serverDiscId}:`, validated.error);
       return {
         success: false,
         error: "commands.persona.export.error_validation_failed",

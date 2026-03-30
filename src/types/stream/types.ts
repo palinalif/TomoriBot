@@ -254,13 +254,10 @@ export function createDefaultStreamMetrics(): StreamMetrics {
 /**
  * Helper function to create buffer management configuration
  */
-export function createBufferManagementConfig(
-  customConfig?: Partial<BufferManagementConfig>,
-): BufferManagementConfig {
+export function createBufferManagementConfig(customConfig?: Partial<BufferManagementConfig>): BufferManagementConfig {
   return {
     regularFlushSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
-    codeBlockFlushSize:
-      DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+    codeBlockFlushSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
     enablePunctuationFlush: true,
     enableCodeBlockDetection: true,
     sentenceBoundaryRegex: createSentenceSplitRegex(),
@@ -279,8 +276,7 @@ export function createTypingSimulationConfig(
     enabled: humanizerDegree >= HumanizerDegree.MEDIUM,
     baseSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
     maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
-    minVisibleDurationMs:
-      DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+    minVisibleDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
     randomPauseEnabled: humanizerDegree >= HumanizerDegree.MEDIUM,
     thinkingPauseChance: DISCORD_STREAMING_CONSTANTS.THINKING_PAUSE_CHANCE,
     ...customConfig,

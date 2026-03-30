@@ -1,20 +1,12 @@
 import { TextInputStyle, MessageFlags } from "discord.js";
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
 import type { SetupConfig, UserRow } from "../../types/db/schema";
 import type { SelectOption, RadioGroupOption } from "../../types/discord/modal";
 import { setupConfigSchema } from "../../types/db/schema";
 import { localizer, getDefaultBotName } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  replySummaryEmbed,
-  promptWithRawModal,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, replySummaryEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ProviderFactory } from "../../utils/provider/providerFactory";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
@@ -47,12 +39,8 @@ const SETUP_API_KEY_MAX_LENGTH = 500;
 const SETUP_TIMEZONE_MAX_LENGTH = 6;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("setup")
-    .setDescription(localizer("en-US", "commands.config.setup.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("setup").setDescription(localizer("en-US", "commands.config.setup.description"));
 
 /**
  * Execute the setup command - guides users through the initial setup of TomoriBot for their server
@@ -70,10 +58,7 @@ export async function execute(
   // Check if channel exists (required for both guilds and DMs)
   if (!interaction.channel) {
     await interaction.reply({
-      content: localizer(
-        userData.language_pref,
-        "general.errors.operation_failed_description",
-      ),
+      content: localizer(userData.language_pref, "general.errors.operation_failed_description"),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -89,10 +74,7 @@ export async function execute(
 
   if (!serverId) {
     await interaction.reply({
-      content: localizer(
-        userData.language_pref,
-        "general.errors.critical_error_description",
-      ),
+      content: localizer(userData.language_pref, "general.errors.critical_error_description"),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -137,9 +119,7 @@ export async function execute(
       // 3a. No main persona but server data exists (orphaned alters/config).
       //     Clean up orphaned data so setupServer can create fresh rows
       //     without hitting unique constraint violations on tomori_configs.server_id.
-      log.warn(
-        `[Setup] Server ${serverId} has no main persona but orphaned data exists — cleaning up for fresh setup`,
-      );
+      log.warn(`[Setup] Server ${serverId} has no main persona but orphaned data exists — cleaning up for fresh setup`);
 
       // Delete orphaned tomoris (alters without a main). CASCADE handles persona_configs.
       // tomori_configs.tomori_id is SET NULL on delete (not cascaded), so we delete config separately.
@@ -157,9 +137,7 @@ export async function execute(
       // Invalidate cache so stale persona data is not served
       invalidateTomoriStateCache(serverId);
 
-      log.info(
-        `[Setup] Cleaned up orphaned data for server ${serverId}, proceeding with fresh setup`,
-      );
+      log.info(`[Setup] Cleaned up orphaned data for server ${serverId}, proceeding with fresh setup`);
     }
 
     // Load dynamic data for the modal
@@ -188,13 +166,11 @@ export async function execute(
     }
 
     // Create provider options for the select menu
-    const providerSelectOptions: SelectOption[] = uniqueProviders.map(
-      (provider) => ({
-        label: getProviderDisplayName(provider),
-        value: provider,
-        description: undefined,
-      }),
-    );
+    const providerSelectOptions: SelectOption[] = uniqueProviders.map((provider) => ({
+      label: getProviderDisplayName(provider),
+      value: provider,
+      description: undefined,
+    }));
 
     // Create preset options for the select menu
     const presetSelectOptions: SelectOption[] = presetOptions.map((preset) => ({
@@ -206,48 +182,24 @@ export async function execute(
     // Create humanizer degree options for the radio group
     const humanizerSelectOptions: RadioGroupOption[] = [
       {
-        label: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_none_label",
-        ),
+        label: localizer(locale, "commands.config.setup.humanizer_option_none_label"),
         value: "0",
-        description: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_none_desc",
-        ),
+        description: localizer(locale, "commands.config.setup.humanizer_option_none_desc"),
       },
       {
-        label: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_light_label",
-        ),
+        label: localizer(locale, "commands.config.setup.humanizer_option_light_label"),
         value: "1",
-        description: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_light_desc",
-        ),
+        description: localizer(locale, "commands.config.setup.humanizer_option_light_desc"),
       },
       {
-        label: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_default_label",
-        ),
+        label: localizer(locale, "commands.config.setup.humanizer_option_default_label"),
         value: "2",
-        description: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_default_desc",
-        ),
+        description: localizer(locale, "commands.config.setup.humanizer_option_default_desc"),
       },
       {
-        label: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_heavy_label",
-        ),
+        label: localizer(locale, "commands.config.setup.humanizer_option_heavy_label"),
         value: "3",
-        description: localizer(
-          locale,
-          "commands.config.setup.humanizer_option_heavy_desc",
-        ),
+        description: localizer(locale, "commands.config.setup.humanizer_option_heavy_desc"),
       },
     ];
 
@@ -312,9 +264,7 @@ export async function execute(
 
     // Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Setup modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Setup modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -339,12 +289,8 @@ export async function execute(
           apiKey: apiKey ? "PROVIDED" : "MISSING",
           presetName: presetName || "MISSING",
           humanizerDegree: humanizerDegreeStr || "MISSING",
-          allValuesKeys: modalResult.values
-            ? Object.keys(modalResult.values)
-            : "NO_VALUES",
-          allValuesStringified: modalResult.values
-            ? JSON.stringify(modalResult.values, null, 2)
-            : "NO_VALUES",
+          allValuesKeys: modalResult.values ? Object.keys(modalResult.values) : "NO_VALUES",
+          allValuesStringified: modalResult.values ? JSON.stringify(modalResult.values, null, 2) : "NO_VALUES",
         });
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.operation_failed_title",
@@ -386,8 +332,7 @@ export async function execute(
           const validationMessage = apiKey
             ? getCustomEndpointValidationMessage(urlValidation)
             : {
-                descriptionKey:
-                  "commands.config.custom.endpoint_url_invalid_description",
+                descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
               };
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.custom.endpoint_url_invalid_title",
@@ -402,18 +347,13 @@ export async function execute(
         log.info(`Custom endpoint URL validated: ${customEndpointUrl}`);
 
         // Show capabilities selection for custom model
-        customCapabilitiesResult = await promptCustomCapabilities(
-          modalSubmitInteraction,
-          locale,
-          serverId,
-        );
+        customCapabilitiesResult = await promptCustomCapabilities(modalSubmitInteraction, locale, serverId);
 
         if (!customCapabilitiesResult.success) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "general.errors.operation_failed_title",
             description:
-              customCapabilitiesResult.error ||
-              localizer(locale, "commands.config.custom.capabilities_timeout"),
+              customCapabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
             color: ColorCode.ERROR,
           });
           return;
@@ -424,9 +364,7 @@ export async function execute(
         );
 
         // Use placeholder API key for custom provider (the endpoint URL is stored separately)
-        const placeholderResult = await encryptApiKey(
-          CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
-        );
+        const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
         encryptedKey = placeholderResult.encrypted;
         keyVersion = placeholderResult.version;
       } else {
@@ -448,8 +386,7 @@ export async function execute(
         });
 
         try {
-          const provider =
-            await ProviderFactory.getProviderByName(normalizedProvider);
+          const provider = await ProviderFactory.getProviderByName(normalizedProvider);
 
           const validationResult = await provider.validateApiKey(apiKey);
           if (!validationResult.valid) {
@@ -457,20 +394,14 @@ export async function execute(
 
             if (validationResult.error) {
               try {
-                const formattedError = provider.formatErrorDescription(
-                  validationResult.error,
-                  locale,
-                );
+                const formattedError = provider.formatErrorDescription(validationResult.error, locale);
                 if (formattedError) {
                   errorDescription = formattedError;
                 } else {
                   errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
                 }
               } catch (formatError) {
-                log.warn(
-                  "Failed to format provider error description",
-                  formatError,
-                );
+                log.warn("Failed to format provider error description", formatError);
                 errorDescription = `Error Code ${validationResult.error.code}: ${validationResult.error.message}`;
               }
             }
@@ -483,10 +414,7 @@ export async function execute(
             return;
           }
         } catch (providerError) {
-          log.error(
-            `Error validating API key for provider ${normalizedProvider}`,
-            providerError as Error,
-          );
+          log.error(`Error validating API key for provider ${normalizedProvider}`, providerError as Error);
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "general.errors.operation_failed_title",
             descriptionKey: "commands.config.setup.api_key_invalid_api",
@@ -502,9 +430,7 @@ export async function execute(
       }
 
       // 4. Validate preset name against available presets
-      const selectedPresetOption = presetOptions.find(
-        (p) => p.name.toLowerCase() === presetName.trim().toLowerCase(),
-      );
+      const selectedPresetOption = presetOptions.find((p) => p.name.toLowerCase() === presetName.trim().toLowerCase());
 
       if (!selectedPresetOption) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -536,9 +462,7 @@ export async function execute(
       }
 
       const selectedPresetId = presetRows[0].tomori_preset_id;
-      log.info(
-        `Selected preset ID: ${selectedPresetId} (${selectedPresetOption.name})`,
-      );
+      log.info(`Selected preset ID: ${selectedPresetId} (${selectedPresetOption.name})`);
 
       // 5. Validate humanizer degree (required, must be 0-3)
       const parsedHumanizer = Number.parseInt(humanizerDegreeStr, 10);
@@ -657,14 +581,10 @@ export async function execute(
 							SELECT server_id FROM servers WHERE discord_id = ${serverId}
 						)
 					`;
-          log.info(
-            `[Setup] Auto-disabled emoji/sticker usage for NovelAI server ${serverId}`,
-          );
+          log.info(`[Setup] Auto-disabled emoji/sticker usage for NovelAI server ${serverId}`);
         } catch (disableError) {
           // Non-critical — log but don't fail setup
-          log.warn(
-            `[Setup] Failed to auto-disable emoji/sticker for NovelAI: ${disableError}`,
-          );
+          log.warn(`[Setup] Failed to auto-disable emoji/sticker for NovelAI: ${disableError}`);
         }
       }
 
@@ -691,14 +611,10 @@ export async function execute(
               `[Setup] Saved custom endpoint config for server ${serverId}: endpoint=${customEndpointUrl}, llmId=${customLlmId}, modelName=${customCapabilitiesResult.modelName || "default"}`,
             );
           } else {
-            log.error(
-              `[Setup] Failed to load TomoriState after setup for custom provider config update`,
-            );
+            log.error(`[Setup] Failed to load TomoriState after setup for custom provider config update`);
           }
         } catch (customConfigError) {
-          log.error(
-            `[Setup] Failed to save custom endpoint config: ${customConfigError}`,
-          );
+          log.error(`[Setup] Failed to save custom endpoint config: ${customConfigError}`);
           // Don't fail setup, the server was created successfully
         }
       }
@@ -712,37 +628,21 @@ export async function execute(
           const newTomoriState = await loadTomoriState(serverId);
 
           if (newTomoriState) {
-            log.info(
-              `[Setup] Force syncing emojis/stickers for guild ${interaction.guild.name}`,
-            );
+            log.info(`[Setup] Force syncing emojis/stickers for guild ${interaction.guild.name}`);
 
             // 2. Force sync both emojis and stickers (ignore 24hr cache)
             await Promise.all([
-              lazySyncGuildEmojis(
-                interaction.guild,
-                newTomoriState.server_id,
-                true,
-              ),
-              lazySyncGuildStickers(
-                interaction.guild,
-                newTomoriState.server_id,
-                true,
-              ),
+              lazySyncGuildEmojis(interaction.guild, newTomoriState.server_id, true),
+              lazySyncGuildStickers(interaction.guild, newTomoriState.server_id, true),
             ]);
 
-            log.success(
-              `[Setup] Successfully synced expressions for guild ${interaction.guild.name}`,
-            );
+            log.success(`[Setup] Successfully synced expressions for guild ${interaction.guild.name}`);
           } else {
-            log.warn(
-              `[Setup] Failed to load TomoriState after setup for guild ${interaction.guild.id}`,
-            );
+            log.warn(`[Setup] Failed to load TomoriState after setup for guild ${interaction.guild.id}`);
           }
         } catch (syncError) {
           // 3. Log error but don't fail setup - expressions will sync on first message anyway
-          log.warn(
-            `[Setup] Failed to sync expressions during setup (will sync on first message): ${syncError}`,
-          );
+          log.warn(`[Setup] Failed to sync expressions during setup (will sync on first message): ${syncError}`);
         }
       }
 
@@ -773,14 +673,10 @@ export async function execute(
             const actionDescription = cachedAvatar
               ? `Set preset avatar for "${selectedPresetOption.name}"`
               : "Reset guild avatar to bot default";
-            log.info(
-              `${actionDescription} for guild ${interaction.guild.id} during setup`,
-            );
+            log.info(`${actionDescription} for guild ${interaction.guild.id} during setup`);
           } else {
             avatarUpdateFailed = true;
-            log.warn(
-              `Failed to update guild avatar during setup: ${response.status} ${response.statusText}`,
-            );
+            log.warn(`Failed to update guild avatar during setup: ${response.status} ${response.statusText}`);
           }
         } catch (avatarError) {
           // Log avatar error but don't fail the setup
@@ -794,17 +690,13 @@ export async function execute(
       const humanizerLabels = [
         localizer(locale, "commands.config.setup.humanizer_option_none_label"),
         localizer(locale, "commands.config.setup.humanizer_option_light_label"),
-        localizer(
-          locale,
-          "commands.config.setup.humanizer_option_default_label",
-        ),
+        localizer(locale, "commands.config.setup.humanizer_option_default_label"),
         localizer(locale, "commands.config.setup.humanizer_option_heavy_label"),
       ];
       const humanizerLabel = humanizerLabels[humanizerDegree] || "Unknown";
       let configuredModelName = customCapabilitiesResult?.modelName || null;
       if (!configuredModelName) {
-        const defaultModel =
-          await loadDefaultModelForProvider(normalizedProvider);
+        const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
         if (defaultModel) {
           configuredModelName = defaultModel.llm_codename;
         }
@@ -832,10 +724,7 @@ export async function execute(
       if (normalizedProvider === "novelai") {
         successFields.push({
           nameKey: "commands.config.setup.novelai_expressions_warning_field",
-          value: localizer(
-            locale,
-            "commands.config.setup.novelai_expressions_warning_value",
-          ),
+          value: localizer(locale, "commands.config.setup.novelai_expressions_warning_value"),
         });
       }
 
@@ -843,27 +732,17 @@ export async function execute(
       if (isDMChannel) {
         successFields.push({
           nameKey: "commands.config.setup.dm_context_explanation_title",
-          value: localizer(
-            locale,
-            "commands.config.setup.dm_context_explanation",
-          ),
+          value: localizer(locale, "commands.config.setup.dm_context_explanation"),
         });
       }
 
       // Always show a "What can I do?" field pointing to /help features
-      const helpFeaturesMention = commandRegistry.getCommandMention(
-        "help",
-        "features",
-      );
+      const helpFeaturesMention = commandRegistry.getCommandMention("help", "features");
       successFields.push({
         nameKey: "commands.config.setup.next_steps_title",
-        value: localizer(
-          locale,
-          "commands.config.setup.next_steps_description",
-          {
-            helpFeatures: helpFeaturesMention,
-          },
-        ),
+        value: localizer(locale, "commands.config.setup.next_steps_description", {
+          helpFeatures: helpFeaturesMention,
+        }),
       });
 
       // Show success message
@@ -878,13 +757,8 @@ export async function execute(
       await replySummaryEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.setup.success_title",
         descriptionKey: successDescriptionKey,
-        descriptionVars: configuredModelName
-          ? { model_name: configuredModelName }
-          : undefined,
-        color:
-          avatarUpdateFailed || isDMChannel
-            ? ColorCode.WARN
-            : ColorCode.SUCCESS,
+        descriptionVars: configuredModelName ? { model_name: configuredModelName } : undefined,
+        color: avatarUpdateFailed || isDMChannel ? ColorCode.WARN : ColorCode.SUCCESS,
         fields: successFields,
         footerKey: isDMChannel
           ? "commands.persona.default.avatar_update_skipped_dm"

@@ -75,22 +75,10 @@ interface CacheStats {
 }
 
 // Environment variables for configuration
-const CRUDE_CONVERSATION_TTL_HOURS = Number.parseInt(
-  process.env.SHORT_TERM_MEMORY_TTL_HOURS || "12",
-  10,
-);
-const SUMMARY_TTL_HOURS = Number.parseInt(
-  process.env.SHORT_TERM_MEMORY_SUMMARY_TTL_HOURS || "24",
-  10,
-);
-const MAX_SUMMARY_LENGTH = Number.parseInt(
-  process.env.SHORT_TERM_MEMORY_MAX_SUMMARY_LENGTH || "1500",
-  10,
-);
-const MAX_MESSAGES_PER_CHANNEL = Number.parseInt(
-  process.env.SHORT_TERM_MEMORY_MAX_MESSAGES_PER_CHANNEL || "10",
-  10,
-);
+const CRUDE_CONVERSATION_TTL_HOURS = Number.parseInt(process.env.SHORT_TERM_MEMORY_TTL_HOURS || "12", 10);
+const SUMMARY_TTL_HOURS = Number.parseInt(process.env.SHORT_TERM_MEMORY_SUMMARY_TTL_HOURS || "24", 10);
+const MAX_SUMMARY_LENGTH = Number.parseInt(process.env.SHORT_TERM_MEMORY_MAX_SUMMARY_LENGTH || "1500", 10);
+const MAX_MESSAGES_PER_CHANNEL = Number.parseInt(process.env.SHORT_TERM_MEMORY_MAX_MESSAGES_PER_CHANNEL || "10", 10);
 
 // Convert hours to milliseconds
 const CRUDE_CONVERSATION_TTL_MS = CRUDE_CONVERSATION_TTL_HOURS * 60 * 60 * 1000;
@@ -120,13 +108,8 @@ const stats: CacheStats = {
  * @param channelId - Discord channel ID
  * @param tomoriId - Optional persona ID for persona-scoped memory
  */
-function getUserCacheKey(
-  userId: string,
-  channelId: string,
-  tomoriId?: number | null,
-): string {
-  if (tomoriId)
-    return `${USER_CACHE_PREFIX}:${userId}:${channelId}:${tomoriId}`;
+function getUserCacheKey(userId: string, channelId: string, tomoriId?: number | null): string {
+  if (tomoriId) return `${USER_CACHE_PREFIX}:${userId}:${channelId}:${tomoriId}`;
   return `${USER_CACHE_PREFIX}:${userId}:${channelId}`;
 }
 
@@ -136,11 +119,7 @@ function getUserCacheKey(
  * @param channelId - Discord channel ID
  * @param tomoriId - Optional persona ID for persona-scoped memory
  */
-function getServerCacheKey(
-  serverId: string,
-  channelId: string,
-  tomoriId?: number | null,
-): string {
+function getServerCacheKey(serverId: string, channelId: string, tomoriId?: number | null): string {
   if (tomoriId) {
     return `${SERVER_CACHE_PREFIX}:${serverId}:${channelId}:${tomoriId}`;
   }
@@ -272,9 +251,7 @@ function collectMemories(
   return memories;
 }
 
-function getShortTermMemoryByKey(
-  key: string,
-): ShortTermMemoryEntry | undefined {
+function getShortTermMemoryByKey(key: string): ShortTermMemoryEntry | undefined {
   const entry = cache.get(key);
 
   log.info(
@@ -283,9 +260,7 @@ function getShortTermMemoryByKey(
 
   if (!entry) {
     stats.misses++;
-    log.info(
-      `[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`,
-    );
+    log.info(`[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`);
     return undefined;
   }
 
@@ -293,9 +268,7 @@ function getShortTermMemoryByKey(
     cache.delete(key);
     stats.expirations++;
     stats.misses++;
-    log.info(
-      `[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`,
-    );
+    log.info(`[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`);
     return undefined;
   }
 
@@ -440,11 +413,7 @@ export function getShortTermMemoriesForUser(
   personaLineageId?: number | null,
 ): ShortTermMemoryEntry[] {
   try {
-    const memories = collectMemories(
-      `${USER_CACHE_PREFIX}:${userId}:`,
-      excludeChannelId,
-      personaLineageId,
-    );
+    const memories = collectMemories(`${USER_CACHE_PREFIX}:${userId}:`, excludeChannelId, personaLineageId);
 
     log.info(
       `[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
@@ -452,14 +421,10 @@ export function getShortTermMemoriesForUser(
 
     return memories;
   } catch (error) {
-    log.error(
-      `[shortTermMemoryCache] Failed to get short-term memories - userId=${userId}`,
-      error,
-      {
-        errorType: "CACHE_RETRIEVAL_ERROR",
-        metadata: { userDiscId: userId },
-      },
-    );
+    log.error(`[shortTermMemoryCache] Failed to get short-term memories - userId=${userId}`, error, {
+      errorType: "CACHE_RETRIEVAL_ERROR",
+      metadata: { userDiscId: userId },
+    });
     return [];
   }
 }
@@ -482,11 +447,7 @@ export function getShortTermMemoriesForServer(
       return [];
     }
 
-    const memories = collectMemories(
-      `${SERVER_CACHE_PREFIX}:${serverId}:`,
-      excludeChannelId,
-      personaLineageId,
-    );
+    const memories = collectMemories(`${SERVER_CACHE_PREFIX}:${serverId}:`, excludeChannelId, personaLineageId);
 
     log.info(
       `[shortTermMemoryCache] Retrieved server-shared short-term memories - serverId=${serverId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
@@ -494,14 +455,10 @@ export function getShortTermMemoriesForServer(
 
     return memories;
   } catch (error) {
-    log.error(
-      `[shortTermMemoryCache] Failed to get server-shared short-term memories - serverId=${serverId}`,
-      error,
-      {
-        errorType: "CACHE_RETRIEVAL_ERROR",
-        metadata: { serverId },
-      },
-    );
+    log.error(`[shortTermMemoryCache] Failed to get server-shared short-term memories - serverId=${serverId}`, error, {
+      errorType: "CACHE_RETRIEVAL_ERROR",
+      metadata: { serverId },
+    });
     return [];
   }
 }
@@ -520,9 +477,7 @@ export function getShortTermMemoryForUserChannel(
   tomoriId?: number | null,
 ): ShortTermMemoryEntry | undefined {
   try {
-    return getShortTermMemoryByKey(
-      getUserCacheKey(userId, channelId, tomoriId),
-    );
+    return getShortTermMemoryByKey(getUserCacheKey(userId, channelId, tomoriId));
   } catch (error) {
     log.error(
       `[shortTermMemoryCache] Failed to get user short-term memory for channel - userId=${userId}, channelId=${channelId}`,
@@ -554,9 +509,7 @@ export function getShortTermMemoryForServerChannel(
       return undefined;
     }
 
-    return getShortTermMemoryByKey(
-      getServerCacheKey(serverId, channelId, tomoriId),
-    );
+    return getShortTermMemoryByKey(getServerCacheKey(serverId, channelId, tomoriId));
   } catch (error) {
     log.error(
       `[shortTermMemoryCache] Failed to get server short-term memory for channel - serverId=${serverId}, channelId=${channelId}`,
@@ -611,10 +564,7 @@ export function updateShortTermMemorySummary(
       return;
     }
 
-    const truncatedSummary =
-      summary.length > MAX_SUMMARY_LENGTH
-        ? summary.slice(0, MAX_SUMMARY_LENGTH)
-        : summary;
+    const truncatedSummary = summary.length > MAX_SUMMARY_LENGTH ? summary.slice(0, MAX_SUMMARY_LENGTH) : summary;
 
     updateSummaryForKey(
       getUserCacheKey(userId, channelId, tomoriId),
@@ -671,11 +621,7 @@ export function invalidateShortTermMemory(
       clearedCount++;
     }
 
-    if (
-      serverId &&
-      serverId !== "DM" &&
-      cache.delete(getServerCacheKey(serverId, channelId, tomoriId))
-    ) {
+    if (serverId && serverId !== "DM" && cache.delete(getServerCacheKey(serverId, channelId, tomoriId))) {
       clearedCount++;
     }
 
@@ -754,14 +700,10 @@ export function clearShortTermMemoryForUser(userId: string): void {
       `[shortTermMemoryCache] Cleared all short-term memories for user - userId=${userId}, clearedCount=${clearedCount}`,
     );
   } catch (error) {
-    log.error(
-      `[shortTermMemoryCache] Failed to clear short-term memories for user - userId=${userId}`,
-      error,
-      {
-        errorType: "CACHE_CLEAR_ERROR",
-        metadata: { userDiscId: userId },
-      },
-    );
+    log.error(`[shortTermMemoryCache] Failed to clear short-term memories for user - userId=${userId}`, error, {
+      errorType: "CACHE_CLEAR_ERROR",
+      metadata: { userDiscId: userId },
+    });
   }
 }
 
@@ -805,10 +747,7 @@ export function getShortTermMemoryCacheStats(): CacheStats & {
   hitRate: string;
 } {
   const totalRequests = stats.hits + stats.misses;
-  const hitRate =
-    totalRequests > 0
-      ? `${((stats.hits / totalRequests) * 100).toFixed(1)}%`
-      : "0%";
+  const hitRate = totalRequests > 0 ? `${((stats.hits / totalRequests) * 100).toFixed(1)}%` : "0%";
 
   return {
     ...stats,

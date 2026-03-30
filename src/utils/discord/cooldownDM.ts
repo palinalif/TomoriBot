@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  MessageFlags,
-  User,
-} from "discord.js";
+import type { ChatInputCommandInteraction, MessageFlags, User } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { log } from "@/utils/misc/logger";
@@ -28,10 +24,7 @@ export async function sendCooldownDM(
   descriptionVars?: Record<string, string | number>,
   footerKey?: string,
   interaction?: ChatInputCommandInteraction,
-  ephemeralFlags?:
-    | MessageFlags.SuppressEmbeds
-    | MessageFlags.Ephemeral
-    | MessageFlags.SuppressNotifications,
+  ephemeralFlags?: MessageFlags.SuppressEmbeds | MessageFlags.Ephemeral | MessageFlags.SuppressNotifications,
 ): Promise<void> {
   try {
     // Build the cooldown embed
@@ -70,9 +63,7 @@ export async function sendCooldownDM(
           },
           ephemeralFlags,
         );
-        log.info(
-          `Sent cooldown ephemeral fallback to user ${user.id} in channel`,
-        );
+        log.info(`Sent cooldown ephemeral fallback to user ${user.id} in channel`);
       } catch (fallbackError) {
         log.warn(
           `Could not send cooldown DM or ephemeral fallback to user ${user.id}: ${fallbackError instanceof Error ? fallbackError.message : "Unknown error"}`,

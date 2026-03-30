@@ -1,7 +1,4 @@
-import {
-  UNPAIRED_SAMPLE_DIALOGUE_SENTINEL,
-  type PresetExportData,
-} from "../../types/preset/presetExport";
+import { UNPAIRED_SAMPLE_DIALOGUE_SENTINEL, type PresetExportData } from "../../types/preset/presetExport";
 import type { SillyTavernCardMetadata } from "../image/pngMetadata";
 import { ABSOLUTE_MAX_ATTRIBUTES, getMemoryLimits } from "./memoryLimits";
 
@@ -168,9 +165,7 @@ function buildAttributeSectionChunks(
   const prefix = heading ? `${heading}\n` : "";
   const maxContentLength = Math.max(maxAttributeLength - prefix.length, 200);
   const contentChunks = splitLongTextIntoChunks(sanitized, maxContentLength);
-  return contentChunks.map((chunk) =>
-    truncateToMaxLength(`${prefix}${chunk}`, maxAttributeLength),
-  );
+  return contentChunks.map((chunk) => truncateToMaxLength(`${prefix}${chunk}`, maxAttributeLength));
 }
 
 function normalizeSpeaker(rawLabel: string): "user" | "char" | null {
@@ -179,12 +174,7 @@ function normalizeSpeaker(rawLabel: string): "user" | "char" | null {
     return "user";
   }
 
-  if (
-    normalized === "char" ||
-    normalized === "bot" ||
-    normalized === "assistant" ||
-    normalized === "character"
-  ) {
+  if (normalized === "char" || normalized === "bot" || normalized === "assistant" || normalized === "character") {
     return "char";
   }
 
@@ -253,11 +243,7 @@ function parseSpeakerTurns(segment: string): DialogueTurn[] {
   return collapseConsecutiveTurns(turns);
 }
 
-function buildPairsFromTurns(
-  turns: DialogueTurn[],
-  maxDialogueLength: number,
-  syntheticInput: string,
-): DialoguePair[] {
+function buildPairsFromTurns(turns: DialogueTurn[], maxDialogueLength: number, syntheticInput: string): DialoguePair[] {
   const pairs: DialoguePair[] = [];
   let pendingUser: string | null = null;
 
@@ -283,10 +269,7 @@ function buildPairsFromTurns(
   return pairs;
 }
 
-function parseMesExamplePairs(
-  mesExample: string | null,
-  maxDialogueLength: number,
-): DialoguePair[] {
+function parseMesExamplePairs(mesExample: string | null, maxDialogueLength: number): DialoguePair[] {
   if (!mesExample) {
     return [];
   }
@@ -314,13 +297,7 @@ function parseMesExamplePairs(
       continue;
     }
 
-    pairs.push(
-      ...buildPairsFromTurns(
-        turns,
-        maxDialogueLength,
-        UNPAIRED_SAMPLE_DIALOGUE_SENTINEL,
-      ),
-    );
+    pairs.push(...buildPairsFromTurns(turns, maxDialogueLength, UNPAIRED_SAMPLE_DIALOGUE_SENTINEL));
   }
 
   return pairs;
@@ -346,10 +323,7 @@ function buildGreetingPairs(
     }));
 }
 
-function generateDefaultTriggerWords(
-  name: string,
-  maxTriggerWords: number,
-): string[] {
+function generateDefaultTriggerWords(name: string, maxTriggerWords: number): string[] {
   const triggers: string[] = [];
   const seen = new Set<string>();
 
@@ -373,19 +347,11 @@ function generateDefaultTriggerWords(
   return triggers.slice(0, maxTriggerWords);
 }
 
-function pickStringFromCard(
-  cardData: JsonObject | null,
-  rootData: JsonObject,
-  key: string,
-): string | null {
+function pickStringFromCard(cardData: JsonObject | null, rootData: JsonObject, key: string): string | null {
   return getStringField(cardData, key) ?? getStringField(rootData, key);
 }
 
-function pickStringArrayFromCard(
-  cardData: JsonObject | null,
-  rootData: JsonObject,
-  key: string,
-): string[] {
+function pickStringArrayFromCard(cardData: JsonObject | null, rootData: JsonObject, key: string): string[] {
   const fromData = getStringArrayField(cardData, key);
   if (fromData.length > 0) {
     return fromData;
@@ -394,17 +360,11 @@ function pickStringArrayFromCard(
   return getStringArrayField(rootData, key);
 }
 
-function pickObjectFromCard(
-  cardData: JsonObject | null,
-  rootData: JsonObject,
-  key: string,
-): JsonObject | null {
+function pickObjectFromCard(cardData: JsonObject | null, rootData: JsonObject, key: string): JsonObject | null {
   return asObject(cardData?.[key]) ?? asObject(rootData[key]);
 }
 
-function collectCharacterBookSections(
-  characterBook: JsonObject | null,
-): ContentSection[] {
+function collectCharacterBookSections(characterBook: JsonObject | null): ContentSection[] {
   if (!characterBook) {
     return [];
   }
@@ -440,9 +400,7 @@ function collectCharacterBookSections(
     }
 
     sections.push({
-      heading: entryTitle
-        ? `Character Book - ${entryTitle}`
-        : "Character Book Entry",
+      heading: entryTitle ? `Character Book - ${entryTitle}` : "Character Book Entry",
       content,
     });
   }
@@ -450,9 +408,7 @@ function collectCharacterBookSections(
   return sections;
 }
 
-export function convertSillyTavernMetadataToPresetData(
-  metadata: SillyTavernCardMetadata,
-): SillyTavernConversionResult {
+export function convertSillyTavernMetadataToPresetData(metadata: SillyTavernCardMetadata): SillyTavernConversionResult {
   const rootData = asObject(metadata.parsedJson);
   if (!rootData) {
     return {
@@ -496,11 +452,7 @@ export function convertSillyTavernMetadataToPresetData(
     sections.push({ heading: "System Prompt", content: systemPrompt });
   }
 
-  const postHistoryInstructions = pickStringFromCard(
-    cardData,
-    rootData,
-    "post_history_instructions",
-  );
+  const postHistoryInstructions = pickStringFromCard(cardData, rootData, "post_history_instructions");
   if (postHistoryInstructions) {
     sections.push({
       heading: "Post-History Instructions",
@@ -509,10 +461,7 @@ export function convertSillyTavernMetadataToPresetData(
   }
 
   const extensions = pickObjectFromCard(cardData, rootData, "extensions");
-  const depthPrompt = getStringField(
-    asObject(extensions?.depth_prompt),
-    "prompt",
-  );
+  const depthPrompt = getStringField(asObject(extensions?.depth_prompt), "prompt");
   if (depthPrompt) {
     sections.push({
       heading: "Depth Prompt",
@@ -520,43 +469,24 @@ export function convertSillyTavernMetadataToPresetData(
     });
   }
 
-  const characterBook = pickObjectFromCard(
-    cardData,
-    rootData,
-    "character_book",
-  );
+  const characterBook = pickObjectFromCard(cardData, rootData, "character_book");
   sections.push(...collectCharacterBookSections(characterBook));
 
   const attributeList = sections
-    .flatMap((section) =>
-      buildAttributeSectionChunks(
-        section.heading,
-        section.content,
-        maxAttributeLength,
-      ),
-    )
+    .flatMap((section) => buildAttributeSectionChunks(section.heading, section.content, maxAttributeLength))
     .slice(0, ABSOLUTE_MAX_ATTRIBUTES);
 
   const mesExample = pickStringFromCard(cardData, rootData, "mes_example");
   const firstMessage = pickStringFromCard(cardData, rootData, "first_mes");
-  const alternateGreetings = pickStringArrayFromCard(
-    cardData,
-    rootData,
-    "alternate_greetings",
-  );
+  const alternateGreetings = pickStringArrayFromCard(cardData, rootData, "alternate_greetings");
 
   const dialoguePairs: DialoguePair[] = [];
   dialoguePairs.push(...parseMesExamplePairs(mesExample, maxDialogueLength));
-  dialoguePairs.push(
-    ...buildGreetingPairs(firstMessage, alternateGreetings, maxDialogueLength),
-  );
+  dialoguePairs.push(...buildGreetingPairs(firstMessage, alternateGreetings, maxDialogueLength));
 
   const cappedDialoguePairs = dialoguePairs.slice(0, maxDialoguePairs);
 
-  const triggerWords = generateDefaultTriggerWords(
-    normalizedName,
-    maxTriggerWords,
-  );
+  const triggerWords = generateDefaultTriggerWords(normalizedName, maxTriggerWords);
 
   return {
     success: true,

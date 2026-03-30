@@ -51,27 +51,19 @@ const modalFileUploadValues = new Map<string, Record<string, string[]>>();
 const modalCheckboxGroupValues = new Map<string, Record<string, string[]>>();
 
 // Storage for resolved attachments from modal file uploads (Discord.js doesn't expose these)
-const modalResolvedAttachments = new Map<
-  string,
-  Record<string, APIAttachment>
->();
+const modalResolvedAttachments = new Map<string, Record<string, APIAttachment>>();
 
 /**
  * Tracks interactions that were acknowledged via raw Discord REST API
  * Used to prevent "already acknowledged" errors when Discord.js state is out of sync
  */
-const rawModalAcknowledged = new WeakMap<
-  ChatInputCommandInteraction | ButtonInteraction,
-  boolean
->();
+const rawModalAcknowledged = new WeakMap<ChatInputCommandInteraction | ButtonInteraction, boolean>();
 
 /**
  * Transform Component Type 18 modal submission to standard ActionRow format
  * This makes Discord.js process the submission as if it were a normal modal from the start
  */
-function transformModalSubmissionPacket(
-  packet: RawDiscordWebSocketPacket,
-): void {
+function transformModalSubmissionPacket(packet: RawDiscordWebSocketPacket): void {
   if (!packet.d?.data?.components) return;
 
   // Transform each Component Type 18 to standard ActionRow format with all data preserved
@@ -115,8 +107,7 @@ function transformModalSubmissionPacket(
             // Include any other properties
             ...Object.fromEntries(
               Object.entries(nestedComponent).filter(
-                ([key]) =>
-                  !["type", "custom_id", "values", "value"].includes(key),
+                ([key]) => !["type", "custom_id", "values", "value"].includes(key),
               ),
             ),
           },
@@ -142,25 +133,14 @@ function setupWebSocketInterception(client: any) {
     if (wsManager?.handlePacket) {
       const originalHandlePacket = wsManager.handlePacket.bind(wsManager);
 
-      wsManager.handlePacket = (
-        packet: RawDiscordWebSocketPacket,
-        shard: RawDiscordShard,
-      ) => {
+      wsManager.handlePacket = (packet: RawDiscordWebSocketPacket, shard: RawDiscordShard) => {
         // Intercept INTERACTION_CREATE packets for modal submissions
-        if (
-          packet.t === "INTERACTION_CREATE" &&
-          packet.d?.type === 5 &&
-          packet.d?.data?.components
-        ) {
+        if (packet.t === "INTERACTION_CREATE" && packet.d?.type === 5 && packet.d?.data?.components) {
           // Check if we have Component Type 18 that needs transformation
-          const hasComponentType18 = packet.d.data.components.some(
-            (comp: RawDiscordComponent) => comp.type === 18,
-          );
+          const hasComponentType18 = packet.d.data.components.some((comp: RawDiscordComponent) => comp.type === 18);
 
           if (hasComponentType18) {
-            log.info(
-              "Transforming Component Type 18 modal submission for Discord.js compatibility",
-            );
+            log.info("Transforming Component Type 18 modal submission for Discord.js compatibility");
 
             const interactionId = packet.d.id;
             if (interactionId) {
@@ -187,8 +167,7 @@ function setupWebSocketInterception(client: any) {
 
                 // 3. Radio Group (type 21) — store selected value string (null → empty string)
                 if (inner.type === 21) {
-                  selectValues[customId] =
-                    typeof inner.value === "string" ? inner.value : "";
+                  selectValues[customId] = typeof inner.value === "string" ? inner.value : "";
                 }
 
                 // 4. Checkbox Group (type 22) — store array of selected values
@@ -198,30 +177,22 @@ function setupWebSocketInterception(client: any) {
 
                 // 5. Checkbox (type 23) — store boolean as "true"/"false" string
                 if (inner.type === 23) {
-                  selectValues[customId] =
-                    inner.value === true ? "true" : "false";
+                  selectValues[customId] = inner.value === true ? "true" : "false";
                 }
               }
 
               if (Object.keys(selectValues).length > 0) {
                 modalSelectValues.set(interactionId, selectValues);
-                log.info(
-                  `Stored ${Object.keys(selectValues).length} select/radio/checkbox values for interaction`,
-                );
+                log.info(`Stored ${Object.keys(selectValues).length} select/radio/checkbox values for interaction`);
               }
 
               if (Object.keys(fileUploadValues).length > 0) {
                 modalFileUploadValues.set(interactionId, fileUploadValues);
-                log.info(
-                  `Stored ${Object.keys(fileUploadValues).length} file upload value set(s) for interaction`,
-                );
+                log.info(`Stored ${Object.keys(fileUploadValues).length} file upload value set(s) for interaction`);
               }
 
               if (Object.keys(checkboxGroupValues).length > 0) {
-                modalCheckboxGroupValues.set(
-                  interactionId,
-                  checkboxGroupValues,
-                );
+                modalCheckboxGroupValues.set(interactionId, checkboxGroupValues);
                 log.info(
                   `Stored ${Object.keys(checkboxGroupValues).length} checkbox group value set(s) for interaction`,
                 );
@@ -229,12 +200,8 @@ function setupWebSocketInterception(client: any) {
 
               // Store resolved attachments before Discord.js processes them
               if (packet.d.data.resolved?.attachments) {
-                const resolvedAttachments = packet.d.data.resolved
-                  .attachments as Record<string, APIAttachment>;
-                modalResolvedAttachments.set(
-                  interactionId,
-                  resolvedAttachments,
-                );
+                const resolvedAttachments = packet.d.data.resolved.attachments as Record<string, APIAttachment>;
+                modalResolvedAttachments.set(interactionId, resolvedAttachments);
                 log.info(
                   `Stored ${Object.keys(resolvedAttachments).length} resolved attachments for interaction ${interactionId}`,
                 );
@@ -253,15 +220,10 @@ function setupWebSocketInterception(client: any) {
       (globalThis as GlobalDiscordState).__webSocketPatched = true;
       log.info("Component Type 18 WebSocket transformation enabled");
     } else {
-      log.warn(
-        "Could not find WebSocket handlePacket method for Component Type 18 support",
-      );
+      log.warn("Could not find WebSocket handlePacket method for Component Type 18 support");
     }
   } catch (error) {
-    log.warn(
-      "Failed to set up Component Type 18 WebSocket interception:",
-      error,
-    );
+    log.warn("Failed to set up Component Type 18 WebSocket interception:", error);
   }
 }
 
@@ -372,9 +334,7 @@ export async function promptWithConfirmation(
   const embed = new EmbedBuilder()
     .setColor(embedColor)
     .setTitle(localizer(locale, embedTitleKey))
-    .setDescription(
-      localizer(locale, embedDescriptionKey, embedDescriptionVars),
-    );
+    .setDescription(localizer(locale, embedDescriptionKey, embedDescriptionVars));
 
   // 3. Create Buttons
   const continueButton = new ButtonBuilder()
@@ -388,10 +348,7 @@ export async function promptWithConfirmation(
     .setStyle(ButtonStyle.Danger);
 
   // 4. Create Action Row
-  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    continueButton,
-    cancelButton,
-  );
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton, cancelButton);
 
   // 5. Send/Edit the Reply
   let message: Message;
@@ -421,19 +378,14 @@ export async function promptWithConfirmation(
         flags: MessageFlags.Ephemeral,
       })) as Message;
     } catch (followUpError) {
-      log.error(
-        "Failed to follow up in promptWithConfirmation:",
-        followUpError,
-      );
+      log.error("Failed to follow up in promptWithConfirmation:", followUpError);
       return { outcome: "timeout" };
     }
   }
 
   // 6. Create Button Collector Filter
   const buttonCollectorFilter = (i: ButtonInteraction) => {
-    i.deferUpdate().catch((e) =>
-      log.warn("Failed to defer update on button filter:", e),
-    );
+    i.deferUpdate().catch((e) => log.warn("Failed to defer update on button filter:", e));
     return i.user.id === interaction.user.id;
   };
 
@@ -454,9 +406,7 @@ export async function promptWithConfirmation(
     const cancelEmbed = new EmbedBuilder()
       .setColor(ColorCode.ERROR)
       .setTitle(localizer(locale, "general.interaction.cancel_title"))
-      .setDescription(
-        localizer(locale, "general.interaction.cancel_description"),
-      );
+      .setDescription(localizer(locale, "general.interaction.cancel_description"));
 
     await interaction.editReply({ embeds: [cancelEmbed], components: [] });
     return { outcome: "cancel" };
@@ -466,9 +416,7 @@ export async function promptWithConfirmation(
     const timeoutEmbed = new EmbedBuilder()
       .setColor(ColorCode.ERROR)
       .setTitle(localizer(locale, "general.interaction.timeout_title"))
-      .setDescription(
-        localizer(locale, "general.interaction.timeout_description"),
-      );
+      .setDescription(localizer(locale, "general.interaction.timeout_description"));
     await interaction.editReply({ embeds: [timeoutEmbed], components: [] });
     return { outcome: "timeout" };
   }
@@ -490,9 +438,7 @@ export async function promptWithModal(
   const { modalTitleKey, modalCustomId, components } = options;
 
   // 1. Create Modal
-  const modal = new ModalBuilder()
-    .setCustomId(modalCustomId)
-    .setTitle(localizer(locale, modalTitleKey));
+  const modal = new ModalBuilder().setCustomId(modalCustomId).setTitle(localizer(locale, modalTitleKey));
 
   // 2. Create Modal Components (Text Inputs Only - String Selects Not Yet Supported)
   const rows = components.map((component) => {
@@ -518,8 +464,7 @@ export async function promptWithModal(
       if (component.placeholder) {
         // If placeholder is provided, use it as localized placeholder
         const placeholder =
-          typeof component.placeholder === "string" &&
-          component.placeholder.startsWith("commands.")
+          typeof component.placeholder === "string" && component.placeholder.startsWith("commands.")
             ? localizer(locale, component.placeholder)
             : component.placeholder;
         textInput.setPlaceholder(placeholder);
@@ -541,24 +486,17 @@ export async function promptWithModal(
       // Use localized placeholder if provided, otherwise show options
       if (component.placeholder) {
         const placeholder =
-          typeof component.placeholder === "string" &&
-          component.placeholder.startsWith("commands.")
+          typeof component.placeholder === "string" && component.placeholder.startsWith("commands.")
             ? localizer(locale, component.placeholder)
             : component.placeholder;
         fallbackInput.setPlaceholder(placeholder);
       } else {
         // Fallback to showing available options
-        const optionsText = component.options
-          .map((opt) => opt.label)
-          .join(", ");
-        fallbackInput.setPlaceholder(
-          `Options: ${optionsText.substring(0, 95)}...`,
-        );
+        const optionsText = component.options.map((opt) => opt.label).join(", ");
+        fallbackInput.setPlaceholder(`Options: ${optionsText.substring(0, 95)}...`);
       }
 
-      return new ActionRowBuilder<TextInputBuilder>().addComponents(
-        fallbackInput,
-      );
+      return new ActionRowBuilder<TextInputBuilder>().addComponents(fallbackInput);
     }
 
     throw new Error(`Unsupported modal component type: ${component}`);
@@ -578,17 +516,14 @@ export async function promptWithModal(
   try {
     const submitted = await interaction.awaitModalSubmit({
       time: 600000, // 10 minutes - matches Discord's natural modal timeout
-      filter: (i) =>
-        i.customId === modalCustomId && i.user.id === interaction.user.id,
+      filter: (i) => i.customId === modalCustomId && i.user.id === interaction.user.id,
     });
 
     // 5. Collect field values
     const values: Record<string, string> = {};
     for (const component of components) {
       if (isModalInputField(component)) {
-        values[component.customId] = submitted.fields.getTextInputValue(
-          component.customId,
-        );
+        values[component.customId] = submitted.fields.getTextInputValue(component.customId);
       } else if (isModalSelectField(component)) {
         // Get selected values from string select
         const field = submitted.fields.getField(component.customId);
@@ -615,10 +550,7 @@ export async function promptWithModal(
  * @param options Configuration for the embed
  */
 export async function replyInfoEmbed(
-  interaction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
   options: StandardEmbedOptions,
   flags:
@@ -634,11 +566,7 @@ export async function replyInfoEmbed(
   const finalOptions = { ...options };
   const serverDiscId = interaction.guild?.id ?? interaction.user?.id;
 
-  if (
-    options.titleKey === "general.errors.tomori_not_setup_title" &&
-    serverDiscId &&
-    getLastDbError(serverDiscId)
-  ) {
+  if (options.titleKey === "general.errors.tomori_not_setup_title" && serverDiscId && getLastDbError(serverDiscId)) {
     finalOptions.titleKey = "general.errors.tomori_updating_title";
     finalOptions.descriptionKey = "general.errors.tomori_updating_description";
     finalOptions.color = ColorCode.WARN;
@@ -663,24 +591,18 @@ export async function replyInfoEmbed(
     id: interaction.id,
   };
 
-  log.info(
-    `replyInfoEmbed interaction state: ${JSON.stringify(interactionState)}`,
-  );
+  log.info(`replyInfoEmbed interaction state: ${JSON.stringify(interactionState)}`);
 
   // 5. Check if interaction was acknowledged via raw REST API (e.g., modal shown)
   // Discord.js state may be out of sync in this case
-  const wasRawModalSent = rawModalAcknowledged.get(
-    interaction as ChatInputCommandInteraction | ButtonInteraction,
-  );
+  const wasRawModalSent = rawModalAcknowledged.get(interaction as ChatInputCommandInteraction | ButtonInteraction);
 
   if (wasRawModalSent && !interaction.deferred && !interaction.replied) {
     // State desync detected: raw REST modal acknowledged the interaction on Discord's
     // side, but Discord.js still thinks replied=false / deferred=false.
     // interaction.followUp() would throw INTERACTION_NOT_REPLIED because of a
     // Discord.js internal guard — bypass it by calling webhook.send() directly.
-    log.info(
-      `Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`,
-    );
+    log.info(`Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`);
     try {
       await interaction.webhook.send({
         embeds: [embed],
@@ -689,10 +611,7 @@ export async function replyInfoEmbed(
       });
       return;
     } catch (webhookError) {
-      log.error(
-        "webhook.send failed for raw-modal-acknowledged interaction:",
-        webhookError,
-      );
+      log.error("webhook.send failed for raw-modal-acknowledged interaction:", webhookError);
       // Fall through to standard error handling
     }
   }
@@ -710,16 +629,13 @@ export async function replyInfoEmbed(
 
     // Enhanced fallback logic with more specific error handling
     try {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       if (errorMessage.includes("has already been acknowledged")) {
         // Interaction was acknowledged via raw REST (e.g. modal shown) but
         // Discord.js state is out of sync. followUp() would hit the same
         // INTERACTION_NOT_REPLIED guard — use webhook.send() instead.
-        log.info(
-          "Attempting webhook.send due to acknowledgment conflict (raw REST desync)",
-        );
+        log.info("Attempting webhook.send due to acknowledgment conflict (raw REST desync)");
         await interaction.webhook.send({
           embeds: [embed],
           components: [],
@@ -744,26 +660,19 @@ export async function replyInfoEmbed(
       }
     } catch (fallbackError) {
       // All methods failed - log comprehensive error details
-      await log.error(
-        "All interaction methods failed for replyInfoEmbed:",
-        error,
-        {
-          errorType: "InteractionReplyFailure",
-          metadata: {
-            fallbackError:
-              fallbackError instanceof Error
-                ? fallbackError.message
-                : String(fallbackError),
-            interactionState: {
-              id: interaction.id,
-              type: interaction.type,
-              deferred: interaction.deferred,
-              replied: interaction.replied,
-            },
-            embedTitle: options.titleKey,
+      await log.error("All interaction methods failed for replyInfoEmbed:", error, {
+        errorType: "InteractionReplyFailure",
+        metadata: {
+          fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          interactionState: {
+            id: interaction.id,
+            type: interaction.type,
+            deferred: interaction.deferred,
+            replied: interaction.replied,
           },
+          embedTitle: options.titleKey,
         },
-      );
+      });
     }
   }
 }
@@ -777,10 +686,7 @@ export async function replyInfoEmbed(
  * @param options Configuration for the summary embed and its fields
  */
 export async function replySummaryEmbed(
-  interaction:
-    | ChatInputCommandInteraction
-    | ButtonInteraction
-    | ModalSubmitInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
   options: SummaryEmbedOptions,
   flags:
@@ -798,22 +704,16 @@ export async function replySummaryEmbed(
     id: interaction.id,
   };
 
-  log.info(
-    `replySummaryEmbed interaction state: ${JSON.stringify(interactionState)}`,
-  );
+  log.info(`replySummaryEmbed interaction state: ${JSON.stringify(interactionState)}`);
 
   // Check if interaction was acknowledged via raw REST API (e.g., modal shown)
-  const wasRawModalSent = rawModalAcknowledged.get(
-    interaction as ChatInputCommandInteraction | ButtonInteraction,
-  );
+  const wasRawModalSent = rawModalAcknowledged.get(interaction as ChatInputCommandInteraction | ButtonInteraction);
 
   if (wasRawModalSent && !interaction.deferred && !interaction.replied) {
     // State desync: raw REST modal acknowledged the interaction but Discord.js
     // still thinks replied=false / deferred=false. Use webhook.send() to bypass
     // the followUp() INTERACTION_NOT_REPLIED guard.
-    log.info(
-      `Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`,
-    );
+    log.info(`Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`);
     try {
       await interaction.webhook.send({
         embeds: [embed],
@@ -822,10 +722,7 @@ export async function replySummaryEmbed(
       });
       return;
     } catch (webhookError) {
-      log.error(
-        "webhook.send failed for raw-modal-acknowledged interaction:",
-        webhookError,
-      );
+      log.error("webhook.send failed for raw-modal-acknowledged interaction:", webhookError);
       // Fall through to standard error handling
     }
   }
@@ -841,13 +738,10 @@ export async function replySummaryEmbed(
 
     // Enhanced fallback logic matching replyInfoEmbed
     try {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       if (errorMessage.includes("has already been acknowledged")) {
-        log.info(
-          "Attempting webhook.send due to acknowledgment conflict (raw REST desync)",
-        );
+        log.info("Attempting webhook.send due to acknowledgment conflict (raw REST desync)");
         await interaction.webhook.send({
           embeds: [embed],
           components: [],
@@ -869,26 +763,19 @@ export async function replySummaryEmbed(
         });
       }
     } catch (fallbackError) {
-      await log.error(
-        "All interaction methods failed for replySummaryEmbed:",
-        error,
-        {
-          errorType: "InteractionReplyFailure",
-          metadata: {
-            fallbackError:
-              fallbackError instanceof Error
-                ? fallbackError.message
-                : String(fallbackError),
-            interactionState: {
-              id: interaction.id,
-              type: interaction.type,
-              deferred: interaction.deferred,
-              replied: interaction.replied,
-            },
-            embedTitle: options.titleKey,
+      await log.error("All interaction methods failed for replySummaryEmbed:", error, {
+        errorType: "InteractionReplyFailure",
+        metadata: {
+          fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          interactionState: {
+            id: interaction.id,
+            type: interaction.type,
+            deferred: interaction.deferred,
+            replied: interaction.replied,
           },
+          embedTitle: options.titleKey,
         },
-      );
+      });
     }
   }
 }
@@ -984,9 +871,7 @@ async function resolvePersonaPageAvatarData(
       }
 
       // 1. Try public URL resolution first (http/https refs or configured base URL)
-      const publicUrl = resolvePersonaAvatarPublicUrl(
-        persona.webhook_avatar_url,
-      );
+      const publicUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
       if (publicUrl) {
         avatarUrls.set(idx, publicUrl);
         return;
@@ -1021,10 +906,7 @@ function buildPersonaPageComponents(
   avatarUrlMap: Map<number, string>,
 ): TopLevelComponentData[] {
   const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
-  const endIdx = Math.min(
-    startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE,
-    options.personas.length,
-  );
+  const endIdx = Math.min(startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE, options.personas.length);
   const pagePersonas = options.personas.slice(startIdx, endIdx);
   const serverAvatarUrl = interaction.guild?.members.me?.displayAvatarURL({
     extension: "png",
@@ -1045,10 +927,7 @@ function buildPersonaPageComponents(
       components: [
         {
           type: ComponentType.TextDisplay,
-          content: `## ${localizer(
-            locale,
-            options.titleKey ?? "general.pagination.select_persona_title",
-          )}`,
+          content: `## ${localizer(locale, options.titleKey ?? "general.pagination.select_persona_title")}`,
         },
       ],
       accessory: {
@@ -1063,8 +942,7 @@ function buildPersonaPageComponents(
   pagePersonas.forEach((persona, idx) => {
     const firstAttribute = persona.attribute_list?.[0]?.trim();
     const snippet = safeSelectOptionText(
-      firstAttribute ||
-        localizer(locale, "general.pagination.persona_no_attributes"),
+      firstAttribute || localizer(locale, "general.pagination.persona_no_attributes"),
       PERSONA_SNIPPET_MAX_LENGTH,
     );
 
@@ -1170,8 +1048,7 @@ export async function replyPaginatedChoices(
   const totalItems = options.items.length;
   const totalPages = Math.ceil(totalItems / PAGINATION_ITEMS_PER_PAGE);
   let currentPage = 1;
-  const preserveSelectedInteraction =
-    options.preserveSelectedInteraction === true;
+  const preserveSelectedInteraction = options.preserveSelectedInteraction === true;
 
   if (totalItems === 0) {
     // If there are no items, show an empty state
@@ -1265,9 +1142,7 @@ export async function replyPaginatedChoices(
 
       // Create button rows
       // Row 1: Pagination controls (Prev, Cancel, Next)
-      const paginationRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        ...buttons,
-      );
+      const paginationRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
 
       // --- Start Change: Split selection buttons into multiple rows ---
       // Rows 2+: Selection buttons (max 5 per row)
@@ -1275,9 +1150,7 @@ export async function replyPaginatedChoices(
       for (let i = 0; i < selectionButtons.length; i += 5) {
         const rowButtons = selectionButtons.slice(i, i + 5);
         if (rowButtons.length > 0) {
-          selectionRows.push(
-            new ActionRowBuilder<ButtonBuilder>().addComponents(...rowButtons),
-          );
+          selectionRows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...rowButtons));
         }
       }
       // --- End Change ---
@@ -1287,9 +1160,7 @@ export async function replyPaginatedChoices(
         // Type assertion needed because ActionRowBuilder<ButtonBuilder> is not directly assignable
         paginationRow as ActionRowBuilder<MessageActionRowComponentBuilder>,
         // Spread the selection rows (if any) with type assertions
-        ...selectionRows.map(
-          (row) => row as ActionRowBuilder<MessageActionRowComponentBuilder>,
-        ),
+        ...selectionRows.map((row) => row as ActionRowBuilder<MessageActionRowComponentBuilder>),
       ];
 
       // Create the embed
@@ -1366,10 +1237,7 @@ export async function replyPaginatedChoices(
             try {
               await options.onCancel();
             } catch (cancelCallbackError) {
-              log.error(
-                "Error executing onCancel callback in replyPaginatedChoices",
-                cancelCallbackError,
-              );
+              log.error("Error executing onCancel callback in replyPaginatedChoices", cancelCallbackError);
               // Don't block the cancellation flow, just log the error
             }
           }
@@ -1396,16 +1264,12 @@ export async function replyPaginatedChoices(
                 interaction: buttonInteraction,
               };
             } catch (selectCallbackError) {
-              log.warn(
-                "Error occurred during onSelect callback execution:",
-                selectCallbackError,
-              );
+              log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
               await buttonInteraction.reply({
                 embeds: [
                   createStandardEmbed(locale, {
                     titleKey: "general.errors.operation_failed_title",
-                    descriptionKey:
-                      "general.errors.operation_failed_description",
+                    descriptionKey: "general.errors.operation_failed_description",
                     descriptionVars: { item: selectedItem },
                     color: ColorCode.ERROR,
                   }),
@@ -1448,10 +1312,7 @@ export async function replyPaginatedChoices(
             };
           } catch (selectCallbackError) {
             // Error occurred within the onSelect callback (e.g., DB update failed in the command)
-            log.warn(
-              "Error occurred during onSelect callback execution:",
-              selectCallbackError,
-            ); // Log as warn, the command's callback should use log.error with context
+            log.warn("Error occurred during onSelect callback execution:", selectCallbackError); // Log as warn, the command's callback should use log.error with context
 
             // Inform the user about the specific failure using new locale keys
             await interaction.editReply({
@@ -1476,9 +1337,7 @@ export async function replyPaginatedChoices(
         }
       } catch (_error) {
         // Handle timeout (This catch block now primarily handles timeouts from awaitMessageComponent)
-        log.warn(
-          `Pagination interaction timed out for user ${interaction.user.id}`,
-        ); // Log timeout specifically
+        log.warn(`Pagination interaction timed out for user ${interaction.user.id}`); // Log timeout specifically
         await interaction.editReply({
           embeds: [
             createStandardEmbed(locale, {
@@ -1517,10 +1376,7 @@ export async function replyPaginatedChoices(
         MessageFlags.Ephemeral, // Ensure it's ephemeral if possible
       );
     } catch (finalErrorReplyError) {
-      log.error(
-        "Failed even to send final error message in replyPaginatedChoices:",
-        finalErrorReplyError,
-      );
+      log.error("Failed even to send final error message in replyPaginatedChoices:", finalErrorReplyError);
     }
 
     return {
@@ -1542,8 +1398,7 @@ export async function replyPaginatedPersonaChoicesV2(
   const totalItems = options.personas.length;
   const totalPages = Math.ceil(totalItems / PERSONA_PAGINATION_ITEMS_PER_PAGE);
   let currentPage = 1;
-  const preserveSelectedInteraction =
-    options.preserveSelectedInteraction === true;
+  const preserveSelectedInteraction = options.preserveSelectedInteraction === true;
   const onSelect = options.onSelect ?? (async () => {});
 
   if (totalItems === 0) {
@@ -1580,28 +1435,15 @@ export async function replyPaginatedPersonaChoicesV2(
     while (true) {
       // Determine which personas are on the current page
       const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
-      const endIdx = Math.min(
-        startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE,
-        options.personas.length,
-      );
+      const endIdx = Math.min(startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE, options.personas.length);
       const pagePersonas = options.personas.slice(startIdx, endIdx);
 
       // Pre-resolve avatar URLs (and collect local file attachments when needed).
       // In non-production without AVATAR_PUBLIC_BASE_URL, alter avatars stored as
       // local paths are loaded from disk and attached directly to the message.
-      const { avatarUrls, files } = await resolvePersonaPageAvatarData(
-        pagePersonas,
-        fallbackAvatarUrl,
-      );
+      const { avatarUrls, files } = await resolvePersonaPageAvatarData(pagePersonas, fallbackAvatarUrl);
 
-      const components = buildPersonaPageComponents(
-        interaction,
-        locale,
-        options,
-        currentPage,
-        totalPages,
-        avatarUrls,
-      );
+      const components = buildPersonaPageComponents(interaction, locale, options, currentPage, totalPages, avatarUrls);
       const baseReplyOptions: Omit<InteractionReplyOptions, "flags"> = {
         components,
         files,
@@ -1657,10 +1499,7 @@ export async function replyPaginatedPersonaChoicesV2(
             try {
               await options.onCancel();
             } catch (cancelCallbackError) {
-              log.error(
-                "Error executing onCancel callback in replyPaginatedPersonaChoicesV2",
-                cancelCallbackError,
-              );
+              log.error("Error executing onCancel callback in replyPaginatedPersonaChoicesV2", cancelCallbackError);
             }
           }
 
@@ -1671,22 +1510,16 @@ export async function replyPaginatedPersonaChoicesV2(
         }
 
         if (customId.startsWith(PERSONA_SELECT_CUSTOM_ID_PREFIX)) {
-          const selectionIdx = Number.parseInt(
-            customId.slice(PERSONA_SELECT_CUSTOM_ID_PREFIX.length),
-            10,
-          );
+          const selectionIdx = Number.parseInt(customId.slice(PERSONA_SELECT_CUSTOM_ID_PREFIX.length), 10);
           if (Number.isNaN(selectionIdx)) {
             await buttonInteraction.deferUpdate();
             continue;
           }
 
-          const startIdx =
-            (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
+          const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
           const absoluteIndex = startIdx + selectionIdx;
           const selectedPersona = options.personas[absoluteIndex];
-          const selectedItem =
-            selectedPersona?.tomori_nickname ??
-            localizer(locale, "general.unknown");
+          const selectedItem = selectedPersona?.tomori_nickname ?? localizer(locale, "general.unknown");
 
           if (!selectedPersona) {
             await buttonInteraction.deferUpdate();
@@ -1715,16 +1548,12 @@ export async function replyPaginatedPersonaChoicesV2(
                 interaction: buttonInteraction,
               };
             } catch (selectCallbackError) {
-              log.warn(
-                "Error occurred during onSelect callback execution:",
-                selectCallbackError,
-              );
+              log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
               await buttonInteraction.reply({
                 embeds: [
                   createStandardEmbed(locale, {
                     titleKey: "general.errors.operation_failed_title",
-                    descriptionKey:
-                      "general.errors.operation_failed_description",
+                    descriptionKey: "general.errors.operation_failed_description",
                     descriptionVars: { item: selectedItem },
                     color: ColorCode.ERROR,
                   }),
@@ -1759,10 +1588,7 @@ export async function replyPaginatedPersonaChoicesV2(
               selectedItem,
             };
           } catch (selectCallbackError) {
-            log.warn(
-              "Error occurred during onSelect callback execution:",
-              selectCallbackError,
-            );
+            log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
             await interaction.editReply({
               components: buildV2StatusComponents(
                 locale,
@@ -1780,9 +1606,7 @@ export async function replyPaginatedPersonaChoicesV2(
           }
         }
       } catch (_error) {
-        log.warn(
-          `Pagination interaction timed out for user ${interaction.user.id}`,
-        );
+        log.warn(`Pagination interaction timed out for user ${interaction.user.id}`);
         await interaction.editReply({
           components: buildV2StatusComponents(
             locale,
@@ -1800,10 +1624,7 @@ export async function replyPaginatedPersonaChoicesV2(
       }
     }
   } catch (error) {
-    log.error(
-      "Unexpected error during replyPaginatedPersonaChoicesV2 setup:",
-      error,
-    );
+    log.error("Unexpected error during replyPaginatedPersonaChoicesV2 setup:", error);
 
     try {
       if (interaction.replied || interaction.deferred) {
@@ -1829,10 +1650,7 @@ export async function replyPaginatedPersonaChoicesV2(
         );
       }
     } catch (finalErrorReplyError) {
-      log.error(
-        "Failed even to send final error message in replyPaginatedPersonaChoicesV2:",
-        finalErrorReplyError,
-      );
+      log.error("Failed even to send final error message in replyPaginatedPersonaChoicesV2:", finalErrorReplyError);
     }
 
     return {
@@ -1877,10 +1695,7 @@ export async function promptWithRawModal(
       type: InteractionResponseType.Modal, // Type 9
       data: {
         custom_id: noncedModalCustomId,
-        title: safeSelectOptionText(
-          localizer(locale, modalTitleKey),
-          MODAL_TITLE_MAX_LENGTH,
-        ),
+        title: safeSelectOptionText(localizer(locale, modalTitleKey), MODAL_TITLE_MAX_LENGTH),
         components: components.map((component) => {
           // Check kind-discriminated types first — before any structural guards.
           // isModalSelectField checks "options" in component, which would also match
@@ -1894,19 +1709,10 @@ export async function promptWithRawModal(
               type: 21, // ComponentType.RadioGroup
               custom_id: nonceCustomId(c.customId),
               options: c.options.map((opt) => ({
-                value: safeSelectOptionText(
-                  opt.value,
-                  SELECT_OPTION_TEXT_MAX_LENGTH,
-                ),
-                label: safeSelectOptionText(
-                  opt.label,
-                  SELECT_OPTION_TEXT_MAX_LENGTH,
-                ),
+                value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
+                label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
                 description: opt.description
-                  ? safeSelectOptionText(
-                      opt.description,
-                      SELECT_OPTION_TEXT_MAX_LENGTH,
-                    )
+                  ? safeSelectOptionText(opt.description, SELECT_OPTION_TEXT_MAX_LENGTH)
                   : undefined,
                 default: opt.default,
               })),
@@ -1916,18 +1722,12 @@ export async function promptWithRawModal(
             // Wrap in Label component (type 18)
             const radioLabelComponent: RawDiscordComponent = {
               type: 18, // ComponentType.Label
-              label: safeSelectOptionText(
-                localizer(locale, c.labelKey),
-                MODAL_LABEL_MAX_LENGTH,
-              ),
+              label: safeSelectOptionText(localizer(locale, c.labelKey), MODAL_LABEL_MAX_LENGTH),
               component: rawComponent,
             };
 
             if (c.descriptionKey) {
-              radioLabelComponent.description = safeModalLocalizer(
-                locale,
-                c.descriptionKey,
-              );
+              radioLabelComponent.description = safeModalLocalizer(locale, c.descriptionKey);
             }
 
             return radioLabelComponent;
@@ -1938,45 +1738,28 @@ export async function promptWithRawModal(
               type: 22, // ComponentType.CheckboxGroup
               custom_id: nonceCustomId(cg.customId),
               options: cg.options.map((opt) => ({
-                value: safeSelectOptionText(
-                  opt.value,
-                  SELECT_OPTION_TEXT_MAX_LENGTH,
-                ),
-                label: safeSelectOptionText(
-                  opt.label,
-                  SELECT_OPTION_TEXT_MAX_LENGTH,
-                ),
+                value: safeSelectOptionText(opt.value, SELECT_OPTION_TEXT_MAX_LENGTH),
+                label: safeSelectOptionText(opt.label, SELECT_OPTION_TEXT_MAX_LENGTH),
                 description: opt.description
-                  ? safeSelectOptionText(
-                      opt.description,
-                      SELECT_OPTION_TEXT_MAX_LENGTH,
-                    )
+                  ? safeSelectOptionText(opt.description, SELECT_OPTION_TEXT_MAX_LENGTH)
                   : undefined,
                 default: opt.default,
               })),
             };
 
-            if (cg.minValues !== undefined)
-              rawComponent.min_values = cg.minValues;
-            if (cg.maxValues !== undefined)
-              rawComponent.max_values = cg.maxValues;
+            if (cg.minValues !== undefined) rawComponent.min_values = cg.minValues;
+            if (cg.maxValues !== undefined) rawComponent.max_values = cg.maxValues;
             if (cg.required !== undefined) rawComponent.required = cg.required;
 
             // Wrap in Label component (type 18)
             const checkboxGroupLabelComponent: RawDiscordComponent = {
               type: 18, // ComponentType.Label
-              label: safeSelectOptionText(
-                localizer(locale, cg.labelKey),
-                MODAL_LABEL_MAX_LENGTH,
-              ),
+              label: safeSelectOptionText(localizer(locale, cg.labelKey), MODAL_LABEL_MAX_LENGTH),
               component: rawComponent,
             };
 
             if (cg.descriptionKey) {
-              checkboxGroupLabelComponent.description = safeModalLocalizer(
-                locale,
-                cg.descriptionKey,
-              );
+              checkboxGroupLabelComponent.description = safeModalLocalizer(locale, cg.descriptionKey);
             }
 
             return checkboxGroupLabelComponent;
@@ -1993,18 +1776,12 @@ export async function promptWithRawModal(
             // Wrap in Label component (type 18)
             const checkboxLabelComponent: RawDiscordComponent = {
               type: 18, // ComponentType.Label
-              label: safeSelectOptionText(
-                localizer(locale, cb.labelKey),
-                MODAL_LABEL_MAX_LENGTH,
-              ),
+              label: safeSelectOptionText(localizer(locale, cb.labelKey), MODAL_LABEL_MAX_LENGTH),
               component: rawComponent,
             };
 
             if (cb.descriptionKey) {
-              checkboxLabelComponent.description = safeModalLocalizer(
-                locale,
-                cb.descriptionKey,
-              );
+              checkboxLabelComponent.description = safeModalLocalizer(locale, cb.descriptionKey);
             }
 
             return checkboxLabelComponent;
@@ -2019,37 +1796,25 @@ export async function promptWithRawModal(
 
             if (component.placeholder) {
               const placeholder =
-                typeof component.placeholder === "string" &&
-                component.placeholder.startsWith("commands.")
+                typeof component.placeholder === "string" && component.placeholder.startsWith("commands.")
                   ? localizer(locale, component.placeholder)
                   : component.placeholder;
-              rawComponent.placeholder = safeSelectOptionText(
-                placeholder,
-                TEXT_INPUT_PLACEHOLDER_MAX_LENGTH,
-              );
+              rawComponent.placeholder = safeSelectOptionText(placeholder, TEXT_INPUT_PLACEHOLDER_MAX_LENGTH);
             }
-            if (component.minLength)
-              rawComponent.min_length = component.minLength;
-            if (component.maxLength)
-              rawComponent.max_length = component.maxLength;
+            if (component.minLength) rawComponent.min_length = component.minLength;
+            if (component.maxLength) rawComponent.max_length = component.maxLength;
             if (component.value) rawComponent.value = component.value;
 
             // Wrap in Label component (type 18)
             const labelComponent: RawDiscordComponent = {
               type: 18, // ComponentType.Label
-              label: safeSelectOptionText(
-                localizer(locale, component.labelKey),
-                MODAL_LABEL_MAX_LENGTH,
-              ),
+              label: safeSelectOptionText(localizer(locale, component.labelKey), MODAL_LABEL_MAX_LENGTH),
               component: rawComponent,
             };
 
             // Add description if provided
             if (component.descriptionKey) {
-              labelComponent.description = safeModalLocalizer(
-                locale,
-                component.descriptionKey,
-              );
+              labelComponent.description = safeModalLocalizer(locale, component.descriptionKey);
             }
 
             return labelComponent;
@@ -2059,19 +1824,10 @@ export async function promptWithRawModal(
               type: 3, // ComponentType.StringSelect
               custom_id: component.customId,
               options: component.options.map((option) => ({
-                label: safeSelectOptionText(
-                  option.label,
-                  SELECT_OPTION_TEXT_MAX_LENGTH,
-                ),
-                value: safeSelectOptionText(
-                  option.value,
-                  SELECT_OPTION_TEXT_MAX_LENGTH,
-                ),
+                label: safeSelectOptionText(option.label, SELECT_OPTION_TEXT_MAX_LENGTH),
+                value: safeSelectOptionText(option.value, SELECT_OPTION_TEXT_MAX_LENGTH),
                 description: option.description
-                  ? safeSelectOptionText(
-                      option.description,
-                      SELECT_OPTION_TEXT_MAX_LENGTH,
-                    )
+                  ? safeSelectOptionText(option.description, SELECT_OPTION_TEXT_MAX_LENGTH)
                   : undefined,
                 emoji: option.emoji,
               })),
@@ -2080,32 +1836,22 @@ export async function promptWithRawModal(
 
             if (component.placeholder) {
               const placeholder =
-                typeof component.placeholder === "string" &&
-                component.placeholder.startsWith("commands.")
+                typeof component.placeholder === "string" && component.placeholder.startsWith("commands.")
                   ? localizer(locale, component.placeholder)
                   : component.placeholder;
-              rawComponent.placeholder = safeSelectOptionText(
-                placeholder,
-                SELECT_PLACEHOLDER_MAX_LENGTH,
-              );
+              rawComponent.placeholder = safeSelectOptionText(placeholder, SELECT_PLACEHOLDER_MAX_LENGTH);
             }
 
             // Wrap in Label component (type 18)
             const labelComponent: RawDiscordComponent = {
               type: 18, // ComponentType.Label
-              label: safeSelectOptionText(
-                localizer(locale, component.labelKey),
-                MODAL_LABEL_MAX_LENGTH,
-              ),
+              label: safeSelectOptionText(localizer(locale, component.labelKey), MODAL_LABEL_MAX_LENGTH),
               component: rawComponent,
             };
 
             // Add description if provided
             if (component.descriptionKey) {
-              labelComponent.description = safeModalLocalizer(
-                locale,
-                component.descriptionKey,
-              );
+              labelComponent.description = safeModalLocalizer(locale, component.descriptionKey);
             }
 
             return labelComponent;
@@ -2122,27 +1868,19 @@ export async function promptWithRawModal(
             // Wrap in Label component (type 18)
             const labelComponent: RawDiscordComponent = {
               type: 18, // ComponentType.Label
-              label: safeSelectOptionText(
-                localizer(locale, component.labelKey),
-                MODAL_LABEL_MAX_LENGTH,
-              ),
+              label: safeSelectOptionText(localizer(locale, component.labelKey), MODAL_LABEL_MAX_LENGTH),
               component: rawComponent,
             };
 
             // Add description if provided
             if (component.descriptionKey) {
-              labelComponent.description = safeModalLocalizer(
-                locale,
-                component.descriptionKey,
-              );
+              labelComponent.description = safeModalLocalizer(locale, component.descriptionKey);
             }
 
             return labelComponent;
           }
 
-          throw new Error(
-            `Unsupported modal component type: ${JSON.stringify(component)}`,
-          );
+          throw new Error(`Unsupported modal component type: ${JSON.stringify(component)}`);
         }),
       },
     };
@@ -2160,12 +1898,8 @@ export async function promptWithRawModal(
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.error(
-        `Failed to send raw modal via REST API: ${response.status} ${response.statusText} - ${errorText}`,
-      );
-      throw new Error(
-        `Discord API error: ${response.status} ${response.statusText}`,
-      );
+      log.error(`Failed to send raw modal via REST API: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`Discord API error: ${response.status} ${response.statusText}`);
     }
 
     // Mark this interaction as acknowledged via raw API for state tracking
@@ -2177,9 +1911,7 @@ export async function promptWithRawModal(
     try {
       const submitted = await interaction.awaitModalSubmit({
         time: 600000, // 10 minutes - matches Discord's natural modal timeout
-        filter: (i) =>
-          i.customId === noncedModalCustomId &&
-          i.user.id === interaction.user.id,
+        filter: (i) => i.customId === noncedModalCustomId && i.user.id === interaction.user.id,
       });
 
       // Extract values using Discord.js methods and stored select values
@@ -2188,9 +1920,7 @@ export async function promptWithRawModal(
       const values: Record<string, string> = {};
       const multiValues: Record<string, string[]> = {};
       const attachments: Record<string, APIAttachment> = {};
-      const fileUploadComponentCount = components.filter((component) =>
-        isModalFileUploadField(component),
-      ).length;
+      const fileUploadComponentCount = components.filter((component) => isModalFileUploadField(component)).length;
 
       // Check kind-based guards (radio, checkbox group, checkbox) BEFORE the
       // catch-all isModalInputField — it matches anything without select-like
@@ -2221,14 +1951,10 @@ export async function promptWithRawModal(
             } else {
               // If no values stored, treat as empty selection (user checked nothing)
               multiValues[cg.customId] = [];
-              log.warn(
-                `No checkbox group values found for ${cg.customId}, defaulting to []`,
-              );
+              log.warn(`No checkbox group values found for ${cg.customId}, defaulting to []`);
             }
           } catch (error) {
-            log.warn(
-              `Failed to get checkbox group values for component: ${error}`,
-            );
+            log.warn(`Failed to get checkbox group values for component: ${error}`);
           }
         } else if (isModalCheckboxField(component)) {
           try {
@@ -2241,23 +1967,16 @@ export async function promptWithRawModal(
             } else {
               // If not stored, infer from default (unchecked = "false")
               values[cb.customId] = cb.default ? "true" : "false";
-              log.warn(
-                `No checkbox value found for ${cb.customId}, using default: ${values[cb.customId]}`,
-              );
+              log.warn(`No checkbox value found for ${cb.customId}, using default: ${values[cb.customId]}`);
             }
           } catch (error) {
             log.warn(`Failed to get checkbox value for component: ${error}`);
           }
         } else if (isModalInputField(component)) {
           try {
-            values[component.customId] = submitted.fields.getTextInputValue(
-              component.customId,
-            );
+            values[component.customId] = submitted.fields.getTextInputValue(component.customId);
           } catch (error) {
-            log.warn(
-              `Failed to get text input value for ${component.customId}:`,
-              error,
-            );
+            log.warn(`Failed to get text input value for ${component.customId}:`, error);
           }
         } else if (isModalSelectField(component)) {
           try {
@@ -2268,28 +1987,19 @@ export async function promptWithRawModal(
             if (selectValue) {
               values[component.customId] = selectValue;
             } else {
-              log.warn(
-                `Could not extract select value for ${component.customId}`,
-              );
+              log.warn(`Could not extract select value for ${component.customId}`);
             }
           } catch (error) {
-            log.warn(
-              `Failed to get select value for ${component.customId}: ${error}`,
-            );
+            log.warn(`Failed to get select value for ${component.customId}: ${error}`);
           }
         } else if (isModalFileUploadField(component)) {
           try {
             // Get stored resolved attachments from WebSocket interception
-            const storedAttachments = modalResolvedAttachments.get(
-              submitted.id,
-            );
-            const storedFileUploadValues = modalFileUploadValues.get(
-              submitted.id,
-            );
+            const storedAttachments = modalResolvedAttachments.get(submitted.id);
+            const storedFileUploadValues = modalFileUploadValues.get(submitted.id);
 
             if (storedAttachments) {
-              const attachmentIds =
-                storedFileUploadValues?.[component.customId] ?? [];
+              const attachmentIds = storedFileUploadValues?.[component.customId] ?? [];
 
               if (attachmentIds.length > 0) {
                 for (const attachmentId of attachmentIds) {
@@ -2298,15 +2008,12 @@ export async function promptWithRawModal(
                     continue;
                   }
                   attachments[component.customId] = attachment;
-                  log.info(
-                    `Extracted file upload for ${component.customId}: ${attachmentId} (${attachment.filename})`,
-                  );
+                  log.info(`Extracted file upload for ${component.customId}: ${attachmentId} (${attachment.filename})`);
                   break; // ModalResult currently stores a single attachment per custom ID
                 }
               } else if (fileUploadComponentCount === 1) {
                 // Backward-compatible fallback for older single-upload modals
-                const [firstAttachmentEntry] =
-                  Object.entries(storedAttachments);
+                const [firstAttachmentEntry] = Object.entries(storedAttachments);
                 if (firstAttachmentEntry) {
                   const [attachmentId, attachment] = firstAttachmentEntry;
                   attachments[component.customId] = attachment;
@@ -2316,14 +2023,10 @@ export async function promptWithRawModal(
                 }
               }
             } else {
-              log.info(
-                `No stored attachments found for interaction ${submitted.id}`,
-              );
+              log.info(`No stored attachments found for interaction ${submitted.id}`);
             }
           } catch (error) {
-            log.warn(
-              `Failed to extract file upload for ${component.customId}: ${error}`,
-            );
+            log.warn(`Failed to extract file upload for ${component.customId}: ${error}`);
           }
         }
       }
@@ -2336,29 +2039,22 @@ export async function promptWithRawModal(
 
       // Auto-defer reply if requested to prevent 3-second interaction timeout
       if (autoDeferReply) {
-        const flags =
-          typeof autoDeferReply === "boolean" ? undefined : autoDeferReply;
+        const flags = typeof autoDeferReply === "boolean" ? undefined : autoDeferReply;
         await submitted.deferReply({ flags });
-        log.info(
-          `Auto-deferred modal submission reply (flags: ${flags ? MessageFlags[flags] : "none"})`,
-        );
+        log.info(`Auto-deferred modal submission reply (flags: ${flags ? MessageFlags[flags] : "none"})`);
       }
 
       return {
         outcome: "submit",
         values,
-        multiValues:
-          Object.keys(multiValues).length > 0 ? multiValues : undefined,
+        multiValues: Object.keys(multiValues).length > 0 ? multiValues : undefined,
         attachments,
         interaction: submitted,
       };
     } catch (error) {
       // This will only catch actual errors, not artificial timeouts
       // Discord's natural timeout or user cancellation will be handled by command timeout
-      log.warn(
-        `Modal submission failed for user ${interaction.user.id}:`,
-        error,
-      );
+      log.warn(`Modal submission failed for user ${interaction.user.id}:`, error);
       return { outcome: "timeout" };
     }
   } catch (error) {
@@ -2381,8 +2077,7 @@ export async function promptWithPaginatedModal(
 ): Promise<ModalResult> {
   // Find the select component (should only be one per modal in current usage)
   const selectComponent = options.components.find(
-    (comp): comp is ModalSelectField =>
-      "options" in comp && Array.isArray(comp.options),
+    (comp): comp is ModalSelectField => "options" in comp && Array.isArray(comp.options),
   );
 
   // If no select component or ≤25 options, use direct modal
@@ -2408,18 +2103,11 @@ export async function promptWithPaginatedModal(
   const pageButtons: ButtonBuilder[] = [];
 
   for (let i = 1; i <= maxButtons; i++) {
-    pageButtons.push(
-      new ButtonBuilder()
-        .setCustomId(`page_${i}`)
-        .setLabel(i.toString())
-        .setStyle(ButtonStyle.Primary),
-    );
+    pageButtons.push(new ButtonBuilder().setCustomId(`page_${i}`).setLabel(i.toString()).setStyle(ButtonStyle.Primary));
   }
 
   // Add page buttons to action row
-  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    ...pageButtons,
-  );
+  const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);
 
   // Send page selection message.
   // Always resolve to a Message (not InteractionResponse) so that
@@ -2441,19 +2129,13 @@ export async function promptWithPaginatedModal(
 
   try {
     // Wait for page button interaction
-    const pageButtonInteraction = await pageSelectMessage.awaitMessageComponent(
-      {
-        filter: (i) =>
-          i.user.id === interaction.user.id && i.customId.startsWith("page_"),
-        time: 300_000, // 5 minutes timeout
-      },
-    );
+    const pageButtonInteraction = await pageSelectMessage.awaitMessageComponent({
+      filter: (i) => i.user.id === interaction.user.id && i.customId.startsWith("page_"),
+      time: 300_000, // 5 minutes timeout
+    });
 
     // Extract page number
-    const selectedPage = Number.parseInt(
-      pageButtonInteraction.customId.replace("page_", ""),
-      10,
-    );
+    const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("page_", ""), 10);
 
     // Calculate page items
     const startIndex = (selectedPage - 1) * ITEMS_PER_PAGE;
@@ -2472,16 +2154,9 @@ export async function promptWithPaginatedModal(
     };
 
     // Show modal with selected page items
-    return promptWithRawModal(
-      pageButtonInteraction as ButtonInteraction,
-      locale,
-      paginatedModalOptions,
-    );
+    return promptWithRawModal(pageButtonInteraction as ButtonInteraction, locale, paginatedModalOptions);
   } catch (error) {
-    log.warn(
-      `Page selection timed out or failed for user ${interaction.user.id}:`,
-      error,
-    );
+    log.warn(`Page selection timed out or failed for user ${interaction.user.id}:`, error);
     return { outcome: "timeout" };
   }
 }
@@ -2529,9 +2204,7 @@ export async function replyPaginatedStatusPages(
   const labelId = `${interaction.id}${STATUS_LABEL_SUFFIX}`;
 
   /** Builds the navigation button row for the given page index */
-  function buildNavRow(
-    page: number,
-  ): ActionRowBuilder<MessageActionRowComponentBuilder> {
+  function buildNavRow(page: number): ActionRowBuilder<MessageActionRowComponentBuilder> {
     return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(prevId)
@@ -2579,9 +2252,7 @@ export async function replyPaginatedStatusPages(
   try {
     while (true) {
       const buttonInteraction = await message.awaitMessageComponent({
-        filter: (i) =>
-          i.user.id === interaction.user.id &&
-          (i.customId === prevId || i.customId === nextId),
+        filter: (i) => i.user.id === interaction.user.id && (i.customId === prevId || i.customId === nextId),
         componentType: ComponentType.Button,
         time: PAGINATION_TIMEOUT_MS,
       });

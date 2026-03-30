@@ -14,12 +14,7 @@
  * intercepts, then calls buildContext() again with `includeTimestamps: true`.
  */
 
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { log } from "../../utils/misc/logger";
 
 export class RefreshMessageTimestampsTool extends BaseTool {
@@ -55,9 +50,7 @@ export class RefreshMessageTimestampsTool extends BaseTool {
     if (!this.isAvailableFor(provider)) return false;
 
     if (context?.streamContext?.disableTimestampContext) {
-      log.info(
-        "RefreshMessageTimestampsTool: Disabled for this turn — timestamps already added to context",
-      );
+      log.info("RefreshMessageTimestampsTool: Disabled for this turn — timestamps already added to context");
       return false;
     }
 
@@ -71,24 +64,17 @@ export class RefreshMessageTimestampsTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Restart signal or early-out if already fired this turn
    */
-  async execute(
-    _args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(_args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Defense-in-depth guard: block if already fired this turn
     if (context.streamContext?.disableTimestampContext) {
-      log.info(
-        "[RefreshMessageTimestampsTool] Execution blocked — timestamps already added this turn",
-      );
+      log.info("[RefreshMessageTimestampsTool] Execution blocked — timestamps already added this turn");
       return {
         success: false,
         message: "Message timestamps were already added to context this turn.",
       };
     }
 
-    log.info(
-      "[RefreshMessageTimestampsTool] Signalling context restart with timestamp annotations",
-    );
+    log.info("[RefreshMessageTimestampsTool] Signalling context restart with timestamp annotations");
 
     return {
       success: true,

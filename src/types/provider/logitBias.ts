@@ -48,10 +48,7 @@ export const logitBiasEntrySchema = z.object({
   kind: logitBiasKindSchema.default("text"),
   tokenizations: z.preprocess(
     (value) => normalizeLogitBiasTokenizations(value),
-    z
-      .array(logitBiasTokenizationSchema)
-      .max(LOGIT_BIAS_TOKENIZATION_MAX)
-      .default([]),
+    z.array(logitBiasTokenizationSchema).max(LOGIT_BIAS_TOKENIZATION_MAX).default([]),
   ),
 });
 
@@ -71,9 +68,7 @@ function parseArrayLike(value: unknown): unknown[] {
   return [];
 }
 
-export function normalizeLogitBiasTokenizations(
-  value: unknown,
-): LogitBiasTokenization[] {
+export function normalizeLogitBiasTokenizations(value: unknown): LogitBiasTokenization[] {
   const tokenizations = parseArrayLike(value);
   const normalized: LogitBiasTokenization[] = [];
   const seen = new Set<string>();
@@ -104,9 +99,7 @@ export function normalizeLogitBiasEntries(value: unknown): LogitBiasEntry[] {
     if (!parsed.success) continue;
 
     const normalizedKind =
-      parsed.data.kind === "token_id" || parseNumericTokenId(parsed.data.text)
-        ? "token_id"
-        : "text";
+      parsed.data.kind === "token_id" || parseNumericTokenId(parsed.data.text) ? "token_id" : "text";
 
     normalized.push({
       ...parsed.data,
@@ -156,9 +149,7 @@ export function mergeLogitBiasEntries(
   let updatedCount = 0;
 
   for (const incomingEntry of incomingEntries) {
-    const existingIndex = mergedEntries.findIndex(
-      (entry) => entry.text === incomingEntry.text,
-    );
+    const existingIndex = mergedEntries.findIndex((entry) => entry.text === incomingEntry.text);
 
     if (existingIndex >= 0) {
       const existingEntry = mergedEntries[existingIndex];
@@ -194,10 +185,7 @@ export function mergeLogitBiasEntries(
   };
 }
 
-export function buildLogitBiasEntries(
-  terms: string[],
-  value: number,
-): LogitBiasEntry[] {
+export function buildLogitBiasEntries(terms: string[], value: number): LogitBiasEntry[] {
   return terms.map((term) => ({
     id: randomUUID(),
     text: term,
@@ -238,10 +226,7 @@ export function buildRuntimeLogitBiasMap(
   return runtimeLogitBias;
 }
 
-export function countRuntimeReadyLogitBiasEntries(
-  entries: LogitBiasEntry[],
-  tokenizerKey?: string | null,
-): number {
+export function countRuntimeReadyLogitBiasEntries(entries: LogitBiasEntry[], tokenizerKey?: string | null): number {
   let count = 0;
 
   for (const entry of entries) {
@@ -259,15 +244,12 @@ export function upsertLogitBiasTokenization(
   tokenIds: string[],
 ): LogitBiasEntry {
   const normalizedTokenIds = normalizeTokenIds(tokenIds);
-  const nextTokenizations = mergeLogitBiasTokenizations(
-    entry.tokenizations ?? [],
-    [
-      {
-        tokenizer_key: tokenizerKey,
-        token_ids: normalizedTokenIds,
-      },
-    ],
-  ).tokenizations;
+  const nextTokenizations = mergeLogitBiasTokenizations(entry.tokenizations ?? [], [
+    {
+      tokenizer_key: tokenizerKey,
+      token_ids: normalizedTokenIds,
+    },
+  ]).tokenizations;
 
   return {
     ...entry,
@@ -285,8 +267,7 @@ function mergeLogitBiasTokenizations(
 
   for (const incomingTokenization of incomingTokenizations) {
     const existingIndex = merged.findIndex(
-      (tokenization) =>
-        tokenization.tokenizer_key === incomingTokenization.tokenizer_key,
+      (tokenization) => tokenization.tokenizer_key === incomingTokenization.tokenizer_key,
     );
     const normalizedIncoming = {
       tokenizer_key: incomingTokenization.tokenizer_key,
@@ -306,17 +287,11 @@ function mergeLogitBiasTokenizations(
   };
 }
 
-function didLogitBiasEntryChange(
-  before: LogitBiasEntry,
-  after: LogitBiasEntry,
-): boolean {
+function didLogitBiasEntryChange(before: LogitBiasEntry, after: LogitBiasEntry): boolean {
   return JSON.stringify(before) !== JSON.stringify(after);
 }
 
-function getRuntimeTokenIdsForEntry(
-  entry: LogitBiasEntry,
-  tokenizerKey?: string | null,
-): string[] {
+function getRuntimeTokenIdsForEntry(entry: LogitBiasEntry, tokenizerKey?: string | null): string[] {
   if (entry.kind === "token_id") {
     const tokenId = parseNumericTokenId(entry.text);
     return tokenId ? [tokenId] : [];
@@ -324,9 +299,7 @@ function getRuntimeTokenIdsForEntry(
 
   if (!tokenizerKey) return [];
 
-  const matchingTokenization = entry.tokenizations?.find(
-    (tokenization) => tokenization.tokenizer_key === tokenizerKey,
-  );
+  const matchingTokenization = entry.tokenizations?.find((tokenization) => tokenization.tokenizer_key === tokenizerKey);
   if (!matchingTokenization) return [];
 
   return normalizeTokenIds(matchingTokenization.token_ids);

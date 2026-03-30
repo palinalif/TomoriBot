@@ -45,10 +45,7 @@ export async function checkChannelWhitelist(
 			SELECT COUNT(*) as count FROM channel_whitelist WHERE server_id = ${serverId}
 		`;
 
-    const channelWhitelistCount = Number.parseInt(
-      countRow?.count as string,
-      10,
-    );
+    const channelWhitelistCount = Number.parseInt(countRow?.count as string, 10);
     const hasActiveChannelWhitelist = channelWhitelistCount > 0;
 
     // 3. Check if specific channel is whitelisted
@@ -97,23 +94,17 @@ export async function checkChannelWhitelist(
     if (
       isChannelWhitelisted &&
       !hasChannelCooldownOverride &&
-      !(
-        effectiveChannelRow?.cooldown_type === null &&
-        effectiveChannelRow?.cooldown_length === null
-      )
+      !(effectiveChannelRow?.cooldown_type === null && effectiveChannelRow?.cooldown_length === null)
     ) {
-      log.warn(
-        "Channel whitelist row has partial cooldown override; falling back to global cooldown",
-        {
-          metadata: {
-            serverDiscId,
-            channelDiscId,
-            parentChannelDiscId,
-            cooldownType: effectiveChannelRow?.cooldown_type ?? null,
-            cooldownLength: effectiveChannelRow?.cooldown_length ?? null,
-          },
+      log.warn("Channel whitelist row has partial cooldown override; falling back to global cooldown", {
+        metadata: {
+          serverDiscId,
+          channelDiscId,
+          parentChannelDiscId,
+          cooldownType: effectiveChannelRow?.cooldown_type ?? null,
+          cooldownLength: effectiveChannelRow?.cooldown_length ?? null,
         },
-      );
+      });
     }
 
     // 4. Load role whitelist entries for this server
@@ -131,9 +122,7 @@ export async function checkChannelWhitelist(
         isRoleWhitelisted = true;
       } else if (memberRoleDiscIds.length > 0) {
         const memberRoles = new Set(memberRoleDiscIds);
-        isRoleWhitelisted = roleRows.some((row) =>
-          memberRoles.has(row.role_disc_id),
-        );
+        isRoleWhitelisted = roleRows.some((row) => memberRoles.has(row.role_disc_id));
       } else {
         isRoleWhitelisted = false;
       }
@@ -142,13 +131,11 @@ export async function checkChannelWhitelist(
     const isChannelAllowed = !hasActiveChannelWhitelist || isChannelWhitelisted;
     const isRoleAllowed = !hasActiveRoleWhitelist || isRoleWhitelisted;
     const isTriggerAllowed = isChannelAllowed && isRoleAllowed;
-    const hasActiveWhitelist =
-      hasActiveChannelWhitelist || hasActiveRoleWhitelist;
+    const hasActiveWhitelist = hasActiveChannelWhitelist || hasActiveRoleWhitelist;
 
     let blockReason: WhitelistCheckResult["blockReason"];
     if (!isTriggerAllowed) {
-      const blockedByChannel =
-        hasActiveChannelWhitelist && !isChannelWhitelisted;
+      const blockedByChannel = hasActiveChannelWhitelist && !isChannelWhitelisted;
       const blockedByRole = hasActiveRoleWhitelist && !isRoleWhitelisted;
       if (blockedByChannel && blockedByRole) {
         blockReason = "channel_and_role";
@@ -171,9 +158,7 @@ export async function checkChannelWhitelist(
       channelCooldownType: hasChannelCooldownOverride
         ? (effectiveChannelRow?.cooldown_type as CooldownType)
         : undefined,
-      channelCooldownLength: hasChannelCooldownOverride
-        ? (effectiveChannelRow?.cooldown_length as number)
-        : undefined,
+      channelCooldownLength: hasChannelCooldownOverride ? (effectiveChannelRow?.cooldown_length as number) : undefined,
     };
   } catch (error) {
     log.warn("Failed to check channel whitelist, failing open", {
@@ -224,10 +209,7 @@ export async function upsertChannelWhitelist(
  * @param channelDiscId - Discord channel ID (snowflake)
  * @returns True if a row was deleted, false if not found
  */
-export async function removeChannelWhitelist(
-  serverId: number,
-  channelDiscId: string,
-): Promise<boolean> {
+export async function removeChannelWhitelist(serverId: number, channelDiscId: string): Promise<boolean> {
   const result = await sql`
 		DELETE FROM channel_whitelist
 		WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
@@ -241,9 +223,7 @@ export async function removeChannelWhitelist(
  * @param serverId - Database server ID
  * @returns Array of channel whitelist rows
  */
-export async function getAllWhitelistChannels(
-  serverId: number,
-): Promise<ChannelWhitelistRow[]> {
+export async function getAllWhitelistChannels(serverId: number): Promise<ChannelWhitelistRow[]> {
   const result = await sql`
 		SELECT * FROM channel_whitelist
 		WHERE server_id = ${serverId}

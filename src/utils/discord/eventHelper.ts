@@ -6,16 +6,12 @@ import { log } from "../misc/logger";
  * @param channel - The channel to analyze
  * @returns Promise<number> Number of non-bot messages in last 24h
  */
-export async function getChannelActivity(
-  channel: TextChannel,
-): Promise<number> {
+export async function getChannelActivity(channel: TextChannel): Promise<number> {
   try {
     const messages = await channel.messages.fetch({ limit: 50 });
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
 
-    return messages.filter(
-      (msg) => !msg.author.bot && msg.createdTimestamp > oneDayAgo,
-    ).size;
+    return messages.filter((msg) => !msg.author.bot && msg.createdTimestamp > oneDayAgo).size;
   } catch {
     // If we can't fetch messages, assume no activity
     return 0;
@@ -28,10 +24,7 @@ export async function getChannelActivity(
  * @param client - The Discord client instance
  * @returns Promise<TextChannel | null>
  */
-export async function findBestChannel(
-  guild: Guild,
-  client: Client,
-): Promise<TextChannel | null> {
+export async function findBestChannel(guild: Guild, client: Client): Promise<TextChannel | null> {
   try {
     // 1. Get all text channels we can send messages in
     const textChannels = guild.channels.cache

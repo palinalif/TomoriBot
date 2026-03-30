@@ -52,10 +52,7 @@ export const MEDIA_LIMITS = {
    * Maximum extend_by for increase_media_context = MESSAGE_FETCH_LIMIT - MEDIA_CONTEXT_WINDOW
    * @default 10 messages
    */
-  MEDIA_CONTEXT_WINDOW: Number.parseInt(
-    process.env.MEDIA_CONTEXT_WINDOW || "10",
-    10,
-  ),
+  MEDIA_CONTEXT_WINDOW: Number.parseInt(process.env.MEDIA_CONTEXT_WINDOW || "10", 10),
 
   /**
    * Maximum size per individual media file in MB (for conversation context)
@@ -81,10 +78,7 @@ export const PERSONA_LIMITS = {
    * Used for image processing operations (download, crop, base64 encode)
    * @default 10 MB (matches Discord's standard upload limit)
    */
-  MAX_AVATAR_SIZE_MB: Number.parseInt(
-    process.env.MAX_AVATAR_SIZE_MB || "10",
-    10,
-  ),
+  MAX_AVATAR_SIZE_MB: Number.parseInt(process.env.MAX_AVATAR_SIZE_MB || "10", 10),
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -95,19 +89,13 @@ export const IMPORT_LIMITS = {
    * Maximum size for data export JSON files (personal/server memories)
    * @default 2 MB
    */
-  MAX_DATA_IMPORT_SIZE_MB: Number.parseInt(
-    process.env.MAX_DATA_IMPORT_SIZE_MB || "2",
-    10,
-  ),
+  MAX_DATA_IMPORT_SIZE_MB: Number.parseInt(process.env.MAX_DATA_IMPORT_SIZE_MB || "2", 10),
 
   /**
    * Maximum size for persona preset PNG files (image + embedded metadata)
    * @default 10 MB
    */
-  MAX_PERSONA_IMPORT_SIZE_MB: Number.parseInt(
-    process.env.MAX_PERSONA_IMPORT_SIZE_MB || "10",
-    10,
-  ),
+  MAX_PERSONA_IMPORT_SIZE_MB: Number.parseInt(process.env.MAX_PERSONA_IMPORT_SIZE_MB || "10", 10),
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -198,9 +186,7 @@ export const STREAMING_LIMITS = {
    * Each flush = 1 Discord message sent (semantically complete chunks)
    * @default 40 in production, Infinity in development
    */
-  MAX_FLUSH_COUNT: GUARDS_ENABLED
-    ? Number.parseInt(process.env.MAX_FLUSH_COUNT || "40", 10)
-    : Number.POSITIVE_INFINITY,
+  MAX_FLUSH_COUNT: GUARDS_ENABLED ? Number.parseInt(process.env.MAX_FLUSH_COUNT || "40", 10) : Number.POSITIVE_INFINITY,
 } as const;
 
 // -----------------------------------------------------------------------------
@@ -211,38 +197,28 @@ export const MEMORY_PROTECTION = {
    * Total container memory limit in MB (AWS ECS limit)
    * @default 512 MB
    */
-  CONTAINER_MEMORY_LIMIT_MB: Number.parseInt(
-    process.env.CONTAINER_MEMORY_LIMIT_MB || "512",
-    10,
-  ),
+  CONTAINER_MEMORY_LIMIT_MB: Number.parseInt(process.env.CONTAINER_MEMORY_LIMIT_MB || "512", 10),
 
   /**
    * Warning threshold as percentage of total memory (0.0 - 1.0)
    * When exceeded, reduce media processing aggressiveness
    * @default 0.75 (75% = 384 MB)
    */
-  MEMORY_WARNING_THRESHOLD: Number.parseFloat(
-    process.env.MEMORY_WARNING_THRESHOLD || "0.75",
-  ),
+  MEMORY_WARNING_THRESHOLD: Number.parseFloat(process.env.MEMORY_WARNING_THRESHOLD || "0.75"),
 
   /**
    * Critical threshold as percentage of total memory (0.0 - 1.0)
    * When exceeded, enter emergency mode (text-only, force GC)
    * @default 0.85 (85% = 435 MB)
    */
-  MEMORY_CRITICAL_THRESHOLD: Number.parseFloat(
-    process.env.MEMORY_CRITICAL_THRESHOLD || "0.85",
-  ),
+  MEMORY_CRITICAL_THRESHOLD: Number.parseFloat(process.env.MEMORY_CRITICAL_THRESHOLD || "0.85"),
 
   /**
    * Emergency cooldown period in milliseconds after entering critical mode
    * During this time, all media processing is disabled
    * @default 60000 (1 minute)
    */
-  EMERGENCY_COOLDOWN_MS: Number.parseInt(
-    process.env.EMERGENCY_COOLDOWN_MS || "60000",
-    10,
-  ),
+  EMERGENCY_COOLDOWN_MS: Number.parseInt(process.env.EMERGENCY_COOLDOWN_MS || "60000", 10),
 } as const;
 
 /**
@@ -285,8 +261,7 @@ class MemoryGuard {
 
     const memUsage = process.memoryUsage();
     const heapUsedBytes = memUsage.heapUsed;
-    const heapLimitBytes =
-      MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB * 1024 * 1024;
+    const heapLimitBytes = MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB * 1024 * 1024;
 
     const heapUsedMB = heapUsedBytes / (1024 * 1024);
     const percentUsed = heapUsedBytes / heapLimitBytes;
@@ -380,9 +355,7 @@ class MemoryGuard {
       log.info("Forcing garbage collection...");
       global.gc();
     } else {
-      log.warn(
-        "Garbage collection not available (run with --expose-gc flag for better memory management)",
-      );
+      log.warn("Garbage collection not available (run with --expose-gc flag for better memory management)");
     }
   }
 
@@ -414,15 +387,11 @@ class MemoryGuard {
     const memCheck = this.checkMemory();
 
     if (memCheck.status === "critical") {
-      return Math.floor(
-        FETCH_LIMITS.FETCH_CHAR_LIMIT * FETCH_LIMITS.MEMORY_REDUCTION_CRITICAL,
-      ); // 4% = 2k chars
+      return Math.floor(FETCH_LIMITS.FETCH_CHAR_LIMIT * FETCH_LIMITS.MEMORY_REDUCTION_CRITICAL); // 4% = 2k chars
     }
 
     if (memCheck.status === "warning") {
-      return Math.floor(
-        FETCH_LIMITS.FETCH_CHAR_LIMIT * FETCH_LIMITS.MEMORY_REDUCTION_WARNING,
-      ); // 30% = 15k chars
+      return Math.floor(FETCH_LIMITS.FETCH_CHAR_LIMIT * FETCH_LIMITS.MEMORY_REDUCTION_WARNING); // 30% = 15k chars
     }
 
     return FETCH_LIMITS.FETCH_CHAR_LIMIT; // 100% = 50k chars in safe mode
@@ -545,9 +514,7 @@ export function checkUserRateLimit(userActiveCount: number): RateLimitResult {
  * @param serverActiveCount - Current number of active messages for this server
  * @returns Rate limit check result
  */
-export function checkServerRateLimit(
-  serverActiveCount: number,
-): RateLimitResult {
+export function checkServerRateLimit(serverActiveCount: number): RateLimitResult {
   if (!GUARDS_ENABLED) {
     return { allowed: true };
   }
@@ -748,12 +715,8 @@ export function logGuardConfiguration(): void {
   log.info(`Guards Enabled: ${GUARDS_ENABLED}`);
   log.info(`Environment: ${process.env.RUN_ENV || "development"}`);
   log.info("\n--- Message Rate Limits ---");
-  log.info(
-    `Max User Active Messages: ${MESSAGE_RATE_LIMITS.MAX_USER_ACTIVE_MESSAGES}`,
-  );
-  log.info(
-    `Max Server Active Messages: ${MESSAGE_RATE_LIMITS.MAX_SERVER_ACTIVE_MESSAGES}`,
-  );
+  log.info(`Max User Active Messages: ${MESSAGE_RATE_LIMITS.MAX_USER_ACTIVE_MESSAGES}`);
+  log.info(`Max Server Active Messages: ${MESSAGE_RATE_LIMITS.MAX_SERVER_ACTIVE_MESSAGES}`);
   log.info("\n--- Media Limits ---");
   log.info(`Media Context Window: ${MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW}`);
   log.info(
@@ -765,22 +728,12 @@ export function logGuardConfiguration(): void {
   log.info(`Max Avatar Size: ${PERSONA_LIMITS.MAX_AVATAR_SIZE_MB} MB`);
   log.info("\n--- Import Limits ---");
   log.info(`Max Data Import Size: ${IMPORT_LIMITS.MAX_DATA_IMPORT_SIZE_MB} MB`);
-  log.info(
-    `Max Persona Import Size: ${IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB} MB`,
-  );
+  log.info(`Max Persona Import Size: ${IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB} MB`);
   log.info("\n--- Upload Quota Limits (24h) ---");
-  log.info(
-    `Max Persona Operations: ${PERSONA_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`,
-  );
-  log.info(
-    `Max Import Operations: ${IMPORT_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`,
-  );
-  log.info(
-    `Max Document Operations: ${DOCUMENT_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`,
-  );
-  log.info(
-    `Max Avatar Operations: ${AVATAR_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per server`,
-  );
+  log.info(`Max Persona Operations: ${PERSONA_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`);
+  log.info(`Max Import Operations: ${IMPORT_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`);
+  log.info(`Max Document Operations: ${DOCUMENT_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`);
+  log.info(`Max Avatar Operations: ${AVATAR_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per server`);
   log.info("\n--- Fetch Tool Limits ---");
   log.info(`Max Fetch Size: ${FETCH_LIMITS.MAX_FETCH_SIZE_MB} MB`);
   log.info(`Base Fetch Char Limit: ${FETCH_LIMITS.FETCH_CHAR_LIMIT}`);
@@ -790,18 +743,10 @@ export function logGuardConfiguration(): void {
   log.info("\n--- Streaming Limits ---");
   log.info(`Max Flush Count: ${STREAMING_LIMITS.MAX_FLUSH_COUNT}`);
   log.info("\n--- Memory Protection ---");
-  log.info(
-    `Container Memory Limit: ${MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB} MB`,
-  );
-  log.info(
-    `Warning Threshold: ${MEMORY_PROTECTION.MEMORY_WARNING_THRESHOLD * 100}%`,
-  );
-  log.info(
-    `Critical Threshold: ${MEMORY_PROTECTION.MEMORY_CRITICAL_THRESHOLD * 100}%`,
-  );
-  log.info(
-    `Emergency Cooldown: ${MEMORY_PROTECTION.EMERGENCY_COOLDOWN_MS / 1000}s`,
-  );
+  log.info(`Container Memory Limit: ${MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB} MB`);
+  log.info(`Warning Threshold: ${MEMORY_PROTECTION.MEMORY_WARNING_THRESHOLD * 100}%`);
+  log.info(`Critical Threshold: ${MEMORY_PROTECTION.MEMORY_CRITICAL_THRESHOLD * 100}%`);
+  log.info(`Emergency Cooldown: ${MEMORY_PROTECTION.EMERGENCY_COOLDOWN_MS / 1000}s`);
   log.info("===================================");
 }
 

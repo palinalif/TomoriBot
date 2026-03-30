@@ -19,13 +19,7 @@ import {
 import { getOpenRouterTokenizer } from "@/utils/cache/openrouterCapabilityCache";
 import { log } from "@/utils/misc/logger";
 
-type OpenAiBpeEncoding =
-  | "cl100k_base"
-  | "o200k_base"
-  | "o200k_harmony"
-  | "p50k_base"
-  | "p50k_edit"
-  | "r50k_base";
+type OpenAiBpeEncoding = "cl100k_base" | "o200k_base" | "o200k_harmony" | "p50k_base" | "p50k_edit" | "r50k_base";
 
 type OpenAiEncodingFn = (text: string) => number[];
 type LogitBiasTextEncoder = (text: string) => number[];
@@ -66,10 +60,7 @@ export function resolveLogitBiasEntriesForLlm(
       entries,
       tokenizerKey,
       resolvedEntryCount: 0,
-      runtimeReadyCount: countRuntimeReadyLogitBiasEntries(
-        entries,
-        tokenizerKey,
-      ),
+      runtimeReadyCount: countRuntimeReadyLogitBiasEntries(entries, tokenizerKey),
     };
   }
 
@@ -100,11 +91,7 @@ export function resolveLogitBiasEntriesForLlm(
       return entry;
     }
 
-    const updatedEntry = upsertLogitBiasTokenization(
-      entry,
-      tokenizerKey,
-      Array.from(tokenIds),
-    );
+    const updatedEntry = upsertLogitBiasTokenization(entry, tokenizerKey, Array.from(tokenIds));
 
     if (JSON.stringify(updatedEntry) !== JSON.stringify(entry)) {
       resolvedEntryCount++;
@@ -117,10 +104,7 @@ export function resolveLogitBiasEntriesForLlm(
     entries: resolvedEntries,
     tokenizerKey,
     resolvedEntryCount,
-    runtimeReadyCount: countRuntimeReadyLogitBiasEntries(
-      resolvedEntries,
-      tokenizerKey,
-    ),
+    runtimeReadyCount: countRuntimeReadyLogitBiasEntries(resolvedEntries, tokenizerKey),
   };
 }
 
@@ -131,16 +115,11 @@ export function buildRuntimeLogitBiasMapForLlm(
   return buildRuntimeLogitBiasMap(entries, getLogitBiasTokenizerKeyForLlm(llm));
 }
 
-export function getLogitBiasTokenizerKeyForLlm(
-  llm: LlmRow | null | undefined,
-): string | null {
+export function getLogitBiasTokenizerKeyForLlm(llm: LlmRow | null | undefined): string | null {
   if (!llm) return null;
 
   const modelCodename = llm.llm_codename;
-  const openRouterTokenizer =
-    llm.llm_provider === "openrouter"
-      ? getOpenRouterTokenizer(modelCodename)
-      : undefined;
+  const openRouterTokenizer = llm.llm_provider === "openrouter" ? getOpenRouterTokenizer(modelCodename) : undefined;
 
   return resolveLogitBiasTokenizerKey(openRouterTokenizer, modelCodename);
 }
@@ -152,10 +131,7 @@ function resolveOpenAiBpeEncoding(
   const normalizedTokenizer = rawTokenizer?.trim().toLowerCase() ?? "";
   const normalizedModelCodename = modelCodename.trim().toLowerCase();
 
-  if (
-    normalizedTokenizer.includes("o200k_harmony") ||
-    normalizedTokenizer.includes("harmony")
-  ) {
+  if (normalizedTokenizer.includes("o200k_harmony") || normalizedTokenizer.includes("harmony")) {
     return "o200k_harmony";
   }
 
@@ -194,10 +170,7 @@ function resolveOpenAiBpeEncoding(
     return "o200k_base";
   }
 
-  if (
-    normalizedModelCodename.includes("gpt-4") ||
-    normalizedModelCodename.includes("gpt-3.5")
-  ) {
+  if (normalizedModelCodename.includes("gpt-4") || normalizedModelCodename.includes("gpt-3.5")) {
     return "cl100k_base";
   }
 
@@ -224,19 +197,14 @@ function resolveOpenAiBpeEncoding(
   return null;
 }
 
-function resolveLogitBiasTokenizerKey(
-  rawTokenizer: string | null | undefined,
-  modelCodename: string,
-): string | null {
+function resolveLogitBiasTokenizerKey(rawTokenizer: string | null | undefined, modelCodename: string): string | null {
   return (
     resolveOpenAiBpeEncoding(rawTokenizer, modelCodename) ??
     resolveLocalLogitBiasTokenizerFamily(rawTokenizer, modelCodename)
   );
 }
 
-function getLogitBiasTextEncoderForKey(
-  tokenizerKey: string,
-): LogitBiasTextEncoder | null {
+function getLogitBiasTextEncoderForKey(tokenizerKey: string): LogitBiasTextEncoder | null {
   const openAiEncoder = OPENAI_BPE_ENCODERS[tokenizerKey as OpenAiBpeEncoding];
   if (openAiEncoder) {
     return openAiEncoder;

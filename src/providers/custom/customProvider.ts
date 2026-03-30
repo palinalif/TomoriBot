@@ -34,23 +34,11 @@ import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchServic
 import { getMCPManager } from "@/utils/mcp/mcpManager";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
-import {
-  CustomStreamAdapter,
-  type CustomStreamConfig,
-} from "./customStreamAdapter";
-import type {
-  ProviderError,
-  StreamContext,
-} from "../../types/stream/interfaces";
+import { CustomStreamAdapter, type CustomStreamConfig } from "./customStreamAdapter";
+import type { ProviderError, StreamContext } from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
-import {
-  type ToolStateForContext,
-  getAvailableToolsWithMCP,
-} from "../../tools/toolRegistry";
-import type {
-  StreamingContext,
-  ToolContext,
-} from "../../types/tool/interfaces";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "../../tools/toolRegistry";
+import type { StreamingContext, ToolContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
@@ -108,11 +96,7 @@ export interface CustomProviderConfig extends ProviderConfig {
  */
 export class CustomProvider
   extends BaseLLMProvider
-  implements
-    LLMProvider,
-    SupportsStructuredOutput,
-    SupportsConversationCompaction,
-    SupportsPresetGeneration
+  implements LLMProvider, SupportsStructuredOutput, SupportsConversationCompaction, SupportsPresetGeneration
 {
   /**
    * Get provider information and capabilities
@@ -135,9 +119,7 @@ export class CustomProvider
   async validateApiKey(_apiKey: string): Promise<ApiKeyValidationResult> {
     // For custom provider, we're lenient - always return valid
     // The actual validation happens when we try to use the endpoint
-    log.info(
-      "Custom provider: Skipping strict API key validation (endpoint health checked on first use)",
-    );
+    log.info("Custom provider: Skipping strict API key validation (endpoint health checked on first use)");
     return { valid: true };
   }
 
@@ -160,9 +142,7 @@ export class CustomProvider
   ): Promise<Array<Record<string, unknown>>> {
     // Only return tools if the model supports them (user-declared capability)
     if (!tomoriState.llm.has_tools) {
-      log.info(
-        "Custom provider: Model does not support tools (user-declared capability)",
-      );
+      log.info("Custom provider: Model does not support tools (user-declared capability)");
       return [];
     }
 
@@ -170,9 +150,7 @@ export class CustomProvider
       // Get built-in tools from the registry
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
-        activePersonaHasElevenlabsVoice: Boolean(
-          tomoriState.elevenlabs_voice_id?.trim(),
-        ),
+        activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,
@@ -213,8 +191,7 @@ export class CustomProvider
 
         finalBuiltInTools = availableBuiltInTools.filter((tool) => {
           const isContextAvailable =
-            "isAvailableForContext" in tool &&
-            typeof tool.isAvailableForContext === "function"
+            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
               ? tool.isAvailableForContext("custom", minimalContext)
               : true;
 
@@ -240,10 +217,7 @@ export class CustomProvider
 
       return allToolsConfig;
     } catch (error) {
-      log.error(
-        `Failed to get tools for custom provider: ${tomoriState.llm.llm_codename}`,
-        error as Error,
-      );
+      log.error(`Failed to get tools for custom provider: ${tomoriState.llm.llm_codename}`, error as Error);
       return [];
     }
   }
@@ -259,10 +233,7 @@ export class CustomProvider
   }
 
   getExpressionInitializationBatchSize(): number {
-    const parsed = Number.parseInt(
-      process.env.CUSTOM_EXPRESSION_BATCH_SIZE || "20",
-      10,
-    );
+    const parsed = Number.parseInt(process.env.CUSTOM_EXPRESSION_BATCH_SIZE || "20", 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
   }
 
@@ -274,15 +245,11 @@ export class CustomProvider
     return await callCustomStructuredJSON(request, responseSchema, zodSchema);
   }
 
-  async generateConversationSummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactConversationResult> {
+  async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
     return await generateConversationSummaryCustom(request);
   }
 
-  async generateRoleplaySummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactRoleplayResult> {
+  async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
     return await generateRoleplaySummaryCustom(request);
   }
 
@@ -294,15 +261,11 @@ export class CustomProvider
     }
 
     if (!request.toolContext) {
-      log.warn(
-        "Custom preset generation skipped search tools: no tool context available.",
-      );
+      log.warn("Custom preset generation skipped search tools: no tool context available.");
       return undefined;
     }
 
-    const hasBraveApiKey = await isBraveSearchAvailable(
-      request.tomoriState.server_id,
-    );
+    const hasBraveApiKey = await isBraveSearchAvailable(request.tomoriState.server_id);
 
     if (!hasBraveApiKey) {
       const mcpManager = getMCPManager();
@@ -313,9 +276,7 @@ export class CustomProvider
 
     const toolStateForContext: ToolStateForContext = {
       server_id: request.tomoriState.server_id.toString(),
-      activePersonaHasElevenlabsVoice: Boolean(
-        request.tomoriState.elevenlabs_voice_id?.trim(),
-      ),
+      activePersonaHasElevenlabsVoice: Boolean(request.tomoriState.elevenlabs_voice_id?.trim()),
       llm: {
         llm_codename: request.tomoriState.llm.llm_codename,
         has_tools: request.tomoriState.llm.has_tools,
@@ -335,55 +296,36 @@ export class CustomProvider
       },
     };
 
-    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
-      "custom",
-      toolStateForContext,
-    );
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP("custom", toolStateForContext);
 
     const searchTools = builtInTools.filter(
-      (tool) =>
-        tool.category === "search" || tool.requiresFeatureFlag === "web_search",
+      (tool) => tool.category === "search" || tool.requiresFeatureFlag === "web_search",
     );
 
     const customAdapter = getCustomToolAdapter();
-    return await customAdapter.getAllToolsInOpenAIFormat(
-      searchTools,
-      request.tomoriState.server_id,
-      mcpFunctionNames,
-    );
+    return await customAdapter.getAllToolsInOpenAIFormat(searchTools, request.tomoriState.server_id, mcpFunctionNames);
   }
 
-  async generatePreset(
-    request: ProviderPresetGenerationRequest,
-  ): Promise<PresetGenerationResult> {
+  async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const endpointUrl = request.tomoriState.config.custom_endpoint_url;
     if (!endpointUrl) {
       return {
-        error:
-          "Custom endpoint URL is not configured. Please configure the custom provider again.",
+        error: "Custom endpoint URL is not configured. Please configure the custom provider again.",
         errorType: "MODEL_ERROR",
       };
     }
 
     const tools = await this.getPresetGenerationTools(request);
-    const modelName = getEffectiveLlmModelName(
-      request.tomoriState.llm,
-      request.tomoriState.config.custom_model_name,
-    );
+    const modelName = getEffectiveLlmModelName(request.tomoriState.llm, request.tomoriState.config.custom_model_name);
 
-    return await generatePresetFromPromptCustom(
-      request.apiKey,
-      request.params,
-      request.locale,
-      {
-        endpointUrl,
-        model: modelName,
-        temperature: request.tomoriState.config.llm_temperature,
-        tools,
-        toolContext: request.toolContext as ToolContext | undefined,
-        maxToolRounds: request.maxToolRounds,
-      },
-    );
+    return await generatePresetFromPromptCustom(request.apiKey, request.params, request.locale, {
+      endpointUrl,
+      model: modelName,
+      temperature: request.tomoriState.config.llm_temperature,
+      tools,
+      toolContext: request.toolContext as ToolContext | undefined,
+      maxToolRounds: request.maxToolRounds,
+    });
   }
 
   /**
@@ -393,10 +335,7 @@ export class CustomProvider
    * @param apiKey - The decrypted API key (may be endpoint URL or auth token)
    * @returns Promise<CustomProviderConfig> - Provider-specific configuration object
    */
-  async createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<CustomProviderConfig> {
+  async createConfig(tomoriState: TomoriState, apiKey: string): Promise<CustomProviderConfig> {
     // Get endpoint URL from tomori_configs
     const endpointUrl = tomoriState.config.custom_endpoint_url;
 
@@ -409,8 +348,7 @@ export class CustomProvider
     // Determine which model name to use:
     // 1. If custom_model_name is set, use it (for Ollama, etc. that require exact model names)
     // 2. Otherwise, fall back to llm_codename (for KoboldCpp, etc. that don't care)
-    const modelName =
-      tomoriState.config.custom_model_name || tomoriState.llm.llm_codename;
+    const modelName = tomoriState.config.custom_model_name || tomoriState.llm.llm_codename;
 
     log.info(`Custom provider: Using endpoint URL: ${endpointUrl}`);
     log.info(
@@ -419,9 +357,7 @@ export class CustomProvider
     log.info(`Custom provider: has_tools: ${tomoriState.llm.has_tools}`);
     log.info(`Custom provider: sees_images: ${tomoriState.llm.sees_images}`);
     log.info(`Custom provider: sees_videos: ${tomoriState.llm.sees_videos}`);
-    log.info(
-      `Custom provider: supports_structoutput: ${tomoriState.llm.supports_structoutput}`,
-    );
+    log.info(`Custom provider: supports_structoutput: ${tomoriState.llm.supports_structoutput}`);
 
     // Build config object
     const config: CustomProviderConfig = {
@@ -452,11 +388,7 @@ export class CustomProvider
    * Uses the modular streaming architecture with StreamOrchestrator and CustomStreamAdapter
    */
   async streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -477,9 +409,7 @@ export class CustomProvider
     personaUsername?: string,
     prefixStrippingName?: string,
   ): Promise<StreamResult> {
-    log.info(
-      `CustomProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`,
-    );
+    log.info(`CustomProvider: Starting streaming for server ${tomoriState.server_id}, model ${config.model}`);
 
     try {
       // Convert the generic config to Custom-specific streaming config
@@ -490,14 +420,11 @@ export class CustomProvider
         // Add Discord streaming constants
         maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
         flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
-        flushBufferSizeCodeBlock:
-          DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+        flushBufferSizeCodeBlock: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
         inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
-        baseTypeSpeedMsPerChar:
-          DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+        baseTypeSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
         maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
-        minVisibleTypingDurationMs:
-          DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+        minVisibleTypingDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
         humanizerDegree: tomoriState.config.humanizer_degree,
         emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
         seesImages: tomoriState.llm.sees_images,
@@ -508,21 +435,12 @@ export class CustomProvider
 
       // Override tools with context-aware tools when streaming context is provided
       if (streamingContext && tomoriState.llm.has_tools) {
-        log.info(
-          "CustomProvider: Reloading tools with streaming context for context-aware availability",
-        );
-        const contextAwareTools = await this.getTools(
-          tomoriState,
-          streamingContext,
-        );
+        log.info("CustomProvider: Reloading tools with streaming context for context-aware availability");
+        const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
-        log.info(
-          `Context-aware tools loaded: ${contextAwareTools.length} tools`,
-        );
+        log.info(`Context-aware tools loaded: ${contextAwareTools.length} tools`);
       } else if (streamingContext && !tomoriState.llm.has_tools) {
-        log.info(
-          "Skipping context-aware tool reload - model doesn't support tools",
-        );
+        log.info("Skipping context-aware tool reload - model doesn't support tools");
       }
 
       // Create streaming context
@@ -562,18 +480,10 @@ export class CustomProvider
       const customAdapter = new CustomStreamAdapter();
 
       // Execute streaming with the modular architecture
-      log.info(
-        "CustomProvider: Delegating to StreamOrchestrator with CustomStreamAdapter",
-      );
-      const result = await orchestrator.streamToDiscord(
-        customAdapter,
-        streamConfig,
-        streamContext,
-      );
+      log.info("CustomProvider: Delegating to StreamOrchestrator with CustomStreamAdapter");
+      const result = await orchestrator.streamToDiscord(customAdapter, streamConfig, streamContext);
 
-      log.info(
-        `CustomProvider: Streaming completed with status: ${result.status}`,
-      );
+      log.info(`CustomProvider: Streaming completed with status: ${result.status}`);
       return result;
     } catch (error) {
       log.error(

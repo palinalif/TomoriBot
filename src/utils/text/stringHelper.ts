@@ -33,20 +33,7 @@ export function createSentenceSplitRegex(): RegExp {
   const reference = ["no", "vol", "fig", "ref", "pp", "p", "ch", "sec"];
 
   // 8. Month abbreviations
-  const months = [
-    "jan",
-    "feb",
-    "mar",
-    "apr",
-    "may",
-    "jun",
-    "jul",
-    "aug",
-    "sep",
-    "oct",
-    "nov",
-    "dec",
-  ];
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
   // 9. Day abbreviations
   const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -102,10 +89,7 @@ export function createSentenceSplitRegex(): RegExp {
  * // result: "Hello, John! Welcome to Paris."
  * ```
  */
-export function replaceTemplateVariables(
-  text: string,
-  variables: Record<string, string | undefined>,
-): string {
+export function replaceTemplateVariables(text: string, variables: Record<string, string | undefined>): string {
   let result = text;
   const normalizedVariables: Record<string, string | undefined> = {
     ...variables,
@@ -120,14 +104,8 @@ export function replaceTemplateVariables(
     }
 
     const escapedPlaceholder = escapeRegExp(placeholder);
-    const doubleBraceRegex = new RegExp(
-      `\\{\\{\\s*${escapedPlaceholder}\\s*\\}\\}`,
-      "gi",
-    );
-    const singleBraceRegex = new RegExp(
-      `\\{\\s*${escapedPlaceholder}\\s*\\}`,
-      "gi",
-    );
+    const doubleBraceRegex = new RegExp(`\\{\\{\\s*${escapedPlaceholder}\\s*\\}\\}`, "gi");
+    const singleBraceRegex = new RegExp(`\\{\\s*${escapedPlaceholder}\\s*\\}`, "gi");
     result = result.replace(doubleBraceRegex, value);
     result = result.replace(singleBraceRegex, value);
   }
@@ -187,15 +165,7 @@ function getDayOfWeek(date: Date): string {
   const dayOfWeek = new Date(date).getDay();
   return Number.isNaN(dayOfWeek)
     ? ""
-    : [
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-      ][dayOfWeek];
+    : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dayOfWeek];
 }
 
 const DISCORD_CUSTOM_EMOJI_NAME_REGEX = /^<a?:([^:>]+):[^>]+>$/;
@@ -210,16 +180,11 @@ function loadEmojiRunPrefixLength(): number {
 
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed)) {
-    log.warn(
-      `Invalid EMOJI_RUN_PREFIX_LENGTH value: ${raw}. Using default: ${DEFAULT_EMOJI_RUN_PREFIX_LENGTH}`,
-    );
+    log.warn(`Invalid EMOJI_RUN_PREFIX_LENGTH value: ${raw}. Using default: ${DEFAULT_EMOJI_RUN_PREFIX_LENGTH}`);
     return DEFAULT_EMOJI_RUN_PREFIX_LENGTH;
   }
 
-  return Math.min(
-    MAX_EMOJI_RUN_PREFIX_LENGTH,
-    Math.max(MIN_EMOJI_RUN_PREFIX_LENGTH, parsed),
-  );
+  return Math.min(MAX_EMOJI_RUN_PREFIX_LENGTH, Math.max(MIN_EMOJI_RUN_PREFIX_LENGTH, parsed));
 }
 
 const EMOJI_RUN_PREFIX_LENGTH = loadEmojiRunPrefixLength();
@@ -235,10 +200,7 @@ function getEmojiRunPrefix(emojiTag: string): string | null {
   return normalizedName.slice(0, EMOJI_RUN_PREFIX_LENGTH);
 }
 
-function shouldMergeEmojiRun(
-  previousEmojiTag: string | null,
-  nextEmojiTag: string,
-): boolean {
+function shouldMergeEmojiRun(previousEmojiTag: string | null, nextEmojiTag: string): boolean {
   if (!previousEmojiTag) return true;
 
   const previousPrefix = getEmojiRunPrefix(previousEmojiTag);
@@ -255,11 +217,7 @@ function shouldMergeEmojiRun(
  * @param chunkLength - Optional max length for each chunk (defaults to 1900, just below Discord's 2000 char limit)
  * @returns Array of message chunks under Discord's limit
  */
-export function chunkMessage(
-  inputText: string,
-  humanizerDegree: number,
-  chunkLength = 1900,
-): string[] {
+export function chunkMessage(inputText: string, humanizerDegree: number, chunkLength = 1900): string[] {
   // 1. Initialize and handle empty input
   const chunkedMessages: string[] = [];
   if (!inputText || inputText.length === 0) {
@@ -412,34 +370,21 @@ export function chunkMessage(
       // Markdown formatting
       const markdownBold = findMarkdownBold(textContent, searchIndex);
       const markdownItalic = findMarkdownItalic(textContent, searchIndex);
-      const markdownStrike = findMarkdownStrikethrough(
-        textContent,
-        searchIndex,
-      );
-      const markdownInlineCode = findMarkdownInlineCode(
-        textContent,
-        searchIndex,
-      );
+      const markdownStrike = findMarkdownStrikethrough(textContent, searchIndex);
+      const markdownInlineCode = findMarkdownInlineCode(textContent, searchIndex);
       const markdownLink = findMarkdownLink(textContent, searchIndex);
 
       // Find the earliest occurring semantic block
       const candidates = [
         quotedString ? { ...quotedString, type: "quoted" as const } : null,
-        parenthesized
-          ? { ...parenthesized, type: "parenthesized" as const }
-          : null,
-        japaneseQuoted
-          ? { ...japaneseQuoted, type: "japanese_quoted" as const }
-          : null,
+        parenthesized ? { ...parenthesized, type: "parenthesized" as const } : null,
+        japaneseQuoted ? { ...japaneseQuoted, type: "japanese_quoted" as const } : null,
         markdownBold,
         markdownItalic,
         markdownStrike,
         markdownInlineCode,
         markdownLink,
-      ].filter(
-        (candidate): candidate is NonNullable<typeof candidate> =>
-          candidate !== null,
-      );
+      ].filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
 
       if (candidates.length === 0) break;
 
@@ -582,10 +527,7 @@ export function chunkMessage(
       hasContent = true;
 
       // Check for following text block
-      if (
-        i + 1 < processedBlocks.length &&
-        processedBlocks[i + 1].type === "text"
-      ) {
+      if (i + 1 < processedBlocks.length && processedBlocks[i + 1].type === "text") {
         mergedContent += processedBlocks[i + 1].content;
         i++; // Skip the next text block as we've consumed it
       }
@@ -619,8 +561,7 @@ export function chunkMessage(
     // Whitespace-only text blocks (left over from cleanLLMOutput padding around
     // converted emojis) must not break the run — the text case skips them anyway.
     if (block.type !== "emoji" && emojiRun.length > 0) {
-      const isWhitespaceText =
-        block.type === "text" && block.content.trim().length === 0;
+      const isWhitespaceText = block.type === "text" && block.content.trim().length === 0;
       if (!isWhitespaceText) {
         chunkedMessages.push(emojiRun);
         emojiRun = "";
@@ -691,10 +632,7 @@ export function chunkMessage(
           chunkedMessages.push(block.content);
         } else {
           // URL fits, add it to current chunk with appropriate spacing
-          currentChunk +=
-            (currentChunk.length > 0 && !currentChunk.endsWith(" ")
-              ? " "
-              : "") + block.content;
+          currentChunk += (currentChunk.length > 0 && !currentChunk.endsWith(" ") ? " " : "") + block.content;
         }
         break;
 
@@ -729,8 +667,7 @@ export function chunkMessage(
             if (!paragraph.trim()) continue;
 
             // Protect markdown links before sentence splitting to prevent URLs from being broken
-            const { protectedText: protectedParagraph, markdownLinks } =
-              detectAndProtectMarkdownLinks(paragraph);
+            const { protectedText: protectedParagraph, markdownLinks } = detectAndProtectMarkdownLinks(paragraph);
 
             // Protect ellipses so sentence splitting does not distort them.
             const processedParagraph = protectedParagraph.replace(
@@ -743,9 +680,7 @@ export function chunkMessage(
 
             // Split on periods at end of sentences but skip common abbreviations and numbered lists like "1.", "2.", etc.
             // Also handles Japanese period (。) as a sentence boundary
-            const sentences = processedParagraph.split(
-              createSentenceSplitRegex(),
-            );
+            const sentences = processedParagraph.split(createSentenceSplitRegex());
 
             // Then split by sentence endings but keep the punctuation
             // This looks for punctuation followed by end of string
@@ -770,26 +705,17 @@ export function chunkMessage(
               let processedSentence = sentence;
               // Ensure we don't shorten "..." to ".." here.
               // Only remove a trailing period if it's a single period, not part of an ellipsis.
-              if (
-                (sentence.endsWith(".") || sentence.endsWith("。")) &&
-                !sentence.endsWith("...")
-              ) {
+              if ((sentence.endsWith(".") || sentence.endsWith("。")) && !sentence.endsWith("...")) {
                 // MODIFIED LINE
                 processedSentence = sentence.slice(0, -1).trim();
               }
 
               if (!processedSentence) continue;
 
-              processedSentence = processedSentence.replaceAll(
-                HEAVY_HUMANIZER_ELLIPSIS_PLACEHOLDER,
-                "...",
-              );
+              processedSentence = processedSentence.replaceAll(HEAVY_HUMANIZER_ELLIPSIS_PLACEHOLDER, "...");
 
               // Restore markdown links after sentence processing
-              processedSentence = restoreMarkdownLinksFromPlaceholders(
-                processedSentence,
-                markdownLinks,
-              );
+              processedSentence = restoreMarkdownLinksFromPlaceholders(processedSentence, markdownLinks);
 
               if (currentChunk.length > 0) {
                 chunkedMessages.push(currentChunk);
@@ -801,12 +727,7 @@ export function chunkMessage(
           }
         } else {
           // 3c-iii. Low or no humanization, use normal text chunking
-          currentChunk = addTextSegment(
-            textToAdd,
-            currentChunk,
-            chunkedMessages,
-            chunkLength,
-          );
+          currentChunk = addTextSegment(textToAdd, currentChunk, chunkedMessages, chunkLength);
         }
         break;
       }
@@ -841,10 +762,7 @@ function isStandalonePunctuationChunk(text: string): boolean {
   return /^[.,!?;:。！？、，]+$/.test(trimmed);
 }
 
-function mergeStandalonePunctuationChunks(
-  chunks: string[],
-  chunkLength: number,
-): string[] {
+function mergeStandalonePunctuationChunks(chunks: string[], chunkLength: number): string[] {
   if (chunks.length <= 1) return chunks;
 
   const normalized: string[] = [];
@@ -988,11 +906,7 @@ function splitCodeBlock(codeBlock: string, chunkLength: number): string[] {
       currentChunk = `\`\`\`${language}\n${line}`;
     } else {
       // Add line to current chunk
-      currentChunk +=
-        (currentChunk.endsWith("\n") ||
-        currentChunk.endsWith(`\`\`\`${language}\n`)
-          ? ""
-          : "\n") + line;
+      currentChunk += (currentChunk.endsWith("\n") || currentChunk.endsWith(`\`\`\`${language}\n`) ? "" : "\n") + line;
     }
   }
 
@@ -1013,12 +927,7 @@ function splitCodeBlock(codeBlock: string, chunkLength: number): string[] {
  * @param chunkLength - Maximum chunk length
  * @returns Updated current chunk
  */
-function addTextSegment(
-  text: string,
-  currentChunk: string,
-  chunks: string[],
-  chunkLength: number,
-): string {
+function addTextSegment(text: string, currentChunk: string, chunks: string[], chunkLength: number): string {
   // If empty text, return current chunk unchanged
   if (!text) return currentChunk;
   let segmentedChunk = currentChunk;
@@ -1071,16 +980,10 @@ export function normalizeCustomEmojisForLlm(text: string): string {
     return `__INLINE_CODE_${inlineCode.length - 1}__`;
   });
 
-  processedText = processedText.replace(
-    /<(a?):([^:>]+):\d{17,20}>/g,
-    (_match, _animated, name) => `:${name}:`,
-  );
+  processedText = processedText.replace(/<(a?):([^:>]+):\d{17,20}>/g, (_match, _animated, name) => `:${name}:`);
 
   for (let i = inlineCode.length - 1; i >= 0; i--) {
-    processedText = processedText.replace(
-      `__INLINE_CODE_${i}__`,
-      inlineCode[i],
-    );
+    processedText = processedText.replace(`__INLINE_CODE_${i}__`, inlineCode[i]);
   }
 
   for (let i = codeBlocks.length - 1; i >= 0; i--) {
@@ -1164,30 +1067,27 @@ export function replaceMentionHandles(
   });
 
   // Handle @[name] and @[name|id] — LLM hallucination using square brackets instead of curly braces
-  processedText = processedText.replace(
-    /@\[([^\]]+)\]/g,
-    (match, rawHandle) => {
-      const handle = (rawHandle as string).trim();
-      if (!handle) return match;
+  processedText = processedText.replace(/@\[([^\]]+)\]/g, (match, rawHandle) => {
+    const handle = (rawHandle as string).trim();
+    if (!handle) return match;
 
-      const pipeIndex = handle.lastIndexOf("|");
-      if (pipeIndex > -1) {
-        const idPart = handle.slice(pipeIndex + 1).trim();
-        if (/^\d{17,20}$/.test(idPart) && mentionIdSet?.has(idPart)) {
-          return `<@${idPart}>`;
-        }
+    const pipeIndex = handle.lastIndexOf("|");
+    if (pipeIndex > -1) {
+      const idPart = handle.slice(pipeIndex + 1).trim();
+      if (/^\d{17,20}$/.test(idPart) && mentionIdSet?.has(idPart)) {
+        return `<@${idPart}>`;
       }
+    }
 
-      if (/^\d{17,20}$/.test(handle) && mentionIdSet?.has(handle)) {
-        return `<@${handle}>`;
-      }
+    if (/^\d{17,20}$/.test(handle) && mentionIdSet?.has(handle)) {
+      return `<@${handle}>`;
+    }
 
-      const normalizedHandle = handle.toLowerCase();
-      const ids = mentionMap.get(normalizedHandle);
-      if (!ids || ids.length !== 1) return `[${handle}]`;
-      return `<@${ids[0]}>`;
-    },
-  );
+    const normalizedHandle = handle.toLowerCase();
+    const ids = mentionMap.get(normalizedHandle);
+    if (!ids || ids.length !== 1) return `[${handle}]`;
+    return `<@${ids[0]}>`;
+  });
 
   // Handle @name|id format without curly braces (LLM sometimes omits braces)
   processedText = processedText.replace(
@@ -1213,10 +1113,7 @@ export function replaceMentionHandles(
   );
 
   for (let i = inlineCode.length - 1; i >= 0; i--) {
-    processedText = processedText.replace(
-      `__INLINE_CODE_${i}__`,
-      inlineCode[i],
-    );
+    processedText = processedText.replace(`__INLINE_CODE_${i}__`, inlineCode[i]);
   }
 
   for (let i = codeBlocks.length - 1; i >= 0; i--) {
@@ -1255,8 +1152,7 @@ export function cleanLLMOutput(
     .replace(/\[system:[\s\S]*$/gi, "");
 
   // 2. Basic whitespace and separator cleanup
-  if (cleanedText.startsWith("```") || cleanedText.endsWith("```"))
-    return cleanedText;
+  if (cleanedText.startsWith("```") || cleanedText.endsWith("```")) return cleanedText;
 
   cleanedText = cleanedText
     .replace(/\n{3,}/g, "\n\n")
@@ -1308,10 +1204,7 @@ export function cleanLLMOutput(
     // 2.1.5 Normalize any malformed emoji tags
     // like "<_name:id>" or "<(Name:id>"
     // to proper "<:name:id>"
-    cleanedText = cleanedText.replace(
-      /<[^:>\s]*:([A-Za-z0-9_~]+):(\d+)>/g,
-      "<:$1:$2>",
-    );
+    cleanedText = cleanedText.replace(/<[^:>\s]*:([A-Za-z0-9_~]+):(\d+)>/g, "<:$1:$2>");
 
     // 2.2 Build a map from emoji name → its correct full format
     const emojiNameMap = new Map<string, string>();
@@ -1332,10 +1225,7 @@ export function cleanLLMOutput(
       // Match :name followed by non-colon character or end of string
       // Use negative lookahead to ensure we don't match already-correct :name: patterns
       // Use positive lookahead to ensure we're at a word boundary (space, punctuation, or end of string)
-      const malformedPattern = new RegExp(
-        `(:${escapeRegExp(name)})(?!:)(?=\\s|$|[^a-zA-Z0-9_~])`,
-        "gi",
-      );
+      const malformedPattern = new RegExp(`(:${escapeRegExp(name)})(?!:)(?=\\s|$|[^a-zA-Z0-9_~])`, "gi");
       cleanedText = cleanedText.replace(malformedPattern, "$1:");
     }
 
@@ -1344,19 +1234,13 @@ export function cleanLLMOutput(
     let placeholderCount = 0;
     for (const emoji of validEmojiSet) {
       const key = `__EMOJI_PLACEHOLDER_${placeholderCount++}__`;
-      cleanedText = cleanedText.replace(
-        new RegExp(escapeRegExp(emoji), "g"),
-        key,
-      );
+      cleanedText = cleanedText.replace(new RegExp(escapeRegExp(emoji), "g"), key);
       preserved.set(key, emoji);
     }
 
     // 2.4 Replace any :name: occurrences with the correct emoji
     for (const [name, full] of emojiNameMap.entries()) {
-      const pattern = new RegExp(
-        `(?<!<[^>]*)\\s*:${escapeRegExp(name)}:\\s*`,
-        "gi",
-      );
+      const pattern = new RegExp(`(?<!<[^>]*)\\s*:${escapeRegExp(name)}:\\s*`, "gi");
       cleanedText = cleanedText.replace(pattern, ` ${full} `);
     }
 
@@ -1370,26 +1254,20 @@ export function cleanLLMOutput(
     );
 
     // 2.5 Correct or drop any remaining <...> emoji attempts
-    cleanedText = cleanedText.replace(
-      /<(a?):([^:>]+):([^>]+)>/g,
-      (_match, animated, name, id) => {
-        const full = `<${animated}:${name}:${id}>`;
-        // a) exact valid → keep
-        if (validEmojiSet.has(full)) return full;
-        // b) name match → use canonical
-        const canonical = emojiNameMap.get(name.toLowerCase());
-        if (canonical) return canonical;
-        // c) unknown → remove
-        return "";
-      },
-    );
+    cleanedText = cleanedText.replace(/<(a?):([^:>]+):([^>]+)>/g, (_match, animated, name, id) => {
+      const full = `<${animated}:${name}:${id}>`;
+      // a) exact valid → keep
+      if (validEmojiSet.has(full)) return full;
+      // b) name match → use canonical
+      const canonical = emojiNameMap.get(name.toLowerCase());
+      if (canonical) return canonical;
+      // c) unknown → remove
+      return "";
+    });
 
     // 2.6 Restore preserved valid emojis
     for (const [key, emoji] of preserved.entries()) {
-      cleanedText = cleanedText.replace(
-        new RegExp(escapeRegExp(key), "g"),
-        emoji,
-      );
+      cleanedText = cleanedText.replace(new RegExp(escapeRegExp(key), "g"), emoji);
     }
   } else {
     // Debug: Log when emoji conversion is skipped
@@ -1471,9 +1349,7 @@ export function truncateBeforeRegisteredSpeakerLine(
       continue;
     }
 
-    if (
-      !isRegisteredOrReservedSpeakerLabel(rawLabel, registeredSpeakerNamesLower)
-    ) {
+    if (!isRegisteredOrReservedSpeakerLabel(rawLabel, registeredSpeakerNamesLower)) {
       continue;
     }
 
@@ -1545,10 +1421,7 @@ function restoreURLsFromPlaceholders(text: string, urls: string[]): string {
   // Restore in reverse order to avoid index issues
   for (let i = urls.length - 1; i >= 0; i--) {
     const placeholder = `__URL_${i}__`;
-    restoredText = restoredText.replace(
-      new RegExp(escapeRegExp(placeholder), "g"),
-      urls[i],
-    );
+    restoredText = restoredText.replace(new RegExp(escapeRegExp(placeholder), "g"), urls[i]);
   }
 
   return restoredText;
@@ -1577,16 +1450,12 @@ function detectAndProtectMarkdownLinks(text: string): {
   const protectedText = text.replace(markdownLinkRegex, (match) => {
     markdownLinks.push(match);
     const placeholder = `__MARKDOWN_LINK_${markdownLinks.length - 1}__`;
-    log.info(
-      `Markdown Link Protection: Protected "${match}" with placeholder "${placeholder}"`,
-    );
+    log.info(`Markdown Link Protection: Protected "${match}" with placeholder "${placeholder}"`);
     return placeholder;
   });
 
   if (markdownLinks.length > 0) {
-    log.info(
-      `Markdown Link Protection: Protected ${markdownLinks.length} markdown link(s) in text`,
-    );
+    log.info(`Markdown Link Protection: Protected ${markdownLinks.length} markdown link(s) in text`);
   }
 
   return { protectedText, markdownLinks };
@@ -1598,32 +1467,22 @@ function detectAndProtectMarkdownLinks(text: string): {
  * @param markdownLinks - Array of original markdown links
  * @returns Text with markdown links restored
  */
-function restoreMarkdownLinksFromPlaceholders(
-  text: string,
-  markdownLinks: string[],
-): string {
+function restoreMarkdownLinksFromPlaceholders(text: string, markdownLinks: string[]): string {
   let restoredText = text;
 
   // Restore in reverse order to avoid index issues
   for (let i = markdownLinks.length - 1; i >= 0; i--) {
     const placeholder = `__MARKDOWN_LINK_${i}__`;
     const originalLink = markdownLinks[i];
-    restoredText = restoredText.replace(
-      new RegExp(escapeRegExp(placeholder), "g"),
-      originalLink,
-    );
+    restoredText = restoredText.replace(new RegExp(escapeRegExp(placeholder), "g"), originalLink);
 
     if (restoredText.includes(originalLink)) {
-      log.info(
-        `Markdown Link Restoration: Restored placeholder "${placeholder}" to "${originalLink}"`,
-      );
+      log.info(`Markdown Link Restoration: Restored placeholder "${placeholder}" to "${originalLink}"`);
     }
   }
 
   if (markdownLinks.length > 0) {
-    log.info(
-      `Markdown Link Restoration: Restored ${markdownLinks.length} markdown link(s) from placeholders`,
-    );
+    log.info(`Markdown Link Restoration: Restored ${markdownLinks.length} markdown link(s) from placeholders`);
   }
 
   return restoredText;
@@ -1635,10 +1494,7 @@ function restoreMarkdownLinksFromPlaceholders(
  * @param startIndex - Index to start searching from
  * @returns Object with start, end indices and content, or null if no balanced pair found
  */
-function findBalancedParentheses(
-  text: string,
-  startIndex = 0,
-): { start: number; end: number; content: string } | null {
+function findBalancedParentheses(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
   const openIndex = text.indexOf("(", startIndex);
   if (openIndex === -1) return null;
 
@@ -1673,10 +1529,7 @@ function findBalancedParentheses(
  * @param startIndex - Index to start searching from
  * @returns Object with start, end indices and content, or null if no complete quoted string found
  */
-function findQuotedString(
-  text: string,
-  startIndex = 0,
-): { start: number; end: number; content: string } | null {
+function findQuotedString(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
   const openIndex = text.indexOf('"', startIndex);
   if (openIndex === -1) return null;
 
@@ -1814,10 +1667,7 @@ function findMarkdownItalic(
       singleUnderscore = text.indexOf("_", singleUnderscore + 1);
       continue;
     }
-    if (
-      singleUnderscore < text.length - 1 &&
-      text[singleUnderscore + 1] === "_"
-    ) {
+    if (singleUnderscore < text.length - 1 && text[singleUnderscore + 1] === "_") {
       singleUnderscore = text.indexOf("_", singleUnderscore + 2);
       continue;
     }
@@ -1882,8 +1732,7 @@ function findMarkdownInlineCode(
     // Skip if part of code block
     if (
       (opening > 1 && text.substring(opening - 2, opening) === "``") ||
-      (opening < text.length - 2 &&
-        text.substring(opening + 1, opening + 3) === "``")
+      (opening < text.length - 2 && text.substring(opening + 1, opening + 3) === "``")
     ) {
       opening = text.indexOf("`", opening + 1);
       continue;
@@ -1895,8 +1744,7 @@ function findMarkdownInlineCode(
       // Make sure closing isn't part of code block either
       if (
         (closing > 1 && text.substring(closing - 2, closing) === "``") ||
-        (closing < text.length - 2 &&
-          text.substring(closing + 1, closing + 3) === "``")
+        (closing < text.length - 2 && text.substring(closing + 1, closing + 3) === "``")
       ) {
         opening = text.indexOf("`", opening + 1);
         continue;
@@ -1934,8 +1782,7 @@ function findMarkdownLink(
   if (closeBracket === -1) return null;
 
   // Check for immediately following (url)
-  if (closeBracket + 1 >= text.length || text[closeBracket + 1] !== "(")
-    return null;
+  if (closeBracket + 1 >= text.length || text[closeBracket + 1] !== "(") return null;
 
   const closeParen = text.indexOf(")", closeBracket + 2);
   if (closeParen === -1) return null;
@@ -2039,13 +1886,10 @@ export function humanizeString(text: string): string {
 
   // 3. Replace inline code (`) with placeholders
   // Look for inline code that contains alphanumeric characters or common code symbols
-  processedText = processedText.replace(
-    /`[\w\s()[\]{}.,:;=+\-*/<>!?#$%^&|~\\]+`/g,
-    (match) => {
-      inlineCode.push(match);
-      return `__INLINE_CODE_${inlineCode.length - 1}__`;
-    },
-  );
+  processedText = processedText.replace(/`[\w\s()[\]{}.,:;=+\-*/<>!?#$%^&|~\\]+`/g, (match) => {
+    inlineCode.push(match);
+    return `__INLINE_CODE_${inlineCode.length - 1}__`;
+  });
 
   // 4. Replace sender strings with placeholders
   processedText = processedText.replace(
@@ -2057,22 +1901,17 @@ export function humanizeString(text: string): string {
   );
   // 5. Apply lowercase transformation to text outside code blocks,
   //    now including hyphenated words like "E-ew" or "D-don't" as single words
-  processedText = processedText.replace(
-    /\b([A-Za-z][A-Za-z'-]*)\b/g,
-    (word) => {
-      // 5.1 Check for all-uppercase acronyms (allow hyphens in acronyms if needed)
-      const isAcronym = /^[A-Z](?:[A-Z'-]*[A-Z])?$/.test(word);
-      // 5.2 Check for known internet expressions (lowercased set)
-      const isInternet = INTERNET_EXPRESSIONS.has(word.toLowerCase());
-      // 5.3 Preserve standalone single letters (e.g., "I", "B", "F" except "A" eg. "A book")
-      const isSingleLetter = word.length === 1 && word !== "A";
-      // If it's an acronym, internet expression, or single letter, leave it;
-      // otherwise lowercase the whole hyphenated or single word.
-      return isAcronym || isInternet || isSingleLetter
-        ? word
-        : word.toLowerCase();
-    },
-  );
+  processedText = processedText.replace(/\b([A-Za-z][A-Za-z'-]*)\b/g, (word) => {
+    // 5.1 Check for all-uppercase acronyms (allow hyphens in acronyms if needed)
+    const isAcronym = /^[A-Z](?:[A-Z'-]*[A-Z])?$/.test(word);
+    // 5.2 Check for known internet expressions (lowercased set)
+    const isInternet = INTERNET_EXPRESSIONS.has(word.toLowerCase());
+    // 5.3 Preserve standalone single letters (e.g., "I", "B", "F" except "A" eg. "A book")
+    const isSingleLetter = word.length === 1 && word !== "A";
+    // If it's an acronym, internet expression, or single letter, leave it;
+    // otherwise lowercase the whole hyphenated or single word.
+    return isAcronym || isInternet || isSingleLetter ? word : word.toLowerCase();
+  });
 
   // 6. Remove commas and semicolons but keep question marks and exclamation points
   processedText = processedText.replace(/[;,]/g, ""); // Remove periods, commas, semicolons, colons
@@ -2088,10 +1927,7 @@ export function humanizeString(text: string): string {
 
   // Then restore inline code
   for (let i = inlineCode.length - 1; i >= 0; i--) {
-    processedText = processedText.replace(
-      `__INLINE_CODE_${i}__`,
-      inlineCode[i],
-    );
+    processedText = processedText.replace(`__INLINE_CODE_${i}__`, inlineCode[i]);
   }
 
   // Finally restore code blocks
@@ -2231,10 +2067,7 @@ export function validateFutureTime(timestamp: Date): boolean {
  * @param currentTime - Current time (defaults to now)
  * @returns Formatted lateness string like "3 minutes late" or null if not late
  */
-export function calculateLateness(
-  scheduledTime: Date,
-  currentTime: Date = new Date(),
-): string | null {
+export function calculateLateness(scheduledTime: Date, currentTime: Date = new Date()): string | null {
   const diffMilliseconds = currentTime.getTime() - scheduledTime.getTime();
 
   if (diffMilliseconds <= 300000) {

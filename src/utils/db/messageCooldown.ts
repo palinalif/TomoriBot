@@ -1,8 +1,4 @@
-import {
-  PermissionFlagsBits,
-  type Message,
-  type GuildMember,
-} from "discord.js";
+import { PermissionFlagsBits, type Message, type GuildMember } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { CooldownType, type TomoriConfigRow } from "@/types/db/schema";
 import { log } from "@/utils/misc/logger";
@@ -25,16 +21,10 @@ export interface CooldownCheckResult {
  * @param cooldownType - The cooldown type configured
  * @returns True if the user is exempt from the cooldown
  */
-export function isExemptFromCooldown(
-  member: GuildMember | null,
-  cooldownType: CooldownType,
-): boolean {
+export function isExemptFromCooldown(member: GuildMember | null, cooldownType: CooldownType): boolean {
   // Type 0 (OFF) has no cooldown, so exemption is irrelevant
   // Type 4 (STRICT_SERVER_WIDE) has no exemptions - everyone must wait
-  if (
-    cooldownType === CooldownType.OFF ||
-    cooldownType === CooldownType.STRICT_SERVER_WIDE
-  ) {
+  if (cooldownType === CooldownType.OFF || cooldownType === CooldownType.STRICT_SERVER_WIDE) {
     return false;
   }
 
@@ -58,15 +48,11 @@ export async function checkMessageTriggerCooldown(
 ): Promise<CooldownCheckResult> {
   // 1. Check whitelist status FIRST (before checking cooldown type)
   const serverDiscId = message.guildId ?? message.author.id;
-  const memberRoleDiscIds = message.member
-    ? message.member.roles.cache.map((role) => role.id)
-    : undefined;
+  const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
 
   // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
   const isThread =
-    "isThread" in message.channel &&
-    typeof message.channel.isThread === "function" &&
-    message.channel.isThread();
+    "isThread" in message.channel && typeof message.channel.isThread === "function" && message.channel.isThread();
   const parentChannelId = isThread ? message.channel.parent?.id : undefined;
 
   const whitelistStatus = await getCachedWhitelistStatus(
@@ -88,9 +74,7 @@ export async function checkMessageTriggerCooldown(
   // 3. Determine which cooldown settings to use
   // If a channel-specific override exists, use it; otherwise inherit the global settings
   const cooldownType = whitelistStatus.hasChannelCooldownOverride
-    ? (whitelistStatus.channelCooldownType ??
-      config.cooldown_type ??
-      CooldownType.OFF)
+    ? (whitelistStatus.channelCooldownType ?? config.cooldown_type ?? CooldownType.OFF)
     : (config.cooldown_type ?? CooldownType.OFF);
 
   // Diagnostic logging for whitelist-based cooldowns
@@ -129,8 +113,7 @@ export async function checkMessageTriggerCooldown(
   );
 
   const member = message.member;
-  const isExempt =
-    !disableExemptions && isExemptFromCooldown(member, cooldownType);
+  const isExempt = !disableExemptions && isExemptFromCooldown(member, cooldownType);
 
   if (isExempt) {
     log.info(
@@ -143,24 +126,15 @@ export async function checkMessageTriggerCooldown(
     };
   }
 
-  if (
-    disableExemptions &&
-    member?.permissions.has(PermissionFlagsBits.ManageGuild)
-  ) {
-    log.warn(
-      `[Cooldown Check] User ${message.author.id} WOULD BE EXEMPT but exemptions are DISABLED for testing`,
-    );
+  if (disableExemptions && member?.permissions.has(PermissionFlagsBits.ManageGuild)) {
+    log.warn(`[Cooldown Check] User ${message.author.id} WOULD BE EXEMPT but exemptions are DISABLED for testing`);
   }
 
-  log.info(
-    `[Cooldown Check] User ${message.author.id} is NOT exempt - proceeding to database check`,
-  );
+  log.info(`[Cooldown Check] User ${message.author.id} is NOT exempt - proceeding to database check`);
 
   // Determine which identifiers to populate based on cooldown type
-  const userDiscIdParam =
-    cooldownType === CooldownType.PER_USER ? message.author.id : null;
-  const channelDiscIdParam =
-    cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
+  const userDiscIdParam = cooldownType === CooldownType.PER_USER ? message.author.id : null;
+  const channelDiscIdParam = cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
 
   try {
     // Check if cooldown exists and is still active
@@ -181,9 +155,7 @@ export async function checkMessageTriggerCooldown(
 		`;
 
     if (!cooldown) {
-      log.info(
-        `[Cooldown Check] No active cooldown found for type ${cooldownType} in server ${serverDiscId}`,
-      );
+      log.info(`[Cooldown Check] No active cooldown found for type ${cooldownType} in server ${serverDiscId}`);
       return {
         isOnCooldown: false,
         remainingSeconds: 0,
@@ -225,21 +197,14 @@ export async function checkMessageTriggerCooldown(
  * @param message - The Discord message that triggered the bot
  * @param config - The Tomori config containing cooldown settings
  */
-export async function setMessageTriggerCooldown(
-  message: Message,
-  config: TomoriConfigRow,
-): Promise<void> {
+export async function setMessageTriggerCooldown(message: Message, config: TomoriConfigRow): Promise<void> {
   // 1. Check whitelist status FIRST to determine which settings to use
   const serverDiscId = message.guildId ?? message.author.id;
-  const memberRoleDiscIds = message.member
-    ? message.member.roles.cache.map((role) => role.id)
-    : undefined;
+  const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
 
   // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
   const isThread =
-    "isThread" in message.channel &&
-    typeof message.channel.isThread === "function" &&
-    message.channel.isThread();
+    "isThread" in message.channel && typeof message.channel.isThread === "function" && message.channel.isThread();
   const parentChannelId = isThread ? message.channel.parent?.id : undefined;
 
   const whitelistStatus = await getCachedWhitelistStatus(
@@ -252,9 +217,7 @@ export async function setMessageTriggerCooldown(
   // 2. Determine which cooldown settings to use
   // If a channel-specific override exists, use it; otherwise inherit the global settings
   const cooldownType = whitelistStatus.hasChannelCooldownOverride
-    ? (whitelistStatus.channelCooldownType ??
-      config.cooldown_type ??
-      CooldownType.OFF)
+    ? (whitelistStatus.channelCooldownType ?? config.cooldown_type ?? CooldownType.OFF)
     : (config.cooldown_type ?? CooldownType.OFF);
 
   const cooldownLengthSeconds = whitelistStatus.hasChannelCooldownOverride
@@ -284,10 +247,8 @@ export async function setMessageTriggerCooldown(
   const expiryTime = Date.now() + cooldownDurationMs;
 
   // Determine which identifiers to populate based on cooldown type
-  const userDiscIdParam =
-    cooldownType === CooldownType.PER_USER ? message.author.id : null;
-  const channelDiscIdParam =
-    cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
+  const userDiscIdParam = cooldownType === CooldownType.PER_USER ? message.author.id : null;
+  const channelDiscIdParam = cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
 
   try {
     await sql`
@@ -323,13 +284,9 @@ export async function setMessageTriggerCooldown(
 		`;
 
     if (verification) {
-      log.info(
-        `[Cooldown Set] VERIFIED - Cooldown exists in database with expiry_time: ${verification.expiry_time}`,
-      );
+      log.info(`[Cooldown Set] VERIFIED - Cooldown exists in database with expiry_time: ${verification.expiry_time}`);
     } else {
-      log.error(
-        `[Cooldown Set] VERIFICATION FAILED - Cooldown not found in database after insert!`,
-      );
+      log.error(`[Cooldown Set] VERIFICATION FAILED - Cooldown not found in database after insert!`);
     }
   } catch (error) {
     // Log but don't throw - cooldown failures shouldn't break message handling

@@ -12,22 +12,13 @@ import { log } from "../misc/logger";
 // to prevent stream timeouts (especially on slower models like Qwen via OpenRouter).
 
 /** Raw byte-size threshold that triggers dimension inspection (default 2 MB) */
-const IMAGE_CONTEXT_MAX_BYTES = Number.parseInt(
-  process.env.IMAGE_CONTEXT_MAX_BYTES ?? "2097152",
-  10,
-);
+const IMAGE_CONTEXT_MAX_BYTES = Number.parseInt(process.env.IMAGE_CONTEXT_MAX_BYTES ?? "2097152", 10);
 
 /** Maximum pixel dimension on the longest side before downscaling (default 2048 px) */
-const IMAGE_CONTEXT_MAX_DIMENSION = Number.parseInt(
-  process.env.IMAGE_CONTEXT_MAX_DIMENSION ?? "2048",
-  10,
-);
+const IMAGE_CONTEXT_MAX_DIMENSION = Number.parseInt(process.env.IMAGE_CONTEXT_MAX_DIMENSION ?? "2048", 10);
 
 /** JPEG quality used when an image is downscaled (default 85) */
-const IMAGE_CONTEXT_JPEG_QUALITY = Number.parseInt(
-  process.env.IMAGE_CONTEXT_JPEG_QUALITY ?? "85",
-  10,
-);
+const IMAGE_CONTEXT_JPEG_QUALITY = Number.parseInt(process.env.IMAGE_CONTEXT_JPEG_QUALITY ?? "85", 10);
 
 /** Result of fetching and optionally optimizing an image for LLM context */
 export interface OptimizedImage {
@@ -54,23 +45,17 @@ export interface OptimizedImage {
  * @returns Optimized base64 image data and final MIME type
  * @throws Error if the fetch itself fails
  */
-export async function fetchAndOptimizeImage(
-  url: string,
-  sourceMimeType?: string,
-): Promise<OptimizedImage> {
+export async function fetchAndOptimizeImage(url: string, sourceMimeType?: string): Promise<OptimizedImage> {
   // 1. Fetch the raw image bytes
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(
-      `Image fetch failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Image fetch failed: ${response.status} ${response.statusText}`);
   }
 
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   const rawSize = buffer.byteLength;
-  const finalMimeType =
-    sourceMimeType || response.headers.get("content-type") || "image/jpeg";
+  const finalMimeType = sourceMimeType || response.headers.get("content-type") || "image/jpeg";
 
   // 2. Fast path — small images pass through unchanged
   if (rawSize <= IMAGE_CONTEXT_MAX_BYTES) {
@@ -130,10 +115,7 @@ export async function fetchAndOptimizeImage(
  * @param sourceMimeType - Original MIME type of the image
  * @returns Optimized base64 image data and final MIME type
  */
-export async function optimizeImageBuffer(
-  buffer: Buffer,
-  sourceMimeType: string,
-): Promise<OptimizedImage> {
+export async function optimizeImageBuffer(buffer: Buffer, sourceMimeType: string): Promise<OptimizedImage> {
   const rawSize = buffer.byteLength;
 
   // 1. Fast path — small images pass through unchanged
@@ -185,19 +167,12 @@ const NAI_REFERENCE_CANVASES = [
   { width: 1536, height: 1024 },
 ] as const;
 
-function selectClosestNaiReferenceCanvas(
-  width: number,
-  height: number,
-): { width: number; height: number } {
+function selectClosestNaiReferenceCanvas(width: number, height: number): { width: number; height: number } {
   const aspectRatio = width / height;
 
   return NAI_REFERENCE_CANVASES.reduce((bestCanvas, candidateCanvas) => {
-    const bestDistance = Math.abs(
-      Math.log(aspectRatio / (bestCanvas.width / bestCanvas.height)),
-    );
-    const candidateDistance = Math.abs(
-      Math.log(aspectRatio / (candidateCanvas.width / candidateCanvas.height)),
-    );
+    const bestDistance = Math.abs(Math.log(aspectRatio / (bestCanvas.width / bestCanvas.height)));
+    const candidateDistance = Math.abs(Math.log(aspectRatio / (candidateCanvas.width / candidateCanvas.height)));
 
     return candidateDistance < bestDistance ? candidateCanvas : bestCanvas;
   });
@@ -223,9 +198,7 @@ export async function centerCropToSquare(buffer: Buffer): Promise<Buffer> {
       throw new Error("Unable to read image dimensions");
     }
 
-    log.info(
-      `Processing image: ${metadata.width}x${metadata.height} (${metadata.format})`,
-    );
+    log.info(`Processing image: ${metadata.width}x${metadata.height} (${metadata.format})`);
 
     // 2. Determine the size of the square (use the smaller dimension)
     const squareSize = Math.min(metadata.width, metadata.height);
@@ -235,9 +208,7 @@ export async function centerCropToSquare(buffer: Buffer): Promise<Buffer> {
     const left = Math.floor((metadata.width - squareSize) / 2);
     const top = Math.floor((metadata.height - squareSize) / 2);
 
-    log.info(
-      `Cropping to ${squareSize}x${squareSize} square (offset: ${left}x${top})`,
-    );
+    log.info(`Cropping to ${squareSize}x${squareSize} square (offset: ${left}x${top})`);
 
     // 4. Extract the square region and convert to PNG
     const croppedBuffer = await sharp(buffer)
@@ -250,16 +221,12 @@ export async function centerCropToSquare(buffer: Buffer): Promise<Buffer> {
       .png() // Convert to PNG format for consistency
       .toBuffer();
 
-    log.info(
-      `Image successfully cropped to square (${croppedBuffer.length} bytes)`,
-    );
+    log.info(`Image successfully cropped to square (${croppedBuffer.length} bytes)`);
 
     return croppedBuffer;
   } catch (error) {
     log.error("Failed to crop image to square:", error);
-    throw new Error(
-      `Image processing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
+    throw new Error(`Image processing failed: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }
 
@@ -270,10 +237,7 @@ export async function centerCropToSquare(buffer: Buffer): Promise<Buffer> {
  * @param targetWidth - Desired width in pixels
  * @returns Promise<Buffer> - Resized PNG buffer
  */
-export async function resizeImage(
-  buffer: Buffer,
-  targetWidth: number,
-): Promise<Buffer> {
+export async function resizeImage(buffer: Buffer, targetWidth: number): Promise<Buffer> {
   try {
     const resizedBuffer = await sharp(buffer)
       .resize({
@@ -287,9 +251,7 @@ export async function resizeImage(
     return resizedBuffer;
   } catch (error) {
     log.error("Failed to resize image:", error);
-    throw new Error(
-      `Image resize failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
+    throw new Error(`Image resize failed: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }
 
@@ -304,19 +266,14 @@ export async function resizeImage(
  * @param buffer - Input image buffer
  * @returns Promise<Buffer> - PNG buffer normalized to a supported NAI canvas
  */
-export async function normalizeNaiReferenceImage(
-  buffer: Buffer,
-): Promise<Buffer> {
+export async function normalizeNaiReferenceImage(buffer: Buffer): Promise<Buffer> {
   try {
     const metadata = await sharp(buffer).metadata();
     if (!metadata.width || !metadata.height) {
       throw new Error("Unable to read image dimensions");
     }
 
-    const canvas = selectClosestNaiReferenceCanvas(
-      metadata.width,
-      metadata.height,
-    );
+    const canvas = selectClosestNaiReferenceCanvas(metadata.width, metadata.height);
 
     const normalizedBuffer = await sharp(buffer)
       .flatten({ background: { r: 0, g: 0, b: 0 } })
@@ -354,9 +311,7 @@ export async function convertToPNG(buffer: Buffer): Promise<Buffer> {
     return pngBuffer;
   } catch (error) {
     log.error("Failed to convert image to PNG:", error);
-    throw new Error(
-      `Image conversion failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
+    throw new Error(`Image conversion failed: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }
 
@@ -366,16 +321,12 @@ export async function convertToPNG(buffer: Buffer): Promise<Buffer> {
  * @param buffer - Input image buffer
  * @returns Promise<sharp.Metadata> - Image metadata
  */
-export async function getImageMetadata(
-  buffer: Buffer,
-): Promise<sharp.Metadata> {
+export async function getImageMetadata(buffer: Buffer): Promise<sharp.Metadata> {
   try {
     const metadata = await sharp(buffer).metadata();
     return metadata;
   } catch (error) {
     log.error("Failed to read image metadata:", error);
-    throw new Error(
-      `Image metadata read failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
+    throw new Error(`Image metadata read failed: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }

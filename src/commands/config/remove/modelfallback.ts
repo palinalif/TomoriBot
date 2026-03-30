@@ -13,14 +13,8 @@ import {
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-} from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { setFallbackLlms } from "@/utils/db/dbWrite";
 import type { UserRow, ErrorContext, LlmRow } from "@/types/db/schema";
 import type { CheckboxGroupOption } from "@/types/discord/modal";
@@ -39,14 +33,10 @@ const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
 /**
  * Configures the 'modelfallback' subcommand for /config remove.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("modelfallback")
-    .setDescription(
-      localizer("en-US", "commands.config.remove.modelfallback.description"),
-    );
+    .setDescription(localizer("en-US", "commands.config.remove.modelfallback.description"));
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
@@ -130,8 +120,7 @@ export async function execute(
             kind: "checkboxGroup",
             customId: FALLBACK_CHECKBOX_ID,
             labelKey: "commands.config.remove.modelfallback.checkbox_label",
-            descriptionKey:
-              "commands.config.remove.modelfallback.checkbox_description",
+            descriptionKey: "commands.config.remove.modelfallback.checkbox_description",
             minValues: 0,
             required: false,
             options: buildFallbackOptions(currentFallbacks),
@@ -155,12 +144,8 @@ export async function execute(
       checkedIndices.add(Number.parseInt(index, 10));
     }
 
-    const remainingFallbacks = currentFallbacks.filter((_, index) =>
-      checkedIndices.has(index),
-    );
-    const removedFallbacks = currentFallbacks.filter(
-      (_, index) => !checkedIndices.has(index),
-    );
+    const remainingFallbacks = currentFallbacks.filter((_, index) => checkedIndices.has(index));
+    const removedFallbacks = currentFallbacks.filter((_, index) => !checkedIndices.has(index));
     if (FALLBACK_DEBUG_ENABLED) {
       log.info(
         `[FallbackDebug][/config remove modelfallback] server_disc_id=${serverDiscId} checked_indices=[${Array.from(checkedIndices).join(", ")}] removed=[${removedFallbacks.map((llm) => llm.llm_codename).join(", ")}]`,
@@ -170,17 +155,14 @@ export async function execute(
     if (removedFallbacks.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "commands.config.remove.modelfallback.no_removals_title",
-        descriptionKey:
-          "commands.config.remove.modelfallback.no_removals_description",
+        descriptionKey: "commands.config.remove.modelfallback.no_removals_description",
         color: ColorCode.INFO,
       });
       return;
     }
 
     // 6. Build the new chain without the unchecked entries, preserving order
-    const remainingIds = remainingFallbacks
-      .map((llm) => llm.llm_id)
-      .filter((id): id is number => id !== undefined);
+    const remainingIds = remainingFallbacks.map((llm) => llm.llm_id).filter((id): id is number => id !== undefined);
 
     // 7. Write the updated chain to the database
     const writeOk = await setFallbackLlms(tomoriState.server_id, remainingIds);
@@ -218,12 +200,9 @@ export async function execute(
     // 9. Reply success
     await replyInfoEmbed(modalInteraction, locale, {
       titleKey: "commands.config.remove.modelfallback.success_title",
-      descriptionKey:
-        "commands.config.remove.modelfallback.success_description",
+      descriptionKey: "commands.config.remove.modelfallback.success_description",
       descriptionVars: {
-        models_removed: formatRemovedNames(
-          removedFallbacks.map((llm) => `\`${llm.llm_codename}\``),
-        ),
+        models_removed: formatRemovedNames(removedFallbacks.map((llm) => `\`${llm.llm_codename}\``)),
         remaining_count: remainingIds.length,
       },
       color: ColorCode.SUCCESS,
@@ -239,11 +218,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "config remove modelfallback" },
     };
-    await log.error(
-      "Error in /config remove modelfallback",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config remove modelfallback", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {
@@ -257,9 +232,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -267,9 +240,7 @@ export async function execute(
   }
 }
 
-function buildFallbackOptions(
-  currentFallbacks: LlmRow[],
-): CheckboxGroupOption[] {
+function buildFallbackOptions(currentFallbacks: LlmRow[]): CheckboxGroupOption[] {
   return currentFallbacks.map((llm, index) => ({
     value: index.toString(),
     label: `${index + 1}. ${llm.llm_codename}`,

@@ -43,9 +43,7 @@ export const HistoryExtractionResultSchema = z.object({
 });
 
 /** Type for the complete extraction batch result */
-export type HistoryExtractionResult = z.infer<
-  typeof HistoryExtractionResultSchema
->;
+export type HistoryExtractionResult = z.infer<typeof HistoryExtractionResultSchema>;
 
 /**
  * Builds the JSON schema object for structured output providers.
@@ -53,10 +51,7 @@ export type HistoryExtractionResult = z.infer<
  *
  * @returns JSON schema describing the extraction result format
  */
-export function buildHistoryExtractionResponseSchema(): Record<
-  string,
-  unknown
-> {
+export function buildHistoryExtractionResponseSchema(): Record<string, unknown> {
   return {
     type: "object" as const,
     properties: {
@@ -75,14 +70,12 @@ export function buildHistoryExtractionResponseSchema(): Record<
             keywords: {
               type: "array" as const,
               items: { type: "string" as const },
-              description:
-                "Keywords for retrieval (names, topics, important terms)",
+              description: "Keywords for retrieval (names, topics, important terms)",
             },
             timestamp: {
               type: "string" as const,
               nullable: true,
-              description:
-                "Absolute timestamp (ISO 8601) if mentioned or inferable, null otherwise",
+              description: "Absolute timestamp (ISO 8601) if mentioned or inferable, null otherwise",
             },
             location: {
               type: "string" as const,
@@ -92,14 +85,12 @@ export function buildHistoryExtractionResponseSchema(): Record<
             persons: {
               type: "array" as const,
               items: { type: "string" as const },
-              description:
-                "People or characters involved, with resolved names (no pronouns)",
+              description: "People or characters involved, with resolved names (no pronouns)",
             },
             entities: {
               type: "array" as const,
               items: { type: "string" as const },
-              description:
-                "Named entities: items, places, events, abilities, etc.",
+              description: "Named entities: items, places, events, abilities, etc.",
             },
             topic: {
               type: "string" as const,
@@ -107,15 +98,7 @@ export function buildHistoryExtractionResponseSchema(): Record<
               description: "High-level topic category for the fact",
             },
           },
-          required: [
-            "lossless_restatement",
-            "keywords",
-            "timestamp",
-            "location",
-            "persons",
-            "entities",
-            "topic",
-          ],
+          required: ["lossless_restatement", "keywords", "timestamp", "location", "persons", "entities", "topic"],
         },
       },
     },

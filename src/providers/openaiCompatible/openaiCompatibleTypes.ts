@@ -45,8 +45,7 @@ export interface OpenAICompatibleAccumulatedToolCall {
   functionArguments: string;
 }
 
-export interface OpenAICompatibleParameterSchema
-  extends Record<string, unknown> {
+export interface OpenAICompatibleParameterSchema extends Record<string, unknown> {
   type: ToolParameterType;
   description?: string;
   enum?: string[];
@@ -55,15 +54,13 @@ export interface OpenAICompatibleParameterSchema
   required?: string[];
 }
 
-export interface OpenAICompatibleObjectSchema
-  extends OpenAICompatibleParameterSchema {
+export interface OpenAICompatibleObjectSchema extends OpenAICompatibleParameterSchema {
   type: "object";
   properties: Record<string, OpenAICompatibleParameterSchema>;
   required: string[];
 }
 
-export interface OpenAICompatibleFunctionDeclaration
-  extends Record<string, unknown> {
+export interface OpenAICompatibleFunctionDeclaration extends Record<string, unknown> {
   name: string;
   description: string;
   parameters: OpenAICompatibleObjectSchema;
@@ -108,12 +105,8 @@ export interface OpenAICompatibleStreamAdapterOptions {
   /** Set to `false` to discard stripped `<think>` content instead of routing it to the thought log. Defaults to `true`. */
   captureThinkBlocksAsThoughts?: boolean;
   resolveApiUrl: (config: OpenAICompatibleStreamConfig) => string;
-  mutateRequestBody?: (
-    args: OpenAICompatibleRequestMutationArgs,
-  ) => Promise<void> | void;
-  mutateHeaders?: (
-    args: OpenAICompatibleHeaderMutationArgs,
-  ) => Promise<void> | void;
+  mutateRequestBody?: (args: OpenAICompatibleRequestMutationArgs) => Promise<void> | void;
+  mutateHeaders?: (args: OpenAICompatibleHeaderMutationArgs) => Promise<void> | void;
   shouldRetryWithoutStop?: (statusCode: number, errorText: string) => boolean;
   /**
    * Return `false` to signal that this endpoint does not accept OpenAI-style

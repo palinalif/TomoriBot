@@ -1,28 +1,13 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 // Import sql
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 // Import types for validation
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 
 // Modal configuration constants
@@ -50,10 +35,7 @@ interface ImageDiffusionModelRow {
  * @param locale - User's preferred locale (e.g., "ja", "en-US")
  * @returns Localized description with flags prepended (e.g., "(FREE+UNCENSORED) Description")
  */
-function getLocalizedDescription(
-  model: ImageDiffusionModelRow,
-  locale: string,
-): string {
+function getLocalizedDescription(model: ImageDiffusionModelRow, locale: string): string {
   // Normalize locale to handle variations (e.g., "ja-JP" -> "ja")
   const normalizedLocale = locale.toLowerCase().split("-")[0];
 
@@ -66,8 +48,7 @@ function getLocalizedDescription(
   }
 
   // Fallback chain: locale-specific -> default -> provider fallback
-  const baseDescription =
-    description || model.model_description || `${model.provider} model`;
+  const baseDescription = description || model.model_description || `${model.provider} model`;
 
   // Build flags array based on model capabilities
   const flags: string[] = [];
@@ -80,14 +61,8 @@ function getLocalizedDescription(
 }
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("image")
-    .setDescription(
-      localizer("en-US", "commands.config.model.image.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("image").setDescription(localizer("en-US", "commands.config.model.image.description"));
 
 /**
  * Changes Tomori's image diffusion model
@@ -113,9 +88,7 @@ export async function execute(
   }
 
   // 2. Load the Tomori state for this server
-  const tomoriState = await getCachedTomoriState(
-    interaction.guild?.id ?? interaction.user.id,
-  );
+  const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
   if (!tomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.tomori_not_setup_title",
@@ -165,9 +138,7 @@ export async function execute(
   }
 
   // Track modal submit interaction and selected model for error handling in catch block
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: ImageDiffusionModelRow | null = null; // For error context and logic
 
   try {
@@ -175,9 +146,7 @@ export async function execute(
     const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
       label: safeSelectOptionText(model.codename), // Use codename as display label
       value: safeSelectOptionText(model.diffusion_model_id.toString()), // Use diffusion_model_id as value
-      description: safeSelectOptionText(
-        getLocalizedDescription(model, userData.language_pref),
-      ), // Use locale-specific description with flags
+      description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)), // Use locale-specific description with flags
     }));
 
     // 6. Show the modal with model selection
@@ -203,9 +172,7 @@ export async function execute(
 
     // 7. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Image model selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Image model selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -217,10 +184,7 @@ export async function execute(
 
     // 8. Find the selected model details by diffusion_model_id
     const selectedModelId = Number.parseInt(selectedModelIdStr, 10);
-    selectedModel =
-      availableModels.find(
-        (model) => model.diffusion_model_id === selectedModelId,
-      ) ?? null;
+    selectedModel = availableModels.find((model) => model.diffusion_model_id === selectedModelId) ?? null;
 
     if (!selectedModel?.diffusion_model_id) {
       const context: ErrorContext = {
@@ -243,22 +207,16 @@ export async function execute(
       );
 
       await modalSubmitInteraction.editReply({
-        content: localizer(
-          locale,
-          "commands.config.model.image.invalid_model_description",
-        ),
+        content: localizer(locale, "commands.config.model.image.invalid_model_description"),
       });
       return;
     }
 
     // 9. Check if this is the same as the current model
-    if (
-      selectedModel.diffusion_model_id === tomoriState.config.diffusion_model_id
-    ) {
+    if (selectedModel.diffusion_model_id === tomoriState.config.diffusion_model_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.image.already_selected_title",
-        descriptionKey:
-          "commands.config.model.image.already_selected_description",
+        descriptionKey: "commands.config.model.image.already_selected_description",
         descriptionVars: {
           model_name: selectedModel.codename,
         },
@@ -289,9 +247,7 @@ export async function execute(
           guildId: interaction.guild?.id ?? interaction.user.id,
           selectedModelCodename: selectedModel.codename,
           targetDiffusionModelId: selectedModel.diffusion_model_id,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -316,8 +272,7 @@ export async function execute(
     // 13. Success message
     // Find previous model name
     const previousModel = availableModels.find(
-      (model) =>
-        model.diffusion_model_id === tomoriState.config.diffusion_model_id,
+      (model) => model.diffusion_model_id === tomoriState.config.diffusion_model_id,
     );
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -325,9 +280,7 @@ export async function execute(
       descriptionKey: "commands.config.model.image.success_description",
       descriptionVars: {
         model_name: selectedModel.codename,
-        previous_model:
-          previousModel?.codename ||
-          localizer(locale, "commands.config.model.image.current_none"),
+        previous_model: previousModel?.codename || localizer(locale, "commands.config.model.image.current_none"),
       },
       color: ColorCode.SUCCESS,
     });
@@ -353,11 +306,7 @@ export async function execute(
         targetDiffusionModelIdAttempted: selectedModel?.diffusion_model_id,
       },
     };
-    await log.error(
-      `Error executing /config model image for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config model image for user ${userData.user_disc_id}`, error as Error, context);
 
     // 14. Inform user of unknown error
     // Use modalSubmitInteraction if available (error after modal), otherwise interaction (error during modal)

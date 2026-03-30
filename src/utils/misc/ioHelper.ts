@@ -8,10 +8,7 @@ import path from "node:path";
  * @param getDirs - Whether to return directories instead of files
  * @returns Array of absolute paths to files or directories
  */
-export default function getAllFiles(
-  directory: string,
-  getDirs = false,
-): string[] {
+export default function getAllFiles(directory: string, getDirs = false): string[] {
   try {
     // Read all items in the directory using Bun's API
     const items = readdirSync(directory, { withFileTypes: true });

@@ -9,17 +9,9 @@ import {
 } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
-import {
-  getCachedAllPersonas,
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { getCachedAllPersonas, getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { updateTomoriConfig } from "@/utils/db/dbWrite";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
@@ -29,35 +21,21 @@ const PROMPT_INPUT_ID = "welcome_additional_prompt";
 const RANDOM_PERSONA_VALUE = "random";
 const MAX_ADDITIONAL_PROMPT_LENGTH = 2000;
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("welcomechannel")
-    .setDescription(
-      localizer("en-US", "commands.server.welcomechannel.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.welcomechannel.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.welcomechannel.channel_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.welcomechannel.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("action")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.welcomechannel.action_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.welcomechannel.action_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -108,14 +86,10 @@ export async function execute(
     if (action === "remove") {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      if (
-        !tomoriState.config.welcome_channel_disc_id &&
-        !tomoriState.config.welcome_prompt
-      ) {
+      if (!tomoriState.config.welcome_channel_disc_id && !tomoriState.config.welcome_prompt) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.server.welcomechannel.not_configured_title",
-          descriptionKey:
-            "commands.server.welcomechannel.not_configured_description",
+          descriptionKey: "commands.server.welcomechannel.not_configured_description",
           color: ColorCode.WARN,
         });
         return;
@@ -158,12 +132,7 @@ export async function execute(
 
     const personaOptions: SelectOption[] = [
       {
-        label: safeSelectOptionText(
-          localizer(
-            locale,
-            "commands.server.welcomechannel.persona_random_label",
-          ),
-        ),
+        label: safeSelectOptionText(localizer(locale, "commands.server.welcomechannel.persona_random_label")),
         value: RANDOM_PERSONA_VALUE,
       },
       ...allPersonas
@@ -172,14 +141,8 @@ export async function execute(
           label: safeSelectOptionText(persona.tomori_nickname),
           value: persona.tomori_id?.toString() ?? "",
           description: persona.is_alter
-            ? localizer(
-                locale,
-                "commands.server.welcomechannel.alter_persona_description",
-              )
-            : localizer(
-                locale,
-                "commands.server.welcomechannel.main_persona_description",
-              ),
+            ? localizer(locale, "commands.server.welcomechannel.alter_persona_description")
+            : localizer(locale, "commands.server.welcomechannel.main_persona_description"),
         }))
         .filter((option) => option.value !== ""),
     ];
@@ -191,10 +154,8 @@ export async function execute(
         {
           customId: PERSONA_SELECT_ID,
           labelKey: "commands.server.welcomechannel.persona_select_label",
-          descriptionKey:
-            "commands.server.welcomechannel.persona_select_description",
-          placeholder:
-            "commands.server.welcomechannel.persona_select_placeholder",
+          descriptionKey: "commands.server.welcomechannel.persona_select_description",
+          placeholder: "commands.server.welcomechannel.persona_select_placeholder",
           required: true,
           options: personaOptions,
         },
@@ -212,16 +173,13 @@ export async function execute(
     });
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Welcome channel modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Welcome channel modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
     modalSubmitInteraction = modalResult.interaction ?? null;
     const selectedPersonaValue = modalResult.values?.[PERSONA_SELECT_ID];
-    const additionalPrompt =
-      modalResult.values?.[PROMPT_INPUT_ID]?.trim() ?? "";
+    const additionalPrompt = modalResult.values?.[PROMPT_INPUT_ID]?.trim() ?? "";
 
     if (!modalSubmitInteraction || !selectedPersonaValue) {
       await replyInfoEmbed(interaction, locale, {
@@ -236,8 +194,7 @@ export async function execute(
     if (!additionalPrompt) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.server.welcomechannel.empty_prompt_title",
-        descriptionKey:
-          "commands.server.welcomechannel.empty_prompt_description",
+        descriptionKey: "commands.server.welcomechannel.empty_prompt_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -245,16 +202,11 @@ export async function execute(
     }
 
     let welcomePersonaId: number | null = null;
-    let personaDisplayName = localizer(
-      locale,
-      "commands.server.welcomechannel.persona_random_label",
-    );
+    let personaDisplayName = localizer(locale, "commands.server.welcomechannel.persona_random_label");
 
     if (selectedPersonaValue !== RANDOM_PERSONA_VALUE) {
       welcomePersonaId = Number.parseInt(selectedPersonaValue, 10);
-      const selectedPersona = allPersonas.find(
-        (persona) => persona.tomori_id === welcomePersonaId,
-      );
+      const selectedPersona = allPersonas.find((persona) => persona.tomori_id === welcomePersonaId);
       if (!selectedPersona || Number.isNaN(welcomePersonaId)) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -307,9 +259,7 @@ export async function execute(
     };
     await log.error("Error in /server welcomechannel command", error, context);
 
-    const errorTarget =
-      modalSubmitInteraction ??
-      (interaction.replied || interaction.deferred ? interaction : null);
+    const errorTarget = modalSubmitInteraction ?? (interaction.replied || interaction.deferred ? interaction : null);
     if (errorTarget) {
       await replyInfoEmbed(errorTarget, locale, {
         titleKey: "general.errors.unknown_error_title",

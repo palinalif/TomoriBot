@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import type { ErrorContext } from "@/types/db/schema";
@@ -15,12 +11,8 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
  * Configure the /help memory subcommand
  * Explains the teach/forget memory system
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("memory")
-    .setDescription(localizer("en-US", "commands.help.memory.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("memory").setDescription(localizer("en-US", "commands.help.memory.description"));
 
 /**
  * Execute the /help memory command
@@ -39,40 +31,15 @@ export async function execute(
   try {
     // Get command mentions for cross-references
     const teachMention = commandRegistry.getCommandMention("teach");
-    const teachMemoryPersonalMention = commandRegistry.getCommandMention(
-      "teach",
-      "memory",
-      "personal",
-    );
-    const teachMemoryServerMention = commandRegistry.getCommandMention(
-      "teach",
-      "memory",
-      "server",
-    );
+    const teachMemoryPersonalMention = commandRegistry.getCommandMention("teach", "memory", "personal");
+    const teachMemoryServerMention = commandRegistry.getCommandMention("teach", "memory", "server");
     const forgetMention = commandRegistry.getCommandMention("forget");
-    const forgetMemoryPersonalMention = commandRegistry.getCommandMention(
-      "forget",
-      "memory",
-      "personal",
-    );
-    const forgetMemoryServerMention = commandRegistry.getCommandMention(
-      "forget",
-      "memory",
-      "server",
-    );
-    const dataExportMention = commandRegistry.getCommandMention(
-      "data",
-      "export",
-    );
+    const forgetMemoryPersonalMention = commandRegistry.getCommandMention("forget", "memory", "personal");
+    const forgetMemoryServerMention = commandRegistry.getCommandMention("forget", "memory", "server");
+    const dataExportMention = commandRegistry.getCommandMention("data", "export");
     const statusMention = commandRegistry.getCommandMention("tool", "status");
-    const helpCustomizationMention = commandRegistry.getCommandMention(
-      "help",
-      "customization",
-    );
-    const personalStmMention = commandRegistry.getCommandMention(
-      "personal",
-      "stm",
-    );
+    const helpCustomizationMention = commandRegistry.getCommandMention("help", "customization");
+    const personalStmMention = commandRegistry.getCommandMention("personal", "stm");
 
     // Use replySummaryEmbed to show structured memory guide
     await replySummaryEmbed(
@@ -88,36 +55,25 @@ export async function execute(
         fields: [
           {
             nameKey: "commands.help.memory.teaching_title",
-            value: localizer(
-              locale,
-              "commands.help.memory.teaching_description",
-              {
-                teach: teachMention,
-                teachMemoryPersonal: teachMemoryPersonalMention,
-                teachMemoryServer: teachMemoryServerMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.memory.teaching_description", {
+              teach: teachMention,
+              teachMemoryPersonal: teachMemoryPersonalMention,
+              teachMemoryServer: teachMemoryServerMention,
+            }),
             inline: false,
           },
           {
             nameKey: "commands.help.memory.forgetting_title",
-            value: localizer(
-              locale,
-              "commands.help.memory.forgetting_description",
-              {
-                forget: forgetMention,
-                forgetMemoryPersonal: forgetMemoryPersonalMention,
-                forgetMemoryServer: forgetMemoryServerMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.memory.forgetting_description", {
+              forget: forgetMention,
+              forgetMemoryPersonal: forgetMemoryPersonalMention,
+              forgetMemoryServer: forgetMemoryServerMention,
+            }),
             inline: false,
           },
           {
             nameKey: "commands.help.memory.how_it_works_title",
-            value: localizer(
-              locale,
-              "commands.help.memory.how_it_works_description",
-            ),
+            value: localizer(locale, "commands.help.memory.how_it_works_description"),
             inline: false,
           },
           {
@@ -130,22 +86,15 @@ export async function execute(
           },
           {
             nameKey: "commands.help.memory.documents_title",
-            value: localizer(
-              locale,
-              "commands.help.memory.documents_description",
-            ),
+            value: localizer(locale, "commands.help.memory.documents_description"),
             inline: false,
           },
           {
             nameKey: "commands.help.memory.shortterm_title",
-            value: localizer(
-              locale,
-              "commands.help.memory.shortterm_description",
-              {
-                personalStm: personalStmMention,
-                personalStmClear: personalStmMention,
-              },
-            ),
+            value: localizer(locale, "commands.help.memory.shortterm_description", {
+              personalStm: personalStmMention,
+              personalStmClear: personalStmMention,
+            }),
             inline: false,
           },
         ],
@@ -163,17 +112,10 @@ export async function execute(
         guildDiscordId: interaction.guild?.id,
       },
     };
-    await log.error(
-      "Error executing /help memory command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /help memory command", error as Error, context);
 
     // Inform user of error (ephemeral)
-    const errorMessage = localizer(
-      locale,
-      "general.errors.unknown_error_description",
-    );
+    const errorMessage = localizer(locale, "general.errors.unknown_error_description");
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({
@@ -188,11 +130,7 @@ export async function execute(
       }
     } catch (replyError) {
       // Log if even the error reply fails
-      log.error(
-        "Failed to send error reply for /help memory",
-        replyError,
-        context,
-      );
+      log.error("Failed to send error reply for /help memory", replyError, context);
     }
   }
 }

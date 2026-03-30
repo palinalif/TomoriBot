@@ -4,19 +4,11 @@
  */
 
 import { log } from "../../utils/misc/logger";
-import {
-  BaseTool,
-  type ToolContext,
-  type ToolResult,
-  type ToolParameterSchema,
-} from "../../types/tool/interfaces";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 import { isBridgeUserId } from "../../utils/bridge";
-import {
-  getDisplayNameForMatrixId,
-  resolveBridgeUserId,
-} from "../../utils/matrix";
+import { getDisplayNameForMatrixId, resolveBridgeUserId } from "../../utils/matrix";
 
 /**
  * Tool for remembering and learning new information during conversations
@@ -81,10 +73,7 @@ export class MemoryTool extends BaseTool {
    * @param context - Tool execution context
    * @returns Promise resolving to tool result
    */
-  async execute(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // Real implementation extracted from tomoriChat.ts:1068-1340
 
     // Validate parameters
@@ -115,9 +104,7 @@ export class MemoryTool extends BaseTool {
     // Extract arguments (from tomoriChat.ts:1070-1076)
     let memoryContentArg = args.memory_content as string;
     let memoryScopeArg = args.memory_scope as "server_wide" | "target_user";
-    let targetUserDiscordIdArg = args.target_user_discord_id as
-      | string
-      | undefined;
+    let targetUserDiscordIdArg = args.target_user_discord_id as string | undefined;
     let targetUserNicknameArg = args.target_user_nickname as string | undefined;
 
     // Bridge ID recovery: resolveBridgeUserId handles dropped "@" prefix and display
@@ -128,26 +115,14 @@ export class MemoryTool extends BaseTool {
 
     // Bridge users have no Discord user row — force server-wide memory scope to avoid crashes.
     // Bridge user IDs (e.g., Matrix @localpart:homeserver) cannot be used for BigInt fuzzy-match.
-    if (
-      memoryScopeArg === "target_user" &&
-      targetUserDiscordIdArg &&
-      isBridgeUserId(targetUserDiscordIdArg)
-    ) {
+    if (memoryScopeArg === "target_user" && targetUserDiscordIdArg && isBridgeUserId(targetUserDiscordIdArg)) {
       const displayNameFromArg = targetUserNicknameArg?.trim();
-      const displayNameFromMap = getDisplayNameForMatrixId(
-        targetUserDiscordIdArg,
-      );
-      const displayNameFromId = targetUserDiscordIdArg
-        .replace(/^@/, "")
-        .split(":")[0];
-      const resolvedDisplayName =
-        displayNameFromArg || displayNameFromMap || displayNameFromId;
+      const displayNameFromMap = getDisplayNameForMatrixId(targetUserDiscordIdArg);
+      const displayNameFromId = targetUserDiscordIdArg.replace(/^@/, "").split(":")[0];
+      const resolvedDisplayName = displayNameFromArg || displayNameFromMap || displayNameFromId;
 
       if (resolvedDisplayName && memoryContentArg.includes("{user}")) {
-        const substitutedMemoryContent = memoryContentArg.replaceAll(
-          "{user}",
-          resolvedDisplayName,
-        );
+        const substitutedMemoryContent = memoryContentArg.replaceAll("{user}", resolvedDisplayName);
         if (substitutedMemoryContent !== memoryContentArg) {
           memoryContentArg = substitutedMemoryContent;
           log.info(
@@ -168,8 +143,7 @@ export class MemoryTool extends BaseTool {
     if (memoryScopeArg === "target_user" && context.message?.author) {
       const authorId = context.message.author.id;
       const guildMember = context.message.guild?.members.cache.get(authorId);
-      const authorDisplayName =
-        guildMember?.displayName ?? context.message.author.username;
+      const authorDisplayName = guildMember?.displayName ?? context.message.author.username;
 
       // 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
       //    GLM often gets IDs wrong by a few digits due to token-level sampling noise.
@@ -201,13 +175,8 @@ export class MemoryTool extends BaseTool {
       }
 
       // 2. Auto-fill missing target_user_nickname from context
-      if (
-        !targetUserNicknameArg?.trim() &&
-        targetUserDiscordIdArg === authorId
-      ) {
-        log.info(
-          `Memory tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
-        );
+      if (!targetUserNicknameArg?.trim() && targetUserDiscordIdArg === authorId) {
+        log.info(`Memory tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`);
         targetUserNicknameArg = authorDisplayName;
       }
 
@@ -215,12 +184,8 @@ export class MemoryTool extends BaseTool {
       if (!targetUserDiscordIdArg?.trim() && targetUserNicknameArg?.trim()) {
         const providedLower = targetUserNicknameArg.toLowerCase();
         const authorNameLower = authorDisplayName.toLowerCase();
-        const authorUsernameLower =
-          context.message.author.username.toLowerCase();
-        if (
-          providedLower === authorNameLower ||
-          providedLower === authorUsernameLower
-        ) {
+        const authorUsernameLower = context.message.author.username.toLowerCase();
+        if (providedLower === authorNameLower || providedLower === authorUsernameLower) {
           log.info(
             `Memory tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
           );
@@ -230,24 +195,16 @@ export class MemoryTool extends BaseTool {
     }
 
     // Import database functions
-    const { addPersonalMemoryByTomori, addServerMemoryByTomori } = await import(
-      "../../utils/db/dbWrite"
-    );
-    const { isBlacklisted, loadUserRow } = await import(
-      "../../utils/db/dbRead"
-    );
-    const { sendStandardEmbed } = await import(
-      "../../utils/discord/embedHelper"
-    );
+    const { addPersonalMemoryByTomori, addServerMemoryByTomori } = await import("../../utils/db/dbWrite");
+    const { isBlacklisted, loadUserRow } = await import("../../utils/db/dbRead");
+    const { sendStandardEmbed } = await import("../../utils/discord/embedHelper");
     const { ColorCode } = await import("../../utils/misc/logger");
     const { convertMentions } = await import("../../utils/text/contextBuilder");
 
     // Import memory validation functions
-    const {
-      validateMemoryContent,
-      checkPersonalMemoryLimit,
-      checkServerMemoryLimit,
-    } = await import("../../utils/db/memoryLimits");
+    const { validateMemoryContent, checkPersonalMemoryLimit, checkServerMemoryLimit } = await import(
+      "../../utils/db/memoryLimits"
+    );
 
     // Critical state validation (from tomoriChat.ts:1078-1104)
     const tomoriState = context.tomoriState;
@@ -271,9 +228,7 @@ export class MemoryTool extends BaseTool {
         tomoriState && !tomoriState.tomori_id && "tomoriState.tomori_id",
         !resolvedUserId && "resolvedUserId",
       ].filter(Boolean);
-      log.error(
-        `Critical state missing before handling remember_this_fact: [${missing.join(", ")}]`,
-      );
+      log.error(`Critical state missing before handling remember_this_fact: [${missing.join(", ")}]`);
       return {
         success: false,
         error: "Internal bot error: Critical state information is missing",
@@ -285,38 +240,28 @@ export class MemoryTool extends BaseTool {
     }
 
     const personaNickname =
-      context.personaUsername ||
-      tomoriState.tomori_nickname ||
-      context.client.user?.username ||
-      "TomoriBot";
+      context.personaUsername || tomoriState.tomori_nickname || context.client.user?.username || "TomoriBot";
 
     // Validate memory content (from tomoriChat.ts:1105-1113)
     if (typeof memoryContentArg !== "string" || !memoryContentArg.trim()) {
       return {
         success: false,
-        error:
-          "The 'memory_content' argument was missing, empty, or not a string",
+        error: "The 'memory_content' argument was missing, empty, or not a string",
         data: {
           status: "memory_save_failed_invalid_args",
-          reason:
-            "The 'memory_content' argument was missing, empty, or not a string",
+          reason: "The 'memory_content' argument was missing, empty, or not a string",
         },
       };
     }
 
     // Validate memory scope (from tomoriChat.ts:1114-1122)
-    if (
-      typeof memoryScopeArg !== "string" ||
-      !["server_wide", "target_user"].includes(memoryScopeArg)
-    ) {
+    if (typeof memoryScopeArg !== "string" || !["server_wide", "target_user"].includes(memoryScopeArg)) {
       return {
         success: false,
-        error:
-          "The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'target_user'",
+        error: "The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'target_user'",
         data: {
           status: "memory_save_failed_invalid_args",
-          reason:
-            "The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'target_user'",
+          reason: "The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'target_user'",
         },
       };
     }
@@ -351,9 +296,7 @@ export class MemoryTool extends BaseTool {
       targetUserDiscordIdArg &&
       targetUserDiscordIdArg === context.client.user?.id
     ) {
-      log.info(
-        "Memory tool: Bot tried to save a personal memory about itself — falling back to server_wide scope",
-      );
+      log.info("Memory tool: Bot tried to save a personal memory about itself — falling back to server_wide scope");
       effectiveScope = "server_wide";
     }
 
@@ -388,20 +331,13 @@ export class MemoryTool extends BaseTool {
         );
 
         if (dbResult) {
-          log.success(
-            `Tomori self-taught a server-wide memory (ID: ${dbResult.server_memory_id}): "${memoryContent}"`,
-          );
+          log.success(`Tomori self-taught a server-wide memory (ID: ${dbResult.server_memory_id}): "${memoryContent}"`);
 
           // Process memory content for display (convert {user} and {bot} tokens to actual names)
           // Security: Ensure we have a valid server ID to prevent user data mixing
-          const serverId =
-            "guild" in context.channel
-              ? context.channel.guild.id
-              : context.userId;
+          const serverId = "guild" in context.channel ? context.channel.guild.id : context.userId;
           if (!serverId) {
-            throw new Error(
-              "Critical security error: No valid server or user ID available for memory processing",
-            );
+            throw new Error("Critical security error: No valid server or user ID available for memory processing");
           }
           const processedMemoryContent = await convertMentions(
             memoryContent,
@@ -422,8 +358,7 @@ export class MemoryTool extends BaseTool {
               titleVars: {
                 persona_nickname: personaNickname,
               },
-              descriptionKey:
-                "genai.self_teach.server_memory_learned_description",
+              descriptionKey: "genai.self_teach.server_memory_learned_description",
               descriptionVars: {
                 memory_content:
                   processedMemoryContent.length > 200
@@ -454,9 +389,7 @@ export class MemoryTool extends BaseTool {
           };
         }
 
-        log.error(
-          "Failed to save server-wide memory via self-teach (DB error)",
-        );
+        log.error("Failed to save server-wide memory via self-teach (DB error)");
         return {
           success: false,
           error: "Database operation failed to save server-wide memory",
@@ -467,10 +400,7 @@ export class MemoryTool extends BaseTool {
           },
         };
       } catch (error) {
-        log.error(
-          "Database error during server-wide memory save",
-          error as Error,
-        );
+        log.error("Database error during server-wide memory save", error as Error);
         return {
           success: false,
           error: "Database error occurred while saving memory",
@@ -486,10 +416,7 @@ export class MemoryTool extends BaseTool {
       // Note: bot self-target check is handled above via auto-fallback to server_wide scope.
 
       // Validate required arguments for target_user scope
-      if (
-        typeof targetUserDiscordIdArg !== "string" ||
-        !targetUserDiscordIdArg.trim()
-      ) {
+      if (typeof targetUserDiscordIdArg !== "string" || !targetUserDiscordIdArg.trim()) {
         return {
           success: false,
           error:
@@ -503,10 +430,7 @@ export class MemoryTool extends BaseTool {
         };
       }
 
-      if (
-        typeof targetUserNicknameArg !== "string" ||
-        !targetUserNicknameArg.trim()
-      ) {
+      if (typeof targetUserNicknameArg !== "string" || !targetUserNicknameArg.trim()) {
         return {
           success: false,
           error:
@@ -525,9 +449,7 @@ export class MemoryTool extends BaseTool {
         const targetUserRow = await loadUserRow(targetUserDiscordIdArg);
 
         if (!targetUserRow || !targetUserRow.user_id) {
-          log.warn(
-            `Self-teach: Target user with Discord ID ${targetUserDiscordIdArg} not found`,
-          );
+          log.warn(`Self-teach: Target user with Discord ID ${targetUserDiscordIdArg} not found`);
           return {
             success: false,
             error: `The user with Discord ID '${targetUserDiscordIdArg}' was not found in Tomori's records`,
@@ -542,9 +464,7 @@ export class MemoryTool extends BaseTool {
 
         // Verify nickname as "two-factor" check (from tomoriChat.ts:1227-1261)
         const actualNicknameInDB = targetUserRow.user_nickname;
-        const guildMember = context.message?.guild?.members.cache.get(
-          targetUserDiscordIdArg,
-        );
+        const guildMember = context.message?.guild?.members.cache.get(targetUserDiscordIdArg);
         const guildDisplayName = guildMember?.displayName?.toLowerCase();
         const discordUsername = guildMember?.user?.username?.toLowerCase();
 
@@ -586,10 +506,7 @@ export class MemoryTool extends BaseTool {
         const userPrivacyLevel = await getPrivacyLevel(targetUserDiscordIdArg);
 
         // Block self-teaching for PARTIAL and FULL privacy levels
-        if (
-          userPrivacyLevel === PrivacyLevel.PARTIAL ||
-          userPrivacyLevel === PrivacyLevel.FULL
-        ) {
+        if (userPrivacyLevel === PrivacyLevel.PARTIAL || userPrivacyLevel === PrivacyLevel.FULL) {
           log.info(
             `Self-teach blocked: User ${targetUserDiscordIdArg} (${targetUserNicknameArg}) has privacy level ${userPrivacyLevel}`,
           );
@@ -641,14 +558,9 @@ export class MemoryTool extends BaseTool {
 
           // Process memory content for display (convert {user} and {bot} tokens to actual names)
           // Security: Ensure we have a valid server ID to prevent user data mixing
-          const serverId =
-            "guild" in context.channel
-              ? context.channel.guild.id
-              : context.userId;
+          const serverId = "guild" in context.channel ? context.channel.guild.id : context.userId;
           if (!serverId) {
-            throw new Error(
-              "Critical security error: No valid server or user ID available for memory processing",
-            );
+            throw new Error("Critical security error: No valid server or user ID available for memory processing");
           }
           const processedMemoryContent = await convertMentions(
             memoryContent,
@@ -660,32 +572,21 @@ export class MemoryTool extends BaseTool {
           );
 
           // Determine footer key based on personalization settings
-          const personalizationEnabled =
-            tomoriState?.config.personal_memories_enabled ?? true;
+          const personalizationEnabled = tomoriState?.config.personal_memories_enabled ?? true;
           // Security: Ensure we have a valid server ID to prevent user data mixing
-          const serverDiscId =
-            "guild" in context.channel
-              ? context.channel.guild.id
-              : context.userId;
+          const serverDiscId = "guild" in context.channel ? context.channel.guild.id : context.userId;
           if (!serverDiscId) {
-            throw new Error(
-              "Critical security error: No valid server or user ID available for blacklist checking",
-            );
+            throw new Error("Critical security error: No valid server or user ID available for blacklist checking");
           }
-          const targetUserIsBlacklisted =
-            (await isBlacklisted(serverDiscId, targetUserDiscordIdArg)) ??
-            false;
+          const targetUserIsBlacklisted = (await isBlacklisted(serverDiscId, targetUserDiscordIdArg)) ?? false;
 
           let personalMemoryFooterKey: string;
           if (!personalizationEnabled) {
-            personalMemoryFooterKey =
-              "genai.self_teach.personal_memory_footer_personalization_disabled";
+            personalMemoryFooterKey = "genai.self_teach.personal_memory_footer_personalization_disabled";
           } else if (targetUserIsBlacklisted) {
-            personalMemoryFooterKey =
-              "genai.self_teach.personal_memory_footer_user_blacklisted";
+            personalMemoryFooterKey = "genai.self_teach.personal_memory_footer_user_blacklisted";
           } else {
-            personalMemoryFooterKey =
-              "genai.self_teach.personal_memory_footer_manage";
+            personalMemoryFooterKey = "genai.self_teach.personal_memory_footer_manage";
           }
 
           // Invalidate user cache so next message includes new memory
@@ -704,8 +605,7 @@ export class MemoryTool extends BaseTool {
                   user_nickname: targetUserNicknameArg,
                   persona_nickname: personaNickname,
                 },
-                descriptionKey:
-                  "genai.self_teach.personal_memory_learned_description",
+                descriptionKey: "genai.self_teach.personal_memory_learned_description",
                 descriptionVars: {
                   user_nickname: targetUserNicknameArg,
                   memory_content:
@@ -722,10 +622,7 @@ export class MemoryTool extends BaseTool {
               },
             );
           } catch (embedError) {
-            log.warn(
-              "Failed to send personal memory notification embed (non-fatal)",
-              embedError as Error,
-            );
+            log.warn("Failed to send personal memory notification embed (non-fatal)", embedError as Error);
           }
 
           return {
@@ -747,13 +644,11 @@ export class MemoryTool extends BaseTool {
         );
         return {
           success: false,
-          error:
-            "Database operation failed to save personal memory for the target user",
+          error: "Database operation failed to save personal memory for the target user",
           data: {
             status: "memory_save_failed_db_error",
             scope: "target_user",
-            reason:
-              "Database operation failed to save personal memory for the target user",
+            reason: "Database operation failed to save personal memory for the target user",
           },
         };
       } catch (error) {

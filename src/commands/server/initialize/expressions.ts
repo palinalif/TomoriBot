@@ -8,11 +8,7 @@
  * Requires model with both sees_images=true and supports_structoutput=true
  */
 
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { loadTomoriState } from "@/utils/db/dbRead";
@@ -38,14 +34,10 @@ import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 /**
  * Configure the subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("expressions")
-    .setDescription(
-      localizer("en-US", "commands.server.initialize.expressions.description"),
-    );
+    .setDescription(localizer("en-US", "commands.server.initialize.expressions.description"));
 
 /**
  * Database row type for uninitialized emojis
@@ -120,13 +112,9 @@ Guidelines:
  * @param items - Array of items to analyze (with name and type)
  * @returns User prompt text
  */
-function buildUserPrompt(
-  items: Array<{ name: string; type: "emoji" | "sticker" }>,
-): string {
+function buildUserPrompt(items: Array<{ name: string; type: "emoji" | "sticker" }>): string {
   // 1. Build numbered list of items
-  const itemList = items
-    .map((item, idx) => `${idx + 1}. ${item.name} (${item.type})`)
-    .join("\n");
+  const itemList = items.map((item, idx) => `${idx + 1}. ${item.name} (${item.type})`).join("\n");
 
   // 2. Construct prompt
   return `Analyze the following ${items.length} Discord expressions and classify each one:
@@ -256,46 +244,30 @@ export async function execute(
     // - Bot was just added to server (empty DB)
     // - Bot was kicked and re-added with new emojis/stickers
     // - Existing servers before expression refresh feature was implemented
-    log.info(
-      `[Initialize Expressions] Force syncing emojis/stickers for guild ${interaction.guild.name}`,
-    );
+    log.info(`[Initialize Expressions] Force syncing emojis/stickers for guild ${interaction.guild.name}`);
 
     await lazySyncGuildEmojis(interaction.guild, tomoriState.server_id, true);
     await lazySyncGuildStickers(interaction.guild, tomoriState.server_id, true);
 
-    log.info(
-      `[Initialize Expressions] Sync complete for guild ${interaction.guild.name}`,
-    );
+    log.info(`[Initialize Expressions] Sync complete for guild ${interaction.guild.name}`);
 
     // 5. Validate model capabilities
     // Model must support BOTH image vision AND structured output
     const llm = tomoriState.llm;
-    const effectiveModelName = getEffectiveLlmModelName(
-      llm,
-      tomoriState.config.custom_model_name,
-    );
+    const effectiveModelName = getEffectiveLlmModelName(llm, tomoriState.config.custom_model_name);
 
     if (!llm.sees_images || !llm.supports_structoutput) {
       // Determine which capability is missing
-      const missingCapability = !llm.sees_images
-        ? "IMAGE VISION"
-        : "STRUCTURED OUTPUT";
+      const missingCapability = !llm.sees_images ? "IMAGE VISION" : "STRUCTURED OUTPUT";
 
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.model_incompatible_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.model_incompatible_description",
-              {
-                model_name: effectiveModelName,
-                missing_capability: missingCapability,
-              },
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.model_incompatible_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.model_incompatible_description", {
+              model_name: effectiveModelName,
+              missing_capability: missingCapability,
+            }),
             color: hexToNumber(ColorCode.ERROR),
           },
         ],
@@ -303,20 +275,12 @@ export async function execute(
       return;
     }
 
-    if (
-      !providerSupportsFeature(llm.llm_provider, "expressionInitialization")
-    ) {
+    if (!providerSupportsFeature(llm.llm_provider, "expressionInitialization")) {
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "general.errors.provider_not_supported_title",
-            ),
-            description: localizer(
-              locale,
-              "general.errors.provider_not_supported_description",
-            ),
+            title: localizer(locale, "general.errors.provider_not_supported_title"),
+            description: localizer(locale, "general.errors.provider_not_supported_description"),
             color: hexToNumber(ColorCode.ERROR),
           },
         ],
@@ -351,21 +315,14 @@ export async function execute(
 		`;
 
     // 8. Check if there's anything to initialize
-    const totalUninitialized =
-      uninitializedEmojis.length + uninitializedStickers.length;
+    const totalUninitialized = uninitializedEmojis.length + uninitializedStickers.length;
 
     if (totalUninitialized === 0) {
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.already_initialized_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.already_initialized_description",
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.already_initialized_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.already_initialized_description"),
             color: hexToNumber(ColorCode.INFO),
           },
         ],
@@ -399,11 +356,8 @@ export async function execute(
     // Different providers have different token limits and cost constraints
     // User should re-run the command to process remaining expressions
     const provider = tomoriState.llm.llm_provider.toLowerCase();
-    const structuredOutputCapability =
-      await resolveStructuredOutputCapability(provider);
-    const expressionBatchSize =
-      structuredOutputCapability?.getExpressionInitializationBatchSize?.() ??
-      null;
+    const structuredOutputCapability = await resolveStructuredOutputCapability(provider);
+    const expressionBatchSize = structuredOutputCapability?.getExpressionInitializationBatchSize?.() ?? null;
     let isBatchLimited = false;
     let batchSize = images.length;
 
@@ -422,21 +376,13 @@ export async function execute(
       embeds: [
         {
           description: isBatchLimited
-            ? localizer(
-                locale,
-                "commands.server.initialize.expressions.progress_analyzing_batch",
-                {
-                  batch_size: batchSize,
-                  total_uninitialized: totalUninitialized,
-                },
-              )
-            : localizer(
-                locale,
-                "commands.server.initialize.expressions.progress_analyzing",
-                {
-                  total: images.length,
-                },
-              ),
+            ? localizer(locale, "commands.server.initialize.expressions.progress_analyzing_batch", {
+                batch_size: batchSize,
+                total_uninitialized: totalUninitialized,
+              })
+            : localizer(locale, "commands.server.initialize.expressions.progress_analyzing", {
+                total: images.length,
+              }),
           color: hexToNumber(ColorCode.INFO),
         },
       ],
@@ -447,14 +393,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.config.model.text.no_api_key_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.config.model.text.no_api_key_description",
-            ),
+            title: localizer(locale, "commands.config.model.text.no_api_key_title"),
+            description: localizer(locale, "commands.config.model.text.no_api_key_description"),
             color: hexToNumber(ColorCode.ERROR),
           },
         ],
@@ -463,10 +403,7 @@ export async function execute(
     }
 
     const keyVersion = tomoriState.config.key_version || 1;
-    const decryptedApiKey = await decryptApiKey(
-      tomoriState.config.api_key,
-      keyVersion,
-    );
+    const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key, keyVersion);
 
     // 13. Build prompts
     const systemPrompt = buildSystemPrompt();
@@ -501,9 +438,7 @@ export async function execute(
       temperature,
     });
 
-    log.info(
-      `LLM structured output response: ${JSON.stringify(result, null, 2)}`,
-    );
+    log.info(`LLM structured output response: ${JSON.stringify(result, null, 2)}`);
 
     // 15. Check if LLM call was successful
     if (!result.success) {
@@ -518,14 +453,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.llm_error_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.llm_error_description",
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.llm_error_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.llm_error_description"),
             color: hexToNumber(ColorCode.ERROR),
           },
         ],
@@ -537,29 +466,19 @@ export async function execute(
     const validationResult = ExpressionBatchResultSchema.safeParse(result.data);
 
     if (!validationResult.success) {
-      log.error(
-        "LLM returned invalid structured output",
-        validationResult.error,
-        {
-          errorType: "ValidationError",
-          metadata: {
-            model: llm.llm_codename,
-            rawData: result.data,
-          },
+      log.error("LLM returned invalid structured output", validationResult.error, {
+        errorType: "ValidationError",
+        metadata: {
+          model: llm.llm_codename,
+          rawData: result.data,
         },
-      );
+      });
 
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.validation_error_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.validation_error_description",
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.validation_error_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.validation_error_description"),
             color: hexToNumber(ColorCode.ERROR),
           },
         ],
@@ -581,14 +500,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.no_matches_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.no_matches_description",
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.no_matches_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.no_matches_description"),
             color: hexToNumber(ColorCode.WARN),
           },
         ],
@@ -599,19 +512,12 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.partial_success_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.partial_success_description",
-              {
-                successful: totalProcessed,
-                total: totalUninitialized,
-                failed,
-              },
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.partial_success_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.partial_success_description", {
+              successful: totalProcessed,
+              total: totalUninitialized,
+              failed,
+            }),
             color: hexToNumber(ColorCode.WARN),
           },
         ],
@@ -621,19 +527,12 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(
-              locale,
-              "commands.server.initialize.expressions.success_title",
-            ),
-            description: localizer(
-              locale,
-              "commands.server.initialize.expressions.success_description",
-              {
-                emoji_count: emojiCount,
-                sticker_count: stickerCount,
-                total: totalProcessed,
-              },
-            ),
+            title: localizer(locale, "commands.server.initialize.expressions.success_title"),
+            description: localizer(locale, "commands.server.initialize.expressions.success_description", {
+              emoji_count: emojiCount,
+              sticker_count: stickerCount,
+              total: totalProcessed,
+            }),
             color: hexToNumber(ColorCode.SUCCESS),
           },
         ],
@@ -652,21 +551,14 @@ export async function execute(
       },
     };
 
-    await log.error(
-      "Error executing /server initialize expressions command",
-      error as Error,
-      context,
-    );
+    await log.error("Error executing /server initialize expressions command", error as Error, context);
 
     // 19. Show error message to user
     await interaction.editReply({
       embeds: [
         {
           title: localizer(locale, "general.errors.unknown_error_title"),
-          description: localizer(
-            locale,
-            "general.errors.unknown_error_description",
-          ),
+          description: localizer(locale, "general.errors.unknown_error_description"),
           color: hexToNumber(ColorCode.ERROR),
         },
       ],

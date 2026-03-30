@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
 
 /**
@@ -23,14 +16,8 @@ import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("remove")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.brave.remove.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.brave.remove.description"));
 
 /**
  * Removes the Brave Search API key from the server's MCP configuration
@@ -63,9 +50,7 @@ export async function execute(
 
   try {
     // 3. Load the Tomori state for this server
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -88,10 +73,7 @@ export async function execute(
     }
 
     // 5. Delete the API key from the optional API keys table
-    const isDeleted = await deleteOptApiKey(
-      tomoriState.server_id,
-      "brave-search",
-    );
+    const isDeleted = await deleteOptApiKey(tomoriState.server_id, "brave-search");
 
     if (!isDeleted) {
       const context: ErrorContext = {

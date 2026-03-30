@@ -9,17 +9,10 @@ import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "@/utils/cache/userCache";
 import { sql } from "@/utils/db/client";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
-import {
-  replyInfoEmbed,
-  replyPaginatedPersonaChoicesV2,
-} from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
 import { convertToPNG } from "@/utils/image/imageProcessor";
 import { ColorCode, log } from "@/utils/misc/logger";
-import {
-  deleteCharRef,
-  uploadCharRef,
-  type CharRefEntityType,
-} from "@/utils/storage/charrefStorage";
+import { deleteCharRef, uploadCharRef, type CharRefEntityType } from "@/utils/storage/charrefStorage";
 import { localizer } from "@/utils/text/localizer";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 
@@ -38,50 +31,30 @@ type UploadPreparationResult =
       descriptionKey: string;
     };
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("charreference")
-    .setDescription(
-      localizer("en-US", "commands.novelai.charreference.description"),
-    )
+    .setDescription(localizer("en-US", "commands.novelai.charreference.description"))
     .addStringOption((option) =>
       option
         .setName("target")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.novelai.charreference.target_description",
-          ),
-        )
-        .addChoices(
-          { name: "Me", value: TARGET_ME },
-          { name: "Persona", value: TARGET_PERSONA },
-        )
+        .setDescription(localizer("en-US", "commands.novelai.charreference.target_description"))
+        .addChoices({ name: "Me", value: TARGET_ME }, { name: "Persona", value: TARGET_PERSONA })
         .setRequired(true),
     )
     .addAttachmentOption((option) =>
       option
         .setName("image")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.novelai.charreference.image_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.novelai.charreference.image_description"))
         .setRequired(false),
     );
 
-async function prepareAttachmentForStorage(
-  attachment: Attachment,
-): Promise<UploadPreparationResult> {
+async function prepareAttachmentForStorage(attachment: Attachment): Promise<UploadPreparationResult> {
   if (!attachment.contentType?.startsWith("image/")) {
     return {
       success: false,
       titleKey: "commands.novelai.charreference.invalid_image_title",
-      descriptionKey:
-        "commands.novelai.charreference.invalid_image_description",
+      descriptionKey: "commands.novelai.charreference.invalid_image_description",
     };
   }
 
@@ -92,22 +65,17 @@ async function prepareAttachmentForStorage(
       return {
         success: false,
         titleKey: "commands.novelai.charreference.download_failed_title",
-        descriptionKey:
-          "commands.novelai.charreference.download_failed_description",
+        descriptionKey: "commands.novelai.charreference.download_failed_description",
       };
     }
 
     sourceBuffer = Buffer.from(await response.arrayBuffer());
   } catch (error) {
-    log.warn(
-      "Failed to download NovelAI character reference attachment",
-      error,
-    );
+    log.warn("Failed to download NovelAI character reference attachment", error);
     return {
       success: false,
       titleKey: "commands.novelai.charreference.download_failed_title",
-      descriptionKey:
-        "commands.novelai.charreference.download_failed_description",
+      descriptionKey: "commands.novelai.charreference.download_failed_description",
     };
   }
 
@@ -117,15 +85,11 @@ async function prepareAttachmentForStorage(
       buffer: await convertToPNG(sourceBuffer),
     };
   } catch (error) {
-    log.warn(
-      "Failed to convert NovelAI character reference attachment to PNG",
-      error,
-    );
+    log.warn("Failed to convert NovelAI character reference attachment to PNG", error);
     return {
       success: false,
       titleKey: "commands.novelai.charreference.conversion_failed_title",
-      descriptionKey:
-        "commands.novelai.charreference.conversion_failed_description",
+      descriptionKey: "commands.novelai.charreference.conversion_failed_description",
     };
   }
 }
@@ -169,9 +133,7 @@ async function replaceStoredCharReference(options: {
   return true;
 }
 
-async function loadCurrentUserCharRef(
-  userDiscId: string,
-): Promise<string | null> {
+async function loadCurrentUserCharRef(userDiscId: string): Promise<string | null> {
   const rows = await sql<Array<StoredRefRow>>`
 		SELECT nai_char_ref_url
 		FROM users
@@ -182,9 +144,7 @@ async function loadCurrentUserCharRef(
   return rows[0]?.nai_char_ref_url ?? null;
 }
 
-async function loadCurrentPersonaCharRef(
-  personaId: number,
-): Promise<string | null> {
+async function loadCurrentPersonaCharRef(personaId: number): Promise<string | null> {
   const rows = await sql<Array<StoredRefRow>>`
 		SELECT nai_char_ref_url
 		FROM tomoris
@@ -289,9 +249,7 @@ async function handlePersonaTarget(
     pngBuffer = prepared.buffer;
   }
 
-  const previousRef = await loadCurrentPersonaCharRef(
-    selectedPersona.tomori_id,
-  );
+  const previousRef = await loadCurrentPersonaCharRef(selectedPersona.tomori_id);
   const updated = await replaceStoredCharReference({
     entityType: "personas",
     entityId: selectedPersona.tomori_id,
@@ -387,15 +345,11 @@ export async function execute(
       return;
     }
 
-    const personaResult = await replyPaginatedPersonaChoicesV2(
-      interaction,
-      locale,
-      {
-        personas: allPersonas,
-        titleKey: "commands.novelai.charreference.persona_select_title",
-        color: ColorCode.INFO,
-      },
-    );
+    const personaResult = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+      personas: allPersonas,
+      titleKey: "commands.novelai.charreference.persona_select_title",
+      color: ColorCode.INFO,
+    });
 
     if (!personaResult.success || personaResult.selectedIndex === undefined) {
       return;
@@ -411,12 +365,7 @@ export async function execute(
       return;
     }
 
-    await handlePersonaTarget(
-      interaction,
-      locale,
-      selectedPersona,
-      imageAttachment,
-    );
+    await handlePersonaTarget(interaction, locale, selectedPersona, imageAttachment);
   } catch (error) {
     await log.error("Error in /novelai charreference command", error, {
       errorType: "CommandExecutionError",

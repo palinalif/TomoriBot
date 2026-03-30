@@ -7,11 +7,7 @@ import {
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  userSchema,
-} from "../../types/db/schema";
+import { type UserRow, type ErrorContext, userSchema } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 
@@ -20,34 +16,22 @@ const SUPPORTED_LANGUAGES = ["en-US", "ja"] as const;
 const DEFAULT_LANGUAGE = "en-US";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("language")
-    .setDescription(
-      localizer("en-US", "commands.personal.language.description"),
-    )
+    .setDescription(localizer("en-US", "commands.personal.language.description"))
     .addStringOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer("en-US", "commands.personal.language.value_description"),
-        )
+        .setDescription(localizer("en-US", "commands.personal.language.value_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.personal.language.choice_english",
-            ),
+            name: localizer("en-US", "commands.personal.language.choice_english"),
             value: "en-US",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.personal.language.choice_japanese",
-            ),
+            name: localizer("en-US", "commands.personal.language.choice_japanese"),
             value: "ja",
           },
         ),
@@ -131,9 +115,7 @@ export async function execute(
           command: "config language",
           guildId: interaction.guild?.id ?? interaction.user.id,
           languageValue,
-          validationErrors: validatedUser.success
-            ? null
-            : validatedUser.error.flatten(), // Include Zod errors if validation failed
+          validationErrors: validatedUser.success ? null : validatedUser.error.flatten(), // Include Zod errors if validation failed
         },
       };
       await log.error(
@@ -178,11 +160,7 @@ export async function execute(
         valueAttempted: interaction.options.getString("value"), // Log attempted value
       },
     };
-    await log.error(
-      `Error executing /config language for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config language for user ${userData.user_disc_id}`, error as Error, context);
 
     // 10. Inform user of unknown error
     // Check if the interaction has already been replied to or deferred
@@ -214,9 +192,7 @@ function getLanguageLabel(locale: string, value: string): string {
       return localizer(locale, "commands.personal.language.choice_japanese");
     default:
       // Default to English if value is somehow unexpected, though validation should prevent this
-      log.warn(
-        `Unexpected language value encountered in getLanguageLabel: ${value}`,
-      );
+      log.warn(`Unexpected language value encountered in getLanguageLabel: ${value}`);
       return localizer(locale, "commands.personal.language.choice_english");
   }
 }

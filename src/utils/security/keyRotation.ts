@@ -56,10 +56,7 @@ function isKeyInCooldown(
 
   const now = Date.now();
   const errorTime = lastErrorAt.getTime();
-  const cooldownMs =
-    lastErrorType === "rate_limit"
-      ? RATE_LIMIT_COOLDOWN_MS
-      : API_ERROR_COOLDOWN_MS;
+  const cooldownMs = lastErrorType === "rate_limit" ? RATE_LIMIT_COOLDOWN_MS : API_ERROR_COOLDOWN_MS;
 
   return now - errorTime < cooldownMs;
 }
@@ -99,9 +96,7 @@ export async function selectApiKey(
 
     // 2. If less than 2 keys, rotation is not active
     if (!rotationKeys || rotationKeys.length < 2) {
-      log.info(
-        `Key rotation not active for server ${serverId} (${rotationKeys?.length || 0} keys)`,
-      );
+      log.info(`Key rotation not active for server ${serverId} (${rotationKeys?.length || 0} keys)`);
       return null;
     }
 
@@ -111,9 +106,7 @@ export async function selectApiKey(
       const parsed = apiKeyRotationSchema.safeParse(row);
       if (!parsed.success) {
         const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-        log.warn(
-          `Invalid rotation key row for server ${serverId}:\n${errorDetails}`,
-        );
+        log.warn(`Invalid rotation key row for server ${serverId}:\n${errorDetails}`);
         continue;
       }
       const key = parsed.data;
@@ -130,9 +123,7 @@ export async function selectApiKey(
 
       // Skip keys in cooldown
       if (isKeyInCooldown(key.last_error_at, key.last_error_type)) {
-        log.info(
-          `Skipping rotation key ${key.rotation_key_id} (in cooldown: ${key.last_error_type})`,
-        );
+        log.info(`Skipping rotation key ${key.rotation_key_id} (in cooldown: ${key.last_error_type})`);
         continue;
       }
 
@@ -142,31 +133,22 @@ export async function selectApiKey(
       if (key.is_main_key_pointer) {
         // Main key pointer: decrypt from tomori_configs.api_key
         if (!tomoriState.config.api_key) {
-          log.warn(
-            `Main key pointer exists but tomori_configs.api_key is null for server ${serverId}`,
-          );
+          log.warn(`Main key pointer exists but tomori_configs.api_key is null for server ${serverId}`);
           continue;
         }
         const keyVersion = tomoriState.config.key_version || 1;
-        decryptedKey = await decryptApiKey(
-          tomoriState.config.api_key,
-          keyVersion,
-        );
+        decryptedKey = await decryptApiKey(tomoriState.config.api_key, keyVersion);
       } else {
         // Regular rotation key: decrypt from row's api_key
         if (!key.api_key) {
-          log.warn(
-            `Rotation key ${key.rotation_key_id} has null api_key for server ${serverId}`,
-          );
+          log.warn(`Rotation key ${key.rotation_key_id} has null api_key for server ${serverId}`);
           continue;
         }
         decryptedKey = await decryptApiKey(key.api_key, key.key_version);
       }
 
       if (!decryptedKey) {
-        log.warn(
-          `Failed to decrypt rotation key ${key.rotation_key_id} for server ${serverId}`,
-        );
+        log.warn(`Failed to decrypt rotation key ${key.rotation_key_id} for server ${serverId}`);
         continue;
       }
 
@@ -182,9 +164,7 @@ export async function selectApiKey(
     }
 
     // 5. All keys exhausted or in cooldown
-    log.warn(
-      `All rotation keys exhausted or in cooldown for server ${serverId}`,
-    );
+    log.warn(`All rotation keys exhausted or in cooldown for server ${serverId}`);
     return null;
   } catch (error) {
     log.error(`Error selecting API key for server ${serverId}:`, error);
@@ -223,9 +203,7 @@ export async function hasAvailableRotationKey(
       const parsed = apiKeyRotationSchema.safeParse(row);
       if (!parsed.success) {
         const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-        log.warn(
-          `Invalid rotation key row for server ${serverId}:\n${errorDetails}`,
-        );
+        log.warn(`Invalid rotation key row for server ${serverId}:\n${errorDetails}`);
         continue;
       }
       const key = parsed.data;
@@ -255,10 +233,7 @@ export async function hasAvailableRotationKey(
 
     return false;
   } catch (error) {
-    log.error(
-      `Error checking available rotation keys for server ${serverId}:`,
-      error,
-    );
+    log.error(`Error checking available rotation keys for server ${serverId}:`, error);
     return false;
   }
 }
@@ -311,10 +286,7 @@ export async function recordKeyError(
 			WHERE rotation_key_id = ${rotationKeyId}
 		`;
 
-    const cooldownSecs =
-      errorType === "rate_limit"
-        ? RATE_LIMIT_COOLDOWN_MS / 1000
-        : API_ERROR_COOLDOWN_MS / 1000;
+    const cooldownSecs = errorType === "rate_limit" ? RATE_LIMIT_COOLDOWN_MS / 1000 : API_ERROR_COOLDOWN_MS / 1000;
 
     log.warn(
       `Recorded ${errorType} error for rotation key ${rotationKeyId} (cooldown: ${cooldownSecs}s): ${errorMessage.substring(0, 100)}`,
@@ -333,11 +305,7 @@ export async function recordKeyError(
  * @param apiKey - The raw API key to encrypt and store
  * @returns True if the key was added successfully
  */
-export async function addRotationKey(
-  serverId: number,
-  provider: string,
-  apiKey: string,
-): Promise<boolean> {
+export async function addRotationKey(serverId: number, provider: string, apiKey: string): Promise<boolean> {
   const normalizedProvider = provider.toLowerCase();
 
   try {
@@ -350,9 +318,7 @@ export async function addRotationKey(
 
     // 2. If no pointer exists, create one first (enables rotation)
     if (!existingPointer || existingPointer.length === 0) {
-      log.info(
-        `Creating main key pointer for server ${serverId} to enable rotation`,
-      );
+      log.info(`Creating main key pointer for server ${serverId} to enable rotation`);
       await sql`
 				INSERT INTO api_key_rotation (server_id, provider, api_key, is_main_key_pointer, is_enabled)
 				VALUES (${serverId}, ${normalizedProvider}, NULL, true, true)
@@ -367,9 +333,7 @@ export async function addRotationKey(
 			VALUES (${serverId}, ${normalizedProvider}, ${encrypted}, ${version}, false, true)
 		`;
 
-    log.success(
-      `Added rotation key for server ${serverId} (provider: ${normalizedProvider})`,
-    );
+    log.success(`Added rotation key for server ${serverId} (provider: ${normalizedProvider})`);
     return true;
   } catch (error) {
     log.error(`Error adding rotation key for server ${serverId}:`, error);
@@ -392,9 +356,7 @@ export async function purgeRotationKeys(serverId: number): Promise<number> {
 		`;
 
     const deletedCount = result.count || 0;
-    log.success(
-      `Purged ${deletedCount} rotation key(s) for server ${serverId}`,
-    );
+    log.success(`Purged ${deletedCount} rotation key(s) for server ${serverId}`);
     return deletedCount;
   } catch (error) {
     log.error(`Error purging rotation keys for server ${serverId}:`, error);
@@ -410,10 +372,7 @@ export async function purgeRotationKeys(serverId: number): Promise<number> {
  * @param provider - The provider name (lowercase) to purge keys for
  * @returns The number of keys deleted
  */
-export async function purgeRotationKeysForProvider(
-  serverId: number,
-  provider: string,
-): Promise<number> {
+export async function purgeRotationKeysForProvider(serverId: number, provider: string): Promise<number> {
   try {
     const result = await sql`
 			DELETE FROM api_key_rotation
@@ -423,16 +382,11 @@ export async function purgeRotationKeysForProvider(
 
     const deletedCount = result.count || 0;
     if (deletedCount > 0) {
-      log.success(
-        `Purged ${deletedCount} rotation key(s) for server ${serverId}, provider ${provider}`,
-      );
+      log.success(`Purged ${deletedCount} rotation key(s) for server ${serverId}, provider ${provider}`);
     }
     return deletedCount;
   } catch (error) {
-    log.error(
-      `Error purging rotation keys for server ${serverId}, provider ${provider}:`,
-      error,
-    );
+    log.error(`Error purging rotation keys for server ${serverId}, provider ${provider}:`, error);
     return 0;
   }
 }
@@ -463,9 +417,7 @@ export async function getRotationKeyCount(serverId: number): Promise<number> {
  * @param serverId - The internal server ID
  * @returns Array of validated ApiKeyRotationRow objects
  */
-export async function loadRotationKeys(
-  serverId: number,
-): Promise<ApiKeyRotationRow[]> {
+export async function loadRotationKeys(serverId: number): Promise<ApiKeyRotationRow[]> {
   try {
     const rows = await sql`
 			SELECT * FROM api_key_rotation
@@ -485,9 +437,7 @@ export async function loadRotationKeys(
         validatedKeys.push(parsed.data);
       } else {
         const errorDetails = JSON.stringify(parsed.error.flatten(), null, 2);
-        log.warn(
-          `Invalid rotation key row for server ${serverId}:\n${errorDetails}`,
-        );
+        log.warn(`Invalid rotation key row for server ${serverId}:\n${errorDetails}`);
       }
     }
 

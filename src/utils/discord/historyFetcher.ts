@@ -4,12 +4,7 @@
  * stopping at a refresh marker or the configured message limit.
  */
 
-import type {
-  TextBasedChannel,
-  Message,
-  Collection,
-  Snowflake,
-} from "discord.js";
+import type { TextBasedChannel, Message, Collection, Snowflake } from "discord.js";
 import { messageContainsRefreshMarker } from "@/utils/discord/embedDetection";
 import { log } from "@/utils/misc/logger";
 
@@ -69,9 +64,7 @@ export async function fetchHistoryUntilMarker(
     try {
       batch = await channel.messages.fetch(fetchOptions);
     } catch (fetchError) {
-      log.warn(
-        `Failed to fetch messages from channel ${channel.id}: ${fetchError}`,
-      );
+      log.warn(`Failed to fetch messages from channel ${channel.id}: ${fetchError}`);
       break;
     }
 

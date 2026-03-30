@@ -13,11 +13,7 @@
  */
 
 import type { ZodType } from "zod";
-import type {
-  GoogleGenAI,
-  HarmBlockThreshold,
-  HarmCategory,
-} from "@google/genai";
+import type { GoogleGenAI, HarmBlockThreshold, HarmCategory } from "@google/genai";
 import type {
   BaseGuildTextChannel,
   BaseGuildVoiceChannel,
@@ -28,19 +24,10 @@ import type {
   AnyThreadChannel,
 } from "discord.js";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
-import {
-  VertexStreamAdapter,
-  type VertexStreamConfig,
-} from "./vertexStreamAdapter";
-import type {
-  ProviderError,
-  StreamContext,
-} from "../../types/stream/interfaces";
+import { VertexStreamAdapter, type VertexStreamConfig } from "./vertexStreamAdapter";
+import type { ProviderError, StreamContext } from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
-import {
-  type ToolStateForContext,
-  getAvailableToolsWithMCP,
-} from "../../tools/toolRegistry";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "../../tools/toolRegistry";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
@@ -69,20 +56,11 @@ import type {
 } from "../../types/provider/featureInterfaces";
 import { getVertexToolAdapter } from "./vertexToolAdapter";
 import { parseVertexCompositeKey, createVertexClient } from "./vertexClient";
-import {
-  getCachedDefaultLLM,
-  isLLMCacheReady,
-} from "../../utils/cache/llmCache";
-import {
-  loadDefaultModelForProvider,
-  loadAvailableModelsForProvider,
-} from "../../utils/db/dbRead";
+import { getCachedDefaultLLM, isLLMCacheReady } from "../../utils/cache/llmCache";
+import { loadDefaultModelForProvider, loadAvailableModelsForProvider } from "../../utils/db/dbRead";
 import { vertexProviderInfo } from "./providerInfo";
 import { callGoogleStructuredJSON } from "../google/googleStructuredOutput";
-import {
-  generateConversationSummaryGoogle,
-  generateRoleplaySummaryGoogle,
-} from "../google/compactGenerator";
+import { generateConversationSummaryGoogle, generateRoleplaySummaryGoogle } from "../google/compactGenerator";
 import { generatePresetFromPrompt } from "../google/presetGenerator";
 
 /**
@@ -100,9 +78,7 @@ async function getDefaultVertexModel(): Promise<string> {
   if (isLLMCacheReady()) {
     const cachedDefault = getCachedDefaultLLM(providerName);
     if (cachedDefault) {
-      log.info(
-        `Using cached default ${providerName} model: ${cachedDefault.llm_codename}`,
-      );
+      log.info(`Using cached default ${providerName} model: ${cachedDefault.llm_codename}`);
       return cachedDefault.llm_codename;
     }
   }
@@ -111,9 +87,7 @@ async function getDefaultVertexModel(): Promise<string> {
   try {
     const dbDefault = await loadDefaultModelForProvider(providerName);
     if (dbDefault) {
-      log.info(
-        `Using database default ${providerName} model: ${dbDefault.llm_codename}`,
-      );
+      log.info(`Using database default ${providerName} model: ${dbDefault.llm_codename}`);
       return dbDefault.llm_codename;
     }
   } catch (error) {
@@ -127,22 +101,15 @@ async function getDefaultVertexModel(): Promise<string> {
     const availableModels = await loadAvailableModelsForProvider(providerName);
     if (availableModels && availableModels.length > 0) {
       const firstModel = availableModels[0].llm_codename;
-      log.warn(
-        `No default model found, using first available ${providerName} model: ${firstModel}`,
-      );
+      log.warn(`No default model found, using first available ${providerName} model: ${firstModel}`);
       return firstModel;
     }
   } catch (error) {
-    log.error(
-      `Failed to load available models for ${providerName}`,
-      error as Error,
-    );
+    log.error(`Failed to load available models for ${providerName}`, error as Error);
   }
 
   // 4. No models found
-  throw new Error(
-    `No default model found for provider: ${providerName}. Please configure models in the database.`,
-  );
+  throw new Error(`No default model found for provider: ${providerName}. Please configure models in the database.`);
 }
 
 /** Vertex-specific configuration extending the base ProviderConfig */
@@ -229,9 +196,7 @@ export class VertexProvider
       if (!responseText?.toLowerCase().includes("valid")) {
         log.warn("Vertex validation response did not contain 'VALID'");
         const adapter = new VertexStreamAdapter();
-        const error = new Error(
-          "Validation response did not contain expected confirmation",
-        );
+        const error = new Error("Validation response did not contain expected confirmation");
         const providerError = adapter.handleProviderError(error);
         return { valid: false, error: providerError };
       }
@@ -285,11 +250,7 @@ export class VertexProvider
       embedding?: { values?: number[] } | number[];
     };
 
-    const embeddingsList = Array.isArray(raw?.embeddings)
-      ? raw.embeddings
-      : raw?.embedding
-        ? [raw.embedding]
-        : [];
+    const embeddingsList = Array.isArray(raw?.embeddings) ? raw.embeddings : raw?.embedding ? [raw.embedding] : [];
 
     return embeddingsList
       .map((entry) => {
@@ -316,19 +277,12 @@ export class VertexProvider
     zodSchema: ZodType<T>,
   ): Promise<StructuredOutputResult<T>> {
     const client = this.buildClient(request.apiKey);
-    return await callGoogleStructuredJSON(
-      request,
-      responseSchema,
-      zodSchema,
-      client,
-    );
+    return await callGoogleStructuredJSON(request, responseSchema, zodSchema, client);
   }
 
   // ─── SupportsPresetGeneration ────────────────────────────────────────
 
-  async generatePreset(
-    request: ProviderPresetGenerationRequest,
-  ): Promise<PresetGenerationResult> {
+  async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const client = this.buildClient(request.apiKey);
     return await generatePresetFromPrompt(
       request.apiKey,
@@ -343,16 +297,12 @@ export class VertexProvider
 
   // ─── SupportsConversationCompaction ──────────────────────────────────
 
-  async generateConversationSummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactConversationResult> {
+  async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
     const client = this.buildClient(request.apiKey);
     return await generateConversationSummaryGoogle(request, client);
   }
 
-  async generateRoleplaySummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactRoleplayResult> {
+  async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
     const client = this.buildClient(request.apiKey);
     return await generateRoleplaySummaryGoogle(request, client);
   }
@@ -366,9 +316,7 @@ export class VertexProvider
     try {
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
-        activePersonaHasElevenlabsVoice: Boolean(
-          tomoriState.elevenlabs_voice_id?.trim(),
-        ),
+        activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,
@@ -408,8 +356,7 @@ export class VertexProvider
 
         finalBuiltInTools = availableBuiltInTools.filter((tool) => {
           const isContextAvailable =
-            "isAvailableForContext" in tool &&
-            typeof tool.isAvailableForContext === "function"
+            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
               ? tool.isAvailableForContext("vertex", minimalContext)
               : true;
 
@@ -435,10 +382,7 @@ export class VertexProvider
 
       return allToolsConfig;
     } catch (error) {
-      log.error(
-        `Failed to get tools for Vertex provider: ${tomoriState.llm.llm_codename}`,
-        error as Error,
-      );
+      log.error(`Failed to get tools for Vertex provider: ${tomoriState.llm.llm_codename}`, error as Error);
       return [];
     }
   }
@@ -451,14 +395,8 @@ export class VertexProvider
 
   // ─── Config ─────────────────────────────────────────────────────────
 
-  async createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<VertexProviderConfig> {
-    const maxOutputTokens = Number.parseInt(
-      process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192",
-      10,
-    );
+  async createConfig(tomoriState: TomoriState, apiKey: string): Promise<VertexProviderConfig> {
+    const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
 
     const config: VertexProviderConfig = {
       model: tomoriState.llm.llm_codename,
@@ -507,11 +445,7 @@ export class VertexProvider
   // ─── Streaming ──────────────────────────────────────────────────────
 
   async streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -531,9 +465,7 @@ export class VertexProvider
     personaUsername?: string,
     prefixStrippingName?: string,
   ): Promise<StreamResult> {
-    log.info(
-      `VertexProvider: Starting modular streaming for server ${tomoriState.server_id}, model ${config.model}`,
-    );
+    log.info(`VertexProvider: Starting modular streaming for server ${tomoriState.server_id}, model ${config.model}`);
 
     try {
       const vertexConfig = config as VertexProviderConfig;
@@ -562,14 +494,11 @@ export class VertexProvider
         ...vertexConfig,
         maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
         flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
-        flushBufferSizeCodeBlock:
-          DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+        flushBufferSizeCodeBlock: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
         inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
-        baseTypeSpeedMsPerChar:
-          DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+        baseTypeSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
         maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
-        minVisibleTypingDurationMs:
-          DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+        minVisibleTypingDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
         humanizerDegree: tomoriState.config.humanizer_degree,
         emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
         safetySettings: safetySettings.map((setting) => ({
@@ -582,18 +511,11 @@ export class VertexProvider
 
       // Override tools with context-aware tools when streaming context is provided
       if (streamingContext && tomoriState.llm.has_tools) {
-        log.info(
-          "VertexProvider: Reloading tools with streaming context for context-aware availability",
-        );
-        const contextAwareTools = await this.getTools(
-          tomoriState,
-          streamingContext,
-        );
+        log.info("VertexProvider: Reloading tools with streaming context for context-aware availability");
+        const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
       } else if (streamingContext && !tomoriState.llm.has_tools) {
-        log.info(
-          "VertexProvider: Skipping context-aware tool reload - model doesn't support tools",
-        );
+        log.info("VertexProvider: Skipping context-aware tool reload - model doesn't support tools");
       }
 
       // Create streaming context
@@ -626,14 +548,8 @@ export class VertexProvider
       const orchestrator = new StreamOrchestrator();
       const vertexAdapter = new VertexStreamAdapter();
 
-      log.info(
-        "VertexProvider: Delegating to StreamOrchestrator with VertexStreamAdapter",
-      );
-      const result = await orchestrator.streamToDiscord(
-        vertexAdapter,
-        streamConfig,
-        streamContext,
-      );
+      log.info("VertexProvider: Delegating to StreamOrchestrator with VertexStreamAdapter");
+      const result = await orchestrator.streamToDiscord(vertexAdapter, streamConfig, streamContext);
 
       log.info(
         `VertexProvider: Modular streaming completed with status: ${result.status}${result.status === "stopped_by_user" && result.stopReason ? ` (reason: ${result.stopReason})` : ""}`,

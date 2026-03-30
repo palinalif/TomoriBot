@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
 // Neutral value: 1.0 = full probability distribution (disabled)
@@ -24,20 +17,14 @@ const TOP_P_MAX = 1.0;
 const TOP_P_DEFAULT = 0.95;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("top-p")
-    .setDescription(
-      localizer("en-US", "commands.config.params.top-p.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.params.top-p.description"))
     .addNumberOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer("en-US", "commands.config.params.top-p.value_description"),
-        )
+        .setDescription(localizer("en-US", "commands.config.params.top-p.value_description"))
         .setMinValue(TOP_P_MIN)
         .setMaxValue(TOP_P_MAX)
         .setRequired(true),
@@ -79,8 +66,7 @@ export async function execute(
     if (newValue < TOP_P_MIN || newValue > TOP_P_MAX) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.top-p.invalid_value_title",
-        descriptionKey:
-          "commands.config.params.top-p.invalid_value_description",
+        descriptionKey: "commands.config.params.top-p.invalid_value_description",
         descriptionVars: {
           min: TOP_P_MIN.toFixed(1),
           max: TOP_P_MAX.toFixed(1),
@@ -136,9 +122,7 @@ export async function execute(
           command: "config params top-p",
           guildId: interaction.guild?.id,
           newValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
@@ -192,11 +176,7 @@ export async function execute(
         valueAttempted: interaction.options.getNumber("value"),
       },
     };
-    await log.error(
-      `Error executing /config params top-p for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config params top-p for user ${userData.user_disc_id}`, error as Error, context);
 
     if (interaction.deferred && !interaction.replied) {
       await interaction.followUp({

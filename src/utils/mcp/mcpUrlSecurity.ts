@@ -47,9 +47,7 @@ function normalizeResolvedAddress(address: string): string {
 }
 
 function isExplicitLocalHost(hostname: string): boolean {
-  return (
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
-  );
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 function classifyIpv4Address(address: string): {
@@ -189,9 +187,7 @@ function classifyResolvedAddress(address: string): ResolvedMcpAddress {
   };
 }
 
-async function resolveHostnameAddresses(
-  hostname: string,
-): Promise<ResolvedMcpAddress[]> {
+async function resolveHostnameAddresses(hostname: string): Promise<ResolvedMcpAddress[]> {
   const literalFamily = isIP(hostname);
   if (literalFamily === 4 || literalFamily === 6) {
     return [classifyResolvedAddress(hostname)];
@@ -223,9 +219,7 @@ function buildBlockedAddressDetails(
   );
 }
 
-export async function validateRemoteMcpUrl(
-  url: string,
-): Promise<McpUrlValidationResult> {
+export async function validateRemoteMcpUrl(url: string): Promise<McpUrlValidationResult> {
   const isProduction = isProductionRuntime();
 
   let parsedUrl: URL;
@@ -256,8 +250,7 @@ export async function validateRemoteMcpUrl(
       valid: false,
       failureCode: "PRODUCTION_HTTPS_REQUIRED",
       hostname,
-      details:
-        "Production requires HTTPS. Use a publicly hosted MCP server with TLS.",
+      details: "Production requires HTTPS. Use a publicly hosted MCP server with TLS.",
     };
   }
 
@@ -266,8 +259,7 @@ export async function validateRemoteMcpUrl(
       valid: false,
       failureCode: "REMOTE_HTTP_FORBIDDEN",
       hostname,
-      details:
-        "HTTP is only allowed for localhost in development. Use HTTPS for remote servers.",
+      details: "HTTP is only allowed for localhost in development. Use HTTPS for remote servers.",
     };
   }
 
@@ -289,8 +281,7 @@ export async function validateRemoteMcpUrl(
       failureCode: "DNS_RESOLUTION_FAILED",
       hostname,
       details:
-        `Failed to resolve hostname '${hostname}': ` +
-        `${error instanceof Error ? error.message : String(error)}`,
+        `Failed to resolve hostname '${hostname}': ` + `${error instanceof Error ? error.message : String(error)}`,
     };
   }
 
@@ -304,9 +295,7 @@ export async function validateRemoteMcpUrl(
   }
 
   if (isProduction) {
-    const blockedAddress = resolvedAddresses.find(
-      (entry) => entry.blockedInProduction,
-    );
+    const blockedAddress = resolvedAddresses.find((entry) => entry.blockedInProduction);
     if (blockedAddress) {
       return {
         valid: false,
@@ -314,11 +303,7 @@ export async function validateRemoteMcpUrl(
         hostname,
         blockedAddress: blockedAddress.address,
         resolvedAddresses: resolvedAddresses.map((entry) => entry.address),
-        details: buildBlockedAddressDetails(
-          hostname,
-          blockedAddress,
-          resolvedAddresses,
-        ),
+        details: buildBlockedAddressDetails(hostname, blockedAddress, resolvedAddresses),
       };
     }
   }

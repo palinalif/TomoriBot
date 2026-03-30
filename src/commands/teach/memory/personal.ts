@@ -6,11 +6,7 @@ import type {
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import { sql } from "@/utils/db/client";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
@@ -26,18 +22,10 @@ import {
 } from "../../../utils/db/dbRead";
 import { invalidateUserCache } from "../../../utils/cache/userCache";
 import type { ModalResult, SelectOption } from "../../../types/discord/modal";
-import {
-  validateMemoryContent,
-  checkPersonalMemoryLimit,
-  getMemoryLimits,
-} from "../../../utils/db/memoryLimits";
+import { validateMemoryContent, checkPersonalMemoryLimit, getMemoryLimits } from "../../../utils/db/memoryLimits";
 import { addPersonalMemoryByTomori } from "../../../utils/db/dbWrite";
 import type { ModalComponent } from "../../../types/discord/modal";
-import {
-  dedupeCaseInsensitive,
-  getNonEmptyNumberedLines,
-  readTxtUpload,
-} from "../../../utils/teach/batchUploadUtils";
+import { dedupeCaseInsensitive, getNonEmptyNumberedLines, readTxtUpload } from "../../../utils/teach/batchUploadUtils";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_personalmemory_add_modal";
@@ -51,37 +39,22 @@ const GLOBAL_PERSONAL_MEMORY_LINEAGE_ID = 0;
 const memoryLimits = getMemoryLimits();
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("personal")
-    .setDescription(
-      localizer("en-US", "commands.teach.memory.personal.description"),
-    )
+    .setDescription(localizer("en-US", "commands.teach.memory.personal.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.teach.memory.personal.scope_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.teach.memory.personal.scope_description"))
         .setRequired(false)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.memory.personal.scope_choice_persona",
-            ),
+            name: localizer("en-US", "commands.teach.memory.personal.scope_choice_persona"),
             value: PERSONAL_SCOPE_VALUE,
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.memory.personal.scope_choice_global",
-            ),
+            name: localizer("en-US", "commands.teach.memory.personal.scope_choice_global"),
             value: GLOBAL_SCOPE_VALUE,
           },
         ),
@@ -124,10 +97,8 @@ export async function execute(
     // Use user ID for DM context, guild ID for server context
     const serverId = interaction.guild?.id ?? interaction.user.id;
     const memoryScope =
-      (interaction.options.getString("scope") as
-        | typeof PERSONAL_SCOPE_VALUE
-        | typeof GLOBAL_SCOPE_VALUE
-        | null) ?? PERSONAL_SCOPE_VALUE;
+      (interaction.options.getString("scope") as typeof PERSONAL_SCOPE_VALUE | typeof GLOBAL_SCOPE_VALUE | null) ??
+      PERSONAL_SCOPE_VALUE;
     tomoriState = await loadTomoriState(serverId);
 
     // 3. Check if Tomori is set up on the server (needed for config check)
@@ -164,24 +135,16 @@ export async function execute(
           label: safeSelectOptionText(persona.tomori_nickname),
           value: persona.tomori_id?.toString() ?? "",
           description: persona.is_alter
-            ? localizer(
-                locale,
-                "commands.teach.memory.personal.alter_persona_description",
-              )
-            : localizer(
-                locale,
-                "commands.teach.memory.personal.main_persona_description",
-              ),
+            ? localizer(locale, "commands.teach.memory.personal.alter_persona_description")
+            : localizer(locale, "commands.teach.memory.personal.main_persona_description"),
         }))
         .filter((option) => option.value !== "");
 
       modalComponents.push({
         customId: "persona_select",
         labelKey: "commands.teach.memory.personal.persona_select_label",
-        descriptionKey:
-          "commands.teach.memory.personal.persona_select_description",
-        placeholder:
-          "commands.teach.memory.personal.persona_select_placeholder",
+        descriptionKey: "commands.teach.memory.personal.persona_select_description",
+        placeholder: "commands.teach.memory.personal.persona_select_placeholder",
         required: true,
         options: personaSelectOptions,
       });
@@ -214,9 +177,7 @@ export async function execute(
 
     // 7. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Personal memory add modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Personal memory add modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -229,10 +190,7 @@ export async function execute(
     const uploadedTextFile = modalResult.attachments?.[MEMORY_FILE_UPLOAD_ID];
     if (memoryScope === PERSONAL_SCOPE_VALUE) {
       const selectedPersonaId = modalResult.values?.persona_select;
-      selectedPersona =
-        allPersonas.find(
-          (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-        ) ?? null;
+      selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
       if (!selectedPersona) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.invalid_option_title",
@@ -288,9 +246,7 @@ export async function execute(
         return;
       }
 
-      const importedMemories = getNonEmptyNumberedLines(uploadResult.text).map(
-        (line) => line.content,
-      );
+      const importedMemories = getNonEmptyNumberedLines(uploadResult.text).map((line) => line.content);
       pendingMemories.push(...importedMemories);
     }
 
@@ -312,8 +268,7 @@ export async function execute(
       if (!contentValidation.isValid) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.memory.personal.content_too_long_title",
-          descriptionKey:
-            "commands.teach.memory.personal.content_too_long_description",
+          descriptionKey: "commands.teach.memory.personal.content_too_long_description",
           descriptionVars: { max_length: memoryLimits.maxMemoryLength },
           color: ColorCode.ERROR,
         });
@@ -330,8 +285,7 @@ export async function execute(
     if (userPrivacyLevel === PrivacyLevel.FULL) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.teach.memory.personal.opted_out_error_title",
-        descriptionKey:
-          "commands.teach.memory.personal.opted_out_error_description",
+        descriptionKey: "commands.teach.memory.personal.opted_out_error_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -343,19 +297,11 @@ export async function execute(
 
     // 12. Load existing memories for duplicate detection
     const currentMemories = userData.user_id
-      ? await loadPersonalMemoriesForUserLineage(
-          userData.user_id,
-          targetLineageId,
-          memoryScope === GLOBAL_SCOPE_VALUE,
-        )
+      ? await loadPersonalMemoriesForUserLineage(userData.user_id, targetLineageId, memoryScope === GLOBAL_SCOPE_VALUE)
       : [];
 
-    const existingMemories = new Set(
-      currentMemories.map((row) => row.content.trim().toLowerCase()),
-    );
-    const memoriesToAdd = dedupedMemories.filter(
-      (memory) => !existingMemories.has(memory.toLowerCase()),
-    );
+    const existingMemories = new Set(currentMemories.map((row) => row.content.trim().toLowerCase()));
+    const memoriesToAdd = dedupedMemories.filter((memory) => !existingMemories.has(memory.toLowerCase()));
 
     // 13. Check for duplicates within the user's memories
     if (memoriesToAdd.length === 0) {
@@ -374,10 +320,8 @@ export async function execute(
       targetLineageId,
       memoryScope === GLOBAL_SCOPE_VALUE,
     );
-    const currentCount =
-      personalLimitCheck.currentCount ?? currentMemories.length;
-    const maxAllowed =
-      personalLimitCheck.maxAllowed ?? memoryLimits.maxPersonalMemories;
+    const currentCount = personalLimitCheck.currentCount ?? currentMemories.length;
+    const maxAllowed = personalLimitCheck.maxAllowed ?? memoryLimits.maxPersonalMemories;
     const availableSlots = Math.max(0, maxAllowed - currentCount);
     if (memoriesToAdd.length > availableSlots) {
       const removeCount = memoriesToAdd.length - availableSlots;
@@ -407,11 +351,7 @@ export async function execute(
     // 14. Insert lineage-scoped memory rows
     let insertSuccess = true;
     if (memoriesToAdd.length === 1) {
-      const insertedMemory = await addPersonalMemoryByTomori(
-        targetUserId,
-        targetLineageId,
-        memoriesToAdd[0] ?? "",
-      );
+      const insertedMemory = await addPersonalMemoryByTomori(targetUserId, targetLineageId, memoriesToAdd[0] ?? "");
       insertSuccess = insertedMemory !== null;
     } else {
       try {
@@ -425,22 +365,18 @@ export async function execute(
         });
       } catch (insertError) {
         insertSuccess = false;
-        await log.error(
-          "Batch insert failed for personal memories",
-          insertError,
-          {
-            userId: userData.user_id,
-            serverId: tomoriState.server_id,
-            tomoriId: selectedPersona?.tomori_id ?? tomoriState.tomori_id,
-            errorType: "DatabaseValidationError",
-            metadata: {
-              command: "teach personalmemory",
-              memoryScope,
-              targetLineageId,
-              insertCount: memoriesToAdd.length,
-            },
+        await log.error("Batch insert failed for personal memories", insertError, {
+          userId: userData.user_id,
+          serverId: tomoriState.server_id,
+          tomoriId: selectedPersona?.tomori_id ?? tomoriState.tomori_id,
+          errorType: "DatabaseValidationError",
+          metadata: {
+            command: "teach personalmemory",
+            memoryScope,
+            targetLineageId,
+            insertCount: memoriesToAdd.length,
           },
-        );
+        });
       }
     }
 
@@ -461,11 +397,7 @@ export async function execute(
           newMemoryContent: memoriesToAdd.join("\n"),
         },
       };
-      await log.error(
-        "Failed to insert personal memory",
-        new Error("Insert returned null"),
-        context,
-      );
+      await log.error("Failed to insert personal memory", new Error("Insert returned null"), context);
 
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -483,12 +415,10 @@ export async function execute(
     let embedColor = ColorCode.SUCCESS;
 
     // Check both personalization settings and user blacklisting (similar to memoryTool.ts:437-454)
-    const personalizationEnabled =
-      tomoriState?.config.personal_memories_enabled ?? true;
+    const personalizationEnabled = tomoriState?.config.personal_memories_enabled ?? true;
     // Only check blacklisting for guild contexts (DM users can't be blacklisted)
     const userIsBlacklisted = interaction.guild
-      ? ((await isBlacklisted(interaction.guild.id, interaction.user.id)) ??
-        false)
+      ? ((await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false)
       : false;
 
     if (!personalizationEnabled) {
@@ -508,8 +438,7 @@ export async function execute(
 
     // 16. Success! Confirm addition (with potential warning) (Rule 12, 19)
     const firstMemory = memoriesToAdd[0] ?? "";
-    const memoryPreview =
-      firstMemory.length > 96 ? `${firstMemory.slice(0, 96)}...` : firstMemory;
+    const memoryPreview = firstMemory.length > 96 ? `${firstMemory.slice(0, 96)}...` : firstMemory;
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: isBatchAdd
@@ -542,8 +471,7 @@ export async function execute(
 
     // Rule 12, 19: Reply with unknown error embed
     const errorReplyInteraction =
-      modalSubmitInteraction &&
-      (modalSubmitInteraction.replied || modalSubmitInteraction.deferred)
+      modalSubmitInteraction && (modalSubmitInteraction.replied || modalSubmitInteraction.deferred)
         ? modalSubmitInteraction
         : interaction.replied || interaction.deferred
           ? interaction
@@ -558,11 +486,10 @@ export async function execute(
           flags: MessageFlags.Ephemeral,
         });
       } catch (replyError) {
-        log.error(
-          "Failed to send error reply in personalmemory catch block",
-          replyError,
-          { ...context, errorType: "ErrorReplyFailed" },
-        );
+        log.error("Failed to send error reply in personalmemory catch block", replyError, {
+          ...context,
+          errorType: "ErrorReplyFailed",
+        });
       }
     } else {
       log.warn(

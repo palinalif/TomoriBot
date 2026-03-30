@@ -3,19 +3,11 @@
  * Swaps the main persona with an alter persona
  */
 
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags, EmbedBuilder, AttachmentBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import type { UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
@@ -67,11 +59,7 @@ function isAvatarUpdateRateLimited(status: number, errorText: string): boolean {
     // Fall through to text matching below
   }
 
-  return (
-    /AVATAR_RATE_LIMIT/i.test(errorText) ||
-    /RATE_LIMIT/i.test(errorText) ||
-    /too fast/i.test(errorText)
-  );
+  return /AVATAR_RATE_LIMIT/i.test(errorText) || /RATE_LIMIT/i.test(errorText) || /too fast/i.test(errorText);
 }
 
 // Constants for modal configuration
@@ -81,12 +69,8 @@ const PERSONA_SELECT_ID = "persona_select";
 /**
  * Configure the 'swap' subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("swap")
-    .setDescription(localizer("en-US", "commands.persona.swap.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("swap").setDescription(localizer("en-US", "commands.persona.swap.description"));
 
 /**
  * Executes the 'swap' command
@@ -119,8 +103,7 @@ export async function execute(
     }
 
     // 2. Check permissions (ManageGuild required)
-    const hasPermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
     if (!hasPermission) {
       await replyInfoEmbed(
@@ -174,12 +157,10 @@ export async function execute(
     }
 
     // 6. Build select options for modal
-    const alterSelectOptions: SelectOption[] = alterPersonas.map(
-      (persona, index) => ({
-        label: safeSelectOptionText(persona.tomori_nickname),
-        value: index.toString(), // Use index to avoid truncation issues
-      }),
-    );
+    const alterSelectOptions: SelectOption[] = alterPersonas.map((persona, index) => ({
+      label: safeSelectOptionText(persona.tomori_nickname),
+      value: index.toString(), // Use index to avoid truncation issues
+    }));
 
     // 7. Show modal with alter selection
     const modalResult = await promptWithPaginatedModal(interaction, locale, {
@@ -198,9 +179,7 @@ export async function execute(
 
     // Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Persona swap modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Persona swap modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -305,8 +284,7 @@ export async function execute(
 
     if (avatarUrl) {
       try {
-        const storedAvatarBuffer =
-          await loadStoredPersonaAvatarBuffer(avatarUrl);
+        const storedAvatarBuffer = await loadStoredPersonaAvatarBuffer(avatarUrl);
         if (storedAvatarBuffer) {
           const avatarBuffer = await convertToPNG(storedAvatarBuffer);
           selectedAlterAvatarBuffer = avatarBuffer;
@@ -340,9 +318,7 @@ export async function execute(
           }
         } else {
           avatarSwapFailed = true;
-          log.warn(
-            `Failed to load alter avatar for swap (non-fatal): ${avatarUrl}`,
-          );
+          log.warn(`Failed to load alter avatar for swap (non-fatal): ${avatarUrl}`);
         }
       } catch (avatarError) {
         // Non-fatal error - persona swap was successful, avatar swap failed
@@ -365,27 +341,17 @@ export async function execute(
     ];
 
     if (nicknameSwapRateLimited || nicknameSwapFailed) {
-      descriptionLines.push(
-        localizer(locale, "commands.persona.swap.nickname_update_failed"),
-      );
+      descriptionLines.push(localizer(locale, "commands.persona.swap.nickname_update_failed"));
     } else if (nicknameSwapSuccess) {
-      descriptionLines.push(
-        localizer(locale, "commands.persona.swap.nickname_update_success"),
-      );
+      descriptionLines.push(localizer(locale, "commands.persona.swap.nickname_update_success"));
     }
 
     if (avatarSwapRateLimited) {
-      descriptionLines.push(
-        localizer(locale, "commands.persona.swap.avatar_update_rate_limited"),
-      );
+      descriptionLines.push(localizer(locale, "commands.persona.swap.avatar_update_rate_limited"));
     } else if (avatarSwapSuccess) {
-      descriptionLines.push(
-        localizer(locale, "commands.persona.swap.avatar_update_success"),
-      );
+      descriptionLines.push(localizer(locale, "commands.persona.swap.avatar_update_success"));
     } else if (avatarSwapAttempted && avatarSwapFailed) {
-      descriptionLines.push(
-        localizer(locale, "commands.persona.swap.avatar_update_failed"),
-      );
+      descriptionLines.push(localizer(locale, "commands.persona.swap.avatar_update_failed"));
     }
 
     const successEmbed = new EmbedBuilder()
@@ -402,45 +368,30 @@ export async function execute(
 
     let formerMainAvatarAttachment: AttachmentBuilder | null = null;
     if (formerMainAvatarBuffer) {
-      const sanitizedNickname = sanitizeAttachmentFilenamePart(
-        mainPersona.tomori_nickname,
-        {
-          fallback: "persona",
-          maxLength: 50,
-        },
-      );
+      const sanitizedNickname = sanitizeAttachmentFilenamePart(mainPersona.tomori_nickname, {
+        fallback: "persona",
+        maxLength: 50,
+      });
       const timestamp = Date.now();
       const avatarFilename = `persona-swap-${sanitizedNickname}-${timestamp}.png`;
-      formerMainAvatarAttachment = new AttachmentBuilder(
-        formerMainAvatarBuffer,
-        {
-          name: avatarFilename,
-        },
-      );
+      formerMainAvatarAttachment = new AttachmentBuilder(formerMainAvatarBuffer, {
+        name: avatarFilename,
+      });
       successEmbed.setImage(`attachment://${avatarFilename}`);
     } else if (formerMainAvatarUrl) {
       successEmbed.setImage(formerMainAvatarUrl);
     }
 
     // Add footer warning to keep embed (used for avatar URL storage)
-    const embedWarning = localizer(
-      locale,
-      "commands.persona.swap.avatar_embed_warning",
-    );
-    const storedNotice = avatarSwapSuccess
-      ? localizer(locale, "commands.persona.swap.avatar_stored_notice")
-      : "";
-    const footerText = storedNotice
-      ? `${embedWarning} ${storedNotice}`
-      : embedWarning;
+    const embedWarning = localizer(locale, "commands.persona.swap.avatar_embed_warning");
+    const storedNotice = avatarSwapSuccess ? localizer(locale, "commands.persona.swap.avatar_stored_notice") : "";
+    const footerText = storedNotice ? `${embedWarning} ${storedNotice}` : embedWarning;
 
     successEmbed.setFooter({ text: footerText });
 
     const reply = await modalSubmitInteraction.followUp({
       embeds: [successEmbed],
-      files: formerMainAvatarAttachment
-        ? [formerMainAvatarAttachment]
-        : undefined,
+      files: formerMainAvatarAttachment ? [formerMainAvatarAttachment] : undefined,
       flags: MessageFlags.SuppressNotifications,
     });
 
@@ -469,13 +420,9 @@ export async function execute(
 						WHERE tomori_id = ${mainPersona.tomori_id}
 					`;
 
-          log.success(
-            `Stored former main persona "${mainPersona.tomori_nickname}" avatar URL for future use`,
-          );
+          log.success(`Stored former main persona "${mainPersona.tomori_nickname}" avatar URL for future use`);
         } else {
-          log.warn(
-            `Failed to extract image URL from success embed for former main persona ${mainPersona.tomori_id}`,
-          );
+          log.warn(`Failed to extract image URL from success embed for former main persona ${mainPersona.tomori_id}`);
         }
       } catch (storageError) {
         // Non-fatal error - persona swap was successful, avatar storage failed
@@ -500,10 +447,7 @@ export async function execute(
 					SET webhook_avatar_url = ${selectedAlterS3Url}
 					WHERE tomori_id = ${selectedAlter.tomori_id}
 				`;
-        if (
-          previousSelectedAlterAvatarUrl &&
-          previousSelectedAlterAvatarUrl !== selectedAlterS3Url
-        ) {
+        if (previousSelectedAlterAvatarUrl && previousSelectedAlterAvatarUrl !== selectedAlterS3Url) {
           await deletePersonaAvatarFromS3(previousSelectedAlterAvatarUrl);
         }
       }
@@ -544,9 +488,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });

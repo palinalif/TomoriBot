@@ -8,22 +8,11 @@ import {
 import { invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  promptWithRawModal,
-  replyInfoEmbed,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
-import type {
-  ErrorContext,
-  TomoriState,
-  UserRow,
-} from "../../../types/db/schema";
+import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
+import type { ErrorContext, TomoriState, UserRow } from "../../../types/db/schema";
 import { personaConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
-import {
-  validateMemoryContent,
-  getMemoryLimits,
-} from "../../../utils/db/memoryLimits";
+import { validateMemoryContent, getMemoryLimits } from "../../../utils/db/memoryLimits";
 import type { SelectOption } from "../../../types/discord/modal";
 import { loadAllPersonasForServer } from "../../../utils/db/dbRead";
 
@@ -37,27 +26,17 @@ const TRIGGERS_INPUT_ID = "triggers_input";
 
 const MAX_TEXT_INPUT_LENGTH = Math.min(
   4000,
-  Math.max(
-    1,
-    memoryLimits.maxTriggerWords * (memoryLimits.maxMemoryLength + 1),
-  ),
+  Math.max(1, memoryLimits.maxTriggerWords * (memoryLimits.maxMemoryLength + 1)),
 );
 
 const formatTextArrayLiteral = (items: string[]): string =>
   `{${items.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
-const formatTriggerList = (triggers: string[]): string =>
-  triggers.map((trigger) => `\`${trigger}\``).join(", ");
+const formatTriggerList = (triggers: string[]): string => triggers.map((trigger) => `\`${trigger}\``).join(", ");
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("add")
-    .setDescription(
-      localizer("en-US", "commands.server.trigger.add.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("add").setDescription(localizer("en-US", "commands.server.trigger.add.description"));
 
 /**
  * Adds trigger words that will make a selected persona respond automatically when mentioned in chat
@@ -102,20 +81,12 @@ export async function execute(
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.server.trigger.add.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.server.trigger.add.main_persona_description",
-            ),
+          ? localizer(locale, "commands.server.trigger.add.alter_persona_description")
+          : localizer(locale, "commands.server.trigger.add.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
     if (personaSelectOptions.length === 0) {
-      log.error(
-        "No selectable personas found while building trigger add modal options",
-      );
+      log.error("No selectable personas found while building trigger add modal options");
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.unknown_error_title",
         descriptionKey: "general.errors.unknown_error_description",
@@ -131,8 +102,7 @@ export async function execute(
         {
           customId: PERSONA_SELECT_ID,
           labelKey: "commands.server.trigger.add.persona_select_label",
-          descriptionKey:
-            "commands.server.trigger.add.persona_select_description",
+          descriptionKey: "commands.server.trigger.add.persona_select_description",
           placeholder: "commands.server.trigger.add.persona_select_placeholder",
           required: true,
           options: personaSelectOptions,
@@ -140,8 +110,7 @@ export async function execute(
         {
           customId: TRIGGERS_INPUT_ID,
           labelKey: "commands.server.trigger.add.triggers_input_label",
-          descriptionKey:
-            "commands.server.trigger.add.triggers_input_description",
+          descriptionKey: "commands.server.trigger.add.triggers_input_description",
           placeholder: "commands.server.trigger.add.triggers_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: true,
@@ -151,9 +120,7 @@ export async function execute(
     });
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Trigger word add modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Trigger word add modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -171,10 +138,7 @@ export async function execute(
       return;
     }
 
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
 
     if (!selectedPersona) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -224,8 +188,7 @@ export async function execute(
       if (!contentValidation.isValid) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.server.trigger.add.content_too_long_title",
-          descriptionKey:
-            "commands.server.trigger.add.content_too_long_description",
+          descriptionKey: "commands.server.trigger.add.content_too_long_description",
           descriptionVars: { max_length: memoryLimits.maxMemoryLength },
           color: ColorCode.ERROR,
         });
@@ -233,12 +196,8 @@ export async function execute(
       }
     }
 
-    const existingTriggers = new Set(
-      currentTriggerWords.map((trigger) => trigger.toLowerCase()),
-    );
-    const newTriggers = uniqueTriggers.filter(
-      (trigger) => !existingTriggers.has(trigger),
-    );
+    const existingTriggers = new Set(currentTriggerWords.map((trigger) => trigger.toLowerCase()));
+    const newTriggers = uniqueTriggers.filter((trigger) => !existingTriggers.has(trigger));
 
     if (newTriggers.length === 0) {
       const descriptionKey =
@@ -249,9 +208,7 @@ export async function execute(
         titleKey: "commands.server.trigger.add.already_exists_title",
         descriptionKey,
         descriptionVars:
-          uniqueTriggers.length === 1
-            ? { word: uniqueTriggers[0] }
-            : { words: formatTriggerList(uniqueTriggers) },
+          uniqueTriggers.length === 1 ? { word: uniqueTriggers[0] } : { words: formatTriggerList(uniqueTriggers) },
         color: ColorCode.WARN,
       });
       return;
@@ -261,8 +218,7 @@ export async function execute(
     if (updatedTriggerCount > memoryLimits.maxTriggerWords) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.server.trigger.add.limit_exceeded_title",
-        descriptionKey:
-          "commands.server.trigger.add.limit_exceeded_description",
+        descriptionKey: "commands.server.trigger.add.limit_exceeded_description",
         descriptionVars: {
           current_count: currentTriggerWords.length.toString(),
           max_allowed: memoryLimits.maxTriggerWords.toString(),
@@ -275,9 +231,7 @@ export async function execute(
     const triggerArrayLiteral = formatTextArrayLiteral(newTriggers);
     const personaId = selectedPersona.tomori_id ?? null;
     if (!personaId) {
-      log.error(
-        "Selected persona missing tomori_id - this should never happen",
-      );
+      log.error("Selected persona missing tomori_id - this should never happen");
       return;
     }
 
@@ -302,9 +256,7 @@ export async function execute(
           wordAdded: newTriggers,
           updatedField: "trigger_words",
           targetTable: "persona_configs",
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(

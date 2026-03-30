@@ -4,21 +4,14 @@
  * Note: pg_cron is only used for hourly cleanup of expired reminders, not execution
  */
 
-import type {
-  Client,
-  Message,
-  TextBasedChannel,
-  TextChannel,
-} from "discord.js";
+import type { Client, Message, TextBasedChannel, TextChannel } from "discord.js";
 import { ChannelType } from "discord.js";
 import { log, ColorCode } from "../utils/misc/logger";
 import { getDueReminders, deleteReminderById } from "../utils/db/dbRead";
 import { rescheduleReminder } from "../utils/db/dbWrite";
 import type { ReminderRow } from "../types/db/schema";
 import { calculateLateness } from "../utils/text/stringHelper";
-import tomoriChat, {
-  suppressNextSelfReply,
-} from "../events/messageCreate/tomoriChat";
+import tomoriChat, { suppressNextSelfReply } from "../events/messageCreate/tomoriChat";
 import { createStandardEmbed } from "../utils/discord/embedHelper";
 import { getCachedAllPersonas } from "../utils/cache/tomoriStateCache";
 import {
@@ -123,29 +116,17 @@ export class ReminderTimer {
       );
 
       // Get the channel where the reminder was set
-      const channel = await this.client.channels.fetch(
-        reminder.channel_disc_id,
-      );
+      const channel = await this.client.channels.fetch(reminder.channel_disc_id);
 
       if (!channel) {
-        log.error(
-          `Channel ${reminder.channel_disc_id} not found for reminder ${reminder.reminder_id}`,
-        );
-        await this.handleReminderExecutionFailure(
-          reminder,
-          `Channel not found: ${reminder.channel_disc_id}`,
-        );
+        log.error(`Channel ${reminder.channel_disc_id} not found for reminder ${reminder.reminder_id}`);
+        await this.handleReminderExecutionFailure(reminder, `Channel not found: ${reminder.channel_disc_id}`);
         return;
       }
 
       if (!channel.isTextBased()) {
-        log.error(
-          `Channel ${reminder.channel_disc_id} is not text-based for reminder ${reminder.reminder_id}`,
-        );
-        await this.handleReminderExecutionFailure(
-          reminder,
-          "Channel is not text-based",
-        );
+        log.error(`Channel ${reminder.channel_disc_id} is not text-based for reminder ${reminder.reminder_id}`);
+        await this.handleReminderExecutionFailure(reminder, "Channel is not text-based");
         return;
       }
 
@@ -185,10 +166,7 @@ export class ReminderTimer {
         log.warn(
           `No messages found in channel ${reminder.channel_disc_id} for reminder ${reminder.reminder_id}, sending error embed instead`,
         );
-        await this.handleReminderExecutionFailure(
-          reminder,
-          "No messages found in channel for context",
-        );
+        await this.handleReminderExecutionFailure(reminder, "No messages found in channel for context");
         return;
       }
 
@@ -196,12 +174,8 @@ export class ReminderTimer {
       const currentTime = new Date();
       const lateness = calculateLateness(reminder.reminder_time, currentTime);
 
-      log.info(
-        `About to call tomoriChat for reminder ${reminder.reminder_id}:`,
-      );
-      log.info(
-        `- Last message author: ${lastMessage.author.username} (bot: ${lastMessage.author.bot})`,
-      );
+      log.info(`About to call tomoriChat for reminder ${reminder.reminder_id}:`);
+      log.info(`- Last message author: ${lastMessage.author.username} (bot: ${lastMessage.author.bot})`);
       log.info(`- Last message ID: ${lastMessage.id}`);
       log.info(`- Reminder recipient ID: ${reminder.user_discord_id}`);
       log.info(`- Reminder purpose: "${reminder.reminder_purpose}"`);
@@ -238,9 +212,7 @@ export class ReminderTimer {
         "system", // textQuotaSource (internal timer trigger)
       );
 
-      log.info(
-        `tomoriChat call completed for reminder ${reminder.reminder_id}`,
-      );
+      log.info(`tomoriChat call completed for reminder ${reminder.reminder_id}`);
 
       // For Matrix users, check if the AI response already mentioned the recipient.
       // If not, send a proper Matrix mention ping (mirrors ensureReminderRecipientMention
@@ -254,55 +226,33 @@ export class ReminderTimer {
           this.client.user?.id ?? "",
         );
       } else if (!isSelfReminder) {
-        await this.ensureReminderRecipientMention(
-          channel,
-          reminder,
-          lastMessage.id,
-          reminderStartTime,
-        );
+        await this.ensureReminderRecipientMention(channel, reminder, lastMessage.id, reminderStartTime);
       }
 
       const repetitionIntervalHours =
-        typeof reminder.repetition_interval_hours === "number"
-          ? reminder.repetition_interval_hours
-          : null;
-      const isRecurring =
-        repetitionIntervalHours !== null && repetitionIntervalHours >= 1;
+        typeof reminder.repetition_interval_hours === "number" ? reminder.repetition_interval_hours : null;
+      const isRecurring = repetitionIntervalHours !== null && repetitionIntervalHours >= 1;
 
       if (isRecurring && reminder.reminder_id) {
-        const nextTriggerTime = new Date(
-          Date.now() + repetitionIntervalHours * 60 * 60 * 1000,
-        );
-        const rescheduled = await rescheduleReminder(
-          reminder.reminder_id,
-          nextTriggerTime,
-        );
+        const nextTriggerTime = new Date(Date.now() + repetitionIntervalHours * 60 * 60 * 1000);
+        const rescheduled = await rescheduleReminder(reminder.reminder_id, nextTriggerTime);
 
         if (rescheduled) {
-          log.success(
-            `Reminder ${reminder.reminder_id} executed and rescheduled for ${nextTriggerTime.toISOString()}`,
-          );
+          log.success(`Reminder ${reminder.reminder_id} executed and rescheduled for ${nextTriggerTime.toISOString()}`);
         } else {
-          log.error(
-            `Failed to reschedule recurring reminder ${reminder.reminder_id}; deleting to prevent duplicates`,
-          );
+          log.error(`Failed to reschedule recurring reminder ${reminder.reminder_id}; deleting to prevent duplicates`);
           await deleteReminderById(reminder.reminder_id);
         }
       } else if (reminder.reminder_id) {
         // Successfully executed one-time reminder, delete it
         await deleteReminderById(reminder.reminder_id);
-        log.success(
-          `Reminder ${reminder.reminder_id} executed and deleted successfully`,
-        );
+        log.success(`Reminder ${reminder.reminder_id} executed and deleted successfully`);
       } else {
         log.error("Cannot delete reminder: reminder_id is undefined");
       }
     } catch (error) {
       log.error(`Error executing reminder ${reminder.reminder_id}:`, error);
-      await this.handleReminderExecutionFailure(
-        reminder,
-        error instanceof Error ? error.message : "Unknown error",
-      );
+      await this.handleReminderExecutionFailure(reminder, error instanceof Error ? error.message : "Unknown error");
     }
   }
 
@@ -326,8 +276,7 @@ export class ReminderTimer {
       afterMessageId,
       triggerStartTime: reminderStartTime,
       contextLabel: `reminder ${reminder.reminder_id}`,
-      fallbackSender: (content) =>
-        this.trySendPersonaFallbackMention(channel, reminder, content),
+      fallbackSender: (content) => this.trySendPersonaFallbackMention(channel, reminder, content),
     });
   }
 
@@ -351,26 +300,17 @@ export class ReminderTimer {
       const persona = personas.find((p) => p.tomori_id === reminder.persona_id);
       if (!persona || !persona.is_alter) return false;
 
-      const isThread =
-        "isThread" in channel &&
-        typeof channel.isThread === "function" &&
-        channel.isThread();
+      const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
       if (isThread && !channel.parent) {
         return false;
       }
-      const webhookChannel =
-        isThread && channel.parent ? channel.parent : channel;
+      const webhookChannel = isThread && channel.parent ? channel.parent : channel;
 
-      const webhookResult = await getOrCreateWebhook(
-        webhookChannel as TextChannel,
-      );
+      const webhookResult = await getOrCreateWebhook(webhookChannel as TextChannel);
       const webhook = webhookResult.webhook;
       if (!webhook) return false;
 
-      const identity = await resolvePersonaWebhookIdentity(
-        persona,
-        channel.guild,
-      );
+      const identity = await resolvePersonaWebhookIdentity(persona, channel.guild);
       await sendWebhookMessageWithIdentity(
         webhook,
         {
@@ -386,10 +326,7 @@ export class ReminderTimer {
       );
       return true;
     } catch (error) {
-      log.warn(
-        `Failed to send persona fallback mention for reminder ${reminder.reminder_id}:`,
-        error,
-      );
+      log.warn(`Failed to send persona fallback mention for reminder ${reminder.reminder_id}:`, error);
       return false;
     }
   }
@@ -397,10 +334,7 @@ export class ReminderTimer {
   /**
    * Handles cases where reminder execution fails
    */
-  private async handleReminderExecutionFailure(
-    reminder: ReminderRow,
-    errorReason: string,
-  ): Promise<void> {
+  private async handleReminderExecutionFailure(reminder: ReminderRow, errorReason: string): Promise<void> {
     try {
       // Delete the reminder even if execution failed to prevent retry loops
       if (reminder.reminder_id) {
@@ -409,18 +343,14 @@ export class ReminderTimer {
 
       // Try to send an info embed showing the raw reminder/task content
       try {
-        const channel = await this.client.channels.fetch(
-          reminder.channel_disc_id,
-        );
+        const channel = await this.client.channels.fetch(reminder.channel_disc_id);
         if (channel?.isTextBased() && "send" in channel) {
           const isSelfReminder = reminder.self_reminder === true;
 
           // 1. Build the info embed with the raw reminder/task content
           const embed = createStandardEmbed("en-US", {
             color: ColorCode.INFO,
-            titleKey: isSelfReminder
-              ? "reminders.task_triggered_title"
-              : "reminders.reminder_triggered_title",
+            titleKey: isSelfReminder ? "reminders.task_triggered_title" : "reminders.reminder_triggered_title",
             descriptionKey: "reminders.triggered_description",
             descriptionVars: { reminder_purpose: reminder.reminder_purpose },
             footerKey: "reminders.triggered_footer",
@@ -429,9 +359,7 @@ export class ReminderTimer {
           // 2. For non-self reminders: include a content mention so Discord
           //    actually pings the recipient (embed text alone does not ping)
           const mentionContent =
-            !isSelfReminder && !isBridgeUserId(reminder.user_discord_id)
-              ? `<@${reminder.user_discord_id}>`
-              : undefined;
+            !isSelfReminder && !isBridgeUserId(reminder.user_discord_id) ? `<@${reminder.user_discord_id}>` : undefined;
 
           await (channel as import("discord.js").TextChannel).send({
             ...(mentionContent ? { content: mentionContent } : {}),
@@ -448,20 +376,12 @@ export class ReminderTimer {
           });
         }
       } catch (fallbackError) {
-        log.error(
-          `Failed to send fallback reminder info embed for reminder ${reminder.reminder_id}:`,
-          fallbackError,
-        );
+        log.error(`Failed to send fallback reminder info embed for reminder ${reminder.reminder_id}:`, fallbackError);
       }
 
-      log.warn(
-        `Reminder ${reminder.reminder_id} deleted due to execution failure: ${errorReason}`,
-      );
+      log.warn(`Reminder ${reminder.reminder_id} deleted due to execution failure: ${errorReason}`);
     } catch (error) {
-      log.error(
-        `Error handling reminder execution failure for reminder ${reminder.reminder_id}:`,
-        error,
-      );
+      log.error(`Error handling reminder execution failure for reminder ${reminder.reminder_id}:`, error);
     }
   }
 

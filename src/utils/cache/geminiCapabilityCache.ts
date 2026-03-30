@@ -49,8 +49,6 @@ const GEMINI_TOKEN_LIMITS: Readonly<Record<string, ModelTokenLimits>> = {
  * @param modelCodename - Model codename (e.g., "gemini-2.5-flash")
  * @returns ModelTokenLimits if the model is known, undefined otherwise
  */
-export function getGeminiTokenLimits(
-  modelCodename: string,
-): ModelTokenLimits | undefined {
+export function getGeminiTokenLimits(modelCodename: string): ModelTokenLimits | undefined {
   return GEMINI_TOKEN_LIMITS[modelCodename];
 }

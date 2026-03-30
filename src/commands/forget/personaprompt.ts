@@ -1,32 +1,15 @@
-import type {
-  ChatInputCommandInteraction,
-  ButtonInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, ButtonInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { UserRow, TomoriState } from "@/types/db/schema";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  replyPaginatedPersonaChoicesV2,
-} from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "@/utils/cache/tomoriStateCache";
+import { replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { sql } from "@/utils/db/client";
 import { localizer } from "@/utils/text/localizer";
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("personaprompt")
-    .setDescription(
-      localizer("en-US", "commands.forget.personaprompt.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("personaprompt").setDescription(localizer("en-US", "commands.forget.personaprompt.description"));
 
 export async function execute(
   _client: Client,
@@ -45,13 +28,11 @@ export async function execute(
   }
 
   if (interaction.guild) {
-    const hasPermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
     if (!hasPermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.forget.personaprompt.no_permission_title",
-        descriptionKey:
-          "commands.forget.personaprompt.no_permission_description",
+        descriptionKey: "commands.forget.personaprompt.no_permission_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -85,22 +66,14 @@ export async function execute(
       return;
     }
 
-    const personaSelection = await replyPaginatedPersonaChoicesV2(
-      interaction,
-      locale,
-      {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      },
-    );
+    const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+      personas: allPersonas,
+      color: ColorCode.INFO,
+      preserveSelectedInteraction: true,
+      onSelect: async () => {},
+    });
 
-    if (
-      !personaSelection.success ||
-      personaSelection.selectedIndex === undefined ||
-      !personaSelection.interaction
-    ) {
+    if (!personaSelection.success || personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
       return;
     }
 
@@ -144,9 +117,7 @@ export async function execute(
     });
 
     const errorReplyTarget =
-      personaSelectionInteraction &&
-      !personaSelectionInteraction.deferred &&
-      !personaSelectionInteraction.replied
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
         ? personaSelectionInteraction
         : interaction;
     await replyInfoEmbed(errorReplyTarget, locale, {

@@ -5,13 +5,7 @@ import type {
   User,
   UserSelectMenuInteraction,
 } from "discord.js";
-import {
-  ActionRowBuilder,
-  ComponentType,
-  EmbedBuilder,
-  MessageFlags,
-  UserSelectMenuBuilder,
-} from "discord.js";
+import { ActionRowBuilder, ComponentType, EmbedBuilder, MessageFlags, UserSelectMenuBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
 import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
@@ -27,34 +21,22 @@ type QuotaResetType = "imagegen" | "textgen";
  * Configure /server quota reset subcommand.
  * Lets admins reset either a user's daily pool or the server-wide pool for image/text generation.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("reset")
-    .setDescription(
-      localizer("en-US", "commands.server.quota.reset.description"),
-    )
+    .setDescription(localizer("en-US", "commands.server.quota.reset.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer("en-US", "commands.server.quota.reset.scope_description"),
-        )
+        .setDescription(localizer("en-US", "commands.server.quota.reset.scope_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.server.quota.reset.scope_choice_user",
-            ),
+            name: localizer("en-US", "commands.server.quota.reset.scope_choice_user"),
             value: "user",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.server.quota.reset.scope_choice_server",
-            ),
+            name: localizer("en-US", "commands.server.quota.reset.scope_choice_server"),
             value: "server",
           },
         ),
@@ -62,26 +44,15 @@ export const configureSubcommand = (
     .addStringOption((option) =>
       option
         .setName("quota_type")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.server.quota.reset.quota_type_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.server.quota.reset.quota_type_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.server.quota.reset.quota_type_choice_imagegen",
-            ),
+            name: localizer("en-US", "commands.server.quota.reset.quota_type_choice_imagegen"),
             value: "imagegen",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.server.quota.reset.quota_type_choice_textgen",
-            ),
+            name: localizer("en-US", "commands.server.quota.reset.quota_type_choice_textgen"),
             value: "textgen",
           },
         ),
@@ -117,10 +88,7 @@ export async function execute(
   const rawScope = interaction.options.getString("scope", true);
   const rawQuotaType = interaction.options.getString("quota_type", true);
 
-  if (
-    (rawScope !== "user" && rawScope !== "server") ||
-    (rawQuotaType !== "imagegen" && rawQuotaType !== "textgen")
-  ) {
+  if ((rawScope !== "user" && rawScope !== "server") || (rawQuotaType !== "imagegen" && rawQuotaType !== "textgen")) {
     await replyInfoEmbed(interaction, userData.language_pref, {
       titleKey: "general.errors.generic_error_title",
       descriptionKey: "general.errors.generic_error_description",
@@ -201,32 +169,21 @@ export async function execute(
   }
 }
 
-async function promptUserSelection(
-  interaction: ChatInputCommandInteraction,
-  locale: string,
-): Promise<User | null> {
+async function promptUserSelection(interaction: ChatInputCommandInteraction, locale: string): Promise<User | null> {
   const userSelect = new UserSelectMenuBuilder()
     .setCustomId(`quota_reset_user_select_${interaction.id}`)
-    .setPlaceholder(
-      localizer(locale, "commands.server.quota.reset.user_select_placeholder"),
-    )
+    .setPlaceholder(localizer(locale, "commands.server.quota.reset.user_select_placeholder"))
     .setMinValues(1)
     .setMaxValues(1);
 
   const selectEmbed = new EmbedBuilder()
-    .setTitle(
-      localizer(locale, "commands.server.quota.reset.user_select_title"),
-    )
-    .setDescription(
-      localizer(locale, "commands.server.quota.reset.user_select_description"),
-    )
+    .setTitle(localizer(locale, "commands.server.quota.reset.user_select_title"))
+    .setDescription(localizer(locale, "commands.server.quota.reset.user_select_description"))
     .setColor(ColorCode.INFO);
 
   await interaction.reply({
     embeds: [selectEmbed],
-    components: [
-      new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(userSelect),
-    ],
+    components: [new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(userSelect)],
     flags: MessageFlags.Ephemeral,
   });
 
@@ -236,8 +193,7 @@ async function promptUserSelection(
   try {
     userSelectInteraction = await promptMessage.awaitMessageComponent({
       componentType: ComponentType.UserSelect,
-      filter: (componentInteraction: UserSelectMenuInteraction) =>
-        componentInteraction.user.id === interaction.user.id,
+      filter: (componentInteraction: UserSelectMenuInteraction) => componentInteraction.user.id === interaction.user.id,
       time: 60_000,
     });
   } catch {
@@ -267,11 +223,7 @@ async function promptUserSelection(
   return selectedUser;
 }
 
-async function resetUserDailyQuota(
-  serverId: number,
-  userDiscId: string,
-  quotaType: QuotaResetType,
-): Promise<void> {
+async function resetUserDailyQuota(serverId: number, userDiscId: string, quotaType: QuotaResetType): Promise<void> {
   const today = new Date().toISOString().split("T")[0];
 
   if (quotaType === "imagegen") {
@@ -292,10 +244,7 @@ async function resetUserDailyQuota(
 	`;
 }
 
-async function resetServerwideQuotaPool(
-  serverId: number,
-  quotaType: QuotaResetType,
-): Promise<void> {
+async function resetServerwideQuotaPool(serverId: number, quotaType: QuotaResetType): Promise<void> {
   if (quotaType === "imagegen") {
     const config = await getQuotaConfig(serverId);
     await sql`

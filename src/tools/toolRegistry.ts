@@ -14,10 +14,7 @@ import type {
   ToolExecutionEvent,
   MCPCapableToolAdapter,
 } from "../types/tool/interfaces";
-import {
-  configToFeatureFlags,
-  filterToolsByFeatureFlags,
-} from "../utils/tools/featureFlagMapper";
+import { configToFeatureFlags, filterToolsByFeatureFlags } from "../utils/tools/featureFlagMapper";
 import { getMCPManager } from "../utils/mcp/mcpManager";
 import { getGuildMcpManager } from "../utils/mcp/guildMcpManager";
 import { getCachedEnabledGuildMcpConfigs } from "../utils/cache/guildMcpConfigCache";
@@ -98,8 +95,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         // Check if tool supports this provider
         // Use context-aware availability check if available, otherwise fall back to basic check
         const isToolAvailable =
-          "isAvailableForContext" in tool &&
-          typeof tool.isAvailableForContext === "function"
+          "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
             ? tool.isAvailableForContext(provider, context)
             : tool.isAvailableFor(provider);
 
@@ -107,18 +103,13 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           continue;
         }
 
-        if (
-          !this.meetsModelCapabilityRequirements(tool, context.tomoriState.llm)
-        ) {
+        if (!this.meetsModelCapabilityRequirements(tool, context.tomoriState.llm)) {
           continue;
         }
 
         // Check feature flag requirements
         if (tool.requiresFeatureFlag) {
-          const isFeatureEnabled = this.checkFeatureFlag(
-            tool.requiresFeatureFlag,
-            context,
-          );
+          const isFeatureEnabled = this.checkFeatureFlag(tool.requiresFeatureFlag, context);
           if (!isFeatureEnabled) {
             continue;
           }
@@ -126,10 +117,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
         // Check permission requirements
         if (tool.requiresPermissions && tool.requiresPermissions.length > 0) {
-          const hasPermissions = this.checkPermissions(
-            tool.requiresPermissions,
-            context,
-          );
+          const hasPermissions = this.checkPermissions(tool.requiresPermissions, context);
           if (!hasPermissions) {
             continue;
           }
@@ -137,9 +125,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
         availableTools.push(tool);
       } catch (error) {
-        log.warn(
-          `Error checking availability for tool ${tool.name}: ${(error as Error).message}`,
-        );
+        log.warn(`Error checking availability for tool ${tool.name}: ${(error as Error).message}`);
       }
     }
 
@@ -157,10 +143,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @param stateForContext - Minimal state with server_id and config for feature flag checking
    * @returns Array of tools available for this provider and configuration
    */
-  getAvailableToolsForContext(
-    provider: string,
-    stateForContext: ToolStateForContext,
-  ): Tool[] {
+  getAvailableToolsForContext(provider: string, stateForContext: ToolStateForContext): Tool[] {
     const availableTools: Tool[] = [];
 
     for (const tool of this.tools.values()) {
@@ -178,10 +161,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
         // Check feature flag requirements (only feature flags, no Discord permissions)
         if (tool.requiresFeatureFlag) {
-          const isFeatureEnabled = this.checkFeatureFlagOnly(
-            tool.requiresFeatureFlag,
-            stateForContext,
-          );
+          const isFeatureEnabled = this.checkFeatureFlagOnly(tool.requiresFeatureFlag, stateForContext);
           if (!isFeatureEnabled) {
             continue;
           }
@@ -192,9 +172,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
         availableTools.push(tool);
       } catch (error) {
-        log.warn(
-          `Error checking availability for tool ${tool.name}: ${(error as Error).message}`,
-        );
+        log.warn(`Error checking availability for tool ${tool.name}: ${(error as Error).message}`);
       }
     }
 
@@ -205,17 +183,13 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     return availableTools;
   }
 
-  private meetsModelCapabilityRequirements(
-    tool: Tool,
-    llm: ToolAvailabilityLlmState,
-  ): boolean {
+  private meetsModelCapabilityRequirements(tool: Tool, llm: ToolAvailabilityLlmState): boolean {
     if (!tool.requiredModelCapabilities) {
       return true;
     }
 
     return Object.entries(tool.requiredModelCapabilities).every(
-      ([capability, expectedValue]) =>
-        llm[capability as keyof ToolAvailabilityLlmState] === expectedValue,
+      ([capability, expectedValue]) => llm[capability as keyof ToolAvailabilityLlmState] === expectedValue,
     );
   }
 
@@ -236,10 +210,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
   }> {
     try {
       // Get built-in tools (already filtered by feature flags)
-      let builtInTools = this.getAvailableToolsForContext(
-        provider,
-        stateForContext,
-      );
+      let builtInTools = this.getAvailableToolsForContext(provider, stateForContext);
 
       // Convert config to feature flags for MCP filtering
       const featureFlags = configToFeatureFlags(stateForContext.config);
@@ -264,25 +235,18 @@ class ToolRegistryImpl implements ToolRegistryInterface {
               }
             }
           } catch (error) {
-            log.warn(
-              "Failed to extract function names from MCP tool:",
-              error as Error,
-            );
+            log.warn("Failed to extract function names from MCP tool:", error as Error);
           }
         }
 
         // Filter MCP functions by feature flags using centralized logic
-        let filteredByFeatureFlags = filterToolsByFeatureFlags(
-          allMCPFunctionNames,
-          featureFlags,
-        );
+        let filteredByFeatureFlags = filterToolsByFeatureFlags(allMCPFunctionNames, featureFlags);
 
         // Apply Brave API key preference logic (prefer Brave over DuckDuckGo when Brave is available)
         const braveServerIdNumber = stateForContext.server_id
           ? Number.parseInt(stateForContext.server_id, 10)
           : undefined;
-        const hasBraveApiKey =
-          await isBraveSearchAvailable(braveServerIdNumber);
+        const hasBraveApiKey = await isBraveSearchAvailable(braveServerIdNumber);
         if (hasBraveApiKey) {
           // DuckDuckGo search function names to exclude when Brave is available
           const duckduckgoSearchFunctions = [
@@ -315,14 +279,11 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       }
 
       // Append guild MCP function names (admin-registered, skip feature flag filtering)
-      const serverIdNum = stateForContext.server_id
-        ? Number.parseInt(stateForContext.server_id, 10)
-        : undefined;
+      const serverIdNum = stateForContext.server_id ? Number.parseInt(stateForContext.server_id, 10) : undefined;
       if (serverIdNum) {
         try {
           const guildMcpManager = getGuildMcpManager();
-          const guildFunctionNames =
-            await guildMcpManager.getGuildMCPFunctionNames(serverIdNum);
+          const guildFunctionNames = await guildMcpManager.getGuildMCPFunctionNames(serverIdNum);
 
           if (guildFunctionNames.length > 0) {
             // Collision check: skip guild functions that shadow built-in or global MCP names
@@ -345,10 +306,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             );
           }
         } catch (error) {
-          log.warn(
-            "[GuildMCP] Failed to get guild MCP function names, continuing without",
-            error,
-          );
+          log.warn("[GuildMCP] Failed to get guild MCP function names, continuing without", error);
         }
       }
 
@@ -357,11 +315,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       // A guild server with server_type = 'url_fetcher' replaces the built-in 'fetch' MCP tool.
       if (serverIdNum) {
         try {
-          const enabledConfigs =
-            await getCachedEnabledGuildMcpConfigs(serverIdNum);
-          const guildServerTypes = new Set(
-            enabledConfigs.map((c) => c.server_type).filter(Boolean),
-          );
+          const enabledConfigs = await getCachedEnabledGuildMcpConfigs(serverIdNum);
+          const guildServerTypes = new Set(enabledConfigs.map((c) => c.server_type).filter(Boolean));
 
           if (guildServerTypes.has("web_search")) {
             const webSearchFunctions = [
@@ -380,72 +335,48 @@ class ToolRegistryImpl implements ToolRegistryInterface {
               "url-metadata",
             ];
             const beforeCount = mcpFunctionNames.length;
-            mcpFunctionNames = mcpFunctionNames.filter(
-              (name) => !webSearchFunctions.includes(name),
-            );
+            mcpFunctionNames = mcpFunctionNames.filter((name) => !webSearchFunctions.includes(name));
             const excludedCount = beforeCount - mcpFunctionNames.length;
             if (excludedCount > 0) {
-              log.info(
-                `Excluded ${excludedCount} web search MCP functions (guild has web_search server type)`,
-              );
+              log.info(`Excluded ${excludedCount} web search MCP functions (guild has web_search server type)`);
             }
           }
 
           if (guildServerTypes.has("url_fetcher")) {
             const fetchFunctions = ["fetch", "fetch-url"];
             const beforeCount = mcpFunctionNames.length;
-            mcpFunctionNames = mcpFunctionNames.filter(
-              (name) => !fetchFunctions.includes(name),
-            );
+            mcpFunctionNames = mcpFunctionNames.filter((name) => !fetchFunctions.includes(name));
             const excludedCount = beforeCount - mcpFunctionNames.length;
             if (excludedCount > 0) {
-              log.info(
-                `Excluded ${excludedCount} URL fetch MCP functions (guild has url_fetcher server type)`,
-              );
+              log.info(`Excluded ${excludedCount} URL fetch MCP functions (guild has url_fetcher server type)`);
             }
           }
         } catch (error) {
-          log.warn(
-            "[GuildMCP] Failed to check server types for deduplication, continuing without",
-            error,
-          );
+          log.warn("[GuildMCP] Failed to check server types for deduplication, continuing without", error);
         }
       }
 
       // Apply NovelAI opt API key preference logic for image generation tools
-      const serverIdNumber = stateForContext.server_id
-        ? Number.parseInt(stateForContext.server_id, 10)
-        : undefined;
+      const serverIdNumber = stateForContext.server_id ? Number.parseInt(stateForContext.server_id, 10) : undefined;
       if (serverIdNumber) {
         const hasNovelAiOptKey = await hasOptApiKey(serverIdNumber, "novelai");
-        const hasElevenLabsOptKey = await hasOptApiKey(
-          serverIdNumber,
-          ELEVENLABS_SERVICE_NAME,
-        );
+        const hasElevenLabsOptKey = await hasOptApiKey(serverIdNumber, ELEVENLABS_SERVICE_NAME);
 
         // 1. If provider is not NovelAI AND no NovelAI opt key exists, remove generate_image_nai
         if (provider !== "novelai" && !hasNovelAiOptKey) {
           const beforeCount = builtInTools.length;
-          builtInTools = builtInTools.filter(
-            (tool) => tool.name !== "generate_image_nai",
-          );
+          builtInTools = builtInTools.filter((tool) => tool.name !== "generate_image_nai");
           if (builtInTools.length < beforeCount) {
-            log.info(
-              `Excluded generate_image_nai (no NovelAI opt key and provider is ${provider})`,
-            );
+            log.info(`Excluded generate_image_nai (no NovelAI opt key and provider is ${provider})`);
           }
         }
 
         // 2. If NovelAI opt key exists AND nai_exclusive_imggen is enabled, remove generate_image
         if (hasNovelAiOptKey && stateForContext.config.nai_exclusive_imggen) {
           const beforeCount = builtInTools.length;
-          builtInTools = builtInTools.filter(
-            (tool) => tool.name !== "generate_image",
-          );
+          builtInTools = builtInTools.filter((tool) => tool.name !== "generate_image");
           if (builtInTools.length < beforeCount) {
-            log.info(
-              "Excluded generate_image (nai_exclusive_imggen enabled with NovelAI opt key)",
-            );
+            log.info("Excluded generate_image (nai_exclusive_imggen enabled with NovelAI opt key)");
           }
         }
 
@@ -460,11 +391,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             if (tool.name !== "generate_image_nai") return tool;
 
             // Create a shallow proxy that hides inpainting-only parameters
-            const {
-              message_id: _msgId,
-              edit_target: _editTarget,
-              ...baseProps
-            } = tool.parameters.properties;
+            const { message_id: _msgId, edit_target: _editTarget, ...baseProps } = tool.parameters.properties;
 
             const strippedDescription = tool.description.replace(
               / For editing\/inpainting:.*?The image will be sent directly to the Discord channel\./,
@@ -494,9 +421,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           !stateForContext.config.voice_message_enabled
         ) {
           const beforeCount = builtInTools.length;
-          builtInTools = builtInTools.filter(
-            (tool) => tool.name !== "generate_voice_message",
-          );
+          builtInTools = builtInTools.filter((tool) => tool.name !== "generate_voice_message");
           if (builtInTools.length < beforeCount) {
             log.info(
               `Excluded generate_voice_message (${
@@ -526,10 +451,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       log.error("Failed to get available tools with MCP:", error as Error);
 
       // Fallback to just built-in tools
-      const builtInTools = this.getAvailableToolsForContext(
-        provider,
-        stateForContext,
-      );
+      const builtInTools = this.getAvailableToolsForContext(provider, stateForContext);
       return {
         builtInTools,
         mcpFunctionNames: [],
@@ -562,10 +484,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @param provider - Provider name
    * @returns Promise<boolean> - True if this is an MCP function
    */
-  async isMCPFunction(
-    functionName: string,
-    provider: string,
-  ): Promise<boolean> {
+  async isMCPFunction(functionName: string, provider: string): Promise<boolean> {
     const adapter = this.mcpAdapters.get(provider);
     if (!adapter) {
       return false;
@@ -574,10 +493,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     try {
       return await adapter.isMCPFunction(functionName);
     } catch (error) {
-      log.warn(
-        `Error checking if function '${functionName}' is MCP for provider '${provider}':`,
-        error as Error,
-      );
+      log.warn(`Error checking if function '${functionName}' is MCP for provider '${provider}':`, error as Error);
       return false;
     }
   }
@@ -591,11 +507,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @param serverId - Optional internal server_id for guild MCP check
    * @returns Promise<boolean> - True if the tool needs a follow-up generation
    */
-  async requiresFollowUp(
-    functionName: string,
-    provider: string,
-    serverId?: number,
-  ): Promise<boolean> {
+  async requiresFollowUp(functionName: string, provider: string, serverId?: number): Promise<boolean> {
     // 1. Check if it's a global MCP function — all MCP tools require follow-up
     const isMcp = await this.isMCPFunction(functionName, provider);
     if (isMcp) {
@@ -605,10 +517,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     // 2. Check if it's a guild MCP function — also requires follow-up
     if (serverId) {
       try {
-        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(
-          serverId,
-          functionName,
-        );
+        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(serverId, functionName);
         if (isGuildMcp) return true;
       } catch {
         /* fall through */
@@ -628,11 +537,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @param context - Execution context
    * @returns Promise resolving to tool execution result
    */
-  async executeTool(
-    toolName: string,
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<ToolResult> {
+  async executeTool(toolName: string, args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const startTime = Date.now();
 
     // 1. Check global MCP first
@@ -646,20 +551,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     if (serverId) {
       try {
         const guildMcpManager = getGuildMcpManager();
-        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(
-          serverId,
-          toolName,
-        );
+        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(serverId, toolName);
         if (isGuildMcp) {
-          log.info(
-            `Executing guild MCP function: ${toolName} for server ${serverId}`,
-          );
-          const result = await guildMcpManager.executeGuildMCPFunction(
-            serverId,
-            toolName,
-            args,
-            context,
-          );
+          log.info(`Executing guild MCP function: ${toolName} for server ${serverId}`);
+          const result = await guildMcpManager.executeGuildMCPFunction(serverId, toolName, args, context);
           const executionTime = Date.now() - startTime;
 
           // Record execution event
@@ -675,9 +570,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           });
 
           if (result.success) {
-            log.success(
-              `Guild MCP function executed successfully: ${toolName} (${executionTime}ms)`,
-            );
+            log.success(`Guild MCP function executed successfully: ${toolName} (${executionTime}ms)`);
           } else {
             log.warn(
               `Guild MCP function execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`,
@@ -687,10 +580,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           return result;
         }
       } catch (error) {
-        log.warn(
-          `Error checking/executing guild MCP function '${toolName}':`,
-          error as Error,
-        );
+        log.warn(`Error checking/executing guild MCP function '${toolName}':`, error as Error);
       }
     }
 
@@ -720,24 +610,16 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         error: `No MCP adapter registered for provider '${context.provider}'`,
       };
 
-      log.error(
-        `MCP function execution failed - no adapter: ${functionName} for provider ${context.provider}`,
-      );
+      log.error(`MCP function execution failed - no adapter: ${functionName} for provider ${context.provider}`);
 
       return errorResult;
     }
 
     try {
-      log.info(
-        `Executing MCP function: ${functionName} for provider ${context.provider}`,
-      );
+      log.info(`Executing MCP function: ${functionName} for provider ${context.provider}`);
 
       // Execute the MCP function through the adapter
-      const result = await adapter.executeMCPFunction(
-        functionName,
-        args,
-        context,
-      );
+      const result = await adapter.executeMCPFunction(functionName, args, context);
       const executionTime = Date.now() - startTime;
 
       // Record execution event
@@ -755,13 +637,9 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       this.recordExecution(executionEvent);
 
       if (result.success) {
-        log.success(
-          `MCP function executed successfully: ${functionName} (${executionTime}ms)`,
-        );
+        log.success(`MCP function executed successfully: ${functionName} (${executionTime}ms)`);
       } else {
-        log.warn(
-          `MCP function execution completed with error: ${functionName} - ${result.error} (${executionTime}ms)`,
-        );
+        log.warn(`MCP function execution completed with error: ${functionName} - ${result.error} (${executionTime}ms)`);
       }
 
       return result;
@@ -826,8 +704,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     // Check if tool is available for this provider
     // Use context-aware availability check if available, otherwise fall back to basic check
     const isToolAvailable =
-      "isAvailableForContext" in tool &&
-      typeof tool.isAvailableForContext === "function"
+      "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
         ? tool.isAvailableForContext(context.provider, context)
         : tool.isAvailableFor(context.provider);
 
@@ -837,17 +714,13 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         error: `Tool '${toolName}' is not available for provider '${context.provider}'`,
       };
 
-      log.error(
-        `Tool execution failed - provider not supported: ${toolName} for provider ${context.provider}`,
-      );
+      log.error(`Tool execution failed - provider not supported: ${toolName} for provider ${context.provider}`);
 
       return errorResult;
     }
 
     try {
-      log.info(
-        `Executing built-in tool: ${toolName} (${tool.category}) for provider ${context.provider}`,
-      );
+      log.info(`Executing built-in tool: ${toolName} (${tool.category}) for provider ${context.provider}`);
 
       // Execute the tool
       const result = await tool.execute(args, context);
@@ -868,13 +741,9 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       this.recordExecution(executionEvent);
 
       if (result.success) {
-        log.success(
-          `Tool executed successfully: ${toolName} (${executionTime}ms)`,
-        );
+        log.success(`Tool executed successfully: ${toolName} (${executionTime}ms)`);
       } else {
-        log.warn(
-          `Tool execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`,
-        );
+        log.warn(`Tool execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`);
       }
 
       return result;
@@ -938,8 +807,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     const toolsByCategory: Record<string, number> = {};
 
     for (const tool of this.tools.values()) {
-      toolsByCategory[tool.category] =
-        (toolsByCategory[tool.category] || 0) + 1;
+      toolsByCategory[tool.category] = (toolsByCategory[tool.category] || 0) + 1;
     }
 
     const recentExecutions = this.executionHistory.filter(
@@ -974,11 +842,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       throw new Error(`Tool '${tool.name}' must have a category`);
     }
 
-    if (
-      !tool.parameters ||
-      !tool.parameters.properties ||
-      !Array.isArray(tool.parameters.required)
-    ) {
+    if (!tool.parameters || !tool.parameters.properties || !Array.isArray(tool.parameters.required)) {
       throw new Error(`Tool '${tool.name}' must have valid parameter schema`);
     }
 
@@ -1011,10 +875,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @param stateForContext - Minimal state with configuration
    * @returns True if feature is enabled
    */
-  private checkFeatureFlagOnly(
-    featureFlag: string,
-    stateForContext: ToolStateForContext,
-  ): boolean {
+  private checkFeatureFlagOnly(featureFlag: string, stateForContext: ToolStateForContext): boolean {
     // Use centralized mapper to convert config to feature flags
     const featureFlags = configToFeatureFlags(stateForContext.config);
     return featureFlags[featureFlag] ?? false;
@@ -1026,10 +887,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @param context - Tool context
    * @returns True if all permissions are available
    */
-  private checkPermissions(
-    requiredPermissions: string[],
-    context: ToolContext,
-  ): boolean {
+  private checkPermissions(requiredPermissions: string[], context: ToolContext): boolean {
     // For now, just check basic Discord permissions
     // This could be expanded to check bot permissions, user roles, etc.
 
@@ -1047,9 +905,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           context.channel.type === ChannelType.PublicThread ||
           context.channel.type === ChannelType.PrivateThread ||
           context.channel.type === ChannelType.AnnouncementThread;
-        const canSend = isThreadChannel
-          ? permissions.has("SendMessagesInThreads")
-          : permissions.has("SendMessages");
+        const canSend = isThreadChannel ? permissions.has("SendMessagesInThreads") : permissions.has("SendMessages");
         if (!canSend) {
           return false;
         }
@@ -1061,9 +917,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       if (
         !clientUser ||
         !("permissionsFor" in context.channel
-          ? context.channel
-              .permissionsFor(clientUser)
-              ?.has("UseExternalStickers")
+          ? context.channel.permissionsFor(clientUser)?.has("UseExternalStickers")
           : true)
       ) {
         return false;
@@ -1082,9 +936,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
     // Keep history size manageable
     if (this.executionHistory.length > this.maxHistorySize) {
-      this.executionHistory = this.executionHistory.slice(
-        -this.maxHistorySize + 100,
-      );
+      this.executionHistory = this.executionHistory.slice(-this.maxHistorySize + 100);
     }
   }
 }
@@ -1101,17 +953,11 @@ export function getTool(name: string): Tool | undefined {
   return ToolRegistry.getTool(name);
 }
 
-export function getAvailableTools(
-  provider: string,
-  context: ToolContext,
-): Tool[] {
+export function getAvailableTools(provider: string, context: ToolContext): Tool[] {
   return ToolRegistry.getAvailableTools(provider, context);
 }
 
-export function getAvailableToolsForContext(
-  provider: string,
-  stateForContext: ToolStateForContext,
-): Tool[] {
+export function getAvailableToolsForContext(provider: string, stateForContext: ToolStateForContext): Tool[] {
   return ToolRegistry.getAvailableToolsForContext(provider, stateForContext);
 }
 
@@ -1127,18 +973,11 @@ export function registerMCPAdapter(adapter: MCPCapableToolAdapter): void {
   ToolRegistry.registerMCPAdapter(adapter);
 }
 
-export async function isMCPFunction(
-  functionName: string,
-  provider: string,
-): Promise<boolean> {
+export async function isMCPFunction(functionName: string, provider: string): Promise<boolean> {
   return ToolRegistry.isMCPFunction(functionName, provider);
 }
 
-export async function requiresFollowUp(
-  functionName: string,
-  provider: string,
-  serverId?: number,
-): Promise<boolean> {
+export async function requiresFollowUp(functionName: string, provider: string, serverId?: number): Promise<boolean> {
   return ToolRegistry.requiresFollowUp(functionName, provider, serverId);
 }
 

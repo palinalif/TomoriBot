@@ -39,9 +39,7 @@ const COMPOSITE_KEY_SEPARATOR = "::";
  */
 export function parseVertexCompositeKey(compositeKey: string): VertexConfig {
   if (!compositeKey || typeof compositeKey !== "string") {
-    throw new Error(
-      "Vertex composite key is empty. Expected format: {project_id}::{location}",
-    );
+    throw new Error("Vertex composite key is empty. Expected format: {project_id}::{location}");
   }
 
   const parts = compositeKey.split(COMPOSITE_KEY_SEPARATOR);
@@ -55,15 +53,11 @@ export function parseVertexCompositeKey(compositeKey: string): VertexConfig {
   const [projectId, location] = parts.map((p) => p.trim());
 
   if (!projectId) {
-    throw new Error(
-      `Vertex composite key has an empty project ID. Expected format: {project_id}::{location}`,
-    );
+    throw new Error(`Vertex composite key has an empty project ID. Expected format: {project_id}::{location}`);
   }
 
   if (!location) {
-    throw new Error(
-      `Vertex composite key has an empty location. Expected format: {project_id}::{location}`,
-    );
+    throw new Error(`Vertex composite key has an empty location. Expected format: {project_id}::{location}`);
   }
 
   return { projectId, location };
@@ -78,9 +72,7 @@ export function parseVertexCompositeKey(compositeKey: string): VertexConfig {
  * @returns GoogleGenAI client ready for Vertex AI calls
  */
 export function createVertexClient(config: VertexConfig): GoogleGenAI {
-  log.info(
-    `Creating Vertex AI client for project "${config.projectId}" in "${config.location}"`,
-  );
+  log.info(`Creating Vertex AI client for project "${config.projectId}" in "${config.location}"`);
 
   return new GoogleGenAI({
     vertexai: true,

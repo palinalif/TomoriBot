@@ -1,47 +1,24 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithRawModal,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
-import type {
-  ErrorContext,
-  UserRow,
-  EmbeddingModelRow,
-} from "../../../types/db/schema";
+import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
+import type { ErrorContext, UserRow, EmbeddingModelRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { decryptApiKey } from "../../../utils/security/crypto";
 import { getMemoryLimits } from "../../../utils/db/memoryLimits";
-import {
-  loadEmbeddingModelById,
-  loadAvailableEmbeddingModelsForProvider,
-} from "../../../utils/db/dbRead";
+import { loadEmbeddingModelById, loadAvailableEmbeddingModelsForProvider } from "../../../utils/db/dbRead";
 import { reembedServerDocuments } from "../../../utils/documents/documentService";
 
 const MODAL_CUSTOM_ID = "config_model_embedding_modal";
 const MODEL_SELECT_ID = "model_select";
 
-function getLocalizedDescription(
-  model: EmbeddingModelRow,
-  locale: string,
-): string {
+function getLocalizedDescription(model: EmbeddingModelRow, locale: string): string {
   const normalizedLocale = locale.toLowerCase().split("-")[0];
-  const description =
-    normalizedLocale === "ja" ? model.ja_description : model.model_description;
-  const baseDescription =
-    description || model.model_description || `${model.provider} model`;
+  const description = normalizedLocale === "ja" ? model.ja_description : model.model_description;
+  const baseDescription = description || model.model_description || `${model.provider} model`;
 
   const flags: string[] = [];
   if (model.is_default) flags.push("DEFAULT");
@@ -49,14 +26,8 @@ function getLocalizedDescription(
   return `${flagPrefix}${baseDescription}`;
 }
 
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("embedding")
-    .setDescription(
-      localizer("en-US", "commands.config.model.embedding.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("embedding").setDescription(localizer("en-US", "commands.config.model.embedding.description"));
 
 export async function execute(
   _client: Client,
@@ -64,9 +35,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled =
-    process.env.RUN_ENV === "production" ||
-    process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
 
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, userData.language_pref, {
@@ -77,9 +46,7 @@ export async function execute(
     return;
   }
 
-  const tomoriState = await getCachedTomoriState(
-    interaction.guild?.id ?? interaction.user.id,
-  );
+  const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
   if (!tomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.tomori_not_setup_title",
@@ -101,10 +68,7 @@ export async function execute(
   }
 
   const currentProvider = tomoriState.llm.llm_provider;
-  const availableModels = await loadAvailableEmbeddingModelsForProvider(
-    currentProvider,
-    false,
-  );
+  const availableModels = await loadAvailableEmbeddingModelsForProvider(currentProvider, false);
 
   if (!availableModels || availableModels.length === 0) {
     await replyInfoEmbed(interaction, locale, {
@@ -117,26 +81,19 @@ export async function execute(
     return;
   }
 
-  let modalSubmitInteraction:
-    | import("discord.js").ModalSubmitInteraction
-    | undefined;
+  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: EmbeddingModelRow | null = null;
 
   try {
     const modelSelectOptions: SelectOption[] = [];
     for (const model of availableModels) {
-      if (
-        model.embedding_model_id === null ||
-        model.embedding_model_id === undefined
-      ) {
+      if (model.embedding_model_id === null || model.embedding_model_id === undefined) {
         continue;
       }
       modelSelectOptions.push({
         label: safeSelectOptionText(model.codename),
         value: safeSelectOptionText(model.embedding_model_id.toString()),
-        description: safeSelectOptionText(
-          getLocalizedDescription(model, userData.language_pref),
-        ),
+        description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)),
       });
     }
 
@@ -161,8 +118,7 @@ export async function execute(
           {
             customId: MODEL_SELECT_ID,
             labelKey: "commands.config.model.embedding.select_label",
-            descriptionKey:
-              "commands.config.model.embedding.select_description",
+            descriptionKey: "commands.config.model.embedding.select_description",
             placeholder: "commands.config.model.embedding.select_placeholder",
             required: true,
             options: modelSelectOptions,
@@ -173,9 +129,7 @@ export async function execute(
     );
 
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Embedding model selection modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Embedding model selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
@@ -194,17 +148,13 @@ export async function execute(
     if (!selectedModelIdStr) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.embedding.invalid_model_title",
-        descriptionKey:
-          "commands.config.model.embedding.invalid_model_description",
+        descriptionKey: "commands.config.model.embedding.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;
     }
     const selectedModelId = Number.parseInt(selectedModelIdStr, 10);
-    selectedModel =
-      availableModels.find(
-        (model) => model.embedding_model_id === selectedModelId,
-      ) ?? null;
+    selectedModel = availableModels.find((model) => model.embedding_model_id === selectedModelId) ?? null;
 
     if (!selectedModel?.embedding_model_id) {
       const context: ErrorContext = {
@@ -226,20 +176,16 @@ export async function execute(
 
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.embedding.invalid_model_title",
-        descriptionKey:
-          "commands.config.model.embedding.invalid_model_description",
+        descriptionKey: "commands.config.model.embedding.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    if (
-      selectedModel.embedding_model_id === tomoriState.config.embedding_model_id
-    ) {
+    if (selectedModel.embedding_model_id === tomoriState.config.embedding_model_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.embedding.already_selected_title",
-        descriptionKey:
-          "commands.config.model.embedding.already_selected_description",
+        descriptionKey: "commands.config.model.embedding.already_selected_description",
         descriptionVars: {
           model_name: selectedModel.codename,
         },
@@ -249,13 +195,11 @@ export async function execute(
     }
 
     const currentEmbeddingModel =
-      tomoriState.config.embedding_model_id !== null &&
-      tomoriState.config.embedding_model_id !== undefined
+      tomoriState.config.embedding_model_id !== null && tomoriState.config.embedding_model_id !== undefined
         ? await loadEmbeddingModelById(tomoriState.config.embedding_model_id)
         : null;
     const shouldReembed =
-      currentEmbeddingModel?.model_family &&
-      currentEmbeddingModel.model_family !== selectedModel.model_family;
+      currentEmbeddingModel?.model_family && currentEmbeddingModel.model_family !== selectedModel.model_family;
 
     if (shouldReembed && ragEnabled) {
       const [docCountRow] = await sql`
@@ -267,8 +211,7 @@ export async function execute(
       if (docCount > 0) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.config.model.embedding.reembed_started_title",
-          descriptionKey:
-            "commands.config.model.embedding.reembed_started_description",
+          descriptionKey: "commands.config.model.embedding.reembed_started_description",
           color: ColorCode.INFO,
         });
 
@@ -276,16 +219,12 @@ export async function execute(
         if (!apiKey) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.model.embedding.no_api_key_title",
-            descriptionKey:
-              "commands.config.model.embedding.no_api_key_description",
+            descriptionKey: "commands.config.model.embedding.no_api_key_description",
             color: ColorCode.ERROR,
           });
           return;
         }
-        const decryptedKey = await decryptApiKey(
-          apiKey,
-          tomoriState.config.key_version || 1,
-        );
+        const decryptedKey = await decryptApiKey(apiKey, tomoriState.config.key_version || 1);
         const limits = getMemoryLimits();
         await reembedServerDocuments({
           serverId: tomoriState.server_id,

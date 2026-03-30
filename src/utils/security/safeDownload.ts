@@ -74,25 +74,19 @@ export interface SafeDownloadResult {
  * const imageBuffer = result.buffer;
  * ```
  */
-export async function safeDownload(
-  url: string,
-  options: SafeDownloadOptions,
-): Promise<SafeDownloadResult> {
+export async function safeDownload(url: string, options: SafeDownloadOptions): Promise<SafeDownloadResult> {
   const { maxSizeMB, timeoutMs = 10000, knownSize } = options;
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
 
   // 1. Pre-check known size if provided (early rejection, no network call)
   if (knownSize !== undefined && knownSize > maxSizeBytes) {
-    log.warn(
-      `File size ${(knownSize / (1024 * 1024)).toFixed(2)} MB exceeds limit of ${maxSizeMB} MB`,
-      {
-        metadata: {
-          url,
-          knownSizeMB: knownSize / (1024 * 1024),
-          maxSizeMB,
-        },
+    log.warn(`File size ${(knownSize / (1024 * 1024)).toFixed(2)} MB exceeds limit of ${maxSizeMB} MB`, {
+      metadata: {
+        url,
+        knownSizeMB: knownSize / (1024 * 1024),
+        maxSizeMB,
       },
-    );
+    });
 
     return {
       success: false,
@@ -133,16 +127,13 @@ export async function safeDownload(
     if (contentLength) {
       const sizeBytes = Number.parseInt(contentLength, 10);
       if (sizeBytes > maxSizeBytes) {
-        log.warn(
-          `Content-Length ${(sizeBytes / (1024 * 1024)).toFixed(2)} MB exceeds limit of ${maxSizeMB} MB`,
-          {
-            metadata: {
-              url,
-              contentLengthMB: sizeBytes / (1024 * 1024),
-              maxSizeMB,
-            },
+        log.warn(`Content-Length ${(sizeBytes / (1024 * 1024)).toFixed(2)} MB exceeds limit of ${maxSizeMB} MB`, {
+          metadata: {
+            url,
+            contentLengthMB: sizeBytes / (1024 * 1024),
+            maxSizeMB,
           },
-        );
+        });
 
         return {
           success: false,
@@ -158,16 +149,13 @@ export async function safeDownload(
 
     // 7. Final size check on actual downloaded data
     if (buffer.length > maxSizeBytes) {
-      log.warn(
-        `Downloaded file ${(buffer.length / (1024 * 1024)).toFixed(2)} MB exceeds limit of ${maxSizeMB} MB`,
-        {
-          metadata: {
-            url,
-            actualSizeMB: buffer.length / (1024 * 1024),
-            maxSizeMB,
-          },
+      log.warn(`Downloaded file ${(buffer.length / (1024 * 1024)).toFixed(2)} MB exceeds limit of ${maxSizeMB} MB`, {
+        metadata: {
+          url,
+          actualSizeMB: buffer.length / (1024 * 1024),
+          maxSizeMB,
         },
-      );
+      });
 
       return {
         success: false,
@@ -177,9 +165,7 @@ export async function safeDownload(
     }
 
     // 8. Success!
-    log.info(
-      `Successfully downloaded ${(buffer.length / (1024 * 1024)).toFixed(2)} MB`,
-    );
+    log.info(`Successfully downloaded ${(buffer.length / (1024 * 1024)).toFixed(2)} MB`);
 
     return {
       success: true,

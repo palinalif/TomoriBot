@@ -106,11 +106,7 @@ const HTML_TAG_REGEX =
  * @param charName - Bot/persona display name
  * @returns Text with additional placeholders resolved
  */
-function applyCompatibilityPatches(
-  text: string,
-  userName: string,
-  charName: string,
-): string {
+function applyCompatibilityPatches(text: string, userName: string, charName: string): string {
   // Patch 1: <USER> / <BOT> XML-style identity placeholders
   // Case-sensitive to avoid false positives with lowercase HTML-like tags
   let result = text.replaceAll("<USER>", userName);
@@ -143,13 +139,10 @@ function processSetVars(text: string): {
 } {
   const vars = new Map<string, string>();
 
-  const cleaned = text.replace(
-    SETVAR_REGEX,
-    (_match, key: string, value: string) => {
-      vars.set(key.trim(), value.trim());
-      return ""; // Remove the setvar macro from content
-    },
-  );
+  const cleaned = text.replace(SETVAR_REGEX, (_match, key: string, value: string) => {
+    vars.set(key.trim(), value.trim());
+    return ""; // Remove the setvar macro from content
+  });
 
   return { cleaned, vars };
 }
@@ -178,11 +171,7 @@ function processGetVars(text: string, vars: Map<string, string>): string {
  * @param expanded - Set to track which content macros were resolved with real data
  * @returns Text with content macros replaced
  */
-function processContentMacros(
-  text: string,
-  ctx: MacroContext,
-  expanded: Set<string>,
-): string {
+function processContentMacros(text: string, ctx: MacroContext, expanded: Set<string>): string {
   // Map of ST macro name → { value, trackingKey }
   // trackingKey is used for deduplication tracking in the context builder
   const macroMap: Array<{
@@ -258,20 +247,17 @@ function processRandom(text: string): string {
  * @returns Text with each roll macro replaced by the computed sum
  */
 function processRoll(text: string): string {
-  return text.replace(
-    ROLL_REGEX,
-    (_match, countStr: string, sidesStr: string) => {
-      const count = Math.min(Number.parseInt(countStr, 10), 100); // Cap at 100 dice
-      const sides = Math.min(Number.parseInt(sidesStr, 10), 1000); // Cap at 1000 sides
-      if (count <= 0 || sides <= 0) return "0";
+  return text.replace(ROLL_REGEX, (_match, countStr: string, sidesStr: string) => {
+    const count = Math.min(Number.parseInt(countStr, 10), 100); // Cap at 100 dice
+    const sides = Math.min(Number.parseInt(sidesStr, 10), 1000); // Cap at 1000 sides
+    if (count <= 0 || sides <= 0) return "0";
 
-      let sum = 0;
-      for (let i = 0; i < count; i++) {
-        sum += Math.floor(Math.random() * sides) + 1;
-      }
-      return sum.toString();
-    },
-  );
+    let sum = 0;
+    for (let i = 0; i < count; i++) {
+      sum += Math.floor(Math.random() * sides) + 1;
+    }
+    return sum.toString();
+  });
 }
 
 /**
@@ -374,9 +360,7 @@ export function resolvePresetMacros(
   }
 
   if (globalVars.size > 0) {
-    log.info(
-      `[ST Preset Engine] Collected ${globalVars.size} variable(s) from enabled nodes`,
-    );
+    log.info(`[ST Preset Engine] Collected ${globalVars.size} variable(s) from enabled nodes`);
   }
 
   // ── Pass 2: Resolve all macros for each node ──
@@ -435,11 +419,7 @@ export function resolvePresetMacros(
     content = processGetVars(content, globalVars);
 
     // 4. Expand content macros (personality, description, scenario, etc.)
-    content = processContentMacros(
-      content,
-      macroContext,
-      expandedContentMacros,
-    );
+    content = processContentMacros(content, macroContext, expandedContentMacros);
 
     // 5. Evaluate random selections
     content = processRandom(content);
@@ -448,11 +428,7 @@ export function resolvePresetMacros(
     content = processRoll(content);
 
     // 7. Apply compatibility patches (additional placeholders like <USER>, <BOT>)
-    content = applyCompatibilityPatches(
-      content,
-      macroContext.userName,
-      macroContext.charName,
-    );
+    content = applyCompatibilityPatches(content, macroContext.userName, macroContext.charName);
 
     // 8. Process trim (must be last text transform)
     const { result: trimmedContent, isEmpty } = processTrim(content);
@@ -479,9 +455,7 @@ export function resolvePresetMacros(
   }
 
   if (htmlWarningCount > 0) {
-    log.warn(
-      `[ST Preset Engine] ${htmlWarningCount} node(s) contain HTML content (may render poorly in Discord)`,
-    );
+    log.warn(`[ST Preset Engine] ${htmlWarningCount} node(s) contain HTML content (may render poorly in Discord)`);
   }
 
   return { resolved, expandedContentMacros };

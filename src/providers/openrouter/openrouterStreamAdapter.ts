@@ -14,15 +14,8 @@
  * - Handle mid-stream errors with unified error format
  */
 
-import type {
-  FunctionCall,
-  FunctionResponseImageMetadata,
-  ThoughtLogEntry,
-} from "../../types/provider/interfaces";
-import {
-  ContextItemTag,
-  type StructuredContextItem,
-} from "../../types/misc/context";
+import type { FunctionCall, FunctionResponseImageMetadata, ThoughtLogEntry } from "../../types/provider/interfaces";
+import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
@@ -138,9 +131,7 @@ interface AccumulatedToolCall {
   functionArguments: string;
 }
 
-const OPENROUTER_VERBOSE_FETCH =
-  (process.env.OPENROUTER_VERBOSE_FETCH ?? "true").trim().toLowerCase() ===
-  "true";
+const OPENROUTER_VERBOSE_FETCH = (process.env.OPENROUTER_VERBOSE_FETCH ?? "true").trim().toLowerCase() === "true";
 
 /**
  * OpenRouter streaming adapter implementation
@@ -207,14 +198,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     seesImages = true,
     seesVideos = false,
   ): Promise<Array<Record<string, unknown>>> {
-    return this.assembleOpenrouterContext(
-      contextItems,
-      [],
-      undefined,
-      seesImages,
-      "Assistant",
-      seesVideos,
-    );
+    return this.assembleOpenrouterContext(contextItems, [], undefined, seesImages, "Assistant", seesVideos);
   }
 
   private isOpenRouterParamSupported(
@@ -223,10 +207,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     aliases: string[] = [],
   ): boolean {
     if (!supportedParameters) return true;
-    return (
-      supportedParameters.has(param) ||
-      aliases.some((alias) => supportedParameters.has(alias))
-    );
+    return supportedParameters.has(param) || aliases.some((alias) => supportedParameters.has(alias));
   }
 
   private isLikelyGenericErrorMessage(message: string): boolean {
@@ -263,10 +244,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     return message.toLowerCase().includes("no endpoints found");
   }
 
-  private cloneWithoutKeys(
-    input: Record<string, unknown>,
-    keysToRemove: string[],
-  ): Record<string, unknown> {
+  private cloneWithoutKeys(input: Record<string, unknown>, keysToRemove: string[]): Record<string, unknown> {
     const cloned: Record<string, unknown> = { ...input };
     for (const key of keysToRemove) {
       delete cloned[key];
@@ -284,9 +262,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
    *
    * Removes any content blocks with type: "image_url" or "image"
    */
-  private stripImagesFromMessages(
-    messages: Array<Record<string, unknown>>,
-  ): Array<Record<string, unknown>> {
+  private stripImagesFromMessages(messages: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
     return messages.map((message) => {
       const content = message.content;
       // If content is an array, filter out image blocks
@@ -315,37 +291,21 @@ export class OpenrouterStreamAdapter implements StreamProvider {
    * parts) because their serialized character length does not map to text token
    * usage in multimodal models.
    */
-  private estimateInputTokensForSafetyCap(
-    messages: Array<Record<string, unknown>>,
-  ): number {
-    const estimatedChars = messages.reduce(
-      (total, message) => total + this.estimateValueCharsForSafetyCap(message),
-      0,
-    );
+  private estimateInputTokensForSafetyCap(messages: Array<Record<string, unknown>>): number {
+    const estimatedChars = messages.reduce((total, message) => total + this.estimateValueCharsForSafetyCap(message), 0);
     return Math.ceil(estimatedChars / 4);
   }
 
-  private estimateValueCharsForSafetyCap(
-    value: unknown,
-    parentKey?: string,
-  ): number {
+  private estimateValueCharsForSafetyCap(value: unknown, parentKey?: string): number {
     if (typeof value === "string") {
-      if (
-        parentKey === "url" &&
-        value.startsWith("data:") &&
-        value.includes(";base64,")
-      ) {
+      if (parentKey === "url" && value.startsWith("data:") && value.includes(";base64,")) {
         return 0;
       }
       return value.length;
     }
 
     if (Array.isArray(value)) {
-      return value.reduce(
-        (total, item) =>
-          total + this.estimateValueCharsForSafetyCap(item, parentKey),
-        0,
-      );
+      return value.reduce((total, item) => total + this.estimateValueCharsForSafetyCap(item, parentKey), 0);
     }
 
     if (!value || typeof value !== "object") {
@@ -398,10 +358,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         };
         message?: string;
       };
-      errorCode =
-        errorData?.error?.code !== undefined
-          ? String(errorData.error.code)
-          : undefined;
+      errorCode = errorData?.error?.code !== undefined ? String(errorData.error.code) : undefined;
       rawErrorBodyFromMetadata = errorData?.error?.metadata?.raw;
       errorMessage =
         errorData?.error?.metadata?.raw ||
@@ -413,18 +370,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       errorMessage = errorText || responseStatusText;
     }
 
-    const statusLabel = errorCode
-      ? `HTTP ${responseStatus} (${errorCode})`
-      : `HTTP ${responseStatus}`;
+    const statusLabel = errorCode ? `HTTP ${responseStatus} (${errorCode})` : `HTTP ${responseStatus}`;
     const requestParamKeys = Object.keys(requestBody).sort().join(", ");
     const rawErrorBody = rawErrorBodyFromMetadata || errorText;
-    const rawErrorBodySnippet =
-      rawErrorBody.length > 3000
-        ? `${rawErrorBody.substring(0, 3000)}...`
-        : rawErrorBody;
-    const shouldAppendRawBody =
-      this.isLikelyGenericErrorMessage(errorMessage) &&
-      Boolean(rawErrorBodySnippet);
+    const rawErrorBodySnippet = rawErrorBody.length > 3000 ? `${rawErrorBody.substring(0, 3000)}...` : rawErrorBody;
+    const shouldAppendRawBody = this.isLikelyGenericErrorMessage(errorMessage) && Boolean(rawErrorBodySnippet);
 
     return {
       error: new Error(
@@ -438,10 +388,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
   /**
    * Start streaming from OpenRouter's API
    */
-  async *startStream(
-    config: StreamConfig,
-    context: StreamContext,
-  ): AsyncGenerator<RawStreamChunk, void, unknown> {
+  async *startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown> {
     log.info("OpenrouterStreamAdapter: Initializing OpenRouter streaming");
 
     // Reset accumulators for this stream
@@ -450,12 +397,8 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     this.speakerGuardPendingTail = "";
     this.streamedTextTail = "";
     this.speakerGuardEnabled = false;
-    this.activePersonaNameLower = (
-      context.tomoriState.tomori_nickname ?? ""
-    ).toLowerCase();
-    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(
-      context.contextItems,
-    );
+    this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
+    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
     if (this.activePersonaNameLower) {
       this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
     }
@@ -475,19 +418,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
     // Ensure model is provided
     if (!config.model) {
-      throw new Error(
-        "Model must be specified in config. Use OpenrouterProvider.getDefaultModel() if needed.",
-      );
+      throw new Error("Model must be specified in config. Use OpenrouterProvider.getDefaultModel() if needed.");
     }
 
     log.info(`Generating content with model ${config.model}`);
 
     // Log tools FIRST (before conversation history for better readability)
-    if (
-      config.tools &&
-      Array.isArray(config.tools) &&
-      config.tools.length > 0
-    ) {
+    if (config.tools && Array.isArray(config.tools) && config.tools.length > 0) {
       log.info(`Tools:\n${JSON.stringify(config.tools, null, 2)}`);
     }
 
@@ -503,11 +440,8 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           : null;
       const skippedUnsupportedParams: string[] = [];
       const normalizedModel = (config.model ?? "").toLowerCase();
-      const omitTemperatureByModelOverride =
-        OpenrouterStreamAdapter.TEMPERATURE_OMIT_MODELS.has(normalizedModel);
-      const personaSpeakerStop = buildPersonaSpeakerStopString(
-        context.tomoriState.tomori_nickname,
-      );
+      const omitTemperatureByModelOverride = OpenrouterStreamAdapter.TEMPERATURE_OMIT_MODELS.has(normalizedModel);
+      const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
       let stopParamSupported = false;
 
       // Build request body (OpenAI-compatible)
@@ -540,52 +474,29 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // If maxOutputTokens is undefined (unknown model), we skip max_tokens entirely
       // and let OpenRouter use the model's natural limit.
       let effectiveMaxOutputTokens = config.maxOutputTokens;
-      if (
-        effectiveMaxOutputTokens !== undefined &&
-        config.model &&
-        isOpenRouterCapabilityCacheReady()
-      ) {
+      if (effectiveMaxOutputTokens !== undefined && config.model && isOpenRouterCapabilityCacheReady()) {
         const tokenLimits = getOpenRouterTokenLimits(config.model);
         if (tokenLimits && tokenLimits.contextLength > 0) {
-          const outputSafetyFactorRaw = Number.parseFloat(
-            process.env.OPENROUTER_OUTPUT_SAFETY_FACTOR || "0.9",
-          );
+          const outputSafetyFactorRaw = Number.parseFloat(process.env.OPENROUTER_OUTPUT_SAFETY_FACTOR || "0.9");
           const outputSafetyFactor =
-            Number.isFinite(outputSafetyFactorRaw) &&
-            outputSafetyFactorRaw > 0 &&
-            outputSafetyFactorRaw < 1
+            Number.isFinite(outputSafetyFactorRaw) && outputSafetyFactorRaw > 0 && outputSafetyFactorRaw < 1
               ? outputSafetyFactorRaw
               : 0.9;
-          const minOutputTokensRaw = Number.parseInt(
-            process.env.OPENROUTER_MIN_OUTPUT_TOKENS || "256",
-            10,
-          );
+          const minOutputTokensRaw = Number.parseInt(process.env.OPENROUTER_MIN_OUTPUT_TOKENS || "256", 10);
           const configuredMinOutputTokens =
-            Number.isFinite(minOutputTokensRaw) && minOutputTokensRaw > 0
-              ? minOutputTokensRaw
-              : 256;
-          const minOutputTokensFloor = Math.min(
-            configuredMinOutputTokens,
-            effectiveMaxOutputTokens,
-          );
+            Number.isFinite(minOutputTokensRaw) && minOutputTokensRaw > 0 ? minOutputTokensRaw : 256;
+          const minOutputTokensFloor = Math.min(configuredMinOutputTokens, effectiveMaxOutputTokens);
           // 1. Rough input token estimate from textual message content
-          const estimatedInputTokens =
-            this.estimateInputTokensForSafetyCap(messages);
-          const remainingContextTokens =
-            tokenLimits.contextLength - estimatedInputTokens;
+          const estimatedInputTokens = this.estimateInputTokensForSafetyCap(messages);
+          const remainingContextTokens = tokenLimits.contextLength - estimatedInputTokens;
           // 2. Budget = safety-factor of remaining context after input
-          const rawSafeOutputBudget = Math.floor(
-            remainingContextTokens * outputSafetyFactor,
-          );
+          const rawSafeOutputBudget = Math.floor(remainingContextTokens * outputSafetyFactor);
           let safeOutputBudget = Math.max(1, rawSafeOutputBudget);
           let minOutputFloorApplied = false;
 
           // 3. If margin makes output too small, lift to min floor when the
           // remaining context can still fit it.
-          if (
-            safeOutputBudget < minOutputTokensFloor &&
-            remainingContextTokens >= minOutputTokensFloor
-          ) {
+          if (safeOutputBudget < minOutputTokensFloor && remainingContextTokens >= minOutputTokensFloor) {
             safeOutputBudget = minOutputTokensFloor;
             minOutputFloorApplied = true;
           }
@@ -608,11 +519,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
       if (effectiveMaxOutputTokens !== undefined) {
-        if (
-          this.isOpenRouterParamSupported(supportedParameters, "max_tokens", [
-            "max_completion_tokens",
-          ])
-        ) {
+        if (this.isOpenRouterParamSupported(supportedParameters, "max_tokens", ["max_completion_tokens"])) {
           requestBody.max_tokens = effectiveMaxOutputTokens;
         } else {
           skippedUnsupportedParams.push("max_tokens");
@@ -644,36 +551,21 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
       if (openrouterConfig.frequencyPenalty !== undefined) {
-        if (
-          this.isOpenRouterParamSupported(
-            supportedParameters,
-            "frequency_penalty",
-          )
-        ) {
+        if (this.isOpenRouterParamSupported(supportedParameters, "frequency_penalty")) {
           requestBody.frequency_penalty = openrouterConfig.frequencyPenalty;
         } else {
           skippedUnsupportedParams.push("frequency_penalty");
         }
       }
       if (openrouterConfig.presencePenalty !== undefined) {
-        if (
-          this.isOpenRouterParamSupported(
-            supportedParameters,
-            "presence_penalty",
-          )
-        ) {
+        if (this.isOpenRouterParamSupported(supportedParameters, "presence_penalty")) {
           requestBody.presence_penalty = openrouterConfig.presencePenalty;
         } else {
           skippedUnsupportedParams.push("presence_penalty");
         }
       }
       if (openrouterConfig.repetitionPenalty !== undefined) {
-        if (
-          this.isOpenRouterParamSupported(
-            supportedParameters,
-            "repetition_penalty",
-          )
-        ) {
+        if (this.isOpenRouterParamSupported(supportedParameters, "repetition_penalty")) {
           requestBody.repetition_penalty = openrouterConfig.repetitionPenalty;
         } else {
           skippedUnsupportedParams.push("repetition_penalty");
@@ -687,9 +579,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
       if (openrouterConfig.logitBias !== undefined) {
-        if (
-          this.isOpenRouterParamSupported(supportedParameters, "logit_bias")
-        ) {
+        if (this.isOpenRouterParamSupported(supportedParameters, "logit_bias")) {
           requestBody.logit_bias = openrouterConfig.logitBias;
         } else {
           skippedUnsupportedParams.push("logit_bias");
@@ -697,10 +587,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       }
 
       if (personaSpeakerStop) {
-        stopParamSupported = this.isOpenRouterParamSupported(
-          supportedParameters,
-          "stop",
-        );
+        stopParamSupported = this.isOpenRouterParamSupported(supportedParameters, "stop");
         if (stopParamSupported) {
           requestBody.stop = [personaSpeakerStop];
         } else {
@@ -708,27 +595,19 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
 
-      this.speakerGuardEnabled =
-        Boolean(personaSpeakerStop) && !stopParamSupported;
+      this.speakerGuardEnabled = Boolean(personaSpeakerStop) && !stopParamSupported;
       if (this.speakerGuardEnabled) {
-        log.info(
-          "OpenRouter: Speaker-boundary fallback guard enabled (stop parameter unsupported)",
-        );
+        log.info("OpenRouter: Speaker-boundary fallback guard enabled (stop parameter unsupported)");
       }
 
       if (supportedParameters && skippedUnsupportedParams.length > 0) {
-        log.info(
-          `OpenRouter: Skipping unsupported params for ${config.model}: ${skippedUnsupportedParams.join(", ")}`,
-        );
+        log.info(`OpenRouter: Skipping unsupported params for ${config.model}: ${skippedUnsupportedParams.join(", ")}`);
       }
       if (omitTemperatureByModelOverride) {
-        log.info(
-          `OpenRouter: Temperature omitted due to model override for ${config.model}`,
-        );
+        log.info(`OpenRouter: Temperature omitted due to model override for ${config.model}`);
       }
 
-      const effectiveTemperatureLabel =
-        "temperature" in requestBody ? String(config.temperature) : "omitted";
+      const effectiveTemperatureLabel = "temperature" in requestBody ? String(config.temperature) : "omitted";
 
       log.info(
         `Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${openrouterConfig.topP ?? "default"}, top_k: ${openrouterConfig.topK ?? "default"}, freq_penalty: ${openrouterConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openrouterConfig.presencePenalty ?? "default"}, rep_penalty: ${openrouterConfig.repetitionPenalty ?? "default"}, min_p: ${openrouterConfig.minP ?? "default"}, logit_bias: ${Object.keys(openrouterConfig.logitBias ?? {}).length}`,
@@ -751,18 +630,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         if (context.abortSignal.aborted) {
           controller.abort();
         } else {
-          context.abortSignal.addEventListener(
-            "abort",
-            () => controller?.abort(),
-            { once: true },
-          );
+          context.abortSignal.addEventListener("abort", () => controller?.abort(), { once: true });
         }
       }
 
       const inactivityTimeoutMs = config.inactivityTimeoutMs ?? 120000;
 
-      const attempts: Array<{ label: string; body: Record<string, unknown> }> =
-        [];
+      const attempts: Array<{ label: string; body: Record<string, unknown> }> = [];
       const seenSerializedBodies = new Set<string>();
       const addAttempt = (label: string, body: Record<string, unknown>) => {
         const serialized = JSON.stringify(body);
@@ -777,9 +651,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // Baseline for probing hidden incompatibilities:
       // remove stream_options first so per-parameter probes isolate other fields.
       const probeBaseline =
-        "stream_options" in requestBody
-          ? this.cloneWithoutKeys(requestBody, ["stream_options"])
-          : { ...requestBody };
+        "stream_options" in requestBody ? this.cloneWithoutKeys(requestBody, ["stream_options"]) : { ...requestBody };
       addAttempt("no_stream_options", probeBaseline);
 
       const mandatoryKeys = new Set(["model", "messages", "stream"]);
@@ -797,14 +669,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           return aIdx - bIdx;
         });
       if (probeCandidateKeys.length > 0) {
-        log.info(
-          `OpenRouter probe candidates (${config.model}): ${probeCandidateKeys.join(", ")}`,
-        );
+        log.info(`OpenRouter probe candidates (${config.model}): ${probeCandidateKeys.join(", ")}`);
         for (const key of probeCandidateKeys) {
-          addAttempt(
-            `probe_drop_${key}`,
-            this.cloneWithoutKeys(probeBaseline, [key]),
-          );
+          addAttempt(`probe_drop_${key}`, this.cloneWithoutKeys(probeBaseline, [key]));
         }
       }
 
@@ -814,19 +681,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       let strippedMessages = messages;
       const probeWithoutImages = { ...probeBaseline };
       if (Array.isArray(probeBaseline.messages as unknown[])) {
-        strippedMessages = this.stripImagesFromMessages(
-          probeBaseline.messages as Array<Record<string, unknown>>,
-        );
+        strippedMessages = this.stripImagesFromMessages(probeBaseline.messages as Array<Record<string, unknown>>);
         probeWithoutImages.messages = strippedMessages;
       }
       addAttempt("strip_images", probeWithoutImages);
 
       // Then try dropping tools while keeping images (less common than tools-only models)
       if ("tools" in probeBaseline) {
-        addAttempt(
-          "probe_drop_tools",
-          this.cloneWithoutKeys(probeBaseline, ["tools"]),
-        );
+        addAttempt("probe_drop_tools", this.cloneWithoutKeys(probeBaseline, ["tools"]));
       }
 
       // Finally, minimal text-only payload with stripped images
@@ -842,9 +704,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         const isRetry = i > 0;
 
         if (isRetry) {
-          log.warn(
-            `OpenRouter request retry with degraded payload: ${attempt.label} (${config.model})`,
-          );
+          log.warn(`OpenRouter request retry with degraded payload: ${attempt.label} (${config.model})`);
         }
 
         const requestInit: RequestInit & { verbose?: boolean } = {
@@ -858,22 +718,15 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           requestInit.verbose = true;
         }
 
-        const attemptResponse = await fetch(
-          "https://openrouter.ai/api/v1/chat/completions",
-          requestInit,
-        );
+        const attemptResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", requestInit);
 
         if (attemptResponse.ok) {
           response = attemptResponse;
           if (isRetry) {
-            log.warn(
-              `OpenRouter request recovered after retry: ${attempt.label} (${config.model})`,
-            );
+            log.warn(`OpenRouter request recovered after retry: ${attempt.label} (${config.model})`);
             if (attempt.label.startsWith("probe_drop_")) {
               const droppedParam = attempt.label.replace("probe_drop_", "");
-              log.warn(
-                `OpenRouter probe indicates likely incompatible parameter for ${config.model}: ${droppedParam}`,
-              );
+              log.warn(`OpenRouter probe indicates likely incompatible parameter for ${config.model}: ${droppedParam}`);
             }
           }
           break;
@@ -891,29 +744,19 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
         const hasMoreAttempts = i < attempts.length - 1;
         const isGeneric400 =
-          parsedError.statusCode === 400 &&
-          this.isLikelyGenericErrorMessage(parsedError.errorMessage);
+          parsedError.statusCode === 400 && this.isLikelyGenericErrorMessage(parsedError.errorMessage);
         // Upstream provider explicitly rejected a parameter — probe-drop can isolate which one.
         const isParamRejection400 =
-          parsedError.statusCode === 400 &&
-          this.isParameterRejectionError(parsedError.errorMessage);
+          parsedError.statusCode === 400 && this.isParameterRejectionError(parsedError.errorMessage);
         // "No endpoints found" 404 means no backend supports the model+params combo,
         // not that the model is missing. Probe-drop retries can find a working subset.
-        const isNoEndpoints404 =
-          parsedError.statusCode === 404 &&
-          this.isNoEndpointsFound(parsedError.errorMessage);
+        const isNoEndpoints404 = parsedError.statusCode === 404 && this.isNoEndpointsFound(parsedError.errorMessage);
         // 502 Bad Gateway from routing models (e.g., openrouter/free) may indicate
         // the selected backend doesn't support the requested parameters.
         // Probe-drop can find a compatible parameter subset.
         const isBackendIncompatible502 = parsedError.statusCode === 502;
 
-        if (
-          (isGeneric400 ||
-            isParamRejection400 ||
-            isNoEndpoints404 ||
-            isBackendIncompatible502) &&
-          hasMoreAttempts
-        ) {
+        if ((isGeneric400 || isParamRejection400 || isNoEndpoints404 || isBackendIncompatible502) && hasMoreAttempts) {
           const reason = isNoEndpoints404
             ? "no endpoints found (404)"
             : isParamRejection400
@@ -921,13 +764,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
               : isBackendIncompatible502
                 ? "backend incompatible with parameters (502)"
                 : "generic HTTP 400";
-          log.warn(
-            `OpenRouter returned ${reason} on attempt '${attempt.label}', trying fallback payload`,
-            {
-              model: config.model,
-              errorMessage: parsedError.errorMessage,
-            },
-          );
+          log.warn(`OpenRouter returned ${reason} on attempt '${attempt.label}', trying fallback payload`, {
+            model: config.model,
+            errorMessage: parsedError.errorMessage,
+          });
           continue;
         }
 
@@ -935,9 +775,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       }
 
       if (!response) {
-        throw new Error(
-          "OpenRouter request failed before obtaining a response",
-        );
+        throw new Error("OpenRouter request failed before obtaining a response");
       }
 
       if (!response.body) {
@@ -953,9 +791,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         let timeoutId: NodeJS.Timeout | null = null;
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutId = setTimeout(() => {
-            reject(
-              new Error("OpenRouter stream timed out while waiting for data"),
-            );
+            reject(new Error("OpenRouter stream timed out while waiting for data"));
           }, inactivityTimeoutMs);
         });
 
@@ -1004,35 +840,22 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           try {
             parsed = JSON.parse(data);
           } catch (parseError) {
-            log.warn(
-              `OpenrouterStreamAdapter: Failed to parse SSE data: ${data}`,
-              {
-                error:
-                  parseError instanceof Error
-                    ? parseError.message
-                    : String(parseError),
-              },
-            );
+            log.warn(`OpenrouterStreamAdapter: Failed to parse SSE data: ${data}`, {
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+            });
             continue;
           }
 
           const normalizedChunk = this.normalizeOpenrouterChunk(parsed);
           if (!normalizedChunk) continue;
 
-          const chunksToEmit =
-            this.splitChunkWithTextAndToolSignals(normalizedChunk);
+          const chunksToEmit = this.splitChunkWithTextAndToolSignals(normalizedChunk);
 
           for (const chunkToEmit of chunksToEmit) {
-            const deduplicatedChunk =
-              this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
-            const guardResult =
-              this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
+            const deduplicatedChunk = this.deduplicateChunkTextAgainstRecentStream(chunkToEmit);
+            const guardResult = this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
 
-            if (
-              this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-                guardResult.chunk,
-              )
-            ) {
+            if (this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(guardResult.chunk)) {
               yield {
                 data: {
                   choices: [
@@ -1056,8 +879,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
             const hasMeaningfulData = Boolean(
               guardResult.chunk.error ||
                 guardResult.chunk.usage ||
-                (guardResult.chunk.choices &&
-                  guardResult.chunk.choices.length > 0),
+                (guardResult.chunk.choices && guardResult.chunk.choices.length > 0),
             );
 
             if (!hasMeaningfulData) {
@@ -1154,9 +976,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     }
   }
 
-  private collectKnownSpeakerNames(
-    contextItems: StructuredContextItem[],
-  ): Set<string> {
+  private collectKnownSpeakerNames(contextItems: StructuredContextItem[]): Set<string> {
     const names = new Set<string>();
 
     for (const item of contextItems) {
@@ -1181,24 +1001,16 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     return names;
   }
 
-  private deduplicateChunkTextAgainstRecentStream(
-    chunk: OpenrouterStreamChunk,
-  ): OpenrouterStreamChunk {
+  private deduplicateChunkTextAgainstRecentStream(chunk: OpenrouterStreamChunk): OpenrouterStreamChunk {
     const firstChoice = chunk.choices?.[0];
     const content = firstChoice?.delta?.content;
-    if (
-      !firstChoice?.delta ||
-      typeof content !== "string" ||
-      content.length === 0
-    ) {
+    if (!firstChoice?.delta || typeof content !== "string" || content.length === 0) {
       return chunk;
     }
 
     const deduplicatedText = this.getTextDelta(content);
     if (deduplicatedText !== content) {
-      log.info(
-        `OpenRouter: Trimmed overlapping streamed text (${content.length} -> ${deduplicatedText.length})`,
-      );
+      log.info(`OpenRouter: Trimmed overlapping streamed text (${content.length} -> ${deduplicatedText.length})`);
     }
 
     if (deduplicatedText.length > 0) {
@@ -1240,15 +1052,8 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     }
 
     const maxOverlap = Math.min(seenTail.length, chunkText.length);
-    for (
-      let overlap = maxOverlap;
-      overlap >= OpenrouterStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS;
-      overlap--
-    ) {
-      if (
-        seenTail.slice(seenTail.length - overlap) ===
-        chunkText.slice(0, overlap)
-      ) {
+    for (let overlap = maxOverlap; overlap >= OpenrouterStreamAdapter.STREAM_TEXT_MIN_DEDUP_CHARS; overlap--) {
+      if (seenTail.slice(seenTail.length - overlap) === chunkText.slice(0, overlap)) {
         return chunkText.slice(overlap);
       }
     }
@@ -1262,13 +1067,8 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     }
 
     this.streamedTextTail += text;
-    if (
-      this.streamedTextTail.length >
-      OpenrouterStreamAdapter.STREAM_TEXT_TAIL_CHARS
-    ) {
-      this.streamedTextTail = this.streamedTextTail.slice(
-        -OpenrouterStreamAdapter.STREAM_TEXT_TAIL_CHARS,
-      );
+    if (this.streamedTextTail.length > OpenrouterStreamAdapter.STREAM_TEXT_TAIL_CHARS) {
+      this.streamedTextTail = this.streamedTextTail.slice(-OpenrouterStreamAdapter.STREAM_TEXT_TAIL_CHARS);
     }
   }
 
@@ -1300,20 +1100,12 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       if (!match) break;
 
       const rawLabel = match[1].trim();
-      if (
-        !isRegisteredOrReservedSpeakerLabel(
-          rawLabel,
-          this.knownSpeakerNamesLower,
-        )
-      ) {
+      if (!isRegisteredOrReservedSpeakerLabel(rawLabel, this.knownSpeakerNamesLower)) {
         continue;
       }
 
       const normalizedLabel = rawLabel.toLowerCase();
-      if (
-        this.activePersonaNameLower &&
-        normalizedLabel === this.activePersonaNameLower
-      ) {
+      if (this.activePersonaNameLower && normalizedLabel === this.activePersonaNameLower) {
         continue;
       }
 
@@ -1346,9 +1138,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     };
   }
 
-  private splitChunkWithTextAndToolSignals(
-    chunk: OpenrouterStreamChunk,
-  ): OpenrouterStreamChunk[] {
+  private splitChunkWithTextAndToolSignals(chunk: OpenrouterStreamChunk): OpenrouterStreamChunk[] {
     const firstChoice = chunk.choices?.[0];
     if (!firstChoice?.delta) {
       return [chunk];
@@ -1360,12 +1150,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       return [chunk];
     }
 
-    const toolCalls =
-      firstChoice.delta.toolCalls ?? firstChoice.delta.tool_calls;
+    const toolCalls = firstChoice.delta.toolCalls ?? firstChoice.delta.tool_calls;
     const finishReason = firstChoice.finishReason ?? firstChoice.finish_reason;
-    const hasToolSignal =
-      Boolean(toolCalls && toolCalls.length > 0) ||
-      finishReason === "tool_calls";
+    const hasToolSignal = Boolean(toolCalls && toolCalls.length > 0) || finishReason === "tool_calls";
 
     if (!hasToolSignal) {
       return [chunk];
@@ -1404,13 +1191,8 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     return [textOnlyChunk, toolSignalChunk];
   }
 
-  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(
-    chunk: OpenrouterStreamChunk,
-  ): boolean {
-    if (
-      !this.speakerGuardEnabled ||
-      this.speakerGuardPendingTail.length === 0
-    ) {
+  private shouldFlushSpeakerGuardTailBeforeNonTextChunk(chunk: OpenrouterStreamChunk): boolean {
+    if (!this.speakerGuardEnabled || this.speakerGuardPendingTail.length === 0) {
       return false;
     }
 
@@ -1424,14 +1206,12 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       return true;
     }
 
-    const toolCalls =
-      firstChoice?.delta?.toolCalls ?? firstChoice?.delta?.tool_calls;
+    const toolCalls = firstChoice?.delta?.toolCalls ?? firstChoice?.delta?.tool_calls;
     if (toolCalls && toolCalls.length > 0) {
       return true;
     }
 
-    const finishReason =
-      firstChoice?.finishReason ?? firstChoice?.finish_reason;
+    const finishReason = firstChoice?.finishReason ?? firstChoice?.finish_reason;
     return Boolean(finishReason);
   }
 
@@ -1468,42 +1248,28 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         return { error: rawObj.error };
       }
 
-      const message =
-        typeof errorObj.message === "string"
-          ? errorObj.message
-          : "OpenRouter API error";
+      const message = typeof errorObj.message === "string" ? errorObj.message : "OpenRouter API error";
       const codeValue = errorObj.code;
       return {
         error: {
-          code:
-            typeof codeValue === "string" || typeof codeValue === "number"
-              ? codeValue
-              : "unknown",
+          code: typeof codeValue === "string" || typeof codeValue === "number" ? codeValue : "unknown",
           message,
         },
       };
     }
 
     // Handle flat error payloads (non-standard)
-    if (
-      typeof rawObj.message === "string" &&
-      ("code" in rawObj || "type" in rawObj)
-    ) {
+    if (typeof rawObj.message === "string" && ("code" in rawObj || "type" in rawObj)) {
       const codeValue = rawObj.code as string | number | undefined;
       return {
         error: {
-          code:
-            typeof codeValue === "string" || typeof codeValue === "number"
-              ? codeValue
-              : "unknown",
+          code: typeof codeValue === "string" || typeof codeValue === "number" ? codeValue : "unknown",
           message: rawObj.message,
         },
       };
     }
 
-    const rawChoices = Array.isArray(rawObj.choices)
-      ? rawObj.choices
-      : undefined;
+    const rawChoices = Array.isArray(rawObj.choices) ? rawObj.choices : undefined;
     const normalizedChoices = rawChoices?.map((choice, index) => {
       const choiceObj = choice as Record<string, unknown>;
       const deltaObj =
@@ -1511,8 +1277,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           ? (choiceObj.delta as Record<string, unknown>)
           : undefined;
 
-      const rawToolCalls =
-        deltaObj?.toolCalls ?? (deltaObj?.tool_calls as unknown);
+      const rawToolCalls = deltaObj?.toolCalls ?? (deltaObj?.tool_calls as unknown);
 
       const normalizedToolCalls = Array.isArray(rawToolCalls)
         ? rawToolCalls.map((toolCall) => {
@@ -1523,24 +1288,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                 : undefined;
 
             return {
-              index:
-                typeof toolObj.index === "number" ? toolObj.index : undefined,
+              index: typeof toolObj.index === "number" ? toolObj.index : undefined,
               id: typeof toolObj.id === "string" ? toolObj.id : undefined,
               type: typeof toolObj.type === "string" ? toolObj.type : undefined,
-              thought_signature:
-                typeof toolObj.thought_signature === "string"
-                  ? toolObj.thought_signature
-                  : undefined,
+              thought_signature: typeof toolObj.thought_signature === "string" ? toolObj.thought_signature : undefined,
               function: functionObj
                 ? {
-                    name:
-                      typeof functionObj.name === "string"
-                        ? functionObj.name
-                        : undefined,
-                    arguments:
-                      typeof functionObj.arguments === "string"
-                        ? functionObj.arguments
-                        : undefined,
+                    name: typeof functionObj.name === "string" ? functionObj.name : undefined,
+                    arguments: typeof functionObj.arguments === "string" ? functionObj.arguments : undefined,
                   }
                 : undefined,
             };
@@ -1554,12 +1309,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           : undefined;
 
       const finishReason =
-        (typeof choiceObj.finishReason === "string" ||
-        choiceObj.finishReason === null
+        (typeof choiceObj.finishReason === "string" || choiceObj.finishReason === null
           ? choiceObj.finishReason
           : undefined) ??
-        (typeof choiceObj.finish_reason === "string" ||
-        choiceObj.finish_reason === null
+        (typeof choiceObj.finish_reason === "string" || choiceObj.finish_reason === null
           ? choiceObj.finish_reason
           : undefined);
 
@@ -1567,16 +1320,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         index: typeof choiceObj.index === "number" ? choiceObj.index : index,
         delta: deltaObj
           ? {
-              role:
-                typeof deltaObj.role === "string" ? deltaObj.role : undefined,
+              role: typeof deltaObj.role === "string" ? deltaObj.role : undefined,
               content:
-                typeof deltaObj.content === "string" ||
-                deltaObj.content === null
+                typeof deltaObj.content === "string" || deltaObj.content === null
                   ? (deltaObj.content as string | null)
                   : undefined,
               reasoning:
-                typeof deltaObj.reasoning === "string" ||
-                deltaObj.reasoning === null
+                typeof deltaObj.reasoning === "string" || deltaObj.reasoning === null
                   ? (deltaObj.reasoning as string | null)
                   : undefined,
               toolCalls: normalizedToolCalls,
@@ -1589,9 +1339,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     });
 
     const rawUsage =
-      rawObj.usage && typeof rawObj.usage === "object"
-        ? (rawObj.usage as Record<string, unknown>)
-        : undefined;
+      rawObj.usage && typeof rawObj.usage === "object" ? (rawObj.usage as Record<string, unknown>) : undefined;
 
     const normalizedUsage = rawUsage
       ? {
@@ -1613,28 +1361,21 @@ export class OpenrouterStreamAdapter implements StreamProvider {
               : typeof rawUsage.total_tokens === "number"
                 ? rawUsage.total_tokens
                 : undefined,
-          completionTokensDetails:
-            rawUsage.completionTokensDetails ??
-            rawUsage.completion_tokens_details,
+          completionTokensDetails: rawUsage.completionTokensDetails ?? rawUsage.completion_tokens_details,
         }
       : undefined;
 
-    const hasUsage =
-      normalizedUsage &&
-      Object.values(normalizedUsage).some((value) => value !== undefined);
+    const hasUsage = normalizedUsage && Object.values(normalizedUsage).some((value) => value !== undefined);
 
     if (!normalizedChoices && !hasUsage) return null;
 
     const normalizedChunk: OpenrouterStreamChunk = {};
 
     if (typeof rawObj.id === "string") normalizedChunk.id = rawObj.id;
-    if (typeof rawObj.object === "string")
-      normalizedChunk.object = rawObj.object;
-    if (typeof rawObj.created === "number")
-      normalizedChunk.created = rawObj.created;
+    if (typeof rawObj.object === "string") normalizedChunk.object = rawObj.object;
+    if (typeof rawObj.created === "number") normalizedChunk.created = rawObj.created;
     if (typeof rawObj.model === "string") normalizedChunk.model = rawObj.model;
-    if (typeof rawObj.provider === "string")
-      normalizedChunk.provider = rawObj.provider;
+    if (typeof rawObj.provider === "string") normalizedChunk.provider = rawObj.provider;
     if (normalizedChoices) normalizedChunk.choices = normalizedChoices;
     if (hasUsage && normalizedUsage) normalizedChunk.usage = normalizedUsage;
 
@@ -1650,21 +1391,15 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     // Handle errors first (both pre-stream and mid-stream errors)
     if ("error" in openrouterChunk && openrouterChunk.error) {
       const providerErrorCandidate = openrouterChunk.error as ProviderError;
-      if (
-        typeof providerErrorCandidate.type === "string" &&
-        typeof providerErrorCandidate.retryable === "boolean"
-      ) {
+      if (typeof providerErrorCandidate.type === "string" && typeof providerErrorCandidate.retryable === "boolean") {
         return {
           type: "error",
           error: providerErrorCandidate,
         };
       }
 
-      const errorCode = (openrouterChunk.error as { code?: string | number })
-        .code;
-      const errorMessage =
-        (openrouterChunk.error as { message?: string }).message ||
-        "OpenRouter API error";
+      const errorCode = (openrouterChunk.error as { code?: string | number }).code;
+      const errorMessage = (openrouterChunk.error as { message?: string }).message || "OpenRouter API error";
 
       // Check for malformed tool call errors (model produced invalid tool call structure)
       // These occur when the model generates null/invalid values where strings are expected
@@ -1710,10 +1445,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         error: {
           type: "api_error",
           message: errorMessage,
-          code:
-            typeof errorCode === "string" || typeof errorCode === "number"
-              ? String(errorCode)
-              : "unknown",
+          code: typeof errorCode === "string" || typeof errorCode === "number" ? String(errorCode) : "unknown",
           retryable: false,
           originalError: openrouterChunk.error,
         } as ProviderError,
@@ -1733,10 +1465,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     const deltaToolCalls = choice.delta?.toolCalls ?? choice.delta?.tool_calls;
     const thoughts: ThoughtLogEntry[] = [];
 
-    if (
-      typeof choice.delta?.reasoning === "string" &&
-      choice.delta.reasoning.length > 0
-    ) {
+    if (typeof choice.delta?.reasoning === "string" && choice.delta.reasoning.length > 0) {
       thoughts.push({
         kind: "raw",
         content: choice.delta.reasoning,
@@ -1745,9 +1474,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
     // Log full chunk when we have tool calls to debug thought_signature location
     if (deltaToolCalls || finishReason === "tool_calls") {
-      log.info(
-        `OpenRouter: FULL CHUNK with tool calls: ${JSON.stringify(openrouterChunk, null, 2)}`,
-      );
+      log.info(`OpenRouter: FULL CHUNK with tool calls: ${JSON.stringify(openrouterChunk, null, 2)}`);
     }
 
     if (finishReason !== null && finishReason !== undefined)
@@ -1776,14 +1503,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         promptTokens: usage.promptTokens ?? usage.prompt_tokens,
         completionTokens: usage.completionTokens ?? usage.completion_tokens,
         totalTokens: usage.totalTokens ?? usage.total_tokens,
-        completionTokensDetails:
-          usage.completionTokensDetails ?? usage.completion_tokens_details,
+        completionTokensDetails: usage.completionTokensDetails ?? usage.completion_tokens_details,
       };
 
       metadata.usage = normalizedUsage;
-      log.info(
-        `OpenRouter usage: ${normalizedUsage.totalTokens ?? "unknown"} total tokens`,
-      );
+      log.info(`OpenRouter usage: ${normalizedUsage.totalTokens ?? "unknown"} total tokens`);
     }
 
     // Handle finish reasons FIRST (before delta processing)
@@ -1809,9 +1533,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           }
 
           // Log raw deltaToolCall for debugging
-          log.info(
-            `OpenRouter: Raw deltaToolCall [${index}]: ${JSON.stringify(deltaToolCall)}`,
-          );
+          log.info(`OpenRouter: Raw deltaToolCall [${index}]: ${JSON.stringify(deltaToolCall)}`);
 
           // Accumulate id, type, and thought_signature (usually only in first chunk)
           if (deltaToolCall.id) {
@@ -1820,19 +1542,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           }
           if (deltaToolCall.type) {
             accumulated.type = deltaToolCall.type;
-            log.info(
-              `OpenRouter: Captured tool call type: ${deltaToolCall.type}`,
-            );
+            log.info(`OpenRouter: Captured tool call type: ${deltaToolCall.type}`);
           }
           if (deltaToolCall.thought_signature) {
             accumulated.thought_signature = deltaToolCall.thought_signature;
-            log.info(
-              `OpenRouter: ✓ CAPTURED thought_signature from deltaToolCall: ${deltaToolCall.thought_signature}`,
-            );
+            log.info(`OpenRouter: ✓ CAPTURED thought_signature from deltaToolCall: ${deltaToolCall.thought_signature}`);
           } else {
-            log.info(
-              `OpenRouter: ✗ No thought_signature in deltaToolCall [${index}]`,
-            );
+            log.info(`OpenRouter: ✗ No thought_signature in deltaToolCall [${index}]`);
           }
 
           // Accumulate function name and arguments
@@ -1853,8 +1569,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
       // Accumulate reasoning_details if present in this final chunk
       // This is critical for Gemini models which require reasoning_details preservation
-      const finalReasoningDetails =
-        choice.delta?.reasoning_details ?? choice.delta?.reasoningDetails;
+      const finalReasoningDetails = choice.delta?.reasoning_details ?? choice.delta?.reasoningDetails;
       if (finalReasoningDetails && finalReasoningDetails.length > 0) {
         this.reasoningDetailsAccumulator.push(...finalReasoningDetails);
         log.info(
@@ -1862,17 +1577,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         );
       }
 
-      log.info(
-        "OpenRouter: finish_reason is 'tool_calls' - parsing accumulated tool calls",
-      );
+      log.info("OpenRouter: finish_reason is 'tool_calls' - parsing accumulated tool calls");
 
       // Get the first accumulated tool call (we only support one at a time currently)
       const accumulated = this.toolCallAccumulator.get(0);
 
       if (!accumulated || !accumulated.functionName) {
-        log.warn(
-          "OpenRouter: finish_reason is 'tool_calls' but no tool call was accumulated!",
-        );
+        log.warn("OpenRouter: finish_reason is 'tool_calls' but no tool call was accumulated!");
         // Return done to avoid infinite retry
         return {
           type: "done",
@@ -1891,9 +1602,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       if (accumulated.functionArguments) {
         try {
           parsedArgs = JSON.parse(accumulated.functionArguments);
-          log.info(
-            `OpenRouter: Successfully parsed tool call arguments: ${JSON.stringify(parsedArgs)}`,
-          );
+          log.info(`OpenRouter: Successfully parsed tool call arguments: ${JSON.stringify(parsedArgs)}`);
         } catch (parseError) {
           log.error(
             `OpenRouter: Failed to parse accumulated arguments as JSON: "${accumulated.functionArguments}"`,
@@ -1912,13 +1621,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // Include thought_signature if present (required for Gemini models)
       if (accumulated.thought_signature) {
         functionCall.thoughtSignature = accumulated.thought_signature;
-        log.info(
-          `OpenRouter: ✓ INCLUDED thought_signature in FunctionCall object: ${accumulated.thought_signature}`,
-        );
+        log.info(`OpenRouter: ✓ INCLUDED thought_signature in FunctionCall object: ${accumulated.thought_signature}`);
       } else {
-        log.warn(
-          `OpenRouter: ✗ MISSING thought_signature - functionCall will not have thoughtSignature field!`,
-        );
+        log.warn(`OpenRouter: ✗ MISSING thought_signature - functionCall will not have thoughtSignature field!`);
       }
 
       // Include reasoning_details if any were accumulated (required for Gemini models)
@@ -2025,32 +1730,22 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
 
         // Log raw deltaToolCall for debugging (intermediate chunks)
-        log.info(
-          `OpenRouter: [INTERMEDIATE] Raw deltaToolCall [${index}]: ${JSON.stringify(deltaToolCall)}`,
-        );
+        log.info(`OpenRouter: [INTERMEDIATE] Raw deltaToolCall [${index}]: ${JSON.stringify(deltaToolCall)}`);
 
         // Accumulate id, type, and thought_signature (usually only in first chunk)
         if (deltaToolCall.id) {
           accumulated.id = deltaToolCall.id;
-          log.info(
-            `OpenRouter: [INTERMEDIATE] Captured id: ${deltaToolCall.id}`,
-          );
+          log.info(`OpenRouter: [INTERMEDIATE] Captured id: ${deltaToolCall.id}`);
         }
         if (deltaToolCall.type) {
           accumulated.type = deltaToolCall.type;
-          log.info(
-            `OpenRouter: [INTERMEDIATE] Captured type: ${deltaToolCall.type}`,
-          );
+          log.info(`OpenRouter: [INTERMEDIATE] Captured type: ${deltaToolCall.type}`);
         }
         if (deltaToolCall.thought_signature) {
           accumulated.thought_signature = deltaToolCall.thought_signature;
-          log.info(
-            `OpenRouter: [INTERMEDIATE] ✓ CAPTURED thought_signature: ${deltaToolCall.thought_signature}`,
-          );
+          log.info(`OpenRouter: [INTERMEDIATE] ✓ CAPTURED thought_signature: ${deltaToolCall.thought_signature}`);
         } else {
-          log.info(
-            `OpenRouter: [INTERMEDIATE] ✗ No thought_signature in this chunk`,
-          );
+          log.info(`OpenRouter: [INTERMEDIATE] ✗ No thought_signature in this chunk`);
         }
 
         // Accumulate function name and arguments
@@ -2080,8 +1775,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
     // Accumulate reasoning_details from delta (required for Gemini models)
     // These can arrive in any chunk, not just the final one
-    const reasoningDetails =
-      choice.delta?.reasoning_details ?? choice.delta?.reasoningDetails;
+    const reasoningDetails = choice.delta?.reasoning_details ?? choice.delta?.reasoningDetails;
     if (reasoningDetails && reasoningDetails.length > 0) {
       this.reasoningDetailsAccumulator.push(...reasoningDetails);
       // Return empty text to continue processing
@@ -2135,9 +1829,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       if (toolCall.function) {
         return {
           name: toolCall.function.name || "",
-          args: toolCall.function.arguments
-            ? JSON.parse(toolCall.function.arguments)
-            : {},
+          args: toolCall.function.arguments ? JSON.parse(toolCall.function.arguments) : {},
         };
       }
     }
@@ -2236,8 +1928,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
               errorCode = parsedError.error?.code || parsedError.code;
             }
             if (!extractedMessage) {
-              extractedMessage =
-                parsedError.error?.message || parsedError.message;
+              extractedMessage = parsedError.error?.message || parsedError.message;
             }
           }
         }
@@ -2356,8 +2047,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           break;
         case "provider_overloaded":
           // Could be 502 or 503
-          messageKey =
-            errorCode === "502" ? "502_default_message" : "503_default_message";
+          messageKey = errorCode === "502" ? "502_default_message" : "503_default_message";
           break;
         case "api_error":
           // Use the specific error code if available
@@ -2376,24 +2066,17 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // (localizer returns the key when it can't find a translation)
       if (openrouterMessage === localeKey) {
         // Fallback to generic unknown message
-        openrouterMessage = localizer(
-          locale,
-          "genai.openrouter.unknown_default_message",
-        );
+        openrouterMessage = localizer(locale, "genai.openrouter.unknown_default_message");
         // Append actual API error for unknown errors
         const maxErrorLength = 1000;
         const apiErrorSnippet =
-          error.message.length > maxErrorLength
-            ? `${error.message.substring(0, maxErrorLength)}...`
-            : error.message;
+          error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
         openrouterMessage += `\n\n**API Response:**\n${apiErrorSnippet}`;
       } else if (messageKey === "unknown_default_message") {
         // Even if we found the key, if it's the unknown message, append API error
         const maxErrorLength = 1000;
         const apiErrorSnippet =
-          error.message.length > maxErrorLength
-            ? `${error.message.substring(0, maxErrorLength)}...`
-            : error.message;
+          error.message.length > maxErrorLength ? `${error.message.substring(0, maxErrorLength)}...` : error.message;
         openrouterMessage += `\n\n**API Response:**\n${apiErrorSnippet}`;
       }
     }
@@ -2455,9 +2138,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         item.role === "system" ||
         (item.role === "user" &&
           item.metadataTag &&
-          OpenrouterStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(
-            item.metadataTag,
-          ))
+          OpenrouterStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(item.metadataTag))
       ) {
         if (itemTextContent) systemInstructionParts.push(itemTextContent);
       } else if (item.role === "user" || item.role === "model") {
@@ -2482,14 +2163,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
             // OpenRouter only permits image parts on user-role messages. For assistant
             // turns, images are resolved normally but staged in pendingBotImageParts,
             // then emitted as a synthetic user turn right after the assistant message.
-            const imageTargetParts =
-              role === "assistant" ? pendingBotImageParts : contentParts;
+            const imageTargetParts = role === "assistant" ? pendingBotImageParts : contentParts;
 
             // Only process images if the model supports them
             if (!seesImages) {
-              log.info(
-                `Skipping image (model doesn't support images): ${part.uri || "[inlineData]"}`,
-              );
+              log.info(`Skipping image (model doesn't support images): ${part.uri || "[inlineData]"}`);
               continue;
             }
 
@@ -2502,11 +2180,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                 };
 
                 // Validate inlineData structure
-                if (
-                  typeof inlineData === "object" &&
-                  inlineData.mimeType &&
-                  inlineData.data
-                ) {
+                if (typeof inlineData === "object" && inlineData.mimeType && inlineData.data) {
                   // Check if this is a GIF - handle based on environment
                   if (inlineData.mimeType === "image/gif") {
                     const isProduction = process.env.RUN_ENV === "production";
@@ -2543,25 +2217,15 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                       },
                     });
 
-                    log.info(
-                      "OpenrouterStreamAdapter: Processed image with existing inlineData",
-                    );
+                    log.info("OpenrouterStreamAdapter: Processed image with existing inlineData");
                   }
                 } else {
-                  log.warn(
-                    "OpenrouterStreamAdapter: Invalid inlineData structure for image part",
-                  );
+                  log.warn("OpenrouterStreamAdapter: Invalid inlineData structure for image part");
                 }
               } catch (inlineErr) {
-                log.warn(
-                  "OpenrouterStreamAdapter: Error processing inlineData",
-                  {
-                    error:
-                      inlineErr instanceof Error
-                        ? inlineErr.message
-                        : String(inlineErr),
-                  },
-                );
+                log.warn("OpenrouterStreamAdapter: Error processing inlineData", {
+                  error: inlineErr instanceof Error ? inlineErr.message : String(inlineErr),
+                });
               }
               continue; // Skip to next part after handling inlineData
             }
@@ -2575,20 +2239,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                 // Check if URI is already a data URI
                 if (part.uri.startsWith("data:")) {
                   // Parse data URI format: data:image/jpeg;base64,xyz
-                  const dataUriMatch = part.uri.match(
-                    /^data:([^;]+);base64,(.+)$/,
-                  );
+                  const dataUriMatch = part.uri.match(/^data:([^;]+);base64,(.+)$/);
                   if (dataUriMatch) {
                     finalMimeType = dataUriMatch[1];
                     base64ImageData = dataUriMatch[2];
 
-                    log.info(
-                      `OpenrouterStreamAdapter: Parsed data URI (${finalMimeType})`,
-                    );
+                    log.info(`OpenrouterStreamAdapter: Parsed data URI (${finalMimeType})`);
                   } else {
-                    log.warn(
-                      `OpenrouterStreamAdapter: Invalid data URI format: ${part.uri.substring(0, 50)}...`,
-                    );
+                    log.warn(`OpenrouterStreamAdapter: Invalid data URI format: ${part.uri.substring(0, 50)}...`);
                     continue;
                   }
                 } else {
@@ -2633,10 +2291,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                   }
 
                   // Regular image processing (non-GIF) — optimize oversized images
-                  const optimized = await fetchAndOptimizeImage(
-                    part.uri,
-                    part.mimeType,
-                  );
+                  const optimized = await fetchAndOptimizeImage(part.uri, part.mimeType);
                   base64ImageData = optimized.data;
                   finalMimeType = optimized.mimeType;
 
@@ -2654,33 +2309,25 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                 log.success(`Successfully added image to message`);
               } catch (imgErr) {
                 log.warn(`Error processing image: ${part.uri}`, {
-                  error:
-                    imgErr instanceof Error ? imgErr.message : String(imgErr),
+                  error: imgErr instanceof Error ? imgErr.message : String(imgErr),
                 });
               }
             }
           } else if (part.type === "video") {
             // Videos follow the same role restriction as images - only user-role messages.
             // For assistant turns, stage in pendingBotImageParts for a synthetic user turn.
-            const videoTargetParts =
-              role === "assistant" ? pendingBotImageParts : contentParts;
+            const videoTargetParts = role === "assistant" ? pendingBotImageParts : contentParts;
 
             if (!seesVideos) {
-              log.info(
-                `Skipping video (model doesn't support videos): ${part.uri}`,
-              );
+              log.info(`Skipping video (model doesn't support videos): ${part.uri}`);
               continue;
             }
 
             try {
-              const isHttpUrl =
-                part.uri.startsWith("http://") ||
-                part.uri.startsWith("https://");
+              const isHttpUrl = part.uri.startsWith("http://") || part.uri.startsWith("https://");
               const isDataUrl = part.uri.startsWith("data:");
               if (!isHttpUrl && !isDataUrl) {
-                log.warn(
-                  `Skipping unsupported video URI format for OpenRouter: ${part.uri}`,
-                );
+                log.warn(`Skipping unsupported video URI format for OpenRouter: ${part.uri}`);
                 continue;
               }
 
@@ -2700,10 +2347,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
               }
             } catch (videoErr) {
               log.warn(`Error processing video: ${part.uri}`, {
-                error:
-                  videoErr instanceof Error
-                    ? videoErr.message
-                    : String(videoErr),
+                error: videoErr instanceof Error ? videoErr.message : String(videoErr),
               });
             }
           }
@@ -2753,9 +2397,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           // Sending an array to strict text-only models (e.g. aion-2.0) causes a 400 error.
           const allTextOnly = contentParts.every((p) => p.type === "text");
           const content = allTextOnly
-            ? contentParts
-                .map((p) => (p as { type: "text"; text: string }).text)
-                .join("\n")
+            ? contentParts.map((p) => (p as { type: "text"; text: string }).text).join("\n")
             : contentParts;
 
           messages.push({
@@ -2774,9 +2416,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         role: "system",
         content: systemContent,
       });
-      log.info(
-        `Assembled system message. Length: ${systemContent.length} characters`,
-      );
+      log.info(`Assembled system message. Length: ${systemContent.length} characters`);
     }
 
     // Add function interaction history if present
@@ -2797,12 +2437,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         };
 
         // Include thought_signature if present (required for Gemini models)
-        const hasThoughtSignature = Boolean(
-          interaction.functionCall.thoughtSignature,
-        );
+        const hasThoughtSignature = Boolean(interaction.functionCall.thoughtSignature);
         if (interaction.functionCall.thoughtSignature) {
-          toolCallObject.thought_signature =
-            interaction.functionCall.thoughtSignature;
+          toolCallObject.thought_signature = interaction.functionCall.thoughtSignature;
           log.info(
             `OpenRouter: ✓ PRESERVING thought_signature in assistant message for tool '${interaction.functionCall.name}': ${interaction.functionCall.thoughtSignature}`,
           );
@@ -2814,16 +2451,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
 
         // Join pre-tool-call text parts into content string (prevents model from repeating itself)
         let preToolCallContent: string | null = null;
-        if (
-          interaction.preToolCallTextParts &&
-          interaction.preToolCallTextParts.length > 0
-        ) {
+        if (interaction.preToolCallTextParts && interaction.preToolCallTextParts.length > 0) {
           preToolCallContent = interaction.preToolCallTextParts
             .map((part) => (part as { text?: string }).text)
-            .filter(
-              (text): text is string =>
-                typeof text === "string" && text.length > 0,
-            )
+            .filter((text): text is string => typeof text === "string" && text.length > 0)
             .join("");
           if (preToolCallContent.length > 0) {
             log.info(
@@ -2847,8 +2478,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           interaction.functionCall.reasoning_details &&
           interaction.functionCall.reasoning_details.length > 0
         ) {
-          assistantMessage.reasoning_details =
-            interaction.functionCall.reasoning_details;
+          assistantMessage.reasoning_details = interaction.functionCall.reasoning_details;
           log.info(
             `OpenRouter: Preserving ${interaction.functionCall.reasoning_details.length} reasoning_details in assistant message for tool '${interaction.functionCall.name}'`,
           );
@@ -2884,14 +2514,9 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
 
         // If the tool returned images, surface them to the model as image_url parts (only if model supports images)
-        if (
-          interaction.imageMetadata?.imageUrls &&
-          interaction.imageMetadata.imageUrls.length > 0
-        ) {
+        if (interaction.imageMetadata?.imageUrls && interaction.imageMetadata.imageUrls.length > 0) {
           if (!seesImages) {
-            log.info(
-              "OpenrouterStreamAdapter: Skipping tool images (model does not support images)",
-            );
+            log.info("OpenrouterStreamAdapter: Skipping tool images (model does not support images)");
           }
 
           for (const img of interaction.imageMetadata.imageUrls) {
@@ -2908,16 +2533,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                 // OpenRouter allows URLs or data URLs; mimeType not required here
               },
             });
-            log.info(
-              `OpenrouterStreamAdapter: Added tool image reference for context: ${sourceUrl}`,
-            );
+            log.info(`OpenrouterStreamAdapter: Added tool image reference for context: ${sourceUrl}`);
           }
         }
 
-        if (
-          interaction.imageMetadata?.messageIds &&
-          interaction.imageMetadata.messageIds.length > 0
-        ) {
+        if (interaction.imageMetadata?.messageIds && interaction.imageMetadata.messageIds.length > 0) {
           responseParts.push({
             type: "text",
             text: `[System: Images were sent to Discord in message ID(s): ${interaction.imageMetadata.messageIds.join(", ")}]`,
@@ -2938,18 +2558,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     if (currentTurnModelParts.length > 0) {
       const prefillText = currentTurnModelParts
         .map((part) => (part as { text?: string }).text)
-        .filter(
-          (text): text is string => typeof text === "string" && text.length > 0,
-        )
+        .filter((text): text is string => typeof text === "string" && text.length > 0)
         .join("");
       if (prefillText) {
         messages.push({
           role: "assistant",
           content: prefillText,
         });
-        log.info(
-          `OpenrouterStreamAdapter: Appended prefill assistant message (${prefillText.length} chars)`,
-        );
+        log.info(`OpenrouterStreamAdapter: Appended prefill assistant message (${prefillText.length} chars)`);
       }
     }
 

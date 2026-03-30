@@ -15,19 +15,9 @@ import {
 } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "@/utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  getCachedAllPersonas,
-} from "@/utils/cache/tomoriStateCache";
-import {
-  getServerRandomTriggerCount,
-  getRandomTriggerByPersonaAndChannel,
-} from "@/utils/db/dbRead";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
+import { getServerRandomTriggerCount, getRandomTriggerByPersonaAndChannel } from "@/utils/db/dbRead";
 import { insertRandomTrigger, upsertRandomTrigger } from "@/utils/db/dbWrite";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
@@ -43,57 +33,35 @@ const PROMPT_INPUT_ID = "prompt_input";
 const RANDOM_PERSONA_VALUE = "random";
 
 /** Default per-server cap; configurable via env */
-const MAX_TRIGGERS_PER_SERVER = Number.parseInt(
-  process.env.RANDOM_TRIGGER_MAX_PER_SERVER ?? "10",
-  10,
-);
+const MAX_TRIGGERS_PER_SERVER = Number.parseInt(process.env.RANDOM_TRIGGER_MAX_PER_SERVER ?? "10", 10);
 
 // ─── Subcommand Configuration ─────────────────────────────────────────────────
 
 /**
  * Configures the 'add' subcommand for /config randomtrigger.
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("add")
-    .setDescription(
-      localizer("en-US", "commands.config.randomtrigger.add.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.randomtrigger.add.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.randomtrigger.add.channel_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.randomtrigger.add.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     )
     .addIntegerOption((option) =>
       option
         .setName("timer_hours")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.randomtrigger.add.timer_hours_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.randomtrigger.add.timer_hours_description"))
         .setMinValue(1)
         .setRequired(true),
     )
     .addIntegerOption((option) =>
       option
         .setName("chance")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.randomtrigger.add.chance_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.randomtrigger.add.chance_description"))
         .setMinValue(1)
         .setMaxValue(100)
         .setRequired(true),
@@ -101,36 +69,21 @@ export const configureSubcommand = (
     .addIntegerOption((option) =>
       option
         .setName("random_offset_range")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.randomtrigger.add.random_offset_range_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.randomtrigger.add.random_offset_range_description"))
         .setMinValue(0)
         .setRequired(false),
     )
     .addIntegerOption((option) =>
       option
         .setName("silence_threshold")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.randomtrigger.add.silence_threshold_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.randomtrigger.add.silence_threshold_description"))
         .setMinValue(1)
         .setRequired(false),
     )
     .addIntegerOption((option) =>
       option
         .setName("failure_threshold")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.randomtrigger.add.failure_threshold_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.randomtrigger.add.failure_threshold_description"))
         .setMinValue(1)
         .setRequired(false),
     );
@@ -176,13 +129,10 @@ export async function execute(
     // 2. Parse and validate slash options
     const channel = interaction.options.getChannel("channel", true);
     const timerHours = interaction.options.getInteger("timer_hours", true);
-    const randomOffsetRange =
-      interaction.options.getInteger("random_offset_range", false) ?? null;
+    const randomOffsetRange = interaction.options.getInteger("random_offset_range", false) ?? null;
     const chance = interaction.options.getInteger("chance", true);
-    const silenceThreshold =
-      interaction.options.getInteger("silence_threshold", false) ?? null;
-    const failureThreshold =
-      interaction.options.getInteger("failure_threshold", false) ?? null;
+    const silenceThreshold = interaction.options.getInteger("silence_threshold", false) ?? null;
+    const failureThreshold = interaction.options.getInteger("failure_threshold", false) ?? null;
 
     // 3. Load Tomori state to verify the server is set up
     const tomoriState = await getCachedTomoriState(interaction.guild.id);
@@ -197,14 +147,11 @@ export async function execute(
     }
 
     // 4. Check per-server trigger cap before proceeding
-    const triggerCount = await getServerRandomTriggerCount(
-      tomoriState.server_id,
-    );
+    const triggerCount = await getServerRandomTriggerCount(tomoriState.server_id);
     if (triggerCount >= MAX_TRIGGERS_PER_SERVER) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.randomtrigger.add.cap_reached_title",
-        descriptionKey:
-          "commands.config.randomtrigger.add.cap_reached_description",
+        descriptionKey: "commands.config.randomtrigger.add.cap_reached_description",
         descriptionVars: { max: MAX_TRIGGERS_PER_SERVER.toString() },
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
@@ -218,12 +165,7 @@ export async function execute(
     // 6. Build select options: "Random" first, then each named persona
     const personaOptions: SelectOption[] = [
       {
-        label: safeSelectOptionText(
-          localizer(
-            locale,
-            "commands.config.randomtrigger.add.persona_random_label",
-          ),
-        ),
+        label: safeSelectOptionText(localizer(locale, "commands.config.randomtrigger.add.persona_random_label")),
         value: RANDOM_PERSONA_VALUE,
       },
       ...allPersonas.map((p) => ({
@@ -242,8 +184,7 @@ export async function execute(
         {
           customId: PERSONA_SELECT_ID,
           labelKey: "commands.config.randomtrigger.add.persona_select_label",
-          placeholder:
-            "commands.config.randomtrigger.add.persona_select_placeholder",
+          placeholder: "commands.config.randomtrigger.add.persona_select_placeholder",
           required: true,
           options: personaOptions,
         },
@@ -253,16 +194,12 @@ export async function execute(
           kind: "checkboxGroup" as const,
           customId: RESPOND_TO_SELF_ID,
           labelKey: "commands.config.randomtrigger.add.respond_to_self_label",
-          descriptionKey:
-            "commands.config.randomtrigger.add.respond_to_self_description",
+          descriptionKey: "commands.config.randomtrigger.add.respond_to_self_description",
           minValues: 0,
           required: false,
           options: [
             {
-              label: localizer(
-                locale,
-                "commands.config.randomtrigger.add.respond_to_self_yes",
-              ),
+              label: localizer(locale, "commands.config.randomtrigger.add.respond_to_self_yes"),
               value: "yes",
             },
           ],
@@ -271,8 +208,7 @@ export async function execute(
         {
           customId: PROMPT_INPUT_ID,
           labelKey: "commands.config.randomtrigger.add.prompt_label",
-          descriptionKey:
-            "commands.config.randomtrigger.add.prompt_description",
+          descriptionKey: "commands.config.randomtrigger.add.prompt_description",
           placeholder: "commands.config.randomtrigger.add.prompt_placeholder",
           style: TextInputStyle.Paragraph,
           required: false,
@@ -283,9 +219,7 @@ export async function execute(
 
     // 8. Handle modal cancellation or timeout
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Randomtrigger add modal ${modalResult.outcome} for user ${interaction.user.id}`,
-      );
+      log.info(`Randomtrigger add modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -304,25 +238,16 @@ export async function execute(
     const customPromptRaw = values[PROMPT_INPUT_ID]?.trim() || null;
 
     // Map "random" sentinel → null (DB stores NULL for random selection)
-    const tomoriId =
-      personaRawValue === RANDOM_PERSONA_VALUE
-        ? null
-        : Number.parseInt(personaRawValue, 10);
+    const tomoriId = personaRawValue === RANDOM_PERSONA_VALUE ? null : Number.parseInt(personaRawValue, 10);
 
     // Checkbox Group: "yes" present in multiValues = respond to self enabled
-    const respondToSelf = (
-      modalResult.multiValues?.[RESPOND_TO_SELF_ID] ?? []
-    ).includes("yes");
+    const respondToSelf = (modalResult.multiValues?.[RESPOND_TO_SELF_ID] ?? []).includes("yes");
 
     // Resolve display name for success/override embeds
     const personaDisplayName =
       tomoriId === null
-        ? localizer(
-            locale,
-            "commands.config.randomtrigger.add.persona_random_label",
-          )
-        : (allPersonas.find((p) => p.tomori_id === tomoriId)?.tomori_nickname ??
-          localizer(locale, "general.unknown"));
+        ? localizer(locale, "commands.config.randomtrigger.add.persona_random_label")
+        : (allPersonas.find((p) => p.tomori_id === tomoriId)?.tomori_nickname ?? localizer(locale, "general.unknown"));
 
     const triggerData = {
       serverId: tomoriState.server_id,
@@ -339,18 +264,11 @@ export async function execute(
 
     // 10. Override check: if a named persona already has a trigger for this channel, update it
     if (tomoriId !== null) {
-      const existing = await getRandomTriggerByPersonaAndChannel(
-        tomoriState.server_id,
-        channel.id,
-        tomoriId,
-      );
+      const existing = await getRandomTriggerByPersonaAndChannel(tomoriState.server_id, channel.id, tomoriId);
 
       if (existing?.trigger_id) {
         // UPSERT the existing trigger with new settings
-        const updated = await upsertRandomTrigger(
-          existing.trigger_id,
-          triggerData,
-        );
+        const updated = await upsertRandomTrigger(existing.trigger_id, triggerData);
 
         if (!updated) {
           const context: ErrorContext = {
@@ -358,11 +276,7 @@ export async function execute(
             errorType: "DatabaseUpdateError",
             metadata: { operation: "upsertRandomTrigger", ...triggerData },
           };
-          await log.error(
-            "Failed to upsert random trigger",
-            new Error("upsertRandomTrigger returned null"),
-            context,
-          );
+          await log.error("Failed to upsert random trigger", new Error("upsertRandomTrigger returned null"), context);
           await replyInfoEmbed(modalInteraction, locale, {
             titleKey: "general.errors.update_failed_title",
             descriptionKey: "general.errors.update_failed_description",
@@ -374,8 +288,7 @@ export async function execute(
         // Notify user that an existing trigger was updated (override)
         await replyInfoEmbed(modalInteraction, locale, {
           titleKey: "commands.config.randomtrigger.add.override_title",
-          descriptionKey:
-            "commands.config.randomtrigger.add.override_description",
+          descriptionKey: "commands.config.randomtrigger.add.override_description",
           descriptionVars: {
             persona: personaDisplayName,
             channel: `<#${channel.id}>`,
@@ -395,11 +308,7 @@ export async function execute(
         errorType: "DatabaseInsertError",
         metadata: { operation: "insertRandomTrigger", ...triggerData },
       };
-      await log.error(
-        "Failed to insert random trigger",
-        new Error("insertRandomTrigger returned null"),
-        context,
-      );
+      await log.error("Failed to insert random trigger", new Error("insertRandomTrigger returned null"), context);
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
@@ -411,25 +320,19 @@ export async function execute(
     // 12. Build optional suffix strings for non-default settings
     const offsetSuffix =
       randomOffsetRange !== null && randomOffsetRange > 0
-        ? localizer(
-            locale,
-            "commands.config.randomtrigger.add.success_offset_suffix",
-            { random_offset_range: randomOffsetRange.toString() },
-          )
+        ? localizer(locale, "commands.config.randomtrigger.add.success_offset_suffix", {
+            random_offset_range: randomOffsetRange.toString(),
+          })
         : "";
     const silenceSuffix = silenceThreshold
-      ? localizer(
-          locale,
-          "commands.config.randomtrigger.add.success_silence_suffix",
-          { silence_threshold: silenceThreshold.toString() },
-        )
+      ? localizer(locale, "commands.config.randomtrigger.add.success_silence_suffix", {
+          silence_threshold: silenceThreshold.toString(),
+        })
       : "";
     const failureSuffix = failureThreshold
-      ? localizer(
-          locale,
-          "commands.config.randomtrigger.add.success_failure_suffix",
-          { failure_threshold: failureThreshold.toString() },
-        )
+      ? localizer(locale, "commands.config.randomtrigger.add.success_failure_suffix", {
+          failure_threshold: failureThreshold.toString(),
+        })
       : "";
 
     // 13. Reply with success summary
@@ -457,11 +360,7 @@ export async function execute(
       errorType: "CommandExecutionError",
       metadata: { command: "config randomtrigger add" },
     };
-    await log.error(
-      "Error in /config randomtrigger add",
-      error as Error,
-      context,
-    );
+    await log.error("Error in /config randomtrigger add", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(interaction, locale, {
@@ -475,9 +374,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.errors.unknown_error_title"))
-            .setDescription(
-              localizer(locale, "general.errors.unknown_error_description"),
-            )
+            .setDescription(localizer(locale, "general.errors.unknown_error_description"))
             .setColor(ColorCode.ERROR),
         ],
       });

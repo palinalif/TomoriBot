@@ -10,14 +10,8 @@ import type { UserRow } from "@/types/db/schema";
  * @param subcommand - The slash command subcommand builder
  * @returns The configured subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("github")
-    .setDescription(
-      localizer("en-US", "commands.contribute.github.description"),
-    );
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("github").setDescription(localizer("en-US", "commands.contribute.github.description"));
 
 /**
  * Execute the contribute github command - show GitHub repository link and contribution information
@@ -45,9 +39,7 @@ export async function execute(
   // 2. Create embed with image attachment
   const embed = new EmbedBuilder()
     .setTitle(localizer(locale, "commands.contribute.github.title"))
-    .setDescription(
-      localizer(locale, "commands.contribute.github.description_text"),
-    )
+    .setDescription(localizer(locale, "commands.contribute.github.description_text"))
     .setColor(ColorCode.INFO)
     .setImage("attachment://gitbanner.png");
 

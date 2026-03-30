@@ -1,13 +1,7 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
-import {
-  DEFAULT_NAI_NEGATIVE_TAGS,
-  DEFAULT_NAI_STYLE_TAGS,
-} from "@/utils/image/naiTagDefaults";
-import {
-  logitBiasEntrySchema,
-  normalizeLogitBiasEntries,
-} from "@/types/provider/logitBias";
+import { DEFAULT_NAI_NEGATIVE_TAGS, DEFAULT_NAI_STYLE_TAGS } from "@/utils/image/naiTagDefaults";
+import { logitBiasEntrySchema, normalizeLogitBiasEntries } from "@/types/provider/logitBias";
 
 export enum HumanizerDegree {
   NONE = 0,
@@ -182,8 +176,7 @@ function normalizeFallbackLlmIds(value: unknown): number[] {
 
   return source
     .map((id) => {
-      const parsed =
-        typeof id === "number" ? id : typeof id === "string" ? Number(id) : NaN;
+      const parsed = typeof id === "number" ? id : typeof id === "string" ? Number(id) : NaN;
       return Number.isInteger(parsed) ? parsed : null;
     })
     .filter((id): id is number => id !== null);
@@ -199,9 +192,7 @@ export const tomoriConfigSchema = z.object({
   vision_llm_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated vision model for non-vision chat models (FK to llms)
   nai_diffusion_model_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated NovelAI image model override for generate_image_nai
   nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
-  nai_negative_tags: z
-    .array(z.string())
-    .default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
+  nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
   nai_sampler: z.string().nullable().optional(), // Added March 2026 - Server override for NovelAI image sampler
   nai_steps: z.number().int().min(1).max(50).nullable().optional(), // Added March 2026 - Server override for NovelAI image steps
   nai_scale: z.number().min(0.0).max(10.0).nullable().optional(), // Added March 2026 - Server override for NovelAI image scale
@@ -239,9 +230,7 @@ export const tomoriConfigSchema = z.object({
   self_teaching_enabled: z.boolean().default(true),
   web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
   personal_memories_enabled: z.boolean().default(true),
-  humanizer_degree: z
-    .nativeEnum(HumanizerDegree)
-    .default(HumanizerDegree.LIGHT),
+  humanizer_degree: z.nativeEnum(HumanizerDegree).default(HumanizerDegree.LIGHT),
   emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   pin_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission for pin message tool
@@ -262,10 +251,7 @@ export const tomoriConfigSchema = z.object({
   custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
   custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
   nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
-  fallback_llm_ids: z.preprocess(
-    (value) => normalizeFallbackLlmIds(value),
-    z.array(z.number().int()).default([]),
-  ), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
+  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
   nai_exclusive_imggen: z.boolean().default(false), // Added March 2026 - Hides standard generate_image when NovelAI opt key is present
   other_model_codename: z.string().nullable().optional(), // Added March 2026 - Real OpenRouter model codename for other-model (e.g. "xai/grok-2")
   other_model_capabilities: z.preprocess(
@@ -379,9 +365,7 @@ export const serverStickerSchema = z.object({
   emotion_key: z.string(),
   is_global: z.boolean().default(false),
   //is_animated: z.boolean().default(false),
-  sticker_format: z
-    .nativeEnum(StickerFormatType)
-    .default(StickerFormatType.PNG),
+  sticker_format: z.nativeEnum(StickerFormatType).default(StickerFormatType.PNG),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -460,9 +444,7 @@ export const personalizationBlacklistSchema = z.object({
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
-export type PersonalizationBlacklistRow = z.infer<
-  typeof personalizationBlacklistSchema
->;
+export type PersonalizationBlacklistRow = z.infer<typeof personalizationBlacklistSchema>;
 
 /**
  * Channel Whitelist Schema
@@ -502,11 +484,7 @@ export const errorLogSchema = z.object({
   error_type: z.string().default("GenericError"), // Categorize the error, default if not specified
   error_message: z.string(), // The main error message, required
   stack_trace: z.string().nullable().optional(), // Dedicated field for stack trace, optional
-  error_metadata: z
-    .record(z.string(), z.unknown())
-    .nullable()
-    .optional()
-    .default({}), // Flexible JSON for extra context, optional
+  error_metadata: z.record(z.string(), z.unknown()).nullable().optional().default({}), // Flexible JSON for extra context, optional
   // Timestamps
   created_at: z.date().optional(), // Handled by DB default
   updated_at: z.date().optional(), // Handled by DB default/trigger
@@ -835,10 +813,7 @@ export const savedProviderConfigSchema = z.object({
   ), // Added March 2026 - Logit bias snapshot
   custom_endpoint_url: z.string().nullable(),
   custom_model_name: z.string().nullable(),
-  fallback_llm_ids: z.preprocess(
-    (value) => normalizeFallbackLlmIds(value),
-    z.array(z.number().int()).default([]),
-  ),
+  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])),
   channel_llm_overrides: z.preprocess(
     (value) => normalizeJsonbArray(value),
     z
@@ -870,10 +845,7 @@ export type SavedProviderConfigRow = z.infer<typeof savedProviderConfigSchema>;
  * Input type for upserting a saved provider config.
  * Omits auto-generated fields (saved_config_id, saved_at, updated_at).
  */
-export type SavedProviderConfigUpsert = Omit<
-  SavedProviderConfigRow,
-  "saved_config_id" | "saved_at" | "updated_at"
->;
+export type SavedProviderConfigUpsert = Omit<SavedProviderConfigRow, "saved_config_id" | "saved_at" | "updated_at">;
 
 /**
  * SillyTavern Preset — imported preset metadata + raw JSON blob.

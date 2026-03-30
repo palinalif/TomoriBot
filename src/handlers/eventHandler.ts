@@ -93,30 +93,20 @@ const setupEventListeners = (client: Client): void => {
             }
           } catch (importError) {
             // Log error during import or execution (Rule 22)
-            log.error(
-              `Failed to import or execute event file: ${eventFile} for event ${eventName}`,
-              importError,
-              {
-                errorType: "EventHandlerError",
-                metadata: { eventName, eventFile },
-              },
-            );
+            log.error(`Failed to import or execute event file: ${eventFile} for event ${eventName}`, importError, {
+              errorType: "EventHandlerError",
+              metadata: { eventName, eventFile },
+            });
           }
         }
       });
-      log.success(
-        `Mapped "${eventName}" listener to "${handlerFolderName}" handlers`,
-      ); // Rule 18
+      log.success(`Mapped "${eventName}" listener to "${handlerFolderName}" handlers`); // Rule 18
     } catch (error) {
       // Log error during the setup phase for a specific listener (Rule 22)
-      log.error(
-        `Error setting up listener for event ${eventName} with handler ${handlerFolderName}`,
-        error,
-        {
-          errorType: "EventHandlerSetupError",
-          metadata: { eventName, handlerFolderName },
-        },
-      );
+      log.error(`Error setting up listener for event ${eventName} with handler ${handlerFolderName}`, error, {
+        errorType: "EventHandlerSetupError",
+        metadata: { eventName, handlerFolderName },
+      });
     }
   }
   log.section("Event Listeners Setup Complete."); // Rule 18

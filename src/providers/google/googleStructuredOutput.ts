@@ -1,7 +1,4 @@
-import {
-  GoogleGenAI,
-  type GoogleGenAI as GoogleGenAIType,
-} from "@google/genai";
+import { GoogleGenAI, type GoogleGenAI as GoogleGenAIType } from "@google/genai";
 import type { Content, GenerateContentConfig, Part } from "@google/genai";
 import type { z } from "zod";
 import {
@@ -9,10 +6,7 @@ import {
   buildExpressionResponseSchema,
   type ExpressionBatchResult,
 } from "@/providers/utils/structuredOutput";
-import type {
-  ProviderStructuredJsonRequest,
-  StructuredOutputResult,
-} from "@/types/provider/featureInterfaces";
+import type { ProviderStructuredJsonRequest, StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
@@ -67,17 +61,13 @@ export async function callGoogleStructuredJSON<T>(
 
     const responseText = result.text?.trim() ?? "";
     if (!responseText) {
-      log.error(
-        "Google structured JSON returned empty response",
-        new Error("Empty response"),
-        {
-          errorType: "GoogleStructuredJSONEmptyResponse",
-          metadata: {
-            model: request.model,
-            finishReason: result.candidates?.[0]?.finishReason,
-          },
+      log.error("Google structured JSON returned empty response", new Error("Empty response"), {
+        errorType: "GoogleStructuredJSONEmptyResponse",
+        metadata: {
+          model: request.model,
+          finishReason: result.candidates?.[0]?.finishReason,
         },
-      );
+      });
       return {
         success: false,
         error: "Google returned an empty structured output response.",
@@ -109,10 +99,7 @@ export async function callGoogleStructuredJSON<T>(
 
     const validationResult = zodSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        "Google structured JSON validation failed",
-        validationResult.error,
-      );
+      log.error("Google structured JSON validation failed", validationResult.error);
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,
@@ -188,19 +175,15 @@ export async function callGoogleStructuredOutput(
 
     const responseText = result.text?.trim() ?? "";
     if (!responseText) {
-      log.error(
-        "Google structured output returned empty response",
-        new Error("Empty response"),
-        {
-          errorType: "GoogleStructuredOutputEmptyResponse",
-          metadata: {
-            model: request.model,
-            imageCount: images.length,
-            finishReason: result.candidates?.[0]?.finishReason,
-            finishMessage: result.candidates?.[0]?.finishMessage,
-          },
+      log.error("Google structured output returned empty response", new Error("Empty response"), {
+        errorType: "GoogleStructuredOutputEmptyResponse",
+        metadata: {
+          model: request.model,
+          imageCount: images.length,
+          finishReason: result.candidates?.[0]?.finishReason,
+          finishMessage: result.candidates?.[0]?.finishMessage,
         },
-      );
+      });
       return {
         success: false,
         error: "Google returned an empty structured output response.",
@@ -212,21 +195,17 @@ export async function callGoogleStructuredOutput(
       parsed = JSON.parse(responseText);
     } catch (parseError) {
       const finishReason = result.candidates?.[0]?.finishReason;
-      log.error(
-        "Google structured output JSON parse failed",
-        parseError as Error,
-        {
-          errorType: "GoogleStructuredOutputParseError",
-          metadata: {
-            model: request.model,
-            imageCount: images.length,
-            finishReason,
-            finishMessage: result.candidates?.[0]?.finishMessage,
-            responseLength: responseText.length,
-            responsePreview: responseText.slice(0, 1000),
-          },
+      log.error("Google structured output JSON parse failed", parseError as Error, {
+        errorType: "GoogleStructuredOutputParseError",
+        metadata: {
+          model: request.model,
+          imageCount: images.length,
+          finishReason,
+          finishMessage: result.candidates?.[0]?.finishMessage,
+          responseLength: responseText.length,
+          responsePreview: responseText.slice(0, 1000),
         },
-      );
+      });
       return {
         success: false,
         error:
@@ -238,10 +217,7 @@ export async function callGoogleStructuredOutput(
 
     const validationResult = ExpressionBatchResultSchema.safeParse(parsed);
     if (!validationResult.success) {
-      log.error(
-        "Google structured output validation failed",
-        validationResult.error,
-      );
+      log.error("Google structured output validation failed", validationResult.error);
       return {
         success: false,
         error: `Invalid response structure: ${validationResult.error.message}`,

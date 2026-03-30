@@ -1,8 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import { sql } from "@/utils/db/client";
 import {
@@ -13,22 +9,11 @@ import {
 } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
 import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import type { ModalResult, SelectOption } from "../../types/discord/modal";
-import {
-  checkAttributeLimit,
-  getMemoryLimits,
-  validateAttribute,
-} from "../../utils/db/memoryLimits";
+import { checkAttributeLimit, getMemoryLimits, validateAttribute } from "../../utils/db/memoryLimits";
 import {
   dedupeCaseInsensitive,
   formatTextArrayLiteral,
@@ -46,12 +31,8 @@ const ATTRIBUTE_INPUT_ID = "attribute_input";
 const ATTRIBUTE_FILE_UPLOAD_ID = "attribute_file_upload";
 
 // Rule 21: Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("attribute")
-    .setDescription(localizer("en-US", "commands.teach.attribute.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("attribute").setDescription(localizer("en-US", "commands.teach.attribute.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -85,15 +66,12 @@ export async function execute(
 
   try {
     // 2. Check if user has Manage Server permission - used for blacklist and teaching restriction bypass
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
     // 3. Check blacklisting only for guild contexts
     // Users with Manage Server permission can bypass blacklist (they can unblacklist themselves anyway)
     if (interaction.guild) {
-      const blacklisted =
-        (await isBlacklisted(interaction.guild.id, interaction.user.id)) ??
-        false;
+      const blacklisted = (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
       if (blacklisted && !hasManagePermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.user_blacklisted_title",
@@ -106,9 +84,7 @@ export async function execute(
     }
 
     // 4. Load server's Tomori state (Rule 17)
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
 
     // 5. Check if Tomori is set up
     if (!tomoriState) {
@@ -122,23 +98,15 @@ export async function execute(
     }
 
     // 6. Resolve target persona options
-    const allPersonas = await loadAllPersonasForServer(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
     const personaSelectOptions: SelectOption[] = allPersonas
       .filter((persona) => persona.tomori_id !== undefined)
       .map((persona) => ({
         label: safeSelectOptionText(persona.tomori_nickname),
         value: persona.tomori_id?.toString() ?? "",
         description: persona.is_alter
-          ? localizer(
-              locale,
-              "commands.teach.attribute.alter_persona_description",
-            )
-          : localizer(
-              locale,
-              "commands.teach.attribute.main_persona_description",
-            ),
+          ? localizer(locale, "commands.teach.attribute.alter_persona_description")
+          : localizer(locale, "commands.teach.attribute.main_persona_description"),
       }))
       .filter((option) => option.value !== "");
     if (personaSelectOptions.length === 0) {
@@ -152,14 +120,10 @@ export async function execute(
     }
 
     // 7. Check if attribute teaching is enabled and if user has bypass permissions
-    if (
-      !tomoriState.config.attribute_memteaching_enabled &&
-      !hasManagePermission
-    ) {
+    if (!tomoriState.config.attribute_memteaching_enabled && !hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.attribute.teaching_disabled_title", // New locale key needed
-        descriptionKey:
-          "commands.teach.attribute.teaching_disabled_description", // New locale key needed
+        descriptionKey: "commands.teach.attribute.teaching_disabled_description", // New locale key needed
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -183,8 +147,7 @@ export async function execute(
         {
           customId: ATTRIBUTE_INPUT_ID,
           labelKey: "commands.teach.attribute.attribute_input_label",
-          descriptionKey:
-            "commands.teach.attribute.attribute_input_description",
+          descriptionKey: "commands.teach.attribute.attribute_input_description",
           placeholder: "commands.teach.attribute.attribute_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: false,
@@ -203,9 +166,7 @@ export async function execute(
 
     // 9. Handle modal outcome
     if (modalResult.outcome !== "submit") {
-      log.info(
-        `Attribute add modal ${modalResult.outcome} for user ${userData.user_id}`,
-      );
+      log.info(`Attribute add modal ${modalResult.outcome} for user ${userData.user_id}`);
       // promptWithRawModal handles cancel/timeout replies
       return;
     }
@@ -217,10 +178,7 @@ export async function execute(
     // 10. Resolve selected persona + attribute input
     // biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required persona select guarantees value
     const selectedPersonaId = modalResult.values![PERSONA_SELECT_ID];
-    selectedPersona =
-      allPersonas.find(
-        (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-      ) ?? null;
+    selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
     if (!selectedPersona?.tomori_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -230,10 +188,8 @@ export async function execute(
       return;
     }
 
-    const typedAttribute =
-      modalResult.values?.[ATTRIBUTE_INPUT_ID]?.trim() ?? "";
-    const uploadedTextFile =
-      modalResult.attachments?.[ATTRIBUTE_FILE_UPLOAD_ID];
+    const typedAttribute = modalResult.values?.[ATTRIBUTE_INPUT_ID]?.trim() ?? "";
+    const uploadedTextFile = modalResult.attachments?.[ATTRIBUTE_FILE_UPLOAD_ID];
     const pendingAttributes: string[] = [];
 
     if (typedAttribute) {
@@ -262,9 +218,7 @@ export async function execute(
         return;
       }
 
-      const importedAttributes = getNonEmptyNumberedLines(
-        uploadResult.text,
-      ).map((line) => line.content);
+      const importedAttributes = getNonEmptyNumberedLines(uploadResult.text).map((line) => line.content);
       pendingAttributes.push(...importedAttributes);
     }
 
@@ -286,13 +240,10 @@ export async function execute(
       if (!attributeValidation.isValid) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "commands.teach.attribute.content_too_long_title",
-          descriptionKey:
-            "commands.teach.attribute.content_too_long_description",
+          descriptionKey: "commands.teach.attribute.content_too_long_description",
           descriptionVars: {
             current_length: attribute.length.toString(),
-            max_allowed: (
-              attributeValidation.maxAllowed || memoryLimits.maxAttributeLength
-            ).toString(),
+            max_allowed: (attributeValidation.maxAllowed || memoryLimits.maxAttributeLength).toString(),
           },
           color: ColorCode.ERROR,
         });
@@ -302,12 +253,8 @@ export async function execute(
 
     // 12. Prepare updated array from selected persona
     const currentAttributes = selectedPersona.attribute_list || [];
-    const existingAttributes = new Set(
-      currentAttributes.map((attribute) => attribute.trim().toLowerCase()),
-    );
-    const attributesToAdd = dedupedAttributes.filter(
-      (attribute) => !existingAttributes.has(attribute.toLowerCase()),
-    );
+    const existingAttributes = new Set(currentAttributes.map((attribute) => attribute.trim().toLowerCase()));
+    const attributesToAdd = dedupedAttributes.filter((attribute) => !existingAttributes.has(attribute.toLowerCase()));
 
     // 13. Check for duplicates before adding
     if (attributesToAdd.length === 0) {
@@ -321,13 +268,9 @@ export async function execute(
     }
 
     // 13.5 Check limit against final import size
-    const attributeLimitCheck = await checkAttributeLimit(
-      selectedPersona.tomori_id,
-    );
-    const currentCount =
-      attributeLimitCheck.currentCount ?? currentAttributes.length;
-    const maxAllowed =
-      attributeLimitCheck.maxAllowed ?? memoryLimits.maxAttributes;
+    const attributeLimitCheck = await checkAttributeLimit(selectedPersona.tomori_id);
+    const currentCount = attributeLimitCheck.currentCount ?? currentAttributes.length;
+    const maxAllowed = attributeLimitCheck.maxAllowed ?? memoryLimits.maxAttributes;
     const availableSlots = Math.max(0, maxAllowed - currentCount);
 
     if (attributesToAdd.length > availableSlots) {
@@ -388,11 +331,7 @@ export async function execute(
           validationErrors: validationResult.error.issues,
         },
       };
-      await log.error(
-        "Failed to validate updated tomori data after adding attribute",
-        validationResult.error,
-        context,
-      );
+      await log.error("Failed to validate updated tomori data after adding attribute", validationResult.error, context);
 
       // Use modal interaction for reply
       await replyInfoEmbed(modalSubmitInteraction, locale, {

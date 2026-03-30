@@ -1,9 +1,6 @@
 import { MessageFlags, type SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
-import {
-  clearChannelProcessingQueue,
-  isChannelProcessingLocked,
-} from "../../events/messageCreate/tomoriChat";
+import { clearChannelProcessingQueue, isChannelProcessingLocked } from "../../events/messageCreate/tomoriChat";
 import type { UserRow } from "../../types/db/schema";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
@@ -15,12 +12,8 @@ import { localizer } from "../../utils/text/localizer";
  * @param subcommand - The slash command subcommand builder
  * @returns The configured subcommand
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
-  subcommand
-    .setName("kill")
-    .setDescription(localizer("en-US", "commands.bot.kill.description"));
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("kill").setDescription(localizer("en-US", "commands.bot.kill.description"));
 
 /**
  * Execute the kill command for this channel.

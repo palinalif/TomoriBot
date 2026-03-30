@@ -4,18 +4,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import {
-  type UserRow,
-  type ErrorContext,
-  tomoriConfigSchema,
-} from "../../../types/db/schema";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
 
 // Define constants at the top (Rule #20)
@@ -25,23 +18,14 @@ const TEMPERATURE_STORED_MAX = 1.99;
 const TEMPERATURE_DEFAULT = 1.0;
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("temperature")
-    .setDescription(
-      localizer("en-US", "commands.config.params.temperature.description"),
-    )
+    .setDescription(localizer("en-US", "commands.config.params.temperature.description"))
     .addNumberOption((option) =>
       option
         .setName("value")
-        .setDescription(
-          localizer(
-            "en-US",
-            "commands.config.params.temperature.value_description",
-          ),
-        )
+        .setDescription(localizer("en-US", "commands.config.params.temperature.value_description"))
         .setMinValue(TEMPERATURE_MIN)
         .setMaxValue(TEMPERATURE_INPUT_MAX)
         .setRequired(true),
@@ -91,8 +75,7 @@ export async function execute(
     if (rawValue < TEMPERATURE_MIN || rawValue > TEMPERATURE_INPUT_MAX) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.temperature.invalid_value_title",
-        descriptionKey:
-          "commands.config.params.temperature.invalid_value_description",
+        descriptionKey: "commands.config.params.temperature.invalid_value_description",
         descriptionVars: {
           min: TEMPERATURE_MIN.toFixed(1),
           max: TEMPERATURE_INPUT_MAX.toFixed(1),
@@ -114,13 +97,11 @@ export async function execute(
     }
 
     // 5. Check if this is the same as the current temperature
-    const currentTemperature =
-      tomoriState.config.llm_temperature ?? TEMPERATURE_DEFAULT;
+    const currentTemperature = tomoriState.config.llm_temperature ?? TEMPERATURE_DEFAULT;
     if (Math.abs(temperatureValue - currentTemperature) < 0.01) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.params.temperature.already_set_title",
-        descriptionKey:
-          "commands.config.params.temperature.already_set_description",
+        descriptionKey: "commands.config.params.temperature.already_set_description",
         descriptionVars: {
           temperature: temperatureValue.toFixed(1),
         },
@@ -150,9 +131,7 @@ export async function execute(
           command: "config params temperature",
           guildId: interaction.guild?.id,
           temperatureValue,
-          validationErrors: validatedConfig.success
-            ? null
-            : validatedConfig.error.flatten(),
+          validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(

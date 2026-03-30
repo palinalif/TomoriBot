@@ -10,18 +10,11 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../../utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type {
-  UserRow,
-  ErrorContext,
-  TomoriState,
-} from "../../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
 import { storeOptApiKey } from "../../../utils/security/crypto";
 
 /** Minimum length for a valid Google API key */
@@ -35,20 +28,14 @@ const VALIDATION_TIMEOUT_MS = 5000;
  * @param subcommand - Discord slash command subcommand builder
  * @returns Configured subcommand builder
  */
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(
-      localizer("en-US", "commands.optionalkey.google.set.description"),
-    )
+    .setDescription(localizer("en-US", "commands.optionalkey.google.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(
-          localizer("en-US", "commands.optionalkey.google.set.key_description"),
-        )
+        .setDescription(localizer("en-US", "commands.optionalkey.google.set.key_description"))
         .setRequired(true),
     );
 
@@ -60,10 +47,7 @@ export const configureSubcommand = (
 async function validateGoogleApiKey(apiKey: string): Promise<boolean> {
   try {
     const response = await Promise.race([
-      fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-        { method: "GET" },
-      ),
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, { method: "GET" }),
       new Promise<Response>((_resolve, reject) =>
         setTimeout(() => reject(new Error("Timeout")), VALIDATION_TIMEOUT_MS),
       ),
@@ -113,17 +97,14 @@ export async function execute(
     if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.google.set.invalid_key_title",
-        descriptionKey:
-          "commands.optionalkey.google.set.invalid_key_description",
+        descriptionKey: "commands.optionalkey.google.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
     // 5. Load the Tomori state for this server
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -136,24 +117,17 @@ export async function execute(
     // 6. Validate the API key by calling Gemini list-models endpoint
     const isValid = await validateGoogleApiKey(apiKey);
     if (!isValid) {
-      log.info(
-        `Google API key validation failed for server ${tomoriState.server_id}`,
-      );
+      log.info(`Google API key validation failed for server ${tomoriState.server_id}`);
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.optionalkey.google.set.key_validation_failed_title",
-        descriptionKey:
-          "commands.optionalkey.google.set.key_validation_failed_description",
+        descriptionKey: "commands.optionalkey.google.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
     }
 
     // 7. Store the validated API key
-    const isStored = await storeOptApiKey(
-      tomoriState.server_id,
-      "google",
-      apiKey,
-    );
+    const isStored = await storeOptApiKey(tomoriState.server_id, "google", apiKey);
 
     if (!isStored) {
       const context: ErrorContext = {

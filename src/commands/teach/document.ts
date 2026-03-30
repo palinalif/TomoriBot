@@ -9,26 +9,12 @@ import { MessageFlags, EmbedBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
-import {
-  getCachedTomoriState,
-  invalidateTomoriStateCache,
-} from "../../utils/cache/tomoriStateCache";
-import {
-  isBlacklisted,
-  loadAllPersonasForServer,
-  loadEmbeddingModelById,
-} from "../../utils/db/dbRead";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { isBlacklisted, loadAllPersonasForServer, loadEmbeddingModelById } from "../../utils/db/dbRead";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
 import { safeDownload } from "../../utils/security/safeDownload";
-import {
-  memoryGuard,
-  reserveDocumentQuota,
-} from "../../utils/security/rateLimiter";
+import { memoryGuard, reserveDocumentQuota } from "../../utils/security/rateLimiter";
 import { decryptApiKey } from "../../utils/security/crypto";
 import {
   chunkDocumentText,
@@ -36,10 +22,7 @@ import {
   normalizeDocumentText,
 } from "../../utils/documents/documentService";
 import { extractTextFromBuffer } from "../../utils/documents/textExtractor";
-import {
-  generateEmbeddingsBatched,
-  providerSupportsEmbeddingTaskType,
-} from "../../utils/embeddings/embeddingProvider";
+import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "../../utils/embeddings/embeddingProvider";
 import type { ErrorContext, TomoriState, UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 
@@ -50,48 +33,34 @@ const DOCUMENT_PERSONA_MODAL_ID = "teach_document_persona_modal";
 const DOCUMENT_PERSONA_SELECT_ID = "persona_select";
 
 // Configure the subcommand
-export const configureSubcommand = (
-  subcommand: SlashCommandSubcommandBuilder,
-) =>
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("document")
     .setDescription(localizer("en-US", "commands.teach.document.description"))
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(
-          localizer("en-US", "commands.teach.document.name_description"),
-        )
+        .setDescription(localizer("en-US", "commands.teach.document.name_description"))
         .setRequired(true)
         .setMaxLength(MAX_DOCUMENT_NAME_LENGTH),
     )
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(
-          localizer("en-US", "commands.teach.document.file_description"),
-        )
+        .setDescription(localizer("en-US", "commands.teach.document.file_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(
-          localizer("en-US", "commands.teach.document.scope_description"),
-        )
+        .setDescription(localizer("en-US", "commands.teach.document.scope_description"))
         .addChoices(
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.document.scope_choice_persona",
-            ),
+            name: localizer("en-US", "commands.teach.document.scope_choice_persona"),
             value: "persona",
           },
           {
-            name: localizer(
-              "en-US",
-              "commands.teach.document.scope_choice_serverwide",
-            ),
+            name: localizer("en-US", "commands.teach.document.scope_choice_serverwide"),
             value: "serverwide",
           },
         )
@@ -104,14 +73,10 @@ function validateAttachment(attachment: Attachment): {
 } {
   const allowedExtensions = [".txt", ".md", ".pdf"];
   const filename = attachment.name?.toLowerCase() ?? "";
-  const hasAllowedExtension = allowedExtensions.some((ext) =>
-    filename.endsWith(ext),
-  );
+  const hasAllowedExtension = allowedExtensions.some((ext) => filename.endsWith(ext));
 
   const allowedTypes = ["text/plain", "text/markdown", "application/pdf"];
-  const hasAllowedContentType = attachment.contentType
-    ? allowedTypes.includes(attachment.contentType)
-    : false;
+  const hasAllowedContentType = attachment.contentType ? allowedTypes.includes(attachment.contentType) : false;
 
   if (!hasAllowedExtension && !hasAllowedContentType) {
     return { isValid: false, errorKey: "invalid_format" };
@@ -129,9 +94,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled =
-    process.env.RUN_ENV === "production" ||
-    process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
 
   // 1. Ensure command is run in a valid channel context
   if (!interaction.channel) {
@@ -148,9 +111,7 @@ export async function execute(
   let tomoriState: TomoriState | null = null;
   let targetTomoriId: number | null = null;
   let modalSubmitInteraction: ModalSubmitInteraction | null = null;
-  let responseInteraction:
-    | ChatInputCommandInteraction
-    | ModalSubmitInteraction = interaction;
+  let responseInteraction: ChatInputCommandInteraction | ModalSubmitInteraction = interaction;
 
   try {
     if (!ragEnabled) {
@@ -169,12 +130,8 @@ export async function execute(
       await interaction.reply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "rate_limit.error_memory_critical_title"),
-            )
-            .setDescription(
-              localizer(locale, "rate_limit.error_memory_critical_description"),
-            )
+            .setTitle(localizer(locale, "rate_limit.error_memory_critical_title"))
+            .setDescription(localizer(locale, "rate_limit.error_memory_critical_description"))
             .setColor(ColorCode.ERROR),
         ],
         flags: MessageFlags.Ephemeral,
@@ -185,9 +142,7 @@ export async function execute(
     // 3. Reserve document quota (per-user)
     const quotaReserve = reserveDocumentQuota(interaction.user.id);
     if (!quotaReserve.allowed) {
-      const resetTime = quotaReserve.resetAt
-        ? new Date(quotaReserve.resetAt).toLocaleString(locale)
-        : "unknown";
+      const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
       await replyInfoEmbed(interaction, locale, {
         titleKey: "rate_limit.error_quota_exceeded_title",
         descriptionKey: "rate_limit.error_quota_exceeded_description",
@@ -201,12 +156,9 @@ export async function execute(
     }
 
     // 4. Check blacklist for guild contexts
-    const hasManagePermission =
-      interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
     if (interaction.guild) {
-      const blacklisted =
-        (await isBlacklisted(interaction.guild.id, interaction.user.id)) ??
-        false;
+      const blacklisted = (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
       if (blacklisted && !hasManagePermission) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "general.errors.user_blacklisted_title",
@@ -219,9 +171,7 @@ export async function execute(
     }
 
     // 5. Load server's Tomori state
-    tomoriState = await getCachedTomoriState(
-      interaction.guild?.id ?? interaction.user.id,
-    );
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
@@ -233,10 +183,7 @@ export async function execute(
     }
 
     // 6. Check teaching permission (reuse server memory setting)
-    if (
-      !tomoriState.config.server_memteaching_enabled &&
-      !hasManagePermission
-    ) {
+    if (!tomoriState.config.server_memteaching_enabled && !hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.document.teaching_disabled_title",
         descriptionKey: "commands.teach.document.teaching_disabled_description",
@@ -251,8 +198,7 @@ export async function execute(
     if (!embeddingModelId) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.document.no_embedding_model_title",
-        descriptionKey:
-          "commands.teach.document.no_embedding_model_description",
+        descriptionKey: "commands.teach.document.no_embedding_model_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -273,8 +219,7 @@ export async function execute(
     if (!embeddingModel) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.document.no_embedding_model_title",
-        descriptionKey:
-          "commands.teach.document.no_embedding_model_description",
+        descriptionKey: "commands.teach.document.no_embedding_model_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -295,33 +240,21 @@ export async function execute(
 
     // 9. Resolve document scope
     const scopeInput = interaction.options.getString("scope");
-    const scope: DocumentScope =
-      scopeInput === "serverwide" ? "serverwide" : DEFAULT_DOCUMENT_SCOPE;
-    let scopeLabel = localizer(
-      locale,
-      "commands.teach.document.scope_label_serverwide",
-    );
+    const scope: DocumentScope = scopeInput === "serverwide" ? "serverwide" : DEFAULT_DOCUMENT_SCOPE;
+    let scopeLabel = localizer(locale, "commands.teach.document.scope_label_serverwide");
 
     // Scope `persona` explicitly uses a string-select modal.
     // Scope `serverwide` intentionally skips persona selection and stores tomori_id as NULL.
     if (scope === "persona") {
-      const allPersonas = await loadAllPersonasForServer(
-        interaction.guild?.id ?? interaction.user.id,
-      );
+      const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
       const personaSelectOptions: SelectOption[] = allPersonas
         .filter((persona) => persona.tomori_id !== undefined)
         .map((persona) => ({
           label: safeSelectOptionText(persona.tomori_nickname),
           value: persona.tomori_id?.toString() ?? "",
           description: persona.is_alter
-            ? localizer(
-                locale,
-                "commands.teach.document.alter_persona_description",
-              )
-            : localizer(
-                locale,
-                "commands.teach.document.main_persona_description",
-              ),
+            ? localizer(locale, "commands.teach.document.alter_persona_description")
+            : localizer(locale, "commands.teach.document.main_persona_description"),
         }))
         .filter((option) => option.value !== "");
 
@@ -335,30 +268,23 @@ export async function execute(
         return;
       }
 
-      const personaModalResult = await promptWithPaginatedModal(
-        interaction,
-        locale,
-        {
-          modalCustomId: DOCUMENT_PERSONA_MODAL_ID,
-          modalTitleKey: "commands.teach.document.persona_modal_title",
-          components: [
-            {
-              customId: DOCUMENT_PERSONA_SELECT_ID,
-              labelKey: "commands.teach.document.persona_select_label",
-              descriptionKey:
-                "commands.teach.document.persona_select_description",
-              placeholder: "commands.teach.document.persona_select_placeholder",
-              required: true,
-              options: personaSelectOptions,
-            },
-          ],
-        },
-      );
+      const personaModalResult = await promptWithPaginatedModal(interaction, locale, {
+        modalCustomId: DOCUMENT_PERSONA_MODAL_ID,
+        modalTitleKey: "commands.teach.document.persona_modal_title",
+        components: [
+          {
+            customId: DOCUMENT_PERSONA_SELECT_ID,
+            labelKey: "commands.teach.document.persona_select_label",
+            descriptionKey: "commands.teach.document.persona_select_description",
+            placeholder: "commands.teach.document.persona_select_placeholder",
+            required: true,
+            options: personaSelectOptions,
+          },
+        ],
+      });
 
       if (personaModalResult.outcome !== "submit") {
-        log.info(
-          `Teach document persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`,
-        );
+        log.info(`Teach document persona modal ${personaModalResult.outcome} for user ${interaction.user.id}`);
         return;
       }
 
@@ -368,12 +294,9 @@ export async function execute(
       }
       responseInteraction = modalSubmitInteraction;
 
-      const selectedPersonaId =
-        personaModalResult.values?.[DOCUMENT_PERSONA_SELECT_ID];
+      const selectedPersonaId = personaModalResult.values?.[DOCUMENT_PERSONA_SELECT_ID];
       const selectedPersona =
-        allPersonas.find(
-          (persona) => persona.tomori_id?.toString() === selectedPersonaId,
-        ) ?? null;
+        allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
 
       if (!selectedPersona?.tomori_id) {
         await replyInfoEmbed(responseInteraction, locale, {
@@ -385,13 +308,9 @@ export async function execute(
       }
 
       targetTomoriId = selectedPersona.tomori_id;
-      scopeLabel = localizer(
-        locale,
-        "commands.teach.document.scope_label_persona",
-        {
-          persona_name: selectedPersona.tomori_nickname,
-        },
-      );
+      scopeLabel = localizer(locale, "commands.teach.document.scope_label_persona", {
+        persona_name: selectedPersona.tomori_nickname,
+      });
     }
 
     // 10. Check duplicate document name in selected scope
@@ -493,18 +412,8 @@ export async function execute(
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.teach.document.download_failed_title",
-              ),
-            )
-            .setDescription(
-              localizer(
-                locale,
-                "commands.teach.document.download_failed_description",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.teach.document.download_failed_title"))
+            .setDescription(localizer(locale, "commands.teach.document.download_failed_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -523,9 +432,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "commands.teach.document.empty_title"))
-            .setDescription(
-              localizer(locale, "commands.teach.document.empty_description"),
-            )
+            .setDescription(localizer(locale, "commands.teach.document.empty_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -536,17 +443,11 @@ export async function execute(
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(locale, "commands.teach.document.too_long_title"),
-            )
+            .setTitle(localizer(locale, "commands.teach.document.too_long_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.teach.document.too_long_description",
-                {
-                  max_length: memoryLimits.maxDocumentTextLength.toString(),
-                },
-              ),
+              localizer(locale, "commands.teach.document.too_long_description", {
+                max_length: memoryLimits.maxDocumentTextLength.toString(),
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -554,20 +455,14 @@ export async function execute(
       return;
     }
 
-    const chunks = chunkDocumentText(
-      normalizedText,
-      memoryLimits.documentChunkSize,
-      memoryLimits.documentChunkOverlap,
-    );
+    const chunks = chunkDocumentText(normalizedText, memoryLimits.documentChunkSize, memoryLimits.documentChunkOverlap);
 
     if (chunks.length === 0) {
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "commands.teach.document.empty_title"))
-            .setDescription(
-              localizer(locale, "commands.teach.document.empty_description"),
-            )
+            .setDescription(localizer(locale, "commands.teach.document.empty_description"))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -578,20 +473,11 @@ export async function execute(
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.teach.document.too_many_chunks_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.teach.document.too_many_chunks_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.teach.document.too_many_chunks_description",
-                {
-                  max_chunks: memoryLimits.maxDocumentChunks.toString(),
-                },
-              ),
+              localizer(locale, "commands.teach.document.too_many_chunks_description", {
+                max_chunks: memoryLimits.maxDocumentChunks.toString(),
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -616,29 +502,16 @@ export async function execute(
 					  AND d.tomori_id = ${targetTomoriId}
 				`;
     const currentChunkCount = Number(chunkCountRow?.chunk_count || 0);
-    if (
-      currentChunkCount + chunks.length >
-      memoryLimits.maxDocumentChunksPerServer
-    ) {
+    if (currentChunkCount + chunks.length > memoryLimits.maxDocumentChunksPerServer) {
       await responseInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(
-              localizer(
-                locale,
-                "commands.teach.document.server_chunk_limit_title",
-              ),
-            )
+            .setTitle(localizer(locale, "commands.teach.document.server_chunk_limit_title"))
             .setDescription(
-              localizer(
-                locale,
-                "commands.teach.document.server_chunk_limit_description",
-                {
-                  max_chunks:
-                    memoryLimits.maxDocumentChunksPerServer.toString(),
-                  scope: scopeLabel,
-                },
-              ),
+              localizer(locale, "commands.teach.document.server_chunk_limit_description", {
+                max_chunks: memoryLimits.maxDocumentChunksPerServer.toString(),
+                scope: scopeLabel,
+              }),
             )
             .setColor(ColorCode.ERROR),
         ],
@@ -646,21 +519,14 @@ export async function execute(
       return;
     }
 
-    const decryptedKey = await decryptApiKey(
-      tomoriState.config.api_key,
-      tomoriState.config.key_version || 1,
-    );
+    const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
 
     const embeddings = await generateEmbeddingsBatched({
       provider: embeddingModel.provider,
       apiKey: decryptedKey,
       model: embeddingModel.codename,
       inputs: chunks,
-      taskType: (await providerSupportsEmbeddingTaskType(
-        embeddingModel.provider,
-      ))
-        ? "RETRIEVAL_DOCUMENT"
-        : undefined,
+      taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider)) ? "RETRIEVAL_DOCUMENT" : undefined,
       batchSize: 16,
     });
 

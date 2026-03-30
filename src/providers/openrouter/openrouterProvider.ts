@@ -19,28 +19,13 @@ import type {
 import type { ZodType } from "zod";
 import { sql } from "../../utils/db/client";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
-import {
-  OpenrouterStreamAdapter,
-  type OpenrouterStreamConfig,
-} from "./openrouterStreamAdapter";
-import {
-  generateConversationSummaryOpenrouter,
-  generateRoleplaySummaryOpenrouter,
-} from "./compactGenerator";
+import { OpenrouterStreamAdapter, type OpenrouterStreamConfig } from "./openrouterStreamAdapter";
+import { generateConversationSummaryOpenrouter, generateRoleplaySummaryOpenrouter } from "./compactGenerator";
 import { generatePresetFromPromptOpenrouter } from "./presetGenerator";
-import type {
-  ProviderError,
-  StreamContext,
-} from "../../types/stream/interfaces";
+import type { ProviderError, StreamContext } from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
-import {
-  type ToolStateForContext,
-  getAvailableToolsWithMCP,
-} from "../../tools/toolRegistry";
-import type {
-  StreamingContext,
-  ToolContext,
-} from "../../types/tool/interfaces";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "../../tools/toolRegistry";
+import type { StreamingContext, ToolContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
@@ -70,20 +55,14 @@ import {
 } from "../../types/provider/interfaces";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
 import { callOpenrouterStructuredJSON } from "./openrouterStructuredOutput";
-import {
-  getCachedDefaultLLM,
-  isLLMCacheReady,
-} from "../../utils/cache/llmCache";
+import { getCachedDefaultLLM, isLLMCacheReady } from "../../utils/cache/llmCache";
 import {
   getOpenRouterCapabilities,
   getOrFetchOpenRouterCapabilities,
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
-import {
-  loadDefaultModelForProvider,
-  loadAvailableModelsForProvider,
-} from "../../utils/db/dbRead";
+import { loadDefaultModelForProvider, loadAvailableModelsForProvider } from "../../utils/db/dbRead";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 import { openrouterProviderInfo } from "./providerInfo";
@@ -104,9 +83,7 @@ async function getDefaultOpenrouterModel(): Promise<string> {
   if (isLLMCacheReady()) {
     const cachedDefault = getCachedDefaultLLM(providerName);
     if (cachedDefault) {
-      log.info(
-        `Using cached default ${providerName} model: ${cachedDefault.llm_codename}`,
-      );
+      log.info(`Using cached default ${providerName} model: ${cachedDefault.llm_codename}`);
       return cachedDefault.llm_codename;
     }
   }
@@ -115,9 +92,7 @@ async function getDefaultOpenrouterModel(): Promise<string> {
   try {
     const dbDefault = await loadDefaultModelForProvider(providerName);
     if (dbDefault) {
-      log.info(
-        `Using database default ${providerName} model: ${dbDefault.llm_codename}`,
-      );
+      log.info(`Using database default ${providerName} model: ${dbDefault.llm_codename}`);
       return dbDefault.llm_codename;
     }
   } catch (error) {
@@ -131,22 +106,15 @@ async function getDefaultOpenrouterModel(): Promise<string> {
     const availableModels = await loadAvailableModelsForProvider(providerName);
     if (availableModels && availableModels.length > 0) {
       const firstModel = availableModels[0].llm_codename;
-      log.warn(
-        `No default model found, using first available ${providerName} model: ${firstModel}`,
-      );
+      log.warn(`No default model found, using first available ${providerName} model: ${firstModel}`);
       return firstModel;
     }
   } catch (error) {
-    log.error(
-      `Failed to load available models for ${providerName}`,
-      error as Error,
-    );
+    log.error(`Failed to load available models for ${providerName}`, error as Error);
   }
 
   // 4. No models found - throw error
-  throw new Error(
-    `No default model found for provider: ${providerName}. Please configure models in the database.`,
-  );
+  throw new Error(`No default model found for provider: ${providerName}. Please configure models in the database.`);
 }
 
 function extractOpenRouterEmbeddings(response: unknown): number[][] {
@@ -223,9 +191,7 @@ export class OpenrouterProvider
 
       // Check if the response is successful (2xx status code)
       if (!response.ok) {
-        log.warn(
-          `API key validation failed with status ${response.status}: ${response.statusText}`,
-        );
+        log.warn(`API key validation failed with status ${response.status}: ${response.statusText}`);
 
         // Handle auth endpoint errors directly (simpler than streaming errors)
         let errorMessage = response.statusText;
@@ -268,14 +234,13 @@ export class OpenrouterProvider
             retryable = false;
         }
 
-        const providerError: import("../../types/stream/interfaces").ProviderError =
-          {
-            type: errorType,
-            message: `OpenRouter auth error (${response.status}): ${errorMessage}`,
-            code: response.status.toString(),
-            retryable,
-            originalError: new Error(errorMessage),
-          };
+        const providerError: import("../../types/stream/interfaces").ProviderError = {
+          type: errorType,
+          message: `OpenRouter auth error (${response.status}): ${errorMessage}`,
+          code: response.status.toString(),
+          retryable,
+          originalError: new Error(errorMessage),
+        };
 
         return { valid: false, error: providerError };
       }
@@ -287,14 +252,13 @@ export class OpenrouterProvider
       // The response should contain user information and rate limits
       if (!data || typeof data !== "object") {
         log.warn("API key validation received invalid response structure");
-        const providerError: import("../../types/stream/interfaces").ProviderError =
-          {
-            type: "api_error",
-            message: "OpenRouter auth endpoint returned invalid data structure",
-            code: "unknown",
-            retryable: false,
-            originalError: new Error("Invalid response structure"),
-          };
+        const providerError: import("../../types/stream/interfaces").ProviderError = {
+          type: "api_error",
+          message: "OpenRouter auth endpoint returned invalid data structure",
+          code: "unknown",
+          retryable: false,
+          originalError: new Error("Invalid response structure"),
+        };
         return { valid: false, error: providerError };
       }
 
@@ -367,15 +331,11 @@ export class OpenrouterProvider
     }
 
     if (!request.toolContext) {
-      log.warn(
-        "OpenRouter preset generation skipped search tools: no tool context available.",
-      );
+      log.warn("OpenRouter preset generation skipped search tools: no tool context available.");
       return undefined;
     }
 
-    const hasBraveApiKey = await isBraveSearchAvailable(
-      request.tomoriState.server_id,
-    );
+    const hasBraveApiKey = await isBraveSearchAvailable(request.tomoriState.server_id);
 
     if (!hasBraveApiKey) {
       const mcpManager = getMCPManager();
@@ -386,9 +346,7 @@ export class OpenrouterProvider
 
     const toolStateForContext: ToolStateForContext = {
       server_id: request.tomoriState.server_id.toString(),
-      activePersonaHasElevenlabsVoice: Boolean(
-        request.tomoriState.elevenlabs_voice_id?.trim(),
-      ),
+      activePersonaHasElevenlabsVoice: Boolean(request.tomoriState.elevenlabs_voice_id?.trim()),
       llm: {
         llm_codename: request.tomoriState.llm.llm_codename,
         has_tools: request.tomoriState.llm.has_tools,
@@ -408,14 +366,10 @@ export class OpenrouterProvider
       },
     };
 
-    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(
-      "openrouter",
-      toolStateForContext,
-    );
+    const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP("openrouter", toolStateForContext);
 
     const searchTools = builtInTools.filter(
-      (tool) =>
-        tool.category === "search" || tool.requiresFeatureFlag === "web_search",
+      (tool) => tool.category === "search" || tool.requiresFeatureFlag === "web_search",
     );
 
     const openrouterAdapter = getOpenrouterToolAdapter();
@@ -426,34 +380,23 @@ export class OpenrouterProvider
     );
   }
 
-  async generatePreset(
-    request: ProviderPresetGenerationRequest,
-  ): Promise<PresetGenerationResult> {
+  async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const tools = await this.getPresetGenerationTools(request);
 
-    return await generatePresetFromPromptOpenrouter(
-      request.apiKey,
-      request.params,
-      request.locale,
-      {
-        model: request.tomoriState.llm.llm_codename,
-        temperature: request.tomoriState.config.llm_temperature,
-        tools,
-        toolContext: request.toolContext as ToolContext | undefined,
-        maxToolRounds: request.maxToolRounds,
-      },
-    );
+    return await generatePresetFromPromptOpenrouter(request.apiKey, request.params, request.locale, {
+      model: request.tomoriState.llm.llm_codename,
+      temperature: request.tomoriState.config.llm_temperature,
+      tools,
+      toolContext: request.toolContext as ToolContext | undefined,
+      maxToolRounds: request.maxToolRounds,
+    });
   }
 
-  async generateConversationSummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactConversationResult> {
+  async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
     return await generateConversationSummaryOpenrouter(request);
   }
 
-  async generateRoleplaySummary(
-    request: ProviderCompactSummaryRequest,
-  ): Promise<CompactRoleplayResult> {
+  async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
     return await generateRoleplaySummaryOpenrouter(request);
   }
 
@@ -472,9 +415,7 @@ export class OpenrouterProvider
       // Get built-in tools from the registry
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
-        activePersonaHasElevenlabsVoice: Boolean(
-          tomoriState.elevenlabs_voice_id?.trim(),
-        ),
+        activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,
@@ -518,8 +459,7 @@ export class OpenrouterProvider
         // Apply additional streaming-aware filtering for tools that support it
         finalBuiltInTools = availableBuiltInTools.filter((tool) => {
           const isContextAvailable =
-            "isAvailableForContext" in tool &&
-            typeof tool.isAvailableForContext === "function"
+            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
               ? tool.isAvailableForContext("openrouter", minimalContext)
               : true;
 
@@ -533,12 +473,11 @@ export class OpenrouterProvider
 
       // Use the enhanced tool adapter to get all tools (built-in + MCP)
       const openrouterAdapter = getOpenrouterToolAdapter();
-      const allToolsConfig =
-        await openrouterAdapter.getAllToolsInOpenrouterFormat(
-          finalBuiltInTools,
-          tomoriState.server_id,
-          mcpFunctionNames,
-        );
+      const allToolsConfig = await openrouterAdapter.getAllToolsInOpenrouterFormat(
+        finalBuiltInTools,
+        tomoriState.server_id,
+        mcpFunctionNames,
+      );
 
       log.info(
         `OpenRouter provider tools loaded: ${finalBuiltInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools (centralized filtering applied)`,
@@ -546,10 +485,7 @@ export class OpenrouterProvider
 
       return allToolsConfig;
     } catch (error) {
-      log.error(
-        `Failed to get tools for OpenRouter provider: ${tomoriState.llm.llm_codename}`,
-        error as Error,
-      );
+      log.error(`Failed to get tools for OpenRouter provider: ${tomoriState.llm.llm_codename}`, error as Error);
       return [];
     }
   }
@@ -569,10 +505,7 @@ export class OpenrouterProvider
    * @param apiKey - The decrypted API key
    * @returns Promise<OpenrouterProviderConfig> - Provider-specific configuration object
    */
-  async createConfig(
-    tomoriState: TomoriState,
-    apiKey: string,
-  ): Promise<OpenrouterProviderConfig> {
+  async createConfig(tomoriState: TomoriState, apiKey: string): Promise<OpenrouterProviderConfig> {
     log.info(`createConfig for model: ${tomoriState.llm.llm_codename}`);
     log.info(`has_tools flag: ${tomoriState.llm.has_tools}`);
     log.info(`sees_images flag: ${tomoriState.llm.sees_images}`);
@@ -590,10 +523,7 @@ export class OpenrouterProvider
       const storedCapabilities = tomoriState.config.other_model_capabilities;
       const fetchedAt = tomoriState.config.other_model_capabilities_fetched_at;
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      const isCacheFresh =
-        fetchedAt &&
-        Date.now() - fetchedAt.getTime() < sevenDaysMs &&
-        storedCapabilities;
+      const isCacheFresh = fetchedAt && Date.now() - fetchedAt.getTime() < sevenDaysMs && storedCapabilities;
 
       if (isCacheFresh && storedCapabilities) {
         log.info(
@@ -617,8 +547,7 @@ export class OpenrouterProvider
         } else {
           try {
             // Re-fetch capabilities for the stored model (handles stale cache + 502 refresh)
-            const capabilities =
-              await getOrFetchOpenRouterCapabilities(otherModelCodename);
+            const capabilities = await getOrFetchOpenRouterCapabilities(otherModelCodename);
 
             if (capabilities) {
               log.info(
@@ -659,16 +588,13 @@ export class OpenrouterProvider
     }
     // Override with OpenRouter API capabilities if available (for registered models)
     else if (isOpenRouterCapabilityCacheReady()) {
-      const apiCapabilities = getOpenRouterCapabilities(
-        tomoriState.llm.llm_codename,
-      );
+      const apiCapabilities = getOpenRouterCapabilities(tomoriState.llm.llm_codename);
 
       if (apiCapabilities) {
         // Log and override each capability if different from database
         if (apiCapabilities.hasTools !== effectiveHasTools) {
           log.info(
-            `[API OVERRIDE] has_tools: ${effectiveHasTools} (DB) → ` +
-              `${apiCapabilities.hasTools} (OpenRouter API)`,
+            `[API OVERRIDE] has_tools: ${effectiveHasTools} (DB) → ` + `${apiCapabilities.hasTools} (OpenRouter API)`,
           );
           effectiveHasTools = apiCapabilities.hasTools;
         }
@@ -697,9 +623,7 @@ export class OpenrouterProvider
       }
     } else {
       // Cache not ready - use database flags
-      log.info(
-        "[DB FALLBACK] OpenRouter capability cache not ready - using database flags",
-      );
+      log.info("[DB FALLBACK] OpenRouter capability cache not ready - using database flags");
     }
 
     // Build config object - only include tools if model supports them
@@ -710,23 +634,12 @@ export class OpenrouterProvider
     // accounts with low daily credit limits.
     // If unknown (cache miss or other-model), leave it undefined so the
     // stream adapter omits max_tokens entirely and lets the model decide.
-    const maxOutputTokensCap = Number.parseInt(
-      process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
-      10,
-    );
+    const maxOutputTokensCap = Number.parseInt(process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192", 10);
     let resolvedMaxOutputTokens: number | undefined;
-    if (
-      tomoriState.llm.llm_codename !== "other-model" &&
-      isOpenRouterCapabilityCacheReady()
-    ) {
-      const tokenLimits = getOpenRouterTokenLimits(
-        tomoriState.llm.llm_codename,
-      );
+    if (tomoriState.llm.llm_codename !== "other-model" && isOpenRouterCapabilityCacheReady()) {
+      const tokenLimits = getOpenRouterTokenLimits(tomoriState.llm.llm_codename);
       if (tokenLimits?.maxCompletionTokens !== undefined) {
-        resolvedMaxOutputTokens = Math.min(
-          tokenLimits.maxCompletionTokens,
-          maxOutputTokensCap,
-        );
+        resolvedMaxOutputTokens = Math.min(tokenLimits.maxCompletionTokens, maxOutputTokensCap);
       }
     }
     log.info(
@@ -737,8 +650,7 @@ export class OpenrouterProvider
       // For other-model, use the user-configured model codename (e.g., "openrouter/free")
       // rather than the placeholder codename "other-model" which OpenRouter rejects
       model:
-        tomoriState.llm.llm_codename === "other-model" &&
-        tomoriState.config.other_model_codename
+        tomoriState.llm.llm_codename === "other-model" && tomoriState.config.other_model_codename
           ? tomoriState.config.other_model_codename
           : tomoriState.llm.llm_codename,
       apiKey: apiKey,
@@ -766,10 +678,7 @@ export class OpenrouterProvider
         minP: tomoriState.config.llm_min_p,
       }),
     };
-    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(
-      tomoriState.config.llm_logit_biases ?? [],
-      tomoriState.llm,
-    );
+    const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(tomoriState.config.llm_logit_biases ?? [], tomoriState.llm);
     if (Object.keys(runtimeLogitBias).length > 0) {
       config.logitBias = runtimeLogitBias;
     }
@@ -785,11 +694,7 @@ export class OpenrouterProvider
    * Uses the modular streaming architecture with StreamOrchestrator and OpenrouterStreamAdapter
    */
   async streamToDiscord(
-    channel:
-      | BaseGuildTextChannel
-      | BaseGuildVoiceChannel
-      | DMChannel
-      | AnyThreadChannel,
+    channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
     client: Client,
     tomoriState: TomoriState,
     config: ProviderConfig,
@@ -823,14 +728,11 @@ export class OpenrouterProvider
         // Add Discord streaming constants
         maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
         flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
-        flushBufferSizeCodeBlock:
-          DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+        flushBufferSizeCodeBlock: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
         inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
-        baseTypeSpeedMsPerChar:
-          DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+        baseTypeSpeedMsPerChar: DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
         maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
-        minVisibleTypingDurationMs:
-          DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+        minVisibleTypingDurationMs: DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
         humanizerDegree: tomoriState.config.humanizer_degree,
         emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
         // Preserve createConfig capability overrides (don't revert to DB flags here)
@@ -842,25 +744,14 @@ export class OpenrouterProvider
 
       // Override tools with context-aware tools when streaming context is provided
       // BUT only if tools were enabled in createConfig (after API capability overrides)
-      const modelSupportsToolsAfterOverride = Array.isArray(
-        openrouterConfig.tools,
-      );
+      const modelSupportsToolsAfterOverride = Array.isArray(openrouterConfig.tools);
       if (streamingContext && modelSupportsToolsAfterOverride) {
-        log.info(
-          "OpenrouterProvider: Reloading tools with streaming context for context-aware availability",
-        );
-        const contextAwareTools = await this.getTools(
-          tomoriState,
-          streamingContext,
-        );
+        log.info("OpenrouterProvider: Reloading tools with streaming context for context-aware availability");
+        const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
-        log.info(
-          `Context-aware tools loaded: ${contextAwareTools.length} tools`,
-        );
+        log.info(`Context-aware tools loaded: ${contextAwareTools.length} tools`);
       } else if (streamingContext && !modelSupportsToolsAfterOverride) {
-        log.info(
-          "Skipping context-aware tool reload - tools disabled by capability override",
-        );
+        log.info("Skipping context-aware tool reload - tools disabled by capability override");
       }
 
       // Create streaming context
@@ -905,14 +796,8 @@ export class OpenrouterProvider
       const openrouterAdapter = new OpenrouterStreamAdapter();
 
       // Execute streaming with the modular architecture
-      log.info(
-        "OpenrouterProvider: Delegating to StreamOrchestrator with OpenrouterStreamAdapter",
-      );
-      const result = await orchestrator.streamToDiscord(
-        openrouterAdapter,
-        streamConfig,
-        streamContext,
-      );
+      log.info("OpenrouterProvider: Delegating to StreamOrchestrator with OpenrouterStreamAdapter");
+      const result = await orchestrator.streamToDiscord(openrouterAdapter, streamConfig, streamContext);
 
       log.info(
         `OpenrouterProvider: Modular streaming completed with status: ${result.status}${result.status === "stopped_by_user" && result.stopReason ? ` (reason: ${result.stopReason})` : ""}`,
