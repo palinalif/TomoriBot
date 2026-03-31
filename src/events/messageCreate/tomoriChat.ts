@@ -3501,9 +3501,17 @@ export default async function tomoriChat(
               extension: "png",
               forceStatic: true,
             });
-            resolvedWebhookImpersonatedUserId =
-              (msg.webhookId ? getCachedImpersonatedUserIdForWebhook(msg.webhookId) : null) ??
-              resolveImpersonatedUserIdByWebhookIdentity(guild, webhookName, webhookAvatarUrl);
+            // Only trust our own cache for user-impersonation attribution in
+            // history. Falling back to name+avatar identity matching here would
+            // let foreign persona webhooks (e.g. another TomoriBot instance's
+            // alter named after a real user) get cached as user-impersonation
+            // targets, poisoning all future replies to those webhooks.
+            // The supplemental check below still handles the case where the
+            // current message is itself a user-impersonation and we need to
+            // recognize matching history messages as the same user.
+            resolvedWebhookImpersonatedUserId = msg.webhookId
+              ? getCachedImpersonatedUserIdForWebhook(msg.webhookId)
+              : null;
             if (
               !resolvedWebhookImpersonatedUserId &&
               isUserImpersonation &&
