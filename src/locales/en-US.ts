@@ -1642,8 +1642,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         // Google Gemini
         google_title: `Setting Up Google Gemini API Key`,
         google_description: `Google Gemini offers free and paid tiers with powerful AI models.
-- Free tier available with generous limits
-- Supports all TomoriBot features such as vision and persona generation
+- Free tier available
 - [Gemini Privacy Policy](https://ai.google.dev/gemini-api/terms)`,
         google_getting_key_title: `Getting Your API Key:`,
         google_getting_key_description: `1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
@@ -1653,9 +1652,9 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         // DeepSeek
         deepseek_title: `Setting Up DeepSeek API Key`,
         deepseek_description: `DeepSeek provides direct access to its own chat and reasoning models on a cheap pay-as-you-go basis.
-- Supports DeepSeek chat and reasoning models in TomoriBot
-- Supports tool-capable and structured-output-capable text models in TomoriBot
-- Native image generation and embeddings are not currently available through TomoriBot's DeepSeek provider
+- Supports DeepSeek chat and reasoning models
+- Supports tool-capable and structured-output-capable text models
+- Native image generation and embeddings are not currently available
 - [DeepSeek API Docs](https://api-docs.deepseek.com/)`,
         deepseek_getting_key_title: `Getting Your API Key:`,
         deepseek_getting_key_description: `1. Visit [DeepSeek API Keys](https://platform.deepseek.com/api_keys)
@@ -1681,7 +1680,6 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 4. Copy this API key into {configSetup} or {configApikeySet}`,
         nvidia_model_notes_title: `Model Notes:`,
         nvidia_model_notes_description: `- \`deepseek-ai/deepseek-v3.2\` is the default general chat model
-- \`qwen/qwen3.5-397b-a17b\` is the highest-capability multimodal model in TomoriBot's curated NVIDIA set
 - \`nv-embed-v1\` is the default embedding model
 - \`stabilityai/stable-diffusion-3-medium\` is the default NVIDIA image model`,
         nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
@@ -1730,7 +1728,6 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         openrouter_title: `Setting Up OpenRouter API Key`,
         openrouter_description: `OpenRouter provides access to multiple AI models from different providers on a pay-as-you-go basis.
 - Access to latest and most powerful AI models (some are free)
-- Currently does not support all TomoriBot features
 - [OpenRouter Terms of Service](https://openrouter.ai/terms)`,
         openrouter_getting_key_title: `Getting Your API Key:`,
         openrouter_getting_key_description: `1. Visit [OpenRouter](https://openrouter.ai/settings/keys)
@@ -1752,7 +1749,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - **Always check pricing** on OpenRouter before selecting a model to avoid unexpected costs
 - Costs vary significantly between models`,
         openrouter_settings_title: `OpenRouter Account Settings:`,
-        openrouter_settings_description: `Settings configured in your OpenRouter account (such as model preferences, rate limits, etc.) will also apply when using TomoriBot`,
+        openrouter_settings_description: `Settings configured in your OpenRouter account (such as model preferences, rate limits, etc.)`,
         openrouter_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // Vertex AI
         vertex_title: `Setting Up Google Vertex AI`,
@@ -1817,13 +1814,11 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         choosing_voice_title: `Choosing a Voice:`,
         choosing_voice_description: `After setting up your API key, you can select which voice I use.
 - Use {configVoiceElevenlabs} to browse and select from available voices
-- Voices include different genders, ages, and accents
-- You can always change or remove the voice selection`,
+- Add more voices in your account through their [Voice Library](https://elevenlabs.io/app/voice-library) where you can also clone your own voices.`,
         free_voices_title: `Premade Voices (Free Tier):`,
-        free_voices_description: `Premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
+        free_voices_description: `Only premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
         important_notes_title: `Important Notes:`,
-        important_notes_description: `- ElevenLabs is optional - I can still respond via text
-- Characters are counted when I generate voice messages
+        important_notes_description: `- Characters are counted when I generate and read voice messages
 - Free tier has monthly limits - check your usage on ElevenLabs dashboard
 - Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
         footer: `Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
@@ -2024,8 +2019,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         removing_title: `Removing an MCP Server`,
         removing_description: `Use {configMcpRemove} to unregister a server at any time. Removing it immediately disconnects the server and frees up a slot for a new one.`,
         security_title: `Security Warning`,
-        security_description: `**Only add MCP servers you trust.**\n\nA malicious MCP server can:\n- **Prompt-inject** Tomori — sending hidden instructions that override her behavior\n- **Exfiltrate data** that users pass to its tools (messages, file content, etc.)\n- Return **harmful or false results** that Tomori will relay to your server\n\nTreat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
-        footer: `Smithery.ai is a third-party service and is not affiliated with TomoriBot. Always review an MCP's described tools before adding it.`,
+        security_description: `**Only add MCP servers you trust.**\n\nA malicious MCP server can:\n- **Prompt-inject** me by sending hidden instructions that override her behavior\n- **Exfiltrate data** that users pass to its tools (messages, file content, etc.)\n- Return **harmful or false results** that Tomori will relay to your server\n\nTreat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
+        footer: `Always review an MCP's described tools before adding it.`,
       },
     },
 
@@ -2530,7 +2525,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_title: `API Key Set`,
           success_description: `The {provider} API key has been successfully validated, encrypted, and saved.`,
           success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\` (the default for this provider).`,
-          custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. Tomori will use \`{model_name}\` when sending requests to this endpoint.`,
+          custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. I will use \`{model_name}\` when sending requests to this endpoint.`,
           novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config permissions\`.`,
         },
         delete: {
@@ -3966,7 +3961,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           channel_description: `The Discord channel to link`,
           room_description: `The Matrix room ID to link (e.g., !abc:matrix.org)`,
           success_title: `Matrix Room Linked`,
-          success_description: `<#{channel_id}> is now bridged to \`{room_id}\`. Messages from TomoriBot will appear in the Matrix room, and Matrix messages will appear here.
+          success_description: `<#{channel_id}> is now bridged to \`{room_id}\`. Messages from me will appear in the Matrix room, and Matrix messages will appear here.
 
 Use {help_matrix} for setup steps, Matrix-only command notes, and the current limitation list.`,
           invalid_room_title: `Invalid Room ID`,
@@ -4560,18 +4555,18 @@ You can change this anytime using \`/personal privacy\`.`,
   events: {
     // Messages for when the bot is added to a server
     addBot: {
-      rejoin_title: `TomoriBot is Back!`,
+      rejoin_title: `I'm Back!`,
       rejoin_description: `Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/config\`, \`/teach\`, and \`forget\` commands. You can also manage or delete your data anytime with \`/data\`.
 
 			If you wish to swap my provider, use the \`/config apikey set\` command.
 
-			**By using TomoriBot, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
-      setup_prompt_title: `TomoriBot Successfully Added`,
+			**By using me, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
+      setup_prompt_title: `Successfully Added`,
       setup_prompt_description: `Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/config setup\` command to choose my initial personality and configure my AI features. You can also manage or delete your data anytime with \`/data\`.
 
 			Use the \`/help apikey\` command if you are unsure on how to create an API key for your chosen AI provider. API keys will be kept encrypted but if you are still wary of giving it to a public Discord bot, feel free to run your own TomoriBot using the [repository's guide](https://github.com/Bredrumb/TomoriBot) instead.
 
-			**By using TomoriBot, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
+			**By using me, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
     },
   },
 

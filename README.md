@@ -51,7 +51,7 @@ English | [日本語](README_ja.md)
 
 TomoriBot is a free and open-source self-hosted personal AI assistant for Discord, inspired by [SillyTavern](https://github.com/SillyTavern/SillyTavern) and Discord's discontinued Clyde. It was created to bring both practical AI assistants and custom AI companions into Discord, with configurable memory, personas, tool usage, and model routing.
 
-It is designed for people who want a customizable Discord AI bot, AI companion, or agentic chatbot that they can run on their own infrastructure. TomoriBot supports long-term memory, multi-persona behavior, web and MCP tools, image understanding, roleplay-oriented workflows, and multiple providers including Google Gemini, OpenRouter, NovelAI, and self-hosted OpenAI-compatible endpoints such as Ollama, KoboldCPP, vLLM, LocalAI, and ChatMock-backed setups.
+It is designed for people who want a customizable Discord AI bot, AI companion, or agentic chatbot that they can run on their own infrastructure. TomoriBot supports long-term memory, multi-persona behavior, web and MCP tools, image understanding, roleplay-oriented workflows, and [multiple providers](#supported-providers) including self-hosted OpenAI-compatible endpoints such as Ollama, KoboldCPP, and vLLM.
 
 You can [invite the public TomoriBot](https://discord.com/oauth2/authorize?client_id=841644102059556915) to your Discord server, or [self-host your own instance](#self-hosting) if you prefer full control over your privacy and API keys. TomoriBot uses encryption that keeps data safe, but self-hosting ensures that all data remain entirely on your device. 
 
@@ -83,7 +83,7 @@ After adding her to your server through either method above, run the `/config se
 
 ![Screenshots 4](img/scs/4.png)
 <h3 align="center">100+ Native Commands for Configuration</h3>
-<p align="center">Everything can be managed through Discord's native slash commands and interactive UI. Completely manage personas, tweak model parameters, set up MCP tool servers, adjust permissions, configure memory, set server member rate limits, and much more! You can also ask TomoriBot directly on what she can do and what her slash commands are. Currently, a Web Dashboard is in the works for even easier management.</p>
+<p align="center">Everything can be managed through Discord's native slash commands and interactive UI. Completely manage personas, prompts, tweak model parameters, set up MCP tool servers, adjust permissions, configure memory, set server member rate limits, and much more! You can also ask TomoriBot directly on what she can do and what her slash commands are. Currently, a Web Dashboard is in the works for even easier management.</p>
 
 <br />
 
@@ -91,7 +91,7 @@ After adding her to your server through either method above, run the `/config se
 ![Screenshots 6](img/scs/6.png)
 
 <h3 align="center">SillyTavern Integration (Beta)</h3>
-<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like in SillyTavern. You can also import SillyTavern V2 character cards directly through `/persona import` or you can modify them first with `/persona generate`.</p>
+<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely, just plop the .json right in through `stpreset`. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like in SillyTavern. You can also import SillyTavern V2 character cards directly through `/persona import` or you can modify them first with `/persona generate`.</p>
 
 ![Screenshots 5](img/scs/5.png)
 <h3 align="center">Lots of More Features, and Counting!</h3>
@@ -99,7 +99,7 @@ After adding her to your server through either method above, run the `/config se
 
 ## Supported Providers
 
-TomoriBot supports a wide range of LLM providers, image generation APIs, voice services, and search tools for a complete multimodal AI experience.
+TomoriBot supports a wide range of LLM providers, image generation APIs, voice services, and search tools. There are plans to add in more providers, as well as features to mix-and-match them.
 
 ### LLM Providers
 
@@ -121,12 +121,12 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 
 | Provider | Text-to-Image | Image-to-Image | Inpainting | Notes |
 |----------|---------------|----------------|-----------|-------|
-| **Google** | ✅ | ✅ | - | Veo, NanoBanana |
-| **OpenRouter** | ✅ | - | - | Multiple diffusion models |
-| **NovelAI** | ✅ | ✅ | ✅ | Diffusion with character references |
-| **Nvidia** | ✅ | - | - | Nvidia Edify suite |
-| **Z.ai** | ✅ | - | - | General & coding images |
-| **Z.ai Coding (Subscription)** | ✅ | - | - | Code-focused generation |
+| **Google** | ✅ | ✅ | - | - |
+| **OpenRouter** | ✅ | ✅ | - | - |
+| **NovelAI** | ✅ | ✅ | ✅ | Can be combined with other providers |
+| **Nvidia** | ✅ | ✅ | - | - |
+| **Z.ai** | ✅ | - | - | - |
+| **Z.ai Coding (Subscription)** | ✅ | - | - | - |
 
 ### Voice & Audio
 
@@ -226,7 +226,7 @@ Before running TomoriBot, ensure you have the following installed:
   # macOS/Linux
   HF_TOKEN=hf_xxx bun run setup:tokenizers
   ```
-  - Without this step, logit bias is silently disabled — everything else works normally.
+  - Without this step, logit bias is silently disabled, but everything else still works normally.
 
 * **Python 3** (Optional but recommended) - Required for URL Fetching MCP server tool
   ```sh
@@ -282,9 +282,7 @@ Before running TomoriBot, ensure you have the following installed:
 
     # Bot Configuration (Optional)
     DEFAULT_BOTNAME=Tomori
-    DEFAULT_BOTNAME_JP=ともり
     BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
-
    ```
 
 **Required Variables:**
@@ -475,7 +473,7 @@ See the [open issues](https://github.com/Bredrumb/TomoriBot/issues) for a full l
 
 Since TomoriBot is still in Beta, any contributions made are **greatly appreciated**, especially for localization.
 
-To contribute a new language translation:
+### To contribute a new language translation:
 
 1. **Create a locale file** in `src/locales/` named after a [Discord locale code](https://discord.com/developers/docs/reference#locales) (e.g., `es-ES.ts` for Spanish, `fr.ts` for French, `ko.ts` for Korean)
 
@@ -497,6 +495,9 @@ To contribute a new language translation:
 
 5. **Submit a pull request** with your new locale file(s) and any `src/db/seed.sql` additions
 
+### To contribute new features
+
+The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run check && bun run lint && bun run check-locales` does not return any errors before doing a pull request of a new feature.
 
 <!-- LEGAL -->
 ## Legal & License
@@ -505,7 +506,7 @@ For users of the official hosted TomoriBot instance:
 - **[Terms of Service](legal/en-US/terms-of-service.md)** - Rules and guidelines for using the bot
 - **[Privacy Policy](legal/en-US/privacy-policy.md)** - How we handle your data
 
-These documents are also accessible within Discord using `/legal terms` and `/legal privacy` commands. If you're self-hosting TomoriBot, these documents serve as reference templates. You control your own data pipeline and are responsible for your deployment's compliance under the GNU Affero General Public License v3.0.
+These documents are also accessible within Discord using `/legal terms` and `/legal privacy` commands. If you're self-hosting TomoriBot, these documents serve as reference templates. You control of your own data and are responsible for your deployment's compliance under the [**GNU Affero General Public License v3.0**](https://github.com/Bredrumb/TomoriBot/blob/main/LICENSE).
 
 <!-- CONTACT -->
 ## Contact
