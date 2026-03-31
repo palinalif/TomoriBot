@@ -804,6 +804,7 @@ export default {
         field_autoch_threshold: `自動チャットモード`,
         field_autoch_channels: `自動チャットチャンネル`,
         field_rp_channels: `RPチャンネル`,
+        field_private_channels: `プライベートチャンネル`,
         field_thought_logs_channel: `思考ログチャンネル`,
         field_welcome_channel: `ウェルカムチャンネル`,
         field_welcome_persona: `ウェルカムペルソナ`,
@@ -3594,6 +3595,26 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
     // サーバー設定コマンド（管理者専用）
     server: {
+      // プライベートチャンネル管理（サブコマンドグループ）
+      privatechannel: {
+        description: `STMを隔離し、思考ログを抑制するプライベートチャンネルを管理`,
+        add: {
+          description: `プライベートチャンネルリストにチャンネルを追加します。`,
+          channel_description: `プライベートに指定するテキストチャンネル。`,
+          success_title: `プライベートチャンネルが追加されました`,
+          success_description: `\`{channel_name}\` をプライベートチャンネルに設定しました。このチャンネルの短期記憶は他のチャンネルに漏れず、思考ログも出力されません。`,
+          already_added_title: `チャンネルは既にプライベートです`,
+          already_added_description: `チャンネル \`{channel_name}\` は既にプライベートチャンネルリストにあります。`,
+        },
+        remove: {
+          description: `プライベートチャンネルリストからチャンネルを削除します。`,
+          channel_description: `プライベートチャンネルリストから削除するテキストチャンネル。`,
+          success_title: `プライベートチャンネルが削除されました`,
+          success_description: `\`{channel_name}\` はプライベートチャンネルではなくなりました。通常のSTM共有と思考ログの動作に戻ります。`,
+          not_found_title: `チャンネルが見つかりません`,
+          not_found_description: `チャンネル \`{channel_name}\` はプライベートチャンネルリストにありません。`,
+        },
+      },
       // RPチャンネル管理（サブコマンドグループ）
       rpchannel: {
         description: `絵文字とスタンプを常に非表示にするRPチャンネルを管理`,

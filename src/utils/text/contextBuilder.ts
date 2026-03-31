@@ -568,6 +568,15 @@ async function buildShortTermMemoryContext(
       otherChannelMemories = [...otherChannelMemories, ...crossServerUserMemories];
     }
 
+    // Filter out private-channel STMs when the current channel is not private.
+    // Private channels isolate their STMs — they cannot leak into non-private channels.
+    // The reverse is allowed: non-private STMs can still appear in private channels.
+    const privateChannelIds = tomoriState?.config.private_channel_ids ?? [];
+    const isCurrentChannelPrivate = privateChannelIds.includes(currentChannelId);
+    if (!isCurrentChannelPrivate && privateChannelIds.length > 0) {
+      otherChannelMemories = otherChannelMemories.filter((memory) => !privateChannelIds.includes(memory.channelId));
+    }
+
     otherChannelMemories.sort((a, b) => b.lastUpdated - a.lastUpdated);
 
     // 2. Limit to max number of other-channel memories (most recent first)

@@ -6610,8 +6610,11 @@ export default async function tomoriChat(
       } // END OF MULTI-PERSONA RESPONSE LOOP
 
       const finalThoughtLog = turnThoughtLog;
+      // Never emit thought logs from private channels — their activity must remain isolated
+      const isPrivateChannel = (tomoriState.config.private_channel_ids ?? []).includes(channel.id);
       if (
         !isDMChannel &&
+        !isPrivateChannel &&
         tomoriState.config.thought_log_channel_disc_id &&
         finalThoughtLog &&
         hasThoughtLogContent(finalThoughtLog)

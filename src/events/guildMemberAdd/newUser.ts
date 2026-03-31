@@ -9,6 +9,11 @@ import tomoriChat, { suppressNextSelfReply } from "@/events/messageCreate/tomori
 import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { registerUser } from "@/utils/db/dbWrite";
 import { buildForcedMentionsForUser, ensureDiscordUserMention } from "@/utils/discord/mentionHelper";
+import {
+  getOrCreateWebhook,
+  resolvePersonaWebhookIdentity,
+  sendWebhookMessageWithIdentity,
+} from "@/utils/discord/webhookManager";
 import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName";
 import { downloadImage } from "@/utils/image/avatarHelper";
 import { log } from "@/utils/misc/logger";
@@ -342,6 +347,37 @@ async function triggerWelcomeMessage(client: Client, member: GuildMember): Promi
     afterMessageId: lastMessage.id,
     triggerStartTime: welcomeStartTime,
     contextLabel: `welcome for member ${member.id} in server ${member.guild.id}`,
+    fallbackSender: async (content) => {
+      // Only use the Alter persona webhook if the chosen greeter is an Alter
+      if (!chosenPersona.is_alter) return false;
+
+      const supportsWebhooks =
+        welcomeChannel.type === ChannelType.GuildText ||
+        welcomeChannel.type === ChannelType.PublicThread ||
+        welcomeChannel.type === ChannelType.PrivateThread ||
+        welcomeChannel.type === ChannelType.AnnouncementThread;
+      if (!supportsWebhooks) return false;
+
+      try {
+        const webhookResult = await getOrCreateWebhook(welcomeChannel);
+        const webhook = webhookResult.webhook;
+        if (!webhook) return false;
+
+        const identity = await resolvePersonaWebhookIdentity(chosenPersona, member.guild);
+        await sendWebhookMessageWithIdentity(
+          webhook,
+          {
+            content,
+            allowedMentions: { users: [member.id], roles: [], parse: [] },
+          },
+          identity,
+        );
+        return true;
+      } catch (error) {
+        log.warn(`Failed to send Alter persona fallback welcome mention for member ${member.id}:`, error);
+        return false;
+      }
+    },
   });
 }
 

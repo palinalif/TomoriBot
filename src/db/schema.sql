@@ -541,6 +541,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 -- Channels in this list always suppress emojis and stickers regardless of global settings
 SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
+-- Add private channel IDs for STM isolation and thought-log suppression (March 2026)
+-- STMs created in these channels cannot leak into other channels, and thought logs are never emitted from them
+SELECT add_column_if_not_exists('tomori_configs', 'private_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
+
 -- Add welcome channel configuration (March 2026)
 -- One configured channel/prompt/persona per server for join greetings
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_channel_disc_id', 'TEXT', 'NULL');

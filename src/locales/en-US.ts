@@ -798,6 +798,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_autoch_threshold: `Auto-Chat Mode`,
         field_autoch_channels: `Auto-Chat Channels`,
         field_rp_channels: `RP Channels`,
+        field_private_channels: `Private Channels`,
         field_thought_logs_channel: `Thought Logs Channel`,
         field_welcome_channel: `Welcome Channel`,
         field_welcome_persona: `Welcome Persona`,
@@ -3576,6 +3577,26 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
     // Server configuration commands (admin-only)
     server: {
+      // Private channel management (subcommand group)
+      privatechannel: {
+        description: `Manage private channels where STMs are isolated and thought logs are suppressed`,
+        add: {
+          description: `Add a channel to the private channel list.`,
+          channel_description: `The text channel to designate as private.`,
+          success_title: `Private Channel Added`,
+          success_description: `\`{channel_name}\` is now a private channel. Its short-term memories will not leak into other channels, and thought logs will not be emitted from it.`,
+          already_added_title: `Channel Already Private`,
+          already_added_description: `The channel \`{channel_name}\` is already in the private channel list.`,
+        },
+        remove: {
+          description: `Remove a channel from the private channel list.`,
+          channel_description: `The text channel to remove from the private channel list.`,
+          success_title: `Private Channel Removed`,
+          success_description: `\`{channel_name}\` is no longer a private channel. It will follow normal STM sharing and thought-log behavior.`,
+          not_found_title: `Channel Not Found`,
+          not_found_description: `The channel \`{channel_name}\` is not in the private channel list.`,
+        },
+      },
       // RP channel management (subcommand group)
       rpchannel: {
         description: `Manage RP channels where emojis and stickers are always suppressed`,
