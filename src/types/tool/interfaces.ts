@@ -74,6 +74,7 @@ export interface StreamingContext {
   disableProfilePictureProcessing?: boolean; // Flag to temporarily disable profile picture processing during enhanced context restart
   disableGifProcessing?: boolean; // Flag to temporarily disable GIF processing during enhanced context restart
   disableShortTermMemoryUpdate?: boolean; // Flag to prevent update_short_term_memory from being called more than once per turn
+  disableCrossChannelMessage?: boolean; // Flag to prevent nested cross-channel dispatch during tool-driven cross-channel turns
   explicitLongTermMemoryIntent?: boolean; // Flag to suppress STM tool nudges when the current user message explicitly asks for persistent memory
   disableTimestampContext?: boolean; // Flag to prevent refresh_message_timestamps from being called more than once per turn
   forceReason?: boolean; // Flag to indicate reasoning mode for enhanced AI responses
@@ -129,6 +130,9 @@ export interface ToolContext {
   webhook?: Webhook;
   personaUsername?: string;
   personaAvatarUrl?: string; // URL or data URI for the active persona/user identity
+  activePersonaId?: number; // Active responding persona for tool-driven follow-up turns
+  isUserImpersonation?: boolean; // True when the active turn is a user impersonation session
+  impersonatedUserId?: string; // Discord user ID currently being impersonated, if any
   suppressProgressNotices?: boolean; // Skip public "working..." embeds for fire-and-forget flows
 }
 

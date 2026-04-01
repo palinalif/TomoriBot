@@ -3577,6 +3577,27 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
     // Server configuration commands (admin-only)
     server: {
+      stm: {
+        description: `Manage server-shared STM entries for all personas`,
+        manage: {
+          description: `Review and clear active server-shared STMs across personas.`,
+          modal_title: `Manage Active Server STMs`,
+          checkbox_label: `Active STMs`,
+          checkbox_label_continued: `Active STMs (Continued)`,
+          checkbox_description: `Uncheck any STM entries you want to clear from this server.`,
+          none_title: `No Active STMs`,
+          none_description: `There are no active server-shared STM entries in this server right now.`,
+          too_many_title: `Too Many Active STMs`,
+          too_many_description: `This server currently has **{count}** active STM entries. Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
+          no_changes_title: `No STMs Cleared`,
+          no_changes_description: `All active STM entries were left checked, so nothing was cleared.`,
+          success_title: `Server STMs Cleared`,
+          success_description: `Cleared **{cleared_count}** server-shared STM entries:\n{cleared_entries}`,
+          unscoped_label: `Unscoped STM`,
+          no_summary: `No summary`,
+          more_cleared: `- ...and {count} more`,
+        },
+      },
       // Private channel management (subcommand group)
       privatechannel: {
         description: `Manage private channels where STMs are isolated and thought logs are suppressed`,

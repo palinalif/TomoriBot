@@ -108,7 +108,7 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 | **Google Gemini** | ✅ | ✅ | ✅ | ✅ |Free Models Available |
 | **OpenRouter** | ✅ | ✅ | ✅ | ✅ |Free Models Available |
 | **Anthropic (API)** | ✅ | ✅ | ✅ |- | NOT Claude Code |
-| **NovelAI** | ✅ | ✅ | - |- | Only GLM 4.5 can use Tools |
+| **NovelAI** | ✅ | ✅ | - |- | Only GLM 4.6 can use Tools |
 | **Nvidia** | ✅ | ✅ | ✅ | ✅ |Free Models Available | 
 | **Deepseek** | ✅ | ✅ | - | - |- |
 | **Z.ai** | ✅ | ✅ | ✅ | - |Free Models Available |

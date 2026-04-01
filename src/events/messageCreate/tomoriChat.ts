@@ -1547,6 +1547,7 @@ async function enforceGlobalRateLimit(params: {
  * @param injectedContextItems - Optional synthetic context items appended after rebuilt history.
  * @param forcedMentions - Optional mention handle mappings to enforce for a target user.
  * @param manualTriggerInvoker - Manual-trigger invoker metadata used when a slash command passes a bot/webhook passport message.
+ * @param manualStreamingContextOverrides - Optional streaming-context overrides for internal follow-up turns.
  */
 export default async function tomoriChat(
   client: Client,
@@ -1579,6 +1580,7 @@ export default async function tomoriChat(
   injectedContextItems?: StructuredContextItem[],
   forcedMentions?: ForcedMention[],
   manualTriggerInvoker?: ManualTriggerInvoker,
+  manualStreamingContextOverrides?: Partial<StreamingContext>,
 ): Promise<void> {
   // 1. Initial Checks & State Loading
   const channel = message.channel;
@@ -1683,6 +1685,7 @@ export default async function tomoriChat(
     disableProfilePictureProcessing: false, // Will be set to true during enhanced context restart
     disableGifProcessing: false, // Will be set to true during enhanced context restart
     disableShortTermMemoryUpdate: false, // Will be set to true after first successful STM update to prevent duplicate calls
+    disableCrossChannelMessage: false, // Can be enabled for tool-driven cross-channel visits/returns
     explicitLongTermMemoryIntent,
     disableTimestampContext: false, // Will be set to true after context_restart_with_timestamps to prevent repeat restarts
     forceReason, // Pass reasoning flag for enhanced AI responses
@@ -1690,6 +1693,10 @@ export default async function tomoriChat(
     disableAllTools: isUserImpersonation, // Disable tools for user impersonation
     naiContinuationPrefill, // NAI GLM-4.6: carry trailing fragment into prompt for mid-sentence continuation
   };
+
+  if (manualStreamingContextOverrides) {
+    Object.assign(streamingContext, manualStreamingContextOverrides);
+  }
 
   const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
   const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
@@ -3524,8 +3531,11 @@ export default async function tomoriChat(
               resolvedWebhookImpersonatedUserId = impersonatedUserId;
             }
 
-            if (resolvedWebhookImpersonatedUserId && msg.webhookId) {
-              cacheUserImpersonationWebhook(msg.webhookId, resolvedWebhookImpersonatedUserId);
+            if (resolvedWebhookImpersonatedUserId) {
+              // Do not cache identity matches discovered from generic history inspection.
+              // Shared channel webhooks can temporarily impersonate a human-looking
+              // display identity for notice embeds, and caching those webhook IDs as
+              // user impersonation targets poisons future reply routing.
               effectiveAuthorId = resolvedWebhookImpersonatedUserId;
               if (
                 isUserImpersonation &&
@@ -5649,6 +5659,9 @@ export default async function tomoriChat(
                     webhook: personaWebhook ?? undefined,
                     personaUsername,
                     personaAvatarUrl,
+                    activePersonaId: currentPersona.tomori_id ?? undefined,
+                    isUserImpersonation,
+                    impersonatedUserId,
                   };
 
                   // Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
@@ -6791,8 +6804,8 @@ export default async function tomoriChat(
                 undefined, // reminderData
                 boomerang.personaId, // selectedPersonaId
                 false, // isPersonaJob
-                false, // isUserImpersonation
-                undefined, // impersonatedUserId
+                boomerang.isUserImpersonation === true, // isUserImpersonation
+                boomerang.impersonatedUserId, // impersonatedUserId
                 "system", // textQuotaSource
                 undefined, // textQuotaTriggerKey
                 undefined, // textQuotaUserDiscId
@@ -6801,6 +6814,9 @@ export default async function tomoriChat(
                 undefined, // naiContinuationPrefill
                 undefined, // emptyResponseFinishReason
                 boomerangContext, // injectedContextItems
+                undefined, // forcedMentions
+                undefined, // manualTriggerInvoker
+                { disableCrossChannelMessage: true }, // manualStreamingContextOverrides
               );
 
               log.success(`Boomerang: Follow-up generation completed in source channel ${boomerang.sourceChannelId}`);

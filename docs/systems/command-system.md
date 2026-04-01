@@ -164,6 +164,7 @@ Examples:
 
 - `/server whitelist remove`
 - `/config remove modeloverride` (channels + personas together)
+- `/server stm manage` (active server-shared STM entries)
 
 Rules:
 
@@ -251,7 +252,7 @@ Rules:
 
 - `bot`: respond, generate(image), kill, impersonate
 - `config`: setup, model(text/image/embedding), apikey(set/delete/rotation), sysprompt(change/clear/preset), params(*), timezone, maxmsgfetch, permissions, uncensors
-- `server`: trigger(add/delete), whitelist(channel/role/remove), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), welcomechannel
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), welcomechannel
 - `persona`: create, generate, import, export, default, swap, remove
 - `tool`: ping, status, refresh, compact, comment
 

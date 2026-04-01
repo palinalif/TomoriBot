@@ -678,6 +678,45 @@ export function clearShortTermMemoryForChannel(channelId: string): void {
 }
 
 /**
+ * Clear one server-scoped short-term memory entry for a specific channel/persona pair.
+ *
+ * @param serverId - Discord server ID
+ * @param channelId - Discord channel ID
+ * @param tomoriId - Optional persona ID for persona-scoped memory
+ */
+export function clearShortTermMemoryForServerChannel(
+  serverId: string,
+  channelId: string,
+  tomoriId?: number | null,
+): void {
+  try {
+    if (!serverId || serverId === "DM" || !channelId) {
+      log.warn(
+        `[shortTermMemoryCache] Invalid parameters for clearShortTermMemoryForServerChannel - serverId=${serverId}, channelId=${channelId}, tomoriId=${tomoriId ?? "none"}`,
+      );
+      return;
+    }
+
+    const deleted = cache.delete(getServerCacheKey(serverId, channelId, tomoriId));
+    if (deleted) {
+      stats.invalidations++;
+      log.info(
+        `[shortTermMemoryCache] Cleared server short-term memory entry - serverId=${serverId}, channelId=${channelId}, tomoriId=${tomoriId ?? "none"}`,
+      );
+    }
+  } catch (error) {
+    log.error(
+      `[shortTermMemoryCache] Failed to clear server short-term memory entry - serverId=${serverId}, channelId=${channelId}, tomoriId=${tomoriId ?? "none"}`,
+      error,
+      {
+        errorType: "CACHE_CLEAR_ERROR",
+        metadata: { serverId, channelId, tomoriId },
+      },
+    );
+  }
+}
+
+/**
  * Clear all user-scoped short-term memories for a user (used by /personal stm clear)
  *
  * @param userId - Discord user ID

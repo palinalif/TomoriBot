@@ -469,33 +469,12 @@ async function handleUserImpersonation(
           })
           .setColor(ColorCode.INFO);
 
-        const impersonatedUser = member?.user || (await client.users.fetch(impersonatedUserId).catch(() => null));
-        const impersonatedAvatarUrl =
-          member?.displayAvatarURL({
-            size: 1024,
-            extension: "png",
-            forceStatic: true,
-          }) ||
-          impersonatedUser?.displayAvatarURL({
-            size: 1024,
-            extension: "png",
-            forceStatic: true,
-          });
-
-        const { webhook } = await getOrCreateWebhook(channel);
-        if (webhook) {
-          await webhook.send({
-            embeds: [noticeEmbed],
-            username: displayName,
-            avatarURL: impersonatedAvatarUrl,
-          });
-        } else {
-          log.warn("Skipping user impersonation notice embed because no webhook was available", {
-            channelId: interaction.channel.id,
-            guildId: interaction.guild.id,
-            impersonatedUserId,
-          });
-        }
+        // Send the notice as a normal bot message so it stays clearly separate
+        // from the actual impersonated webhook output and cannot contaminate
+        // webhook identity tracking.
+        await channel.send({
+          embeds: [noticeEmbed],
+        });
       } catch (noticeError) {
         log.warn("Failed to send user impersonation notice embed", {
           noticeError,

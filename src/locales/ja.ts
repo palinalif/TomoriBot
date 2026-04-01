@@ -3595,6 +3595,27 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
     // サーバー設定コマンド（管理者専用）
     server: {
+      stm: {
+        description: `全ペルソナのサーバー共有STMを管理`,
+        manage: {
+          description: `各ペルソナの有効なサーバー共有STMを確認してクリアします。`,
+          modal_title: `有効なサーバーSTMを管理`,
+          checkbox_label: `有効なSTM`,
+          checkbox_label_continued: `有効なSTM（続き）`,
+          checkbox_description: `このサーバーからクリアしたいSTMのチェックを外してください。`,
+          none_title: `有効なSTMはありません`,
+          none_description: `現在、このサーバーには有効なサーバー共有STMがありません。`,
+          too_many_title: `有効なSTMが多すぎます`,
+          too_many_description: `このサーバーには現在 **{count}** 件の有効なSTMがあります。Discordのモーダルではチェックボックスグループを **{max_groups}** 個まで（合計 **{max_entries}** 件まで）しか表示できません。`,
+          no_changes_title: `STMはクリアされませんでした`,
+          no_changes_description: `すべてのSTMがチェックされたままだったため、クリアされた項目はありません。`,
+          success_title: `サーバーSTMをクリアしました`,
+          success_description: `サーバー共有STMを **{cleared_count}** 件クリアしました:\n{cleared_entries}`,
+          unscoped_label: `未分類STM`,
+          no_summary: `要約なし`,
+          more_cleared: `- ...他 {count} 件`,
+        },
+      },
       // プライベートチャンネル管理（サブコマンドグループ）
       privatechannel: {
         description: `STMを隔離し、思考ログを抑制するプライベートチャンネルを管理`,

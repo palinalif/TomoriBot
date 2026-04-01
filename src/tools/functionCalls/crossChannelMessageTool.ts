@@ -34,6 +34,10 @@ export interface PendingBoomerang {
   error?: string;
   /** Persona ID to use for the boomerang generation */
   personaId?: number;
+  /** Whether the source turn was a user impersonation */
+  isUserImpersonation?: boolean;
+  /** Impersonated Discord user ID to preserve across boomerang follow-up */
+  impersonatedUserId?: string;
   /** Recent messages from the target channel (newest first) */
   targetChannelMessages: Array<{
     author: string;
@@ -74,11 +78,14 @@ export function buildBoomerangContext(boomerang: PendingBoomerang): StructuredCo
 
   const resultStr = boomerang.success ? "Success" : `Failed: ${boomerang.error ?? "unknown error"}`;
 
-  let contextText = `[System: You just visited #${boomerang.targetChannelName} to perform a task.\nTask: "${boomerang.task}". Result: ${resultStr}.`;
+  let contextText =
+    `[System: You have just returned from #${boomerang.targetChannelName}.\n` +
+    `Report back naturally on what happened there.\n` +
+    `Outcome: ${resultStr}.`;
   if (messagesBlock) {
     contextText += `\nHere is what was happening in #${boomerang.targetChannelName} (last 10 messages, newest first):\n${messagesBlock}`;
   }
-  contextText += "\nNow naturally tell the people here what you did or found.]";
+  contextText += "\nNow continue the conversation here with a concise update.]";
 
   return [
     {
@@ -138,6 +145,19 @@ export class CrossChannelMessageTool extends BaseTool {
     return provider.toLowerCase() !== "novelai";
   }
 
+  isAvailableForContext(provider: string, context?: ToolContext): boolean {
+    if (!this.isAvailableFor(provider)) {
+      return false;
+    }
+
+    if (context?.streamContext?.disableCrossChannelMessage) {
+      log.info("CrossChannelMessageTool: Disabled for this turn to prevent nested cross-channel dispatch");
+      return false;
+    }
+
+    return true;
+  }
+
   /**
    * Execute cross-channel message dispatch.
    * 1. Validates parameters and resolves the target channel
@@ -149,6 +169,18 @@ export class CrossChannelMessageTool extends BaseTool {
    * @returns Promise resolving to tool result
    */
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    if (context.streamContext?.disableCrossChannelMessage) {
+      log.info("CrossChannelMessageTool: Execution blocked for this turn to prevent nested cross-channel dispatch");
+      return {
+        success: false,
+        error: "Cross-channel messaging is temporarily disabled for this tool-driven follow-up turn.",
+        data: {
+          status: "cross_channel_failed_nested_dispatch_blocked",
+          reason: "Cross-channel tool is disabled during an active cross-channel dispatch or boomerang follow-up.",
+        },
+      };
+    }
+
     // 1. Extract and validate parameters
     const channelIdArg = args.channel_id as string | undefined;
     const channelNameArg = args.channel_name as string | undefined;
@@ -396,7 +428,9 @@ export class CrossChannelMessageTool extends BaseTool {
     // 9. Call tomoriChat in the target channel
     const tomoriChat = (await import("../../events/messageCreate/tomoriChat")).default;
 
-    const sourcePersonaId = context.tomoriState.tomori_id ?? undefined;
+    const sourcePersonaId = context.activePersonaId ?? context.tomoriState.tomori_id ?? undefined;
+    const isSourceUserImpersonation = context.isUserImpersonation === true;
+    const sourceImpersonatedUserId = context.impersonatedUserId;
 
     try {
       await tomoriChat(
@@ -414,8 +448,8 @@ export class CrossChannelMessageTool extends BaseTool {
         undefined, // reminderData
         sourcePersonaId, // selectedPersonaId — same persona visits target
         false, // isPersonaJob
-        false, // isUserImpersonation
-        undefined, // impersonatedUserId
+        isSourceUserImpersonation, // isUserImpersonation
+        sourceImpersonatedUserId, // impersonatedUserId
         "system", // textQuotaSource — system-triggered
         undefined, // textQuotaTriggerKey
         undefined, // textQuotaUserDiscId
@@ -424,6 +458,9 @@ export class CrossChannelMessageTool extends BaseTool {
         undefined, // naiContinuationPrefill
         undefined, // emptyResponseFinishReason
         [taskInjection], // injectedContextItems
+        undefined, // forcedMentions
+        undefined, // manualTriggerInvoker
+        { disableCrossChannelMessage: true }, // manualStreamingContextOverrides
       );
 
       log.success(
@@ -472,6 +509,8 @@ export class CrossChannelMessageTool extends BaseTool {
           task: taskArg.trim(),
           success: true,
           personaId: sourcePersonaId,
+          isUserImpersonation: isSourceUserImpersonation,
+          impersonatedUserId: sourceImpersonatedUserId,
           targetChannelMessages: targetMessages,
         });
 
@@ -487,13 +526,13 @@ export class CrossChannelMessageTool extends BaseTool {
         return {
           success: true,
           endTurn: true,
-          message: `You visited #${targetChannel.name}, completed your task, and have now returned to this channel to report back.`,
+          message: `You just returned from #${targetChannel.name}.`,
           data: {
             status: "cross_channel_visit_complete",
             target_channel_name: targetChannel.name,
             target_channel_id: targetChannel.id,
             boomerang: true,
-            note: `You have already visited #${targetChannel.name} and completed your task there. You are now back in this channel. Report what you found or did.`,
+            note: `You are back from #${targetChannel.name}. Report what happened there without restating the full assignment.`,
           },
         };
       }
@@ -521,6 +560,8 @@ export class CrossChannelMessageTool extends BaseTool {
           success: false,
           error: error instanceof Error ? error.message : "Unknown error",
           personaId: sourcePersonaId,
+          isUserImpersonation: isSourceUserImpersonation,
+          impersonatedUserId: sourceImpersonatedUserId,
           targetChannelMessages: [],
         });
       }

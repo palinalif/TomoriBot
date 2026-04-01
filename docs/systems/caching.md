@@ -60,7 +60,10 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
   - `storeShortTermMemory`, `getShortTermMemoryForUserChannel`, `getShortTermMemoryForServerChannel`
   - `getShortTermMemoriesForUser`, `getShortTermMemoriesForServer`
   - `updateShortTermMemorySummary`
-  - `clearShortTermMemoryForUser`, `clearShortTermMemoryForChannel`
+  - `clearShortTermMemoryForUser`, `clearShortTermMemoryForChannel`, `clearShortTermMemoryForServerChannel`
+- Operational note:
+  - `/server stm manage` lists the current server's active server-shared STM entries across personas.
+  - Unchecking an entry clears only that server-scoped STM entry; user-scoped cross-server STM entries are left intact.
 
 ### 6) LLM model cache (`llmCache.ts`)
 

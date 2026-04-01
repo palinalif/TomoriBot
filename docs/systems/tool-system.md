@@ -41,7 +41,10 @@ Current `cross_channel_message` runtime notes:
 - also supports thread targets by exact `channel_id`
 - fallback `channel_name` lookup checks both guild channel names and active thread titles
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
+- tool-driven cross-channel dispatch now preserves the active sender identity, including alter personas and `/bot impersonate` user impersonation turns, for both the target-channel visit and optional boomerang follow-up
 - Discord channel/thread links in prompt context are normalized into the same readable `#name` + ID form used for channel mentions, so pasted links are easier for the model to reuse as `channel_id` targets
+- tool-driven cross-channel visits now hide `cross_channel_message` for the dispatched turn itself and for the boomerang follow-up turn, preventing nested re-dispatch loops
+- boomerang return context now assumes the original assignment is already in history and asks for a concise report-back instead of restating the task
 
 Current `generate_image_nai` runtime notes:
 
