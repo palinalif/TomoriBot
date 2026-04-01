@@ -138,19 +138,14 @@ export class YouTubeVideoTool extends BaseTool {
     log.info(`Processing YouTube video: ${youtubeUrl} - Reason: ${reason}`);
 
     await sendToolProgressNotice(
-      context.channel,
-      context.locale,
+      context,
+      "youtube_processing",
       {
         titleKey: "genai.video.youtube_processing_title",
         descriptionKey: "genai.video.youtube_processing_description",
         descriptionVars: { video_url: youtubeUrl },
         footerKey: "genai.video.youtube_processing_footer",
         color: ColorCode.INFO,
-      },
-      {
-        webhook: context.webhook,
-        personaUsername: context.personaUsername,
-        personaAvatarUrl: context.personaAvatarUrl,
       },
       "YouTubeVideoTool",
     );

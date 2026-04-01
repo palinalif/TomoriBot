@@ -385,6 +385,7 @@ export async function execute(
 					emoji_usage_enabled = true,
 					sticker_usage_enabled = true,
 					imagegen_enabled = true,
+					tool_notice_hidden_keys = ARRAY[]::text[],
 					self_debug_enabled = false
 				WHERE server_id = ${serverId}
 				RETURNING tomori_config_id
@@ -418,6 +419,7 @@ export async function execute(
 							emoji_usage_enabled = true,
 							sticker_usage_enabled = true,
 							imagegen_enabled = true,
+							tool_notice_hidden_keys = ARRAY[]::text[],
 							self_debug_enabled = false
 						WHERE tomori_id = ${mainTomoriId}
 						RETURNING tomori_config_id

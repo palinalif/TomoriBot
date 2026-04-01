@@ -108,6 +108,7 @@ export const serverConfigExportSchema = z.object({
   emoji_usage_enabled: z.boolean().default(true),
   sticker_usage_enabled: z.boolean().default(true),
   imagegen_enabled: z.boolean().default(true),
+  tool_notice_hidden_keys: z.array(z.string()).default([]),
   self_debug_enabled: z.boolean().default(false),
   nai_style_tags: z.array(z.string()).optional(),
   nai_negative_tags: z.array(z.string()).optional(),

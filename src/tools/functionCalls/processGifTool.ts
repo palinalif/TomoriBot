@@ -214,18 +214,13 @@ export class ProcessGifTool extends BaseTool {
 
       // 6. Process GIF using extractGifKeyframes() utility
       await sendToolProgressNotice(
-        context.channel,
-        context.locale,
+        context,
+        "gif_processing",
         {
           titleKey: "genai.gif.processing_title",
           descriptionKey: "genai.gif.processing_description",
           footerKey: "genai.gif.processing_footer",
           color: ColorCode.INFO,
-        },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
         },
         "ProcessGifTool",
       );

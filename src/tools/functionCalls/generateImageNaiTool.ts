@@ -970,19 +970,14 @@ export class GenerateImageNaiTool extends BaseTool {
 
       if (!context.suppressProgressNotices) {
         await sendToolProgressNotice(
-          context.channel,
-          context.locale,
+          context,
+          isInpaintMode ? "image_editing" : "image_generation",
           {
             titleKey: isInpaintMode ? "genai.image.editing_title" : "genai.image.generating_title",
             descriptionKey: isInpaintMode ? "genai.image.editing_description" : "genai.image.generating_description",
             descriptionVars: isInpaintMode ? { edit_target: editTarget as string } : undefined,
             footerKey: "genai.image.generating_footer",
             color: ColorCode.INFO,
-          },
-          {
-            webhook: context.webhook,
-            personaUsername: context.personaUsername,
-            personaAvatarUrl: context.personaAvatarUrl,
           },
           "GenerateImageNaiTool",
         );

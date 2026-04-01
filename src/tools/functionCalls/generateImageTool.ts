@@ -598,8 +598,8 @@ export class GenerateImageTool extends BaseTool {
 
       if (!context.suppressProgressNotices) {
         await sendToolProgressNotice(
-          context.channel,
-          context.locale,
+          context,
+          "image_generation",
           {
             titleKey: "genai.image.generating_title",
             descriptionKey: usesReferences
@@ -607,11 +607,6 @@ export class GenerateImageTool extends BaseTool {
               : "genai.image.generating_description",
             footerKey: "genai.image.generating_footer",
             color: ColorCode.INFO,
-          },
-          {
-            webhook: context.webhook,
-            personaUsername: context.personaUsername,
-            personaAvatarUrl: context.personaAvatarUrl,
           },
           "GenerateImageTool",
         );

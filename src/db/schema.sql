@@ -311,6 +311,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   personal_memories_enabled BOOLEAN DEFAULT true,
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT true,
+  tool_notice_hidden_keys TEXT[] DEFAULT '{}',
   humanizer_degree INT DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -551,6 +552,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'welcome_channel_disc_id', 'TE
 SELECT add_column_if_not_exists('tomori_configs', 'thought_log_channel_disc_id', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_prompt', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_persona_id', 'INTEGER', 'NULL');
+
+-- Add hidden tool notice registry (April 2026)
+-- Stores hidden notice keys only; missing entries remain visible by default
+SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Add LLM sampling parameter columns (February 2026)
 -- llm_top_p: Nucleus sampling — probability mass threshold (0.95=default, 0.0=most restricted)

@@ -103,6 +103,8 @@ On successful streamed turns, `StreamOrchestrator` returns the merged reasoning 
 
 Normal message triggers are disabled inside the configured thought-log channel so provider reasoning echoes cannot recursively trigger new chats there. Slash commands still work because they do not use `messageCreate`.
 
+When tool notices are hidden through `/config toolnotices visibility`, those notices reuse the same thought-log channel as a fallback destination. Routed notices include the original source message URL when available, or the source channel mention otherwise. Private channels remain isolated: hidden notices from configured private channels are suppressed instead of being reposted to thoughtlogs.
+
 Thought-log sender identity is explicit:
 - main persona turns post as the normal bot sender
 - alter persona turns post through the shared webhook using the alter nickname/avatar

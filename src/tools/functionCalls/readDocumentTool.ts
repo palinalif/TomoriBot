@@ -155,18 +155,13 @@ export class ReadDocumentTool extends BaseTool {
 
       // 5. Send "Reading document..." embed indicator
       await sendToolProgressNotice(
-        context.channel,
-        context.locale,
+        context,
+        "document_reading",
         {
           titleKey: "genai.document.reading_title",
           descriptionKey: "genai.document.reading_description",
           descriptionVars: { filename: docAttachment.name },
           color: ColorCode.INFO,
-        },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
         },
         "ReadDocumentTool",
       );

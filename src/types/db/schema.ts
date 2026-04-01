@@ -1,5 +1,6 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
+import { TOOL_NOTICE_KEYS, isToolNoticeKey, type ToolNoticeKey } from "@/constants/toolNotices";
 import { DEFAULT_NAI_NEGATIVE_TAGS, DEFAULT_NAI_STYLE_TAGS } from "@/utils/image/naiTagDefaults";
 import { logitBiasEntrySchema, normalizeLogitBiasEntries } from "@/types/provider/logitBias";
 
@@ -182,6 +183,25 @@ function normalizeFallbackLlmIds(value: unknown): number[] {
     .filter((id): id is number => id !== null);
 }
 
+function normalizeToolNoticeHiddenKeys(value: unknown): ToolNoticeKey[] {
+  let source: unknown = value;
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source.filter((item): item is ToolNoticeKey => typeof item === "string" && isToolNoticeKey(item));
+}
+
+const toolNoticeKeySchema = z.enum(TOOL_NOTICE_KEYS);
+
 export const tomoriConfigSchema = z.object({
   tomori_config_id: z.number().optional(),
   tomori_id: z.number().nullable().optional(), // Legacy pointer (server-scoped configs use server_id)
@@ -238,6 +258,10 @@ export const tomoriConfigSchema = z.object({
   imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
   hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
   hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds
+  tool_notice_hidden_keys: z.preprocess(
+    (value) => normalizeToolNoticeHiddenKeys(value),
+    z.array(toolNoticeKeySchema).default([]),
+  ), // Added April 2026 - Hidden tool notice types; missing entries remain visible by default
   voice_message_enabled: z.boolean().default(true), // Added March 2026 - Allow Tomori to send ElevenLabs TTS voice messages
   voice_transcript_chat_mode: z.boolean().default(false), // Added March 2026 - Post voice transcripts as webhook chat messages instead of using internal cache
   self_debug_enabled: z.boolean().default(false), // Added March 2026 - Include Tomori error embeds in context as [System: ...]

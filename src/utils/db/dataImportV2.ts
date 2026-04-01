@@ -275,6 +275,9 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
     const naiNegativeTagsLiteral = config.nai_negative_tags
       ? `{${config.nai_negative_tags.map((tag: string) => `"${tag.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
       : null;
+    const toolNoticeHiddenKeysLiteral = config.tool_notice_hidden_keys
+      ? `{${config.tool_notice_hidden_keys.map((key: string) => `"${key.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
+      : null;
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
@@ -300,6 +303,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				emoji_usage_enabled = ${config.emoji_usage_enabled},
 				sticker_usage_enabled = ${config.sticker_usage_enabled},
 				imagegen_enabled = ${config.imagegen_enabled},
+				tool_notice_hidden_keys = COALESCE(${toolNoticeHiddenKeysLiteral}::text[], tool_notice_hidden_keys, ARRAY[]::text[]),
 				self_debug_enabled = ${config.self_debug_enabled},
 				nai_style_tags = COALESCE(${naiStyleTagsLiteral}::text[], nai_style_tags),
 				nai_negative_tags = COALESCE(${naiNegativeTagsLiteral}::text[], nai_negative_tags),
@@ -339,6 +343,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						emoji_usage_enabled = ${config.emoji_usage_enabled},
 						sticker_usage_enabled = ${config.sticker_usage_enabled},
 						imagegen_enabled = ${config.imagegen_enabled},
+						tool_notice_hidden_keys = COALESCE(${toolNoticeHiddenKeysLiteral}::text[], tool_notice_hidden_keys, ARRAY[]::text[]),
 						self_debug_enabled = ${config.self_debug_enabled},
 						nai_style_tags = COALESCE(${naiStyleTagsLiteral}::text[], nai_style_tags),
 						nai_negative_tags = COALESCE(${naiNegativeTagsLiteral}::text[], nai_negative_tags),

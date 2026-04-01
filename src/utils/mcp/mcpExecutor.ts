@@ -331,8 +331,8 @@ export class MCPExecutor {
 
       if (functionName === "fetch" && context?.channel && context.locale) {
         await sendToolProgressNotice(
-          context.channel,
-          context.locale,
+          context,
+          "web_fetch",
           {
             titleKey: "genai.fetch.reading_title",
             descriptionKey: "genai.fetch.reading_description",
@@ -341,11 +341,6 @@ export class MCPExecutor {
             },
             footerKey: "genai.fetch.reading_footer",
             color: ColorCode.INFO,
-          },
-          {
-            webhook: context.webhook,
-            personaUsername: context.personaUsername,
-            personaAvatarUrl: context.personaAvatarUrl,
           },
           "MCPExecutor",
         );

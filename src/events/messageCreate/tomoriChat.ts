@@ -9,7 +9,15 @@ import type {
   Embed,
   Webhook,
 } from "discord.js";
-import { BaseGuildTextChannel, ChannelType, DMChannel, MessageType, TextChannel } from "discord.js"; // Import value for instanceof check
+import {
+  AttachmentBuilder,
+  BaseGuildTextChannel,
+  ChannelType,
+  DMChannel,
+  EmbedBuilder,
+  MessageType,
+  TextChannel,
+} from "discord.js"; // Import value for instanceof check
 // Provider imports moved to factory pattern
 import type { StructuredContextItem, RequestSnapshot } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
@@ -1674,6 +1682,40 @@ export default async function tomoriChat(
   // Easter egg: Respond to "$whoami" as the main persona
   if (message.content === "$whoami" && "send" in channel) {
     await channel.send("I'm Tomowi!");
+    return;
+  }
+
+  if (message.content === "$aprilfools" && "send" in channel) {
+    const footerIconPath = "img/extras/aprilfools.png";
+    const footerIconFile = Bun.file(footerIconPath);
+    const footerIconExists = await footerIconFile.exists();
+    const files = footerIconExists
+      ? [
+          new AttachmentBuilder(Buffer.from(await footerIconFile.arrayBuffer()), {
+            name: "aprilfools.png",
+          }),
+        ]
+      : [];
+
+    const aprilFoolsEmbed = new EmbedBuilder()
+      .setAuthor({
+        name: "DLsite",
+      })
+      .setTitle("【寝落ちASMR3時間】")
+      .setURL("https://www.youtube.com/watch?v=L8XbI9aJOXk")
+      .setDescription(
+        "日々のちょっとした癒しに。聴きやすさを重視したバイノーラル耳かきボイスです。音声はKU100ダミーヘッドマイクを使用。(CV:月野きいろ様)「DLsite 同人 - R18」は同人誌・同人ゲーム・同人ボイス・ASMRのダウンロードショップ。お気に入りの作品をすぐダウ...",
+      );
+
+    if (footerIconExists) {
+      aprilFoolsEmbed.setImage("attachment://aprilfools.png");
+    }
+
+    await channel.send({
+      content: "Emergency system notice: user prank susceptibility score has reached 100%.",
+      embeds: [aprilFoolsEmbed],
+      ...(files.length > 0 ? { files } : {}),
+    });
     return;
   }
 

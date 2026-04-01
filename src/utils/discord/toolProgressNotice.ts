@@ -1,19 +1,133 @@
-import { log } from "@/utils/misc/logger";
-import { sendStandardEmbed, type WebhookEmbedContext } from "@/utils/discord/embedHelper";
+import type { BaseGuildTextChannel } from "discord.js";
 import type { StandardEmbedOptions } from "@/types/discord/embed";
+import type { ToolContext } from "@/types/tool/interfaces";
+import type { TomoriConfigRow } from "@/types/db/schema";
+import { type ToolNoticeKey, TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
+import { sendStandardEmbed } from "@/utils/discord/embedHelper";
+import { localizer } from "@/utils/text/localizer";
+import { log } from "@/utils/misc/logger";
 
-type ToolProgressChannel = Parameters<typeof sendStandardEmbed>[0];
+const HIDE_NOTICE_FOOTER_KEY = "genai.tool_notice.hide_footer";
 
-export async function sendToolProgressNotice(
-  channel: ToolProgressChannel,
+function resolveDescription(locale: string, options: StandardEmbedOptions): string {
+  const baseDescription = options.description
+    ? options.description
+    : options.descriptionKey
+      ? localizer(locale, options.descriptionKey, options.descriptionVars)
+      : "";
+  const existingFooter = options.footerKey ? localizer(locale, options.footerKey, options.footerVars) : "";
+
+  return [baseDescription.trim(), existingFooter.trim()].filter((part) => part.length > 0).join(" ");
+}
+
+function buildToolNoticeOptions(
   locale: string,
   options: StandardEmbedOptions,
-  webhookContext: WebhookEmbedContext | undefined,
+  sourceLine?: string,
+): StandardEmbedOptions {
+  const description = resolveDescription(locale, options);
+  const sourceDescription = sourceLine
+    ? localizer(locale, "genai.thought_log.description", {
+        source_line: sourceLine,
+      })
+    : "";
+
+  return {
+    ...options,
+    description: [sourceDescription, description].filter((part) => part.length > 0).join("\n\n"),
+    footerKey: HIDE_NOTICE_FOOTER_KEY,
+    footerVars: undefined,
+  };
+}
+
+function getWebhookContext(context: ToolContext) {
+  return {
+    webhook: context.webhook,
+    personaUsername: context.personaUsername,
+    personaAvatarUrl: context.personaAvatarUrl,
+  };
+}
+
+function isDMBasedChannel(channel: ToolContext["channel"]): boolean {
+  return "isDMBased" in channel && typeof channel.isDMBased === "function" ? channel.isDMBased() : false;
+}
+
+function getSourceLine(context: ToolContext): string {
+  return context.message?.url ?? context.channel.toString();
+}
+
+export function isToolNoticeVisible(config: TomoriConfigRow, key: ToolNoticeKey): boolean {
+  return !(config.tool_notice_hidden_keys ?? []).includes(key);
+}
+
+export async function routeToolNoticeToThoughtLog(
+  context: ToolContext,
+  options: StandardEmbedOptions,
+  logLabel: string,
+): Promise<boolean> {
+  const thoughtLogChannelId = context.tomoriState.config.thought_log_channel_disc_id;
+  if (!thoughtLogChannelId) {
+    return false;
+  }
+
+  const thoughtLogChannel = await context.client.channels.fetch(thoughtLogChannelId).catch(() => null);
+  if (
+    !thoughtLogChannel ||
+    !("send" in thoughtLogChannel) ||
+    typeof thoughtLogChannel.send !== "function" ||
+    ("isDMBased" in thoughtLogChannel &&
+      typeof thoughtLogChannel.isDMBased === "function" &&
+      thoughtLogChannel.isDMBased())
+  ) {
+    log.warn(`${logLabel}: Thought log channel ${thoughtLogChannelId} is missing or unavailable. Skipping reroute.`);
+    return false;
+  }
+
+  await sendStandardEmbed(
+    thoughtLogChannel as BaseGuildTextChannel,
+    context.locale,
+    buildToolNoticeOptions(context.locale, options, getSourceLine(context)),
+    getWebhookContext(context),
+  );
+
+  return true;
+}
+
+export async function sendToolNotice(
+  context: ToolContext,
+  noticeKey: ToolNoticeKey,
+  options: StandardEmbedOptions,
   logLabel: string,
 ): Promise<void> {
   try {
-    await sendStandardEmbed(channel, locale, options, webhookContext);
+    const finalOptions = buildToolNoticeOptions(context.locale, options);
+    if (isToolNoticeVisible(context.tomoriState.config, noticeKey)) {
+      await sendStandardEmbed(context.channel, context.locale, finalOptions, getWebhookContext(context));
+      return;
+    }
+
+    if (isDMBasedChannel(context.channel)) {
+      return;
+    }
+
+    const privateChannelIds = context.tomoriState.config.private_channel_ids ?? [];
+    if (privateChannelIds.includes(context.channel.id)) {
+      return;
+    }
+
+    await routeToolNoticeToThoughtLog(context, options, logLabel);
   } catch (error) {
-    log.warn(`${logLabel}: Failed to send progress notification embed`, error as Error);
+    log.warn(`${logLabel}: Failed to send tool notice embed`, error as Error);
   }
 }
+
+export async function sendToolProgressNotice(
+  context: ToolContext,
+  noticeKey: ToolNoticeKey,
+  options: StandardEmbedOptions,
+  logLabel: string,
+): Promise<void> {
+  await sendToolNotice(context, noticeKey, options, logLabel);
+}
+
+export { TOOL_NOTICE_DEFINITIONS };

@@ -6,7 +6,7 @@
 
 import { BaseTool, type ToolContext, type ToolResult } from "../../../types/tool/interfaces";
 import { log } from "../../../utils/misc/logger";
-import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
+import { sendToolNotice } from "../../../utils/discord/toolProgressNotice";
 import { brave_web_search, brave_image_search, brave_video_search, brave_news_search } from "./toolImplementations";
 
 // =============================================
@@ -119,19 +119,15 @@ export class BraveWebSearchTool extends BaseBraveSearchTool {
       log.info(`Executing ${this.name} with query: ${args.query}`);
 
       // Send search status embed to Discord
-      await sendStandardEmbed(
-        context.channel,
-        context.locale,
+      await sendToolNotice(
+        context,
+        "web_search",
         {
           titleKey: "genai.search.web_search_title",
           titleVars: { query: args.query as string },
           descriptionKey: "genai.search.disclaimer_description",
         },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
+        "BraveWebSearchTool",
       );
 
       // Add server ID from context
@@ -207,19 +203,15 @@ export class BraveImageSearchTool extends BaseBraveSearchTool {
       log.info(`Executing ${this.name} with query: ${args.query}`);
 
       // Send search status embed to Discord
-      await sendStandardEmbed(
-        context.channel,
-        context.locale,
+      await sendToolNotice(
+        context,
+        "image_search",
         {
           titleKey: "genai.search.image_search_title",
           titleVars: { query: args.query as string },
           descriptionKey: "genai.search.disclaimer_description",
         },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
+        "BraveImageSearchTool",
       );
 
       // Add server ID from context
@@ -303,19 +295,15 @@ export class BraveVideoSearchTool extends BaseBraveSearchTool {
       log.info(`Executing ${this.name} with query: ${args.query}`);
 
       // Send search status embed to Discord
-      await sendStandardEmbed(
-        context.channel,
-        context.locale,
+      await sendToolNotice(
+        context,
+        "video_search",
         {
           titleKey: "genai.search.video_search_title",
           titleVars: { query: args.query as string },
           descriptionKey: "genai.search.disclaimer_description",
         },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
+        "BraveVideoSearchTool",
       );
 
       // Add server ID from context
@@ -399,19 +387,15 @@ export class BraveNewsSearchTool extends BaseBraveSearchTool {
       log.info(`Executing ${this.name} with query: ${args.query}`);
 
       // Send search status embed to Discord
-      await sendStandardEmbed(
-        context.channel,
-        context.locale,
+      await sendToolNotice(
+        context,
+        "news_search",
         {
           titleKey: "genai.search.news_search_title",
           titleVars: { query: args.query as string },
           descriptionKey: "genai.search.disclaimer_description",
         },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
-        },
+        "BraveNewsSearchTool",
       );
 
       // Add server ID from context

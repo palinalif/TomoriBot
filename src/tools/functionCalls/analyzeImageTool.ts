@@ -132,18 +132,13 @@ export class AnalyzeImageTool extends BaseTool {
 
     try {
       await sendToolProgressNotice(
-        context.channel,
-        context.locale,
+        context,
+        "image_analysis",
         {
           titleKey: "genai.vision.analyzing_title",
           descriptionKey: "genai.vision.analyzing_description",
           footerKey: "genai.vision.analyzing_footer",
           color: ColorCode.INFO,
-        },
-        {
-          webhook: context.webhook,
-          personaUsername: context.personaUsername,
-          personaAvatarUrl: context.personaAvatarUrl,
         },
         "AnalyzeImageTool",
       );

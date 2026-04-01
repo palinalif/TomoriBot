@@ -6,6 +6,7 @@
 
 import { log } from "../../../utils/misc/logger";
 import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
+import { sendToolNotice } from "../../../utils/discord/toolProgressNotice";
 import { getMCPManager } from "../../../utils/mcp/mcpManager";
 import type {
   DuckDuckGoWebSearchResponse,
@@ -112,19 +113,15 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
       // Send search status embed to Discord (consistent with Brave Search UX)
       // Non-fatal: missing permissions should not prevent search results from reaching the AI
       try {
-        await sendStandardEmbed(
-          context.channel,
-          context.locale,
+        await sendToolNotice(
+          context,
+          "web_search",
           {
             titleKey: "genai.search.web_search_title",
             titleVars: { query },
             descriptionKey: "genai.search.disclaimer_description",
           },
-          {
-            webhook: context.webhook,
-            personaUsername: context.personaUsername,
-            personaAvatarUrl: context.personaAvatarUrl,
-          },
+          "DuckDuckGoSearchHandler",
         );
       } catch (embedError) {
         log.warn("Failed to send DuckDuckGo search status embed (non-fatal)", embedError as Error);

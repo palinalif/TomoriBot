@@ -148,3 +148,33 @@ Registry tracks execution history and stats:
 
 - `getExecutionHistory(limit)`
 - `getStats()`
+
+## Tool Notice Visibility
+
+User-facing tool progress notices are centralized in `src/utils/discord/toolProgressNotice.ts`.
+
+Current notice keys:
+
+- `web_search`
+- `image_search`
+- `video_search`
+- `news_search`
+- `web_fetch`
+- `document_reading`
+- `image_generation`
+- `image_editing`
+- `image_analysis`
+- `gif_processing`
+- `youtube_processing`
+- `mcp_tool_call`
+
+Behavior notes:
+
+- visibility is server-scoped via `tomori_configs.tool_notice_hidden_keys`
+- an empty hidden-key list means all current and future notice types remain visible by default
+- `/config toolnotices visibility` manages the hidden-key list through checkbox groups
+- visible notices are posted in the source channel as normal
+- hidden notices are rerouted to the configured thought-log channel when one exists
+- hidden notices from private channels are suppressed instead of being rerouted, so private-channel activity never leaks to thoughtlogs
+- hidden notices in DMs are suppressed because DMs have no guild thought-log destination
+- all tool notices include a footer hint pointing users to `/config toolnotices visibility`
