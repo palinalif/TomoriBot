@@ -165,6 +165,8 @@ Examples:
 - `/server whitelist remove`
 - `/config remove modeloverride` (channels + personas together)
 - `/server stm manage` (active server-shared STM entries)
+- `/server privatechannel remove`
+- `/server rpchannel remove`
 
 Rules:
 

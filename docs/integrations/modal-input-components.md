@@ -364,6 +364,8 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 Implemented examples:
 
 - `/server whitelist remove` manages channels and roles in one modal.
+- `/server privatechannel remove` manages configured private channels in one modal.
+- `/server rpchannel remove` manages configured RP channels in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
 - `/config mcp remove` manages registered MCP servers in one modal.
 - `/config remove modelfallback` manages the fallback chain in one modal while preserving remaining order.
