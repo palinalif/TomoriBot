@@ -1140,6 +1140,7 @@ interface ChannelLockEntry {
   userDiscId?: string; // Discord ID of user whose message is currently being processed
   currentIsPersonaJob?: boolean; // Skip user rate limits for internal persona jobs
   activePersonaId?: number; // Persona currently generating — follow-ups inherit this to avoid fallback to main
+  followUpEligible?: boolean; // Only true once the current turn is confirmed to generate and has a pinned persona
   isInToolCallChain?: boolean; // True while multi-turn tool calling is active — suppresses follow-up interrupts
   isCommandTriggered?: boolean; // True when generation was triggered by a slash command (/respond, /impersonate) — suppresses follow-up interrupts entirely
   typingKeepaliveTimer: NodeJS.Timeout | null;
@@ -2059,6 +2060,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       lockEntry.userDiscId = undefined; // Clear user tracking
       lockEntry.currentIsPersonaJob = false;
       lockEntry.activePersonaId = undefined; // Clear active persona tracking
+      lockEntry.followUpEligible = false;
       lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
       lockEntry.isCommandTriggered = false; // Clear command trigger flag
       lockEntry.messageQueue = []; // Clear queue as well, as context might be very old
@@ -2105,6 +2107,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       !isPersonaJob &&
       !message.author.bot &&
       !message.webhookId &&
+      lockEntry.followUpEligible === true &&
       !lockEntry.isCommandTriggered && // Slash-command triggers don't support follow-ups
       lockEntry.userDiscId === userDiscId &&
       !isNaturalStopMessage(message.content) &&
@@ -2356,6 +2359,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
     lockEntry.currentMessageId = message.id;
     lockEntry.userDiscId = userDiscId; // Track user for rate limiting
     lockEntry.currentIsPersonaJob = isPersonaJob;
+    lockEntry.activePersonaId = selectedPersonaId;
+    lockEntry.followUpEligible = false;
+    lockEntry.isInToolCallChain = false;
     lockEntry.isCommandTriggered = !!manualTriggerInvoker; // Slash command triggers suppress follow-up interrupts
   }
   // --- End Semaphore Logic ---
@@ -3111,6 +3117,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       if (personasToRespond.length === 0) {
         log.info(`No personas matched trigger for message ${message.id} in server ${serverDiscId}`);
         return;
+      }
+
+      if (lockEntry) {
+        lockEntry.activePersonaId = personasToRespond[0]?.tomori_id ?? undefined;
+        lockEntry.followUpEligible = lockEntry.activePersonaId !== undefined;
       }
 
       // 8.52. Check text generation quota for user-triggered guild responses
@@ -6912,6 +6923,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       lockEntry.userDiscId = undefined; // Clear user tracking for rate limiting
       lockEntry.currentIsPersonaJob = false;
       lockEntry.activePersonaId = undefined; // Clear active persona tracking
+      lockEntry.followUpEligible = false;
       lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
       lockEntry.isCommandTriggered = false; // Clear command trigger flag
       stopDiscordTypingKeepalive(channelLockId, lockEntry, "lock_released");

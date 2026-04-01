@@ -161,6 +161,54 @@ export async function setPersonaConditioningEnabled(
   }
 }
 
+export async function setServerConditioningEnabled(
+  serverId: number,
+  conditioningType: ConditioningType,
+  enabled: boolean,
+): Promise<number> {
+  const column = conditioningType === "reward" ? "reward_conditioning_enabled" : "punish_conditioning_enabled";
+
+  try {
+    const updatedRows =
+      column === "reward_conditioning_enabled"
+        ? await sql<Array<{ tomori_id: number }>>`
+				INSERT INTO persona_configs (tomori_id, reward_conditioning_enabled)
+				SELECT tomori_id, ${enabled}
+				FROM tomoris
+				WHERE server_id = ${serverId}
+				ON CONFLICT (tomori_id)
+				DO UPDATE SET
+					reward_conditioning_enabled = EXCLUDED.reward_conditioning_enabled,
+					updated_at = CURRENT_TIMESTAMP
+				RETURNING tomori_id
+			`
+        : await sql<Array<{ tomori_id: number }>>`
+				INSERT INTO persona_configs (tomori_id, punish_conditioning_enabled)
+				SELECT tomori_id, ${enabled}
+				FROM tomoris
+				WHERE server_id = ${serverId}
+				ON CONFLICT (tomori_id)
+				DO UPDATE SET
+					punish_conditioning_enabled = EXCLUDED.punish_conditioning_enabled,
+					updated_at = CURRENT_TIMESTAMP
+				RETURNING tomori_id
+			`;
+
+    return updatedRows.length;
+  } catch (error) {
+    await log.error("Failed to update server-wide conditioning toggle", error, {
+      serverId,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "setServerConditioningEnabled",
+        conditioningType,
+        enabled,
+      },
+    });
+    return 0;
+  }
+}
+
 export async function loadConditioningGroupsForPersona(
   serverId: number,
   personaLineageId: number,

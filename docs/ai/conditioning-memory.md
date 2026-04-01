@@ -46,6 +46,12 @@ Management is centralized under `/conditioning`:
 
 `toggle` and `clear` require `ManageGuild`.
 
+`/conditioning toggle` is server-wide:
+
+- it flips reward or punishment prompt injection for every persona in that server
+- it does not require picking a persona
+- `/conditioning history` and `/conditioning clear` remain persona-specific
+
 ## Storage Rules
 
 Conditioning rows are stored in `conditioning_history`.
@@ -116,6 +122,8 @@ Persona config stores two independent injection flags:
 
 These toggles only affect prompt injection.
 They do not stop new conditioning rows from being recorded.
+
+Although the flags are still stored per persona in `persona_configs`, the `/conditioning toggle` command now updates those flags for all personas in the server at once for better UX consistency.
 
 ## Environment Variables
 
