@@ -394,6 +394,8 @@ export async function loadTomoriState(serverDiscId: string): Promise<TomoriState
       llm: llmData, // Add the LLM data to match schema
       trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
       persona_prompt: personaConfig?.persona_prompt ?? null,
+      reward_conditioning_enabled: personaConfig?.reward_conditioning_enabled ?? true,
+      punish_conditioning_enabled: personaConfig?.punish_conditioning_enabled ?? true,
       server_memories: serverMemories, // Add server memories to the state
       rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
       vision_llm: visionLlm, // Dedicated vision model (undefined when not configured)
@@ -613,6 +615,8 @@ export async function loadAllPersonasForServer(serverDiscId: string): Promise<To
             llm: llmData,
             trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
             persona_prompt: personaConfig?.persona_prompt ?? null,
+            reward_conditioning_enabled: personaConfig?.reward_conditioning_enabled ?? true,
+            punish_conditioning_enabled: personaConfig?.punish_conditioning_enabled ?? true,
             server_memories: serverMemories,
             rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
             vision_llm: visionLlm, // Dedicated vision model (undefined when not configured)

@@ -44,7 +44,7 @@ export type CommandExecutionMap = Map<string, Map<string, CommandExecuteFunction
  */
 export type CommandCooldownMap = Map<string, number>;
 // Categories that are completely restricted to guilds only
-const GUILD_ONLY_CATEGORIES: string[] = ["server"];
+const GUILD_ONLY_CATEGORIES: string[] = ["server", "reward", "punish", "conditioning"];
 // Categories that require manage permissions in guild context
 const MANAGER_ONLY_CATEGORIES = ["config", "optionalkey", "server"];
 

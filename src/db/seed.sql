@@ -1,6 +1,10 @@
 -- Ensure all required columns exist in tomori_configs table
 SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 'BOOLEAN', 'false');
 
+-- Ensure all required columns exist in persona_configs table
+SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('persona_configs', 'punish_conditioning_enabled', 'BOOLEAN', 'true');
+
 -- Ensure all required columns exist in llms table
 SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');

@@ -90,6 +90,7 @@ const TOMORI_ONLY_KNOWLEDGE_TAGS = new Set([
 const TOMORI_ONLY_DIALOGUE_TAGS = new Set([
   ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION,
   ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY,
+  ContextItemTag.KNOWLEDGE_SERVER_CONDITIONING,
 ]);
 
 // ─── Anchor Markers ─────────────────────────────────────────────────────

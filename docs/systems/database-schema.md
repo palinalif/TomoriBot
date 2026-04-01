@@ -32,6 +32,7 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 
 - `server_memories`
 - `personal_memories`
+- `conditioning_history`
 - `server_emojis`
 - `server_stickers`
 
@@ -79,6 +80,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomoris` now supports multiple personas per server (`is_alter` flag).
 - `persona_lineage_id` supports cross-server memory identity matching.
 - Persona names are constrained unique per server (case-insensitive, trimmed).
+- `persona_configs.reward_conditioning_enabled` and `persona_configs.punish_conditioning_enabled` are persona-scoped prompt-injection toggles for conditioning memory.
 
 ### Server config scoping
 
@@ -111,6 +113,14 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 - `server_memories`: shared server-level memory
 - `personal_memories`: user + persona lineage scoped memory
+- `conditioning_history`: server + persona lineage scoped reward/punish reinforcement history
+
+### Conditioning history
+
+- `conditioning_history` stores behavioral reinforcement events from `/reward` and `/punish`.
+- Rows are grouped logically by `server_id + persona_lineage_id + conditioning_type + action_key + reason_normalized`.
+- The physical uniqueness constraint is further scoped by `user_id`, so repeated actions by the same user increment `count` while different users still aggregate at read time.
+- Empty `reason_text` values are allowed and stored, but those rows are intentionally excluded from prompt injection.
 
 ### Cooldown storage
 

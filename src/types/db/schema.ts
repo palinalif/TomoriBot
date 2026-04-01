@@ -26,6 +26,9 @@ export enum CooldownType {
   COMMAND_CATEGORY = 5, // Command category cooldowns (per-user, global across servers)
 }
 
+export const conditioningTypeSchema = z.enum(["reward", "punish"]);
+export type ConditioningType = z.infer<typeof conditioningTypeSchema>;
+
 export const userSchema = z.object({
   user_id: z.number().optional(),
   user_disc_id: z.string(),
@@ -322,6 +325,8 @@ export const personaConfigSchema = z.object({
   tomori_id: z.number(),
   trigger_words: z.array(z.string()).default([]),
   persona_prompt: z.string().nullable().optional(),
+  reward_conditioning_enabled: z.boolean().default(true),
+  punish_conditioning_enabled: z.boolean().default(true),
   llm_id: z.number().int().nullable().optional(), // Added March 2026 - Persona-specific LLM model override
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
@@ -415,6 +420,29 @@ export const serverMemorySchema = z.object({
   updated_at: z.date().optional(),
 });
 export type ServerMemoryRow = z.infer<typeof serverMemorySchema>;
+
+export const conditioningHistorySchema = z.object({
+  conditioning_id: z.number().optional(),
+  server_id: z.number(),
+  persona_lineage_id: z.preprocess((value) => {
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      return Number(value);
+    }
+    return value;
+  }, z.number().int().nonnegative()),
+  conditioning_type: conditioningTypeSchema,
+  action_key: z.string(),
+  reason_text: z.string(),
+  reason_normalized: z.string(),
+  user_id: z.number(),
+  count: z.number().int().min(1).default(1),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+});
+export type ConditioningHistoryRow = z.infer<typeof conditioningHistorySchema>;
 
 export const personalMemorySchema = z.object({
   personal_memory_id: z.number().optional(),
@@ -739,6 +767,8 @@ export type TomoriState = TomoriRow & {
   llm: LlmRow; // Added LLM information
   trigger_words: string[]; // Persona-scoped trigger words from persona_configs
   persona_prompt: string | null; // Optional persona-specific prompt appended after system prompt
+  reward_conditioning_enabled: boolean; // Persona-scoped reward conditioning injection toggle
+  punish_conditioning_enabled: boolean; // Persona-scoped punish conditioning injection toggle
   server_memories: string[]; // Changed to string array to match implementation
   rotation_keys?: ApiKeyRotationRow[]; // Optional: API key rotation pool for load balancing/failover
   persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
@@ -755,6 +785,8 @@ export const tomoriStateSchema = tomoriSchema.extend({
   llm: llmSchema, // Added LLM schema validation
   trigger_words: z.array(z.string()).default([]),
   persona_prompt: z.string().nullable().default(null),
+  reward_conditioning_enabled: z.boolean().default(true),
+  punish_conditioning_enabled: z.boolean().default(true),
   server_memories: z.array(z.string()).default([]), // Changed to array of strings
   rotation_keys: z.array(apiKeyRotationSchema).optional(), // API key rotation pool
   persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override

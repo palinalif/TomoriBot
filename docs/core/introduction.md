@@ -9,7 +9,7 @@ TomoriBot is a TypeScript + Bun Discord AI chatbot focused on configurable perso
 - Multi-persona runtime
   - Main + alter personas per server, persona trigger routing, and persona-specific reminders/webhooks
 - Memory systems
-  - Server memories, personal memories, and short-term memory summaries shared per persona across channels within a server
+  - Server memories, personal memories, short-term memory summaries, and persona-scoped conditioning memory per server
 - Tool execution
   - Built-in tools, MCP servers, and Brave REST tools behind one tool registry
 - RAG document memory
@@ -32,9 +32,9 @@ TomoriBot is a TypeScript + Bun Discord AI chatbot focused on configurable perso
 
 ## Current Command Surface
 
-Commands are loaded from folders under `src/commands/` (currently 17 top-level categories):
+Commands are loaded from folders under `src/commands/` (currently 19 top-level categories):
 
-- `bot`, `config`, `contribute`, `data`, `donate`, `forget`, `generate`, `help`, `legal`, `novelai`, `persona`, `personal`, `reward`, `server`, `support`, `teach`, `tool`
+- `bot`, `conditioning`, `config`, `contribute`, `data`, `donate`, `forget`, `generate`, `help`, `legal`, `novelai`, `persona`, `personal`, `punish`, `reward`, `server`, `support`, `teach`, `tool`
 
 ## Documentation Layout
 

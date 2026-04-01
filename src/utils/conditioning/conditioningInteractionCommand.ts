@@ -1,0 +1,303 @@
+import type {
+  ChatInputCommandInteraction,
+  Client,
+  Message,
+  ModalSubmitInteraction,
+  SlashCommandSubcommandBuilder,
+} from "discord.js";
+import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from "discord.js";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { ColorCode, log } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import type { ConditioningType, UserRow } from "@/types/db/schema";
+import type { SelectOption } from "@/types/discord/modal";
+import { loadAllPersonasForServer, loadTomoriState } from "@/utils/db/dbRead";
+import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
+import tomoriChat from "@/events/messageCreate/tomoriChat";
+import {
+  CONDITIONING_REASON_MAX_LENGTH,
+  normalizeConditioningReason,
+  type ConditioningActionKey,
+} from "@/utils/conditioning/conditioning";
+import { recordConditioningEvent } from "@/utils/db/conditioningDb";
+
+const EMBED_COLOR_BY_TYPE: Record<ConditioningType, ColorCode> = {
+  reward: ColorCode.AFFECTION,
+  punish: ColorCode.ERROR,
+};
+
+type ReplyInteraction = ChatInputCommandInteraction | ModalSubmitInteraction;
+
+export function createConditioningInteractionCommand(type: ConditioningType, actionKey: ConditioningActionKey) {
+  const commandKey = `commands.${type}.${actionKey}`;
+
+  const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+    subcommand
+      .setName(actionKey)
+      .setDescription(localizer("en-US", `${commandKey}.description`))
+      .addStringOption((option) =>
+        option
+          .setName("reason")
+          .setDescription(localizer("en-US", `${commandKey}.reason_description`))
+          .setMaxLength(CONDITIONING_REASON_MAX_LENGTH)
+          .setRequired(false),
+      );
+
+  async function execute(
+    client: Client,
+    interaction: ChatInputCommandInteraction,
+    userData: UserRow,
+    locale: string,
+  ): Promise<void> {
+    if (!interaction.channel || !("messages" in interaction.channel) || !interaction.guild) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.guild_only_title",
+        descriptionKey: "general.errors.guild_only_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const botMember = interaction.guild.members.me;
+    if (!botMember) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
+    if (!("permissionsFor" in guildChannel)) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const permissions = guildChannel.permissionsFor(botMember);
+    if (
+      !permissions?.has(PermissionFlagsBits.ViewChannel) ||
+      !permissions?.has(PermissionFlagsBits.ReadMessageHistory)
+    ) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.bot.respond.missing_permissions_title",
+        descriptionKey: "commands.bot.respond.missing_permissions_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const tomoriState = await loadTomoriState(interaction.guild.id);
+    if (!tomoriState) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
+    const alterPersonas = allPersonas.filter((persona) => persona.is_alter);
+    const mainPersona = allPersonas.find((persona) => !persona.is_alter) ?? allPersonas[0];
+
+    if (!mainPersona) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    let selectedPersona = mainPersona;
+    let replyInteraction: ReplyInteraction = interaction;
+
+    if (alterPersonas.length > 0) {
+      const personaOptions: SelectOption[] = [
+        {
+          label: safeSelectOptionText(mainPersona.tomori_nickname),
+          value: "0",
+          description: localizer(locale, "commands.bot.respond.main_persona_description"),
+        },
+        ...alterPersonas.map((persona, index) => ({
+          label: safeSelectOptionText(persona.tomori_nickname),
+          value: (index + 1).toString(),
+          description: localizer(locale, "commands.bot.respond.alter_persona_description"),
+        })),
+      ];
+
+      const modalResult = await promptWithPaginatedModal(interaction, locale, {
+        modalCustomId: `${type}_${actionKey}_persona_select`,
+        modalTitleKey: "commands.bot.respond.select_persona_title",
+        components: [
+          {
+            customId: "persona_choice",
+            labelKey: "commands.bot.respond.select_persona_label",
+            placeholder: "commands.bot.respond.select_persona_placeholder",
+            required: true,
+            options: personaOptions,
+          },
+        ],
+      });
+
+      if (modalResult.outcome !== "submit") {
+        log.info(`${type} ${actionKey} persona selection ${modalResult.outcome} for user ${interaction.user.id}`);
+        return;
+      }
+
+      if (modalResult.interaction) {
+        replyInteraction = modalResult.interaction;
+      }
+
+      const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
+      selectedPersona = selectedIndex === 0 ? mainPersona : (alterPersonas[selectedIndex - 1] ?? mainPersona);
+    }
+
+    if (!selectedPersona.tomori_id) {
+      await replyInfoEmbed(replyInteraction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    if (!userData.user_id) {
+      await replyInfoEmbed(replyInteraction, locale, {
+        titleKey: "general.errors.operation_failed_title",
+        descriptionKey: "general.errors.operation_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    try {
+      const botName =
+        selectedPersona.tomori_nickname ?? tomoriState.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori";
+      const reasonText = normalizeConditioningReason(interaction.options.getString("reason"));
+      const conditioningEvent = await recordConditioningEvent({
+        serverId: tomoriState.server_id,
+        personaLineageId: selectedPersona.persona_lineage_id ?? 0,
+        conditioningType: type,
+        actionKey,
+        userId: userData.user_id,
+        reason: reasonText,
+      });
+
+      let embedDescription = localizer(locale, `${commandKey}.embed_description`, {
+        user: `<@${interaction.user.id}>`,
+        bot: botName,
+      });
+
+      const interactionEmbed = new EmbedBuilder()
+        .setTitle(localizer(locale, `${commandKey}.embed_title`))
+        .setColor(EMBED_COLOR_BY_TYPE[type]);
+
+      if (reasonText.length > 0) {
+        embedDescription = `${embedDescription}\n${localizer(locale, "commands.conditioning.shared.reason_line", {
+          reason: reasonText,
+        })}`;
+        if (conditioningEvent) {
+          interactionEmbed.setFooter({
+            text: localizer(locale, `commands.conditioning.shared.${type}_footer`, {
+              bot: botName,
+            }),
+          });
+        }
+      }
+
+      interactionEmbed.setDescription(embedDescription);
+
+      await replyInteraction.reply({
+        embeds: [interactionEmbed],
+        flags: MessageFlags.SuppressNotifications,
+      });
+
+      const invokingMember = interaction.guild.members.cache.get(interaction.user.id);
+      const memberRoleDiscIds = invokingMember?.roles.cache.map((role) => role.id);
+      const isThread =
+        "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
+      const parentChannelId = isThread && "parent" in guildChannel ? guildChannel.parent?.id : undefined;
+      const whitelistStatus = await getCachedWhitelistStatus(
+        interaction.guild.id,
+        interaction.channel.id,
+        memberRoleDiscIds,
+        parentChannelId,
+      );
+
+      if (!whitelistStatus.isTriggerAllowed) {
+        log.info(
+          `${type} ${actionKey} interaction completed without chat response because channel ${interaction.channel.id} is blocked by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+        );
+        return;
+      }
+
+      const messages = await interaction.channel.messages.fetch({ limit: 1 });
+      const latestMessage = messages.first();
+
+      if (!latestMessage) {
+        log.warn(`No messages found in channel ${interaction.channel.id} for ${type} ${actionKey} command.`);
+        return;
+      }
+
+      log.info(
+        `${type} ${actionKey} triggered by ${interaction.user.id} in channel ${interaction.channel.id} for message ${latestMessage.id}`,
+      );
+
+      await tomoriChat(
+        client,
+        latestMessage as Message,
+        false,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        0,
+        false,
+        undefined,
+        undefined,
+        selectedPersona.tomori_id,
+        undefined,
+        undefined,
+        undefined,
+        "user",
+        interaction.id,
+        interaction.user.id,
+        undefined,
+      );
+    } catch (error) {
+      await log.error(`Error in ${type} ${actionKey} command`, error, {
+        errorType: `${type}_${actionKey}_command_error`,
+        metadata: {
+          userId: interaction.user.id,
+          guildId: interaction.guild.id,
+          channelId: interaction.channel?.id,
+        },
+      });
+
+      try {
+        await replyInteraction.followUp({
+          content: localizer(locale, "general.errors.unknown_error_description"),
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch (followUpError) {
+        await log.error(`Failed to send error follow-up for ${type} ${actionKey} command`, followUpError, {
+          errorType: `${type}_${actionKey}_command_error_followup`,
+          metadata: {
+            userId: interaction.user.id,
+            guildId: interaction.guild.id,
+          },
+        });
+      }
+    }
+  }
+
+  return { configureSubcommand, execute };
+}

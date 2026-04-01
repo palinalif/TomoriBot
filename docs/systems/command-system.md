@@ -29,6 +29,7 @@ Grouped commands are represented by folders:
 ## Current Top-Level Categories
 
 - `bot`
+- `conditioning`
 - `config`
 - `contribute`
 - `data`
@@ -40,6 +41,7 @@ Grouped commands are represented by folders:
 - `novelai`
 - `persona`
 - `personal`
+- `punish`
 - `reward`
 - `server`
 - `support`
@@ -50,7 +52,7 @@ Grouped commands are represented by folders:
 
 Defined in `commandLoader.ts`:
 
-- Guild-only categories: `server`
+- Guild-only categories: `server`, `reward`, `punish`, `conditioning`
 - Manage Guild required by default: `config`, `server`
 
 ## Localization Strategy for Command Metadata
@@ -256,6 +258,9 @@ Rules:
 - `config`: setup, model(text/image/embedding), apikey(set/delete/rotation), sysprompt(change/clear/preset), params(*), timezone, maxmsgfetch, permissions, uncensors
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), welcomechannel
 - `persona`: create, generate, import, export, default, swap, remove
+- `conditioning`: toggle, history, clear
+- `punish`: spank, pinch, bite, squeeze
+- `reward`: headpat, hug, kiss, tickle
 - `tool`: ping, status, refresh, compact, comment
 
 `/server autotrigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.

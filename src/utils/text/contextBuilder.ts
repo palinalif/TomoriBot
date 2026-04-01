@@ -24,6 +24,7 @@ import { getCurrentTimeWithOffset, formatUTCOffset, getTimeOfDayPhrase } from ".
 import {
   HumanizerDegree,
   PrivacyLevel,
+  type ConditioningType,
   type TomoriConfigRow,
   type ServerEmojiRow,
   type ServerStickerRow,
@@ -46,6 +47,11 @@ import { formatMemoryWithId } from "../memory/memoryId";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
 import { getCachedActivePreset } from "../cache/stPresetCache";
 import { reassembleWithPreset } from "./presetContextBuilder";
+import { loadConditioningGroupsForPersona } from "@/utils/db/conditioningDb";
+import {
+  CONDITIONING_CONTEXT_MAX_GROUPS_PER_TYPE,
+  getConditioningContextPastParticiple,
+} from "@/utils/conditioning/conditioning";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -817,6 +823,74 @@ function pushDialogueHistoryContextItem(
     metadataTag: ContextItemTag.DIALOGUE_HISTORY,
     messageId,
   });
+}
+
+async function buildConditioningContextItem(params: {
+  client: Client;
+  guildId: string;
+  serverId: number;
+  personaLineageId: number;
+  botName: string;
+  personalMemoriesEnabled: boolean;
+  rewardEnabled: boolean;
+  punishEnabled: boolean;
+}): Promise<StructuredContextItem | null> {
+  const sections: string[] = [];
+
+  const appendSection = async (conditioningType: ConditioningType, enabled: boolean): Promise<void> => {
+    if (!enabled) {
+      return;
+    }
+
+    const visibleGroups = (
+      await loadConditioningGroupsForPersona(params.serverId, params.personaLineageId, conditioningType)
+    )
+      .filter((group) => group.reasonText.trim().length > 0)
+      .slice(0, CONDITIONING_CONTEXT_MAX_GROUPS_PER_TYPE);
+
+    if (visibleGroups.length === 0) {
+      return;
+    }
+
+    const heading =
+      conditioningType === "reward"
+        ? `## Rewarded Behaviors\nHere are past things ${params.botName} did that got rewarded for. Strive to do them again:`
+        : `## Punished Behaviors\nHere are past things ${params.botName} did that got punished for. Avoid doing them again:`;
+
+    const lines = visibleGroups.map((group) => {
+      const users = group.userDiscIds.map((userDiscId) => `<@${userDiscId}>`).join(", ");
+      const action = getConditioningContextPastParticiple(conditioningType, group.actionKey);
+      const countSuffix = group.totalCount > 1 ? ` (${group.totalCount} times)` : "";
+      return `- [${params.botName} was ${action} by ${users}. Reason: \`${group.reasonText}]\`${countSuffix}`;
+    });
+
+    sections.push(`${heading}\n${lines.join("\n")}`);
+  };
+
+  await appendSection("reward", params.rewardEnabled);
+  await appendSection("punish", params.punishEnabled);
+
+  if (sections.length === 0) {
+    return null;
+  }
+
+  return {
+    role: "system",
+    parts: [
+      {
+        type: "text",
+        text: await convertMentions(
+          sections.join("\n\n"),
+          params.client,
+          params.guildId,
+          "User",
+          params.botName,
+          params.personalMemoriesEnabled,
+        ),
+      },
+    ],
+    metadataTag: ContextItemTag.KNOWLEDGE_SERVER_CONDITIONING,
+  };
 }
 
 /** Shared parameter type for both the routing wrapper and native context builder. */
@@ -1936,6 +2010,36 @@ async function buildContextNative({
     }
   } catch (error) {
     log.warn("Failed to add server document context", error);
+  }
+
+  // 7.6 Conditioning history (reward/punish)
+  // Placed near the end of system-context assembly so it can guide behavior
+  // without displacing higher-stability persona and server state blocks.
+  if (
+    !isUserImpersonation &&
+    tomoriState &&
+    tomoriState.server_id &&
+    tomoriState.persona_lineage_id >= 0 &&
+    (tomoriState.reward_conditioning_enabled || tomoriState.punish_conditioning_enabled)
+  ) {
+    try {
+      const conditioningItem = await buildConditioningContextItem({
+        client,
+        guildId,
+        serverId: tomoriState.server_id,
+        personaLineageId: tomoriState.persona_lineage_id,
+        botName,
+        personalMemoriesEnabled: tomoriConfig.personal_memories_enabled,
+        rewardEnabled: tomoriState.reward_conditioning_enabled,
+        punishEnabled: tomoriState.punish_conditioning_enabled,
+      });
+
+      if (conditioningItem) {
+        contextItems.push(conditioningItem);
+      }
+    } catch (error) {
+      log.warn("Failed to add conditioning context", error);
+    }
   }
 
   // Skip sample dialogues for user impersonation (users don't need examples of bot's speech)

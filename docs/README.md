@@ -31,6 +31,7 @@ This folder is organized by topic instead of numeric filenames.
 - [`ai/multi-persona.md`](./ai/multi-persona.md)
 - [`ai/rag.md`](./ai/rag.md)
 - [`ai/context-assembly.md`](./ai/context-assembly.md)
+- [`ai/conditioning-memory.md`](./ai/conditioning-memory.md)
 - NovelAI:
   - [`ai/novelai/tool-calling.md`](./ai/novelai/tool-calling.md)
   - [`ai/novelai/limitations.md`](./ai/novelai/limitations.md)

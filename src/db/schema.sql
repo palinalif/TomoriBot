@@ -324,6 +324,8 @@ CREATE TABLE IF NOT EXISTS persona_configs (
   tomori_id INT PRIMARY KEY,
   trigger_words TEXT[] DEFAULT '{}',
   persona_prompt TEXT NULL,
+  reward_conditioning_enabled BOOLEAN DEFAULT true,
+  punish_conditioning_enabled BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
@@ -360,6 +362,10 @@ LEFT JOIN LATERAL (
 	LIMIT 1
 ) tc_legacy ON true
 ON CONFLICT (tomori_id) DO NOTHING;
+
+-- Add persona conditioning toggles (April 2026)
+SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('persona_configs', 'punish_conditioning_enabled', 'BOOLEAN', 'true');
 
 -- Add server_id column for server-scoped configs (January 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'server_id', 'INTEGER');
@@ -989,6 +995,38 @@ CREATE INDEX IF NOT EXISTS idx_server_memories_tomori_id ON server_memories(tomo
 CREATE INDEX IF NOT EXISTS idx_server_memories_tomori_created_at ON server_memories(tomori_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_server_memories_lineage_id ON server_memories(persona_lineage_id);
 CREATE INDEX IF NOT EXISTS idx_server_memories_server_lineage_created_at ON server_memories(server_id, persona_lineage_id, created_at DESC);
+
+-- Persona-scoped conditioning history for reward/punish interactions (April 2026)
+CREATE TABLE IF NOT EXISTS conditioning_history (
+  conditioning_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,
+  persona_lineage_id BIGINT NOT NULL,
+  conditioning_type TEXT NOT NULL CHECK (conditioning_type IN ('reward', 'punish')),
+  action_key TEXT NOT NULL,
+  reason_text TEXT NOT NULL,
+  reason_normalized TEXT NOT NULL,
+  user_id INT NOT NULL,
+  count INT NOT NULL DEFAULT 1 CHECK (count >= 1),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+DROP TRIGGER IF EXISTS update_conditioning_history_timestamp ON conditioning_history;
+CREATE TRIGGER update_conditioning_history_timestamp
+BEFORE UPDATE ON conditioning_history
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conditioning_history_unique
+ON conditioning_history(server_id, persona_lineage_id, conditioning_type, action_key, reason_normalized, user_id);
+
+CREATE INDEX IF NOT EXISTS idx_conditioning_history_server_lineage_type_updated
+ON conditioning_history(server_id, persona_lineage_id, conditioning_type, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_conditioning_history_server_lineage_updated
+ON conditioning_history(server_id, persona_lineage_id, updated_at DESC);
 
 -- Dedicated personal memories table (lineage-scoped)
 CREATE TABLE IF NOT EXISTS personal_memories (

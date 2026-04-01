@@ -8,7 +8,7 @@ Context assembly is the process of transforming raw server/user/conversation sta
 
 The system has two modes:
 
-1. **Native assembly** — Fixed 9-block structure, always available, no configuration needed
+1. **Native assembly** — Fixed native block structure, always available, no configuration needed
 2. **Preset-driven assembly** — When a SillyTavern preset is active, native blocks are rearranged according to the preset's node order (see [ST Preset System](../integrations/sillytavern-preset-system.md))
 
 If no preset is active (the default), the system behaves exactly as native assembly. The preset path is fully transparent to callers.
@@ -79,8 +79,9 @@ The `metadataTag` is a stable interface between the native builder and the prese
 | `KNOWLEDGE_USERS_IN_CONVERSATION` | 7 | User list + personal memories + status + reminders + time/channel info | `/teach memory personal`, `/forget memory personal` |
 | `KNOWLEDGE_SHORT_TERM_MEMORY` | 8 | Recent conversation summaries from other channels (STM) | `/personal cache` |
 | `KNOWLEDGE_SERVER_DOCUMENTS` | 9 | RAG document chunks | `/teach document`, `/teach history`, `/forget document` |
-| `DIALOGUE_SAMPLE` | 10 | Sample dialogue pairs | `/teach sampledialogue`, `/forget sampledialogue` |
-| `DIALOGUE_HISTORY` | 11 | Actual conversation history | `/config maxmsgfetch` |
+| `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/reward`, `/punish`, `/conditioning` |
+| `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/teach sampledialogue`, `/forget sampledialogue` |
+| `DIALOGUE_HISTORY` | 12 | Actual conversation history | `/config maxmsgfetch` |
 
 ## Native Assembly Order
 
@@ -99,8 +100,9 @@ All blocks marked with `*` are conditional (only included when enabled/available
      memories + status + reminders + time/channel info
  9.  Short-term memory (STM) = other-channel summaries*   [KNOWLEDGE_SHORT_TERM_MEMORY]
 10.  RAG documents*                                       [KNOWLEDGE_SERVER_DOCUMENTS]
-11.  Sample dialogues*                                    [DIALOGUE_SAMPLE]
-12.  Conversation history                                 [DIALOGUE_HISTORY]
+11.  Conditioning guidance*                               [KNOWLEDGE_SERVER_CONDITIONING]
+12.  Sample dialogues*                                    [DIALOGUE_SAMPLE]
+13.  Conversation history                                 [DIALOGUE_HISTORY]
      + Tail directives (appended to last history item)
 ```
 
@@ -152,7 +154,7 @@ All text content passes through `convertMentions()` before being added to contex
 
 | File | Purpose |
 |------|---------|
-| `src/utils/text/contextBuilder.ts` | Routing wrapper + native 9-block assembly (~2800 lines) |
+| `src/utils/text/contextBuilder.ts` | Routing wrapper + native context assembly (~2800 lines) |
 | `src/utils/text/presetContextBuilder.ts` | Preset-driven rearrangement engine |
 | `src/utils/text/stPresetEngine.ts` | ST macro template engine (two-pass resolution) |
 | `src/utils/cache/stPresetCache.ts` | In-memory cache for active preset + nodes |

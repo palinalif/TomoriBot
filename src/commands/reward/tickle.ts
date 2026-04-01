@@ -1,4 +1,4 @@
-import { createRewardCommand } from "./rewardHelper";
+import { createConditioningInteractionCommand } from "@/utils/conditioning/conditioningInteractionCommand";
 
 /** Tickle reward — tickle the bot and trigger a response */
-export const { configureSubcommand, execute } = createRewardCommand("tickle");
+export const { configureSubcommand, execute } = createConditioningInteractionCommand("reward", "tickle");

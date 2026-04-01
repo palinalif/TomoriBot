@@ -20,7 +20,7 @@ This is distinct from [SillyTavern Card Import](./sillytavern-card-support.md), 
 2. The preset becomes active for that server
 3. On every LLM call, the context builder detects the active preset and rearranges blocks accordingly
 4. The `/sysprompt` and personality settings still apply — the preset controls *where* they appear, not *whether* they exist
-5. If no preset is active, the system uses the native fixed 9-block assembly (see [Context Assembly](../ai/context-assembly.md))
+5. If no preset is active, the system uses the native fixed context assembly (see [Context Assembly](../ai/context-assembly.md))
 6. Removing or deactivating the preset reverts to native assembly instantly
 
 ## Current Status
@@ -138,7 +138,7 @@ These are case-sensitive (uppercase only) to avoid false positives with lowercas
 
 ## Context Assembly Override (Phase 3)
 
-When an active preset exists, the context builder uses a **Build-Then-Rearrange** strategy instead of the fixed 9-block order. Located in `src/utils/text/presetContextBuilder.ts`.
+When an active preset exists, the context builder uses a **Build-Then-Rearrange** strategy instead of the fixed native order. Located in `src/utils/text/presetContextBuilder.ts`.
 
 ### Transformation Example
 
@@ -156,8 +156,9 @@ To understand what the preset system does, here's a concrete before/after compar
  8. Users in conversation                           [KNOWLEDGE_USERS_IN_CONVERSATION]
  9. STM                                             [KNOWLEDGE_SHORT_TERM_MEMORY]
 10. RAG documents                                   [KNOWLEDGE_SERVER_DOCUMENTS]
-11. Sample dialogues                                [DIALOGUE_SAMPLE]
-12. Conversation history                            [DIALOGUE_HISTORY]
+11. Conditioning guidance                           [KNOWLEDGE_SERVER_CONDITIONING]
+12. Sample dialogues                                [DIALOGUE_SAMPLE]
+13. Conversation history                            [DIALOGUE_HISTORY]
 ```
 
 **Same blocks after a preset rearranges them** (example preset node order):
@@ -171,7 +172,8 @@ To understand what the preset system does, here's a concrete before/after compar
  6. [worldInfoBefore marker] → RAG documents           ← pulled from KNOWLEDGE_SERVER_DOCUMENTS
  7. ★ Custom node: "Write in {{getvar::style}} style." ← resolved to "Write in narrative style."
  8. [dialogueExamples marker]                          ← pulled from DIALOGUE_SAMPLE
-    ↳ PRE-FLUSH: Users in conversation, STM            ← TomoriBot-only blocks injected here
+    ↳ PRE-FLUSH: Users in conversation, STM, conditioning
+                                                       ← TomoriBot-only blocks injected here
  9. [chatHistory marker]    → Conversation history     ← pulled from DIALOGUE_HISTORY
     ↳ Depth injection at depth 0: "Remember to stay in character."  ← merged into last history item
 ```
@@ -231,7 +233,7 @@ These blocks have no ST marker equivalent. They are flushed at anchor points dur
 | Blocks | Flushed at | Timing |
 |--------|-----------|--------|
 | Server info, memories, emojis, stickers | `charPersonality`, `charDescription`, or `main` marker | After the marker's items |
-| Users in conversation, STM, remaining RAG | `dialogueExamples` or `chatHistory` marker | Before the marker's items |
+| Users in conversation, STM, conditioning, remaining RAG | `dialogueExamples` or `chatHistory` marker | Before the marker's items |
 
 If the preset doesn't include these anchor markers, remaining blocks are appended at the end before dialogue history.
 
@@ -430,7 +432,7 @@ This section documents what our implementation supports versus what native Silly
 | Area | SillyTavern | TomoriBot |
 |------|------------|-----------|
 | **Depth injection** | Inserts new standalone messages at target depth | Merges into existing messages as `[System: ...]` text parts. Same-depth injections are batched into a single `[System: ...]` block for token efficiency. This prevents role-alternation violations on Gemini/Anthropic but may not match exact ST positioning. |
-| **TomoriBot-only blocks** | N/A | Server info, server memories, emojis, stickers, user list, STM have no ST markers. They are always included and auto-flushed at anchor points. Users cannot reorder or disable them via the preset. |
+| **TomoriBot-only blocks** | N/A | Server info, server memories, emojis, stickers, user list, STM, and conditioning have no ST markers. They are always included and auto-flushed at anchor points. Users cannot reorder or disable them via the preset. |
 | **Variable scope** | May support scoped/local variables | All `{{setvar}}` variables are global across enabled nodes. No scoping. |
 | **`prompt_order` parsing** | Both `character_id: 100000` (system) and `100001` (user) | Only `100001` (user prompt order) is parsed. The `100000` system order is ignored. |
 | **Character-specific ordering** | Different prompt orders per character card | TomoriBot uses one preset per server regardless of active persona. |
@@ -445,7 +447,7 @@ This section documents what our implementation supports versus what native Silly
 | `src/utils/cache/stPresetCache.ts` | In-memory preset cache with TTL |
 | `src/utils/text/stPresetEngine.ts` | Template macro engine (two-pass resolution) |
 | `src/utils/text/presetContextBuilder.ts` | Preset-driven context rearrangement |
-| `src/utils/text/contextBuilder.ts` | Routing wrapper + native 9-block assembly |
+| `src/utils/text/contextBuilder.ts` | Routing wrapper + native context assembly |
 | `src/commands/stpreset/upload.ts` | `/stpreset upload` command |
 | `src/commands/stpreset/remove.ts` | `/stpreset remove` command |
 | `src/commands/stpreset/node/toggle.ts` | `/stpreset node toggle` command |

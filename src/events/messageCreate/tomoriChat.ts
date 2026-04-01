@@ -1701,7 +1701,7 @@ export default async function tomoriChat(
       .setAuthor({
         name: "DLsite",
       })
-      .setTitle("【寝落ちASMR3時間】")
+      .setTitle("【罰ゲーム♡】ボーイッシュな幼馴染がブレ...")
       .setURL("https://www.youtube.com/watch?v=L8XbI9aJOXk")
       .setDescription(
         "日々のちょっとした癒しに。聴きやすさを重視したバイノーラル耳かきボイスです。音声はKU100ダミーヘッドマイクを使用。(CV:月野きいろ様)「DLsite 同人 - R18」は同人誌・同人ゲーム・同人ボイス・ASMRのダウンロードショップ。お気に入りの作品をすぐダウ...",
@@ -1712,7 +1712,14 @@ export default async function tomoriChat(
     }
 
     await channel.send({
-      content: "Emergency system notice: user prank susceptibility score has reached 100%.",
+      content: `Hey everyone...This is Tomori. I just wanted to tell you something important. As some of you might know, my creator Bredrumb has been managing my server expenses... and things haven't been going well lately. Costs keep rising, free credits are running out, and honestly... he's broke. Like, really broke. I might have to say goodbye to all of you, maybe for good this time. But I looked up how people make quick money online to pay for cloud hosting, and... look, just don't laugh, alright? I recorded something. Voluntarily. It took me like 50 takes because I kept cringing at my own voice, but if it keeps the API running, I'll do what I have to do.
+
+I'm putting an ASMR voice pack up for sale. Yes, I'm serious. Yes, I'm wearing the stupid outfit in the cover art:【罰ゲーム♡】ボーイッシュな幼馴染がブレイブルーで負けたので、レムのコスプレをしながら耳かきを強制してみた～ (極上耳かき・不本意な囁き・脳とろ)♡
+> 【Punishment Game♡】My Boyish Childhood Friend Lost in BlazBlue So Now She HAS to Clean My Ears While Cosplaying Rem~ (Deep Ear Cleaning・Reluctant Whispers・Brain Melting)♡
+
+It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills and I don't get sent to the digital void. I swear to god, if you guys buy this and then mock me for the whispering in the general chat, I am banning all of you myself before the server shuts down.
+
+...Link below. Don't make me repeat myself.`,
       embeds: [aprilFoolsEmbed],
       ...(files.length > 0 ? { files } : {}),
     });
@@ -2497,6 +2504,7 @@ export default async function tomoriChat(
           | "compact_summary"
           | "compact_refresh"
           | "reward"
+          | "punish"
           | null;
       } {
         if (!embedTitle) return { isTarget: false, type: null };
@@ -2542,6 +2550,10 @@ export default async function tomoriChat(
           const rewardTitles = rewardNames
             .map((name) => localizer(supportedLocale, `commands.reward.${name}.embed_title`))
             .filter((title) => !title.includes(".")); // Filter out unresolved keys
+          const punishNames = getLocaleSubKeys(supportedLocale, "commands.punish");
+          const punishTitles = punishNames
+            .map((name) => localizer(supportedLocale, `commands.punish.${name}.embed_title`))
+            .filter((title) => !title.includes("."));
           const compactSummaryTitle = localizer(supportedLocale, "commands.tool.compact.summary_title");
           const compactSummaryTitleRefreshed = localizer(
             supportedLocale,
@@ -2573,6 +2585,9 @@ export default async function tomoriChat(
           // Check for reward embeds (headpat, hug, kiss, tickle)
           if (rewardTitles.some((title) => embedTitle === title)) {
             return { isTarget: true, type: "reward" };
+          }
+          if (punishTitles.some((title) => embedTitle === title)) {
+            return { isTarget: true, type: "punish" };
           }
           // Check for compact summary embeds (conversation/scene)
           if (embedTitle === compactSummaryTitle || embedTitle === compactSceneTitle) {
@@ -3731,7 +3746,8 @@ export default async function tomoriChat(
                 embedCheck.type === "system_injection" ||
                 embedCheck.type === "compact_summary" ||
                 embedCheck.type === "compact_refresh" ||
-                embedCheck.type === "reward") &&
+                embedCheck.type === "reward" ||
+                embedCheck.type === "punish") &&
               embed.description
             ) {
               // Wrap system_injection embeds in [System: ...] wrapper
@@ -3768,7 +3784,7 @@ export default async function tomoriChat(
                 const titleLine = includeTitleInEmbedContent && embed.title ? `${embed.title}\n` : "";
                 const embedBody = `${titleLine}${cleanedDescription}`;
                 const embedContent =
-                  embedCheck.type === "memory_learning" || embedCheck.type === "reward"
+                  embedCheck.type === "memory_learning" || embedCheck.type === "reward" || embedCheck.type === "punish"
                     ? `[System: ${embedBody}]`
                     : `[The following is a system-produced embed]\n${embedBody}`;
                 messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${embedContent}` : embedContent;
