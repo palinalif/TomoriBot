@@ -360,12 +360,14 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 - Keep the first group descriptive and use "(Continued)" labels for later groups.
 - Respect Discord's modal ceiling: 5 checkbox groups, 10 options each, 50 total entries.
 - If the list exceeds 50, warn clearly and fall back to a different management flow rather than silently truncating.
+- For persistent setting commands, treat checked items as the stored enabled-set and write the full checked set back on submit.
 
 Implemented examples:
 
 - `/server whitelist remove` manages channels and roles in one modal.
 - `/server privatechannel remove` manages configured private channels in one modal.
 - `/server rpchannel remove` manages configured RP channels in one modal.
+- `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
 - `/config toolnotices visibility` manages visible tool notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
 - `/config mcp remove` manages registered MCP servers in one modal.

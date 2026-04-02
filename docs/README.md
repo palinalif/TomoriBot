@@ -21,6 +21,13 @@ This folder is organized by topic instead of numeric filenames.
 - [`systems/caching.md`](./systems/caching.md)
 - [`systems/cooldown-system.md`](./systems/cooldown-system.md)
 
+## Commands V2
+
+- [`commands-v2/README.md`](./commands-v2/README.md)
+- [`commands-v2/naming.md`](./commands-v2/naming.md)
+- [`commands-v2/checklist-settings.md`](./commands-v2/checklist-settings.md)
+- [`commands-v2/migration-map.md`](./commands-v2/migration-map.md)
+
 ## AI
 
 - [`ai/providers.md`](./ai/providers.md)

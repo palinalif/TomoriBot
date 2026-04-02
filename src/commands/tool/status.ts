@@ -592,11 +592,12 @@ export async function execute(
                   current: blacklistedCount,
                 });
 
-        // 7. Format channel lists (auto-chat, RP, private, welcome, whitelist, random triggers, channel model overrides)
+        // 7. Format channel lists (auto-chat, RP, private, cross-channel blocklist, welcome, whitelist, random triggers, channel model overrides)
         const [
           autoChannelsValue,
           rpChannelsValue,
           privateChannelsValue,
+          crosschannelBlocklistValue,
           welcomeChannelValue,
           thoughtLogChannelValue,
           whitelistValue,
@@ -607,6 +608,7 @@ export async function execute(
           formatChannelList(client, config.autoch_disc_ids, locale),
           formatChannelList(client, config.rp_channel_ids, locale),
           formatChannelList(client, config.private_channel_ids, locale),
+          formatChannelList(client, config.crosschannel_blocklist_ids ?? [], locale),
           formatWelcomeChannel(client, config, personaNameMap, locale),
           formatChannelList(
             client,
@@ -755,6 +757,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_private_channels",
               value: privateChannelsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_crosschannel_blocklist",
+              value: crosschannelBlocklistValue,
               inline: false,
             },
             {

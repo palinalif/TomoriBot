@@ -552,6 +552,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'A
 -- STMs created in these channels cannot leak into other channels, and thought logs are never emitted from them
 SELECT add_column_if_not_exists('tomori_configs', 'private_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
+-- Add cross-channel blocklist channel IDs (April 2026)
+-- Channels in this list cannot be targeted by the cross_channel_message tool; forum/media parents also block thread visits
+SELECT add_column_if_not_exists('tomori_configs', 'crosschannel_blocklist_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
+
 -- Add welcome channel configuration (March 2026)
 -- One configured channel/prompt/persona per server for join greetings
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_channel_disc_id', 'TEXT', 'NULL');

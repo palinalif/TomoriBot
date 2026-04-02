@@ -180,6 +180,22 @@ Rules:
 - if the total set exceeds 50 options, show an explicit overflow warning or route the user to a different bulk action
 - after submit, diff original entries against submitted checked values, then invalidate caches only after successful DB writes
 
+### Pattern 3B: Persistent Checklist Setting
+
+Use when one command owns the full enabled-set of a durable setting rather than an add/remove delta flow.
+
+Example:
+
+- `/server crosschannel-blocklist`
+
+Rules:
+
+- checked means "enabled in the stored set"; unchecked means "disabled from the stored set"
+- reopening the command must preload the current saved state
+- submit writes the full selected set back to storage, not just the latest delta intent
+- if the eligible option set exceeds one modal (`>50`), show a page-selection message first and launch page-scoped checkbox modals from there
+- durable server-scoped settings added through this pattern should also be surfaced in `/tool status`
+
 ### Pattern 4: Pagination Helpers (No Pre-Defer)
 
 Use when calling `replyPaginatedChoices(...)` or `promptWithPaginatedModal(...)`.
@@ -256,7 +272,7 @@ Rules:
 
 - `bot`: respond, generate(image), kill, impersonate
 - `config`: setup, model(text/image/embedding), apikey(set/delete/rotation), sysprompt(change/clear/preset), params(*), timezone, maxmsgfetch, permissions, uncensors
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), welcomechannel
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), crosschannel-blocklist, welcomechannel
 - `persona`: create, generate, import, export, default, swap, remove
 - `conditioning`: toggle, history, clear
 - `punish`: spank, pinch, bite, squeeze
@@ -266,6 +282,8 @@ Rules:
 `/server autotrigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.
 
 `/bot generate image` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available.
+
+Forward-looking command rewrite guidance lives in `docs/commands-v2/`. Those docs define target UX and naming conventions only; the runtime loader and current implementation still use the existing `src/commands/` structure.
 
 ## Adding a New Command
 

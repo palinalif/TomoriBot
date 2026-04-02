@@ -237,6 +237,7 @@ export const tomoriConfigSchema = z.object({
   autoch_disc_ids: z.array(z.string()).default([]),
   rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
   private_channel_ids: z.array(z.string()).default([]), // Added March 2026 - Channels where STMs cannot leak out and thought logs are suppressed
+  crosschannel_blocklist_ids: z.array(z.string()).default([]), // Added April 2026 - Channels blocked as cross_channel_message targets; thread parents also apply
   welcome_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for member join welcomes
   thought_log_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for reasoning/thought log embeds
   welcome_prompt: z.string().nullable().optional(), // Added March 2026 - Additional prompt appended to join welcomes

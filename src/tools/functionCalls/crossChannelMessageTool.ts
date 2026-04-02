@@ -337,6 +337,32 @@ export class CrossChannelMessageTool extends BaseTool {
       };
     }
 
+    const blockedChannelIds = new Set(context.tomoriState.config.crosschannel_blocklist_ids ?? []);
+    const isThreadTarget =
+      "isThread" in targetChannel && typeof targetChannel.isThread === "function" && targetChannel.isThread();
+    const effectiveBlockedChannelId = blockedChannelIds.has(targetChannel.id)
+      ? targetChannel.id
+      : isThreadTarget && targetChannel.parent && blockedChannelIds.has(targetChannel.parent.id)
+        ? targetChannel.parent.id
+        : null;
+
+    if (effectiveBlockedChannelId) {
+      const blockedTargetName =
+        isThreadTarget && targetChannel.parent?.id === effectiveBlockedChannelId
+          ? `#${targetChannel.parent.name}`
+          : `#${targetChannel.name}`;
+
+      return {
+        success: false,
+        error: `Cross-channel messaging is blocked for ${blockedTargetName} in this server.`,
+        data: {
+          status: "cross_channel_failed_blocklisted_target",
+          reason: "The target channel is in the server cross-channel blocklist.",
+          blocked_channel_id: effectiveBlockedChannelId,
+        },
+      };
+    }
+
     // 5. Permission check — bot must have ViewChannel + (SendMessages or SendMessagesInThreads)
     const botMember = guild.members.cache.get(context.client.user?.id ?? "");
     if (botMember && "permissionsFor" in targetChannel) {
