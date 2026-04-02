@@ -1,6 +1,6 @@
 {
   "name": "tomoribot",
-  "version": "0.7.921",
+  "version": "0.7.922",
   "description": "Customizable AI Assistant Discord Bot",
   "main": "./src/index.ts",
   "type": "module",
@@ -19,6 +19,7 @@
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/checkLocalizationKeys.ts",
     "check-limits": "bun run scripts/checkDiscordLimits.ts",
+    "audit-dependencies": "bun run scripts/auditDependencies.ts",
     "audit-keys": "bun run scripts/auditKeyVersions.ts",
     "rotate-keys": "bun run scripts/rotateAllKeys.ts",
     "check-keys": "bun run scripts/checkKeys.ts",
@@ -71,6 +72,7 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
+    "@sapphire/shapeshift": "file:vendor/shapeshift",
     "@aws-sdk/xml-builder>fast-xml-parser": "5.5.9",
     "body-parser": ">=2.2.1",
     "body-parser>qs": "6.14.2",

@@ -8,7 +8,6 @@ export const TOOL_NOTICE_KEYS = [
   "image_generation",
   "image_editing",
   "image_analysis",
-  "profile_picture_analysis",
   "gif_processing",
   "youtube_processing",
   "mcp_tool_call",
@@ -71,11 +70,6 @@ export const TOOL_NOTICE_DEFINITIONS: ToolNoticeDefinition[] = [
     key: "image_analysis",
     labelKey: "commands.config.toolnotices.visibility.notice_image_analysis_label",
     descriptionKey: "commands.config.toolnotices.visibility.notice_image_analysis_description",
-  },
-  {
-    key: "profile_picture_analysis",
-    labelKey: "commands.config.toolnotices.visibility.notice_profile_picture_analysis_label",
-    descriptionKey: "commands.config.toolnotices.visibility.notice_profile_picture_analysis_description",
   },
   {
     key: "gif_processing",

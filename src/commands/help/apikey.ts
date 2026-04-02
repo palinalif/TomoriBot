@@ -35,6 +35,10 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
             value: "deepseek",
           },
           {
+            name: localizer("en-US", "commands.help.apikey.provider_choice_custom"),
+            value: "custom",
+          },
+          {
             name: localizer("en-US", "commands.help.apikey.provider_choice_nvidia"),
             value: "nvidia",
           },
@@ -163,6 +167,15 @@ export async function execute(
           footerVars: {
             configModel: configModelMention,
           },
+        };
+        break;
+
+      case "custom":
+        embedOptions = {
+          titleKey: "commands.help.apikey.custom_title",
+          descriptionKey: "commands.help.apikey.custom_description",
+          color: ColorCode.INFO,
+          fields: [],
         };
         break;
 

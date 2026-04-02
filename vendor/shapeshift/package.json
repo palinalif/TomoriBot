@@ -1,0 +1,23 @@
+{
+  "name": "@sapphire/shapeshift",
+  "version": "4.0.0",
+  "description": "Vendored TomoriBot copy of @sapphire/shapeshift without lodash.",
+  "license": "MIT",
+  "main": "dist/cjs/index.cjs",
+  "module": "dist/esm/index.mjs",
+  "types": "dist/cjs/index.d.cts",
+  "exports": {
+    "import": {
+      "types": "./dist/esm/index.d.mts",
+      "default": "./dist/esm/index.mjs"
+    },
+    "require": {
+      "types": "./dist/cjs/index.d.cts",
+      "default": "./dist/cjs/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "fast-deep-equal": "^3.1.3"
+  }
+}

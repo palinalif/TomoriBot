@@ -16,18 +16,20 @@ import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionH
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { deleteConditioningGroupsForPersona, loadConditioningGroupsForPersona } from "@/utils/db/conditioningDb";
-import {
-  getConditioningTypeOption,
-  hasManageGuildPermission,
-  selectConditioningPersona,
-} from "@/utils/conditioning/conditioningCommandHelper";
+import { hasManageGuildPermission, selectConditioningPersona } from "@/utils/conditioning/conditioningCommandHelper";
+import type { ConditioningType } from "@/types/db/schema";
 
-const CHECKBOX_GROUP_PREFIX = "conditioning_clear_group";
+const CHECKBOX_GROUP_PREFIX = "conditioning_manage_group";
 const MAX_OPTIONS_PER_GROUP = 10;
 const MAX_GROUPS_PER_MODAL = 5;
-const GROUPS_PER_PAGE = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
+const GROUPS_PER_PAGE = MAX_OPTIONS_PER_GROUP * (MAX_GROUPS_PER_MODAL - 1);
 const PAGE_SELECT_TIMEOUT_MS = 300_000;
 const PAGE_BUTTON_LIMIT = 24;
+const CONDITIONING_TYPE_ORDER: ConditioningType[] = ["reward", "punish"];
+
+function getManageTypeMarker(locale: string, conditioningType: ConditioningType): string {
+  return localizer(locale, `commands.conditioning.manage.marker_${conditioningType}`);
+}
 
 function truncateOptionLabel(value: string): string {
   return value.length > 100 ? `${value.slice(0, 97)}...` : value;
@@ -35,55 +37,62 @@ function truncateOptionLabel(value: string): string {
 
 function buildCheckboxGroups(groups: ConditioningGroup[], locale: string): ModalCheckboxGroupField[] {
   const checkboxGroups: ModalCheckboxGroupField[] = [];
+  const indexedGroups = groups.map((group, index) => ({ group, index }));
 
-  for (let i = 0; i < groups.length; i += MAX_OPTIONS_PER_GROUP) {
-    const chunk = groups.slice(i, i + MAX_OPTIONS_PER_GROUP);
-    const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
-    const options: CheckboxGroupOption[] = chunk.map((group, index) => {
-      const actionLabel = localizer(locale, `commands.${group.conditioningType}.${group.actionKey}.history_label`);
-      const description =
-        group.reasonText.length > 0
-          ? localizer(locale, "commands.conditioning.clear.option_reason_description", {
-              count: group.totalCount.toString(),
-              reason: group.reasonText,
-            })
-          : localizer(locale, "commands.conditioning.clear.option_stored_only_description", {
-              count: group.totalCount.toString(),
-            });
+  for (const conditioningType of CONDITIONING_TYPE_ORDER) {
+    const typedGroups = indexedGroups.filter(({ group }) => group.conditioningType === conditioningType);
+    for (let i = 0; i < typedGroups.length; i += MAX_OPTIONS_PER_GROUP) {
+      const chunk = typedGroups.slice(i, i + MAX_OPTIONS_PER_GROUP);
+      const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+      const typeMarker = getManageTypeMarker(locale, conditioningType);
+      const options: CheckboxGroupOption[] = chunk.map(({ group, index }) => {
+        const actionLabel = localizer(locale, `commands.${group.conditioningType}.${group.actionKey}.history_label`);
+        const description =
+          group.reasonText.length > 0
+            ? localizer(locale, "commands.conditioning.manage.option_reason_description", {
+                type_marker: typeMarker,
+                count: group.totalCount.toString(),
+                reason: group.reasonText,
+              })
+            : localizer(locale, "commands.conditioning.manage.option_stored_only_description", {
+                type_marker: typeMarker,
+                count: group.totalCount.toString(),
+              });
 
-      return {
-        label: truncateOptionLabel(`${actionLabel} ×${group.totalCount}`),
-        value: index.toString(),
-        description: truncateOptionLabel(description),
-        default: true,
-      };
-    });
+        return {
+          label: truncateOptionLabel(actionLabel),
+          value: index.toString(),
+          description: truncateOptionLabel(description),
+          default: true,
+        };
+      });
 
-    checkboxGroups.push({
-      kind: "checkboxGroup",
-      customId: `${CHECKBOX_GROUP_PREFIX}_${groupIndex}`,
-      labelKey:
-        groupIndex === 0
-          ? "commands.conditioning.clear.checkbox_label"
-          : "commands.conditioning.clear.checkbox_label_continued",
-      descriptionKey: groupIndex === 0 ? "commands.conditioning.clear.checkbox_description" : undefined,
-      minValues: 0,
-      required: false,
-      options,
-    });
+      checkboxGroups.push({
+        kind: "checkboxGroup",
+        customId: `${CHECKBOX_GROUP_PREFIX}_${conditioningType}_${groupIndex}`,
+        labelKey:
+          groupIndex === 0
+            ? `commands.conditioning.manage.${conditioningType}_checkbox_label`
+            : `commands.conditioning.manage.${conditioningType}_checkbox_label_continued`,
+        descriptionKey:
+          groupIndex === 0 ? `commands.conditioning.manage.${conditioningType}_checkbox_description` : undefined,
+        minValues: 0,
+        required: false,
+        options,
+      });
+    }
   }
 
   return checkboxGroups;
 }
 
-function collectSelectedIndexes(multiValues: Record<string, string[]> | undefined, groupCount: number): Set<number> {
+function collectSelectedIndexes(multiValues: Record<string, string[]> | undefined): Set<number> {
   const indexes = new Set<number>();
-  for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
-    const values = multiValues?.[`${CHECKBOX_GROUP_PREFIX}_${groupIndex}`] ?? [];
+  for (const values of Object.values(multiValues ?? {})) {
     for (const value of values) {
       const parsed = Number.parseInt(value, 10);
       if (Number.isFinite(parsed)) {
-        indexes.add(parsed + groupIndex * MAX_OPTIONS_PER_GROUP);
+        indexes.add(parsed);
       }
     }
   }
@@ -99,7 +108,7 @@ function buildPageActionRows(totalPages: number, totalGroups: number): ActionRow
     const end = Math.min(page * GROUPS_PER_PAGE, totalGroups);
     pageButtons.push(
       new ButtonBuilder()
-        .setCustomId(`conditioning_clear_page_${page}`)
+        .setCustomId(`conditioning_manage_page_${page}`)
         .setLabel(`${start}-${end}`)
         .setStyle(ButtonStyle.Primary),
     );
@@ -114,19 +123,7 @@ function buildPageActionRows(totalPages: number, totalGroups: number): ActionRow
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("clear")
-    .setDescription(localizer("en-US", "commands.conditioning.clear.description"))
-    .addStringOption((option) =>
-      option
-        .setName("type")
-        .setDescription(localizer("en-US", "commands.conditioning.clear.type_description"))
-        .setRequired(true)
-        .addChoices(
-          { name: localizer("en-US", "commands.conditioning.clear.type_choice_reward"), value: "reward" },
-          { name: localizer("en-US", "commands.conditioning.clear.type_choice_punish"), value: "punish" },
-        ),
-    );
+  subcommand.setName("manage").setDescription(localizer("en-US", "commands.conditioning.manage.description"));
 
 export async function execute(
   _client: Client,
@@ -147,20 +144,17 @@ export async function execute(
   const selection = await selectConditioningPersona(interaction, locale);
   if (!selection) return;
 
-  const conditioningType = getConditioningTypeOption(interaction);
   const groups = await loadConditioningGroupsForPersona(
     selection.persona.server_id,
     selection.persona.persona_lineage_id ?? 0,
-    conditioningType,
   );
 
   if (groups.length === 0) {
     await replyInfoEmbed(selection.interaction, locale, {
-      titleKey: "commands.conditioning.clear.none_title",
-      descriptionKey: "commands.conditioning.clear.none_description",
+      titleKey: "commands.conditioning.manage.none_title",
+      descriptionKey: "commands.conditioning.manage.none_description",
       descriptionVars: {
         persona_name: selection.persona.tomori_nickname,
-        type_label: localizer(locale, `commands.conditioning.shared.type_${conditioningType}`),
       },
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
@@ -171,8 +165,8 @@ export async function execute(
   const totalPages = Math.ceil(groups.length / GROUPS_PER_PAGE);
   if (totalPages > PAGE_BUTTON_LIMIT) {
     await replyInfoEmbed(selection.interaction, locale, {
-      titleKey: "commands.conditioning.clear.too_many_title",
-      descriptionKey: "commands.conditioning.clear.too_many_description",
+      titleKey: "commands.conditioning.manage.too_many_title",
+      descriptionKey: "commands.conditioning.manage.too_many_description",
       descriptionVars: {
         total_entries: groups.length.toString(),
         total_pages: totalPages.toString(),
@@ -189,11 +183,10 @@ export async function execute(
 
   if (totalPages > 1) {
     const pageSelectEmbed = createStandardEmbed(locale, {
-      titleKey: "commands.conditioning.clear.select_page_title",
-      descriptionKey: "commands.conditioning.clear.select_page_description",
+      titleKey: "commands.conditioning.manage.select_page_title",
+      descriptionKey: "commands.conditioning.manage.select_page_description",
       descriptionVars: {
         persona_name: selection.persona.tomori_nickname,
-        type_label: localizer(locale, `commands.conditioning.shared.type_${conditioningType}`),
         total_entries: groups.length.toString(),
         total_pages: totalPages.toString(),
       },
@@ -211,15 +204,15 @@ export async function execute(
       pageButtonInteraction = (await pageMessage.awaitMessageComponent({
         filter: (buttonInteraction) =>
           buttonInteraction.user.id === interaction.user.id &&
-          buttonInteraction.customId.startsWith("conditioning_clear_page_"),
+          buttonInteraction.customId.startsWith("conditioning_manage_page_"),
         time: PAGE_SELECT_TIMEOUT_MS,
       })) as ButtonInteraction;
     } catch {
-      log.info("[Conditioning Clear] Page selection timed out");
+      log.info("[Conditioning Manage] Page selection timed out");
       return;
     }
 
-    const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("conditioning_clear_page_", ""), 10);
+    const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("conditioning_manage_page_", ""), 10);
     const startIndex = (selectedPage - 1) * GROUPS_PER_PAGE;
     pageGroups = groups.slice(startIndex, startIndex + GROUPS_PER_PAGE);
     modalSource = pageButtonInteraction;
@@ -230,8 +223,8 @@ export async function execute(
     modalSource,
     locale,
     {
-      modalCustomId: `conditioning_clear_${interaction.id}`,
-      modalTitleKey: "commands.conditioning.clear.modal_title",
+      modalCustomId: `conditioning_manage_${interaction.id}`,
+      modalTitleKey: "commands.conditioning.manage.modal_title",
       components: checkboxGroups,
     },
     MessageFlags.Ephemeral,
@@ -241,13 +234,13 @@ export async function execute(
     return;
   }
 
-  const selectedIndexes = collectSelectedIndexes(modalResult.multiValues, checkboxGroups.length);
+  const selectedIndexes = collectSelectedIndexes(modalResult.multiValues);
   const groupsToDelete = pageGroups.filter((_group, index) => !selectedIndexes.has(index));
 
   if (groupsToDelete.length === 0) {
     await replyInfoEmbed(modalResult.interaction, locale, {
-      titleKey: "commands.conditioning.clear.no_changes_title",
-      descriptionKey: "commands.conditioning.clear.no_changes_description",
+      titleKey: "commands.conditioning.manage.no_changes_title",
+      descriptionKey: "commands.conditioning.manage.no_changes_description",
       color: ColorCode.INFO,
       flags: MessageFlags.Ephemeral,
     });
@@ -257,8 +250,8 @@ export async function execute(
   const deletedRows = await deleteConditioningGroupsForPersona(
     selection.persona.server_id,
     selection.persona.persona_lineage_id ?? 0,
-    conditioningType,
     groupsToDelete.map((group) => ({
+      conditioningType: group.conditioningType,
       actionKey: group.actionKey,
       reasonNormalized: group.reasonNormalized,
     })),
@@ -274,13 +267,16 @@ export async function execute(
     return;
   }
 
+  const removedRewardGroups = groupsToDelete.filter((group) => group.conditioningType === "reward").length;
+  const removedPunishGroups = groupsToDelete.filter((group) => group.conditioningType === "punish").length;
+
   await replyInfoEmbed(modalResult.interaction, locale, {
-    titleKey: "commands.conditioning.clear.success_title",
-    descriptionKey: "commands.conditioning.clear.success_description",
+    titleKey: "commands.conditioning.manage.success_title",
+    descriptionKey: "commands.conditioning.manage.success_description",
     descriptionVars: {
       persona_name: selection.persona.tomori_nickname,
-      type_label: localizer(locale, `commands.conditioning.shared.type_${conditioningType}`),
-      removed_groups: groupsToDelete.length.toString(),
+      reward_groups: removedRewardGroups.toString(),
+      punish_groups: removedPunishGroups.toString(),
       deleted_rows: deletedRows.toString(),
     },
     color: ColorCode.SUCCESS,

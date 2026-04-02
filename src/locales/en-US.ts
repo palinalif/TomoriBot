@@ -243,11 +243,6 @@ export default {
       analyzing_footer: "This may take a moment depending on image count",
     },
 
-    profile_picture: {
-      analyzing_title: "👤  Analyzing Profile Picture...",
-      analyzing_description: "Fetching and analyzing the requested profile picture.",
-    },
-
     gif: {
       processing_title: "🎞️  Processing GIF...",
       processing_description: "Extracting keyframes from the requested GIF for closer analysis.",
@@ -1625,6 +1620,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
         provider_choice_deepseek: `DeepSeek`,
+        provider_choice_custom: `Custom Provider`,
         provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
@@ -1678,6 +1674,24 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`deepseek-reasoner\` is the thinking/reasoning model and may respond more slowly
 - You can switch between available DeepSeek text models after setup`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        // Custom Provider
+        custom_title: `Custom Provider Setup`,
+        custom_description: `Connect to any OpenAI-compatible endpoint: Ollama, vLLM, LiteLLM, OneAPI, KoboldCPP, and more.
+
+**Endpoint URL**
+Enter your base URL in the API Key field when selecting the Custom provider.
+Example: \`https://my-server.com/v1\`
+\`/chat/completions\` is appended automatically. Do not add it yourself.
+In production the URL must be **HTTPS** and publicly reachable (no localhost or private IPs).
+
+**Model Name**
+Set during the capabilities prompt after entering the URL. Enter the exact name your endpoint expects, e.g. \`gemma3:latest\` for Ollama or the model ID your proxy uses.
+Sent as the \`model\` field in every request.
+
+**API Key / Bearer Token**
+Optional. After setup, use \`/config apikey set\` again to store an auth token.
+If set, it is sent as \`Authorization: Bearer {token}\`.
+Leave unset for endpoints that require no authentication.`,
         // NVIDIA NIM
         nvidia_title: `Setting Up NVIDIA NIM API Key`,
         nvidia_description: `NVIDIA NIM provides free hosted chat, embeddings, and image generation through NVIDIA's API catalog.
@@ -2452,7 +2466,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         select_persona_title: `Select a persona to manage`,
         reason_line: `Reason: \`\`{reason}\`\``,
         reward_footer: `❤️ {bot} will remember this. Use /conditioning to manage.`,
-        punish_footer: `👻 {bot} will remember this. Use /conditioning to manage.`,
+        punish_footer: `💀 {bot} will remember this. Use /conditioning to manage.`,
         type_reward: `reward conditioning`,
         type_punish: `punishment conditioning`,
       },
@@ -2469,43 +2483,29 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         enabled_success_description: `Enabled stored {type_label} prompt injection for all {persona_count} personas in this server.`,
         disabled_success_description: `Disabled stored {type_label} prompt injection for all {persona_count} personas in this server. New records will still be stored.`,
       },
-      history: {
-        description: `View stored conditioning history for a persona.`,
-        type_description: `Which conditioning type to view.`,
-        type_choice_reward: `Rewards`,
-        type_choice_punish: `Punishments`,
-        title_reward: `Reward Conditioning History`,
-        title_punish: `Punishment Conditioning History`,
-        none_title: `No Conditioning History`,
-        none_description: `{persona_name} does not have any {type_label} entries yet.`,
-        status_enabled: `Enabled`,
-        status_disabled: `Disabled`,
-        summary: `**Persona:** {persona_name}\n**Prompt Injection:** {status_label}\n**Entries:** {entry_count}\n\n{entries}{more_entries}`,
-        entry_with_reason: `• {action_label} ×{count} by {users} • updated <t:{updated_at}:R>\ndue to: "{reason}"`,
-        entry_without_reason: `• {action_label} ×{count} by {users} • updated <t:{updated_at}:R>\nstored only (no reason, not injected into prompt)`,
-        more_entries: `...and {count} more entries.`,
-      },
-      clear: {
-        description: `Delete stored conditioning history for a persona.`,
-        type_description: `Which conditioning type to clear.`,
-        type_choice_reward: `Rewards`,
-        type_choice_punish: `Punishments`,
-        none_title: `Nothing to Clear`,
-        none_description: `{persona_name} does not have any {type_label} entries to clear.`,
+      manage: {
+        description: `Manage stored conditioning history for a persona.`,
+        marker_reward: `❤️ Reward`,
+        marker_punish: `💀 Punishment`,
+        none_title: `Nothing to Manage`,
+        none_description: `{persona_name} does not have any conditioning entries to manage.`,
         too_many_title: `Too Many Entries`,
         too_many_description: `Found {total_entries} entries across {total_pages} pages. The current limit is {max_pages} pages.`,
         select_page_title: `Select a Conditioning Page`,
-        select_page_description: `Select which page of {type_label} entries to manage for {persona_name}.\nEntries: {total_entries}\nPages: {total_pages}`,
-        checkbox_label: `Keep These Entries`,
-        checkbox_label_continued: `Keep These Entries (Continued)`,
-        checkbox_description: `Leave an entry checked to keep it. Uncheck it to delete that conditioning group for this persona.`,
-        option_reason_description: `{count} total • due to: "{reason}"`,
-        option_stored_only_description: `{count} total • stored only (no prompt injection)`,
-        modal_title: `Clear Conditioning`,
+        select_page_description: `Select which page of conditioning entries to manage for {persona_name}.\nEntries: {total_entries}\nPages: {total_pages}\nRewards use ❤️ and punishments use 💀.`,
+        reward_checkbox_label: `❤️ Reward Entries`,
+        reward_checkbox_label_continued: `❤️ Reward Entries (Continued)`,
+        reward_checkbox_description: `Leave an entry checked to keep it. Uncheck it to delete that reward conditioning group for this persona.`,
+        punish_checkbox_label: `💀 Punishment Entries`,
+        punish_checkbox_label_continued: `💀 Punishment Entries (Continued)`,
+        punish_checkbox_description: `Leave an entry checked to keep it. Uncheck it to delete that punishment conditioning group for this persona.`,
+        option_reason_description: `{type_marker} • {count} total • due to: "{reason}"`,
+        option_stored_only_description: `{type_marker} • {count} total • stored only (no prompt injection)`,
+        modal_title: `Manage Conditioning`,
         no_changes_title: `No Changes Made`,
-        no_changes_description: `Everything stayed checked, so nothing was deleted.`,
-        success_title: `Conditioning Cleared`,
-        success_description: `Removed {removed_groups} {type_label} groups for {persona_name} ({deleted_rows} stored rows deleted).`,
+        no_changes_description: `Everything stayed checked, so nothing was removed.`,
+        success_title: `Conditioning Updated`,
+        success_description: `Removed {reward_groups} reward groups and {punish_groups} punishment groups for {persona_name} ({deleted_rows} stored rows deleted).`,
       },
     },
 
@@ -2561,14 +2561,14 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       bite: {
         description: `Give me a playful bite!`,
         reason_description: `Why are you punishing me?`,
-        embed_title: `🦷 Bite Time!`,
+        embed_title: `🦷 Snack Time!`,
         embed_description: `{user} just bit {bot}.`,
         history_label: `Bite`,
       },
       squeeze: {
         description: `Give me a squeeze!`,
         reason_description: `Why are you punishing me?`,
-        embed_title: `🫳 Squeeze Time!`,
+        embed_title: `🫳 Squishy squishy!`,
         embed_description: `{user} just squeezed {bot}.`,
         history_label: `Squeeze`,
       },
@@ -2671,11 +2671,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           // Info messages
           no_keys_title: `No Rotation Keys`,
           no_keys_description: `There are no rotation keys to purge. Only your main API key is configured.`,
-        },
-        help: {
-          description: `How to set up the Custom provider (OpenAI-compatible endpoints).`,
-          title: `Custom Provider Setup`,
-          body: `Connect to any OpenAI-compatible endpoint: Ollama, vLLM, LiteLLM, OneAPI, KoboldCPP, and more.\n\n**Endpoint URL**\nEnter your base URL in the API Key field when selecting the Custom provider.\nExample: \`https://my-server.com/v1\`\n\`/chat/completions\` is appended automatically. Do not add it yourself.\nIn production the URL must be **HTTPS** and publicly reachable (no localhost or private IPs).\n\n**Model Name**\nSet during the capabilities prompt after entering the URL. Enter the exact name your endpoint expects, e.g. \`gemma3:latest\` for Ollama or the model ID your proxy uses.\nSent as the \`model\` field in every request.\n\n**API Key / Bearer Token**\nOptional. After setup, use \`/config apikey set\` again to store an auth token.\nIf set, it is sent as \`Authorization: Bearer {token}\`.\nLeave unset for endpoints that require no authentication.`,
         },
       },
       // Custom provider configuration
@@ -2816,8 +2811,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           notice_image_editing_description: `Show image editing or inpaint notices.`,
           notice_image_analysis_label: `Image Analysis`,
           notice_image_analysis_description: `Show image analysis notices.`,
-          notice_profile_picture_analysis_label: `Profile Picture Analysis`,
-          notice_profile_picture_analysis_description: `Show profile picture analysis notices.`,
           notice_gif_processing_label: `GIF Processing`,
           notice_gif_processing_description: `Show GIF processing notices.`,
           notice_youtube_processing_label: `YouTube Processing`,

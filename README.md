@@ -155,7 +155,7 @@ If you customize TomoriBot's system prompt, persona instructions, or external pr
 | Tool name | Requirements | Purpose |
 |---|---|---|
 | `review_capabilities` | Base Tool | Check current chat abilities, slash commands, or runtime settings before answering. |
-| `remember_this_fact` | `self_teaching_enabled` | Save a new stable server fact or user-specific preference for future conversations. |
+| `create_long_term_memory` | `self_teaching_enabled` | Save a new stable server fact or user-specific preference for future conversations. |
 | `update_long_term_memory` | `self_teaching_enabled` | Replace an outdated long-term memory by ID. |
 | `update_short_term_memory` | Base Tool; unavailable on NovelAI | Save temporary working memory for the current channel/story arc without making it permanent. |
 | `create_task` | Base Tool | Schedule one-time or recurring reminders and self-tasks. |

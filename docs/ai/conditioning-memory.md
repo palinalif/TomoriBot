@@ -41,16 +41,16 @@ Each subcommand also accepts an optional `reason` string.
 Management is centralized under `/conditioning`:
 
 - `/conditioning toggle`
-- `/conditioning history`
-- `/conditioning clear`
+- `/conditioning manage`
 
-`toggle` and `clear` require `ManageGuild`.
+`toggle` and `manage` require `ManageGuild`.
 
 `/conditioning toggle` is server-wide:
 
 - it flips reward or punishment prompt injection for every persona in that server
 - it does not require picking a persona
-- `/conditioning history` and `/conditioning clear` remain persona-specific
+- `/conditioning manage` remains persona-specific
+- `/conditioning manage` now shows both reward and punishment entries in one modal, separated with ❤️ and 💀 markers
 
 ## Storage Rules
 

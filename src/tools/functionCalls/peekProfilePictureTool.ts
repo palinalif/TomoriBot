@@ -178,17 +178,6 @@ export class PeekProfilePictureTool extends BaseTool {
     log.info(`Processing profile picture for identity: ${targetIdentity} - Reason: ${reason}`);
 
     try {
-      await sendToolProgressNotice(
-        context,
-        "profile_picture_analysis",
-        {
-          titleKey: "genai.profile_picture.analyzing_title",
-          descriptionKey: "genai.profile_picture.analyzing_description",
-          color: ColorCode.INFO,
-        },
-        "PeekProfilePictureTool",
-      );
-
       const avatarData = await resolveAvatarByIdentity(targetIdentity, context, {
         forceStatic: true,
       });
@@ -222,6 +211,18 @@ export class PeekProfilePictureTool extends BaseTool {
       // vision model is configured, call the vision model directly with the avatar image
       // and return a text description. The primary model then responds to that description.
       if (!context.tomoriState.llm.sees_images && context.tomoriState.vision_llm) {
+        await sendToolProgressNotice(
+          context,
+          "image_analysis",
+          {
+            titleKey: "genai.vision.analyzing_title",
+            descriptionKey: "genai.vision.analyzing_description",
+            footerKey: "genai.vision.analyzing_footer",
+            color: ColorCode.INFO,
+          },
+          "PeekProfilePictureTool",
+        );
+
         return await this.redirectToVisionModel(preparedImages, targetTypeLabel, userDisplayText, reason, context);
       }
 

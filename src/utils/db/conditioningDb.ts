@@ -310,8 +310,7 @@ export async function loadConditioningGroupsForPersona(
 export async function deleteConditioningGroupsForPersona(
   serverId: number,
   personaLineageId: number,
-  conditioningType: ConditioningType,
-  groups: Array<Pick<ConditioningGroup, "actionKey" | "reasonNormalized">>,
+  groups: Array<Pick<ConditioningGroup, "conditioningType" | "actionKey" | "reasonNormalized">>,
 ): Promise<number> {
   if (groups.length === 0) return 0;
 
@@ -324,7 +323,7 @@ export async function deleteConditioningGroupsForPersona(
 					DELETE FROM conditioning_history
 					WHERE server_id = ${serverId}
 					  AND persona_lineage_id = ${personaLineageId}
-					  AND conditioning_type = ${conditioningType}
+					  AND conditioning_type = ${group.conditioningType}
 					  AND action_key = ${group.actionKey}
 					  AND reason_normalized = ${group.reasonNormalized}
 					RETURNING conditioning_id
@@ -341,7 +340,6 @@ export async function deleteConditioningGroupsForPersona(
       metadata: {
         operation: "deleteConditioningGroupsForPersona",
         personaLineageId,
-        conditioningType,
         groupCount: groups.length,
       },
     });

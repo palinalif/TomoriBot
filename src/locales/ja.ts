@@ -245,11 +245,6 @@ export default {
       analyzing_footer: "画像の数によって少し時間がかかる場合があります",
     },
 
-    profile_picture: {
-      analyzing_title: "👤 プロフィール画像を解析中...",
-      analyzing_description: "指定されたプロフィール画像を取得して解析しています",
-    },
-
     gif: {
       processing_title: "🎞️ GIFを処理中...",
       processing_description: "詳細に確認するため、指定されたGIFからキーフレームを抽出しています",
@@ -1630,6 +1625,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
         provider_choice_deepseek: `DeepSeek`,
+        provider_choice_custom: `Custom Provider`,
         provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
@@ -1679,6 +1675,24 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`deepseek-reasoner\` はシンキング／推論モデルで、応答が遅くなる場合があります
 - セットアップ後は利用可能なDeepSeekテキストモデル間で切り替えられます`,
         deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
+        // Custom Provider
+        custom_title: `カスタムプロバイダーのセットアップ`,
+        custom_description: `Ollama・vLLM・LiteLLM・OneAPI・KoboldCPPなど、任意のOpenAI互換エンドポイントに接続できます。
+
+**エンドポイントURL**
+カスタムプロバイダーを選択する際に、APIキーフィールドにベースURLを入力してください。
+例: \`https://my-server.com/v1\`
+\`/chat/completions\` は自動で付加されます。自分で追加しないでください。
+本番環境では**HTTPS**かつ公開アクセス可能なURLが必要です（localhostやプライベートIPは不可）。
+
+**モデル名**
+URL入力後に表示される機能設定プロンプトで設定します。エンドポイントが期待する正確な名前を入力してください。例: Ollamaなら \`gemma3:latest\`、プロキシならそのモデルID。
+リクエストの \`model\` フィールドとして送信されます。
+
+**APIキー / Bearerトークン**
+オプションです。セットアップ後に \`/config apikey set\` で認証トークンを保存できます。
+設定した場合、\`Authorization: Bearer {token}\` として送信されます。
+認証不要なエンドポイントでは設定不要です。`,
         // NVIDIA NIM
         nvidia_title: `NVIDIA NIM APIキーの設定`,
         nvidia_description: `NVIDIA NIMは、NVIDIAのAPIカタログを通じてホスト型のチャット、埋め込み、画像生成を提供します。
@@ -2473,7 +2487,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         select_persona_title: `管理するペルソナを選択`,
         reason_line: `Reason: \`\`{reason}\`\``,
         reward_footer: `❤️ {bot}はこれを覚えておきます。管理は /conditioning を使用してください。`,
-        punish_footer: `👻 {bot}はこれを覚えておきます。管理は /conditioning を使用してください。`,
+        punish_footer: `💀 {bot}はこれを覚えておきます。管理は /conditioning を使用してください。`,
         type_reward: `ご褒美条件付け`,
         type_punish: `おしおき条件付け`,
       },
@@ -2490,43 +2504,29 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         enabled_success_description: `このサーバー内の全 {persona_count} ペルソナで、保存済みの{type_label}をプロンプトへ注入するようにしました。`,
         disabled_success_description: `このサーバー内の全 {persona_count} ペルソナで、保存済みの{type_label}のプロンプト注入を無効にしました。新しい記録は引き続き保存されます。`,
       },
-      history: {
-        description: `保存されている条件付け履歴を表示します。`,
-        type_description: `表示する条件付けの種類。`,
-        type_choice_reward: `ご褒美`,
-        type_choice_punish: `おしおき`,
-        title_reward: `ご褒美条件付け履歴`,
-        title_punish: `おしおき条件付け履歴`,
-        none_title: `条件付け履歴はありません`,
-        none_description: `{persona_name}には{type_label}の履歴がまだありません。`,
-        status_enabled: `有効`,
-        status_disabled: `無効`,
-        summary: `**ペルソナ:** {persona_name}\n**プロンプト注入:** {status_label}\n**項目数:** {entry_count}\n\n{entries}{more_entries}`,
-        entry_with_reason: `• {action_label} ×{count} / 実行者: {users} / 更新 <t:{updated_at}:R>\n理由: 「{reason}」`,
-        entry_without_reason: `• {action_label} ×{count} / 実行者: {users} / 更新 <t:{updated_at}:R>\n保存のみ（理由なし、プロンプトには注入されません）`,
-        more_entries: `…ほか {count} 件`,
-      },
-      clear: {
-        description: `保存されている条件付け履歴を削除します。`,
-        type_description: `削除する条件付けの種類。`,
-        type_choice_reward: `ご褒美`,
-        type_choice_punish: `おしおき`,
-        none_title: `削除する条件付けはありません`,
-        none_description: `{persona_name}には削除できる{type_label}履歴がありません。`,
+      manage: {
+        description: `保存されている条件付け履歴を管理します。`,
+        marker_reward: `❤️ ご褒美`,
+        marker_punish: `💀 おしおき`,
+        none_title: `管理する条件付けはありません`,
+        none_description: `{persona_name}には管理できる条件付け履歴がありません。`,
         too_many_title: `項目が多すぎます`,
         too_many_description: `{total_entries} 件の項目が見つかりました（{total_pages} ページ）。現在は最大 {max_pages} ページまで対応しています。`,
         select_page_title: `条件付けページを選択`,
-        select_page_description: `{persona_name}の{type_label}を管理するページを選択してください。\n項目数: {total_entries}\nページ数: {total_pages}`,
-        checkbox_label: `残す項目`,
-        checkbox_label_continued: `残す項目（続き）`,
-        checkbox_description: `チェックを残すと保持されます。チェックを外すと、このペルソナの条件付けグループが削除されます。`,
-        option_reason_description: `合計 {count} 回 • 理由: 「{reason}」`,
-        option_stored_only_description: `合計 {count} 回 • 保存のみ（プロンプト注入なし）`,
-        modal_title: `条件付けを削除`,
+        select_page_description: `{persona_name}の条件付け項目を管理するページを選択してください。\n項目数: {total_entries}\nページ数: {total_pages}\nご褒美は ❤️、おしおきは 💀 で表示されます。`,
+        reward_checkbox_label: `❤️ ご褒美項目`,
+        reward_checkbox_label_continued: `❤️ ご褒美項目（続き）`,
+        reward_checkbox_description: `チェックを残すと保持されます。チェックを外すと、このペルソナのご褒美条件付けグループが削除されます。`,
+        punish_checkbox_label: `💀 おしおき項目`,
+        punish_checkbox_label_continued: `💀 おしおき項目（続き）`,
+        punish_checkbox_description: `チェックを残すと保持されます。チェックを外すと、このペルソナのおしおき条件付けグループが削除されます。`,
+        option_reason_description: `{type_marker} • 合計 {count} 回 • 理由: 「{reason}」`,
+        option_stored_only_description: `{type_marker} • 合計 {count} 回 • 保存のみ（プロンプト注入なし）`,
+        modal_title: `条件付けを管理`,
         no_changes_title: `変更はありません`,
         no_changes_description: `すべてチェックされたままだったため、削除は行われませんでした。`,
-        success_title: `条件付けを削除しました`,
-        success_description: `{persona_name}の{type_label}グループを {removed_groups} 件削除しました（保存行 {deleted_rows} 件を削除）。`,
+        success_title: `条件付けを更新しました`,
+        success_description: `{persona_name}のご褒美グループを {reward_groups} 件、おしおきグループを {punish_groups} 件削除しました（保存行 {deleted_rows} 件を削除）。`,
       },
     },
 
@@ -2692,11 +2692,6 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           no_keys_title: `ローテーションキーがありません`,
           no_keys_description: `削除するローテーションキーがありません。メインAPIキーのみが設定されています。`,
         },
-        help: {
-          description: `カスタムプロバイダー（OpenAI互換エンドポイント）のセットアップ方法。`,
-          title: `カスタムプロバイダーのセットアップ`,
-          body: `Ollama・vLLM・LiteLLM・OneAPI・KoboldCPPなど、任意のOpenAI互換エンドポイントに接続できます。\n\n**エンドポイントURL**\nカスタムプロバイダーを選択する際に、APIキーフィールドにベースURLを入力してください。\n例: \`https://my-server.com/v1\`\n\`/chat/completions\` は自動で付加されます。自分で追加しないでください。\n本番環境では**HTTPS**かつ公開アクセス可能なURLが必要です（localhostやプライベートIPは不可）。\n\n**モデル名**\nURL入力後に表示される機能設定プロンプトで設定します。エンドポイントが期待する正確な名前を入力してください。例: Ollamaなら \`gemma3:latest\`、プロキシならそのモデルID。\nリクエストの \`model\` フィールドとして送信されます。\n\n**APIキー / Bearerトークン**\nオプションです。セットアップ後に \`/config apikey set\` で認証トークンを保存できます。\n設定した場合、\`Authorization: Bearer {token}\` として送信されます。\n認証不要なエンドポイントでは設定不要です。`,
-        },
       },
       // カスタムプロバイダー設定
       custom: {
@@ -2836,8 +2831,6 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           notice_image_editing_description: `画像編集・インペイント通知を表示します。`,
           notice_image_analysis_label: `画像解析`,
           notice_image_analysis_description: `画像解析通知を表示します。`,
-          notice_profile_picture_analysis_label: `プロフィール画像解析`,
-          notice_profile_picture_analysis_description: `プロフィール画像解析通知を表示します。`,
           notice_gif_processing_label: `GIF処理`,
           notice_gif_processing_description: `GIF処理通知を表示します。`,
           notice_youtube_processing_label: `YouTube処理`,

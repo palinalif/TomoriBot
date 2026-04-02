@@ -15,7 +15,7 @@ import { resolveUserTarget } from "@/utils/discord/targetResolver";
 export class MemoryTool extends BaseTool {
   name = "create_long_term_memory";
   description =
-    "Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about a user. Avoid saving information that is already known or redundant. IMPORTANT: Use {bot} instead of hardcoded bot names and {user} instead of hardcoded user names in your memory content to prevent confusion when names change. Be proactive in remembering preferences, interests, and context that enhance conversation quality without compromising privacy or accuracy. Avoid saving PII (real names, addresses, and contact info)";
+    "Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about a user. Avoid saving information that is already known or redundant. IMPORTANT: Use {bot} instead of hardcoded bot names and {user} instead of hardcoded user names in your memory content to prevent confusion when names change. Be proactive in remembering user or server preferences, interests, and facts. Do not wait for the user to ask you to remember things and be proactive but avoid saving PII (real names, addresses, and contact info)";
   category = "memory" as const;
   requiresFeatureFlag = "self_teaching";
 

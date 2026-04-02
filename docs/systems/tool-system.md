@@ -181,7 +181,6 @@ Current notice keys:
 - `image_generation`
 - `image_editing`
 - `image_analysis`
-- `profile_picture_analysis`
 - `gif_processing`
 - `youtube_processing`
 - `mcp_tool_call`
