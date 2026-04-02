@@ -19,7 +19,6 @@
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/checkLocalizationKeys.ts",
     "check-limits": "bun run scripts/checkDiscordLimits.ts",
-    "audit-dependencies": "bun run scripts/auditDependencies.ts",
     "audit-keys": "bun run scripts/auditKeyVersions.ts",
     "rotate-keys": "bun run scripts/rotateAllKeys.ts",
     "check-keys": "bun run scripts/checkKeys.ts",
@@ -72,14 +71,13 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "@sapphire/shapeshift": "file:vendor/shapeshift",
     "@aws-sdk/xml-builder>fast-xml-parser": "5.5.9",
     "body-parser": ">=2.2.1",
     "body-parser>qs": "6.14.2",
     "express-rate-limit": "8.2.2",
     "express>qs": "6.14.2",
     "jws": "^3.2.2",
-    "lodash": "^4.17.23",
+    "lodash": "^4.18.1",
     "minimatch": ">=10.2.3",
     "qs": "6.14.2",
     "hono": "$hono",

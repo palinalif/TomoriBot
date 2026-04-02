@@ -167,34 +167,12 @@ Controls include:
 - Memory pressure guard with warning/critical modes and emergency cooldown
 - Safe attachment download with max size + timeout + response validation
 
-## Dependency Audit Policy
-
-Primary files:
-- `.github/workflows/deploy-tomoribot.yml`
-- `scripts/auditDependencies.ts`
-- `patches/README.md`
-
-Current CI behavior:
-- The deployment workflow does not rely on a raw `bun audit --audit-level=high` hard fail anymore.
-- Instead, it runs `bun run audit-dependencies`, which still uses `bun audit` as the source of advisory data but applies a repo-owned policy before deciding whether CI should fail.
-
-Why this exists:
-- Bun reports advisories at the package level, not the dependency-path level.
-- TomoriBot currently carries a documented Matrix-only accepted risk for the `lodash` high advisory when every reachable lockfile path stays under the Matrix bridge dependency chain.
-- The policy is intentionally narrow: exact advisory id, exact package, and exact allowed dependency-path family. If the same advisory appears anywhere else, CI still fails.
-
-Important constraint:
-- This policy is not a blanket ignore list. It is an explicit, reviewable exception for a known dependency chain.
-- Removal conditions and manual patch cleanup steps live in `patches/README.md`.
-- When the Matrix chain or vendored/patch state changes, update `scripts/auditDependencies.ts` and `patches/README.md` together.
-
 ## Operational Checklist
 
 - Keep `.env` and secret material out of version control.
 - Prefer versioned encryption keys (`CRYPTO_SECRET_V*`) even if starting with one version.
 - Run `bun run audit-keys` before removing old key versions.
 - Use `bun run rotate-keys --dry-run` before forced migration.
-- Run `bun run audit-dependencies` when changing dependency security policy, vendored packages, or accepted-risk exceptions.
 - When changing privacy or blacklist behavior in code, verify matching cache invalidation paths (user cache / blacklist cache).
 
 ## Related Docs
