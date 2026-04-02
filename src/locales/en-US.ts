@@ -243,6 +243,11 @@ export default {
       analyzing_footer: "This may take a moment depending on image count",
     },
 
+    profile_picture: {
+      analyzing_title: "👤  Analyzing Profile Picture...",
+      analyzing_description: "Fetching and analyzing the requested profile picture.",
+    },
+
     gif: {
       processing_title: "🎞️  Processing GIF...",
       processing_description: "Extracting keyframes from the requested GIF for closer analysis.",
@@ -2811,6 +2816,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           notice_image_editing_description: `Show image editing or inpaint notices.`,
           notice_image_analysis_label: `Image Analysis`,
           notice_image_analysis_description: `Show image analysis notices.`,
+          notice_profile_picture_analysis_label: `Profile Picture Analysis`,
+          notice_profile_picture_analysis_description: `Show profile picture analysis notices.`,
           notice_gif_processing_label: `GIF Processing`,
           notice_gif_processing_description: `Show GIF processing notices.`,
           notice_youtube_processing_label: `YouTube Processing`,

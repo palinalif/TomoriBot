@@ -265,7 +265,7 @@ const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(process.env.NAI_TOOL_FA
 const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   "update_short_term_memory",
   //"update_long_term_memory",
-  //"remember_this_fact",
+  //"create_long_term_memory",
   //"create_task",
 ]);
 const STREAM_SDK_CALL_TIMEOUT_MS = 120000; // Overall SDK call timeout (120 seconds) — must exceed typical TTFT for slow models
@@ -3573,11 +3573,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   ? tomoriState?.tomori_nickname || "Bot"
                   : msgReferencedMessage.author.username;
 
-              // Get the referenced message content (truncate if too long)
-              let referencedContent = (msgReferencedMessage.content || "[No text content]").replace(/\n/g, " ");
-              if (referencedContent.length > 200) {
-                referencedContent = `${referencedContent.substring(0, 197)}...`;
-              }
+              // Preserve the full quoted reply text; prompt-level history truncation
+              // should decide what to drop, not this inline reply annotation.
+              const referencedContent = formatInlineSystemContent(msgReferencedMessage.content);
 
               // Store referenced message info for later attachment extraction
               // (attachments will be processed after imageAttachments/videoAttachments arrays are declared)
@@ -5934,6 +5932,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     activePersonaId: currentPersona.tomori_id ?? undefined,
                     isUserImpersonation,
                     impersonatedUserId,
+                    contextItems: contextSegments,
                   };
 
                   // Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
@@ -6054,19 +6053,20 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       (toolResult.data as Record<string, unknown>).type === "context_restart_with_image"
                     ) {
                       const restartData = toolResult.data as Record<string, unknown>;
-                      const userId = restartData.user_id as string;
+                      const pendingContextKey = restartData.pending_context_key as string;
+                      const targetIdentity = restartData.target_identity as string;
                       const username = restartData.username as string;
 
                       log.info(
-                        `Profile picture restart signal detected for user: ${username} (${userId}). Enhancing context with avatar image.`,
+                        `Profile picture restart signal detected for ${targetIdentity} (${username}). Enhancing context with avatar image.`,
                       );
 
                       // Get the enhanced context item from external storage
-                      const enhancedContextItem = PeekProfilePictureTool.getPendingEnhancedContext(userId);
+                      const enhancedContextItem = PeekProfilePictureTool.getPendingEnhancedContext(pendingContextKey);
 
                       if (!enhancedContextItem) {
                         log.warn(
-                          `No pending enhanced context found for user ${userId}. Profile picture restart failed.`,
+                          `No pending enhanced context found for key ${pendingContextKey}. Profile picture restart failed.`,
                         );
                         continue;
                       }

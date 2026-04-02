@@ -15,11 +15,12 @@ import { invalidateUserCache } from "../../utils/cache/userCache";
 import { sendStandardEmbed } from "../../utils/discord/embedHelper";
 import { convertMentions } from "../../utils/text/contextBuilder";
 import { isBlacklisted, loadUserRow, getPrivacyLevel, loadPersonalMemoriesForUserLineage } from "@/utils/db/dbRead";
+import { resolveUserTarget } from "@/utils/discord/targetResolver";
 
 export class UpdateLongTermMemoryTool extends BaseTool {
   name = "update_long_term_memory";
   description =
-    "Replace an existing long-term memory (server or personal) by ID. Use this when an existing memory needs revision. For server memories, provide the memory ID shown in context (e.g., ID:24). For personal memories, also provide the target user's Discord ID and nickname, and use the ID shown next to that user's memory.";
+    "Replace an existing long-term memory (server or personal) by ID. Use this when an existing memory needs revision. For server memories, provide the memory ID shown in context (e.g., ID:24). For personal memories, also provide the target user's name as shown in the conversation or current server, and use the ID shown next to that user's memory.";
   category = "memory" as const;
   requiresFeatureFlag = "self_teaching";
 
@@ -35,15 +36,10 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         description:
           "The full replacement memory content. This completely replaces the existing memory. Do NOT insert user IDs or any meta information here.",
       },
-      target_user_discord_id: {
+      target_user: {
         type: "string",
         description:
-          "If updating a personal memory, provide the target user's ID from context. This can be a Discord ID (e.g., '123456789012345678') or a bridge user ID (e.g., '@alice:matrix.org').",
-      },
-      target_user_nickname: {
-        type: "string",
-        description:
-          "If updating a personal memory, also provide the target user's nickname as seen in the current conversation or profile. This is used to confirm the target user.",
+          "If updating a personal memory, provide the target user's name as seen in the current conversation or server. Use natural names, not IDs.",
       },
     },
     required: ["memory_id", "memory_content"],
@@ -84,63 +80,11 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 
     const memoryIdArg = args.memory_id;
     const memoryContentArg = args.memory_content;
-    let targetUserDiscordIdArg = args.target_user_discord_id as string | undefined;
-    let targetUserNicknameArg = args.target_user_nickname as string | undefined;
-
-    // NovelAI GLM recovery: resolve missing or garbled user params from context.
-    // GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
-    // (e.g., last few digits off). When the model is clearly trying to update a personal
-    // memory about the message author, resolve from context instead of failing.
-    if (context.message?.author && (targetUserDiscordIdArg || targetUserNicknameArg)) {
-      const authorId = context.message.author.id;
-      const guildMember = context.message.guild?.members.cache.get(authorId);
-      const authorDisplayName = guildMember?.displayName ?? context.message.author.username;
-
-      // 1. Fuzzy-match Discord ID: if the provided ID is close to a guild member, use the correct one.
-      if (targetUserDiscordIdArg && targetUserDiscordIdArg !== authorId) {
-        const guild = context.message.guild;
-        if (guild) {
-          const exactMember = guild.members.cache.get(targetUserDiscordIdArg);
-          if (!exactMember) {
-            try {
-              const idDiff =
-                BigInt(targetUserDiscordIdArg) > BigInt(authorId)
-                  ? BigInt(targetUserDiscordIdArg) - BigInt(authorId)
-                  : BigInt(authorId) - BigInt(targetUserDiscordIdArg);
-              if (idDiff < 1000n && idDiff > 0n) {
-                log.info(
-                  `Update memory tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${authorId}" (diff: ${idDiff}, likely message author)`,
-                );
-                targetUserDiscordIdArg = authorId;
-              }
-            } catch {
-              // BigInt parsing failed — ID contains non-numeric characters, skip fuzzy match
-            }
-          }
-        }
-      }
-
-      // 2. Auto-fill missing target_user_nickname from context
-      if (!targetUserNicknameArg?.trim() && targetUserDiscordIdArg === authorId) {
-        log.info(
-          `Update memory tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
-        );
-        targetUserNicknameArg = authorDisplayName;
-      }
-
-      // 3. Auto-fill missing target_user_discord_id if nickname matches the author
-      if (!targetUserDiscordIdArg?.trim() && targetUserNicknameArg?.trim()) {
-        const providedLower = targetUserNicknameArg.toLowerCase();
-        const authorNameLower = authorDisplayName.toLowerCase();
-        const authorUsernameLower = context.message.author.username.toLowerCase();
-        if (providedLower === authorNameLower || providedLower === authorUsernameLower) {
-          log.info(
-            `Update memory tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
-          );
-          targetUserDiscordIdArg = authorId;
-        }
-      }
-    }
+    const targetUserArg = args.target_user as string | undefined;
+    const legacyTargetUserDiscordIdArg = args.target_user_discord_id as string | undefined;
+    const legacyTargetUserNicknameArg = args.target_user_nickname as string | undefined;
+    const requestedTargetUser =
+      targetUserArg?.trim() || legacyTargetUserNicknameArg?.trim() || legacyTargetUserDiscordIdArg?.trim();
 
     if (typeof memoryIdArg !== "number" || !Number.isSafeInteger(memoryIdArg) || memoryIdArg <= 0) {
       return {
@@ -185,25 +129,49 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       };
     }
 
-    const targetUserDiscordId = typeof targetUserDiscordIdArg === "string" ? targetUserDiscordIdArg.trim() : "";
-    const targetUserNickname = typeof targetUserNicknameArg === "string" ? targetUserNicknameArg.trim() : "";
-    const hasTargetUserId = targetUserDiscordId.length > 0;
-    const hasTargetUserNickname = targetUserNickname.length > 0;
+    let resolvedTargetUserId: string | undefined;
+    let resolvedTargetUserLabel: string | undefined;
+    if (requestedTargetUser) {
+      const userResolution = await resolveUserTarget(requestedTargetUser, context);
+      if (userResolution.status === "ambiguous") {
+        return {
+          success: false,
+          error: `Multiple users match "${requestedTargetUser}". Please clarify which one you mean: ${userResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
+          data: {
+            status: "memory_update_failed_ambiguous_user",
+            reason: "Multiple users matched the requested target.",
+            candidates: userResolution.candidates.map((candidate) => candidate.label),
+          },
+        };
+      }
 
-    if (hasTargetUserId !== hasTargetUserNickname) {
-      return {
-        success: false,
-        error:
-          "The 'target_user_discord_id' and 'target_user_nickname' arguments must be provided together when updating a personal memory.",
-        data: {
-          status: "memory_update_failed_invalid_args",
-          reason:
-            "The 'target_user_discord_id' and 'target_user_nickname' arguments must be provided together when updating a personal memory.",
-        },
-      };
+      if (userResolution.status === "not_found") {
+        return {
+          success: false,
+          error: `Could not find a user matching "${requestedTargetUser}" in this conversation or server.`,
+          data: {
+            status: "memory_update_failed_user_not_found",
+            reason: "The requested user was not found in this conversation or server.",
+          },
+        };
+      }
+
+      if (userResolution.isBridgeUser) {
+        return {
+          success: false,
+          error: "Bridge users only support server-wide memories, so personal memories cannot be updated for them.",
+          data: {
+            status: "memory_update_failed_invalid_scope",
+            reason: "Bridge users do not support personal memory updates.",
+          },
+        };
+      }
+
+      resolvedTargetUserId = userResolution.targetId;
+      resolvedTargetUserLabel = userResolution.displayLabel;
     }
 
-    const isPersonalUpdate = hasTargetUserId && hasTargetUserNickname;
+    const isPersonalUpdate = Boolean(resolvedTargetUserId);
 
     const tomoriState = context.tomoriState;
     if (!tomoriState?.server_id || !tomoriState.tomori_id) {
@@ -309,7 +277,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
 
       // 2) Personal memory update (index-based, requires target user)
-      if (targetUserDiscordId === context.client.user?.id) {
+      if (resolvedTargetUserId === context.client.user?.id) {
         return {
           success: false,
           error: "Cannot update personal memories about the bot. Use a server memory instead.",
@@ -320,14 +288,14 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         };
       }
 
-      const targetUserRow = await loadUserRow(targetUserDiscordId);
+      const targetUserRow = await loadUserRow(resolvedTargetUserId as string);
       if (!targetUserRow || !targetUserRow.user_id) {
         return {
           success: false,
-          error: `The user with Discord ID '${targetUserDiscordId}' was not found in Tomori's records`,
+          error: `Tomori doesn't know ${resolvedTargetUserLabel} yet, so this personal memory cannot be updated.`,
           data: {
             status: "memory_update_failed_user_not_found",
-            reason: `The user with Discord ID '${targetUserDiscordId}' was not found in Tomori's records.`,
+            reason: "Tomori can only update personal memories for users it already knows.",
           },
         };
       }
@@ -336,8 +304,8 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       let guildMember = null;
       if (guild) {
         guildMember =
-          guild.members.cache.get(targetUserDiscordId) ||
-          (await guild.members.fetch(targetUserDiscordId).catch(() => null));
+          guild.members.cache.get(resolvedTargetUserId as string) ||
+          (await guild.members.fetch(resolvedTargetUserId as string).catch(() => null));
         if (!guildMember) {
           return {
             success: false,
@@ -350,7 +318,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         }
       } else {
         const triggererDiscId = context.message?.author?.id || context.userId;
-        if (!triggererDiscId || triggererDiscId !== targetUserDiscordId) {
+        if (!triggererDiscId || triggererDiscId !== resolvedTargetUserId) {
           return {
             success: false,
             error: "Personal memory owner is not in this conversation",
@@ -361,38 +329,14 @@ export class UpdateLongTermMemoryTool extends BaseTool {
           };
         }
       }
-
-      // Two-factor nickname validation (same logic as remember_this_fact)
-      const actualNicknameInDB = targetUserRow.user_nickname;
-      const guildDisplayName = guildMember?.displayName?.toLowerCase();
-      const discordUsername = guildMember?.user?.username?.toLowerCase();
-      const providedNicknameLower = targetUserNickname.toLowerCase();
-      const dbNicknameLower = actualNicknameInDB.toLowerCase();
-      const nicknameValid =
-        dbNicknameLower === providedNicknameLower ||
-        providedNicknameLower === guildDisplayName ||
-        dbNicknameLower === guildDisplayName ||
-        providedNicknameLower === discordUsername;
-
-      if (!nicknameValid) {
-        return {
-          success: false,
-          error: `The provided nickname '${targetUserNickname}' does not match the records for user ID '${targetUserDiscordId}'`,
-          data: {
-            status: "memory_update_failed_nickname_mismatch",
-            reason: `The provided nickname '${targetUserNickname}' does not match the records for user ID '${targetUserDiscordId}'.`,
-          },
-        };
-      }
-
-      const userPrivacyLevel = await getPrivacyLevel(targetUserDiscordId);
+      const userPrivacyLevel = await getPrivacyLevel(resolvedTargetUserId as string);
       if (userPrivacyLevel === PrivacyLevel.PARTIAL || userPrivacyLevel === PrivacyLevel.FULL) {
         return {
           success: false,
-          error: `Cannot update personal memory: User ${targetUserNickname} has privacy restrictions.`,
+          error: `Cannot update personal memory: ${resolvedTargetUserLabel} has privacy restrictions.`,
           data: {
             status: "memory_update_failed_privacy_restricted",
-            reason: `The user ${targetUserNickname} has chosen to restrict personal memory storage.`,
+            reason: `The user ${resolvedTargetUserLabel} has chosen to restrict personal memory storage.`,
           },
         };
       }
@@ -435,8 +379,9 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         };
       }
 
-      invalidateUserCache(targetUserDiscordId);
+      invalidateUserCache(resolvedTargetUserId as string);
       const userDisplayName =
+        resolvedTargetUserLabel ||
         guildMember?.displayName ||
         guildMember?.user.username ||
         targetUserRow.user_nickname ||
@@ -451,7 +396,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         tomoriState?.config.personal_memories_enabled,
       );
 
-      const isUserBlacklisted = guild ? await isBlacklisted(serverDiscId, targetUserDiscordId) : false;
+      const isUserBlacklisted = guild ? await isBlacklisted(serverDiscId, resolvedTargetUserId as string) : false;
       const footerKey = !tomoriState.config.personal_memories_enabled
         ? "genai.self_teach.personal_memory_footer_personalization_disabled"
         : isUserBlacklisted
@@ -494,7 +439,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
           scope: "target_user",
           memory_id: memoryId,
           content_saved: newContent,
-          target_user_discord_id: targetUserDiscordId,
+          target_user: userDisplayName,
         },
       };
     } catch (error) {

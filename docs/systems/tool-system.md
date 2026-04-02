@@ -21,7 +21,7 @@ Built-in tools are class-based:
 
 From `src/tools/functionCalls/`:
 
-- `remember_this_fact` (`memoryTool.ts`)
+- `create_long_term_memory` (`memoryTool.ts`)
 - `update_long_term_memory` (`updateLongTermMemoryTool.ts`)
 - `update_short_term_memory` (`updateShortTermMemoryTool.ts`)
 - `create_task` (`reminderTool.ts`)
@@ -38,12 +38,13 @@ From `src/tools/functionCalls/`:
 Current `cross_channel_message` runtime notes:
 
 - can target another text channel immediately without scheduling
-- also supports thread targets by exact `channel_id`
-- fallback `channel_name` lookup checks both guild channel names and active thread titles
+- target selection is now name-first through `target_channel`; exact active thread titles are supported alongside channel names
+- deprecated `channel_id` / `channel_name` inputs are still accepted at execution time for backward compatibility, but they are no longer advertised to the model
+- ambiguous channel or thread names return a clarification failure instead of guessing
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
 - the `/server crosschannel-blocklist` setting blocks tool-driven visits into listed channels, and blocked forum/media parents also block thread targets under them
 - tool-driven cross-channel dispatch now preserves the active sender identity, including alter personas and `/bot impersonate` user impersonation turns, for both the target-channel visit and optional boomerang follow-up
-- Discord channel/thread links in prompt context are normalized into the same readable `#name` + ID form used for channel mentions, so pasted links are easier for the model to reuse as `channel_id` targets
+- Discord channel/thread links in prompt context are normalized into plain readable `#name` text
 - tool-driven cross-channel visits now hide `cross_channel_message` for the dispatched turn itself and for the boomerang follow-up turn, preventing nested re-dispatch loops
 - boomerang return context now assumes the original assignment is already in history and asks for a concise report-back instead of restating the task
 
@@ -60,6 +61,21 @@ Current `generate_image_nai` runtime notes:
 - tool-facing schema guidance now also explicitly prefers `self` over the bot's Discord user ID when the active persona is the intended target, without assuming a specific bot or persona name
 - context building now includes saved NAI appearance tags inline on the relevant user/persona conversation entries instead of a separate `# Image Profiles` knowledge block, so image identity guidance stays attached to the same entity description the model is already reading
 - provider tool adapters now preserve nested array/object tool schemas recursively, so structured tool params such as `characters[]` survive provider conversion
+
+Current name-resolution notes for built-in tools:
+
+- `create_task` now advertises `target_user` and optional `target_channel`
+- `create_long_term_memory` and `update_long_term_memory` now advertise `target_user`
+- `peek_profile_picture` and `generate_image` now advertise `target_identity`
+- `peek_profile_picture` now supplies the target Discord user's profile banner alongside the avatar when a banner exists, so vision-capable flows can inspect both images together
+- shared resolution is handled by `src/utils/discord/targetResolver.ts`
+- user resolution order is: current-conversation aliases, exact guild display name, exact DB nickname intersected with guild membership, exact global name, exact username
+- channel resolution is exact text-channel name, exact active thread title, then unique normalized match across both sets
+- matching is exact plus unique normalized only; V1 intentionally avoids fuzzy matching
+- ambiguous results never auto-pick and instead return candidate labels for clarification
+- if a Discord user resolves successfully but has no Tomori user row yet, reminder/personal-memory tools fail with a human-readable "Tomori doesn't know this user yet" style error
+- bridge users can still be resolved by name from current conversation metadata, but avatar tools reject them and personal-memory creation/update does not create bridge-scoped personal memories
+- message-targeted tools such as `read_document`, `pin_selected_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows remain message-ID-based in V1
 
 Current `update_short_term_memory` runtime notes:
 
@@ -165,6 +181,7 @@ Current notice keys:
 - `image_generation`
 - `image_editing`
 - `image_analysis`
+- `profile_picture_analysis`
 - `gif_processing`
 - `youtube_processing`
 - `mcp_tool_call`

@@ -7,8 +7,8 @@ import { log } from "../../utils/misc/logger";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { validateFutureTime, formatTimeRemaining } from "../../utils/text/stringHelper";
 import { parseTimeWithOffset, formatUTCOffset, formatTimeWithOffset } from "../../utils/text/timezoneHelper";
-import { isBridgeUserId, isMatrixBridgeWebhookUsername } from "../../utils/bridge";
-import { resolveBridgeUserId } from "../../utils/matrix";
+import { isMatrixBridgeWebhookUsername } from "../../utils/bridge";
+import { resolveChannelTarget, resolveUserTarget } from "@/utils/discord/targetResolver";
 
 /**
  * Tool for creating scheduled tasks that trigger messages at specific times
@@ -27,15 +27,10 @@ export class ReminderTool extends BaseTool {
         description:
           "What the task is for. IMPORTANT: Be very descriptive and detailed (2-4 sentences) because you might not remember the context after a long time. Include WHAT the task is about, WHY it was set, and any relevant details from the conversation. The more context you provide now, the more helpful the task will be later, but do NOT include user/channel IDs or any meta information in this content.",
       },
-      target_user_nickname: {
+      target_user: {
         type: "string",
         description:
-          "Nickname of the Discord user this task should notify, as you see them in the current conversation or their user profile information.",
-      },
-      target_user_discord_id: {
-        type: "string",
-        description:
-          "Discord ID of the user this task should notify (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
+          "Name of the user this task should notify, as shown in the current conversation or current server. Use natural names, not IDs. If this is a task for yourself instead, set self_reminder to true.",
       },
       reminder_time: {
         type: "string",
@@ -72,13 +67,13 @@ export class ReminderTool extends BaseTool {
         description:
           "OPTIONAL: Set to true when this is a task for you to execute yourself. This disables user mentions and focuses the prompt on the task.",
       },
-      channel_id: {
+      target_channel: {
         type: "string",
         description:
-          "OPTIONAL: Discord channel ID where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
+          "OPTIONAL: Channel or active thread name where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
       },
     },
-    required: ["reminder_purpose", "target_user_nickname", "target_user_discord_id", "repetition_interval_hours"],
+    required: ["reminder_purpose", "repetition_interval_hours"],
   };
 
   /**
@@ -113,8 +108,9 @@ export class ReminderTool extends BaseTool {
 
     // Extract arguments
     const reminderPurposeArg = args.reminder_purpose as string;
-    let targetUserNicknameArg = args.target_user_nickname as string;
-    let targetUserDiscordIdArg = args.target_user_discord_id as string;
+    const targetUserArg = args.target_user as string | undefined;
+    const legacyTargetUserNicknameArg = args.target_user_nickname as string | undefined;
+    const legacyTargetUserDiscordIdArg = args.target_user_discord_id as string | undefined;
     let reminderTimeArg = args.reminder_time as string | undefined;
     const minutesFromNowArg = args.minutes_from_now as number | undefined;
     const hoursFromNowArg = args.hours_from_now as number | undefined;
@@ -122,80 +118,8 @@ export class ReminderTool extends BaseTool {
     const monthsFromNowArg = args.months_from_now as number | undefined;
     let repetitionIntervalHoursArg = args.repetition_interval_hours as number | undefined;
     const selfReminderArg = args.self_reminder as boolean | undefined;
-    const requestedChannelIdArg = args.channel_id as string | undefined;
-
-    // NovelAI GLM recovery: resolve missing or garbled user/channel params from context.
-    // GLM frequently omits target_user_nickname and generates slightly wrong Discord IDs
-    // (e.g., last few digits off). When the model is clearly trying to target the message
-    // author, resolve from context instead of failing.
-    if (context.message?.author && selfReminderArg !== true) {
-      const authorId = context.message.author.id;
-      const guildMember = context.message.guild?.members.cache.get(authorId);
-      const authorDisplayName = guildMember?.displayName ?? context.message.author.username;
-
-      // 1. Fuzzy-match Discord ID: if the provided ID doesn't match any cached guild member,
-      //    search ALL cached members for the closest snowflake ID within a tolerance of 1000.
-      //    GLM often gets IDs wrong by a few digits due to floating-point precision loss
-      //    on large snowflake IDs (which exceed Number.MAX_SAFE_INTEGER).
-      //    Skip fuzzy-match entirely for Matrix user IDs (@user:host) — BigInt parsing would fail.
-      if (targetUserDiscordIdArg && !isBridgeUserId(targetUserDiscordIdArg)) {
-        const guild = context.message.guild;
-        if (guild) {
-          const exactMember = guild.members.cache.get(targetUserDiscordIdArg);
-          if (!exactMember) {
-            try {
-              const garbledId = BigInt(targetUserDiscordIdArg);
-              let closestMemberId: string | null = null;
-              let smallestDiff = BigInt(1000); // threshold: < 1000
-
-              // Scan all cached guild members for the closest matching ID
-              for (const [memberId] of guild.members.cache) {
-                const diff = garbledId > BigInt(memberId) ? garbledId - BigInt(memberId) : BigInt(memberId) - garbledId;
-                if (diff > 0n && diff < smallestDiff) {
-                  smallestDiff = diff;
-                  closestMemberId = memberId;
-                }
-              }
-
-              if (closestMemberId) {
-                log.info(
-                  `Reminder tool: Correcting garbled Discord ID "${targetUserDiscordIdArg}" → "${closestMemberId}" (diff: ${smallestDiff}, fuzzy-matched from guild members cache)`,
-                );
-                targetUserDiscordIdArg = closestMemberId;
-              }
-            } catch {
-              // BigInt parsing failed — ID contains non-numeric characters, skip fuzzy match
-            }
-          }
-        }
-      }
-
-      // 2. Auto-fill missing target_user_nickname from context
-      if (!targetUserNicknameArg?.trim() && targetUserDiscordIdArg === authorId) {
-        log.info(
-          `Reminder tool: Auto-filling missing target_user_nickname with "${authorDisplayName}" (message author)`,
-        );
-        targetUserNicknameArg = authorDisplayName;
-      }
-
-      // 3. Auto-fill missing target_user_discord_id if nickname matches the author
-      if (!targetUserDiscordIdArg?.trim() && targetUserNicknameArg?.trim()) {
-        const providedLower = targetUserNicknameArg.toLowerCase();
-        const authorNameLower = authorDisplayName.toLowerCase();
-        const authorUsernameLower = context.message.author.username.toLowerCase();
-        if (providedLower === authorNameLower || providedLower === authorUsernameLower) {
-          log.info(
-            `Reminder tool: Auto-filling missing target_user_discord_id with "${authorId}" (nickname "${targetUserNicknameArg}" matches message author)`,
-          );
-          targetUserDiscordIdArg = authorId;
-        }
-      }
-    }
-
-    // Matrix ID recovery: LLMs occasionally drop or mangle the Matrix user ID.
-    // resolveBridgeUserId() handles both failure modes (missing "@" prefix and plain
-    // display name) and is a no-op for valid bridge IDs and Discord snowflakes.
-    targetUserDiscordIdArg = resolveBridgeUserId(targetUserDiscordIdArg);
+    const targetChannelArg = args.target_channel as string | undefined;
+    const legacyChannelIdArg = args.channel_id as string | undefined;
 
     // NovelAI GLM recovery: normalize absolute time format.
     // GLM may output "2025-09-05 15:30" (space), "2025-09-05T15:30" (ISO), or
@@ -241,6 +165,9 @@ export class ReminderTool extends BaseTool {
 
     const requestingUserRow = resolvedUserId ? await loadUserRow(resolvedUserId) : null;
     const channelId = context.channel.id;
+    const requestedTargetUser =
+      targetUserArg?.trim() || legacyTargetUserNicknameArg?.trim() || legacyTargetUserDiscordIdArg?.trim();
+    const requestedTargetChannel = targetChannelArg?.trim() || legacyChannelIdArg?.trim();
 
     if (
       !tomoriState ||
@@ -289,28 +216,19 @@ export class ReminderTool extends BaseTool {
     const botUserId = context.client.user?.id;
     const isSelfReminder =
       selfReminderArg === true ||
-      (typeof targetUserDiscordIdArg === "string" && !!botUserId && targetUserDiscordIdArg.trim() === botUserId);
+      requestedTargetUser?.toLowerCase() === "self" ||
+      (typeof legacyTargetUserDiscordIdArg === "string" &&
+        !!botUserId &&
+        legacyTargetUserDiscordIdArg.trim() === botUserId);
 
     if (!isSelfReminder) {
-      if (typeof targetUserNicknameArg !== "string" || !targetUserNicknameArg.trim()) {
+      if (!requestedTargetUser) {
         return {
           success: false,
-          error: "The 'target_user_nickname' argument was missing, empty, or not a string",
+          error: "The 'target_user' argument is required unless self_reminder is true.",
           data: {
             status: "reminder_creation_failed_invalid_args",
-            reason: "The 'target_user_nickname' argument was missing, empty, or not a string",
-          },
-        };
-      }
-
-      // Validate target user Discord ID
-      if (typeof targetUserDiscordIdArg !== "string" || !targetUserDiscordIdArg.trim()) {
-        return {
-          success: false,
-          error: "The 'target_user_discord_id' argument was missing, empty, or not a string",
-          data: {
-            status: "reminder_creation_failed_invalid_args",
-            reason: "The 'target_user_discord_id' argument was missing, empty, or not a string",
+            reason: "The 'target_user' argument is required unless self_reminder is true.",
           },
         };
       }
@@ -348,101 +266,47 @@ export class ReminderTool extends BaseTool {
 
     // Resolve and validate target channel (optional override)
     let resolvedChannelId = channelId;
-    if (typeof requestedChannelIdArg === "string") {
-      const trimmedChannelId = requestedChannelIdArg.trim();
-      if (!trimmedChannelId) {
+    let resolvedChannelLabel = "Current channel";
+    if (requestedTargetChannel) {
+      if (!context.guildId) {
         return {
           success: false,
-          error: "The 'channel_id' argument was empty or invalid",
+          error: "Channel overrides are not supported in DMs.",
           data: {
             status: "reminder_creation_failed_invalid_channel",
-            reason: "The 'channel_id' argument was empty or invalid.",
+            reason: "Channel overrides are not supported in DMs.",
           },
         };
       }
 
-      // If channel_id is provided in a DM context, only allow the current channel
-      if (!context.guildId) {
-        if (trimmedChannelId !== channelId) {
-          return {
-            success: false,
-            error: "Channel overrides are not supported in DMs",
-            data: {
-              status: "reminder_creation_failed_invalid_channel",
-              reason: "Channel overrides are not supported in DMs. Use the current channel.",
-            },
-          };
-        }
-      } else {
-        let targetChannel = await context.client.channels.fetch(trimmedChannelId).catch(() => null);
-
-        // GLM fuzzy recovery: if exact channel ID not found, search all guild
-        // channels for the closest snowflake ID within a tolerance of 1000.
-        // GLM loses precision on large snowflake IDs due to float rounding.
-        if (!targetChannel && context.guildId) {
-          try {
-            const garbledId = BigInt(trimmedChannelId);
-            const guild = await context.client.guilds.fetch(context.guildId).catch(() => null);
-            if (guild) {
-              let closestChannelId: string | null = null;
-              let smallestDiff = BigInt(1000); // threshold: < 1000
-
-              // Scan all cached guild channels for the closest matching ID
-              for (const [chId] of guild.channels.cache) {
-                const diff = garbledId > BigInt(chId) ? garbledId - BigInt(chId) : BigInt(chId) - garbledId;
-                if (diff > 0n && diff < smallestDiff) {
-                  smallestDiff = diff;
-                  closestChannelId = chId;
-                }
-              }
-
-              if (closestChannelId) {
-                log.info(
-                  `Reminder tool: Correcting garbled channel ID "${trimmedChannelId}" → "${closestChannelId}" (diff: ${smallestDiff}, fuzzy-matched from guild channels cache)`,
-                );
-                targetChannel = await context.client.channels.fetch(closestChannelId).catch(() => null);
-              }
-            }
-          } catch {
-            // BigInt parsing failed, skip fuzzy match
-          }
-        }
-
-        if (!targetChannel || targetChannel.isDMBased()) {
-          return {
-            success: false,
-            error: `Channel with ID '${trimmedChannelId}' was not found in this server`,
-            data: {
-              status: "reminder_creation_failed_invalid_channel",
-              reason: `Channel not found in server: ${trimmedChannelId}`,
-            },
-          };
-        }
-
-        if (!("guildId" in targetChannel) || targetChannel.guildId !== context.guildId) {
-          return {
-            success: false,
-            error: `Channel with ID '${trimmedChannelId}' was not found in this server`,
-            data: {
-              status: "reminder_creation_failed_invalid_channel",
-              reason: `Channel not found in server: ${trimmedChannelId}`,
-            },
-          };
-        }
-
-        if (!targetChannel.isTextBased()) {
-          return {
-            success: false,
-            error: "The specified channel is not a text-based server channel",
-            data: {
-              status: "reminder_creation_failed_invalid_channel",
-              reason: "The specified channel is not a text-based server channel.",
-            },
-          };
-        }
+      const channelResolution = await resolveChannelTarget(requestedTargetChannel, context);
+      if (channelResolution.status === "ambiguous") {
+        return {
+          success: false,
+          error: `Multiple channels or threads match "${requestedTargetChannel}". Please clarify which one you mean: ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
+          data: {
+            status: "reminder_creation_failed_ambiguous_channel",
+            reason: "Multiple channels or threads matched the requested target.",
+            candidates: channelResolution.candidates.map((candidate) => candidate.label),
+          },
+        };
       }
 
-      resolvedChannelId = trimmedChannelId;
+      if (channelResolution.status === "not_found") {
+        return {
+          success: false,
+          error: `Could not find a text channel or thread matching "${requestedTargetChannel}" in this server.`,
+          data: {
+            status: "reminder_creation_failed_invalid_channel",
+            reason: "The requested channel or thread was not found in this server.",
+          },
+        };
+      }
+
+      resolvedChannelId = channelResolution.channel.id;
+      resolvedChannelLabel = channelResolution.displayLabel;
+    } else if ("name" in context.channel) {
+      resolvedChannelLabel = `#${context.channel.name}`;
     }
 
     // Determine which time method to use and calculate the final reminder time
@@ -507,8 +371,6 @@ export class ReminderTool extends BaseTool {
     }
 
     const reminderPurpose = reminderPurposeArg.trim();
-    const targetUserNickname = targetUserNicknameArg?.trim();
-    const targetUserDiscordId = targetUserDiscordIdArg?.trim();
 
     // Validate that the calculated time is in the future (both absolute and relative times)
     if (!finalReminderTime || !validateFutureTime(finalReminderTime)) {
@@ -538,72 +400,64 @@ export class ReminderTool extends BaseTool {
     }
 
     try {
-      let actualNicknameInDB = targetUserNickname || "Tomori";
-      let resolvedTargetUserId = targetUserDiscordId || "";
+      let actualNicknameInDB = requestedTargetUser || "Tomori";
+      let resolvedTargetUserId = "";
+      let resolvedTargetUserLabel = actualNicknameInDB;
 
       if (isSelfReminder) {
         resolvedTargetUserId = botUserId as string;
         actualNicknameInDB = tomoriState.tomori_nickname || context.client.user?.username || "Tomori";
-      } else if (isBridgeUserId(resolvedTargetUserId)) {
-        // Matrix users have no users table record — their ID is "@user:host" format.
-        // Trust the AI-provided nickname directly (verified by the context builder
-        // which injects their display name from matrixDisplayNameToId).
-        actualNicknameInDB = targetUserNickname;
-        log.info(
-          `Reminder: Target is a Matrix user (${resolvedTargetUserId}), skipping DB lookup and using provided nickname "${actualNicknameInDB}"`,
-        );
+        resolvedTargetUserLabel = actualNicknameInDB;
       } else {
-        // Load target user to verify they exist
-        const targetUserRow = await loadUserRow(resolvedTargetUserId);
-
-        if (!targetUserRow || !targetUserRow.user_id) {
-          log.warn(`Reminder: Target user with Discord ID ${resolvedTargetUserId} not found`);
+        const userResolution = await resolveUserTarget(requestedTargetUser as string, context);
+        if (userResolution.status === "ambiguous") {
           return {
             success: false,
-            error: `The user with Discord ID '${resolvedTargetUserId}' was not found in TomoriBot's records`,
+            error: `Multiple users match "${requestedTargetUser}". Please clarify which one you mean: ${userResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
             data: {
-              status: "reminder_creation_failed_user_not_found",
-              target_user_discord_id: resolvedTargetUserId,
-              reason: `The user with Discord ID '${resolvedTargetUserId}' was not found in TomoriBot's records. TomoriBot can only create reminders for users she knows.`,
+              status: "reminder_creation_failed_ambiguous_user",
+              reason: "Multiple users matched the requested target.",
+              candidates: userResolution.candidates.map((candidate) => candidate.label),
             },
           };
         }
 
-        // Verify nickname as "two-factor" check
-        actualNicknameInDB = targetUserRow.user_nickname;
-        const guildMember = context.message?.guild?.members.cache.get(resolvedTargetUserId);
-        const guildDisplayName = guildMember?.displayName?.toLowerCase();
-        const discordUsername = guildMember?.user?.username?.toLowerCase();
-
-        // Allow if LLM-provided nickname matches ANY of:
-        // 1. Database nickname
-        // 2. Current guild display name
-        // 3. Discord username (bulletproof fallback)
-        const providedNicknameLower = (targetUserNickname || "").toLowerCase();
-        const dbNicknameLower = actualNicknameInDB.toLowerCase();
-        const nicknameValid =
-          dbNicknameLower === providedNicknameLower ||
-          providedNicknameLower === guildDisplayName ||
-          dbNicknameLower === guildDisplayName ||
-          providedNicknameLower === discordUsername;
-
-        if (!nicknameValid) {
-          log.warn(
-            `Reminder: Nickname mismatch for target user ${resolvedTargetUserId}. LLM provided: '${targetUserNickname}', DB has: '${actualNicknameInDB}', Guild display: '${guildMember?.displayName}', Discord username '${guildMember?.user?.username}'.`,
-          );
+        if (userResolution.status === "not_found") {
           return {
             success: false,
-            error: `The provided nickname '${targetUserNickname}' does not match the records for user ID '${resolvedTargetUserId}'`,
+            error: `Could not find a user matching "${requestedTargetUser}" in this conversation or server.`,
             data: {
-              status: "reminder_creation_failed_nickname_mismatch",
-              target_user_discord_id: resolvedTargetUserId,
-              provided_nickname: targetUserNickname,
-              actual_nickname: actualNicknameInDB,
-              guild_display_name: guildMember?.displayName,
-              discord_username: guildMember?.user?.username,
-              reason: `The provided nickname '${targetUserNickname}' does not match the records for user ID '${resolvedTargetUserId}' (TomoriBot knows them as '${actualNicknameInDB}', guild shows '${guildMember?.displayName}', Discord username '${guildMember?.user?.username}'). Please ensure the Discord ID and nickname correspond to the same user.`,
+              status: "reminder_creation_failed_user_not_found",
+              reason: "The requested user was not found in this conversation or server.",
             },
           };
+        }
+
+        resolvedTargetUserId = userResolution.targetId;
+        resolvedTargetUserLabel = userResolution.displayLabel;
+
+        if (userResolution.isBridgeUser) {
+          actualNicknameInDB = userResolution.displayLabel.replace(/\s+\(Matrix\)$/u, "");
+          log.info(
+            `Reminder: Target is a bridge user (${resolvedTargetUserId}), storing display label "${actualNicknameInDB}" without a DB lookup`,
+          );
+        } else {
+          // Load target user to verify they exist
+          const targetUserRow = await loadUserRow(resolvedTargetUserId);
+
+          if (!targetUserRow || !targetUserRow.user_id) {
+            log.warn(`Reminder: Resolved target user ${resolvedTargetUserId} is unknown to TomoriBot`);
+            return {
+              success: false,
+              error: `TomoriBot doesn't know ${resolvedTargetUserLabel} yet, so it cannot create a reminder for them.`,
+              data: {
+                status: "reminder_creation_failed_user_not_found",
+                reason: "TomoriBot can only create reminders for users it already knows.",
+              },
+            };
+          }
+
+          actualNicknameInDB = targetUserRow.user_nickname;
         }
       }
 
@@ -705,12 +559,11 @@ export class ReminderTool extends BaseTool {
           data: {
             status: "reminder_created_successfully",
             reminder_id: dbResult.reminder_id,
-            target_user_nickname: actualNicknameInDB,
-            target_user_discord_id: resolvedTargetUserId,
+            target_user: resolvedTargetUserLabel,
             reminder_purpose: reminderPurpose,
             reminder_time: finalReminderTime.toISOString(),
             repetition_interval_hours: repetitionIntervalHours,
-            channel_id: resolvedChannelId,
+            target_channel: resolvedChannelLabel,
             self_reminder: isSelfReminder,
             time_remaining_ms: timeRemainingMs,
             time_remaining_text: timeRemainingStr,

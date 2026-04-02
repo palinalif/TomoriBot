@@ -41,6 +41,14 @@ export interface ToolStateForContext {
   };
 }
 
+const BUILTIN_TOOL_ALIASES: Record<string, string> = {
+  remember_this_fact: "create_long_term_memory",
+};
+
+function resolveBuiltInToolAlias(toolName: string): string {
+  return BUILTIN_TOOL_ALIASES[toolName] ?? toolName;
+}
+
 // Re-export ToolContext for external use
 export type { ToolContext } from "../types/tool/interfaces";
 
@@ -78,7 +86,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @returns Tool instance or undefined if not found
    */
   getTool(name: string): Tool | undefined {
-    return this.tools.get(name);
+    const resolvedName = resolveBuiltInToolAlias(name);
+    return this.tools.get(resolvedName);
   }
 
   /**
@@ -508,8 +517,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    * @returns Promise<boolean> - True if the tool needs a follow-up generation
    */
   async requiresFollowUp(functionName: string, provider: string, serverId?: number): Promise<boolean> {
+    const resolvedFunctionName = resolveBuiltInToolAlias(functionName);
+
     // 1. Check if it's a global MCP function — all MCP tools require follow-up
-    const isMcp = await this.isMCPFunction(functionName, provider);
+    const isMcp = await this.isMCPFunction(resolvedFunctionName, provider);
     if (isMcp) {
       return true;
     }
@@ -517,7 +528,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     // 2. Check if it's a guild MCP function — also requires follow-up
     if (serverId) {
       try {
-        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(serverId, functionName);
+        const isGuildMcp = await getGuildMcpManager().isGuildMCPFunction(serverId, resolvedFunctionName);
         if (isGuildMcp) return true;
       } catch {
         /* fall through */
@@ -525,7 +536,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     }
 
     // 3. Check built-in tool property
-    const tool = this.getTool(functionName);
+    const tool = this.getTool(resolvedFunctionName);
     return tool?.requiresFollowUp ?? false;
   }
 
@@ -539,11 +550,12 @@ class ToolRegistryImpl implements ToolRegistryInterface {
    */
   async executeTool(toolName: string, args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const startTime = Date.now();
+    const resolvedToolName = resolveBuiltInToolAlias(toolName);
 
     // 1. Check global MCP first
-    const isMcp = await this.isMCPFunction(toolName, context.provider);
+    const isMcp = await this.isMCPFunction(resolvedToolName, context.provider);
     if (isMcp) {
-      return this.executeMCPFunction(toolName, args, context, startTime);
+      return this.executeMCPFunction(resolvedToolName, args, context, startTime);
     }
 
     // 2. Check guild MCP
@@ -551,15 +563,15 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     if (serverId) {
       try {
         const guildMcpManager = getGuildMcpManager();
-        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(serverId, toolName);
+        const isGuildMcp = await guildMcpManager.isGuildMCPFunction(serverId, resolvedToolName);
         if (isGuildMcp) {
-          log.info(`Executing guild MCP function: ${toolName} for server ${serverId}`);
-          const result = await guildMcpManager.executeGuildMCPFunction(serverId, toolName, args, context);
+          log.info(`Executing guild MCP function: ${resolvedToolName} for server ${serverId}`);
+          const result = await guildMcpManager.executeGuildMCPFunction(serverId, resolvedToolName, args, context);
           const executionTime = Date.now() - startTime;
 
           // Record execution event
           this.recordExecution({
-            toolName,
+            toolName: resolvedToolName,
             provider: context.provider,
             serverId: serverId.toString(),
             userId: context.userId,
@@ -570,22 +582,22 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           });
 
           if (result.success) {
-            log.success(`Guild MCP function executed successfully: ${toolName} (${executionTime}ms)`);
+            log.success(`Guild MCP function executed successfully: ${resolvedToolName} (${executionTime}ms)`);
           } else {
             log.warn(
-              `Guild MCP function execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`,
+              `Guild MCP function execution completed with error: ${resolvedToolName} - ${result.error} (${executionTime}ms)`,
             );
           }
 
           return result;
         }
       } catch (error) {
-        log.warn(`Error checking/executing guild MCP function '${toolName}':`, error as Error);
+        log.warn(`Error checking/executing guild MCP function '${resolvedToolName}':`, error as Error);
       }
     }
 
     // 3. Execute as built-in tool
-    return this.executeBuiltInTool(toolName, args, context, startTime);
+    return this.executeBuiltInTool(resolvedToolName, args, context, startTime);
   }
 
   /**

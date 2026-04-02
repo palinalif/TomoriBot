@@ -12,6 +12,7 @@ import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema }
 import type { StructuredContextItem } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
 import { isRefreshMarkerEmbed } from "../../utils/discord/embedDetection";
+import { resolveChannelTarget } from "@/utils/discord/targetResolver";
 
 // ─── Boomerang Mechanism ─────────────────────────────────────────────
 // Stores pending boomerang data keyed by source channel ID.
@@ -111,15 +112,10 @@ export class CrossChannelMessageTool extends BaseTool {
   parameters: ToolParameterSchema = {
     type: "object",
     properties: {
-      channel_id: {
+      target_channel: {
         type: "string",
         description:
-          "Discord ID of the target channel or thread to send a message in. At least one of channel_id or channel_name must be provided.",
-      },
-      channel_name: {
-        type: "string",
-        description:
-          "Name of the target channel (without #). Used as a fallback if channel_id is not provided, or as an alternative lookup method. This matches guild channel names and active thread titles. At least one of channel_id or channel_name must be provided.",
+          "Name of the target channel or active thread in the current server. Accepts natural channel names like 'general', '#general', or an exact active thread title. If the name is ambiguous, the tool will ask for clarification instead of guessing.",
       },
       task: {
         type: "string",
@@ -182,19 +178,21 @@ export class CrossChannelMessageTool extends BaseTool {
     }
 
     // 1. Extract and validate parameters
-    const channelIdArg = args.channel_id as string | undefined;
-    const channelNameArg = args.channel_name as string | undefined;
+    const targetChannelArg = args.target_channel as string | undefined;
+    const legacyChannelIdArg = args.channel_id as string | undefined;
+    const legacyChannelNameArg = args.channel_name as string | undefined;
     const taskArg = args.task as string;
     const boomerangArg = args.boomerang as boolean | undefined;
+    const requestedChannel = targetChannelArg?.trim() || legacyChannelNameArg?.trim() || legacyChannelIdArg?.trim();
 
     // Validate: at least one channel identifier must be provided
-    if (!channelIdArg?.trim() && !channelNameArg?.trim()) {
+    if (!requestedChannel) {
       return {
         success: false,
-        error: "At least one of 'channel_id' or 'channel_name' must be provided to identify the target channel.",
+        error: "The 'target_channel' parameter is required to identify the target channel or thread.",
         data: {
           status: "cross_channel_failed_missing_channel",
-          reason: "No channel identifier provided.",
+          reason: "No target channel or thread was provided.",
         },
       };
     }
@@ -237,92 +235,31 @@ export class CrossChannelMessageTool extends BaseTool {
       };
     }
 
-    let targetChannel: GuildTextBasedChannel | null = null;
-    const activeThreads = await guild.channels.fetchActiveThreads().catch((error) => {
-      log.warn("Cross-channel tool: Failed to fetch active threads", error);
-      return null;
-    });
-
-    // Try channel_id first
-    if (channelIdArg?.trim()) {
-      const trimmedId = channelIdArg.trim();
-      const fetched = await context.client.channels.fetch(trimmedId).catch(() => null);
-
-      // If exact fetch fails, try GLM fuzzy BigInt recovery
-      if (!fetched) {
-        try {
-          const garbledId = BigInt(trimmedId);
-          let closestChannelId: string | null = null;
-          let smallestDiff = BigInt(1000);
-          const candidateIds = new Set<string>(guild.channels.cache.keys());
-
-          if (activeThreads) {
-            for (const threadId of activeThreads.threads.keys()) {
-              candidateIds.add(threadId);
-            }
-          }
-
-          for (const chId of candidateIds) {
-            const diff = garbledId > BigInt(chId) ? garbledId - BigInt(chId) : BigInt(chId) - garbledId;
-            if (diff > 0n && diff < smallestDiff) {
-              smallestDiff = diff;
-              closestChannelId = chId;
-            }
-          }
-
-          if (closestChannelId) {
-            log.info(
-              `Cross-channel tool: Correcting garbled channel ID "${trimmedId}" → "${closestChannelId}" (diff: ${smallestDiff})`,
-            );
-            const corrected = await context.client.channels.fetch(closestChannelId).catch(() => null);
-            if (corrected?.isTextBased() && !corrected.isDMBased()) {
-              targetChannel = corrected as GuildTextBasedChannel;
-            }
-          }
-        } catch {
-          // BigInt parsing failed — skip fuzzy match
-        }
-      } else if (fetched.isTextBased() && !fetched.isDMBased()) {
-        targetChannel = fetched as GuildTextBasedChannel;
-      }
-    }
-
-    // Fallback to channel_name or thread title lookup
-    if (!targetChannel && channelNameArg?.trim()) {
-      const nameLower = channelNameArg.trim().toLowerCase();
-      const found = guild.channels.cache.find((ch) => ch.name.toLowerCase() === nameLower && ch.isTextBased());
-      if (found?.isTextBased()) {
-        targetChannel = found as GuildTextBasedChannel;
-      } else if (activeThreads) {
-        const matchingThread = activeThreads.threads.find((thread) => thread.name.toLowerCase() === nameLower);
-        if (matchingThread?.isTextBased()) {
-          targetChannel = matchingThread as GuildTextBasedChannel;
-        }
-      }
-    }
-
-    if (!targetChannel) {
+    const channelResolution = await resolveChannelTarget(requestedChannel, context);
+    if (channelResolution.status === "ambiguous") {
       return {
         success: false,
-        error: `Could not find a text channel or thread matching ${channelIdArg ? `ID "${channelIdArg}"` : `name "${channelNameArg}"`} in this server.`,
+        error: `Multiple channels or threads match "${requestedChannel}". Please clarify which one you mean: ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
+        data: {
+          status: "cross_channel_failed_ambiguous_channel",
+          reason: "Multiple channels or threads matched the requested target.",
+          candidates: channelResolution.candidates.map((candidate) => candidate.label),
+        },
+      };
+    }
+
+    if (channelResolution.status === "not_found") {
+      return {
+        success: false,
+        error: `Could not find a text channel or thread matching "${requestedChannel}" in this server.`,
         data: {
           status: "cross_channel_failed_channel_not_found",
-          reason: "Target channel or thread not found or not a text-based channel.",
+          reason: "Target channel or thread was not found or is not text-based.",
         },
       };
     }
 
-    // Verify target is in the same guild
-    if (!("guildId" in targetChannel) || targetChannel.guildId !== context.guildId) {
-      return {
-        success: false,
-        error: "The target channel or thread does not belong to this server.",
-        data: {
-          status: "cross_channel_failed_wrong_guild",
-          reason: "Target channel or thread is in a different guild.",
-        },
-      };
-    }
+    const targetChannel: GuildTextBasedChannel = channelResolution.channel;
 
     // 4. Same-channel guard
     if (targetChannel.id === context.channel.id) {
@@ -358,7 +295,6 @@ export class CrossChannelMessageTool extends BaseTool {
         data: {
           status: "cross_channel_failed_blocklisted_target",
           reason: "The target channel is in the server cross-channel blocklist.",
-          blocked_channel_id: effectiveBlockedChannelId,
         },
       };
     }
@@ -556,7 +492,6 @@ export class CrossChannelMessageTool extends BaseTool {
           data: {
             status: "cross_channel_visit_complete",
             target_channel_name: targetChannel.name,
-            target_channel_id: targetChannel.id,
             boomerang: true,
             note: `You are back from #${targetChannel.name}. Report what happened there without restating the full assignment.`,
           },
@@ -569,7 +504,6 @@ export class CrossChannelMessageTool extends BaseTool {
         data: {
           status: "cross_channel_message_sent",
           target_channel_name: targetChannel.name,
-          target_channel_id: targetChannel.id,
           boomerang: false,
         },
       };

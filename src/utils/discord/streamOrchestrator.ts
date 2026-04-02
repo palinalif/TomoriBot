@@ -2469,30 +2469,32 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     const mentionIdSet = new Set<string>();
 
     for (const item of contextItems) {
-      if (item.metadataTag !== ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION) {
+      if (
+        item.metadataTag !== ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION ||
+        !item.conversationUsers ||
+        item.conversationUsers.length === 0
+      ) {
         continue;
       }
 
-      for (const part of item.parts) {
-        if (part.type !== "text") continue;
-        const lines = part.text.split(/\r?\n/);
-        for (const line of lines) {
-          const idMatch = line.match(/User ID:\s*(\d{17,20})/);
-          if (!idMatch) continue;
-          const userId = idMatch[1];
-          mentionIdSet.add(userId);
+      for (const conversationUser of item.conversationUsers) {
+        if (!conversationUser.mentionable || !/^\d{17,20}$/.test(conversationUser.targetId)) {
+          continue;
+        }
 
-          const handleMatches = line.matchAll(/@\{([^}]+)\}/g);
-          for (const handleMatch of handleMatches) {
-            const rawHandle = handleMatch[1]?.trim();
-            if (!rawHandle) continue;
-            const normalizedHandle = rawHandle.toLowerCase();
-            const existing = mentionMap.get(normalizedHandle) ?? [];
-            if (!existing.includes(userId)) {
-              existing.push(userId);
-            }
-            mentionMap.set(normalizedHandle, existing);
+        mentionIdSet.add(conversationUser.targetId);
+
+        for (const alias of conversationUser.aliases) {
+          const normalizedHandle = alias.trim().toLowerCase();
+          if (!normalizedHandle) {
+            continue;
           }
+
+          const existing = mentionMap.get(normalizedHandle) ?? [];
+          if (!existing.includes(conversationUser.targetId)) {
+            existing.push(conversationUser.targetId);
+          }
+          mentionMap.set(normalizedHandle, existing);
         }
       }
     }

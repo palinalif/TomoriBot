@@ -98,8 +98,6 @@ const ensuredRoomMemberships = new Set<string>();
  * 500 events ≈ the last ~500 bot messages per session — enough for any realistic reply chain.
  */
 const MAX_TRACKED_SENT_EVENTS = Number.parseInt(process.env.MATRIX_MAX_TRACKED_SENT_EVENTS || "500", 10);
-const MAX_REPLY_SNIPPET_CHARS = 120;
-
 /**
  * Metadata tracked for a Matrix event sent by a bot persona.
  */
@@ -893,7 +891,7 @@ function mxcToHttp(mxcUrl: string, homeserverUrl: string): string | null {
 }
 
 /**
- * Normalize and clamp quoted reply snippets used in Matrix reply system annotations.
+ * Normalize quoted reply snippets used in Matrix reply system annotations.
  */
 function buildReplySnippet(rawText?: string | null): string | undefined {
   if (!rawText) return undefined;
@@ -903,11 +901,7 @@ function buildReplySnippet(rawText?: string | null): string | undefined {
 
   // Keep outer annotation quoting stable: convert inner double quotes to single quotes.
   const safeForQuote = normalized.replace(/"/g, "'");
-  if (safeForQuote.length <= MAX_REPLY_SNIPPET_CHARS) {
-    return safeForQuote;
-  }
-
-  return `${safeForQuote.slice(0, Math.max(0, MAX_REPLY_SNIPPET_CHARS - 3)).trimEnd()}...`;
+  return safeForQuote;
 }
 
 type PersonaReplyLookup = {

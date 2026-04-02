@@ -49,6 +49,8 @@ export interface EnhancedImageContent extends BaseEnhancedContent {
   };
   /** Flag indicating this is a profile picture */
   isProfilePicture: boolean;
+  /** Flag indicating this image is a profile banner */
+  isProfileBanner?: boolean;
 }
 
 /**

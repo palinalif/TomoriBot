@@ -245,6 +245,11 @@ export default {
       analyzing_footer: "画像の数によって少し時間がかかる場合があります",
     },
 
+    profile_picture: {
+      analyzing_title: "👤 プロフィール画像を解析中...",
+      analyzing_description: "指定されたプロフィール画像を取得して解析しています",
+    },
+
     gif: {
       processing_title: "🎞️ GIFを処理中...",
       processing_description: "詳細に確認するため、指定されたGIFからキーフレームを抽出しています",
@@ -2831,6 +2836,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
           notice_image_editing_description: `画像編集・インペイント通知を表示します。`,
           notice_image_analysis_label: `画像解析`,
           notice_image_analysis_description: `画像解析通知を表示します。`,
+          notice_profile_picture_analysis_label: `プロフィール画像解析`,
+          notice_profile_picture_analysis_description: `プロフィール画像解析通知を表示します。`,
           notice_gif_processing_label: `GIF処理`,
           notice_gif_processing_description: `GIF処理通知を表示します。`,
           notice_youtube_processing_label: `YouTube処理`,

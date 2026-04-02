@@ -13,6 +13,7 @@ import {
 import {
   ContextItemTag,
   type ContextPart, // New: For text/image parts
+  type ConversationUserReference,
   type StructuredContextItem, // New: The main output type
 } from "../../types/misc/context";
 import { registerUser } from "../db/dbWrite";
@@ -278,7 +279,7 @@ export async function convertMentions(
             const guild = client.guilds.cache.get(serverId);
             const channel = guild?.channels.cache.get(id) || (await client.channels.fetch(id).catch(() => null));
             if (channel?.isTextBased() && !channel.isDMBased()) {
-              return `#${channel.name} (ID: ${id})`;
+              return `#${channel.name}`;
             }
           } catch (error) {
             log.error(`Error resolving channel mention ${id} in convertMentions:`, error, {
@@ -720,7 +721,7 @@ async function buildShortTermMemoryContext(
         // Add the HINT immediately after the summary (not at the end)
         // Only when the STM tool is available for this provider
         if (isStmToolAvailable) {
-          const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use remember_this_fact or update_long_term_memory instead.]`;
+          const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use create_long_term_memory or update_long_term_memory instead.]`;
 
           memoryItems.push({
             role: "user",
@@ -748,7 +749,7 @@ async function buildShortTermMemoryContext(
         // NO SUMMARY but enough messages - Create prompt at end
         // Only when the STM tool is available for this provider
         const createText =
-          "You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use remember_this_fact or update_long_term_memory instead.";
+          "You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use create_long_term_memory or update_long_term_memory instead.";
 
         createPromptText = await convertMentions(
           createText,
@@ -1559,9 +1560,10 @@ async function buildContextNative({
     let usersInConversationText = "[System: The following users are having a conversation:\n\n";
 
     if (isUserImpersonation) {
-      usersInConversationText += `To ping users, prepend an "@" symbol to their mention handle, like @{username} (case-insensitive). If a name is duplicated, use the handle with the user ID suffix (e.g., @{name|123456789012345678}). Use only if it's an important message, otherwise do not ping users.\n\n`;
+      usersInConversationText +=
+        'To ping users, prepend an "@" symbol to a unique mention handle shown below (case-insensitive). If a user says mention requires clarification, ask for clarification instead of guessing. Use mentions only when the notification matters.\n\n';
     } else {
-      usersInConversationText += `If ${botName} wants to ping any of these users, simply prepend an "@" symbol to their mention handle, like @{username} (case-insensitive). If a name is duplicated, use the handle with the user ID suffix (e.g., @{name|123456789012345678}). This ensures the user gets a notification from ${botName}'s message. Use only if it's an important message, otherwise do not ping users.\n\n`;
+      usersInConversationText += `If ${botName} wants to ping any of these users, prepend an "@" symbol to a unique mention handle shown below (case-insensitive). If a user says mention requires clarification, ask for clarification instead of guessing. Use mentions only when the notification matters.\n\n`;
     }
 
     type UserConversationEntry = {
@@ -1572,9 +1574,12 @@ async function buildContextNative({
       isBot: boolean;
       mentionAliases: string[];
       primaryAlias: string | null;
+      mentionable: boolean;
+      resolvableTargetId?: string;
     };
 
     const userEntries: UserConversationEntry[] = [];
+    const conversationUsers: ConversationUserReference[] = [];
     const aliasCounts = new Map<string, number>();
 
     const addAlias = (aliases: Set<string>, value?: string | null) => {
@@ -1605,6 +1610,7 @@ async function buildContextNative({
           isBot: true,
           mentionAliases: [],
           primaryAlias: null,
+          mentionable: false,
         });
         continue;
       }
@@ -1629,16 +1635,15 @@ async function buildContextNative({
       if (!userRow) {
         const syntheticEntry = syntheticUsers?.get(userIdToProcess);
         if (syntheticEntry) {
-          const syntheticAliasSet = new Set<string>();
-          addAlias(syntheticAliasSet, syntheticEntry.displayName);
           userEntries.push({
             userId: userIdToProcess,
             displayName: syntheticEntry.displayName,
             detailLines: [],
             imageAppearanceTags: undefined,
             isBot: false,
-            mentionAliases: Array.from(syntheticAliasSet),
-            primaryAlias: syntheticEntry.displayName || null,
+            mentionAliases: [],
+            primaryAlias: null,
+            mentionable: false,
           });
           continue;
         }
@@ -1674,7 +1679,7 @@ async function buildContextNative({
         (!serverNickname || canUseCustomNickname);
 
       if (canUseCustomNickname) {
-        displayName = serverNickname ? `${customNickname} (Server Nickname: "${serverNickname}")` : customNickname;
+        displayName = customNickname;
       } else if (serverNickname) {
         displayName = serverNickname;
       } else {
@@ -1805,7 +1810,27 @@ async function buildContextNative({
         isBot: false,
         mentionAliases: Array.from(aliasSet),
         primaryAlias,
+        mentionable: true,
+        resolvableTargetId: userRow.user_disc_id,
       });
+    }
+
+    if (matrixUsers && matrixUsers.size > 0) {
+      for (const [matrixUserId, displayName] of matrixUsers.entries()) {
+        const matrixAliasSet = new Set<string>();
+        addAlias(matrixAliasSet, displayName);
+        userEntries.push({
+          userId: matrixUserId,
+          displayName,
+          detailLines: ["- Status: Online or status unknown"],
+          imageAppearanceTags: undefined,
+          isBot: false,
+          mentionAliases: Array.from(matrixAliasSet),
+          primaryAlias: displayName || null,
+          mentionable: false,
+          resolvableTargetId: matrixUserId,
+        });
+      }
     }
 
     if (!isUserImpersonation && tomoriConfig.imagegen_enabled && syntheticUsers && syntheticUsers.size > 0) {
@@ -1844,31 +1869,36 @@ async function buildContextNative({
       }
     }
 
-    const formatMentionHandle = (alias: string, userId: string) => {
-      const key = alias.toLowerCase();
-      return (aliasCounts.get(key) ?? 0) > 1 ? `${alias}|${userId}` : alias;
-    };
+    const isAliasUnique = (alias: string) => (aliasCounts.get(alias.toLowerCase()) ?? 0) === 1;
+    const formatMentionHandle = (alias: string) => `@{${alias}}`;
 
     for (const entry of userEntries) {
       if (entry.isBot) {
         const selfSuffix = isUserImpersonation ? "" : " (This is you!)";
-        usersInConversationText += `${entry.displayName} (User ID: ${entry.userId})${selfSuffix}\n`;
+        usersInConversationText += `${entry.displayName}${selfSuffix}\n`;
       } else {
         const mentionParts: string[] = [];
-        if (entry.primaryAlias) {
-          const handle = formatMentionHandle(entry.primaryAlias, entry.userId);
-          mentionParts.push(`Mention: @{${handle}}`);
-        }
+        const uniqueAliases = entry.mentionAliases.filter(isAliasUnique);
+        const primaryVisibleAlias =
+          entry.primaryAlias && isAliasUnique(entry.primaryAlias)
+            ? entry.primaryAlias
+            : (uniqueAliases.find((alias) => alias !== entry.primaryAlias) ?? null);
+        const aliasHandles = uniqueAliases
+          .filter((alias) => alias !== primaryVisibleAlias)
+          .map((alias) => formatMentionHandle(alias));
 
-        const aliasHandles = entry.mentionAliases
-          .filter((alias) => alias !== entry.primaryAlias)
-          .map((alias) => `@{${formatMentionHandle(alias, entry.userId)}}`);
+        if (entry.mentionable && primaryVisibleAlias) {
+          mentionParts.push(`Mention: ${formatMentionHandle(primaryVisibleAlias)}`);
+        }
         if (aliasHandles.length > 0) {
           mentionParts.push(`Aliases: ${aliasHandles.join(", ")}`);
         }
+        if (entry.mentionable && entry.mentionAliases.length > 0 && !primaryVisibleAlias) {
+          mentionParts.push("Mention requires clarification");
+        }
 
         const mentionInfo = mentionParts.length > 0 ? ` (${mentionParts.join("; ")})` : "";
-        usersInConversationText += `${entry.displayName} (User ID: ${entry.userId})${mentionInfo}\n`;
+        usersInConversationText += `${entry.displayName}${mentionInfo}\n`;
       }
 
       if (entry.imageAppearanceTags && entry.imageAppearanceTags.length > 0) {
@@ -1880,16 +1910,14 @@ async function buildContextNative({
       }
 
       usersInConversationText += "\n"; // Blank line between users
-    }
 
-    // Append Matrix bridge users after Discord users.
-    // Include their bridge ID explicitly so tool calls can pass a concrete target ID
-    // (memory tool will safely downgrade target_user -> server_wide for bridge users).
-    if (matrixUsers && matrixUsers.size > 0) {
-      for (const [matrixUserId, displayName] of matrixUsers.entries()) {
-        usersInConversationText += `${displayName} (User ID: ${matrixUserId}) (Mention: @{${displayName}})\n`;
-        usersInConversationText += "- Status: Online or status unknown\n";
-        usersInConversationText += "\n";
+      if (entry.resolvableTargetId && entry.mentionAliases.length > 0) {
+        conversationUsers.push({
+          targetId: entry.resolvableTargetId,
+          displayLabel: entry.displayName,
+          aliases: entry.mentionAliases,
+          mentionable: entry.mentionable,
+        });
       }
     }
 
@@ -1922,6 +1950,7 @@ async function buildContextNative({
         },
       ],
       metadataTag: ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION,
+      conversationUsers,
     });
   }
 

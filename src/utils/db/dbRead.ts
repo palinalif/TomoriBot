@@ -690,6 +690,49 @@ export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
 }
 
 /**
+ * Loads user rows whose saved nickname exactly matches the provided normalized nickname.
+ * Matching is case-insensitive, trims leading/trailing whitespace, and collapses repeated whitespace.
+ * @param normalizedNickname - Pre-normalized nickname to match against
+ * @returns Array of validated UserRow objects
+ */
+export async function loadUserRowsByNormalizedNickname(normalizedNickname: string): Promise<UserRow[]> {
+  return (
+    (await withCachedPlanRetry(async () => {
+      try {
+        const nickname = normalizedNickname.trim().toLowerCase();
+        if (!nickname) {
+          return [];
+        }
+
+        const rows = await sql`
+				SELECT *
+				FROM users
+				WHERE regexp_replace(lower(trim(user_nickname)), '\s+', ' ', 'g') = ${nickname}
+			`;
+
+        const parsedUsers: UserRow[] = [];
+        for (const row of rows) {
+          const parsedUser = userSchema.safeParse(row);
+          if (!parsedUser.success) {
+            log.error(
+              `Failed to validate user data while matching nickname "${normalizedNickname}":`,
+              parsedUser.error.flatten(),
+            );
+            continue;
+          }
+          parsedUsers.push(parsedUser.data);
+        }
+
+        return parsedUsers;
+      } catch (error) {
+        log.error(`Error loading user rows for nickname "${normalizedNickname}":`, error);
+        return [];
+      }
+    }, `load user rows for nickname ${normalizedNickname}`)) ?? []
+  );
+}
+
+/**
  * Loads persona-scoped config row for a specific persona.
  * @param tomoriId - Internal persona ID.
  * @returns PersonaConfigRow or null if not found/invalid.

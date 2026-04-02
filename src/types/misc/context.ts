@@ -15,6 +15,13 @@ export type ContextPart =
   | { type: "image"; uri: string; mimeType: string } // URI could be a public URL or a data URI
   | { type: "video"; uri: string; mimeType: string; isYouTubeLink?: boolean }; // Video support with YouTube detection
 
+export interface ConversationUserReference {
+  targetId: string; // Discord snowflake or bridge user ID
+  displayLabel: string;
+  aliases: string[];
+  mentionable: boolean; // True only when this target can be converted into a Discord mention
+}
+
 // New: Define the possible metadata tags for context items (Rule 13)
 export enum ContextItemTag {
   // System-level instructions and configurations
@@ -50,6 +57,7 @@ export type StructuredContextItem = {
   parts: ContextPart[];
   metadataTag?: ContextItemTag; // Optional tag for internal processing
   messageId?: string; // Optional Discord message ID for tools that need to reference the original message
+  conversationUsers?: ConversationUserReference[]; // Hidden metadata for user resolution and mention handling
 };
 
 /**

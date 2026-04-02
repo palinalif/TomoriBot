@@ -61,6 +61,7 @@ Each context item has:
   role: "system" | "user" | "model";
   parts: ContextPart[];          // Text, image, or video segments
   metadataTag?: ContextItemTag;  // Semantic tag for identification
+  conversationUsers?: ConversationUserReference[]; // Hidden mention/target metadata
 }
 ```
 
@@ -148,7 +149,20 @@ All text content passes through `convertMentions()` before being added to contex
 - Resolves `{bot}` → bot's display name
 - Resolves `{user}` → triggerer's display name
 - Resolves Discord mention syntax (`<@id>`) → display names
+- Resolves Discord channel mentions (`<#id>`) and pasted channel links into plain `#name` text instead of exposing channel IDs
 - Uses a stable "User" placeholder in system-role content to avoid cache invalidation when different users trigger the same prompt
+
+### Users In Conversation Block
+
+`KNOWLEDGE_USERS_IN_CONVERSATION` now separates visible prompt text from executable targeting metadata:
+
+- visible text lists human-readable user/channel names only
+- Discord and Matrix user IDs are no longer shown to the model in this block
+- channel context is rendered as plain `#channel-name`
+- mention guidance only shows unique non-ID handles; if a handle is ambiguous, the prompt explicitly says clarification is required before pinging
+- hidden `conversationUsers` metadata stores the alias-to-target mapping used later by the stream orchestrator and tool resolvers
+
+This keeps the prompt more natural while preserving exact internal IDs for mentions, reminders, and Discord API calls.
 
 ### History Annotation Rules
 
@@ -156,6 +170,8 @@ Conversation history can contain one or more leading `[System: ...]` lines befor
 - reply references
 - forwarded-message snapshots
 - media-origin hints for quoted/forwarded attachments
+
+Reply-reference and forwarded-message quotes preserve the full normalized message text. If the prompt later needs to shrink, that happens at the history-truncation layer rather than inside the annotation itself.
 
 When those annotations are present, the dialogue formatter keeps the system lines intact and inserts the speaker prefix only before the remaining user text. This prevents forwarded/reply metadata from being misread as user-authored dialogue.
 

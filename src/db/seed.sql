@@ -119,6 +119,7 @@ VALUES
   ('zaicoding', 'glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model with advanced reasoning, tool use, and structured output', '高度な推論、ツール利用、構造化出力に対応した最も高性能なGLMモデル'),
   ('zaicoding', 'glm-5.1', false, false, true, false, false, true, false, false, false, false, true, 'Latest flagship GLM model with advanced reasoning and tool support', '最新のフラッグシップGLMモデル（高度な推論・ツール対応）'),
   ('zaicoding', 'glm-5-turbo', false, false, false, false, false, true, false, false, false, false, true, 'Fast variant of GLM-5 with tool support', 'GLM-5の高速版（ツール対応）'),
+  ('zaicoding', 'glm-5v-turbo', false, false, true, false, false, true, true, false, false, false, true, 'Vision-capable GLM-5 Turbo tuned for long contexts and reliable tool chains', '長文コンテキスト対応と安定したツール連携に調整されたビジョン対応GLM-5 Turboモデル'),
   -- Z.ai General API Models (prefixed codenames allow coexistence with coding rows)
   ('zai', 'zai/glm-4.6', false, false, false, false, false, true, false, false, false, false, true, 'Text-only GLM model optimized for roleplay', 'ロールプレイ向けに最適化されたテキスト専用GLMモデル'),
   ('zai', 'zai/glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用するビジョン対応GLMモデル'),
@@ -128,6 +129,7 @@ VALUES
   ('zai', 'zai/glm-5', false, false, true, false, false, true, false, false, false, false, true, 'Most capable GLM model from the general Z.ai API', '通常のZ.ai APIで利用する最も高性能なGLMモデル'),
   ('zai', 'zai/glm-5.1', false, false, true, false, false, true, false, false, false, false, true, 'Latest flagship GLM model from the general Z.ai API', '通常のZ.ai APIで利用する最新のフラッグシップGLMモデル'),
   ('zai', 'zai/glm-5-turbo', false, false, false, false, false, true, false, false, false, false, true, 'Fast variant of GLM-5 from the general Z.ai API', '通常のZ.ai APIで利用するGLM-5の高速版'),
+  ('zai', 'zai/glm-5v-turbo', false, false, true, false, false, true, true, false, false, false, true, 'Vision-capable GLM-5 Turbo tuned for long contexts and reliable tool chains', '長文コンテキスト対応と安定したツール連携に調整されたビジョン対応GLM-5 Turboモデル'),
   -- Anthropic Models (vision + tools + structured output via forced tool use; no video/YouTube)
   ('anthropic', 'claude-haiku-4-5', false, false, false, false, false, true, true, false, false, false, true, 'Fast and cost-efficient Claude model for general tasks', '汎用タスク向けの高速でコスト効率の良いClaudeモデル'),
   ('anthropic', 'claude-sonnet-4-6', false, true, false, false, false, true, true, false, false, false, true, 'Balanced Claude model — best mix of quality, speed, and cost', '品質・速度・コストの最適なバランスを持つClaudeモデル'),

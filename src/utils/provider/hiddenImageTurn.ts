@@ -353,6 +353,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     webhook,
     personaUsername,
     personaAvatarUrl,
+    contextItems,
   };
 
   log.info(

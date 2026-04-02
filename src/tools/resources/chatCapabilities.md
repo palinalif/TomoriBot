@@ -55,7 +55,7 @@
 - ✅ **Fetch Content**: Retrieve webpage content when users share URLs
 - ✅ **Generate Images**: Create AI images from text prompts (when enabled)
 - ✅ **Send Expressions**: Send emojis/stickers as separate function calls
-- ✅ **Look at Discord profile pictures**: See the profile pictures of users
+- ✅ **Look at Discord profile pictures**: See users' profile pictures and attached profile banners when available
 - ✅ **Pin Messages**: Pin important messages on Discord (requires mention of Message ID by replying)
 - ✅ **Set up Reminders**: Create reminders for users, which you mention when time's up
 

@@ -328,7 +328,7 @@ actual reply text
 
 `matrixManager.ts` strips this fallback block before relaying to Discord, so TomoriBot only sees the actual reply text.
 
-When a Matrix user replies to a TomoriBot persona message, a `[System: user is replying to PersonaName's message]` annotation is appended to the relayed Discord message body. Reply triggering itself is handled by `pendingMatrixReplyChannels` in `matrixManager.ts`/`tomoriChat.ts`, since Discord webhooks cannot carry native reply references.
+When a Matrix user replies to a TomoriBot persona message, a `[System: user is replying to PersonaName's message "..."]` annotation is appended to the relayed Discord message body when the original message text is available. Reply triggering itself is handled by `pendingMatrixReplyChannels` in `matrixManager.ts`/`tomoriChat.ts`, since Discord webhooks cannot carry native reply references.
 
 The bot tracks sent Matrix event IDs → persona name in a bounded in-memory map (`sentEventPersonas`, capped at 500 entries). For replies to messages sent in a previous session (not in the map), it falls back to fetching the original event from the homeserver to check whether the sender was a `@_tomori_*` virtual user.
 

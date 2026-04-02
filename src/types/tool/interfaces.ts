@@ -4,6 +4,7 @@
  */
 
 import type { LlmRow, TomoriState } from "../db/schema";
+import type { StructuredContextItem } from "../misc/context";
 import type {
   BaseGuildTextChannel,
   BaseGuildVoiceChannel,
@@ -134,6 +135,7 @@ export interface ToolContext {
   isUserImpersonation?: boolean; // True when the active turn is a user impersonation session
   impersonatedUserId?: string; // Discord user ID currently being impersonated, if any
   suppressProgressNotices?: boolean; // Skip public "working..." embeds for fire-and-forget flows
+  contextItems?: StructuredContextItem[]; // Current LLM context for tools that need hidden resolution metadata
 }
 
 /**

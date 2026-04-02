@@ -14,6 +14,7 @@ export const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
   select_sticker_for_response: "sticker_usage",
 
   // Memory/learning tools
+  create_long_term_memory: "self_teaching",
   remember_this_fact: "self_teaching",
   update_long_term_memory: "self_teaching",
 

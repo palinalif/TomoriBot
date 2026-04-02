@@ -8,7 +8,7 @@ import { AttachmentBuilder } from "discord.js";
 import { GoogleGenAI } from "@google/genai";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
-import { resolveAvatarByDiscordId } from "@/utils/discord/avatarResolver";
+import { resolveAvatarByIdentity } from "@/utils/discord/avatarResolver";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
@@ -24,11 +24,9 @@ import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL }
 export class GenerateImageTool extends BaseTool {
   name = "generate_image";
   description =
-    "Generate an AI image using the active provider's native image model. Provide a detailed text prompt describing what image you want to create. If you provide a message_id or user_id reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
+    "Generate an AI image using the active provider's native image model. Provide a detailed text prompt describing what image you want to create. If you provide a message_id or target_identity reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
-  private static readonly DISCORD_ID_PATTERN = /^\d{17,19}$/;
-  private static readonly PERSONA_ID_PATTERN = /^(?:self|(?:persona:)?\d{1,10})$/i;
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -43,10 +41,10 @@ export class GenerateImageTool extends BaseTool {
         description:
           "Optional: The Discord message ID containing images to use as reference for image-to-image generation. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
       },
-      user_id: {
+      target_identity: {
         type: "string",
         description:
-          "Optional: Target ID whose profile picture/avatar should be used as a reference image. Accepts 'self' for the current active persona, a Discord/webhook ID (17-19 digits), or a persona DB ID (short numeric or persona:<tomori_id>). Prefer 'self' when you mean the active persona instead of the bot's Discord user ID. Can be combined with message_id references.",
+          "Optional: User or persona identity whose profile picture/avatar should be used as a reference image. Accepts 'self', an exact persona nickname, or a natural user name from the current conversation or server. Deprecated raw IDs are still accepted at execution time for compatibility. Can be combined with message_id references.",
       },
       aspect_ratio: {
         type: "string",
@@ -556,9 +554,9 @@ export class GenerateImageTool extends BaseTool {
     // Extract arguments
     const prompt = args.prompt as string;
     const messageId = args.message_id as string | undefined;
-    const userId = args.user_id as string | undefined;
+    const targetIdentity = (args.target_identity as string | undefined) ?? (args.user_id as string | undefined);
     const aspectRatio = (args.aspect_ratio as string) || "1:1";
-    const usesReferences = !!(messageId || userId);
+    const usesReferences = !!(messageId || targetIdentity);
 
     try {
       // Get the diffusion model codename from database
@@ -622,18 +620,9 @@ export class GenerateImageTool extends BaseTool {
         log.info(`Using ${messageImages.length} reference image(s) from message ${messageId} for generation`);
       }
 
-      if (userId) {
-        if (!this.isValidDiscordId(userId)) {
-          return {
-            success: false,
-            error: "Invalid target ID format",
-            message:
-              "The provided user_id is invalid. Use 'self', a 17-19 digit Discord/webhook ID, or a short numeric persona ID.",
-          };
-        }
-
+      if (targetIdentity) {
         try {
-          const avatarData = await resolveAvatarByDiscordId(userId, context, {
+          const avatarData = await resolveAvatarByIdentity(targetIdentity, context, {
             forceStatic: false,
           });
           const avatarBase64 = await this.fetchAndConvertImageToBase64(avatarData.avatarUrl);
@@ -643,14 +632,16 @@ export class GenerateImageTool extends BaseTool {
           });
           const avatarTypeLabel =
             avatarData.sourceType === "persona" ? "persona" : avatarData.sourceType === "webhook" ? "webhook" : "user";
-          log.info(`Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${userId})`);
+          log.info(`Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${targetIdentity})`);
         } catch (avatarErr) {
-          log.error(`Failed to fetch profile picture for ID ${userId}`, avatarErr as Error);
+          log.error(`Failed to fetch profile picture for identity ${targetIdentity}`, avatarErr as Error);
           return {
             success: false,
-            error: "Failed to fetch profile picture for user_id (user/webhook/persona)",
+            error: "Failed to fetch profile picture for target_identity",
             message:
-              "Could not fetch an avatar for that ID. Please confirm it is 'self', a valid Discord/webhook ID, or a persona ID and try again.",
+              avatarErr instanceof Error
+                ? avatarErr.message
+                : "Could not fetch an avatar for that identity. Please confirm the name or persona and try again.",
           };
         }
       }
@@ -852,14 +843,6 @@ export class GenerateImageTool extends BaseTool {
       };
     }
   }
-
-  /**
-   * Validate Discord snowflake format
-   */
-  private isValidDiscordId(userId: string): boolean {
-    return GenerateImageTool.DISCORD_ID_PATTERN.test(userId) || GenerateImageTool.PERSONA_ID_PATTERN.test(userId);
-  }
-
   /**
    * Fetch an image URL and convert to base64 (used for profile pictures)
    */
