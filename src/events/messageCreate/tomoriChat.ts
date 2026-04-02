@@ -10,11 +10,10 @@ import type {
   Webhook,
 } from "discord.js";
 import {
-  AttachmentBuilder,
   BaseGuildTextChannel,
   ChannelType,
   DMChannel,
-  EmbedBuilder,
+  MessageReferenceType,
   MessageType,
   TextChannel,
 } from "discord.js"; // Import value for instanceof check
@@ -1020,6 +1019,7 @@ type SimplifiedMessageForContext = {
   content: string | null; // Message text content
   createdAt?: number; // Discord message creation timestamp in milliseconds (message.createdTimestamp)
   mediaSourceMessageIds?: string[]; // Array of message IDs that host media (for combined messages)
+  remoteMediaSourceKind?: "reply" | "forwarded";
   imageAttachments: Array<{
     url: string; // Original URL of the image
     proxyUrl: string; // Discord's proxy URL, often more stable for fetching
@@ -1073,6 +1073,86 @@ function extractEmojiImageAttachments(content: string): SimplifiedMessageForCont
   }
 
   return attachments;
+}
+
+function isSupportedImageAttachmentContentType(contentType: string | null | undefined): boolean {
+  return (
+    contentType?.startsWith("image/png") ||
+    contentType?.startsWith("image/jpeg") ||
+    contentType?.startsWith("image/webp") ||
+    contentType?.startsWith("image/heic") ||
+    contentType?.startsWith("image/heif") ||
+    contentType?.startsWith("image/gif") ||
+    false
+  );
+}
+
+function isSupportedVideoAttachmentContentType(contentType: string | null | undefined): boolean {
+  return Boolean(contentType && SUPPORTED_VIDEO_MIME_TYPES.some((type) => contentType.startsWith(type)));
+}
+
+function appendSupportedMediaFromMessage(
+  sourceMessage: Pick<Message, "attachments">,
+  imageAttachments: SimplifiedMessageForContext["imageAttachments"],
+  videoAttachments: SimplifiedMessageForContext["videoAttachments"],
+): { imageCount: number; videoCount: number } {
+  let imageCount = 0;
+  let videoCount = 0;
+
+  for (const attachment of sourceMessage.attachments.values()) {
+    if (isSupportedImageAttachmentContentType(attachment.contentType)) {
+      imageAttachments.push({
+        url: attachment.url,
+        proxyUrl: attachment.proxyURL,
+        mimeType: attachment.contentType,
+        filename: attachment.name,
+      });
+      imageCount++;
+      continue;
+    }
+
+    if (isSupportedVideoAttachmentContentType(attachment.contentType)) {
+      videoAttachments.push({
+        url: attachment.url,
+        proxyUrl: attachment.proxyURL,
+        mimeType: attachment.contentType,
+        filename: attachment.name,
+        isYouTubeLink: false,
+      });
+      videoCount++;
+    }
+  }
+
+  return { imageCount, videoCount };
+}
+
+function formatInlineSystemContent(content: string | null | undefined, fallbackText = "[No text content]"): string {
+  const normalizedContent = content?.replace(/\n/g, " ").trim();
+  if (!normalizedContent) {
+    return fallbackText;
+  }
+
+  return normalizedContent;
+}
+
+function formatForwardedAuthorName(
+  forwardedMessage: {
+    author: Message["author"] | null;
+    member: Message["member"] | null;
+  },
+  tomoriNickname: string,
+  clientUserId: string | undefined,
+): string {
+  if (clientUserId && forwardedMessage.author?.id === clientUserId) {
+    return tomoriNickname;
+  }
+
+  return (
+    forwardedMessage.member?.displayName ??
+    forwardedMessage.author?.globalName ??
+    forwardedMessage.author?.username ??
+    "Unknown user"
+  );
 }
 
 function mergeForcedMentions(...mentionLists: Array<ForcedMention[] | undefined>): ForcedMention[] {
@@ -1686,6 +1766,7 @@ export default async function tomoriChat(
     return;
   }
 
+  /*
   if (message.content === "$aprilfools" && "send" in channel) {
     const footerIconPath = "img/extras/aprilfools.png";
     const footerIconFile = Bun.file(footerIconPath);
@@ -1726,6 +1807,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
     });
     return;
   }
+*/
 
   const explicitLongTermMemoryIntent = hasExplicitLongTermMemoryIntent(message.content);
 
@@ -3435,7 +3517,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       // Find the most recent message with a reference (latest in the array)
       let latestReferenceMessageIndex = -1;
       for (let i = relevantMessagesArray.length - 1; i >= 0; i--) {
-        if (relevantMessagesArray[i].reference?.messageId) {
+        if (
+          relevantMessagesArray[i].reference?.messageId &&
+          relevantMessagesArray[i].reference?.type !== MessageReferenceType.Forward
+        ) {
           latestReferenceMessageIndex = i;
           break; // Found the most recent one, stop searching
         }
@@ -3679,6 +3764,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         let hasProcessedEmbed = false; // Track if this message contains a processed embed
         const mediaSourceMessageIds: string[] = []; // Array to collect all message IDs with media
         let hasLocalMedia = false;
+        let remoteMediaSourceKind: SimplifiedMessageForContext["remoteMediaSourceKind"];
 
         const reactionContextLine = await buildReactionContextAnnotation(msg, reactionContextBudget);
         if (reactionContextLine) {
@@ -3687,42 +3773,157 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             : reactionContextLine;
         }
 
+        if (msg.reference?.type === MessageReferenceType.Forward && msg.messageSnapshots.size > 0) {
+          const forwardedContextBlocks: string[] = [];
+
+          for (const forwardedMessage of msg.messageSnapshots.values()) {
+            const preForwardImageCount = imageAttachments.length;
+            const preForwardVideoCount = videoAttachments.length;
+            const forwardedTextSegments: string[] = [];
+
+            if (forwardedMessage.content?.trim()) {
+              forwardedTextSegments.push(forwardedMessage.content.trim());
+            }
+
+            appendSupportedMediaFromMessage(forwardedMessage, imageAttachments, videoAttachments);
+
+            if (shouldExtractEmojiImages && forwardedMessage.content) {
+              const forwardedEmojiAttachments = extractEmojiImageAttachments(forwardedMessage.content);
+              if (forwardedEmojiAttachments.length > 0) {
+                imageAttachments.push(...forwardedEmojiAttachments);
+              }
+            }
+
+            const isForwardedTomoriAuthoredMessage = forwardedMessage.author?.id === client.user?.id;
+            if (forwardedMessage.embeds.length > 0) {
+              for (const embed of forwardedMessage.embeds) {
+                const embedCheck = checkTargetEmbedTitle(embed.title);
+                if (
+                  embedCheck.isTarget &&
+                  (embedCheck.type === "memory_learning" ||
+                    embedCheck.type === "reminder_set" ||
+                    embedCheck.type === "system_injection" ||
+                    embedCheck.type === "compact_summary" ||
+                    embedCheck.type === "compact_refresh" ||
+                    embedCheck.type === "reward" ||
+                    embedCheck.type === "punish") &&
+                  embed.description
+                ) {
+                  if (
+                    embedCheck.type === "system_injection" ||
+                    embedCheck.type === "compact_summary" ||
+                    embedCheck.type === "compact_refresh"
+                  ) {
+                    const titleLine =
+                      embedCheck.type === "compact_summary" || embedCheck.type === "compact_refresh"
+                        ? embed.title
+                          ? `## ${embed.title}\n`
+                          : ""
+                        : "";
+                    forwardedTextSegments.push(`[System: ${titleLine}${embed.description}]`);
+                  } else {
+                    let cleanedDescription = embed.description;
+                    if (tomoriState?.tomori_nickname) {
+                      const escapedNickname = tomoriState.tomori_nickname.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                      const botNamePattern = new RegExp(`^${escapedNickname}:\\s*`, "i");
+                      if (botNamePattern.test(cleanedDescription)) {
+                        cleanedDescription = cleanedDescription.replace(botNamePattern, "").trim();
+                      }
+                    }
+
+                    const includeTitleInEmbedContent =
+                      embedCheck.type === "memory_learning" || embedCheck.type === "reminder_set";
+                    const titleLine = includeTitleInEmbedContent && embed.title ? `${embed.title}\n` : "";
+                    const embedBody = `${titleLine}${cleanedDescription}`;
+                    const embedContent =
+                      embedCheck.type === "memory_learning" ||
+                      embedCheck.type === "reward" ||
+                      embedCheck.type === "punish"
+                        ? `[System: ${embedBody}]`
+                        : `[The following is a system-produced embed]\n${embedBody}`;
+                    forwardedTextSegments.push(embedContent);
+                  }
+                } else if (selfDebugEnabled && isForwardedTomoriAuthoredMessage && shouldIncludeSelfDebugEmbed(embed)) {
+                  const diagnosticEmbedContent = formatTomoriSelfDebugEmbedAsSystemMessage(embed);
+                  if (diagnosticEmbedContent) {
+                    forwardedTextSegments.push(diagnosticEmbedContent);
+                  }
+                } else if (!isForwardedTomoriAuthoredMessage) {
+                  const linkEmbedData = processLinkEmbed(embed);
+                  if (linkEmbedData.isLinkPreview) {
+                    if (linkEmbedData.textContent) {
+                      forwardedTextSegments.push(linkEmbedData.textContent);
+                    }
+
+                    if (linkEmbedData.imageInfo) {
+                      imageAttachments.push({
+                        url: linkEmbedData.imageInfo.url,
+                        proxyUrl: linkEmbedData.imageInfo.proxyUrl,
+                        mimeType: linkEmbedData.imageInfo.mimeType,
+                        filename: linkEmbedData.imageInfo.filename,
+                      });
+                    }
+
+                    if (linkEmbedData.thumbnailInfo) {
+                      imageAttachments.push({
+                        url: linkEmbedData.thumbnailInfo.url,
+                        proxyUrl: linkEmbedData.thumbnailInfo.proxyUrl,
+                        mimeType: linkEmbedData.thumbnailInfo.mimeType,
+                        filename: linkEmbedData.thumbnailInfo.filename,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+
+            if (imageAttachments.length > preForwardImageCount || videoAttachments.length > preForwardVideoCount) {
+              const forwardedMessageId = forwardedMessage.id ?? msg.reference.messageId;
+              if (forwardedMessageId) {
+                mediaSourceMessageIds.push(forwardedMessageId);
+              }
+              remoteMediaSourceKind = "forwarded";
+            }
+
+            const imageCount = imageAttachments.length - preForwardImageCount;
+            const videoCount = videoAttachments.length - preForwardVideoCount;
+            let attachmentInfo = "";
+            if (imageCount > 0) {
+              attachmentInfo += ` (with ${imageCount} image${imageCount > 1 ? "s" : ""})`;
+            }
+            if (videoCount > 0) {
+              attachmentInfo += ` (with ${videoCount} video${videoCount > 1 ? "s" : ""})`;
+            }
+
+            const forwardedSourceChannel = forwardedMessage.channelId
+              ? `<#${forwardedMessage.channelId}>`
+              : "another channel";
+            const forwardedAuthorName = formatForwardedAuthorName(
+              forwardedMessage,
+              tomoriState?.tomori_nickname || "Bot",
+              client.user?.id,
+            );
+            const forwardedContent = formatInlineSystemContent(forwardedTextSegments.join("\n"));
+            forwardedContextBlocks.push(
+              `[System: ${authorName} forwarded a message by ${forwardedAuthorName} from ${forwardedSourceChannel} saying: ${forwardedContent}${attachmentInfo}]`,
+            );
+          }
+
+          if (forwardedContextBlocks.length > 0) {
+            const forwardedContext = forwardedContextBlocks.join("\n");
+            messageContentForLlm = messageContentForLlm
+              ? `${forwardedContext}\n${messageContentForLlm}`
+              : forwardedContext;
+          }
+        }
+
         // Extract attachments from referenced message if it exists (after arrays are declared)
         // Check if this is the message that got reference context injection and we have stored reference message data
         if (index === latestReferenceMessageIndex && typeof referencedMessageData !== "undefined") {
           const preRefImageCount = imageAttachments.length;
           const preRefVideoCount = videoAttachments.length;
 
-          if (referencedMessageData.message.attachments.size > 0) {
-            for (const attachment of referencedMessageData.message.attachments.values()) {
-              if (
-                attachment.contentType?.startsWith("image/png") ||
-                attachment.contentType?.startsWith("image/jpeg") ||
-                attachment.contentType?.startsWith("image/webp") ||
-                attachment.contentType?.startsWith("image/heic") ||
-                attachment.contentType?.startsWith("image/heif") ||
-                attachment.contentType?.startsWith("image/gif")
-              ) {
-                imageAttachments.push({
-                  url: attachment.url,
-                  proxyUrl: attachment.proxyURL,
-                  mimeType: attachment.contentType,
-                  filename: attachment.name,
-                });
-              } else if (
-                attachment.contentType &&
-                SUPPORTED_VIDEO_MIME_TYPES.some((type) => attachment.contentType?.startsWith(type))
-              ) {
-                videoAttachments.push({
-                  url: attachment.url,
-                  proxyUrl: attachment.proxyURL,
-                  mimeType: attachment.contentType,
-                  filename: attachment.name,
-                  isYouTubeLink: false,
-                });
-              }
-            }
-          }
+          appendSupportedMediaFromMessage(referencedMessageData.message, imageAttachments, videoAttachments);
 
           if (shouldExtractEmojiImages && referencedMessageData.message.content) {
             const referencedEmojiAttachments = extractEmojiImageAttachments(referencedMessageData.message.content);
@@ -3733,6 +3934,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
           if (imageAttachments.length > preRefImageCount || videoAttachments.length > preRefVideoCount) {
             mediaSourceMessageIds.push(referencedMessageData.message.id);
+            remoteMediaSourceKind = "reply";
           }
 
           // Log attachment extraction for debugging
@@ -3878,14 +4080,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         // 5.a. Process direct image attachments and stickers
         if (msg.attachments.size > 0) {
           for (const attachment of msg.attachments.values()) {
-            if (
-              attachment.contentType?.startsWith("image/png") ||
-              attachment.contentType?.startsWith("image/jpeg") ||
-              attachment.contentType?.startsWith("image/webp") ||
-              attachment.contentType?.startsWith("image/heic") ||
-              attachment.contentType?.startsWith("image/heif") ||
-              attachment.contentType?.startsWith("image/gif")
-            ) {
+            if (isSupportedImageAttachmentContentType(attachment.contentType)) {
               imageAttachments.push({
                 url: attachment.url,
                 proxyUrl: attachment.proxyURL,
@@ -3895,10 +4090,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               hasLocalMedia = true;
             }
             // 1. Check for video attachments using supported MIME types
-            else if (
-              attachment.contentType &&
-              SUPPORTED_VIDEO_MIME_TYPES.some((type) => attachment.contentType?.startsWith(type))
-            ) {
+            else if (isSupportedVideoAttachmentContentType(attachment.contentType)) {
               videoAttachments.push({
                 url: attachment.url,
                 proxyUrl: attachment.proxyURL,
@@ -4088,6 +4280,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 ? mediaSourceMessageIds
                 : undefined
             : undefined;
+        const resolvedRemoteMediaSourceKind =
+          !hasLocalMedia && mediaSourceMessageIds.length > 0 ? remoteMediaSourceKind : undefined;
 
         // 5.c. Check if this message is from the same effective author as the previous one
         const prevMessage = simplifiedMessages[simplifiedMessages.length - 1];
@@ -4127,6 +4321,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             const combinedIds = [...existingIds, ...resolvedMediaSourceMessageIds];
             prevMessage.mediaSourceMessageIds = [...new Set(combinedIds)]; // Remove duplicates
           }
+          if (resolvedRemoteMediaSourceKind) {
+            const prevHasLocalMediaSource = prevMessage.mediaSourceMessageIds?.includes(prevMessage.id) ?? false;
+            if (!prevHasLocalMediaSource && !prevMessage.remoteMediaSourceKind) {
+              prevMessage.remoteMediaSourceKind = resolvedRemoteMediaSourceKind;
+            } else if (prevMessage.remoteMediaSourceKind !== resolvedRemoteMediaSourceKind) {
+              prevMessage.remoteMediaSourceKind = undefined;
+            }
+          }
         } else if (messageContentForLlm || imageAttachments.length > 0 || videoAttachments.length > 0) {
           // Create a new entry if it's a different author or the previous has no content
           simplifiedMessages.push({
@@ -4138,6 +4340,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             content: messageContentForLlm,
             createdAt: msg.createdTimestamp, // Discord message creation timestamp (ms) for timestamp tool
             mediaSourceMessageIds: resolvedMediaSourceMessageIds,
+            remoteMediaSourceKind: resolvedRemoteMediaSourceKind,
             imageAttachments,
             videoAttachments,
           });

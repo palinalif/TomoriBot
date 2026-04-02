@@ -4,6 +4,7 @@
  * Supports streaming via Server-Sent Events (SSE)
  */
 
+import { mergeStopStrings } from "@/providers/utils/stopStrings";
 import { log } from "@/utils/misc/logger";
 
 // =============================================
@@ -295,14 +296,7 @@ function convertToOpenAIParams(
   naiParams: NovelAIParameters,
   additionalStopStrings?: string[],
 ): Partial<OpenAICompletionRequest> {
-  const defaultStops = ["<|user|>", "<|observation|>", "<|system|>", "</think>"];
-  const mergedStops = [...defaultStops];
-  for (const stop of additionalStopStrings ?? []) {
-    if (typeof stop !== "string" || stop.length === 0) continue;
-    if (!mergedStops.includes(stop)) {
-      mergedStops.push(stop);
-    }
-  }
+  const mergedStops = mergeStopStrings(undefined, additionalStopStrings);
 
   return {
     max_tokens: naiParams.max_length,
@@ -313,11 +307,7 @@ function convertToOpenAIParams(
     frequency_penalty: naiParams.repetition_penalty_frequency,
     presence_penalty: naiParams.repetition_penalty_presence,
     repetition_penalty: naiParams.repetition_penalty,
-    // GLM 4.6 stop sequences:
-    // - Role tags are defensive (model rarely emits them in completions mode —
-    //   speaker detection in the adapter handles primary turn-stopping).
-    // - </think> prevents the model from continuing past a stray closing think tag,
-    //   which causes garbage/out-of-character generation after visible text.
+    // Specialized GLM stop strings are resolved centrally in providers/utils/stopStrings.ts.
     stop: mergedStops,
   };
 }

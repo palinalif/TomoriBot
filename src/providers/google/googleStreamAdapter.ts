@@ -28,7 +28,7 @@ import { ContextItemTag, type StructuredContextItem } from "../../types/misc/con
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
-import { buildPersonaSpeakerStopString, mergeStopStrings } from "../utils/stopStrings";
+import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -141,16 +141,20 @@ export class GoogleStreamAdapter implements StreamProvider {
       safetySettings: googleConfig.safetySettings,
     };
 
-    const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
     this.speakerGuardPendingTail = "";
     this.streamedTextTail = "";
-    this.speakerGuardEnabled = Boolean(personaSpeakerStop);
+    this.speakerGuardEnabled = Boolean(buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname));
     this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
     this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
     if (this.activePersonaNameLower) {
       this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
     }
-    const mergedStopSequences = mergeStopStrings(requestConfig.stopSequences, personaSpeakerStop);
+    const mergedStopSequences = buildProviderStopStrings({
+      existingStops: requestConfig.stopSequences,
+      providerName: "google",
+      model: config.model,
+      personaName: context.tomoriState.tomori_nickname,
+    });
     if (mergedStopSequences) {
       requestConfig.stopSequences = mergedStopSequences;
     }

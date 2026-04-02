@@ -46,7 +46,7 @@ const MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024;
 export class AnalyzeImageTool extends BaseTool {
   name = "analyze_image";
   description =
-    "Analyze images in a Discord message using AI vision. Returns detailed descriptions of all images found in the message. Use this when a user sends an image and you need to understand its contents.";
+    "Analyze images in a Discord message using AI vision. Use this only when the user explicitly asks about the image or when unseen visual details are necessary to answer correctly. Do not call it just because an image is present.";
   category = "utility" as const;
   requiresFollowUp = true;
 
@@ -65,7 +65,7 @@ export class AnalyzeImageTool extends BaseTool {
       prompt: {
         type: "string",
         description:
-          "Optional question or instruction for the vision model (e.g., 'What text is in this image?' or 'Describe the mood of this photo'). If omitted, a general description is returned.",
+          "Optional question or instruction for the vision model (e.g., 'What text is in this image?' or 'Describe the mood of this photo'). Ask only for the specific visual detail needed. If omitted, a general description is returned.",
       },
     },
     required: ["message_id"],

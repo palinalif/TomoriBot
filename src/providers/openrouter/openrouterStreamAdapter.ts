@@ -24,7 +24,7 @@ import {
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
 } from "../../utils/cache/openrouterCapabilityCache";
-import { buildPersonaSpeakerStopString } from "../utils/stopStrings";
+import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "../utils/stopStrings";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
 import type {
   ProcessedChunk,
@@ -442,6 +442,11 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       const normalizedModel = (config.model ?? "").toLowerCase();
       const omitTemperatureByModelOverride = OpenrouterStreamAdapter.TEMPERATURE_OMIT_MODELS.has(normalizedModel);
       const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
+      const stopStrings = buildProviderStopStrings({
+        providerName: "openrouter",
+        model: config.model,
+        personaName: context.tomoriState.tomori_nickname,
+      });
       let stopParamSupported = false;
 
       // Build request body (OpenAI-compatible)
@@ -586,10 +591,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
 
-      if (personaSpeakerStop) {
+      if (stopStrings) {
         stopParamSupported = this.isOpenRouterParamSupported(supportedParameters, "stop");
         if (stopParamSupported) {
-          requestBody.stop = [personaSpeakerStop];
+          requestBody.stop = stopStrings;
         } else {
           skippedUnsupportedParams.push("stop");
         }

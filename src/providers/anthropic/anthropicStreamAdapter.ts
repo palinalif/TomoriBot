@@ -17,7 +17,7 @@ import { ContextItemTag, type StructuredContextItem } from "../../types/misc/con
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
-import { buildPersonaSpeakerStopString } from "../utils/stopStrings";
+import { buildProviderStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -217,10 +217,14 @@ export class AnthropicStreamAdapter implements StreamProvider {
     }
 
     // 8. Add stop sequences for speaker guard
-    const speakerStopString = buildPersonaSpeakerStopString(context.prefixStrippingName ?? context.personaUsername);
-    if (speakerStopString) {
-      requestBody.stop_sequences = [speakerStopString];
-      log.info(`AnthropicStreamAdapter: Added speaker stop sequence`);
+    const stopSequences = buildProviderStopStrings({
+      providerName: "anthropic",
+      model: config.model,
+      personaName: context.prefixStrippingName ?? context.personaUsername,
+    });
+    if (stopSequences) {
+      requestBody.stop_sequences = stopSequences;
+      log.info(`AnthropicStreamAdapter: Added stop sequences`);
     }
 
     // 9. Handle output prefill (assistant prefix)

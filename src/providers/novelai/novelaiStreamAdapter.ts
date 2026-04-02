@@ -41,7 +41,7 @@ import {
   type NovelAIStreamChunk,
   type NovelAIParameters,
 } from "./novelaiService";
-import { buildPersonaSpeakerStopString } from "@/providers/utils/stopStrings";
+import { buildProviderStopStrings } from "@/providers/utils/stopStrings";
 
 /** Whether GLM 4.6 thinking (reasoning) is enabled. When disabled, /nothink is appended to suppress internal reasoning. */
 const NAI_GLM_THINKING_ENABLED = (process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
@@ -483,12 +483,16 @@ export class NovelaiStreamAdapter implements StreamProvider {
     }
 
     // Build request
-    const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
+    const openAIStopStrings = buildProviderStopStrings({
+      providerName: "novelai",
+      model: config.model,
+      personaName: context.tomoriState.tomori_nickname,
+    });
     const request: NovelAIGenerationRequest = {
       input: prompt,
       model: config.model,
       parameters,
-      openAIStopStrings: personaSpeakerStop ? [personaSpeakerStop] : undefined,
+      openAIStopStrings,
     };
 
     // Log sanitized request for debugging

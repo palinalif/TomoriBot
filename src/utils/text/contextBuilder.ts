@@ -95,6 +95,7 @@ export type SimplifiedMessageForContext = {
   content: string | null;
   createdAt?: number; // Discord message creation timestamp in milliseconds (message.createdTimestamp)
   mediaSourceMessageIds?: string[]; // Array of message IDs that host media (for combined messages)
+  remoteMediaSourceKind?: "reply" | "forwarded";
   imageAttachments: Array<{
     url: string;
     proxyUrl: string;
@@ -136,6 +137,23 @@ function normalizeDiscordChannelLinks(text: string): string {
 
 function formatDiscordChannelReference(channelId: string | undefined, fallbackText: string): string {
   return channelId ? `<#${channelId}>` : fallbackText;
+}
+
+function splitLeadingSystemBlocks(content: string): { leadingSystemBlocks: string[]; remainingContent: string | null } {
+  const lines = content.split("\n");
+  const leadingSystemBlocks: string[] = [];
+  let currentIndex = 0;
+
+  while (currentIndex < lines.length && /^\[System: .*]$/.test(lines[currentIndex])) {
+    leadingSystemBlocks.push(lines[currentIndex]);
+    currentIndex++;
+  }
+
+  const remainingContent = lines.slice(currentIndex).join("\n").trim();
+  return {
+    leadingSystemBlocks,
+    remainingContent: remainingContent || null,
+  };
 }
 
 /**
@@ -2312,7 +2330,7 @@ async function buildContextNative({
             // Vision tool available — prompt the model to use it instead of guessing
             detachedSystemParts.push({
               type: "text",
-              text: `[System: This message contains ${imageDescription}. Use the analyze_image tool to view and understand the image contents.]`,
+              text: `[System: This message contains ${imageDescription}. Do not guess the image contents. Use the analyze_image tool only if the user explicitly asks about the image or if unseen visual details are necessary to answer correctly.]`,
             });
           } else {
             // No vision tool — instruct the model to not pretend it can see
@@ -2385,11 +2403,15 @@ async function buildContextNative({
       const idList = mediaMessageIds.join(", ");
 
       // If the current message's ID is absent from mediaSourceMessageIds, all media
-      // came from a referenced message (reply scenario) — the [System: referring to...]
-      // block already names the original sender, so don't misattribute to the replying user.
+      // came from a referenced/forwarded message — the leading [System: ...] block
+      // already names the original sender, so don't misattribute to the current author.
       const isReferenceOnlyMedia = !mediaMessageIds.includes(msg.id);
       if (isReferenceOnlyMedia) {
-        mediaAttributionHint = `[System: ${thisOrThese} ${mediaWord} (${idLabel}: ${idList}) ${wasSent} included in the message being replied to]`;
+        if (msg.remoteMediaSourceKind === "forwarded") {
+          mediaAttributionHint = `[System: ${thisOrThese} ${mediaWord} (${idLabel}: ${idList}) ${wasSent} attached to the forwarded message described above]`;
+        } else {
+          mediaAttributionHint = `[System: ${thisOrThese} ${mediaWord} (${idLabel}: ${idList}) ${wasSent} included in the message being replied to]`;
+        }
       } else {
         // Resolve the author name through convertMentions — msg.authorName may be a raw
         // <@userId> mention for regular users, which needs guild cache resolution.
@@ -2413,16 +2435,13 @@ async function buildContextNative({
       const normalizedContent = normalizeCustomEmojisForLlm(msg.content);
 
       // Prepend author name, with special handling for [System:] content:
-      // - Pure system injections (embeds, reminders, etc.) are standalone "[System: ...]" — no prefix needed.
-      // - Reply references have "[System: ...]\n<user message>" — the user part needs the prefix.
+      // - Pure system injections (embeds, reminders, etc.) are standalone "[System: ...]" blocks — no prefix needed.
+      // - Reply/forward annotations may add one or more leading "[System: ...]" lines before user text.
       let processedContent: string;
       if (normalizedContent.startsWith("[System:")) {
-        const replyBoundaryIndex = normalizedContent.indexOf("]\n");
-        if (replyBoundaryIndex !== -1 && replyBoundaryIndex + 2 < normalizedContent.length) {
-          // Reply reference: insert author prefix after the [System: ...] block
-          const systemBlock = normalizedContent.slice(0, replyBoundaryIndex + 2);
-          const userContent = normalizedContent.slice(replyBoundaryIndex + 2);
-          processedContent = `${systemBlock}${msg.authorName}: ${userContent}`;
+        const { leadingSystemBlocks, remainingContent } = splitLeadingSystemBlocks(normalizedContent);
+        if (leadingSystemBlocks.length > 0 && remainingContent) {
+          processedContent = `${leadingSystemBlocks.join("\n")}\n${msg.authorName}: ${remainingContent}`;
         } else {
           processedContent = normalizedContent; // Pure system injection, no author prefix
         }

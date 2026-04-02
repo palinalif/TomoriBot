@@ -180,6 +180,7 @@ Provider adapter safeguards:
 - Google/OpenRouter/Custom adapters split mixed chunks (`text` + tool-call signal) into two raw chunks so text is processed first, then `function_call`.
 - Speaker-boundary holdback tails are force-flushed before non-text chunks (tool call/error/finish) to prevent truncated text when a stream exits early on tool execution.
 - Adapter-level speaker fallback only stops on registered speaker labels already present in context, plus reserved `Assistant:` labels. It intentionally ignores arbitrary capitalized headings such as `Budget Breakdown:`.
+- Shared stop-string rules live in `src/providers/utils/stopStrings.ts`. That registry now handles universal stop strings, provider/model-specific stop strings, and persona speaker stops.
 
 Stream-level safeguard:
 - Right before Discord send, `StreamOrchestrator` truncates any flushed segment at the first line that starts with a registered non-active speaker label (`Name:`) or reserved `Assistant:` label, then stops the stream. This applies to every provider, including providers that already have adapter-level speaker guards.

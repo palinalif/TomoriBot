@@ -239,13 +239,13 @@ export default {
 
     vision: {
       analyzing_title: "🖼️  Analyzing Image...",
-      analyzing_description: "Current model is non-vision; using configured vision model to analyze images",
+      analyzing_description: "Current model is non-vision; using configured vision model to analyze images.",
       analyzing_footer: "This may take a moment depending on image count",
     },
 
     gif: {
       processing_title: "🎞️  Processing GIF...",
-      processing_description: "Extracting keyframes from the requested GIF for closer analysis",
+      processing_description: "Extracting keyframes from the requested GIF for closer analysis.",
       processing_footer: "Large GIFs can take a bit longer",
     },
 

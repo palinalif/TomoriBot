@@ -28,7 +28,7 @@ import type { StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "@/utils/text/stringHelper";
-import { buildPersonaSpeakerStopString } from "@/providers/utils/stopStrings";
+import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "@/providers/utils/stopStrings";
 
 export class OpenAICompatibleStreamAdapter implements StreamProvider {
   private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
@@ -110,8 +110,13 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       if (this.speakerGuardEnabled) {
         log.info(`${this.options.adapterName}: Speaker-boundary fallback guard enabled`);
       }
-      if (personaSpeakerStop) {
-        requestBody.stop = [personaSpeakerStop];
+      const stopStrings = buildProviderStopStrings({
+        providerName: this.options.providerName,
+        model: config.model,
+        personaName: context.tomoriState.tomori_nickname,
+      });
+      if (stopStrings) {
+        requestBody.stop = stopStrings;
       }
 
       if (config.maxOutputTokens !== undefined) {

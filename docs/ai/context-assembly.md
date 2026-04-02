@@ -150,6 +150,15 @@ All text content passes through `convertMentions()` before being added to contex
 - Resolves Discord mention syntax (`<@id>`) → display names
 - Uses a stable "User" placeholder in system-role content to avoid cache invalidation when different users trigger the same prompt
 
+### History Annotation Rules
+
+Conversation history can contain one or more leading `[System: ...]` lines before a user's actual text. TomoriBot uses this for:
+- reply references
+- forwarded-message snapshots
+- media-origin hints for quoted/forwarded attachments
+
+When those annotations are present, the dialogue formatter keeps the system lines intact and inserts the speaker prefix only before the remaining user text. This prevents forwarded/reply metadata from being misread as user-authored dialogue.
+
 ## File Map
 
 | File | Purpose |
