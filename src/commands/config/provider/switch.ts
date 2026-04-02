@@ -12,6 +12,7 @@ import {
   getAllChannelLlmOverridesForServer,
   loadPersonaLlmOverridesForServer,
   loadLlmById,
+  loadEmbeddingModelById,
 } from "@/utils/db/dbRead";
 import {
   clearAllChannelLlmOverridesForServer,
@@ -41,12 +42,29 @@ import {
 } from "@/utils/discord/customProviderModal";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
+import { getLlmDisplayName } from "@/utils/provider/modelDisplay";
+import { getDiffusionModelById } from "@/utils/image/naiDiffusionModels";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_provider_switch_modal";
 const PROVIDER_SELECT_ID = "provider_select";
 const API_KEY_INPUT_ID = "api_key_input";
 const SAVE_CURRENT_SELECT_ID = "save_current_select";
+const RESTORE_MODEL_PREVIEW_LIMIT = 4;
+const RESTORE_OVERRIDE_PREVIEW_LIMIT = 3;
+const RESTORE_VALUE_MAX_LENGTH = 220;
+
+function truncateRestoreValue(value: string, maxLength = RESTORE_VALUE_MAX_LENGTH): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function formatRestoreCode(value: string): string {
+  return `\`${value}\``;
+}
 
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -735,6 +753,8 @@ export async function execute(
       channelRestored: number;
       personaRestored: number;
       skipped: number;
+      restoredChannelOverrides: { channel_disc_id: string; llm_id: number }[];
+      restoredPersonaOverrides: { tomori_id: number; llm_id: number }[];
     } | null = null;
 
     if (!isSameProvider && isRestoringFromSaved) {
@@ -796,101 +816,212 @@ export async function execute(
       model_name: modelName ?? "unknown",
     };
 
-    // 15.1. Build restored config summary for the success embed
-    // Lists which config categories were loaded back from the saved snapshot.
-    // Settings not in the snapshot are silently carried over from the current config.
+    // 15.1. Build restored config summary for the success embed.
+    // Show the exact values that were restored from the saved snapshot.
     if (isRestoringFromSaved && savedConfig) {
       // Split to avoid false positive in locale scanner ("commands.config" + ".provider.switch")
       const keyBase = "commands.config" + ".provider.switch";
+      const restoredLabel = localizer(locale, `${keyBase}.restored_label`);
+      const noRestoresLabel = localizer(locale, `${keyBase}.no_restores_label`);
+      const chatModelLabel = localizer(locale, `${keyBase}.config_label_chat_model`);
+      const visionModelLabel = localizer(locale, `${keyBase}.config_label_vision_model`);
+      const imageModelLabel = localizer(locale, `${keyBase}.config_label_image_model`);
+      const embeddingModelLabel = localizer(locale, `${keyBase}.config_label_embedding_model`);
+      const samplerSettingsLabel = localizer(locale, `${keyBase}.config_label_sampler_settings`);
+      const fallbackModelsNoneLabel = localizer(locale, `${keyBase}.config_label_fallback_models_none`);
+      const channelOverridesNoneLabel = localizer(locale, `${keyBase}.config_label_channel_overrides_none`);
+      const personaOverridesNoneLabel = localizer(locale, `${keyBase}.config_label_persona_overrides_none`);
+      const customEndpointLabel = localizer(locale, `${keyBase}.config_label_custom_endpoint`);
+      const samplerPresetLabel = localizer(locale, `${keyBase}.sampler_preset_label`);
+      const samplerTemperatureLabel = localizer(locale, `${keyBase}.sampler_temperature_label`);
+      const samplerTopPLabel = localizer(locale, `${keyBase}.sampler_top_p_label`);
+      const samplerTopKLabel = localizer(locale, `${keyBase}.sampler_top_k_label`);
+      const samplerFrequencyPenaltyLabel = localizer(locale, `${keyBase}.sampler_frequency_penalty_label`);
+      const samplerPresencePenaltyLabel = localizer(locale, `${keyBase}.sampler_presence_penalty_label`);
+      const samplerMinPLabel = localizer(locale, `${keyBase}.sampler_min_p_label`);
+      const samplerLogitBiasesLabel = localizer(locale, `${keyBase}.sampler_logit_biases_label`);
       const restoredItems: string[] = [];
       const noRestoreItems: string[] = [];
-
-      // Helper to push to the appropriate list
-      const trackConfig = (hasData: boolean, label: string) => {
-        if (hasData) {
-          restoredItems.push(label);
-        } else {
-          noRestoreItems.push(label);
-        }
+      const unknownValue = formatRestoreCode(localizer(locale, "general.unknown"));
+      const addRestoredItem = (label: string, value: string) => {
+        restoredItems.push(`• **${label}:** ${truncateRestoreValue(value)}`);
+      };
+      const addMissingItem = (label: string) => {
+        noRestoreItems.push(label);
+      };
+      const formatMoreSuffix = (hiddenCount: number) =>
+        hiddenCount > 0 ? ` ${localizer(locale, `${keyBase}.restore_more_suffix`, { count: hiddenCount })}` : "";
+      const formatPreviewList = (items: string[], maxItems: number) => {
+        const visibleItems = items.slice(0, maxItems);
+        return `${visibleItems.join(", ")}${formatMoreSuffix(items.length - visibleItems.length)}`;
+      };
+      const resolveLlmDisplay = async (llmId: number, customModelName?: string | null) => {
+        const llm = await loadLlmById(llmId);
+        return llm ? formatRestoreCode(getLlmDisplayName(llm, customModelName)) : unknownValue;
+      };
+      const resolveDiffusionDisplay = async (diffusionModelId: number) => {
+        const model = await getDiffusionModelById(diffusionModelId);
+        return model ? formatRestoreCode(model.codename) : unknownValue;
+      };
+      const resolveEmbeddingDisplay = async (embeddingModelId: number) => {
+        const model = await loadEmbeddingModelById(embeddingModelId);
+        return model ? formatRestoreCode(model.codename) : unknownValue;
+      };
+      const resolvePersonaDisplay = async (tomoriId: number) => {
+        const personaRow = (await sql`SELECT tomori_nickname FROM tomoris WHERE tomori_id = ${tomoriId} LIMIT 1`)[0];
+        return personaRow?.tomori_nickname
+          ? `**${personaRow.tomori_nickname as string}**`
+          : `**${localizer(locale, "general.unknown")}**`;
       };
 
       // Chat Model
-      trackConfig(!!savedConfig.llm_id, localizer(locale, `${keyBase}.config_label_chat_model`));
+      if (savedConfig.llm_id) {
+        addRestoredItem(chatModelLabel, await resolveLlmDisplay(savedConfig.llm_id, savedConfig.custom_model_name));
+      } else {
+        addMissingItem(chatModelLabel);
+      }
 
       // Vision Model
-      trackConfig(!!savedConfig.vision_llm_id, localizer(locale, `${keyBase}.config_label_vision_model`));
+      if (savedConfig.vision_llm_id) {
+        addRestoredItem(
+          visionModelLabel,
+          await resolveLlmDisplay(savedConfig.vision_llm_id, savedConfig.custom_model_name),
+        );
+      } else {
+        addMissingItem(visionModelLabel);
+      }
 
-      // Image Model (standard diffusion or NAI diffusion)
-      trackConfig(
-        !!(savedConfig.diffusion_model_id || savedConfig.nai_diffusion_model_id),
-        localizer(locale, `${keyBase}.config_label_image_model`),
-      );
+      // Image Model (prefer the NovelAI-specific override when present)
+      const imageModelId = savedConfig.nai_diffusion_model_id ?? savedConfig.diffusion_model_id;
+      if (imageModelId) {
+        addRestoredItem(imageModelLabel, await resolveDiffusionDisplay(imageModelId));
+      } else {
+        addMissingItem(imageModelLabel);
+      }
 
       // Embedding Model
-      trackConfig(!!savedConfig.embedding_model_id, localizer(locale, `${keyBase}.config_label_embedding_model`));
+      if (savedConfig.embedding_model_id) {
+        addRestoredItem(embeddingModelLabel, await resolveEmbeddingDisplay(savedConfig.embedding_model_id));
+      } else {
+        addMissingItem(embeddingModelLabel);
+      }
 
-      // Sampler Settings — group all sampler fields as one category
-      const hasSamplers = [
-        savedConfig.llm_temperature,
-        savedConfig.llm_top_p,
-        savedConfig.llm_top_k,
-        savedConfig.llm_frequency_penalty,
-        savedConfig.llm_presence_penalty,
-        savedConfig.llm_min_p,
-      ].some((v) => v != null);
-      trackConfig(hasSamplers, localizer(locale, `${keyBase}.config_label_sampler_settings`));
+      // Sampler Settings — group all saved sampler values as one detailed line.
+      const samplerParts: string[] = [];
+      if (savedConfig.nai_preset_name) {
+        samplerParts.push(`${samplerPresetLabel} ${formatRestoreCode(savedConfig.nai_preset_name)}`);
+      }
+      if (savedConfig.llm_temperature != null) {
+        samplerParts.push(`${samplerTemperatureLabel} ${formatRestoreCode(String(savedConfig.llm_temperature))}`);
+      }
+      if (savedConfig.llm_top_p != null) {
+        samplerParts.push(`${samplerTopPLabel} ${formatRestoreCode(String(savedConfig.llm_top_p))}`);
+      }
+      if (savedConfig.llm_top_k != null) {
+        samplerParts.push(`${samplerTopKLabel} ${formatRestoreCode(String(savedConfig.llm_top_k))}`);
+      }
+      if (savedConfig.llm_frequency_penalty != null) {
+        samplerParts.push(
+          `${samplerFrequencyPenaltyLabel} ${formatRestoreCode(String(savedConfig.llm_frequency_penalty))}`,
+        );
+      }
+      if (savedConfig.llm_presence_penalty != null) {
+        samplerParts.push(
+          `${samplerPresencePenaltyLabel} ${formatRestoreCode(String(savedConfig.llm_presence_penalty))}`,
+        );
+      }
+      if (savedConfig.llm_min_p != null) {
+        samplerParts.push(`${samplerMinPLabel} ${formatRestoreCode(String(savedConfig.llm_min_p))}`);
+      }
+      if ((savedConfig.llm_logit_biases?.length ?? 0) > 0) {
+        samplerParts.push(
+          `${samplerLogitBiasesLabel} ${formatRestoreCode(String(savedConfig.llm_logit_biases.length))}`,
+        );
+      }
+      if (samplerParts.length > 0) {
+        addRestoredItem(samplerSettingsLabel, samplerParts.join(" · "));
+      } else {
+        addMissingItem(samplerSettingsLabel);
+      }
 
-      // Fallback Models (with count)
-      const fallbackCount = savedConfig.fallback_llm_ids?.length ?? 0;
-      if (fallbackCount > 0) {
-        restoredItems.push(
+      // Fallback Models
+      const fallbackIds = savedConfig.fallback_llm_ids ?? [];
+      if (fallbackIds.length > 0) {
+        const fallbackDisplays = await Promise.all(
+          fallbackIds.map((fallbackId) => resolveLlmDisplay(fallbackId, savedConfig.custom_model_name)),
+        );
+        addRestoredItem(
           localizer(locale, `${keyBase}.config_label_fallback_models`, {
-            count: fallbackCount,
+            count: fallbackIds.length,
           }),
+          formatPreviewList(fallbackDisplays, RESTORE_MODEL_PREVIEW_LIMIT),
         );
       } else {
-        noRestoreItems.push(localizer(locale, `${keyBase}.config_label_fallback_models_none`));
+        addMissingItem(fallbackModelsNoneLabel);
       }
 
-      // Channel Overrides (use actual restore counts if available)
-      const channelRestoredCount = restoreResult?.channelRestored ?? 0;
-      if (channelRestoredCount > 0) {
-        restoredItems.push(
+      // Channel Overrides (only list overrides that were actually restored)
+      const restoredChannelOverrides = restoreResult?.restoredChannelOverrides ?? [];
+      if (restoredChannelOverrides.length > 0) {
+        const channelOverrideDisplays = await Promise.all(
+          restoredChannelOverrides.slice(0, RESTORE_OVERRIDE_PREVIEW_LIMIT).map(async (override) => {
+            const modelDisplay = await resolveLlmDisplay(override.llm_id, savedConfig.custom_model_name);
+            return `<#${override.channel_disc_id}> → ${modelDisplay}`;
+          }),
+        );
+        addRestoredItem(
           localizer(locale, `${keyBase}.config_label_channel_overrides`, {
-            count: channelRestoredCount,
+            count: restoredChannelOverrides.length,
           }),
+          `${channelOverrideDisplays.join("; ")}${formatMoreSuffix(
+            restoredChannelOverrides.length - channelOverrideDisplays.length,
+          )}`,
         );
       } else {
-        noRestoreItems.push(localizer(locale, `${keyBase}.config_label_channel_overrides_none`));
+        addMissingItem(channelOverridesNoneLabel);
       }
 
-      // Persona Overrides (use actual restore counts if available)
-      const personaRestoredCount = restoreResult?.personaRestored ?? 0;
-      if (personaRestoredCount > 0) {
-        restoredItems.push(
-          localizer(locale, `${keyBase}.config_label_persona_overrides`, {
-            count: personaRestoredCount,
+      // Persona Overrides (only list overrides that were actually restored)
+      const restoredPersonaOverrides = restoreResult?.restoredPersonaOverrides ?? [];
+      if (restoredPersonaOverrides.length > 0) {
+        const personaOverrideDisplays = await Promise.all(
+          restoredPersonaOverrides.slice(0, RESTORE_OVERRIDE_PREVIEW_LIMIT).map(async (override) => {
+            const personaDisplay = await resolvePersonaDisplay(override.tomori_id);
+            const modelDisplay = await resolveLlmDisplay(override.llm_id, savedConfig.custom_model_name);
+            return `${personaDisplay} → ${modelDisplay}`;
           }),
         );
+        addRestoredItem(
+          localizer(locale, `${keyBase}.config_label_persona_overrides`, {
+            count: restoredPersonaOverrides.length,
+          }),
+          `${personaOverrideDisplays.join("; ")}${formatMoreSuffix(
+            restoredPersonaOverrides.length - personaOverrideDisplays.length,
+          )}`,
+        );
       } else {
-        noRestoreItems.push(localizer(locale, `${keyBase}.config_label_persona_overrides_none`));
+        addMissingItem(personaOverridesNoneLabel);
       }
 
       // Custom Endpoint (only relevant for custom providers)
-      trackConfig(!!savedConfig.custom_endpoint_url, localizer(locale, `${keyBase}.config_label_custom_endpoint`));
+      if (savedConfig.custom_endpoint_url) {
+        addRestoredItem(customEndpointLabel, formatRestoreCode(savedConfig.custom_endpoint_url));
+      } else {
+        addMissingItem(customEndpointLabel);
+      }
 
-      // Build the details string — each section separated by a blank line
+      // Build the details string — each section separated by a blank line.
       let restoredDetails = "";
       if (restoredItems.length > 0) {
-        restoredDetails += `\n\n✅ **${localizer(locale, `${keyBase}.restored_label`)}:** ${restoredItems.join(" · ")}`;
+        restoredDetails += `\n\n✅ **${restoredLabel}:**\n${restoredItems.join("\n")}`;
       }
       if (noRestoreItems.length > 0) {
-        restoredDetails += `\n\n➖ **${localizer(locale, `${keyBase}.no_restores_label`)}:** ${noRestoreItems.join(" · ")}`;
+        restoredDetails += `\n\n➖ **${noRestoresLabel}:** ${noRestoreItems.join(" · ")}`;
       }
-      // Static note: settings not in the snapshot keep their current values
+      // Static note: settings not in the snapshot keep their current values.
       restoredDetails += `\n\n${localizer(locale, `${keyBase}.carried_over_note`)}`;
 
-      // Note skipped overrides (channels/personas that no longer exist)
+      // Note skipped overrides (deleted channels/personas or missing models).
       const skippedCount = restoreResult?.skipped ?? 0;
       if (skippedCount > 0) {
         restoredDetails += `\n${localizer(locale, `${keyBase}.skipped_overrides_note`, { count: skippedCount })}`;

@@ -1897,10 +1897,14 @@ export async function restoreOverridesFromSnapshot(
   channelRestored: number;
   personaRestored: number;
   skipped: number;
+  restoredChannelOverrides: { channel_disc_id: string; llm_id: number }[];
+  restoredPersonaOverrides: { tomori_id: number; llm_id: number }[];
 }> {
   let channelRestored = 0;
   let personaRestored = 0;
   let skipped = 0;
+  const restoredChannelOverrides: { channel_disc_id: string; llm_id: number }[] = [];
+  const restoredPersonaOverrides: { tomori_id: number; llm_id: number }[] = [];
 
   // 1. Restore channel overrides (validate llm_id exists and channel still exists)
   for (const override of channelOverrides) {
@@ -1924,6 +1928,7 @@ export async function restoreOverridesFromSnapshot(
     const success = await setChannelLlmOverride(serverId, override.channel_disc_id, override.llm_id);
     if (success) {
       channelRestored++;
+      restoredChannelOverrides.push(override);
     } else {
       skipped++;
     }
@@ -1958,6 +1963,7 @@ export async function restoreOverridesFromSnapshot(
     const success = await setPersonaLlmOverride(override.tomori_id, override.llm_id);
     if (success) {
       personaRestored++;
+      restoredPersonaOverrides.push(override);
     } else {
       skipped++;
     }
@@ -1966,7 +1972,13 @@ export async function restoreOverridesFromSnapshot(
   log.info(
     `Override restore for server ${serverId}: ${channelRestored} channel, ${personaRestored} persona restored, ${skipped} skipped`,
   );
-  return { channelRestored, personaRestored, skipped };
+  return {
+    channelRestored,
+    personaRestored,
+    skipped,
+    restoredChannelOverrides,
+    restoredPersonaOverrides,
+  };
 }
 
 /**

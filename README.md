@@ -97,6 +97,52 @@ After adding her to your server through either method above, run the `/config se
 <h3 align="center">Lots of More Features, and Counting!</h3>
 <p align="center">A bunch of fun features that are easy to setup ranging from practical automatic greetings for new server members and cross-channel movement, to silly ones like user impersonations for some trolling. New ones are constantly in development, so please report through GitHub issues or the official Discord for any bugs (or to share any fun suggestions).</p>
 
+## Built-In Tool Reference for Prompt Customization
+
+If you customize TomoriBot's system prompt, persona instructions, or external provider prompt templates, use the exact function names below.
+
+- `Base Tool` means the tool is part of TomoriBot's normal built-in tool set. It may still depend on the current provider/model supporting tool calling.
+- Other requirements below are additional gates such as server feature flags, Discord permissions, model capabilities, or optional API keys.
+- Admin-added MCP tools are intentionally not listed here because their names depend on each server's configuration.
+
+### Built-In Function Tools
+
+| Tool name | Requirements | Purpose | Prompt / cool use case |
+|---|---|---|---|
+| `review_capabilities` | Base Tool | Check current chat abilities, slash commands, or runtime settings before answering. | Use this when the user asks "can you do X?" so Tomori does not hallucinate missing or disabled features. |
+| `remember_this_fact` | `self_teaching_enabled` | Save a new stable server fact or user-specific preference for future conversations. | Example: if a user repeatedly rewards a behavior and clearly explains why, store the underlying preference so Tomori can repeat what earns those rewards. |
+| `update_long_term_memory` | `self_teaching_enabled` | Replace an outdated long-term memory by ID. | Example: if a user corrects an old preference, rename, or standing instruction, revise the old memory instead of keeping both versions. |
+| `update_short_term_memory` | Base Tool; unavailable on NovelAI | Save temporary working memory for the current channel/story arc without making it permanent. | Example: after a long RP scene, support thread, or planning session, summarize the current state so later replies in that conversation stay coherent. |
+| `create_task` | Base Tool | Schedule one-time or recurring reminders and self-tasks. | Example: post a daily 8 AM support digest, weekly event reminder, or a recurring self-reminder to do a channel recap. |
+| `cross_channel_message` | Base Tool; unavailable on NovelAI; target channel permissions and cross-channel blocklist still apply | Instantly act in another channel or thread, with optional boomerang report-back. | Example: visit `#mods` to ask a question, or check another thread and then return with a short summary of what happened. |
+| `select_sticker_for_response` | `sticker_usage_enabled`; `USE_EXTERNAL_STICKERS` | Pick a matching server sticker to accompany the response. | Example: add a celebratory or smug sticker after a joke lands, a build succeeds, or a challenge is completed. |
+| `pin_selected_message` | `pin_message_enabled`; `MANAGE_MESSAGES` | Pin an important recent message in the current channel. | Example: pin a finalized answer, event info, or an intentionally funny "pin of shame" moment. |
+| `peek_profile_picture` | Base Tool; requires either a vision-capable chat model or a configured `vision_llm` | Inspect a user's avatar or the active persona avatar. | Example: answer "what does my avatar look like?" or use `self` when the active persona wants to reference her own appearance. |
+| `read_document` | Base Tool | Extract text from a PDF, TXT, or MD attachment in a recent message. | Example: read a posted rules file, changelog, proposal, or reference doc before answering questions about it. |
+| `refresh_message_timestamps` | Base Tool | Rebuild recent context with exact timestamps on every message. | Example: answer "when did Alice say that?" or "how long ago was the last deploy?" accurately instead of guessing. |
+| `increase_media_context` | Base Tool; requires a vision-capable chat model | Pull older hidden images/videos back into context when media was windowed out for optimization. | Example: if an earlier screenshot or reference image matters and the prompt shows a hidden-media placeholder, request the exact extra window needed. |
+| `process_gif` | Base Tool; development only; requires a vision-capable chat model | Extract keyframes from a GIF for analysis. | Useful in local/dev testing when an animated reaction GIF actually matters to understanding the conversation. |
+| `process_youtube_video` | Base Tool; requires a model with YouTube/video support | Analyze a specific YouTube link on demand. | Example: summarize the contents of a linked clip only when the video details materially affect the reply. |
+| `analyze_image` | Base Tool; requires a configured `vision_llm`; only shown when the current chat model cannot already see images | Delegate image understanding to a separate vision model. | Example: let a text-only chat model still answer OCR or screenshot questions by routing the image analysis through the configured vision model. |
+| `generate_image` | `imagegen_enabled`; active provider must support native image generation | Generate or edit an image with the current provider. | Example: create banners, scene snapshots, memes, or reference-based edits from a message image or avatar. |
+| `generate_image_nai` | `imagegen_enabled`; NovelAI provider or NovelAI optional API key | Generate or edit anime-styled images with NovelAI. | Example: create character art, multi-character scenes, or inpaint a targeted redraw while keeping the rest of the image intact. |
+| `generate_voice_message` | ElevenLabs optional API key; active persona needs an ElevenLabs voice; `voice_message_enabled` | Send a spoken Discord voice reply instead of plain text. | Example: run a "Tomori FM" morning bulletin, dramatic in-character line delivery, or voiced event announcement. |
+
+### Default Search / Web Extras
+
+These are the common built-in or bundled web tools Tomori can expose when web access is enabled. Exact availability depends on provider support, server config, API keys, and which MCP servers are active.
+
+| Tool name | Requirements | Purpose | Prompt / cool use case |
+|---|---|---|---|
+| `brave_web_search` | `web_search_enabled`; Brave API available | Search the web for general information. | Use for current events, product facts, or anything likely to have changed recently. |
+| `brave_image_search` | `web_search_enabled`; Brave API available | Search for relevant images on the web. | Good for finding reference art, visual examples, or confirming what something looks like. |
+| `brave_video_search` | `web_search_enabled`; Brave API available | Search for relevant videos on the web. | Useful when the user wants clips, trailers, demos, or examples worth watching. |
+| `brave_news_search` | `web_search_enabled`; Brave API available | Search specifically for current news coverage. | Use for fresh headlines, recent announcements, or tracking a developing story. |
+| `fetch` | Active bundled fetch MCP server | Read a specific web page or URL in more detail. | Use after a search result is found and Tomori needs the actual page contents, not just the search snippet. |
+| `web-search` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Free web search fallback when Brave is unavailable. | Useful as a default search path on servers that do not provide a Brave API key. |
+| `fetch-url` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Fetch and inspect a specific URL. | Use when a user pasted a link and wants the contents summarized or checked. |
+| `url-metadata` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Retrieve page metadata for a URL. | Useful for quickly checking what a link is before deciding whether to fetch the full page. |
+
 ## Supported Providers
 
 TomoriBot supports a wide range of LLM providers, image generation APIs, voice services, and search tools. There are plans to add in more providers, as well as features to mix-and-match them.
