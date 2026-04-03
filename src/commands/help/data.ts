@@ -35,7 +35,7 @@ export async function execute(
     const dataDeleteMention = commandRegistry.getCommandMention("data", "delete");
     const personaExportMention = commandRegistry.getCommandMention("persona", "export");
     const personalPrivacyMention = commandRegistry.getCommandMention("personal", "privacy");
-    const configPermissionsMention = commandRegistry.getCommandMention("config", "permissions");
+    const configPermissionsMention = commandRegistry.getCommandMention("config", "bot-permissions");
 
     // Use replySummaryEmbed to show structured data management guide
     await replySummaryEmbed(

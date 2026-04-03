@@ -91,7 +91,7 @@ After adding her to your server through either method above, run the `/config se
 ![Screenshots 6](img/scs/6.png)
 
 <h3 align="center">SillyTavern Integration (Beta)</h3>
-<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely, just plop the .json right in through `stpreset`. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like in SillyTavern. You can also import SillyTavern V2 character cards directly through `/persona import` or you can modify them first with `/persona generate`.</p>
+<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely, just plop the .json right in through `st-preset`. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like in SillyTavern. You can also import SillyTavern V2 character cards directly through `/persona import` or you can modify them first with `/persona generate`.</p>
 
 ![Screenshots 5](img/scs/5.png)
 <h3 align="center">Lots of More Features, and Counting!</h3>

@@ -194,7 +194,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       capabilitiesContent += "- Each alter persona has its own personality, trigger words, and webhook avatar\n";
       capabilitiesContent += "- Alter personas are triggered when their keywords appear in messages\n";
       capabilitiesContent +=
-        "- Multiple personas can be triggered sequentially from a single message (up to the server's `/config multitrigger` limit)\n";
+        "- Multiple personas can be triggered sequentially from a single message (up to the server's `/config persona-trigger-limit` limit)\n";
       capabilitiesContent += "- Replying to a webhook message continues the conversation as that persona\n";
       capabilitiesContent += "- Self-triggers are prevented (a persona will not trigger itself)\n\n";
 
@@ -240,7 +240,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "- Users can also ask you to speak or say something out loud (triggers the voice message tool)\n\n";
       } else if (!voiceEnabled) {
         capabilitiesContent +=
-          "Voice messages are **disabled** by server configuration. An admin can re-enable with `/config permissions`.\n\n";
+          "Voice messages are **disabled** by server configuration. An admin can re-enable with `/config bot-permissions`.\n\n";
       } else {
         capabilitiesContent +=
           "Voice messages are not configured for this persona. An admin can assign a voice with `/config voice elevenlabs`.\n\n";
@@ -259,10 +259,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
             "- The preset controls how your system prompt, persona description, personality, dialogue examples, and chat history are assembled\n";
           capabilitiesContent +=
             "- Supports macros like `{{user}}`, `{{char}}`, `{{personality}}`, `{{description}}`, `{{random: A, B, C}}`, and more\n";
-          capabilitiesContent += "- Nodes can be toggled on/off by admins with `/stpreset node toggle`\n\n";
+          capabilitiesContent += "- Nodes can be toggled on/off by admins with `/st-preset node toggle`\n\n";
         } else {
           capabilitiesContent += "No SillyTavern preset is active. Using native context assembly.\n";
-          capabilitiesContent += "- Upload a preset with `/stpreset upload` to customize how context is structured\n\n";
+          capabilitiesContent +=
+            "- Upload a preset with `/st-preset upload` to customize how context is structured\n\n";
         }
       }
 
@@ -385,14 +386,14 @@ export class ReviewCapabilitiesTool extends BaseTool {
         if (!seesYouTube) missingVision.push("YouTube videos");
 
         unavailableReasons.push(
-          `**Vision Limitations**: Current model cannot process ${missingVision.join(", ")}. Switch to a vision-capable model using \`/config model\` or \`/config apikey\`.`,
+          `**Vision Limitations**: Current model cannot process ${missingVision.join(", ")}. Switch to a vision-capable model using \`/config model\` or \`/config api-key\`.`,
         );
       }
 
       // Check for missing function calling
       if (!hasTools) {
         unavailableReasons.push(
-          "**No Function Calling**: Current model does not support tools/functions. Many features (search, reminders, etc.) require function calling. Switch to a model with tool support using `/config model` or `/config apikey`.",
+          "**No Function Calling**: Current model does not support tools/functions. Many features (search, reminders, etc.) require function calling. Switch to a model with tool support using `/config model` or `/config api-key`.",
         );
       }
 
@@ -406,7 +407,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (!config.imagegen_enabled)
         disabledFeatures.push({
           feature: "image generation",
-          command: "/config permissions (permission: imagegen)",
+          command: "/config bot-permissions (permission: imagegen)",
         });
       if (!config.sticker_usage_enabled)
         disabledFeatures.push({
@@ -457,7 +458,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       // 12. Add model switching information
       capabilitiesContent += "**Need different capabilities?** Tell the user they can switch models using:\n";
       capabilitiesContent += "- `/config model` - Switch to a different model with the current provider\n";
-      capabilitiesContent += "- `/config apikey` - Switch to a different LLM provider entirely\n\n";
+      capabilitiesContent += "- `/config api-key` - Switch to a different LLM provider entirely\n\n";
       capabilitiesContent += "Different models may support different features (vision, tools, reasoning, etc.).\n";
 
       log.info(`Successfully generated dynamic chat capabilities for model: ${displayModelName}`);
@@ -613,7 +614,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         settingsContent += "Image generation is enabled but no diffusion model is set.\n";
         settingsContent += "- Configure with `/config model image` to activate\n\n";
       } else {
-        settingsContent += "Image generation is **disabled**. Enable with `/config permissions`.\n\n";
+        settingsContent += "Image generation is **disabled**. Enable with `/config bot-permissions`.\n\n";
       }
 
       // 6b-2. Voice System Configuration
@@ -631,7 +632,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         settingsContent += `- Assign a voice with \`/config voice elevenlabs\`\n\n`;
       } else {
         settingsContent += `Voice messages are **disabled** by server configuration.\n`;
-        settingsContent += `- Re-enable with \`/config permissions\`\n\n`;
+        settingsContent += `- Re-enable with \`/config bot-permissions\`\n\n`;
       }
 
       // 6b-3. SillyTavern Preset Configuration
@@ -644,10 +645,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
           settingsContent += `An active preset is loaded: **${presetData.preset.preset_name}**\n`;
           settingsContent += `- **Total nodes**: ${presetData.nodes.length} (${enabledNodes.length} enabled)\n`;
           settingsContent += `- **Template macros**: \`{{user}}\`, \`{{char}}\`, \`{{personality}}\`, \`{{description}}\`, \`{{random: ...}}\`, etc.\n`;
-          settingsContent += `- **Manage**: \`/stpreset node toggle\` to enable/disable nodes, \`/stpreset remove\` to deactivate\n\n`;
+          settingsContent += `- **Manage**: \`/st-preset node toggle\` to enable/disable nodes, \`/st-preset remove\` to deactivate\n\n`;
         } else {
           settingsContent += `No SillyTavern preset is active. Using native context assembly.\n`;
-          settingsContent += `- Upload one with \`/stpreset upload\` to customize context structure\n\n`;
+          settingsContent += `- Upload one with \`/st-preset upload\` to customize context structure\n\n`;
         }
       }
 
@@ -655,13 +656,13 @@ export class ReviewCapabilitiesTool extends BaseTool {
       settingsContent += "## System Prompt\n\n";
       if (config.system_prompt) {
         settingsContent += `A custom system prompt is active (${config.system_prompt.length} characters).\n`;
-        settingsContent += "- Modify with `/config sysprompt change`\n";
-        settingsContent += "- Switch to a preset with `/config sysprompt preset`\n";
-        settingsContent += "- Reset to default with `/config sysprompt clear`\n\n";
+        settingsContent += "- Modify with `/config system-prompt set`\n";
+        settingsContent += "- Switch to a preset with `/config system-prompt preset`\n";
+        settingsContent += "- Reset to default with `/config system-prompt remove`\n\n";
       } else {
         settingsContent += "No custom system prompt is set. Using the default built-in prompt.\n";
-        settingsContent += "- Set a custom prompt with `/config sysprompt change`\n";
-        settingsContent += "- Or choose a preset with `/config sysprompt preset`\n\n";
+        settingsContent += "- Set a custom prompt with `/config system-prompt set`\n";
+        settingsContent += "- Or choose a preset with `/config system-prompt preset`\n\n";
       }
 
       // 7. API Keys Section
@@ -684,7 +685,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         settingsContent += "- If one key fails, the next available key is tried silently\n\n";
       } else {
         settingsContent +=
-          "No rotation keys configured. Use `/config apikey rotation` to add backup keys for automatic failover.\n\n";
+          "No rotation keys configured. Use `/config api-key rotation` to add backup keys for automatic failover.\n\n";
       }
 
       // 8. Available Tools Section (Dynamic Query)
@@ -852,10 +853,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       // 10. How to Enable Features Section
       settingsContent += "## How to Enable Disabled Features\n\n";
-      settingsContent += "- **Model Limitations**: Switch models using `/config model` or `/config apikey`\n";
+      settingsContent += "- **Model Limitations**: Switch models using `/config model` or `/config api-key`\n";
       settingsContent += "- **Server Configuration**: Server admin can enable features via `/config [feature]`\n";
       settingsContent +=
-        "- **API Keys**: Configure via `/config apikey` (LLM) or `/config brave_apikey` (Brave Search)\n";
+        "- **API Keys**: Configure via `/config api-key` (LLM) or `/config brave_apikey` (Brave Search)\n";
 
       log.info(`Successfully generated settings capabilities for server ${serverId}`);
 

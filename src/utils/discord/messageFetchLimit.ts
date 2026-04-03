@@ -1,6 +1,6 @@
 /**
  * Shared bounds for Discord message history fetch limits.
- * Used by runtime context building and /config maxmsgfetch validation.
+ * Used by runtime context building and /config message-fetch-limit validation.
  */
 
 export const MIN_MESSAGE_FETCH_LIMIT = 20;

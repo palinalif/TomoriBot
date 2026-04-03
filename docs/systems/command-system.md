@@ -1,4 +1,4 @@
-# 7. Command System
+﻿# 7. Command System
 
 TomoriBot uses Discord slash commands loaded dynamically from `src/commands/`.
 
@@ -167,7 +167,7 @@ Examples:
 - `/server whitelist remove`
 - `/config remove modeloverride` (channels + personas together)
 - `/server stm manage` (active server-shared STM entries)
-- `/server privatechannel remove`
+- `/server private-channels remove`
 - `/server rpchannel remove`
 
 Rules:
@@ -271,7 +271,10 @@ Rules:
 ## Representative Command Groups
 
 - `bot`: respond, generate(image), kill, impersonate
-- `config`: setup, model(text/image/embedding), apikey(set/delete/rotation), sysprompt(change/clear/preset), params(*), timezone, maxmsgfetch, permissions, uncensors
+- `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), params(*), timezone, message-fetch-limit, bot-permissions, jailbreaks
+- `optional-key`: google/set/remove, brave/set/remove, elevenlabs/set/remove, novelai/set/remove
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/reset), rpchannel(add/remove), crosschannel-blocklist, welcomechannel, private-channels(add/remove), member-permissions, always-reply, thought-logs-channel
+- `novelai`: attg, image(model/params/generate), image-tags(style/me/character/negative), character-reference
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), crosschannel-blocklist, welcomechannel
 - `persona`: create, generate, import, export, default, swap, remove
 - `conditioning`: toggle, manage
@@ -279,7 +282,7 @@ Rules:
 - `reward`: headpat, hug, kiss, tickle
 - `tool`: ping, status, refresh, compact, comment
 
-`/server autotrigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.
+`/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.
 
 `/bot generate image` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available.
 

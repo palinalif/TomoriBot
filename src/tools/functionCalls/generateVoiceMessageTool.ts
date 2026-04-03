@@ -208,7 +208,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       return {
         success: false,
         error:
-          "No ElevenLabs API key is available for this server. A server manager can set one with /optionalkey elevenlabs set.",
+          "No ElevenLabs API key is available for this server. A server manager can set one with /optional-key elevenlabs set.",
       };
     }
 

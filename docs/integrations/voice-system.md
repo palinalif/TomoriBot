@@ -1,4 +1,4 @@
-# Voice System
+﻿# Voice System
 
 TomoriBot has a bidirectional voice pipeline: inbound **STT** (users speak → bot reads) and outbound **TTS** (bot speaks → users hear). Both sides are currently powered by ElevenLabs, but the architecture is intentionally service-agnostic so future providers (Whisper STT, Qwen TTS, local services) can be dropped in.
 
@@ -46,9 +46,9 @@ Voice features require all three gates to be open:
 
 | Gate | Where set | Default |
 |------|-----------|---------|
-| Server opt-in key (`elevenlabs`) | `/optionalkey elevenlabs set` | none (feature disabled) |
+| Server opt-in key (`elevenlabs`) | `/optional-key elevenlabs set` | none (feature disabled) |
 | Per-persona voice assignment | `/config voice elevenlabs` | none (TTS disabled per persona) |
-| Server-level permission flag (`voice_message_enabled`) | `/config permissions` (checkbox) | `true` |
+| Server-level permission flag (`voice_message_enabled`) | `/config bot-permissions` (checkbox) | `true` |
 
 The `generate_voice_message` tool is excluded from the tool list in `toolRegistry.ts` unless all three are satisfied. The permission flag exists so admins with a key can still opt out server-wide without removing the key.
 
@@ -175,7 +175,7 @@ The current implementation couples the service calls to ElevenLabs directly. Fut
    ```
 2. Update `audioAttachmentTranscription.ts` to call the new provider (or add a routing layer if multiple STT providers should coexist).
 3. Add an opt key lookup for the new provider's API key using the existing `hasOptApiKey` / `getOptApiKey` pattern in `src/utils/security/crypto.ts`.
-4. Add an `/optionalkey {provider} set/remove` command pair.
+4. Add an `/optional-key {provider} set/remove` command pair.
 
 ### For a new TTS provider (e.g. Qwen TTS, local Kokoro)
 

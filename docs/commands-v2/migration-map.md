@@ -1,4 +1,4 @@
-# Migration Map
+﻿# Migration Map
 
 This page tracks concrete current commands that define or inspire the v2 direction.
 
@@ -10,7 +10,7 @@ This page tracks concrete current commands that define or inspire the v2 directi
   - hyphenated flat name
   - saved state mirrored in `/tool status`
 
-- `/server privatechannel remove`
+- `/server private-channels remove`
   - useful precursor for checkbox-group bulk management
   - v2-style follow-up would be a single persistent checklist command if the setting moves away from add/remove
 

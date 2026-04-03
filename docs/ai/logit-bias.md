@@ -1,12 +1,12 @@
-# Logit Bias
+﻿# Logit Bias
 
-This document describes TomoriBot's `/config logitbias` design and runtime behavior.
+This document describes TomoriBot's `/config logit-bias` design and runtime behavior.
 
 ## Command Surface
 
-- `/config logitbias add`
-- `/config logitbias remove`
-- `/config logitbias upload`
+- `/config logit-bias add`
+- `/config logit-bias remove`
+- `/config logit-bias upload`
 
 The command family accepts plain text such as `sorry, hello, hi` plus a shared bias value like `-100`, and also accepts explicit numeric token IDs.
 
@@ -42,10 +42,10 @@ At generation time, Tomori builds the OpenAI-style `logit_bias` map for the curr
 
 Tomori refreshes tokenizer caches when the effective text model changes or when new entries are added:
 
-- `/config logitbias add`
-- `/config logitbias upload`
+- `/config logit-bias add`
+- `/config logit-bias upload`
 - `/config model text`
-- `/config apikey set` when it changes `llm_id`
+- `/config api-key set` when it changes `llm_id`
 - `/config provider switch` when it changes or restores `llm_id`
 
 Saved provider snapshots also preserve `llm_logit_biases`, so switching away and back keeps both the raw text and any previously-cached tokenizer data.

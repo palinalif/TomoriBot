@@ -30,12 +30,12 @@ export async function execute(
 ): Promise<void> {
   try {
     // Get command mentions for cross-references
-    const helpApikeyMention = commandRegistry.getCommandMention("help", "apikey");
+    const helpApikeyMention = commandRegistry.getCommandMention("help", "api-key");
     const configSetupMention = commandRegistry.getCommandMention("config", "setup");
     const serverInitializeExpressionsMention = commandRegistry.getCommandMention("server", "initialize", "expressions");
     const serverTriggerMention = commandRegistry.getCommandMention("server", "trigger", "add");
-    const configPermissionsMention = commandRegistry.getCommandMention("config", "permissions");
-    const serverAutotriggerMention = commandRegistry.getCommandMention("server", "autotrigger", "channels");
+    const configPermissionsMention = commandRegistry.getCommandMention("config", "bot-permissions");
+    const serverAutotriggerMention = commandRegistry.getCommandMention("server", "auto-trigger", "channels");
     const personaMention = commandRegistry.getCommandMention("persona");
     const serverMention = commandRegistry.getCommandMention("server");
     const personalMention = commandRegistry.getCommandMention("personal");

@@ -1,4 +1,4 @@
-# SillyTavern Preset System
+﻿# SillyTavern Preset System
 
 > Import and use SillyTavern (ST) presets to control how TomoriBot assembles LLM prompts.
 
@@ -16,7 +16,7 @@ This is distinct from [SillyTavern Card Import](./sillytavern-card-support.md), 
 
 ## How It Works (User Perspective)
 
-1. User uploads an ST preset JSON via `/stpreset upload`
+1. User uploads an ST preset JSON via `/st-preset upload`
 2. The preset becomes active for that server
 3. On every LLM call, the context builder detects the active preset and rearranges blocks accordingly
 4. The `/sysprompt` and personality settings still apply — the preset controls *where* they appear, not *whether* they exist
@@ -28,11 +28,11 @@ This is distinct from [SillyTavern Card Import](./sillytavern-card-support.md), 
 - **Phase 1: Import & Visualization** — implemented
 - **Phase 2: Template Engine** — implemented
 - **Phase 3: Context Assembly Override** — implemented
-- **Phase 4: Management Commands** — not yet implemented (`/stpreset activate`, `/stpreset deactivate`, `/stpreset delete`)
+- **Phase 4: Management Commands** — not yet implemented (`/st-preset activate`, `/st-preset deactivate`, `/st-preset delete`)
 
 ## Commands
 
-### `/stpreset upload`
+### `/st-preset upload`
 
 Uploads a SillyTavern preset JSON file and stores it for the current server.
 
@@ -47,7 +47,7 @@ Uploads a SillyTavern preset JSON file and stores it for the current server.
 
 **Preset name:** Derived from the uploaded filename (minus `.json` extension), truncated to 100 chars. Must be unique per server.
 
-### `/stpreset node toggle`
+### `/st-preset node toggle`
 
 Shows a modal with checkbox groups representing the preset's toggleable prompt nodes.
 
@@ -59,7 +59,7 @@ Shows a modal with checkbox groups representing the preset's toggleable prompt n
 5. Modal title = preset name (dynamic, truncated at 45 chars by Discord)
 6. On submit, persists changed enabled states and invalidates the preset cache
 
-### `/stpreset remove`
+### `/st-preset remove`
 
 Deletes the currently active SillyTavern preset for this server, reverting context assembly to native fixed-block order.
 
@@ -73,8 +73,8 @@ Deletes the currently active SillyTavern preset for this server, reverting conte
 
 | Command | DB Function | Purpose |
 |---------|-------------|---------|
-| `/stpreset activate` | `setActivePreset()` | Switch between uploaded presets |
-| `/stpreset list` | `loadPresetsForServer()` | Show all presets for the server |
+| `/st-preset activate` | `setActivePreset()` | Switch between uploaded presets |
+| `/st-preset list` | `loadPresetsForServer()` | Show all presets for the server |
 
 ## Template Engine (Phase 2)
 
@@ -448,6 +448,6 @@ This section documents what our implementation supports versus what native Silly
 | `src/utils/text/stPresetEngine.ts` | Template macro engine (two-pass resolution) |
 | `src/utils/text/presetContextBuilder.ts` | Preset-driven context rearrangement |
 | `src/utils/text/contextBuilder.ts` | Routing wrapper + native context assembly |
-| `src/commands/stpreset/upload.ts` | `/stpreset upload` command |
-| `src/commands/stpreset/remove.ts` | `/stpreset remove` command |
-| `src/commands/stpreset/node/toggle.ts` | `/stpreset node toggle` command |
+| `src/commands/st-preset/upload.ts` | `/st-preset upload` command |
+| `src/commands/st-preset/remove.ts` | `/st-preset remove` command |
+| `src/commands/st-preset/node/toggle.ts` | `/st-preset node toggle` command |

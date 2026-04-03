@@ -1,4 +1,4 @@
-# 2. Getting Started with TomoriBot Development
+﻿# 2. Getting Started with TomoriBot Development
 
 This guide sets up TomoriBot locally with Bun + PostgreSQL.
 
@@ -75,7 +75,7 @@ Run in your test server:
 Then set your provider key:
 
 ```text
-/config apikey set provider:google key:...
+/config api-key set provider:google key:...
 ```
 
 Also supported:

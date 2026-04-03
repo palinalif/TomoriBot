@@ -1,4 +1,4 @@
-# 5. Database Schema and Data Model
+﻿# 5. Database Schema and Data Model
 
 This document summarizes the current PostgreSQL schema used by TomoriBot.
 
@@ -86,7 +86,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 - `tomori_configs.server_id` is the primary modern scope.
 - `tomori_configs.tomori_id` remains as a nullable legacy pointer.
-- `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config maxmsgfetch`).
+- `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config message-fetch-limit`).
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.thought_log_channel_disc_id` stores the optional server-scoped channel where provider reasoning summaries are posted after successful streamed chat turns.
 - `tomori_configs.crosschannel_blocklist_ids` stores the server-scoped channel blocklist for tool-driven `cross_channel_message` dispatch. Blocking a forum/media parent also blocks visits into threads under that parent.
@@ -102,7 +102,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 ### NovelAI profile tags
 
 - `tomoris.nai_tags` stores per-persona NovelAI character tags.
-- `tomoris.nai_char_ref_url` stores the persisted persona reference image URL/path used by the `/novelai charreference` workflow.
+- `tomoris.nai_char_ref_url` stores the persisted persona reference image URL/path used by the `/novelai character-reference` workflow.
 - `users.nai_char_tags` stores per-user NovelAI character tags keyed by Discord snowflake (`users.user_disc_id`).
 - `users.nai_char_ref_url` stores the persisted user reference image URL/path keyed by Discord snowflake.
 
@@ -151,7 +151,7 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 ### Logit bias snapshot storage
 
 - `saved_provider_configs.llm_logit_biases` mirrors `tomori_configs.llm_logit_biases` so provider snapshots can restore both the original text entries and any cached tokenizer-family resolutions.
-- This keeps `/config provider switch` and `/config apikey set` compatible with text-first logit-bias UX across model changes.
+- This keeps `/config provider switch` and `/config api-key set` compatible with text-first logit-bias UX across model changes.
 
 ## Migration Style
 

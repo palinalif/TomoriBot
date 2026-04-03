@@ -1,4 +1,4 @@
-# 8. AI Provider System
+﻿# 8. AI Provider System
 
 TomoriBot uses a provider abstraction so chat logic stays provider-agnostic.
 
@@ -107,7 +107,7 @@ Rule:
 - Tool support primarily follows the OpenRouter `tools` parameter, with a fallback for models whose OpenRouter description explicitly advertises native function/tool calling even when `supported_parameters` is incomplete.
 - `tool_choice` is treated as optional and is only sent when the OpenRouter capability cache says the active model supports it.
 - `supported_parameters` from the OpenRouter cache is also used to gate optional request params such as `logit_bias`.
-- `/config logitbias` now stores raw text as the source of truth and caches tokenizer-specific token IDs per model family.
+- `/config logit-bias` now stores raw text as the source of truth and caches tokenizer-specific token IDs per model family.
 - Model changes refresh those cached tokenizations instead of forcing users to re-enter the same words.
 - Runtime still only sends `logit_bias` when the active OpenRouter model reports support for it.
 - See `docs/ai/logit-bias.md` for the storage format, refresh triggers, and tokenizer-family design.
@@ -138,7 +138,7 @@ Rule:
 - structured output, history extraction, and `/server initialize expressions` work when the configured custom model is marked with the required capabilities
 - conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
 - persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
-- `/config logitbias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
+- `/config logit-bias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
 
 ## DeepSeek Provider Notes
 
@@ -380,13 +380,13 @@ Why this matters:
 
 ## API Key Setup Commands
 
-- `/config apikey set provider:google key:...`
-- `/config apikey set provider:openrouter key:...`
-- `/config apikey set provider:novelai key:...`
-- `/config apikey set provider:deepseek key:...`
-- `/config apikey set provider:nvidia key:...`
-- `/config apikey set provider:zai key:...`
-- `/config apikey set provider:zaicoding key:...`
+- `/config api-key set provider:google key:...`
+- `/config api-key set provider:openrouter key:...`
+- `/config api-key set provider:novelai key:...`
+- `/config api-key set provider:deepseek key:...`
+- `/config api-key set provider:nvidia key:...`
+- `/config api-key set provider:zai key:...`
+- `/config api-key set provider:zaicoding key:...`
 
 Provider choice/model selection commands:
 

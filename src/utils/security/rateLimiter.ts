@@ -41,7 +41,7 @@ export const MESSAGE_RATE_LIMITS = {
 export const MEDIA_LIMITS = {
   /**
    * Default total number of messages fetched for context building.
-   * Actual runtime limit is configurable per server via /config maxmsgfetch.
+   * Actual runtime limit is configurable per server via /config message-fetch-limit.
    * @default 80
    */
   MESSAGE_FETCH_LIMIT: DEFAULT_MESSAGE_FETCH_LIMIT,
@@ -720,7 +720,7 @@ export function logGuardConfiguration(): void {
   log.info("\n--- Media Limits ---");
   log.info(`Media Context Window: ${MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW}`);
   log.info(
-    `Default Max Media Extend: ${MEDIA_LIMITS.MESSAGE_FETCH_LIMIT - MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW} (actual value depends on /config maxmsgfetch)`,
+    `Default Max Media Extend: ${MEDIA_LIMITS.MESSAGE_FETCH_LIMIT - MEDIA_LIMITS.MEDIA_CONTEXT_WINDOW} (actual value depends on /config message-fetch-limit)`,
   );
   log.info(`Max Media Size: ${MEDIA_LIMITS.MAX_MEDIA_SIZE_MB} MB`);
   log.info(`Max GIF Size: ${MEDIA_LIMITS.MAX_GIF_SIZE_MB} MB`);

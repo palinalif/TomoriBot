@@ -1,4 +1,4 @@
-# 17. Multi-Persona System
+﻿# 17. Multi-Persona System
 
 This document describes TomoriBot's multi-persona system: how main and alter personas are stored, triggered, and rendered (webhooks, embeds, stickers, reminders), plus operational details and limitations.
 
@@ -54,7 +54,7 @@ Each persona checks its own trigger list:
 - **Main**: `tomori_configs.trigger_words`.
 - **Alter**: `tomoris.alter_triggers`.
 
-If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config multitrigger`.
+If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config persona-trigger-limit`.
 
 ### Manual triggers
 
@@ -84,7 +84,7 @@ To prevent infinite loops where personas continuously trigger each other, Tomori
 
 ### Overview
 
-- **Default limit**: 3 (configurable via `/config selfreply`, max 10)
+- **Default limit**: 3 (configurable via `/config self-reply-limit`, max 10)
 - **Scope**: Per-channel (shared across all personas)
 - **Purpose**: Limit cascading persona-to-persona triggers, not user-triggered responses
 
@@ -95,7 +95,7 @@ Think of the self-reply chain as a nested array with size `limit + 1`:
 ```javascript
 // With selfReplyLimit = 3
 const selfReplyChain = [
-  [User/Manual],     // Index 0: Bypass phase (up to /config multitrigger per message)
+  [User/Manual],     // Index 0: Bypass phase (up to /config persona-trigger-limit per message)
   [Level 1],         // Index 1: depth = 1
   [Level 2],         // Index 2: depth = 2
   [Level 3],         // Index 3: depth = 3 (limit reached!)
@@ -113,7 +113,7 @@ const selfReplyChain = [
 
 #### **Bypass Phase (No Limit Applied)**
 
-These triggers do NOT increment depth and can still trigger multiple personas (up to `/config multitrigger`):
+These triggers do NOT increment depth and can still trigger multiple personas (up to `/config persona-trigger-limit`):
 
 ✅ **User messages** → `isSelfMessage = false`
 ✅ **Slash commands** (`/respond`, `/impersonate`) → `isManuallyTriggered = true`
@@ -172,14 +172,14 @@ The chain resets (depth → 0) when:
 - Range: 0 (disabled) to 10 (max)
 - 0 = Only user/manual triggers allowed, all persona chains blocked
 
-**Command:** `/config selfreply`
+**Command:** `/config self-reply-limit`
 
 **Database:** `tomori_configs.triggered_persona_limit`
 - Default: 3
 - Range: 1 to 10
 - Caps how many personas one message can trigger
 
-**Command:** `/config multitrigger`
+**Command:** `/config persona-trigger-limit`
 
 ### Example Flow
 
@@ -229,7 +229,7 @@ Level 4       ❌         ❌         ❌        ❌  BLOCKED
 
 ### Key Insights
 
-1. **User always bypasses depth** - User/manual triggers don’t consume chain depth (but still respect `/config multitrigger`)
+1. **User always bypasses depth** - User/manual triggers don’t consume chain depth (but still respect `/config persona-trigger-limit`)
 2. **One message = one depth** - Mentioning 10 personas in one message = 1 depth increment
 3. **Shared counter** - All personas share the same depth counter per channel
 4. **Fair multi-triggers** - Multiple personas responding to the same message don't each add depth
@@ -240,10 +240,10 @@ Level 4       ❌         ❌         ❌        ❌  BLOCKED
 - Check if self-reply limit is reached
 - Look for log: `Self-reply chain limit reached (X)`
 - Have a user send a message to reset the chain
-- Increase limit with `/config selfreply` (max 10)
+- Increase limit with `/config self-reply-limit` (max 10)
 
 **Want to disable cascading entirely?**
-- Set limit to 0: `/config selfreply limit:0`
+- Set limit to 0: `/config self-reply-limit limit:0`
 - Only user/manual triggers will work, no persona-to-persona chains
 
 ## Webhook Strategy
@@ -464,7 +464,7 @@ In-memory caches:
 2. **Check self-reply limit:**
    - Look for log: `Self-reply chain limit reached (X)`
    - Have a user send a message to reset the chain
-   - Increase limit with `/config selfreply` if needed
+   - Increase limit with `/config self-reply-limit` if needed
 
 3. **Check webhook permissions:**
    - Verify bot has `MANAGE_WEBHOOKS` permission in channel
@@ -494,12 +494,12 @@ In-memory caches:
 **Personas stop responding after several triggers:**
 - Chain limit reached (default: 3)
 - User message resets chain
-- Check current limit: `/config selfreply`
+- Check current limit: `/config self-reply-limit`
 - Increase limit (max 10) or disable (0)
 
 **Personas triggering infinite loops:**
 - Limit is too high or disabled (0)
-- Reduce limit with `/config selfreply`
+- Reduce limit with `/config self-reply-limit`
 - Check persona personalities (may be too eager to mention each other)
 
 ## Test Checklist (Recommended)
@@ -518,7 +518,7 @@ In-memory caches:
 7. **Chain depth:** Persona A → B → C → limit reached → D blocked.
 8. **Multi-mention depth:** Persona A mentions B, C, D in one message → all respond, depth +1 only.
 9. **Chain reset:** After chain limit reached, user message → chain resets, personas respond again.
-10. **Limit configuration:** `/config selfreply limit:5` → new limit applies immediately.
+10. **Limit configuration:** `/config self-reply-limit limit:5` → new limit applies immediately.
 
 ### Webhook Robustness (Local Development)
 

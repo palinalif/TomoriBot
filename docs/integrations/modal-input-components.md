@@ -1,4 +1,4 @@
-# Modal Input Components
+﻿# Modal Input Components
 
 Discord introduced new interactive input components for modals beyond the original Text Input. These components enable richer form-like experiences with structured selection inputs.
 
@@ -365,14 +365,14 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 Implemented examples:
 
 - `/server whitelist remove` manages channels and roles in one modal.
-- `/server privatechannel remove` manages configured private channels in one modal.
+- `/server private-channels remove` manages configured private channels in one modal.
 - `/server rpchannel remove` manages configured RP channels in one modal.
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
-- `/config toolnotices visibility` manages visible tool notice embed types in one modal.
+- `/config tool-notices visibility` manages visible tool notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
 - `/config mcp remove` manages registered MCP servers in one modal.
 - `/config remove modelfallback` manages the fallback chain in one modal while preserving remaining order.
-- `/config randomtrigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
+- `/config random-trigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
 - `/server trigger delete` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 
 ---
@@ -401,7 +401,7 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 | Command                    | File                            | Custom ID              | Current Options          | Required | Migration Target                               |
 | -------------------------- | ------------------------------- | ---------------------- | ------------------------ | -------- | ---------------------------------------------- |
 | `/config mcp toggle`       | `config/mcp/toggle.ts`         | `mcp_enabled_select`   | Enable / Disable         | Yes      | **Checkbox Group** (1 option, required)        |
-| `/config randomtrigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/config random-trigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/config provider switch`  | `config/provider/switch.ts`    | `save_current_select`  | Yes / No (default: Yes)  | No       | **Checkbox** (default: true, rarely unchecked) |
@@ -437,14 +437,14 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/config model vision`           | `config/model/vision.ts`         | Dynamic model list, uses pagination                       |
 | `/config model embedding`        | `config/model/embedding.ts`      | Dynamic model list, uses pagination                       |
 | `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
-| `/config sysprompt preset`       | `config/sysprompt/preset.ts`     | Dynamic preset list from DB                               |
-| `/config apikey set`             | `config/apikey/set.ts`           | Provider select + text input combo; list may grow         |
+| `/config system-prompt preset`       | `config/system-prompt/preset.ts`     | Dynamic preset list from DB                               |
+| `/config api-key set`             | `config/api-key/set.ts`           | Provider select + text input combo; list may grow         |
 | `/teach personaprompt`           | `teach/personaprompt.ts`         | Dynamic persona list + free-form prompt (up to 16000 chars, 4 fields) |
 | `/teach attribute`               | `teach/attribute.ts`             | Dynamic persona list, uses pagination                     |
 | `/teach sampledialogue`          | `teach/sampledialogue.ts`        | Dynamic persona list, uses pagination                     |
 | `/teach memory personal`         | `teach/memory/personal.ts`       | Dynamic memory list                                       |
 | `/teach memory server`           | `teach/memory/server.ts`         | Dynamic memory list                                       |
-| `/novelai tags character`        | `novelai/tags/character.ts`      | Dynamic persona list                                      |
+| `/novelai image-tags character`        | `novelai/tags/character.ts`      | Dynamic persona list                                      |
 | `/forget attribute`              | `forget/attribute.ts`            | Dynamic attribute list, uses pagination                   |
 | `/forget reminder`               | `forget/reminder.ts`             | Dynamic reminder list                                     |
 | `/server welcomechannel`         | `server/welcomechannel.ts`       | Dynamic channel list                                      |
@@ -455,12 +455,12 @@ These modals collect free-form text and have no structured option set:
 
 | Command                    | File                          | Reason                                                  |
 | -------------------------- | ----------------------------- | ------------------------------------------------------- |
-| `/config sysprompt change` | `config/sysprompt/change.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
-| `/config randomtrigger add`| `config/randomtrigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
+| `/config system-prompt set` | `config/system-prompt/set.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
+| `/config random-trigger add`| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
 | `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
-| `/novelai tags me`         | `novelai/tags/me.ts`          | Free-form tag text                                      |
-| `/novelai tags negative`   | `novelai/tags/negative.ts`    | Free-form tag text                                      |
-| `/novelai tags style`      | `novelai/tags/style.ts`       | Free-form tag text                                      |
+| `/novelai image-tags me`         | `novelai/tags/me.ts`          | Free-form tag text                                      |
+| `/novelai image-tags negative`   | `novelai/tags/negative.ts`    | Free-form tag text                                      |
+| `/novelai image-tags style`      | `novelai/tags/style.ts`       | Free-form tag text                                      |
 | `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
 | `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |

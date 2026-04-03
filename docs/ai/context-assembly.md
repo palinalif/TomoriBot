@@ -1,4 +1,4 @@
-# Context Assembly
+﻿# Context Assembly
 
 > How TomoriBot builds the LLM prompt from server state, user data, conversation history, and optional ST presets.
 
@@ -82,7 +82,7 @@ The `metadataTag` is a stable interface between the native builder and the prese
 | `KNOWLEDGE_SERVER_DOCUMENTS` | 9 | RAG document chunks | `/teach document`, `/teach history`, `/forget document` |
 | `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/reward`, `/punish`, `/conditioning` |
 | `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/teach sampledialogue`, `/forget sampledialogue` |
-| `DIALOGUE_HISTORY` | 12 | Actual conversation history | `/config maxmsgfetch` |
+| `DIALOGUE_HISTORY` | 12 | Actual conversation history | `/config message-fetch-limit` |
 
 ## Native Assembly Order
 

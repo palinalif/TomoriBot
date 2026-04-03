@@ -2,7 +2,7 @@
  * Custom Provider Modal Utilities
  *
  * Shared utilities for handling the custom provider's two-step modal flow.
- * Used by /config setup and /config apikey set commands.
+ * Used by /config setup and /config api-key set commands.
  *
  * Flow:
  * 1. User selects "custom" provider in the first modal

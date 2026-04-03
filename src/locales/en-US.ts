@@ -1,4 +1,4 @@
-// locales/en.ts (or your desired file name)
+﻿// locales/en.ts (or your desired file name)
 
 // Export the entire locale structure as a default object
 export default {
@@ -74,9 +74,9 @@ export default {
       tomori_updating_description: `I'm currently being updated and will be back shortly. Please try again in a few moments!`,
       tomori_not_setup_dm_footer: `DMs are treated as mini "servers" wherein I respond to any of your messages privately. Most server related commands will still work as intended.`,
       api_key_missing_title: `API Key Missing`,
-      api_key_missing_description: `I need an API key to function, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/config apikey set\`.`,
+      api_key_missing_description: `I need an API key to function, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/config api-key set\`.`,
       api_key_error_title: `API Key Error`,
-      api_key_error_description: `There was an issue accessing or decrypting the configured API key. Please ensure it was set correctly using \`/config apikey set\`.`,
+      api_key_error_description: `There was an issue accessing or decrypting the configured API key. Please ensure it was set correctly using \`/config api-key set\`.`,
       context_error_title: `Context Building Error`,
       context_error_description: `I encountered an error while trying to understand the conversation context.`,
       critical_error_title: `Critical Error`,
@@ -98,14 +98,14 @@ export default {
       brave_api: {
         missing_key: {
           title: `Brave API Key Missing`,
-          description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/optionalkey brave set\`.`,
-          footer: `Learn how using /help apikey`,
+          description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/optional-key brave set\`.`,
+          footer: `Learn how using /help api-key`,
         },
       },
       duckduckgo_rate_limit: {
         title: `DuckDuckGo Rate Limited`,
-        description: `DuckDuckGo search is currently rate limited. For more reliable searching, a server member with \`Manage Server\` permissions can set up Brave Search using \`/optionalkey brave set\`.`,
-        footer: `Learn how using /help apikey`,
+        description: `DuckDuckGo search is currently rate limited. For more reliable searching, a server member with \`Manage Server\` permissions can set up Brave Search using \`/optional-key brave set\`.`,
+        footer: `Learn how using /help api-key`,
       },
       operation_failed_title: `Operation Failed`,
       operation_failed_description: `The requested operation could not be completed. Please try again.`,
@@ -122,7 +122,7 @@ export default {
       webhook_unknown_error_title: `Webhook Error`,
       webhook_unknown_error_description: `I couldn't create a webhook in this channel, so alter personas will use regular bot messages. Please check my permissions and try again.`,
       voice_transcription_unavailable_title: `Voice Transcription Unavailable`,
-      voice_transcription_unavailable_description: `Voice transcription isn't available here yet. Configure an ElevenLabs key with \`/optionalkey elevenlabs set\` and try again.`,
+      voice_transcription_unavailable_description: `Voice transcription isn't available here yet. Configure an ElevenLabs key with \`/optional-key elevenlabs set\` and try again.`,
       voice_transcription_failed_title: `Voice Transcription Failed`,
       voice_transcription_failed_description: `I couldn't transcribe that audio message. Please try again or send the message as text instead.`,
     },
@@ -212,7 +212,7 @@ export default {
     },
 
     tool_notice: {
-      hide_footer: `Hide this using \`/config toolnotices visibility\``,
+      hide_footer: `Hide this using \`/config tool-notices visibility\``,
     },
 
     // YouTube video processing messages
@@ -279,12 +279,12 @@ export default {
       rate_limit_title: "🟡 Provider Rate Limit Exceeded",
       rate_limit_title_all_rotation_keys: "🟡 Provider Rate Limit Exceeded (All Rotation Keys)",
       rate_limit_tip:
-        "Please wait a few minutes before trying again. If you have multiple personal keys, consider `/config apikey rotation`.",
+        "Please wait a few minutes before trying again. If you have multiple personal keys, consider `/config api-key rotation`.",
       model_fallback_hint: "For better resilience, you can configure model failover with `/config model fallback`.",
 
       content_blocked_title: "🔴️ Provider Content Filter",
       content_blocked_tip:
-        "Tip: You can turn on `/config uncensors` options to help prevent this error. You may also check messages (`/tool refresh`), personality/memories (`/data export`), blacklist problematic members (`/server blacklist`), or switch provider (`/config model`)",
+        "Tip: You can turn on `/config jailbreaks` options to help prevent this error. You may also check messages (`/tool refresh`), personality/memories (`/data export`), blacklist problematic members (`/server blacklist`), or switch provider (`/config model`)",
 
       timeout_title: "🟡️ Provider Request Timeout",
       timeout_tip: "Try shortening your message or try again",
@@ -609,9 +609,9 @@ export default {
         no_nodes: `No usable prompt nodes were found in this preset.`,
         duplicate_name: `A preset named "{name}" already exists for this server. Remove it first or rename the file.`,
         success_title: `Preset Uploaded`,
-        success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n{notes}\nUse \`/stpreset node toggle\` to adjust which nodes are active.\nUse \`/stpreset remove\` to revert to default behavior.`,
-        note_comment_only: `\n> **{count}** comment-only node(s) are visible in \`/stpreset node toggle\` but are never injected into the prompt.`,
-        note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/stpreset node toggle\` to enable them.\n`,
+        success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n{notes}\nUse \`/st-preset node toggle\` to adjust which nodes are active.\nUse \`/st-preset remove\` to revert to default behavior.`,
+        note_comment_only: `\n> **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
+        note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.\n`,
       },
       remove: {
         description: `Remove the active SillyTavern preset`,
@@ -627,7 +627,7 @@ export default {
         toggle: {
           description: `Toggle preset prompt nodes on or off`,
           no_preset_title: `No Preset Found`,
-          no_preset_description: `No active SillyTavern preset found for this server. Upload one with \`/stpreset upload\` first.`,
+          no_preset_description: `No active SillyTavern preset found for this server. Upload one with \`/st-preset upload\` first.`,
           no_nodes_title: `No Toggleable Nodes`,
           no_nodes_description: `This preset has no toggleable prompt nodes.`,
           select_page_title: `Select Page`,
@@ -698,7 +698,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Keep memories concise
 - Use free AI providers (Google Gemini free tier)
 - Limit auto-trigger channels`,
-          footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help apikey\` to learn more.`,
+          footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help api-key\` to learn more.`,
         },
       },
       compact: {
@@ -1287,9 +1287,9 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_additional_inst: `Additional Instructions`,
         // Error messages
         wrong_provider_title: `🔴 Incompatible Provider`,
-        wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Please use \`/config apikey set\` to switch providers.`,
+        wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Please use \`/config api-key set\` to switch providers.`,
         no_api_key_title: `🔴 No API Key`,
-        no_api_key_description: `No API key configured. Please use \`/config apikey set\` to set up your provider API key.`,
+        no_api_key_description: `No API key configured. Please use \`/config api-key set\` to set up your provider API key.`,
         model_incompatible_title: `Incompatible Model`,
         model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.\n\n**Next steps:**\nUse \`/config model text\` to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
         image_vision_required_title: `🔴 Image Vision Required`,
@@ -1299,7 +1299,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         web_search_tools_required_title: `🔴 Web Search Unavailable`,
         web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.\n\n**Next steps:**\n1. Use \`/config model text\` to switch to a tool-enabled model, OR\n2. Regenerate without web search (choose "No" when asked)`,
         api_key_decrypt_failed_title: `🔴 API Key Error`,
-        api_key_decrypt_failed_description: `Failed to decrypt API key. Please reconfigure using \`/config apikey set\`.`,
+        api_key_decrypt_failed_description: `Failed to decrypt API key. Please reconfigure using \`/config api-key set\`.`,
         invalid_image_title: `🔴 Invalid Image`,
         invalid_image_description: `Please upload a valid image file (PNG, JPG, JPEG, etc.).`,
         image_download_failed_title: `🔴 Image Download Failed`,
@@ -1399,14 +1399,14 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - I can see content within shared embeds (like tweets, articles, etc.)`,
         search_title: `Search & Information`,
         search_description: `- I can search the web for current information
-- I can also do image, video, and news search (via \`/optionalkey brave set\`)
+- I can also do image, video, and news search (via \`/optional-key brave set\`)
 - I can fetch and read content from URLs`,
         personality_title: `Personality & Customization`,
         personality_description: `- I can change my name and avatar using \`/config rename\` and \`/server avatar\`
 - I can switch between different personas using \`/persona\` (you can also share and save personas using \`/persona export\`!)
 - Multiple characters can coexist as alter personas, each with their own triggers and webhook avatar
 - My behavior and tone can be tweaked with \`/teach\`
-- A custom system prompt can be set with \`/config sysprompt\` to further shape my behavior
+- A custom system prompt can be set with \`/config system-prompt\` to further shape my behavior
 - Learn more with \`/help customization\``,
         memory_title: `Memory & Personalization`,
         memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
@@ -1425,7 +1425,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         alter_description: `- Multiple characters can coexist in one server via alter personas
 - Each alter has its own personality and is triggered by specific keywords
 - Alter personas use webhooks for distinct avatars
-- Multiple alters can respond to a single message (up to the \`/config multitrigger\` limit)
+- Multiple alters can respond to a single message (up to the \`/config persona-trigger-limit\` limit)
 - Replying to a webhook message continues the conversation as that persona
 - Manage alters with \`/persona import\` (alter option) and \`/persona remove\``,
         expressions_title: `Expressions & Reactions`,
@@ -1499,7 +1499,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Keep memories concise
 - Use free AI providers (Google Gemini free tier)
 - Limit auto-trigger channels`,
-        footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help apikey\` to learn more.`,
+        footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help api-key\` to learn more.`,
       },
 
       // /help setup
@@ -1615,7 +1615,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         footer: `Your chosen AI provider (Google, NovelAI, OpenRouter) processes your messages according to their own privacy policies. Never share personal information with me for privacy. For full details, see \`/legal privacy\` and \`/legal terms\``,
       },
 
-      // /help apikey
+      // /help api-key
       apikey: {
         description: `Learn how to set up API keys for AI providers`,
         provider_description: `Choose your AI provider`,
@@ -1647,7 +1647,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         brave_important_title: `Important Notes:`,
         brave_important_description: `- This is separate from your main AI provider
 - Without Brave API key, I can still function and use built-in web search`,
-        brave_footer: `For setting up your main AI provider, use the other \`/help apikey\` options`,
+        brave_footer: `For setting up your main AI provider, use the other \`/help api-key\` options`,
         // Google Gemini
         google_title: `Setting Up Google Gemini API Key`,
         google_description: `Google Gemini offers free and paid tiers with powerful AI models.
@@ -1684,7 +1684,7 @@ Set during the capabilities prompt after entering the URL. Enter the exact name 
 Sent as the \`model\` field in every request.
 
 **API Key / Bearer Token**
-Optional. After setup, use \`/config apikey set\` again to store an auth token.
+Optional. After setup, use \`/config api-key set\` again to store an auth token.
 If set, it is sent as \`Authorization: Bearer {token}\`.
 Leave unset for endpoints that require no authentication.`,
         // NVIDIA NIM
@@ -2130,7 +2130,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         text: {
           description: `Apply a NovelAI sampling preset to this server's text generation settings.`,
           not_novelai_title: `NovelAI Provider Required`,
-          not_novelai_description: `This command only works when your AI provider is set to NovelAI. Use \`/config apikey set\` to switch providers.`,
+          not_novelai_description: `This command only works when your AI provider is set to NovelAI. Use \`/config api-key set\` to switch providers.`,
           not_kayra_erato_title: `Kayra or Erato Required`,
           not_kayra_erato_description: `Sampling presets are only available for the **kayra-v1** and **llama-3-erato-v1** models. Use \`/config model text\` to switch models.`,
           modal_title: `Choose Sampling Preset`,
@@ -2172,7 +2172,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           field_orientation: `Orientation`,
           field_negative_tags: `Extra Negative Tags`,
           no_api_key_title: `NovelAI API Key Required`,
-          no_api_key_description: `No NovelAI API key is available for this server. Set one with \`/optionalkey novelai set\`, or switch your main provider to NovelAI.`,
+          no_api_key_description: `No NovelAI API key is available for this server. Set one with \`/optional-key novelai set\`, or switch your main provider to NovelAI.`,
           invalid_reference_title: `Invalid Character Reference`,
           invalid_reference_description: `The character reference must be a valid image attachment that NovelAI can read.`,
           character_reference_requires_v4_title: `V4 Model Required`,
@@ -2344,7 +2344,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         select_persona_placeholder: `Select who should respond...`,
         main_persona_description: `Main Persona`,
         alter_persona_description: `Alter Persona`,
-        embed_hide_notice: `Tip: You can hide this embed by enabling the "Hide Response Embeds" permission via \`/config permissions\`.`,
+        embed_hide_notice: `Tip: You can hide this embed by enabling the "Hide Response Embeds" permission via \`/config bot-permissions\`.`,
         use_reasoning_label: `Use Reasoning`,
         use_reasoning_description: `Toggle advanced reasoning mode using the smartest available model.`,
         use_reasoning_placeholder: `Select reasoning mode...`,
@@ -2353,7 +2353,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         use_reasoning_no: `No`,
         use_reasoning_no_description: `Use the standard model for a normal response.`,
         no_smart_model_title: `No Reasoning Model Found`,
-        no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config apikey set\`.`,
+        no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config api-key set\`.`,
         no_messages_title: `No Messages Found`,
         no_messages_description: `No messages found in this channel. Send at least one message before using \`/bot respond\`.`,
         cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot respond\` again. This cooldown is shared with message triggers.`,
@@ -2385,9 +2385,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         persona_message_placeholder: `Enter the message to send as the persona...`,
         persona_success_title: `Message Sent`,
         persona_success_description: `Message sent successfully as {persona}.`,
-        persona_impersonation_notice_description: `Hide this embed via \`/config permissions\`.`,
+        persona_impersonation_notice_description: `Hide this embed via \`/config bot-permissions\`.`,
         persona_impersonation_notice_footer: `Impersonation by {user}`,
-        user_impersonation_notice_description: `Hide this embed via \`/config permissions\`.`,
+        user_impersonation_notice_description: `Hide this embed via \`/config bot-permissions\`.`,
         user_impersonation_notice_footer: `{user} triggered a {target} impersonation`,
 
         // User impersonation
@@ -2579,7 +2579,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           provider_description: `Choose the AI provider for your API key`,
           provider_placeholder: `Select a provider...`,
           api_key_label: `Provider API Key`,
-          api_key_description: `This key will be securely stored. Use the '/help apikey' command for instructions in getting one. Tip: Use /config provider switch for saved config persistence.`,
+          api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one. Tip: Use /config provider switch for saved config persistence.`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
           no_providers_title: `No Providers Available`,
@@ -2599,7 +2599,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_description: `The {provider} API key has been successfully validated, encrypted, and saved.`,
           success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\` (the default for this provider).`,
           custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. I will use \`{model_name}\` when sending requests to this endpoint.`,
-          novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config permissions\`.`,
+          novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config bot-permissions\`.`,
         },
         delete: {
           description: `Remove the currently configured AI provider API key.`,
@@ -2617,7 +2617,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           key_description: `The API key to add to the rotation pool (required for add action)`,
           // Validation errors
           no_main_key_title: `No Main API Key`,
-          no_main_key_description: `You must set a main API key using \`/config apikey set\` before adding rotation keys.`,
+          no_main_key_description: `You must set a main API key using \`/config api-key set\` before adding rotation keys.`,
           custom_provider_title: `Not Supported`,
           custom_provider_description: `API key rotation is not supported for custom providers.`,
           key_required_title: `Key Required`,
@@ -2724,7 +2724,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           sampler_presence_penalty_label: `Presence Penalty`,
           sampler_min_p_label: `Min P`,
           sampler_logit_biases_label: `Logit Biases`,
-          success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config permissions\`.`,
+          success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config bot-permissions\`.`,
           success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
         },
         remove: {
@@ -2779,7 +2779,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         },
       },
       humanizer: {
-        description: `Set how 'human-like' my responses should be. For custom prompts, use /config sysprompt change.`,
+        description: `Set how 'human-like' my responses should be. For custom prompts, use /config system-prompt set.`,
         // value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
         modal_title: `Set Humanizer Degree`,
         select_label: `Humanizer Level`,
@@ -2790,7 +2790,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         choice_medium: `2: Medium (Typing Simulation)`,
         choice_heavy: `3: Heavy (Sentence Chunking & Lowercase)`,
         desc_none: `No system prompt injected. Raw AI output with no formatting or behavioral guidance.`,
-        desc_light: `Injects your system prompt (/config sysprompt) into every request. No typing simulation.`,
+        desc_light: `Injects your system prompt (/config system-prompt) into every request. No typing simulation.`,
         desc_medium: `Light features + typing indicators and random thinking pauses between messages.`,
         desc_heavy: `All features + sentence-level message splitting and casual text style (lowercase, reduced punctuation).`,
         // invalid_value_title: `Invalid Value`,
@@ -2938,7 +2938,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           description: `Choose an ElevenLabs voice for a persona.`,
           select_persona_title: `Select Persona Voice Target`,
           no_key_title: `No ElevenLabs API Key Set`,
-          no_key_description: `An ElevenLabs key is required before choosing persona voices. Set one first with \`/optionalkey elevenlabs set\`.`,
+          no_key_description: `An ElevenLabs key is required before choosing persona voices. Set one first with \`/optional-key elevenlabs set\`.`,
           voice_fetch_failed_title: `Voice List Unavailable`,
           voice_fetch_failed_description: `I couldn't load the available ElevenLabs voices for this server. Please check the configured key and try again.`,
           no_voices_title: `No Voices Available`,
@@ -2964,7 +2964,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           select_description: `Choose the AI model for me to use. Check your AI provider's website for pricing of non-free models.`,
           select_placeholder: `Choose a model...`,
           no_api_key_title: `No API Key Set`,
-          no_api_key_description: `An API key must be configured before changing models. Please use \`/config apikey set\` to set an API key first.`,
+          no_api_key_description: `An API key must be configured before changing models. Please use \`/config api-key set\` to set an API key first.`,
           no_models_title: `No Models Found`,
           no_models_description: `Could not load available AI models from the database.`,
           invalid_model_title: `Invalid Model`,
@@ -2974,7 +2974,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           validating_api_key_compatibility_title: `Validating API Key`,
           validating_api_key_compatibility: `Validating API key compatibility with new provider...`,
           api_key_incompatible_title: `API Key Incompatible`,
-          api_key_incompatible_description: `The current API key is not compatible with the {model_name} model from {provider}. Please set a valid API key for {provider} using \`/config apikey set\`.`,
+          api_key_incompatible_description: `The current API key is not compatible with the {model_name} model from {provider}. Please set a valid API key for {provider} using \`/config api-key set\`.`,
           validation_error_title: `Validation Error`,
           validation_error_description: `An error occurred while validating API key compatibility. Please try again.`,
           success_title: `Model Updated`,
@@ -3009,7 +3009,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           select_description: `Choose the embedding model for document search.`,
           select_placeholder: `Choose a model...`,
           no_api_key_title: `No API Key Set`,
-          no_api_key_description: `An API key must be configured before changing embedding models. Please use \`/config apikey set\` first.`,
+          no_api_key_description: `An API key must be configured before changing embedding models. Please use \`/config api-key set\` first.`,
           no_models_title: `No Embedding Models Available`,
           no_models_description: `No embedding models are available for provider {provider}.`,
           invalid_model_title: `Invalid Model`,
@@ -3051,7 +3051,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_api_key_title: `No API Key Set`,
           no_api_key_description: `An API key must be configured before changing image models.`,
           no_models_title: `No Image Models Available`,
-          no_models_description: `Your current text model provider ({provider}) does not support image generation. Switch to Google or OpenRouter using \`/config apikey set\` first.`,
+          no_models_description: `Your current text model provider ({provider}) does not support image generation. Switch to Google or OpenRouter using \`/config api-key set\` first.`,
           invalid_model_description: `The selected image model is not valid or available.`,
           already_selected_title: `Model Already Selected`,
           already_selected_description: `Already using the \`{model_name}\` image model.`,
@@ -3066,7 +3066,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           select_description: `Choose a vision-capable model to analyze images on behalf of your chat model.`,
           select_placeholder: `Choose a vision model...`,
           no_api_key_title: `No API Key Set`,
-          no_api_key_description: `An API key must be configured before setting a vision model. Please use \`/config apikey set\` first.`,
+          no_api_key_description: `An API key must be configured before setting a vision model. Please use \`/config api-key set\` first.`,
           no_models_title: `No Vision Models Available`,
           no_models_description: `Your current provider ({provider}) has no vision-capable models. Switch to a provider with vision models first.`,
           invalid_model_title: `Invalid Model`,
@@ -3116,7 +3116,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         api_provider_description: `Please choose the provider of the LLM of your choice`,
         api_provider_placeholder: `Choose a provider...`,
         api_key_label: `API Key`,
-        api_key_description: `This key will be securely stored. Use the '/help apikey' command for instructions in getting one`,
+        api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one`,
         api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
         api_key_placeholder: `Do NOT share this key with anyone`,
         preset_label: `Personality Preset`,
@@ -3165,7 +3165,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         already_setup_title: `Already SeWt Up`,
         already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/teach\`, etc.
 
-				If you wish to swap my provider, use the \`/config apikey set\` command.`,
+				If you wish to swap my provider, use the \`/config api-key set\` command.`,
       },
       params: {
         description: `Adjust AI sampling parameters for generation quality.`,
@@ -3880,7 +3880,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         member_description: `The member to add or remove from the blacklist.`,
         action_description: `Whether to add or remove the member.`,
         personalization_disabled_title: `Personalization Disabled`,
-        personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config permissions\`.`,
+        personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config bot-permissions\`.`,
         already_blacklisted_title: `Already Blacklisted`,
         already_blacklisted_description: `\`{user_name}\` is already on the personalization blacklist.`,
         not_blacklisted_title: `Not Blacklisted`,
@@ -4293,7 +4293,7 @@ You can change this anytime using \`/personal privacy\`.`,
       sampledialogue: {
         description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
         teaching_disabled_title: `Sample Dialogue Teaching Disabled`,
-        teaching_disabled_description: `Members are currently not allowed to teach/forget sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/server memberpermissions\`.`,
+        teaching_disabled_description: `Members are currently not allowed to teach/forget sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         modal_title: `Add Sample Dialogue`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this dialogue is for.`,
@@ -4341,7 +4341,7 @@ You can change this anytime using \`/personal privacy\`.`,
       attribute: {
         description: `Add a personality attribute describing me for this server.`,
         teaching_disabled_title: `Attribute Teaching Disabled`,
-        teaching_disabled_description: `Members are not currently allowed to teach/forget personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/server memberpermissions\`.`,
+        teaching_disabled_description: `Members are not currently allowed to teach/forget personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         modal_title: `Add Personality Attribute`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this attribute is for.`,
@@ -4390,11 +4390,11 @@ You can change this anytime using \`/personal privacy\`.`,
         rag_disabled_title: `Document RAG Disabled`,
         rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
         teaching_disabled_title: `Document Teaching Disabled`,
-        teaching_disabled_description: `Members are not currently allowed to teach/forget documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/server memberpermissions\`.`,
+        teaching_disabled_description: `Members are not currently allowed to teach/forget documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         no_embedding_model_title: `No Embedding Model Set`,
         no_embedding_model_description: `An embedding model is not configured for this provider. Please set one using \`/config model embedding\`.`,
         no_api_key_title: `No API Key Set`,
-        no_api_key_description: `An API key is required to embed documents. Please use \`/config apikey set\`.`,
+        no_api_key_description: `An API key is required to embed documents. Please use \`/config api-key set\`.`,
         invalid_name_title: `Invalid Document Name`,
         invalid_name_description: `Please provide a valid document name (1-64 characters).`,
         duplicate_title: `Document Name Already Exists`,
@@ -4437,7 +4437,7 @@ You can change this anytime using \`/personal privacy\`.`,
         no_embedding_model_title: `No Embedding Model Set`,
         no_embedding_model_description: `An embedding model is not configured. Please set one using \`/config model embedding\`.`,
         no_api_key_title: `No API Key Set`,
-        no_api_key_description: `An API key is required to extract and embed history. Please use \`/config apikey set\`.`,
+        no_api_key_description: `An API key is required to extract and embed history. Please use \`/config api-key set\`.`,
         no_messages_title: `No Messages Found`,
         no_messages_description: `No messages were found in this channel to extract knowledge from.`,
         no_facts_extracted_title: `No Facts Extracted`,
@@ -4539,7 +4539,7 @@ You can change this anytime using \`/personal privacy\`.`,
         server: {
           description: `Add a server memory to my knowledge base.`,
           teaching_disabled_title: `Server Memory Teaching Disabled`,
-          teaching_disabled_description: `Members are not currently allowed to add/remove server memories on this server. A server member with \`Manage Server\` permissions can enable this using \`/server memberpermissions\`.`,
+          teaching_disabled_description: `Members are not currently allowed to add/remove server memories on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
           modal_title: `Add Server Memory`,
           persona_select_label: `Persona`,
           persona_select_description: `Choose which persona this server memory is for.`,
@@ -4729,14 +4729,15 @@ You can change this anytime using \`/personal privacy\`.`,
         // Errors
         disabled_title: "🔴 Image Generation Disabled",
         disabled_description:
-          "Image generation is disabled on this server. A server member with `Manage Server` permissions can enable it using `/config permissions`.",
+          "Image generation is disabled on this server. A server member with `Manage Server` permissions can enable it using `/config bot-permissions`.",
         wrong_provider_title: "🔴 Unsupported Provider",
         wrong_provider_description:
           "Image generation requires a provider with native image generation support. Your current provider is **{current_provider}**.",
         no_api_key_title: "🔴 No API Key",
-        no_api_key_description: "No API key configured. Please use `/config apikey set`.",
+        no_api_key_description: "No API key configured. Please use `/config api-key set`.",
         api_key_decrypt_failed_title: "🔴 API Key Error",
-        api_key_decrypt_failed_description: "Failed to decrypt API key. Please reconfigure using `/config apikey set`.",
+        api_key_decrypt_failed_description:
+          "Failed to decrypt API key. Please reconfigure using `/config api-key set`.",
         no_diffusion_model_title: "🔴 No Image Model",
         no_diffusion_model_description: "No diffusion model configured for your provider.",
         error_billing_title: "🔴 Billing Required",
@@ -4766,13 +4767,13 @@ You can change this anytime using \`/personal privacy\`.`,
       rejoin_title: `I'm Back!`,
       rejoin_description: `Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/config\`, \`/teach\`, and \`forget\` commands. You can also manage or delete your data anytime with \`/data\`.
 
-			If you wish to swap my provider, use the \`/config apikey set\` command.
+			If you wish to swap my provider, use the \`/config api-key set\` command.
 
 			**By using me, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
       setup_prompt_title: `Successfully Added`,
       setup_prompt_description: `Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/config setup\` command to choose my initial personality and configure my AI features. You can also manage or delete your data anytime with \`/data\`.
 
-			Use the \`/help apikey\` command if you are unsure on how to create an API key for your chosen AI provider. API keys will be kept encrypted but if you are still wary of giving it to a public Discord bot, feel free to run your own TomoriBot using the [repository's guide](https://github.com/Bredrumb/TomoriBot) instead.
+			Use the \`/help api-key\` command if you are unsure on how to create an API key for your chosen AI provider. API keys will be kept encrypted but if you are still wary of giving it to a public Discord bot, feel free to run your own TomoriBot using the [repository's guide](https://github.com/Bredrumb/TomoriBot) instead.
 
 			**By using me, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
     },
@@ -4815,7 +4816,7 @@ You can change this anytime using \`/personal privacy\`.`,
       quota_remaining: `You have {remaining} image(s) remaining for today.`,
     },
     generate_image_nai: {
-      no_google_api_key: `Inpainting requires a Google API key for image segmentation. Set one with /optionalkey google set, or switch to the Google provider.`,
+      no_google_api_key: `Inpainting requires a Google API key for image segmentation. Set one with /optional-key google set, or switch to the Google provider.`,
       provider_quota_exceeded: `NovelAI image generation quota is exhausted for this account. Recharge Anlas or wait for the quota to refresh, then try again.`,
       characters_require_v4: `Character positioning requires a NovelAI V4 diffusion model or newer.`,
       character_requires_id_or_tags: `Character entry #{index} must include either an id or tags.`,

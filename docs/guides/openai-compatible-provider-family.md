@@ -1,4 +1,4 @@
-# OpenAI-Compatible Provider Family
+﻿# OpenAI-Compatible Provider Family
 
 This guide is the concrete refactor blueprint for adding multiple new providers that expose an OpenAI-style chat API.
 
@@ -122,7 +122,7 @@ Current examples:
 
 User-facing reminder:
 
-- when adding a new provider in this family, also update `/help apikey` choices and localized provider instructions
+- when adding a new provider in this family, also update `/help api-key` choices and localized provider instructions
 
 ## File Layout
 
@@ -434,7 +434,7 @@ The combined extraction + DeepSeek slice is successful when:
 
 - `custom` still works without behavior regression
 - `deepseek` is auto-discovered and registered in `providerInfoRegistry`
-- `/config setup` and `/config apikey set` can validate and switch to `deepseek`
+- `/config setup` and `/config api-key set` can validate and switch to `deepseek`
 - `/config model text` shows the seeded DeepSeek models
 - DeepSeek chat streaming works
 - DeepSeek tool calling works only on seeded tool-capable models
@@ -454,7 +454,7 @@ The combined extraction + DeepSeek slice is successful when:
 - `src/utils/provider/providerInfoRegistry.ts`
 - `src/utils/provider/providerCapabilityResolver.ts`
 - `src/providers/utils/providerFeatureExecutors.ts`
-- `src/commands/config/apikey/set.ts`
+- `src/commands/config/api-key/set.ts`
 - `src/commands/config/model/image.ts`
 - `src/commands/config/model/embedding.ts`
 - `src/utils/db/dbWrite.ts`

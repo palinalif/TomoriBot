@@ -1,4 +1,4 @@
-# 9. Tool System
+﻿# 9. Tool System
 
 TomoriBot exposes built-in tools, MCP tools, and REST-backed tools through one central registry.
 
@@ -50,8 +50,8 @@ Current `cross_channel_message` runtime notes:
 
 Current `generate_image_nai` runtime notes:
 
-- server-wide style tags come from `/novelai tags style` via `tomori_configs.nai_style_tags`
-- server-wide negative tags come from `/novelai tags negative` via `tomori_configs.nai_negative_tags`
+- server-wide style tags come from `/novelai image-tags style` via `tomori_configs.nai_style_tags`
+- server-wide negative tags come from `/novelai image-tags negative` via `tomori_configs.nai_negative_tags`
 - the dedicated `generate_image_nai` model override comes from `/novelai image model` via `tomori_configs.nai_diffusion_model_id`, with fallback to the shared image model only when that shared model is already NovelAI
 - `characters[]` now drives V4 multi-character prompting for `generate_image_nai`; coordinate mode is enabled when two or more characters are present
 - persona and user appearance tags are resolved from `tomoris.nai_tags` and `users.nai_char_tags`
@@ -241,9 +241,9 @@ Behavior notes:
 
 - visibility is server-scoped via `tomori_configs.tool_notice_hidden_keys`
 - an empty hidden-key list means all current and future notice types remain visible by default
-- `/config toolnotices visibility` manages the hidden-key list through checkbox groups
+- `/config tool-notices visibility` manages the hidden-key list through checkbox groups
 - visible notices are posted in the source channel as normal
 - hidden notices are rerouted to the configured thought-log channel when one exists
 - hidden notices from private channels are suppressed instead of being rerouted, so private-channel activity never leaks to thoughtlogs
 - hidden notices in DMs are suppressed because DMs have no guild thought-log destination
-- all tool notices include a footer hint pointing users to `/config toolnotices visibility`
+- all tool notices include a footer hint pointing users to `/config tool-notices visibility`
