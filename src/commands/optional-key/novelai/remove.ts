@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /optional-key novelai remove
  * Removes the stored NovelAI API key for this server and clears the exclusive image gen flag.
  */
@@ -23,7 +23,7 @@ import { updateTomoriConfig } from "../../../utils/db/dbWrite";
  * @returns Configured subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.novelai.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optional-key.novelai.remove.description"));
 
 /**
  * Removes the NovelAI API key from the server's optional API keys and clears exclusive imggen flag
@@ -70,8 +70,8 @@ export async function execute(
     const hasKey = await hasOptApiKey(tomoriState.server_id, "novelai");
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.novelai.remove.no_key_title",
-        descriptionKey: "commands.optionalkey.novelai.remove.no_key_description",
+        titleKey: "commands.optional-key.novelai.remove.no_key_title",
+        descriptionKey: "commands.optional-key.novelai.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -117,8 +117,8 @@ export async function execute(
 
     // 8. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.novelai.remove.success_title",
-      descriptionKey: "commands.optionalkey.novelai.remove.success_description",
+      titleKey: "commands.optional-key.novelai.remove.success_title",
+      descriptionKey: "commands.optional-key.novelai.remove.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -149,3 +149,4 @@ export async function execute(
     });
   }
 }
+

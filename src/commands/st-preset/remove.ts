@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -19,7 +19,7 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
  * @param subcommand - The subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.stpreset.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.st-preset.remove.description"));
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -63,8 +63,8 @@ export async function execute(
 
     if (!preset || !preset.preset_id) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.stpreset.remove.no_preset_title",
-        descriptionKey: "commands.stpreset.remove.no_preset_description",
+        titleKey: "commands.st-preset.remove.no_preset_title",
+        descriptionKey: "commands.st-preset.remove.no_preset_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -75,8 +75,8 @@ export async function execute(
     const deleted = await deletePreset(preset.preset_id, tomoriState.server_id);
     if (!deleted) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.stpreset.remove.failed_title",
-        descriptionKey: "commands.stpreset.remove.failed_description",
+        titleKey: "commands.st-preset.remove.failed_title",
+        descriptionKey: "commands.st-preset.remove.failed_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -85,8 +85,8 @@ export async function execute(
 
     // 4. Confirm removal
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.stpreset.remove.success_title",
-      descriptionKey: "commands.stpreset.remove.success_description",
+      titleKey: "commands.st-preset.remove.success_title",
+      descriptionKey: "commands.st-preset.remove.success_description",
       descriptionVars: { name: preset.preset_name },
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
@@ -111,3 +111,4 @@ export async function execute(
     });
   }
 }
+

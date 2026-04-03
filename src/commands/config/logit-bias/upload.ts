@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   MessageFlags,
   type Attachment,
@@ -66,11 +66,11 @@ function parseUploadedEntries(payload: unknown) {
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("upload")
-    .setDescription(localizer("en-US", "commands.config.logitbias.upload.description"))
+    .setDescription(localizer("en-US", "commands.config.logit-bias.upload.description"))
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(localizer("en-US", "commands.config.logitbias.upload.file_description"))
+        .setDescription(localizer("en-US", "commands.config.logit-bias.upload.file_description"))
         .setRequired(true),
     );
 
@@ -98,8 +98,8 @@ export async function execute(
     const validation = validateAttachment(attachment);
     if (!validation.isValid) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.invalid_file_title",
-        descriptionKey: `commands.config.logitbias.upload.${validation.errorKey}`,
+        titleKey: "commands.config.logit-bias.upload.invalid_file_title",
+        descriptionKey: `commands.config.logit-bias.upload.${validation.errorKey}`,
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -109,8 +109,8 @@ export async function execute(
     const maxSizeBytes = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
     if (attachment.size && attachment.size > maxSizeBytes) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.file_too_large_title",
-        descriptionKey: "commands.config.logitbias.upload.file_too_large_description",
+        titleKey: "commands.config.logit-bias.upload.file_too_large_title",
+        descriptionKey: "commands.config.logit-bias.upload.file_too_large_description",
         descriptionVars: {
           max_size: MAX_UPLOAD_FILE_SIZE_MB.toString(),
         },
@@ -130,8 +130,8 @@ export async function execute(
 
     if (!downloadResult.success || !downloadResult.buffer) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.download_failed_title",
-        descriptionKey: "commands.config.logitbias.upload.download_failed_description",
+        titleKey: "commands.config.logit-bias.upload.download_failed_title",
+        descriptionKey: "commands.config.logit-bias.upload.download_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -142,8 +142,8 @@ export async function execute(
       rawPayload = JSON.parse(downloadResult.buffer.toString("utf-8"));
     } catch {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.invalid_json_title",
-        descriptionKey: "commands.config.logitbias.upload.invalid_json_description",
+        titleKey: "commands.config.logit-bias.upload.invalid_json_title",
+        descriptionKey: "commands.config.logit-bias.upload.invalid_json_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -152,8 +152,8 @@ export async function execute(
     const parsedEntries = parseUploadedEntries(rawPayload);
     if (!parsedEntries.success) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.invalid_schema_title",
-        descriptionKey: "commands.config.logitbias.upload.invalid_schema_description",
+        titleKey: "commands.config.logit-bias.upload.invalid_schema_title",
+        descriptionKey: "commands.config.logit-bias.upload.invalid_schema_description",
         descriptionVars: {
           min: LOGIT_BIAS_MIN.toString(),
           max: LOGIT_BIAS_MAX.toString(),
@@ -166,8 +166,8 @@ export async function execute(
 
     if (parsedEntries.data.length === 0) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.no_entries_title",
-        descriptionKey: "commands.config.logitbias.upload.no_entries_description",
+        titleKey: "commands.config.logit-bias.upload.no_entries_title",
+        descriptionKey: "commands.config.logit-bias.upload.no_entries_description",
         color: ColorCode.WARN,
       });
       return;
@@ -188,8 +188,8 @@ export async function execute(
 
     if (merged.addedCount === 0 && merged.updatedCount === 0) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.upload.already_set_title",
-        descriptionKey: "commands.config.logitbias.upload.already_set_description",
+        titleKey: "commands.config.logit-bias.upload.already_set_title",
+        descriptionKey: "commands.config.logit-bias.upload.already_set_description",
         color: ColorCode.INFO,
       });
       return;
@@ -233,8 +233,8 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.logitbias.upload.success_title",
-      descriptionKey: "commands.config.logitbias.upload.success_description",
+      titleKey: "commands.config.logit-bias.upload.success_title",
+      descriptionKey: "commands.config.logit-bias.upload.success_description",
       descriptionVars: {
         added_count: merged.addedCount.toString(),
         updated_count: merged.updatedCount.toString(),
@@ -275,3 +275,4 @@ export async function execute(
     });
   }
 }
+

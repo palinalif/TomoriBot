@@ -108,7 +108,7 @@ Current runtime effects for `FULL`:
 - Message-based chat trigger flow silently ignores the user in `messageCreate` (non-manual trigger path).
 - Messages from level-2 users are filtered out of conversation history context.
 
-### Per-server blacklist (`/server blacklist`)
+### Per-server blacklist (`/server user-blacklist add|remove`)
 
 `personalization_blacklist` is server-scoped and keyed by `(server_id, user_disc_id)`.
 

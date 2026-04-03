@@ -1,4 +1,4 @@
-﻿import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
@@ -16,11 +16,11 @@ import {
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("message-fetch-limit")
-    .setDescription(localizer("en-US", "commands.config.maxmsgfetch.description"))
+    .setDescription(localizer("en-US", "commands.config.message-fetch-limit.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(localizer("en-US", "commands.config.maxmsgfetch.limit_description"))
+        .setDescription(localizer("en-US", "commands.config.message-fetch-limit.limit_description"))
         .setMinValue(MIN_MESSAGE_FETCH_LIMIT)
         .setMaxValue(MAX_MESSAGE_FETCH_LIMIT)
         .setRequired(true),
@@ -58,8 +58,8 @@ export async function execute(
 
     if (limit < MIN_MESSAGE_FETCH_LIMIT || limit > MAX_MESSAGE_FETCH_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.maxmsgfetch.limit.invalid_range_title",
-        descriptionKey: "commands.config.maxmsgfetch.limit.invalid_range_description",
+        titleKey: "commands.config.message-fetch-limit.limit.invalid_range_title",
+        descriptionKey: "commands.config.message-fetch-limit.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_MESSAGE_FETCH_LIMIT.toString(),
           max: MAX_MESSAGE_FETCH_LIMIT.toString(),
@@ -82,8 +82,8 @@ export async function execute(
     const currentLimit = tomoriState.config.message_fetch_limit ?? DEFAULT_MESSAGE_FETCH_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.maxmsgfetch.limit.already_set_title",
-        descriptionKey: "commands.config.maxmsgfetch.limit.already_set_description",
+        titleKey: "commands.config.message-fetch-limit.limit.already_set_title",
+        descriptionKey: "commands.config.message-fetch-limit.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -149,8 +149,8 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.maxmsgfetch.limit.success_title",
-      descriptionKey: "commands.config.maxmsgfetch.limit.success_description",
+      titleKey: "commands.config.message-fetch-limit.limit.success_title",
+      descriptionKey: "commands.config.message-fetch-limit.limit.success_description",
       descriptionVars: {
         limit: limit.toString(),
       },
@@ -175,3 +175,4 @@ export async function execute(
     });
   }
 }
+

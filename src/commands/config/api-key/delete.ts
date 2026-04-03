@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -13,7 +13,7 @@ import { sql } from "@/utils/db/client";
 
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("delete").setDescription(localizer("en-US", "commands.config.apikey.delete.description"));
+  subcommand.setName("delete").setDescription(localizer("en-US", "commands.config.api-key.delete.description"));
 
 /**
  * Removes API key from database
@@ -53,8 +53,8 @@ export async function execute(
     // 4. Check if there's an API key to remove
     if (!tomoriState.config.api_key) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.apikey.delete.no_key_title",
-        descriptionKey: "commands.config.apikey.delete.no_key_description",
+        titleKey: "commands.config.api-key.delete.no_key_title",
+        descriptionKey: "commands.config.api-key.delete.no_key_description",
         color: ColorCode.WARN,
       });
       return;
@@ -105,8 +105,8 @@ export async function execute(
 
     // 8. Success message with embed
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.delete.success_title",
-      descriptionKey: "commands.config.apikey.delete.success_description",
+      titleKey: "commands.config.api-key.delete.success_title",
+      descriptionKey: "commands.config.api-key.delete.success_description",
       color: ColorCode.SUCCESS,
     });
   } catch (error) {
@@ -143,3 +143,4 @@ export async function execute(
     // Avoid using replyInfoEmbed here to prevent potential double-reply issues
   }
 }
+

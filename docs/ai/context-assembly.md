@@ -80,7 +80,7 @@ The `metadataTag` is a stable interface between the native builder and the prese
 | `KNOWLEDGE_USERS_IN_CONVERSATION` | 7 | User list + personal memories + status + reminders + time/channel info | `/teach memory personal`, `/forget memory personal` |
 | `KNOWLEDGE_SHORT_TERM_MEMORY` | 8 | Recent conversation summaries from other channels (STM) | `/personal cache` |
 | `KNOWLEDGE_SERVER_DOCUMENTS` | 9 | RAG document chunks | `/teach document`, `/teach history`, `/forget document` |
-| `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/reward`, `/punish`, `/conditioning` |
+| `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/reward`, `/punish`, `/conditioning manage` |
 | `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/teach sampledialogue`, `/forget sampledialogue` |
 | `DIALOGUE_HISTORY` | 12 | Actual conversation history | `/config message-fetch-limit` |
 

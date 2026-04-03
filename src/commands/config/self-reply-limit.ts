@@ -1,4 +1,4 @@
-﻿import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
@@ -16,11 +16,11 @@ const DEFAULT_LIMIT = 3;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("self-reply-limit")
-    .setDescription(localizer("en-US", "commands.config.selfreply.description"))
+    .setDescription(localizer("en-US", "commands.config.self-reply-limit.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(localizer("en-US", "commands.config.selfreply.limit_description"))
+        .setDescription(localizer("en-US", "commands.config.self-reply-limit.limit_description"))
         .setMinValue(MIN_LIMIT)
         .setMaxValue(MAX_LIMIT)
         .setRequired(true),
@@ -60,8 +60,8 @@ export async function execute(
     // 3. Validate range (redundant but safe)
     if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.selfreply.limit.invalid_range_title",
-        descriptionKey: "commands.config.selfreply.limit.invalid_range_description",
+        titleKey: "commands.config.self-reply-limit.limit.invalid_range_title",
+        descriptionKey: "commands.config.self-reply-limit.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_LIMIT.toString(),
           max: MAX_LIMIT.toString(),
@@ -86,8 +86,8 @@ export async function execute(
     const currentLimit = tomoriState.config.self_reply_limit ?? DEFAULT_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.selfreply.limit.already_set_title",
-        descriptionKey: "commands.config.selfreply.limit.already_set_description",
+        titleKey: "commands.config.self-reply-limit.limit.already_set_title",
+        descriptionKey: "commands.config.self-reply-limit.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -159,11 +159,11 @@ export async function execute(
     const isEnabled = limit > 0;
     await replyInfoEmbed(interaction, locale, {
       titleKey: isEnabled
-        ? "commands.config.selfreply.limit.success_title"
-        : "commands.config.selfreply.limit.success_disabled_title",
+        ? "commands.config.self-reply-limit.limit.success_title"
+        : "commands.config.self-reply-limit.limit.success_disabled_title",
       descriptionKey: isEnabled
-        ? "commands.config.selfreply.limit.success_description"
-        : "commands.config.selfreply.limit.success_disabled_description",
+        ? "commands.config.self-reply-limit.limit.success_description"
+        : "commands.config.self-reply-limit.limit.success_disabled_description",
       descriptionVars: {
         limit: limit.toString(),
       },
@@ -188,3 +188,4 @@ export async function execute(
     });
   }
 }
+

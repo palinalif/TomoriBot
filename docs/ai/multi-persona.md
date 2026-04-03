@@ -61,7 +61,7 @@ If multiple personas match, they respond in deterministic order based on where t
 Manual triggers can specify `selectedPersonaId`. In that case, **only that persona responds** (fallbacks apply if missing).
 
 Configured join welcomes also use the manual-trigger path:
-- `/server welcomechannel` stores a selected persona or `Random`.
+- `/server welcome-channel set` stores a selected persona or `Random`.
 - On `guildMemberAdd`, the welcome event resolves that persona and calls `tomoriChat(..., isManuallyTriggered = true, selectedPersonaId = ...)`.
 - If `welcome_persona_id` is `NULL`, one persona is chosen uniformly from the server's available personas for that join.
 

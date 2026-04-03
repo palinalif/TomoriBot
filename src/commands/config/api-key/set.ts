@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   TextInputStyle,
   type ChatInputCommandInteraction,
@@ -36,7 +36,7 @@ const API_KEY_INPUT_ID = "api_key_input";
 
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("set").setDescription(localizer("en-US", "commands.config.apikey.set.description"));
+  subcommand.setName("set").setDescription(localizer("en-US", "commands.config.api-key.set.description"));
 
 /**
  * Sets the API key Tomori will use for this server with dynamic provider selection
@@ -80,8 +80,8 @@ export async function execute(
   const uniqueProviders = await loadUniqueProviders();
   if (!uniqueProviders || uniqueProviders.length === 0) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.set.no_providers_title",
-      descriptionKey: "commands.config.apikey.set.no_providers_description",
+      titleKey: "commands.config.api-key.set.no_providers_title",
+      descriptionKey: "commands.config.api-key.set.no_providers_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -103,21 +103,21 @@ export async function execute(
     const modalComponents: ModalComponent[] = [
       {
         customId: PROVIDER_SELECT_ID,
-        labelKey: "commands.config.apikey.set.provider_label",
-        descriptionKey: "commands.config.apikey.set.provider_description",
-        placeholder: "commands.config.apikey.set.provider_placeholder",
+        labelKey: "commands.config.api-key.set.provider_label",
+        descriptionKey: "commands.config.api-key.set.provider_description",
+        placeholder: "commands.config.api-key.set.provider_placeholder",
         required: true,
         options: providerSelectOptions,
       },
       {
         customId: API_KEY_INPUT_ID,
-        labelKey: "commands.config.apikey.set.api_key_label",
+        labelKey: "commands.config.api-key.set.api_key_label",
         // Show custom endpoint hint when not in production (custom provider available)
         descriptionKey:
           process.env.RUN_ENV !== "production"
-            ? "commands.config.apikey.set.api_key_description_with_custom"
-            : "commands.config.apikey.set.api_key_description",
-        placeholder: "commands.config.apikey.set.api_key_placeholder",
+            ? "commands.config.api-key.set.api_key_description_with_custom"
+            : "commands.config.api-key.set.api_key_description",
+        placeholder: "commands.config.api-key.set.api_key_placeholder",
         required: true,
         style: TextInputStyle.Short,
         maxLength: 200,
@@ -129,7 +129,7 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.apikey.set.modal_title",
+        modalTitleKey: "commands.config.api-key.set.modal_title",
         components: modalComponents,
       },
       MessageFlags.Ephemeral, // Auto-defer with ephemeral flag
@@ -209,8 +209,8 @@ export async function execute(
       // Basic API key validation - let helper functions manage interaction state
       if (apiKey.length < 10) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.config.apikey.set.invalid_key_title",
-          descriptionKey: "commands.config.apikey.set.invalid_key_description",
+          titleKey: "commands.config.api-key.set.invalid_key_title",
+          descriptionKey: "commands.config.api-key.set.invalid_key_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -236,8 +236,8 @@ export async function execute(
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.includes("Unsupported provider")) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.apikey.set.unsupported_provider_title",
-            descriptionKey: "commands.config.apikey.set.unsupported_provider_description",
+            titleKey: "commands.config.api-key.set.unsupported_provider_title",
+            descriptionKey: "commands.config.api-key.set.unsupported_provider_description",
             descriptionVars: {
               provider: selectedProvider,
             },
@@ -245,8 +245,8 @@ export async function execute(
           });
         } else {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.apikey.set.validation_error_title",
-            descriptionKey: "commands.config.apikey.set.validation_error_description",
+            titleKey: "commands.config.api-key.set.validation_error_title",
+            descriptionKey: "commands.config.api-key.set.validation_error_description",
             color: ColorCode.ERROR,
           });
         }
@@ -274,7 +274,7 @@ export async function execute(
         }
 
         await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.config.apikey.set.key_validation_failed_title",
+          titleKey: "commands.config.api-key.set.key_validation_failed_title",
           description: errorDescription, // Use formatted error description
           color: ColorCode.ERROR,
         });
@@ -340,8 +340,8 @@ export async function execute(
 
         if (!defaultModel || !defaultModel.llm_id) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.apikey.set.no_default_model_title",
-            descriptionKey: "commands.config.apikey.set.no_default_model_description",
+            titleKey: "commands.config.api-key.set.no_default_model_title",
+            descriptionKey: "commands.config.api-key.set.no_default_model_description",
             descriptionVars: {
               provider: getProviderDisplayName(newProvider),
             },
@@ -523,12 +523,12 @@ export async function execute(
     // When switching specifically to NovelAI, use the dedicated key that also
     // notifies the user that emoji/sticker usage were automatically disabled.
     const successDescriptionKey = isCustomProvider(newProvider)
-      ? "commands.config.apikey.set.custom_success_with_model_description"
+      ? "commands.config.api-key.set.custom_success_with_model_description"
       : currentProvider !== newProvider && newProvider === "novelai"
-        ? "commands.config.apikey.set.novelai_success_with_model_description"
+        ? "commands.config.api-key.set.novelai_success_with_model_description"
         : currentProvider !== newProvider
-          ? "commands.config.apikey.set.success_with_model_description"
-          : "commands.config.apikey.set.success_description";
+          ? "commands.config.api-key.set.success_with_model_description"
+          : "commands.config.api-key.set.success_description";
 
     const descriptionVars: Record<string, string> = {
       provider: getProviderDisplayName(selectedProvider),
@@ -546,7 +546,7 @@ export async function execute(
     }
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
-      titleKey: "commands.config.apikey.set.success_title",
+      titleKey: "commands.config.api-key.set.success_title",
       descriptionKey: successDescriptionKey,
       descriptionVars,
       color: ColorCode.SUCCESS,
@@ -584,3 +584,4 @@ export async function execute(
     });
   }
 }
+

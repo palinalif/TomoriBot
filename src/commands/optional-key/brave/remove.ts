@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -17,7 +17,7 @@ import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
  * @returns Configured subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.brave.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optional-key.brave.remove.description"));
 
 /**
  * Removes the Brave Search API key from the server's MCP configuration
@@ -64,8 +64,8 @@ export async function execute(
     const hasKey = await hasOptApiKey(tomoriState.server_id, "brave-search");
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.brave.remove.no_key_title",
-        descriptionKey: "commands.optionalkey.brave.remove.no_key_description",
+        titleKey: "commands.optional-key.brave.remove.no_key_title",
+        descriptionKey: "commands.optional-key.brave.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -106,8 +106,8 @@ export async function execute(
 
     // 7. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.brave.remove.success_title",
-      descriptionKey: "commands.optionalkey.brave.remove.success_description",
+      titleKey: "commands.optional-key.brave.remove.success_title",
+      descriptionKey: "commands.optional-key.brave.remove.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -140,3 +140,4 @@ export async function execute(
     });
   }
 }
+

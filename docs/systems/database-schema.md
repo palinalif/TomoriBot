@@ -90,7 +90,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.thought_log_channel_disc_id` stores the optional server-scoped channel where provider reasoning summaries are posted after successful streamed chat turns.
 - `tomori_configs.crosschannel_blocklist_ids` stores the server-scoped channel blocklist for tool-driven `cross_channel_message` dispatch. Blocking a forum/media parent also blocks visits into threads under that parent.
-- `tomori_configs.welcome_prompt` stores the required additional greeting instruction shown in `/server welcomechannel`.
+- `tomori_configs.welcome_prompt` stores the required additional greeting instruction shown in `/server welcome-channel set`.
 - `tomori_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.
 - `tomori_configs.nai_style_tags` stores server-wide NovelAI style/quality tags prepended to every `generate_image_nai` prompt.
 - `tomori_configs.nai_negative_tags` stores server-wide NovelAI negative tags; an empty array falls back to the `NAI_IMAGE_NEGATIVE_PROMPT` env value.

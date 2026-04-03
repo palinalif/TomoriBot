@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -13,7 +13,7 @@ import { localizer } from "@/utils/text/localizer";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.elevenlabs.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optional-key.elevenlabs.remove.description"));
 
 export async function execute(
   _client: Client,
@@ -49,8 +49,8 @@ export async function execute(
     const hasKey = await hasOptApiKey(tomoriState.server_id, ELEVENLABS_SERVICE_NAME);
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.elevenlabs.remove.no_key_title",
-        descriptionKey: "commands.optionalkey.elevenlabs.remove.no_key_description",
+        titleKey: "commands.optional-key.elevenlabs.remove.no_key_title",
+        descriptionKey: "commands.optional-key.elevenlabs.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -87,8 +87,8 @@ export async function execute(
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.elevenlabs.remove.success_title",
-      descriptionKey: "commands.optionalkey.elevenlabs.remove.success_description",
+      titleKey: "commands.optional-key.elevenlabs.remove.success_title",
+      descriptionKey: "commands.optional-key.elevenlabs.remove.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -119,3 +119,4 @@ export async function execute(
     });
   }
 }
+

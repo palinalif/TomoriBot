@@ -1,4 +1,4 @@
-﻿import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
@@ -11,11 +11,11 @@ import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("self-debug")
-    .setDescription(localizer("en-US", "commands.config.selfdebug.description"))
+    .setDescription(localizer("en-US", "commands.config.self-debug.description"))
     .addStringOption((option) =>
       option
         .setName("set")
-        .setDescription(localizer("en-US", "commands.config.selfdebug.set_description"))
+        .setDescription(localizer("en-US", "commands.config.self-debug.set_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -71,10 +71,10 @@ export async function execute(
     const currentSetting = tomoriState.config.self_debug_enabled ?? false;
     if (currentSetting === isEnabled) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.selfdebug.already_set_title",
+        titleKey: "commands.config.self-debug.already_set_title",
         descriptionKey: isEnabled
-          ? "commands.config.selfdebug.already_enabled_description"
-          : "commands.config.selfdebug.already_disabled_description",
+          ? "commands.config.self-debug.already_enabled_description"
+          : "commands.config.self-debug.already_disabled_description",
         color: ColorCode.WARN,
       });
       return;
@@ -135,10 +135,10 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.selfdebug.success_title",
+      titleKey: "commands.config.self-debug.success_title",
       descriptionKey: isEnabled
-        ? "commands.config.selfdebug.enabled_success"
-        : "commands.config.selfdebug.disabled_success",
+        ? "commands.config.self-debug.enabled_success"
+        : "commands.config.self-debug.disabled_success",
       color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
     });
   } catch (error) {
@@ -160,3 +160,4 @@ export async function execute(
     });
   }
 }
+

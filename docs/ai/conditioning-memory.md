@@ -40,17 +40,16 @@ Each subcommand also accepts an optional `reason` string.
 
 Management is centralized under `/conditioning`:
 
-- `/conditioning toggle`
 - `/conditioning manage`
 
-`toggle` and `manage` require `ManageGuild`.
+`/conditioning manage` requires `ManageGuild`.
 
-`/conditioning toggle` is server-wide:
+`/conditioning manage` is now server-wide:
 
-- it flips reward or punishment prompt injection for every persona in that server
-- it does not require picking a persona
-- `/conditioning manage` remains persona-specific
-- `/conditioning manage` now shows both reward and punishment entries in one modal, separated with ❤️ and 💀 markers
+- it does not require picking a persona first
+- it shows stored reward and punishment entries from every persona in the server
+- each checklist entry includes the persona name plus a ❤️ reward or 💀 punishment marker
+- lists beyond one modal use a page-selection step and page-scoped checkbox modals
 
 ## Storage Rules
 
@@ -123,7 +122,7 @@ Persona config stores two independent injection flags:
 These toggles only affect prompt injection.
 They do not stop new conditioning rows from being recorded.
 
-Although the flags are still stored per persona in `persona_configs`, the `/conditioning toggle` command now updates those flags for all personas in the server at once for better UX consistency.
+The reward/punish enable flags are still stored per persona in `persona_configs`, but management of stored conditioning history is centralized under `/conditioning manage`.
 
 ## Environment Variables
 

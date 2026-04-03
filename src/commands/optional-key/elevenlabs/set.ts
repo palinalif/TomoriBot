@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -18,11 +18,11 @@ const MIN_KEY_LENGTH = 10;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(localizer("en-US", "commands.optionalkey.elevenlabs.set.description"))
+    .setDescription(localizer("en-US", "commands.optional-key.elevenlabs.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(localizer("en-US", "commands.optionalkey.elevenlabs.set.key_description"))
+        .setDescription(localizer("en-US", "commands.optional-key.elevenlabs.set.key_description"))
         .setRequired(true),
     );
 
@@ -51,8 +51,8 @@ export async function execute(
     apiKey = interaction.options.getString("key", true).trim();
     if (apiKey.length < MIN_KEY_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.elevenlabs.set.invalid_key_title",
-        descriptionKey: "commands.optionalkey.elevenlabs.set.invalid_key_description",
+        titleKey: "commands.optional-key.elevenlabs.set.invalid_key_title",
+        descriptionKey: "commands.optional-key.elevenlabs.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -74,8 +74,8 @@ export async function execute(
         `ElevenLabs API key validation failed for server ${tomoriState.server_id}: HTTP ${validationResult.statusCode ?? "?"} — ${validationResult.details ?? validationResult.errorKind ?? "unknown"}`,
       );
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.elevenlabs.set.key_validation_failed_title",
-        descriptionKey: "commands.optionalkey.elevenlabs.set.key_validation_failed_description",
+        titleKey: "commands.optional-key.elevenlabs.set.key_validation_failed_title",
+        descriptionKey: "commands.optional-key.elevenlabs.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -118,27 +118,27 @@ export async function execute(
       interaction,
       locale,
       {
-        titleKey: "commands.optionalkey.elevenlabs.set.success_title",
-        descriptionKey: "commands.optionalkey.elevenlabs.set.success_description",
+        titleKey: "commands.optional-key.elevenlabs.set.success_title",
+        descriptionKey: "commands.optional-key.elevenlabs.set.success_description",
         color: ColorCode.SUCCESS,
         fields: [
           {
-            nameKey: "commands.optionalkey.elevenlabs.set.success_voices_title",
-            value: localizer(locale, "commands.optionalkey.elevenlabs.set.success_voices_description", {
+            nameKey: "commands.optional-key.elevenlabs.set.success_voices_title",
+            value: localizer(locale, "commands.optional-key.elevenlabs.set.success_voices_description", {
               configVoiceElevenlabs: configVoiceElevenlabsMention,
             }),
             inline: false,
           },
           {
-            nameKey: "commands.optionalkey.elevenlabs.set.success_custom_voices_title",
-            value: localizer(locale, "commands.optionalkey.elevenlabs.set.success_custom_voices_description", {
+            nameKey: "commands.optional-key.elevenlabs.set.success_custom_voices_title",
+            value: localizer(locale, "commands.optional-key.elevenlabs.set.success_custom_voices_description", {
               configVoiceElevenlabs: configVoiceElevenlabsMention,
             }),
             inline: false,
           },
           {
-            nameKey: "commands.optionalkey.elevenlabs.set.success_transcript_mode_title",
-            value: localizer(locale, "commands.optionalkey.elevenlabs.set.success_transcript_mode_description", {
+            nameKey: "commands.optional-key.elevenlabs.set.success_transcript_mode_title",
+            value: localizer(locale, "commands.optional-key.elevenlabs.set.success_transcript_mode_description", {
               configVoiceTranscripts: configVoiceTranscriptsMention,
             }),
             inline: false,
@@ -174,3 +174,4 @@ export async function execute(
     });
   }
 }
+

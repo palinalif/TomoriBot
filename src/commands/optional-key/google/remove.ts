@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /optional-key google remove
  * Removes the stored Google API key for this server.
  */
@@ -22,7 +22,7 @@ import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
  * @returns Configured subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optionalkey.google.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optional-key.google.remove.description"));
 
 /**
  * Removes the Google API key from the server's optional API keys
@@ -69,8 +69,8 @@ export async function execute(
     const hasKey = await hasOptApiKey(tomoriState.server_id, "google");
     if (!hasKey) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.google.remove.no_key_title",
-        descriptionKey: "commands.optionalkey.google.remove.no_key_description",
+        titleKey: "commands.optional-key.google.remove.no_key_title",
+        descriptionKey: "commands.optional-key.google.remove.no_key_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -111,8 +111,8 @@ export async function execute(
 
     // 7. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.google.remove.success_title",
-      descriptionKey: "commands.optionalkey.google.remove.success_description",
+      titleKey: "commands.optional-key.google.remove.success_title",
+      descriptionKey: "commands.optional-key.google.remove.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -143,3 +143,4 @@ export async function execute(
     });
   }
 }
+

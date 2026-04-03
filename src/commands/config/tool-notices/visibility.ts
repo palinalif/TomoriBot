@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -23,7 +23,7 @@ const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("visibility")
-    .setDescription(localizer("en-US", "commands.config.toolnotices.visibility.description"));
+    .setDescription(localizer("en-US", "commands.config.tool-notices.visibility.description"));
 
 export async function execute(
   _client: Client,
@@ -57,8 +57,8 @@ export async function execute(
     const groupCount = Math.ceil(TOOL_NOTICE_DEFINITIONS.length / MAX_OPTIONS_PER_GROUP);
     if (groupCount > MAX_GROUPS_PER_MODAL) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.toolnotices.visibility.too_many_title",
-        descriptionKey: "commands.config.toolnotices.visibility.too_many_description",
+        titleKey: "commands.config.tool-notices.visibility.too_many_title",
+        descriptionKey: "commands.config.tool-notices.visibility.too_many_description",
         descriptionVars: {
           count: TOOL_NOTICE_DEFINITIONS.length.toString(),
           max_entries: MAX_ENTRIES_PER_MODAL.toString(),
@@ -76,7 +76,7 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.toolnotices.visibility.modal_title",
+        modalTitleKey: "commands.config.tool-notices.visibility.modal_title",
         components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
@@ -108,8 +108,8 @@ export async function execute(
 
     if (hiddenNow.length === 0 && restoredNow.length === 0) {
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.config.toolnotices.visibility.no_changes_title",
-        descriptionKey: "commands.config.toolnotices.visibility.no_changes_description",
+        titleKey: "commands.config.tool-notices.visibility.no_changes_title",
+        descriptionKey: "commands.config.tool-notices.visibility.no_changes_description",
         color: ColorCode.INFO,
       });
       return;
@@ -165,8 +165,8 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(modalResult.interaction, locale, {
-      titleKey: "commands.config.toolnotices.visibility.success_title",
-      descriptionKey: "commands.config.toolnotices.visibility.success_description",
+      titleKey: "commands.config.tool-notices.visibility.success_title",
+      descriptionKey: "commands.config.tool-notices.visibility.success_description",
       descriptionVars: {
         hidden_count: hiddenNow.length.toString(),
         hidden_list: formatNoticeList(hiddenNow, locale),
@@ -213,9 +213,9 @@ function buildCheckboxGroups(locale: string, hiddenKeys: ToolNoticeKey[]): Modal
       customId: `${NOTICE_CHECKBOX_ID_PREFIX}_${groupIndex}`,
       labelKey:
         groupIndex === 0
-          ? "commands.config.toolnotices.visibility.checkbox_label"
-          : "commands.config.toolnotices.visibility.checkbox_label_continued",
-      descriptionKey: groupIndex === 0 ? "commands.config.toolnotices.visibility.checkbox_description" : undefined,
+          ? "commands.config.tool-notices.visibility.checkbox_label"
+          : "commands.config.tool-notices.visibility.checkbox_label_continued",
+      descriptionKey: groupIndex === 0 ? "commands.config.tool-notices.visibility.checkbox_description" : undefined,
       minValues: 0,
       maxValues: options.length,
       required: false,
@@ -246,3 +246,4 @@ function formatTextArrayLiteral(items: string[]): string {
 function formatNoticeList(items: string[], locale: string): string {
   return items.length > 0 ? items.map((item) => `\`${item}\``).join(", ") : localizer(locale, "commands.choices.none");
 }
+

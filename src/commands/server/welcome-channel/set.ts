@@ -15,7 +15,7 @@ import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/util
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const MODAL_CUSTOM_ID = "server_welcomechannel_modal";
+const MODAL_CUSTOM_ID = "server_welcome_channel_set_modal";
 const PERSONA_SELECT_ID = "welcome_persona_select";
 const PROMPT_INPUT_ID = "welcome_additional_prompt";
 const RANDOM_PERSONA_VALUE = "random";
@@ -23,30 +23,14 @@ const MAX_ADDITIONAL_PROMPT_LENGTH = 2000;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("welcomechannel")
-    .setDescription(localizer("en-US", "commands.server.welcomechannel.description"))
+    .setName("set")
+    .setDescription(localizer("en-US", "commands.server.welcome-channel.set.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(localizer("en-US", "commands.server.welcomechannel.channel_description"))
+        .setDescription(localizer("en-US", "commands.server.welcome-channel.set.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("action")
-        .setDescription(localizer("en-US", "commands.server.welcomechannel.action_description"))
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.choices.add"),
-            value: "add",
-          },
-          {
-            name: localizer("en-US", "commands.choices.remove"),
-            value: "remove",
-          },
-        ),
     );
 
 export async function execute(
@@ -66,7 +50,6 @@ export async function execute(
   }
 
   const selectedChannel = interaction.options.getChannel("channel", true);
-  const action = interaction.options.getString("action", true);
   let modalSubmitInteraction: ModalSubmitInteraction | null = null;
 
   try {
@@ -77,44 +60,6 @@ export async function execute(
         descriptionKey: "general.errors.tomori_not_setup_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const currentWelcomePrompt = tomoriState.config.welcome_prompt ?? undefined;
-
-    if (action === "remove") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-      if (!tomoriState.config.welcome_channel_disc_id && !tomoriState.config.welcome_prompt) {
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.server.welcomechannel.not_configured_title",
-          descriptionKey: "commands.server.welcomechannel.not_configured_description",
-          color: ColorCode.WARN,
-        });
-        return;
-      }
-
-      const updatedConfig = await updateTomoriConfig(tomoriState.server_id, {
-        welcome_channel_disc_id: null,
-        welcome_prompt: null,
-        welcome_persona_id: null,
-      });
-
-      if (!updatedConfig) {
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "general.errors.update_failed_title",
-          descriptionKey: "general.errors.update_failed_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
-
-      invalidateTomoriStateCache(interaction.guild.id);
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.welcomechannel.removed_title",
-        descriptionKey: "commands.server.welcomechannel.removed_description",
-        color: ColorCode.WARN,
       });
       return;
     }
@@ -132,7 +77,7 @@ export async function execute(
 
     const personaOptions: SelectOption[] = [
       {
-        label: safeSelectOptionText(localizer(locale, "commands.server.welcomechannel.persona_random_label")),
+        label: safeSelectOptionText(localizer(locale, "commands.server.welcome-channel.shared.persona_random_label")),
         value: RANDOM_PERSONA_VALUE,
       },
       ...allPersonas
@@ -141,39 +86,39 @@ export async function execute(
           label: safeSelectOptionText(persona.tomori_nickname),
           value: persona.tomori_id?.toString() ?? "",
           description: persona.is_alter
-            ? localizer(locale, "commands.server.welcomechannel.alter_persona_description")
-            : localizer(locale, "commands.server.welcomechannel.main_persona_description"),
+            ? localizer(locale, "commands.server.welcome-channel.shared.alter_persona_description")
+            : localizer(locale, "commands.server.welcome-channel.shared.main_persona_description"),
         }))
         .filter((option) => option.value !== ""),
     ];
 
     const modalResult = await promptWithRawModal(interaction, locale, {
       modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.server.welcomechannel.modal_title",
+      modalTitleKey: "commands.server.welcome-channel.shared.modal_title",
       components: [
         {
           customId: PERSONA_SELECT_ID,
-          labelKey: "commands.server.welcomechannel.persona_select_label",
-          descriptionKey: "commands.server.welcomechannel.persona_select_description",
-          placeholder: "commands.server.welcomechannel.persona_select_placeholder",
+          labelKey: "commands.server.welcome-channel.shared.persona_select_label",
+          descriptionKey: "commands.server.welcome-channel.shared.persona_select_description",
+          placeholder: "commands.server.welcome-channel.shared.persona_select_placeholder",
           required: true,
           options: personaOptions,
         },
         {
           customId: PROMPT_INPUT_ID,
-          labelKey: "commands.server.welcomechannel.prompt_label",
-          descriptionKey: "commands.server.welcomechannel.prompt_description",
-          placeholder: "commands.server.welcomechannel.prompt_placeholder",
+          labelKey: "commands.server.welcome-channel.shared.prompt_label",
+          descriptionKey: "commands.server.welcome-channel.shared.prompt_description",
+          placeholder: "commands.server.welcome-channel.shared.prompt_placeholder",
           style: TextInputStyle.Paragraph,
           required: true,
           maxLength: MAX_ADDITIONAL_PROMPT_LENGTH,
-          value: currentWelcomePrompt,
+          value: tomoriState.config.welcome_prompt ?? undefined,
         },
       ],
     });
 
     if (modalResult.outcome !== "submit") {
-      log.info(`Welcome channel modal ${modalResult.outcome} for user ${interaction.user.id}`);
+      log.info(`Welcome channel set modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
@@ -193,8 +138,8 @@ export async function execute(
 
     if (!additionalPrompt) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey: "commands.server.welcomechannel.empty_prompt_title",
-        descriptionKey: "commands.server.welcomechannel.empty_prompt_description",
+        titleKey: "commands.server.welcome-channel.shared.empty_prompt_title",
+        descriptionKey: "commands.server.welcome-channel.shared.empty_prompt_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -202,7 +147,7 @@ export async function execute(
     }
 
     let welcomePersonaId: number | null = null;
-    let personaDisplayName = localizer(locale, "commands.server.welcomechannel.persona_random_label");
+    let personaDisplayName = localizer(locale, "commands.server.welcome-channel.shared.persona_random_label");
 
     if (selectedPersonaValue !== RANDOM_PERSONA_VALUE) {
       welcomePersonaId = Number.parseInt(selectedPersonaValue, 10);
@@ -238,8 +183,8 @@ export async function execute(
 
     invalidateTomoriStateCache(interaction.guild.id);
     await replyInfoEmbed(modalSubmitInteraction, locale, {
-      titleKey: "commands.server.welcomechannel.added_title",
-      descriptionKey: "commands.server.welcomechannel.added_description",
+      titleKey: "commands.server.welcome-channel.set.success_title",
+      descriptionKey: "commands.server.welcome-channel.set.success_description",
       descriptionVars: {
         channel: `<#${selectedChannel.id}>`,
         persona: personaDisplayName,
@@ -251,13 +196,12 @@ export async function execute(
       userId: userData.user_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "server welcomechannel",
-        guildId: interaction.guild.id,
-        action,
+        command: "server welcome-channel set",
+        guildId: interaction.guild?.id,
         channelId: selectedChannel.id,
       },
     };
-    await log.error("Error in /server welcomechannel command", error, context);
+    await log.error("Error in /server welcome-channel set command", error, context);
 
     const errorTarget = modalSubmitInteraction ?? (interaction.replied || interaction.deferred ? interaction : null);
     if (errorTarget) {

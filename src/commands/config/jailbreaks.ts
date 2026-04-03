@@ -1,56 +1,40 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../types/db/schema";
+import type { CheckboxGroupOption } from "@/types/discord/modal";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { type UserRow, type ErrorContext, tomoriConfigSchema } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
 
+const MODAL_CUSTOM_ID = "config_jailbreaks_modal";
+const CHECKBOX_ID = "config_jailbreaks_checkbox_group";
+
+const JAILBREAK_OPTIONS = [
+  {
+    id: "injection",
+    columnName: "uncensor_injection_enabled",
+    labelKey: "commands.config.jailbreaks.injection_option",
+  },
+  {
+    id: "unicode_spaces",
+    columnName: "uncensor_unicode_space_enabled",
+    labelKey: "commands.config.jailbreaks.unicode_spaces_option",
+  },
+  {
+    id: "sanitize",
+    columnName: "uncensor_sanitize_enabled",
+    labelKey: "commands.config.jailbreaks.sanitize_option",
+  },
+] as const;
+
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("jailbreaks")
-    .setDescription(localizer("en-US", "commands.config.uncensors.description"))
-    .addStringOption((option) =>
-      option
-        .setName("uncensor")
-        .setDescription(localizer("en-US", "commands.config.uncensors.option_description"))
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.config.uncensors.injection_option"),
-            value: "injection",
-          },
-          {
-            name: localizer("en-US", "commands.config.uncensors.unicode_spaces_option"),
-            value: "unicode_spaces",
-          },
-          {
-            name: localizer("en-US", "commands.config.uncensors.sanitize_option"),
-            value: "sanitize",
-          },
-        ),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("set")
-        .setDescription(localizer("en-US", "commands.config.uncensors.set_description"))
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.config.options.enable"),
-            value: "enable",
-          },
-          {
-            name: localizer("en-US", "commands.config.options.disable"),
-            value: "disable",
-          },
-        ),
-    );
+  subcommand.setName("jailbreaks").setDescription(localizer("en-US", "commands.config.jailbreaks.description"));
 
 export async function execute(
   _client: Client,
@@ -67,13 +51,7 @@ export async function execute(
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
   try {
-    const uncensorChoice = interaction.options.getString("uncensor", true);
-    const setAction = interaction.options.getString("set", true);
-    const isEnabled = setAction === "enable";
-
     const tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
@@ -84,82 +62,93 @@ export async function execute(
       return;
     }
 
-    let dbColumnName = "";
-    let uncensorTypeKey = "";
-    let currentSetting: boolean | undefined;
-
-    switch (uncensorChoice) {
-      case "injection":
-        dbColumnName = "uncensor_injection_enabled";
-        uncensorTypeKey = "commands.config.uncensors.injection_option";
-        currentSetting = tomoriState.config.uncensor_injection_enabled;
-        break;
-      case "unicode_spaces":
-        dbColumnName = "uncensor_unicode_space_enabled";
-        uncensorTypeKey = "commands.config.uncensors.unicode_spaces_option";
-        currentSetting = tomoriState.config.uncensor_unicode_space_enabled;
-        break;
-      case "sanitize":
-        dbColumnName = "uncensor_sanitize_enabled";
-        uncensorTypeKey = "commands.config.uncensors.sanitize_option";
-        currentSetting = tomoriState.config.uncensor_sanitize_enabled;
-        break;
+    const checkboxOptions: CheckboxGroupOption[] = JAILBREAK_OPTIONS.map((option) => ({
+      label: localizer(locale, option.labelKey),
+      value: option.id,
       default:
-        log.error(`Invalid uncensorChoice received in /config jailbreaks: ${uncensorChoice}`);
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
+        option.id === "injection"
+          ? tomoriState.config.uncensor_injection_enabled
+          : option.id === "unicode_spaces"
+            ? tomoriState.config.uncensor_unicode_space_enabled
+            : tomoriState.config.uncensor_sanitize_enabled,
+    }));
+
+    const modalResult = await promptWithRawModal(
+      interaction,
+      locale,
+      {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.config.jailbreaks.modal_title",
+        components: [
+          {
+            kind: "checkboxGroup",
+            customId: CHECKBOX_ID,
+            labelKey: "commands.config.jailbreaks.checkbox_label",
+            descriptionKey: "commands.config.jailbreaks.checkbox_description",
+            minValues: 0,
+            maxValues: checkboxOptions.length,
+            required: false,
+            options: checkboxOptions,
+          },
+        ],
+      },
+      MessageFlags.Ephemeral,
+    );
+
+    if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+      return;
     }
 
-    if (currentSetting === isEnabled) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.uncensors.already_set_title",
-        descriptionKey: isEnabled
-          ? "commands.config.uncensors.already_enabled_description"
-          : "commands.config.uncensors.already_disabled_description",
-        descriptionVars: {
-          uncensor_type: localizer(locale, uncensorTypeKey),
-        },
-        color: ColorCode.WARN,
+    const selectedIds = new Set(modalResult.multiValues?.[CHECKBOX_ID] ?? []);
+    const nextState = {
+      uncensor_injection_enabled: selectedIds.has("injection"),
+      uncensor_unicode_space_enabled: selectedIds.has("unicode_spaces"),
+      uncensor_sanitize_enabled: selectedIds.has("sanitize"),
+    };
+
+    const noChanges =
+      nextState.uncensor_injection_enabled === tomoriState.config.uncensor_injection_enabled &&
+      nextState.uncensor_unicode_space_enabled === tomoriState.config.uncensor_unicode_space_enabled &&
+      nextState.uncensor_sanitize_enabled === tomoriState.config.uncensor_sanitize_enabled;
+
+    if (noChanges) {
+      await replyInfoEmbed(modalResult.interaction, locale, {
+        titleKey: "commands.config.jailbreaks.no_changes_title",
+        descriptionKey: "commands.config.jailbreaks.no_changes_description",
+        color: ColorCode.INFO,
       });
       return;
     }
 
     const [updatedRow] = await sql`
-            UPDATE tomori_configs
-            SET ${sql.unsafe(dbColumnName)} = ${isEnabled}
-            WHERE server_id = ${tomoriState.server_id}
-            RETURNING *
-        `;
+      UPDATE tomori_configs
+      SET
+        uncensor_injection_enabled = ${nextState.uncensor_injection_enabled},
+        uncensor_unicode_space_enabled = ${nextState.uncensor_unicode_space_enabled},
+        uncensor_sanitize_enabled = ${nextState.uncensor_sanitize_enabled}
+      WHERE server_id = ${tomoriState.server_id}
+      RETURNING *
+    `;
 
     const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
-    if (!validatedConfig.success || !updatedRow) {
+    if (!updatedRow || !validatedConfig.success) {
       const context: ErrorContext = {
         tomoriId: tomoriState.tomori_id,
         serverId: tomoriState.server_id,
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config uncensors",
+          command: "config jailbreaks",
           guildId: interaction.guild?.id ?? interaction.user.id,
-          uncensorChoice,
-          dbColumnName,
-          isEnabled,
           validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
       };
       await log.error(
-        "Failed to update or validate Tomori uncensor config",
-        validatedConfig.success
-          ? new Error("Database update returned no rows or unexpected data")
-          : new Error("Updated config data failed validation"),
+        "Failed to update or validate jailbreak config",
+        validatedConfig.success ? new Error("Database update returned no rows") : validatedConfig.error,
         context,
       );
-
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(modalResult.interaction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
         color: ColorCode.ERROR,
@@ -169,56 +158,46 @@ export async function execute(
 
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-    const descriptionKey = isEnabled
-      ? "commands.config.uncensors.enabled_success"
-      : "commands.config.uncensors.disabled_success";
-    let description = localizer(locale, descriptionKey, {
-      uncensor_type: localizer(locale, uncensorTypeKey),
-    });
-
-    if (uncensorChoice === "injection" && isEnabled) {
-      description += `\n\n${localizer(locale, "commands.config.uncensors.injection_ack_notice")}`;
-    }
-
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.uncensors.success_title",
-      description,
-      color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
+    await replyInfoEmbed(modalResult.interaction, locale, {
+      titleKey: "commands.config.jailbreaks.success_title",
+      descriptionKey: "commands.config.jailbreaks.success_description",
+      descriptionVars: {
+        enabled_count: [
+          nextState.uncensor_injection_enabled,
+          nextState.uncensor_unicode_space_enabled,
+          nextState.uncensor_sanitize_enabled,
+        ]
+          .filter(Boolean)
+          .length.toString(),
+      },
+      color: ColorCode.SUCCESS,
     });
   } catch (error) {
-    let serverIdForError: number | null = null;
-    let tomoriIdForError: number | null = null;
-    if (interaction.guild?.id) {
-      const state = await getCachedTomoriState(interaction.guild.id);
-      serverIdForError = state?.server_id ?? null;
-      tomoriIdForError = state?.tomori_id ?? null;
-    }
-
+    const state = interaction.guild?.id ? await getCachedTomoriState(interaction.guild.id) : null;
     const context: ErrorContext = {
       userId: userData.user_id,
-      serverId: serverIdForError,
-      tomoriId: tomoriIdForError,
+      serverId: state?.server_id ?? null,
+      tomoriId: state?.tomori_id ?? null,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config uncensors",
+        command: "config jailbreaks",
         guildId: interaction.guild?.id ?? interaction.user.id,
         executorDiscordId: interaction.user.id,
-        uncensorAttempted: interaction.options.getString("uncensor"),
-        actionAttempted: interaction.options.getString("set"),
       },
     };
-    await log.error(`Error executing /config jailbreaks for user ${userData.user_disc_id}`, error as Error, context);
+    await log.error("Error executing /config jailbreaks", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: localizer(locale, "general.errors.unknown_error_description"),
         flags: MessageFlags.Ephemeral,
       });
-    } else {
-      await interaction.followUp({
-        content: localizer(locale, "general.errors.unknown_error_description"),
-        flags: MessageFlags.Ephemeral,
-      });
+      return;
     }
+
+    await interaction.followUp({
+      content: localizer(locale, "general.errors.unknown_error_description"),
+      flags: MessageFlags.Ephemeral,
+    });
   }
 }

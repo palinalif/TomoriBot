@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /optional-key novelai set
  * Validates and stores a NovelAI API key for the server.
  * When set, the generate_image_nai tool becomes available regardless of the active LLM provider.
@@ -36,17 +36,17 @@ const VALIDATION_TIMEOUT_MS = 10_000;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(localizer("en-US", "commands.optionalkey.novelai.set.description"))
+    .setDescription(localizer("en-US", "commands.optional-key.novelai.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(localizer("en-US", "commands.optionalkey.novelai.set.key_description"))
+        .setDescription(localizer("en-US", "commands.optional-key.novelai.set.key_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("disable_other_imggen")
-        .setDescription(localizer("en-US", "commands.optionalkey.novelai.set.disable_other_imggen_description"))
+        .setDescription(localizer("en-US", "commands.optional-key.novelai.set.disable_other_imggen_description"))
         .addChoices(
           {
             name: localizer("en-US", "commands.choices.enable"),
@@ -125,8 +125,8 @@ export async function execute(
     // 4. Basic format validation
     if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.novelai.set.invalid_key_title",
-        descriptionKey: "commands.optionalkey.novelai.set.invalid_key_description",
+        titleKey: "commands.optional-key.novelai.set.invalid_key_title",
+        descriptionKey: "commands.optional-key.novelai.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -148,8 +148,8 @@ export async function execute(
     if (!isValid) {
       log.info(`NovelAI API key validation failed for server ${tomoriState.server_id}`);
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.novelai.set.key_validation_failed_title",
-        descriptionKey: "commands.optionalkey.novelai.set.key_validation_failed_description",
+        titleKey: "commands.optional-key.novelai.set.key_validation_failed_title",
+        descriptionKey: "commands.optional-key.novelai.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -194,11 +194,11 @@ export async function execute(
 
     // 10. Success message — include note about exclusive mode if enabled
     const successDescriptionKey = disableOtherImggen
-      ? "commands.optionalkey.novelai.set.success_exclusive_description"
-      : "commands.optionalkey.novelai.set.success_description";
+      ? "commands.optional-key.novelai.set.success_exclusive_description"
+      : "commands.optional-key.novelai.set.success_description";
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.novelai.set.success_title",
+      titleKey: "commands.optional-key.novelai.set.success_title",
       descriptionKey: successDescriptionKey,
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
@@ -230,3 +230,4 @@ export async function execute(
     });
   }
 }
+

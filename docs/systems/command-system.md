@@ -167,8 +167,8 @@ Examples:
 - `/server whitelist remove`
 - `/config remove modeloverride` (channels + personas together)
 - `/server stm manage` (active server-shared STM entries)
-- `/server private-channels remove`
-- `/server rpchannel remove`
+- `/server private-channels`
+- `/server rp-channels`
 
 Rules:
 
@@ -177,7 +177,7 @@ Rules:
 - set `minValues: 0` and `required: false` so users can uncheck everything
 - chunk long lists into groups of 10 options; Discord allows at most 5 groups per modal (50 total options)
 - if you are managing multiple entity types in one modal, keep them in separate checkbox groups by type
-- if the total set exceeds 50 options, show an explicit overflow warning or route the user to a different bulk action
+- if the total set exceeds 50 options, show a page-selection step and launch page-scoped checkbox modals
 - after submit, diff original entries against submitted checked values, then invalidate caches only after successful DB writes
 
 ### Pattern 3B: Persistent Checklist Setting
@@ -273,11 +273,11 @@ Rules:
 - `bot`: respond, generate(image), kill, impersonate
 - `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), params(*), timezone, message-fetch-limit, bot-permissions, jailbreaks
 - `optional-key`: google/set/remove, brave/set/remove, elevenlabs/set/remove, novelai/set/remove
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/reset), rpchannel(add/remove), crosschannel-blocklist, welcomechannel, private-channels(add/remove), member-permissions, always-reply, thought-logs-channel
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
 - `novelai`: attg, image(model/params/generate), image-tags(style/me/character/negative), character-reference
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), autotrigger(*), matrix(link/unlink), quota(imagegen/textgen/reset), rpchannel(add/remove), crosschannel-blocklist, welcomechannel
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove
-- `conditioning`: toggle, manage
+- `conditioning`: manage
 - `punish`: spank, pinch, bite, squeeze
 - `reward`: headpat, hug, kiss, tickle
 - `tool`: ping, status, refresh, compact, comment

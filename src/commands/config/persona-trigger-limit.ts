@@ -1,4 +1,4 @@
-﻿import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
@@ -16,11 +16,11 @@ const DEFAULT_LIMIT = 3;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("persona-trigger-limit")
-    .setDescription(localizer("en-US", "commands.config.multitrigger.description"))
+    .setDescription(localizer("en-US", "commands.config.persona-trigger-limit.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(localizer("en-US", "commands.config.multitrigger.limit_description"))
+        .setDescription(localizer("en-US", "commands.config.persona-trigger-limit.limit_description"))
         .setMinValue(MIN_LIMIT)
         .setMaxValue(MAX_LIMIT)
         .setRequired(true),
@@ -59,8 +59,8 @@ export async function execute(
     // 3. Validate range (redundant but safe)
     if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.multitrigger.limit.invalid_range_title",
-        descriptionKey: "commands.config.multitrigger.limit.invalid_range_description",
+        titleKey: "commands.config.persona-trigger-limit.limit.invalid_range_title",
+        descriptionKey: "commands.config.persona-trigger-limit.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_LIMIT.toString(),
           max: MAX_LIMIT.toString(),
@@ -85,8 +85,8 @@ export async function execute(
     const currentLimit = tomoriState.config.triggered_persona_limit ?? DEFAULT_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.multitrigger.limit.already_set_title",
-        descriptionKey: "commands.config.multitrigger.limit.already_set_description",
+        titleKey: "commands.config.persona-trigger-limit.limit.already_set_title",
+        descriptionKey: "commands.config.persona-trigger-limit.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -156,8 +156,8 @@ export async function execute(
 
     // 9. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.multitrigger.limit.success_title",
-      descriptionKey: "commands.config.multitrigger.limit.success_description",
+      titleKey: "commands.config.persona-trigger-limit.limit.success_title",
+      descriptionKey: "commands.config.persona-trigger-limit.limit.success_description",
       descriptionVars: {
         limit: limit.toString(),
       },
@@ -182,3 +182,4 @@ export async function execute(
     });
   }
 }
+

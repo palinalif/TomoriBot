@@ -117,8 +117,8 @@ export async function execute(
 
   if (!uniqueProviders || uniqueProviders.length === 0) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.set.no_providers_title",
-      descriptionKey: "commands.config.apikey.set.no_providers_description",
+      titleKey: "commands.config.api-key.set.no_providers_title",
+      descriptionKey: "commands.config.api-key.set.no_providers_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -463,8 +463,8 @@ export async function execute(
         // Validate the new API key
         if (apiKeyToUse.length < 10) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.apikey.set.invalid_key_title",
-            descriptionKey: "commands.config.apikey.set.invalid_key_description",
+            titleKey: "commands.config.api-key.set.invalid_key_title",
+            descriptionKey: "commands.config.api-key.set.invalid_key_description",
             color: ColorCode.ERROR,
           });
           return;
@@ -485,15 +485,15 @@ export async function execute(
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (errorMessage.includes("Unsupported provider")) {
             await replyInfoEmbed(modalSubmitInteraction, locale, {
-              titleKey: "commands.config.apikey.set.unsupported_provider_title",
-              descriptionKey: "commands.config.apikey.set.unsupported_provider_description",
+              titleKey: "commands.config.api-key.set.unsupported_provider_title",
+              descriptionKey: "commands.config.api-key.set.unsupported_provider_description",
               descriptionVars: { provider: selectedProvider },
               color: ColorCode.ERROR,
             });
           } else {
             await replyInfoEmbed(modalSubmitInteraction, locale, {
-              titleKey: "commands.config.apikey.set.validation_error_title",
-              descriptionKey: "commands.config.apikey.set.validation_error_description",
+              titleKey: "commands.config.api-key.set.validation_error_title",
+              descriptionKey: "commands.config.api-key.set.validation_error_description",
               color: ColorCode.ERROR,
             });
           }
@@ -518,7 +518,7 @@ export async function execute(
           }
 
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.apikey.set.key_validation_failed_title",
+            titleKey: "commands.config.api-key.set.key_validation_failed_title",
             description: errorDescription,
             color: ColorCode.ERROR,
           });
@@ -585,8 +585,8 @@ export async function execute(
         const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
         if (!defaultModel || !defaultModel.llm_id) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.apikey.set.no_default_model_title",
-            descriptionKey: "commands.config.apikey.set.no_default_model_description",
+            titleKey: "commands.config.api-key.set.no_default_model_title",
+            descriptionKey: "commands.config.api-key.set.no_default_model_description",
             descriptionVars: {
               provider: getProviderDisplayName(normalizedProvider),
             },
@@ -1086,3 +1086,4 @@ export async function execute(
     });
   }
 }
+

@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   TextInputStyle,
   type ChatInputCommandInteraction,
@@ -27,7 +27,7 @@ const TERMS_INPUT_MAX_LENGTH = 1000;
 const BIAS_INPUT_MAX_LENGTH = 16;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("add").setDescription(localizer("en-US", "commands.config.logitbias.add.description"));
+  subcommand.setName("add").setDescription(localizer("en-US", "commands.config.logit-bias.add.description"));
 
 export async function execute(
   _client: Client,
@@ -54,22 +54,22 @@ export async function execute(
       locale,
       {
         modalCustomId: `config_logitbias_add_${interaction.id}`,
-        modalTitleKey: "commands.config.logitbias.add.modal_title",
+        modalTitleKey: "commands.config.logit-bias.add.modal_title",
         components: [
           {
             customId: "logit_bias_terms",
-            labelKey: "commands.config.logitbias.add.terms_label",
-            descriptionKey: "commands.config.logitbias.add.terms_description",
-            placeholder: "commands.config.logitbias.add.terms_placeholder",
+            labelKey: "commands.config.logit-bias.add.terms_label",
+            descriptionKey: "commands.config.logit-bias.add.terms_description",
+            placeholder: "commands.config.logit-bias.add.terms_placeholder",
             style: TextInputStyle.Paragraph,
             required: true,
             maxLength: TERMS_INPUT_MAX_LENGTH,
           },
           {
             customId: "logit_bias_value",
-            labelKey: "commands.config.logitbias.add.bias_label",
-            descriptionKey: "commands.config.logitbias.add.bias_description",
-            placeholder: "commands.config.logitbias.add.bias_placeholder",
+            labelKey: "commands.config.logit-bias.add.bias_label",
+            descriptionKey: "commands.config.logit-bias.add.bias_description",
+            placeholder: "commands.config.logit-bias.add.bias_placeholder",
             style: TextInputStyle.Short,
             required: true,
             maxLength: BIAS_INPUT_MAX_LENGTH,
@@ -92,8 +92,8 @@ export async function execute(
 
     if (terms.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.logitbias.add.empty_terms_title",
-        descriptionKey: "commands.config.logitbias.add.empty_terms_description",
+        titleKey: "commands.config.logit-bias.add.empty_terms_title",
+        descriptionKey: "commands.config.logit-bias.add.empty_terms_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -102,8 +102,8 @@ export async function execute(
     const oversizedTerm = terms.find((term) => term.length > LOGIT_BIAS_TEXT_MAX_LENGTH);
     if (oversizedTerm) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.logitbias.add.term_too_long_title",
-        descriptionKey: "commands.config.logitbias.add.term_too_long_description",
+        titleKey: "commands.config.logit-bias.add.term_too_long_title",
+        descriptionKey: "commands.config.logit-bias.add.term_too_long_description",
         descriptionVars: {
           max_length: LOGIT_BIAS_TEXT_MAX_LENGTH.toString(),
         },
@@ -115,8 +115,8 @@ export async function execute(
     const biasValue = parseLogitBiasValue(rawBiasValue);
     if (biasValue === null) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.logitbias.add.invalid_bias_title",
-        descriptionKey: "commands.config.logitbias.add.invalid_bias_description",
+        titleKey: "commands.config.logit-bias.add.invalid_bias_title",
+        descriptionKey: "commands.config.logit-bias.add.invalid_bias_description",
         descriptionVars: {
           min: LOGIT_BIAS_MIN.toString(),
           max: LOGIT_BIAS_MAX.toString(),
@@ -132,8 +132,8 @@ export async function execute(
 
     if (merged.addedCount === 0 && merged.updatedCount === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.logitbias.add.already_set_title",
-        descriptionKey: "commands.config.logitbias.add.already_set_description",
+        titleKey: "commands.config.logit-bias.add.already_set_title",
+        descriptionKey: "commands.config.logit-bias.add.already_set_description",
         color: ColorCode.WARN,
       });
       return;
@@ -178,8 +178,8 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.config.logitbias.add.success_title",
-      descriptionKey: "commands.config.logitbias.add.success_description",
+      titleKey: "commands.config.logit-bias.add.success_title",
+      descriptionKey: "commands.config.logit-bias.add.success_description",
       descriptionVars: {
         added_count: merged.addedCount.toString(),
         updated_count: merged.updatedCount.toString(),
@@ -219,3 +219,4 @@ export async function execute(
     });
   }
 }
+

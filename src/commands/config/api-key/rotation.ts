@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -25,19 +25,19 @@ const ACTION_PURGE = "purge";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("rotation")
-    .setDescription(localizer("en-US", "commands.config.apikey.rotation.description"))
+    .setDescription(localizer("en-US", "commands.config.api-key.rotation.description"))
     .addStringOption((option) =>
       option
         .setName("action")
-        .setDescription(localizer("en-US", "commands.config.apikey.rotation.action_description"))
+        .setDescription(localizer("en-US", "commands.config.api-key.rotation.action_description"))
         .setRequired(true)
         .addChoices(
           {
-            name: localizer("en-US", "commands.config.apikey.rotation.action_add"),
+            name: localizer("en-US", "commands.config.api-key.rotation.action_add"),
             value: ACTION_ADD,
           },
           {
-            name: localizer("en-US", "commands.config.apikey.rotation.action_purge"),
+            name: localizer("en-US", "commands.config.api-key.rotation.action_purge"),
             value: ACTION_PURGE,
           },
         ),
@@ -45,7 +45,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(localizer("en-US", "commands.config.apikey.rotation.key_description"))
+        .setDescription(localizer("en-US", "commands.config.api-key.rotation.key_description"))
         .setRequired(false),
     );
 
@@ -99,8 +99,8 @@ export async function execute(
   // 4. Ensure a main API key is configured first
   if (!tomoriState.config.api_key) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.rotation.no_main_key_title",
-      descriptionKey: "commands.config.apikey.rotation.no_main_key_description",
+      titleKey: "commands.config.api-key.rotation.no_main_key_title",
+      descriptionKey: "commands.config.api-key.rotation.no_main_key_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -111,8 +111,8 @@ export async function execute(
   const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
   if (isCustomProvider(currentProvider)) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.rotation.custom_provider_title",
-      descriptionKey: "commands.config.apikey.rotation.custom_provider_description",
+      titleKey: "commands.config.api-key.rotation.custom_provider_title",
+      descriptionKey: "commands.config.api-key.rotation.custom_provider_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -176,8 +176,8 @@ async function handleAddAction(
   // 1. Validate API key is provided
   if (!apiKey) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.rotation.key_required_title",
-      descriptionKey: "commands.config.apikey.rotation.key_required_description",
+      titleKey: "commands.config.api-key.rotation.key_required_title",
+      descriptionKey: "commands.config.api-key.rotation.key_required_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -187,8 +187,8 @@ async function handleAddAction(
   // 2. Basic key length validation
   if (apiKey.length < 10) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.set.invalid_key_title",
-      descriptionKey: "commands.config.apikey.set.invalid_key_description",
+      titleKey: "commands.config.api-key.set.invalid_key_title",
+      descriptionKey: "commands.config.api-key.set.invalid_key_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -205,10 +205,10 @@ async function handleAddAction(
 
     if (!validationResult.valid) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.apikey.set.key_validation_failed_title",
+        titleKey: "commands.config.api-key.set.key_validation_failed_title",
         description:
           validationResult.error?.message ||
-          localizer(locale, "commands.config.apikey.set.key_validation_failed_description"),
+          localizer(locale, "commands.config.api-key.set.key_validation_failed_description"),
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -217,8 +217,8 @@ async function handleAddAction(
   } catch (error) {
     log.error(`Error validating rotation API key for provider ${currentProvider}`, error as Error);
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.set.validation_error_title",
-      descriptionKey: "commands.config.apikey.set.validation_error_description",
+      titleKey: "commands.config.api-key.set.validation_error_title",
+      descriptionKey: "commands.config.api-key.set.validation_error_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -247,8 +247,8 @@ async function handleAddAction(
 
   // 7. Success message
   await replyInfoEmbed(interaction, locale, {
-    titleKey: "commands.config.apikey.rotation.add_success_title",
-    descriptionKey: "commands.config.apikey.rotation.add_success_description",
+    titleKey: "commands.config.api-key.rotation.add_success_title",
+    descriptionKey: "commands.config.api-key.rotation.add_success_description",
     descriptionVars: {
       count: String(keyCount),
       provider: currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1),
@@ -275,8 +275,8 @@ async function handlePurgeAction(
 
   if (currentCount === 0) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.apikey.rotation.no_keys_title",
-      descriptionKey: "commands.config.apikey.rotation.no_keys_description",
+      titleKey: "commands.config.api-key.rotation.no_keys_title",
+      descriptionKey: "commands.config.api-key.rotation.no_keys_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -292,8 +292,8 @@ async function handlePurgeAction(
 
   // 4. Success message
   await replyInfoEmbed(interaction, locale, {
-    titleKey: "commands.config.apikey.rotation.purge_success_title",
-    descriptionKey: "commands.config.apikey.rotation.purge_success_description",
+    titleKey: "commands.config.api-key.rotation.purge_success_title",
+    descriptionKey: "commands.config.api-key.rotation.purge_success_description",
     descriptionVars: {
       count: String(deletedCount),
     },
@@ -303,3 +303,4 @@ async function handlePurgeAction(
 
   log.success(`Purged ${deletedCount} rotation key(s) for server ${tomoriState.server_id}`);
 }
+

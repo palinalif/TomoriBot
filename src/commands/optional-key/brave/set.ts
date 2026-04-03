@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type Client,
@@ -20,11 +20,11 @@ import { braveWebSearch } from "../../../tools/restAPIs/brave/braveSearchService
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(localizer("en-US", "commands.optionalkey.brave.set.description"))
+    .setDescription(localizer("en-US", "commands.optional-key.brave.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(localizer("en-US", "commands.optionalkey.brave.set.key_description"))
+        .setDescription(localizer("en-US", "commands.optional-key.brave.set.key_description"))
         .setRequired(true),
     );
 
@@ -65,8 +65,8 @@ export async function execute(
     // 3. Basic validation (no specific Brave API validation available)
     if (!apiKey || apiKey.length < 10) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.brave.set.invalid_key_title",
-        descriptionKey: "commands.optionalkey.brave.set.invalid_key_description",
+        titleKey: "commands.optional-key.brave.set.invalid_key_title",
+        descriptionKey: "commands.optional-key.brave.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -94,8 +94,8 @@ export async function execute(
         // Don't log specific validation failures - they could contain sensitive info
         log.info(`Brave API key validation failed for server ${tomoriState.server_id}`);
         await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.optionalkey.brave.set.key_validation_failed_title",
-          descriptionKey: "commands.optionalkey.brave.set.key_validation_failed_description",
+          titleKey: "commands.optional-key.brave.set.key_validation_failed_title",
+          descriptionKey: "commands.optional-key.brave.set.key_validation_failed_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -104,8 +104,8 @@ export async function execute(
       // Same error handling regardless of error type to prevent information leakage
       log.info(`Brave API key validation error for server ${tomoriState.server_id}`);
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.brave.set.key_validation_failed_title",
-        descriptionKey: "commands.optionalkey.brave.set.key_validation_failed_description",
+        titleKey: "commands.optional-key.brave.set.key_validation_failed_title",
+        descriptionKey: "commands.optional-key.brave.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -145,8 +145,8 @@ export async function execute(
 
     // 11. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.brave.set.success_title",
-      descriptionKey: "commands.optionalkey.brave.set.success_description",
+      titleKey: "commands.optional-key.brave.set.success_title",
+      descriptionKey: "commands.optional-key.brave.set.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -180,3 +180,4 @@ export async function execute(
     });
   }
 }
+

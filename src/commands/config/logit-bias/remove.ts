@@ -1,4 +1,4 @@
-﻿import {
+import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -48,9 +48,9 @@ function buildCheckboxGroups(pageEntries: LogitBiasEntry[]): ModalCheckboxGroupF
       customId: `${CHECKBOX_ID_PREFIX}_${groupIndex}`,
       labelKey:
         groupIndex === 0
-          ? "commands.config.logitbias.remove.checkbox_label"
-          : "commands.config.logitbias.remove.checkbox_label_continued",
-      descriptionKey: groupIndex === 0 ? "commands.config.logitbias.remove.checkbox_description" : undefined,
+          ? "commands.config.logit-bias.remove.checkbox_label"
+          : "commands.config.logit-bias.remove.checkbox_label_continued",
+      descriptionKey: groupIndex === 0 ? "commands.config.logit-bias.remove.checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,
@@ -76,11 +76,11 @@ function collectSelectedIds(multiValues: Record<string, string[]> | undefined, g
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("remove")
-    .setDescription(localizer("en-US", "commands.config.logitbias.remove.description"))
+    .setDescription(localizer("en-US", "commands.config.logit-bias.remove.description"))
     .addBooleanOption((option) =>
       option
         .setName("clearall")
-        .setDescription(localizer("en-US", "commands.config.logitbias.remove.clearall_description"))
+        .setDescription(localizer("en-US", "commands.config.logit-bias.remove.clearall_description"))
         .setRequired(false),
     );
 
@@ -108,8 +108,8 @@ export async function execute(
     const logitBiasEntries = tomoriState.config.llm_logit_biases ?? [];
     if (logitBiasEntries.length === 0) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.remove.none_title",
-        descriptionKey: "commands.config.logitbias.remove.none_description",
+        titleKey: "commands.config.logit-bias.remove.none_title",
+        descriptionKey: "commands.config.logit-bias.remove.none_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -157,8 +157,8 @@ export async function execute(
       invalidateTomoriStateCache(serverDiscId);
 
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.remove.clearall_success_title",
-        descriptionKey: "commands.config.logitbias.remove.clearall_success_description",
+        titleKey: "commands.config.logit-bias.remove.clearall_success_title",
+        descriptionKey: "commands.config.logit-bias.remove.clearall_success_description",
         descriptionVars: {
           removed_count: logitBiasEntries.length.toString(),
         },
@@ -170,8 +170,8 @@ export async function execute(
     const totalPages = Math.ceil(logitBiasEntries.length / ENTRIES_PER_PAGE);
     if (totalPages > PAGE_BUTTON_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.logitbias.remove.too_many_title",
-        descriptionKey: "commands.config.logitbias.remove.too_many_description",
+        titleKey: "commands.config.logit-bias.remove.too_many_title",
+        descriptionKey: "commands.config.logit-bias.remove.too_many_description",
         descriptionVars: {
           total_entries: logitBiasEntries.length.toString(),
           total_pages: totalPages.toString(),
@@ -188,8 +188,8 @@ export async function execute(
 
     if (totalPages > 1) {
       const pageSelectEmbed = createStandardEmbed(locale, {
-        titleKey: "commands.config.logitbias.remove.select_page_title",
-        descriptionKey: "commands.config.logitbias.remove.select_page_description",
+        titleKey: "commands.config.logit-bias.remove.select_page_title",
+        descriptionKey: "commands.config.logit-bias.remove.select_page_description",
         descriptionVars: {
           total_entries: logitBiasEntries.length.toString(),
           total_pages: totalPages.toString(),
@@ -242,7 +242,7 @@ export async function execute(
       locale,
       {
         modalCustomId: `config_logitbias_remove_${interaction.id}`,
-        modalTitleKey: "commands.config.logitbias.remove.modal_title",
+        modalTitleKey: "commands.config.logit-bias.remove.modal_title",
         components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
@@ -264,8 +264,8 @@ export async function execute(
 
     if (removedEntries.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.logitbias.remove.no_removals_title",
-        descriptionKey: "commands.config.logitbias.remove.no_removals_description",
+        titleKey: "commands.config.logit-bias.remove.no_removals_title",
+        descriptionKey: "commands.config.logit-bias.remove.no_removals_description",
         color: ColorCode.INFO,
       });
       return;
@@ -309,8 +309,8 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.config.logitbias.remove.success_title",
-      descriptionKey: "commands.config.logitbias.remove.success_description",
+      titleKey: "commands.config.logit-bias.remove.success_title",
+      descriptionKey: "commands.config.logit-bias.remove.success_description",
       descriptionVars: {
         removed_count: removedEntries.length.toString(),
         remaining_count: remainingEntries.length.toString(),
@@ -349,3 +349,4 @@ export async function execute(
     });
   }
 }
+

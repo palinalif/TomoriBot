@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /optional-key google set
  * Validates and stores a Google API key for the server.
  * Used primarily for Gemini image segmentation (inpainting masks).
@@ -31,11 +31,11 @@ const VALIDATION_TIMEOUT_MS = 5000;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("set")
-    .setDescription(localizer("en-US", "commands.optionalkey.google.set.description"))
+    .setDescription(localizer("en-US", "commands.optional-key.google.set.description"))
     .addStringOption((option) =>
       option
         .setName("key")
-        .setDescription(localizer("en-US", "commands.optionalkey.google.set.key_description"))
+        .setDescription(localizer("en-US", "commands.optional-key.google.set.key_description"))
         .setRequired(true),
     );
 
@@ -96,8 +96,8 @@ export async function execute(
     // 4. Basic format validation
     if (!apiKey || apiKey.length < MIN_KEY_LENGTH) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.google.set.invalid_key_title",
-        descriptionKey: "commands.optionalkey.google.set.invalid_key_description",
+        titleKey: "commands.optional-key.google.set.invalid_key_title",
+        descriptionKey: "commands.optional-key.google.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -119,8 +119,8 @@ export async function execute(
     if (!isValid) {
       log.info(`Google API key validation failed for server ${tomoriState.server_id}`);
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.optionalkey.google.set.key_validation_failed_title",
-        descriptionKey: "commands.optionalkey.google.set.key_validation_failed_description",
+        titleKey: "commands.optional-key.google.set.key_validation_failed_title",
+        descriptionKey: "commands.optional-key.google.set.key_validation_failed_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -160,8 +160,8 @@ export async function execute(
 
     // 9. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.optionalkey.google.set.success_title",
-      descriptionKey: "commands.optionalkey.google.set.success_description",
+      titleKey: "commands.optional-key.google.set.success_title",
+      descriptionKey: "commands.optional-key.google.set.success_description",
       color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
@@ -192,3 +192,4 @@ export async function execute(
     });
   }
 }
+

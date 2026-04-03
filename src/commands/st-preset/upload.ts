@@ -1,4 +1,4 @@
-﻿import {
+import {
   MessageFlags,
   type Attachment,
   type ChatInputCommandInteraction,
@@ -72,11 +72,11 @@ interface RawSTPreset {
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("upload")
-    .setDescription(localizer("en-US", "commands.stpreset.upload.description"))
+    .setDescription(localizer("en-US", "commands.st-preset.upload.description"))
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(localizer("en-US", "commands.stpreset.upload.file_description"))
+        .setDescription(localizer("en-US", "commands.st-preset.upload.file_description"))
         .setRequired(true),
     );
 
@@ -265,8 +265,8 @@ export async function execute(
   const validation = validateAttachment(attachment);
   if (!validation.isValid) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.stpreset.upload.invalid_file_title",
-      descriptionKey: `commands.stpreset.upload.${validation.errorKey}`,
+      titleKey: "commands.st-preset.upload.invalid_file_title",
+      descriptionKey: `commands.st-preset.upload.${validation.errorKey}`,
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -277,8 +277,8 @@ export async function execute(
   const maxSizeBytes = MAX_PRESET_FILE_SIZE_MB * 1024 * 1024;
   if (attachment.size && attachment.size > maxSizeBytes) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.stpreset.upload.file_too_large_title",
-      descriptionKey: "commands.stpreset.upload.file_too_large_description",
+      titleKey: "commands.st-preset.upload.file_too_large_title",
+      descriptionKey: "commands.st-preset.upload.file_too_large_description",
       descriptionVars: { max_size: MAX_PRESET_FILE_SIZE_MB.toString() },
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
@@ -299,7 +299,7 @@ export async function execute(
 
     if (!downloadResult.success || !downloadResult.buffer) {
       await interaction.editReply({
-        content: localizer(locale, "commands.stpreset.upload.download_failed"),
+        content: localizer(locale, "commands.st-preset.upload.download_failed"),
       });
       return;
     }
@@ -310,7 +310,7 @@ export async function execute(
       rawPreset = JSON.parse(downloadResult.buffer.toString("utf-8"));
     } catch {
       await interaction.editReply({
-        content: localizer(locale, "commands.stpreset.upload.invalid_json"),
+        content: localizer(locale, "commands.st-preset.upload.invalid_json"),
       });
       return;
     }
@@ -318,7 +318,7 @@ export async function execute(
     // 7. Validate it looks like a SillyTavern preset (must have prompts array)
     if (!rawPreset.prompts || !Array.isArray(rawPreset.prompts)) {
       await interaction.editReply({
-        content: localizer(locale, "commands.stpreset.upload.not_a_preset"),
+        content: localizer(locale, "commands.st-preset.upload.not_a_preset"),
       });
       return;
     }
@@ -327,7 +327,7 @@ export async function execute(
     const parseResult = parsePresetNodes(rawPreset);
     if (!parseResult) {
       await interaction.editReply({
-        content: localizer(locale, "commands.stpreset.upload.no_nodes"),
+        content: localizer(locale, "commands.st-preset.upload.no_nodes"),
       });
       return;
     }
@@ -362,14 +362,14 @@ export async function execute(
     const filterNotes: string[] = [];
     if (commentOnlyCount > 0) {
       filterNotes.push(
-        localizer(locale, "commands.stpreset.upload.note_comment_only", {
+        localizer(locale, "commands.st-preset.upload.note_comment_only", {
           count: commentOnlyCount.toString(),
         }),
       );
     }
     if (disabledByPreset > 0) {
       filterNotes.push(
-        localizer(locale, "commands.stpreset.upload.note_disabled_by_preset", {
+        localizer(locale, "commands.st-preset.upload.note_disabled_by_preset", {
           count: disabledByPreset.toString(),
         }),
       );
@@ -378,8 +378,8 @@ export async function execute(
 
     // 14. Success response
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.stpreset.upload.success_title",
-      descriptionKey: "commands.stpreset.upload.success_description",
+      titleKey: "commands.st-preset.upload.success_title",
+      descriptionKey: "commands.st-preset.upload.success_description",
       descriptionVars: {
         name: presetName,
         total: nodes.length.toString(),
@@ -409,3 +409,4 @@ export async function execute(
     });
   }
 }
+

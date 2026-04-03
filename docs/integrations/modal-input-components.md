@@ -365,8 +365,8 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 Implemented examples:
 
 - `/server whitelist remove` manages channels and roles in one modal.
-- `/server private-channels remove` manages configured private channels in one modal.
-- `/server rpchannel remove` manages configured RP channels in one modal.
+- `/server private-channels` manages the full saved private-channel set in one modal, with paginated fallback beyond 50 channels.
+- `/server rp-channels` manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
 - `/config tool-notices visibility` manages visible tool notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
@@ -447,7 +447,7 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/novelai image-tags character`        | `novelai/tags/character.ts`      | Dynamic persona list                                      |
 | `/forget attribute`              | `forget/attribute.ts`            | Dynamic attribute list, uses pagination                   |
 | `/forget reminder`               | `forget/reminder.ts`             | Dynamic reminder list                                     |
-| `/server welcomechannel`         | `server/welcomechannel.ts`       | Dynamic channel list                                      |
+| `/server welcome-channel set`    | `server/welcome-channel/set.ts`  | Channel option + dynamic persona list                     |
 
 ### Not Candidates — Keep Text Input
 

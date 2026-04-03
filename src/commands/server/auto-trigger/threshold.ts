@@ -33,11 +33,11 @@ function rollAutochatTarget(minThreshold: number, maxThreshold: number): number 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("threshold")
-    .setDescription(localizer("en-US", "commands.server.autotrigger.threshold.description"))
+    .setDescription(localizer("en-US", "commands.server.auto-trigger.threshold.description"))
     .addIntegerOption((option) =>
       option
         .setName("threshold")
-        .setDescription(localizer("en-US", "commands.server.autotrigger.threshold.threshold_description"))
+        .setDescription(localizer("en-US", "commands.server.auto-trigger.threshold.threshold_description"))
         .setMinValue(MIN_THRESHOLD)
         .setMaxValue(MAX_THRESHOLD)
         .setRequired(true),
@@ -45,7 +45,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addIntegerOption((option) =>
       option
         .setName("max")
-        .setDescription(localizer("en-US", "commands.server.autotrigger.threshold.max_description"))
+        .setDescription(localizer("en-US", "commands.server.auto-trigger.threshold.max_description"))
         .setMinValue(MIN_THRESHOLD)
         .setMaxValue(MAX_THRESHOLD)
         .setRequired(false),
@@ -95,8 +95,8 @@ Positive values use a shared fixed or random range.
 
     if (!isValidThreshold) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.autotrigger.threshold.invalid_range_title",
-        descriptionKey: "commands.server.autotrigger.threshold.invalid_range_specific_description",
+        titleKey: "commands.server.auto-trigger.threshold.invalid_range_title",
+        descriptionKey: "commands.server.auto-trigger.threshold.invalid_range_specific_description",
         descriptionVars: {
           always: MIN_THRESHOLD.toString(),
           min: MIN_RANDOM_THRESHOLD.toString(),
@@ -151,7 +151,7 @@ Positive values use a shared fixed or random range.
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "server autotrigger threshold",
+          command: "server auto-trigger threshold",
           threshold,
           maxThreshold,
           nextTarget,
@@ -180,7 +180,7 @@ Positive values use a shared fixed or random range.
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "server autotrigger threshold",
+          command: "server auto-trigger threshold",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
@@ -201,7 +201,7 @@ Positive values use a shared fixed or random range.
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "server autotrigger threshold",
+          command: "server auto-trigger threshold",
           validationErrors: validatedTomori.error.flatten(),
         },
       };
@@ -221,15 +221,15 @@ Positive values use a shared fixed or random range.
     // Success message based on auto-chat mode
     await replyInfoEmbed(interaction, locale, {
       titleKey: isAlwaysReplyMode
-        ? "commands.server.autotrigger.threshold.success_always_title"
+        ? "commands.server.auto-trigger.threshold.success_always_title"
         : isRangeMode
-          ? "commands.server.autotrigger.threshold.success_range_title"
-          : "commands.server.autotrigger.threshold.success_title",
+          ? "commands.server.auto-trigger.threshold.success_range_title"
+          : "commands.server.auto-trigger.threshold.success_title",
       descriptionKey: isAlwaysReplyMode
-        ? "commands.server.autotrigger.threshold.success_always_description"
+        ? "commands.server.auto-trigger.threshold.success_always_description"
         : isRangeMode
-          ? "commands.server.autotrigger.threshold.success_range_description"
-          : "commands.server.autotrigger.threshold.success_description",
+          ? "commands.server.auto-trigger.threshold.success_range_description"
+          : "commands.server.auto-trigger.threshold.success_description",
       descriptionVars: {
         threshold: threshold.toString(),
         min: threshold.toString(),
@@ -243,7 +243,7 @@ Positive values use a shared fixed or random range.
       serverId: (await getCachedTomoriState(interaction.guild.id))?.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "server autotrigger threshold",
+        command: "server auto-trigger threshold",
         options: interaction.options?.data,
       },
     };

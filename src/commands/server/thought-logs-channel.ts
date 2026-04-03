@@ -1,4 +1,4 @@
-﻿import {
+import {
   ChannelType,
   MessageFlags,
   type ChatInputCommandInteraction,
@@ -15,11 +15,11 @@ import { localizer } from "@/utils/text/localizer";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("thought-logs-channel")
-    .setDescription(localizer("en-US", "commands.server.thoughtlogs.description"))
+    .setDescription(localizer("en-US", "commands.server.thought-logs-channel.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(localizer("en-US", "commands.server.thoughtlogs.channel_description"))
+        .setDescription(localizer("en-US", "commands.server.thought-logs-channel.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     );
@@ -47,8 +47,8 @@ export async function execute(
   try {
     if (selectedChannel.type !== ChannelType.GuildText) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.thoughtlogs.invalid_channel_title",
-        descriptionKey: "commands.server.thoughtlogs.invalid_channel_description",
+        titleKey: "commands.server.thought-logs-channel.invalid_channel_title",
+        descriptionKey: "commands.server.thought-logs-channel.invalid_channel_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -85,17 +85,17 @@ export async function execute(
     const successMessage =
       nextChannelId === null
         ? {
-            titleKey: "commands.server.thoughtlogs.cleared_title",
-            descriptionKey: "commands.server.thoughtlogs.cleared_description",
+            titleKey: "commands.server.thought-logs-channel.cleared_title",
+            descriptionKey: "commands.server.thought-logs-channel.cleared_description",
           }
         : currentChannelId
           ? {
-              titleKey: "commands.server.thoughtlogs.updated_title",
-              descriptionKey: "commands.server.thoughtlogs.updated_description",
+              titleKey: "commands.server.thought-logs-channel.updated_title",
+              descriptionKey: "commands.server.thought-logs-channel.updated_description",
             }
           : {
-              titleKey: "commands.server.thoughtlogs.set_title",
-              descriptionKey: "commands.server.thoughtlogs.set_description",
+              titleKey: "commands.server.thought-logs-channel.set_title",
+              descriptionKey: "commands.server.thought-logs-channel.set_description",
             };
 
     await replyInfoEmbed(interaction, locale, {
@@ -126,3 +126,4 @@ export async function execute(
     });
   }
 }
+

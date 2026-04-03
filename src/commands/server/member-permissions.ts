@@ -1,4 +1,4 @@
-﻿import {
+import {
   EmbedBuilder,
   MessageFlags,
   type ChatInputCommandInteraction,
@@ -23,7 +23,7 @@ const MEMBERPERMISSIONS_CHECKBOX_ID = "memberpermissions_checkbox";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("member-permissions")
-    .setDescription(localizer("en-US", "commands.server.memberpermissions.description"));
+    .setDescription(localizer("en-US", "commands.server.member-permissions.description"));
 
 /**
  * Defines all configurable member teaching permissions for the checkbox modal.
@@ -40,22 +40,22 @@ const MEMBER_PERMISSION_DEFINITIONS: MemberPermissionDefinition[] = [
   {
     value: "servermemories",
     dbColumn: "server_memteaching_enabled",
-    labelKey: "commands.server.memberpermissions.servermemories_option",
-    descKey: "commands.server.memberpermissions.servermemories_desc",
+    labelKey: "commands.server.member-permissions.servermemories_option",
+    descKey: "commands.server.member-permissions.servermemories_desc",
     getState: (c) => c.server_memteaching_enabled,
   },
   {
     value: "attributelist",
     dbColumn: "attribute_memteaching_enabled",
-    labelKey: "commands.server.memberpermissions.attributelist_option",
-    descKey: "commands.server.memberpermissions.attributelist_desc",
+    labelKey: "commands.server.member-permissions.attributelist_option",
+    descKey: "commands.server.member-permissions.attributelist_desc",
     getState: (c) => c.attribute_memteaching_enabled,
   },
   {
     value: "sampledialogues",
     dbColumn: "sampledialogue_memteaching_enabled",
-    labelKey: "commands.server.memberpermissions.sampledialogues_option",
-    descKey: "commands.server.memberpermissions.sampledialogues_desc",
+    labelKey: "commands.server.member-permissions.sampledialogues_option",
+    descKey: "commands.server.member-permissions.sampledialogues_desc",
     getState: (c) => c.sampledialogue_memteaching_enabled,
   },
 ];
@@ -118,13 +118,13 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.server.memberpermissions.select_embed_title",
+        modalTitleKey: "commands.server.member-permissions.select_embed_title",
         components: [
           {
             kind: "checkboxGroup",
             customId: MEMBERPERMISSIONS_CHECKBOX_ID,
-            labelKey: "commands.server.memberpermissions.select_placeholder",
-            descriptionKey: "commands.server.memberpermissions.select_embed_description",
+            labelKey: "commands.server.member-permissions.select_placeholder",
+            descriptionKey: "commands.server.member-permissions.select_embed_description",
             minValues: 0,
             required: false,
             options: checkboxOptions,
@@ -165,8 +165,8 @@ export async function execute(
     // 6. If nothing changed, say so and exit
     if (changes.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.server.memberpermissions.no_changes_title",
-        descriptionKey: "commands.server.memberpermissions.no_changes_description",
+        titleKey: "commands.server.member-permissions.no_changes_title",
+        descriptionKey: "commands.server.member-permissions.no_changes_description",
         color: ColorCode.WARN,
       });
       return;
@@ -221,7 +221,7 @@ export async function execute(
     const enabledLabels = changes.filter((c) => c.isEnabled).map((c) => `\`${c.label}\``);
     const disabledLabels = changes.filter((c) => !c.isEnabled).map((c) => `\`${c.label}\``);
 
-    let resultDescription = localizer(locale, "commands.server.memberpermissions.success_description", {
+    let resultDescription = localizer(locale, "commands.server.member-permissions.success_description", {
       count: changes.length,
     });
     if (enabledLabels.length > 0) {
@@ -234,7 +234,7 @@ export async function execute(
     await modalInteraction.reply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.server.memberpermissions.success_title"))
+          .setTitle(localizer(locale, "commands.server.member-permissions.success_title"))
           .setDescription(resultDescription)
           .setColor(ColorCode.SUCCESS),
       ],
@@ -283,3 +283,4 @@ export async function execute(
     }
   }
 }
+

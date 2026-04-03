@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /config random-trigger remove
  * Removes existing random triggers from the server.
  * Uses checkbox-group bulk removal when the full set fits in one modal,
@@ -41,7 +41,7 @@ type RandomTriggerSummary = {
 };
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.config.randomtrigger.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.config.random-trigger.remove.description"));
 
 export async function execute(
   _client: Client,
@@ -74,15 +74,15 @@ export async function execute(
     const triggers = await getServerRandomTriggers(tomoriState.server_id);
     if (triggers.length === 0) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.randomtrigger.remove.none_title",
-        descriptionKey: "commands.config.randomtrigger.remove.none_description",
+        titleKey: "commands.config.random-trigger.remove.none_title",
+        descriptionKey: "commands.config.random-trigger.remove.none_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const randomLabel = localizer(locale, "commands.config.randomtrigger.add.persona_random_label");
+    const randomLabel = localizer(locale, "commands.config.random-trigger.add.persona_random_label");
     const allPersonas = await getCachedAllPersonas(interaction.guild.id);
     const personaNameById = new Map<number, string>();
     for (const persona of allPersonas) {
@@ -106,7 +106,7 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.randomtrigger.remove.modal_title",
+        modalTitleKey: "commands.config.random-trigger.remove.modal_title",
         components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
@@ -134,8 +134,8 @@ export async function execute(
     const triggersToRemove = triggerSummaries.filter((summary) => !checkedTriggerIds.has(summary.trigger.trigger_id));
     if (triggersToRemove.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.randomtrigger.remove.no_removals_title",
-        descriptionKey: "commands.config.randomtrigger.remove.no_removals_description",
+        titleKey: "commands.config.random-trigger.remove.no_removals_title",
+        descriptionKey: "commands.config.random-trigger.remove.no_removals_description",
         color: ColorCode.INFO,
       });
       return;
@@ -179,13 +179,13 @@ async function handlePaginatedRemovalFallback(
 
   const modalResult = await promptWithPaginatedModal(interaction, locale, {
     modalCustomId: MODAL_CUSTOM_ID,
-    modalTitleKey: "commands.config.randomtrigger.remove.modal_title",
+    modalTitleKey: "commands.config.random-trigger.remove.modal_title",
     components: [
       {
         customId: TRIGGER_SELECT_ID,
-        labelKey: "commands.config.randomtrigger.remove.select_label",
-        descriptionKey: "commands.config.randomtrigger.remove.select_description",
-        placeholder: "commands.config.randomtrigger.remove.select_placeholder",
+        labelKey: "commands.config.random-trigger.remove.select_label",
+        descriptionKey: "commands.config.random-trigger.remove.select_description",
+        placeholder: "commands.config.random-trigger.remove.select_placeholder",
         required: true,
         options: triggerOptions,
       },
@@ -259,8 +259,8 @@ async function removeRandomTriggers(
   }
 
   await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.config.randomtrigger.remove.success_title",
-    descriptionKey: "commands.config.randomtrigger.remove.success_description",
+    titleKey: "commands.config.random-trigger.remove.success_title",
+    descriptionKey: "commands.config.random-trigger.remove.success_description",
     descriptionVars: {
       triggers_removed: formatRemovedSummaries(removedSummaries.map((summary) => summary.summary)),
     },
@@ -315,9 +315,9 @@ function buildTriggerCheckboxGroups(triggerSummaries: RandomTriggerSummary[]): M
       customId: `${TRIGGER_CHECKBOX_ID_PREFIX}_${groupIndex}`,
       labelKey:
         groupIndex === 0
-          ? "commands.config.randomtrigger.remove.checkbox_label"
-          : "commands.config.randomtrigger.remove.checkbox_label_continued",
-      descriptionKey: groupIndex === 0 ? "commands.config.randomtrigger.remove.checkbox_description" : undefined,
+          ? "commands.config.random-trigger.remove.checkbox_label"
+          : "commands.config.random-trigger.remove.checkbox_label_continued",
+      descriptionKey: groupIndex === 0 ? "commands.config.random-trigger.remove.checkbox_description" : undefined,
       minValues: 0,
       required: false,
       options,
@@ -339,3 +339,4 @@ function formatRemovedSummaries(summaries: string[]): string {
   const suffix = summaries.length > maxVisible ? "\n..." : "";
   return visibleSummaries.join("\n") + suffix;
 }
+

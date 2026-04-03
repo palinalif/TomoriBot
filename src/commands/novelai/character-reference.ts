@@ -34,18 +34,18 @@ type UploadPreparationResult =
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("character-reference")
-    .setDescription(localizer("en-US", "commands.novelai.charreference.description"))
+    .setDescription(localizer("en-US", "commands.novelai.character-reference.description"))
     .addStringOption((option) =>
       option
         .setName("target")
-        .setDescription(localizer("en-US", "commands.novelai.charreference.target_description"))
+        .setDescription(localizer("en-US", "commands.novelai.character-reference.target_description"))
         .addChoices({ name: "Me", value: TARGET_ME }, { name: "Persona", value: TARGET_PERSONA })
         .setRequired(true),
     )
     .addAttachmentOption((option) =>
       option
         .setName("image")
-        .setDescription(localizer("en-US", "commands.novelai.charreference.image_description"))
+        .setDescription(localizer("en-US", "commands.novelai.character-reference.image_description"))
         .setRequired(false),
     );
 
@@ -53,8 +53,8 @@ async function prepareAttachmentForStorage(attachment: Attachment): Promise<Uplo
   if (!attachment.contentType?.startsWith("image/")) {
     return {
       success: false,
-      titleKey: "commands.novelai.charreference.invalid_image_title",
-      descriptionKey: "commands.novelai.charreference.invalid_image_description",
+      titleKey: "commands.novelai.character-reference.invalid_image_title",
+      descriptionKey: "commands.novelai.character-reference.invalid_image_description",
     };
   }
 
@@ -64,8 +64,8 @@ async function prepareAttachmentForStorage(attachment: Attachment): Promise<Uplo
     if (!response.ok) {
       return {
         success: false,
-        titleKey: "commands.novelai.charreference.download_failed_title",
-        descriptionKey: "commands.novelai.charreference.download_failed_description",
+        titleKey: "commands.novelai.character-reference.download_failed_title",
+        descriptionKey: "commands.novelai.character-reference.download_failed_description",
       };
     }
 
@@ -74,8 +74,8 @@ async function prepareAttachmentForStorage(attachment: Attachment): Promise<Uplo
     log.warn("Failed to download NovelAI character reference attachment", error);
     return {
       success: false,
-      titleKey: "commands.novelai.charreference.download_failed_title",
-      descriptionKey: "commands.novelai.charreference.download_failed_description",
+      titleKey: "commands.novelai.character-reference.download_failed_title",
+      descriptionKey: "commands.novelai.character-reference.download_failed_description",
     };
   }
 
@@ -88,8 +88,8 @@ async function prepareAttachmentForStorage(attachment: Attachment): Promise<Uplo
     log.warn("Failed to convert NovelAI character reference attachment to PNG", error);
     return {
       success: false,
-      titleKey: "commands.novelai.charreference.conversion_failed_title",
-      descriptionKey: "commands.novelai.charreference.conversion_failed_description",
+      titleKey: "commands.novelai.character-reference.conversion_failed_title",
+      descriptionKey: "commands.novelai.character-reference.conversion_failed_description",
     };
   }
 }
@@ -208,11 +208,11 @@ async function handleUserTarget(
 
   await replyInfoEmbed(interaction, locale, {
     titleKey: imageAttachment
-      ? "commands.novelai.charreference.success_title"
-      : "commands.novelai.charreference.cleared_title",
+      ? "commands.novelai.character-reference.success_title"
+      : "commands.novelai.character-reference.cleared_title",
     descriptionKey: imageAttachment
-      ? "commands.novelai.charreference.success_me_description"
-      : "commands.novelai.charreference.cleared_me_description",
+      ? "commands.novelai.character-reference.success_me_description"
+      : "commands.novelai.character-reference.cleared_me_description",
     color: ColorCode.SUCCESS,
   });
 }
@@ -280,11 +280,11 @@ async function handlePersonaTarget(
 
   await replyInfoEmbed(interaction, locale, {
     titleKey: imageAttachment
-      ? "commands.novelai.charreference.success_title"
-      : "commands.novelai.charreference.cleared_title",
+      ? "commands.novelai.character-reference.success_title"
+      : "commands.novelai.character-reference.cleared_title",
     descriptionKey: imageAttachment
-      ? "commands.novelai.charreference.success_persona_description"
-      : "commands.novelai.charreference.cleared_persona_description",
+      ? "commands.novelai.character-reference.success_persona_description"
+      : "commands.novelai.character-reference.cleared_persona_description",
     descriptionVars: {
       persona_name: selectedPersona.tomori_nickname,
     },
@@ -347,7 +347,7 @@ export async function execute(
 
     const personaResult = await replyPaginatedPersonaChoicesV2(interaction, locale, {
       personas: allPersonas,
-      titleKey: "commands.novelai.charreference.persona_select_title",
+      titleKey: "commands.novelai.character-reference.persona_select_title",
       color: ColorCode.INFO,
     });
 
@@ -384,3 +384,4 @@ export async function execute(
     });
   }
 }
+

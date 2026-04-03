@@ -27,15 +27,15 @@ import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const MODAL_CUSTOM_ID = "server_auto_trigger_channels_modal";
-const CHECKBOX_ID_PREFIX = "server_auto_trigger_channels_checkbox_group";
-const PAGE_BUTTON_PREFIX = "server_auto_trigger_channels_page_";
-const DONE_BUTTON_ID = "server_auto_trigger_channels_done";
+const MODAL_CUSTOM_ID = "server_private_channels_modal";
+const CHECKBOX_ID_PREFIX = "server_private_channels_checkbox_group";
+const PAGE_BUTTON_PREFIX = "server_private_channels_page_";
+const DONE_BUTTON_ID = "server_private_channels_done";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("channels")
-    .setDescription(localizer("en-US", "commands.server.auto-trigger.channels.description"));
+    .setName("private-channels")
+    .setDescription(localizer("en-US", "commands.server.private-channels.description"));
 
 export async function execute(
   _client: Client,
@@ -66,15 +66,15 @@ export async function execute(
     const availableChannels = await loadGuildTextChecklistChannels(interaction.guild);
     if (availableChannels.length === 0) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.auto-trigger.channels.no_channels_title",
-        descriptionKey: "commands.server.auto-trigger.channels.no_channels_description",
+        titleKey: "commands.server.private-channels.no_channels_title",
+        descriptionKey: "commands.server.private-channels.no_channels_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const initialSelectedIds = new Set(tomoriState.config.autoch_disc_ids ?? []);
+    const initialSelectedIds = new Set(tomoriState.config.private_channel_ids ?? []);
 
     if (availableChannels.length <= CHECKLIST_CHANNELS_PER_PAGE) {
       await executeSinglePage(
@@ -101,11 +101,11 @@ export async function execute(
       userId: userData.user_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "server auto-trigger channels",
+        command: "server private-channels",
         guildId: interaction.guildId,
       },
     };
-    await log.error("Error in /server auto-trigger channels command", error, context);
+    await log.error("Error in /server private-channels command", error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -129,7 +129,7 @@ async function executeSinglePage(
     locale,
     {
       modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.server.auto-trigger.channels.modal_title",
+      modalTitleKey: "commands.server.private-channels.modal_title",
       components: checkboxGroups,
     },
     MessageFlags.Ephemeral,
@@ -164,8 +164,8 @@ async function executeMultiPage(
 
   if (totalPages > CHECKLIST_MAX_PAGE_BUTTONS) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.server.auto-trigger.channels.too_many_pages_title",
-      descriptionKey: "commands.server.auto-trigger.channels.too_many_pages_description",
+      titleKey: "commands.server.private-channels.too_many_pages_title",
+      descriptionKey: "commands.server.private-channels.too_many_pages_description",
       descriptionVars: {
         channel_count: availableChannels.length.toString(),
         max_pages: CHECKLIST_MAX_PAGE_BUTTONS.toString(),
@@ -181,7 +181,7 @@ async function executeMultiPage(
     components: buildChecklistPageActionRows(
       totalPages,
       availableChannels.length,
-      localizer(locale, "commands.server.auto-trigger.channels.done_button"),
+      localizer(locale, "commands.server.private-channels.done_button"),
       PAGE_BUTTON_PREFIX,
       DONE_BUTTON_ID,
     ),
@@ -201,7 +201,7 @@ async function executeMultiPage(
         time: CHECKLIST_PAGE_SELECT_TIMEOUT_MS,
       })) as ButtonInteraction;
     } catch {
-      log.info("[AutoTriggerChannels] Page selection timed out");
+      log.info("[PrivateChannels] Page selection timed out");
       break;
     }
 
@@ -225,7 +225,7 @@ async function executeMultiPage(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.server.auto-trigger.channels.modal_title",
+        modalTitleKey: "commands.server.private-channels.modal_title",
         components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
@@ -259,7 +259,7 @@ async function executeMultiPage(
         components: buildChecklistPageActionRows(
           totalPages,
           availableChannels.length,
-          localizer(locale, "commands.server.auto-trigger.channels.done_button"),
+          localizer(locale, "commands.server.private-channels.done_button"),
           PAGE_BUTTON_PREFIX,
           DONE_BUTTON_ID,
         ),
@@ -289,16 +289,16 @@ function buildCheckboxGroups(
     selectedIds,
     locale,
     checkboxIdPrefix: CHECKBOX_ID_PREFIX,
-    labelKey: "commands.server.auto-trigger.channels.checkbox_label",
-    labelKeyContinued: "commands.server.auto-trigger.channels.checkbox_label_continued",
-    descriptionKey: "commands.server.auto-trigger.channels.checkbox_description",
+    labelKey: "commands.server.private-channels.checkbox_label",
+    labelKeyContinued: "commands.server.private-channels.checkbox_label_continued",
+    descriptionKey: "commands.server.private-channels.checkbox_description",
   });
 }
 
 function buildPageSelectEmbed(locale: string, channelCount: number, totalPages: number, selectedCount: number) {
   return createStandardEmbed(locale, {
-    titleKey: "commands.server.auto-trigger.channels.select_page_title",
-    descriptionKey: "commands.server.auto-trigger.channels.select_page_description",
+    titleKey: "commands.server.private-channels.select_page_title",
+    descriptionKey: "commands.server.private-channels.select_page_description",
     descriptionVars: {
       channel_count: channelCount.toString(),
       total_pages: totalPages.toString(),
@@ -322,8 +322,8 @@ async function persistUpdate(
 
   if (enabledIds.length === 0 && disabledIds.length === 0) {
     await replyInfoEmbed(responseInteraction, locale, {
-      titleKey: "commands.server.auto-trigger.channels.no_changes_title",
-      descriptionKey: "commands.server.auto-trigger.channels.no_changes_description",
+      titleKey: "commands.server.private-channels.no_changes_title",
+      descriptionKey: "commands.server.private-channels.no_changes_description",
       color: ColorCode.INFO,
     });
     return previousSelectedIds;
@@ -331,7 +331,7 @@ async function persistUpdate(
 
   const [updatedRow] = await sql`
     UPDATE tomori_configs
-    SET autoch_disc_ids = ${formatTextArrayLiteral([...nextSelectedIds])}::text[]
+    SET private_channel_ids = ${formatTextArrayLiteral([...nextSelectedIds])}::text[]
     WHERE server_id = ${tomoriState.server_id}
     RETURNING *
   `;
@@ -342,11 +342,11 @@ async function persistUpdate(
       serverId: tomoriState.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "server auto-trigger channels",
+        command: "server private-channels",
         guildId,
       },
     };
-    await log.error("Failed to update autoch_disc_ids config", new Error("Database update failed"), context);
+    await log.error("Failed to update private_channel_ids config", new Error("Database update failed"), context);
     await replyInfoEmbed(responseInteraction, locale, {
       titleKey: "general.errors.update_failed_title",
       descriptionKey: "general.errors.update_failed_description",
@@ -362,11 +362,11 @@ async function persistUpdate(
       serverId: tomoriState.server_id,
       errorType: "SchemaValidationError",
       metadata: {
-        command: "server auto-trigger channels",
+        command: "server private-channels",
         validationErrors: validatedConfig.error.flatten(),
       },
     };
-    await log.error("Failed to validate updated config after auto-trigger update", validatedConfig.error, context);
+    await log.error("Failed to validate updated config after private-channel update", validatedConfig.error, context);
     await replyInfoEmbed(responseInteraction, locale, {
       titleKey: "general.errors.update_failed_title",
       descriptionKey: "general.errors.update_failed_description",
@@ -378,17 +378,17 @@ async function persistUpdate(
   invalidateTomoriStateCache(guildId);
 
   await replyInfoEmbed(responseInteraction, locale, {
-    titleKey: "commands.server.auto-trigger.channels.success_title",
-    descriptionKey: "commands.server.auto-trigger.channels.success_description",
+    titleKey: "commands.server.private-channels.success_title",
+    descriptionKey: "commands.server.private-channels.success_description",
     descriptionVars: {
       enabled_count: enabledIds.length.toString(),
       enabled_channels: formatChecklistChannelMentions(enabledIds, availableChannels, locale),
       disabled_count: disabledIds.length.toString(),
       disabled_channels: formatChecklistChannelMentions(disabledIds, availableChannels, locale),
-      selected_count: validatedConfig.data.autoch_disc_ids.length.toString(),
+      selected_count: validatedConfig.data.private_channel_ids.length.toString(),
     },
     color: ColorCode.SUCCESS,
   });
 
-  return new Set(validatedConfig.data.autoch_disc_ids);
+  return new Set(validatedConfig.data.private_channel_ids);
 }

@@ -1,4 +1,4 @@
-﻿import {
+import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -144,7 +144,7 @@ function buildCheckboxGroups(pageNodes: StPresetNodeRow[], pageOffset: number): 
       customId: `stpreset_nodes_${groupIndex}`,
       // Pass raw label — localizer returns the key itself when no match is found
       labelKey: dynamicLabel,
-      descriptionKey: "commands.stpreset.node.toggle.group_description",
+      descriptionKey: "commands.st-preset.node.toggle.group_description",
       minValues: 0,
       maxValues: chunk.length,
       required: false,
@@ -181,7 +181,7 @@ function collectSelectedIds(multiValues: Record<string, string[]> | undefined, g
  * @param subcommand - The subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("toggle").setDescription(localizer("en-US", "commands.stpreset.node.toggle.description"));
+  subcommand.setName("toggle").setDescription(localizer("en-US", "commands.st-preset.node.toggle.description"));
 
 // ─── Execution ───────────────────────────────────────────────────────
 
@@ -232,8 +232,8 @@ export async function execute(
 
     if (!preset || !preset.preset_id) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.stpreset.node.toggle.no_preset_title",
-        descriptionKey: "commands.stpreset.node.toggle.no_preset_description",
+        titleKey: "commands.st-preset.node.toggle.no_preset_title",
+        descriptionKey: "commands.st-preset.node.toggle.no_preset_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -244,8 +244,8 @@ export async function execute(
     const dbNodes = await loadToggleableNodes(preset.preset_id);
     if (dbNodes.length === 0) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.stpreset.node.toggle.no_nodes_title",
-        descriptionKey: "commands.stpreset.node.toggle.no_nodes_description",
+        titleKey: "commands.st-preset.node.toggle.no_nodes_title",
+        descriptionKey: "commands.st-preset.node.toggle.no_nodes_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -318,7 +318,7 @@ function buildPageActionRows(
   pageButtons.push(
     new ButtonBuilder()
       .setCustomId(DONE_BUTTON_ID)
-      .setLabel(localizer(locale, "commands.stpreset.node.toggle.done_button"))
+      .setLabel(localizer(locale, "commands.st-preset.node.toggle.done_button"))
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -376,11 +376,11 @@ async function executeSinglePageToggle(
   const changesText =
     summary.changes.length > 0
       ? summary.changes.join("\n")
-      : localizer(locale, "commands.stpreset.node.toggle.no_changes");
+      : localizer(locale, "commands.st-preset.node.toggle.no_changes");
 
   await replyInfoEmbed(modalResult.interaction, locale, {
-    titleKey: "commands.stpreset.node.toggle.result_title",
-    descriptionKey: "commands.stpreset.node.toggle.result_description",
+    titleKey: "commands.st-preset.node.toggle.result_title",
+    descriptionKey: "commands.st-preset.node.toggle.result_description",
     descriptionVars: {
       total: totalCount.toString(),
       enabled: selectedCount.toString(),
@@ -417,8 +417,8 @@ async function executeMultiPageToggle(
 ): Promise<void> {
   // 1. Build and send the page-selection embed with buttons
   const pageSelectEmbed = createStandardEmbed(locale, {
-    titleKey: "commands.stpreset.node.toggle.select_page_title",
-    descriptionKey: "commands.stpreset.node.toggle.select_page_description",
+    titleKey: "commands.st-preset.node.toggle.select_page_title",
+    descriptionKey: "commands.st-preset.node.toggle.select_page_description",
     descriptionVars: {
       preset_name: preset.preset_name,
       total_nodes: dbNodes.length.toString(),
@@ -499,11 +499,11 @@ async function executeMultiPageToggle(
       const changesText =
         summary.changes.length > 0
           ? summary.changes.join("\n")
-          : localizer(locale, "commands.stpreset.node.toggle.no_changes");
+          : localizer(locale, "commands.st-preset.node.toggle.no_changes");
 
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.stpreset.node.toggle.result_title",
-        descriptionKey: "commands.stpreset.node.toggle.result_description",
+        titleKey: "commands.st-preset.node.toggle.result_title",
+        descriptionKey: "commands.st-preset.node.toggle.result_description",
         descriptionVars: {
           total: totalCount.toString(),
           enabled: selectedCount.toString(),
@@ -583,3 +583,4 @@ function processToggleResults(
     totalCount: pageNodes.length,
   };
 }
+
