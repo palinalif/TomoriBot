@@ -932,10 +932,10 @@ export async function sendUserTranscriptViaWebhook(
 
 /**
  * Resolves the avatar URL for a given persona and guild.
- * Handles fallback chain: alter avatar -> guild avatar -> default avatar.
+ * Handles fallback chain: alter avatar -> bot's guild avatar -> default avatar.
  *
  * @param persona - The persona to resolve avatar for
- * @param guild - The guild context (for main persona guild avatar)
+ * @param guild - The guild context (for main persona guild-specific avatar)
  * @returns Avatar URL string, or undefined to use webhook default
  */
 export function resolvePersonaAvatarURL(persona: TomoriState, guild: Guild): string | undefined {
@@ -956,11 +956,15 @@ export function resolvePersonaAvatarURL(persona: TomoriState, guild: Guild): str
     }
   }
 
-  // 2. Main persona: Try guild avatar first
+  // 2. Main persona: Try the bot's guild-specific avatar first
   if (!persona.is_alter) {
-    const guildAvatar = guild.iconURL({ extension: "png", size: 256 });
-    if (guildAvatar) {
-      return guildAvatar;
+    const memberAvatar = guild.members.me?.displayAvatarURL({
+      extension: "png",
+      size: 256,
+      forceStatic: true,
+    });
+    if (memberAvatar) {
+      return memberAvatar;
     }
 
     // Fallback to webhook_avatar_url if guild has no icon

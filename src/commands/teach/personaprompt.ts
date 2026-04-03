@@ -11,7 +11,21 @@ import type { SelectOption } from "@/types/discord/modal";
 
 const MODAL_CUSTOM_ID = "teach_personaprompt_modal";
 const PERSONA_SELECT_ID = "persona_select";
-const PERSONA_PROMPT_INPUT_ID = "persona_prompt_input";
+const PERSONA_PROMPT_INPUT_IDS = [
+  "persona_prompt_part1",
+  "persona_prompt_part2",
+  "persona_prompt_part3",
+  "persona_prompt_part4",
+] as const;
+const PERSONA_PROMPT_PART_MAX_LENGTH = 4000;
+
+function splitPromptIntoModalParts(prompt: string | null | undefined): string[] {
+  const promptValue = prompt ?? "";
+
+  return Array.from({ length: PERSONA_PROMPT_INPUT_IDS.length }, (_, index) =>
+    promptValue.slice(index * PERSONA_PROMPT_PART_MAX_LENGTH, (index + 1) * PERSONA_PROMPT_PART_MAX_LENGTH),
+  );
+}
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("personaprompt").setDescription(localizer("en-US", "commands.teach.personaprompt.description"));
@@ -81,6 +95,9 @@ export async function execute(
       return;
     }
 
+    const initialPersona = allPersonas[0] ?? null;
+    const existingPromptParts = splitPromptIntoModalParts(initialPersona?.persona_prompt);
+
     const modalResult = await promptWithRawModal(interaction, locale, {
       modalCustomId: MODAL_CUSTOM_ID,
       modalTitleKey: "commands.teach.personaprompt.modal_title",
@@ -94,13 +111,44 @@ export async function execute(
           options: personaSelectOptions,
         },
         {
-          customId: PERSONA_PROMPT_INPUT_ID,
-          labelKey: "commands.teach.personaprompt.prompt_label",
-          descriptionKey: "commands.teach.personaprompt.prompt_description",
-          placeholder: "commands.teach.personaprompt.prompt_placeholder",
+          customId: PERSONA_PROMPT_INPUT_IDS[0],
+          labelKey: "commands.teach.personaprompt.part1_label",
+          descriptionKey: "commands.teach.personaprompt.part1_description",
+          placeholder: "commands.teach.personaprompt.part1_placeholder",
           style: TextInputStyle.Paragraph,
           required: true,
-          maxLength: 4000,
+          maxLength: PERSONA_PROMPT_PART_MAX_LENGTH,
+          value: existingPromptParts[0] || undefined,
+        },
+        {
+          customId: PERSONA_PROMPT_INPUT_IDS[1],
+          labelKey: "commands.teach.personaprompt.part2_label",
+          descriptionKey: "commands.teach.personaprompt.part2_description",
+          placeholder: "commands.teach.personaprompt.part2_placeholder",
+          style: TextInputStyle.Paragraph,
+          required: false,
+          maxLength: PERSONA_PROMPT_PART_MAX_LENGTH,
+          value: existingPromptParts[1] || undefined,
+        },
+        {
+          customId: PERSONA_PROMPT_INPUT_IDS[2],
+          labelKey: "commands.teach.personaprompt.part3_label",
+          descriptionKey: "commands.teach.personaprompt.part3_description",
+          placeholder: "commands.teach.personaprompt.part3_placeholder",
+          style: TextInputStyle.Paragraph,
+          required: false,
+          maxLength: PERSONA_PROMPT_PART_MAX_LENGTH,
+          value: existingPromptParts[2] || undefined,
+        },
+        {
+          customId: PERSONA_PROMPT_INPUT_IDS[3],
+          labelKey: "commands.teach.personaprompt.part4_label",
+          descriptionKey: "commands.teach.personaprompt.part4_description",
+          placeholder: "commands.teach.personaprompt.part4_placeholder",
+          style: TextInputStyle.Paragraph,
+          required: false,
+          maxLength: PERSONA_PROMPT_PART_MAX_LENGTH,
+          value: existingPromptParts[3] || undefined,
         },
       ],
     });
@@ -112,7 +160,9 @@ export async function execute(
 
     const modalSubmitInteraction = modalResult.interaction;
     const selectedPersonaId = modalResult.values?.[PERSONA_SELECT_ID];
-    const personaPrompt = modalResult.values?.[PERSONA_PROMPT_INPUT_ID]?.trim();
+    const personaPrompt = PERSONA_PROMPT_INPUT_IDS.map((inputId) => modalResult.values?.[inputId] || "")
+      .join("")
+      .trim();
     if (!modalSubmitInteraction || !selectedPersonaId || !personaPrompt) {
       return;
     }

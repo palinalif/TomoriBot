@@ -439,7 +439,7 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
 | `/config sysprompt preset`       | `config/sysprompt/preset.ts`     | Dynamic preset list from DB                               |
 | `/config apikey set`             | `config/apikey/set.ts`           | Provider select + text input combo; list may grow         |
-| `/teach personaprompt`           | `teach/personaprompt.ts`         | Dynamic persona list, uses pagination                     |
+| `/teach personaprompt`           | `teach/personaprompt.ts`         | Dynamic persona list + free-form prompt (up to 16000 chars, 4 fields) |
 | `/teach attribute`               | `teach/attribute.ts`             | Dynamic persona list, uses pagination                     |
 | `/teach sampledialogue`          | `teach/sampledialogue.ts`        | Dynamic persona list, uses pagination                     |
 | `/teach memory personal`         | `teach/memory/personal.ts`       | Dynamic memory list                                       |

@@ -39,6 +39,10 @@ function asObject(value: unknown): JsonObject | null {
   return value as JsonObject;
 }
 
+function hasOwnKey(obj: JsonObject, key: string): boolean {
+  return Object.hasOwn(obj, key);
+}
+
 function getStringField(obj: JsonObject | null, key: string): string | null {
   if (!obj) {
     return null;
@@ -364,6 +368,31 @@ function pickObjectFromCard(cardData: JsonObject | null, rootData: JsonObject, k
   return asObject(cardData?.[key]) ?? asObject(rootData[key]);
 }
 
+export function looksLikeSillyTavernCardJson(input: unknown): boolean {
+  const rootData = asObject(input);
+  if (!rootData) {
+    return false;
+  }
+
+  const spec = getStringField(rootData, "spec");
+  if (spec?.toLowerCase().startsWith("chara_card")) {
+    return true;
+  }
+
+  const cardData = asObject(rootData.data);
+  const candidateFields = ["name", "description", "personality", "scenario", "first_mes", "mes_example"];
+  const matchedFieldCount = candidateFields.reduce((count, key) => {
+    const value = pickStringFromCard(cardData, rootData, key);
+    return value ? count + 1 : count;
+  }, 0);
+
+  if (matchedFieldCount >= 2) {
+    return true;
+  }
+
+  return (cardData !== null || hasOwnKey(rootData, "data")) && matchedFieldCount >= 1;
+}
+
 function collectCharacterBookSections(characterBook: JsonObject | null): ContentSection[] {
   if (!characterBook) {
     return [];
@@ -409,11 +438,22 @@ function collectCharacterBookSections(characterBook: JsonObject | null): Content
 }
 
 export function convertSillyTavernMetadataToPresetData(metadata: SillyTavernCardMetadata): SillyTavernConversionResult {
-  const rootData = asObject(metadata.parsedJson);
+  return convertSillyTavernJsonToPresetData(metadata.parsedJson);
+}
+
+export function convertSillyTavernJsonToPresetData(input: unknown): SillyTavernConversionResult {
+  const rootData = asObject(input);
   if (!rootData) {
     return {
       success: false,
-      error: "Decoded SillyTavern metadata is not a JSON object.",
+      error: "Decoded SillyTavern card data is not a JSON object.",
+    };
+  }
+
+  if (!looksLikeSillyTavernCardJson(rootData)) {
+    return {
+      success: false,
+      error: "JSON payload does not look like a SillyTavern character card.",
     };
   }
 

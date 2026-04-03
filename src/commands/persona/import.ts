@@ -1,6 +1,6 @@
 /**
  * Preset Import Command
- * Imports TomoriBot's personality from a PNG file with embedded metadata
+ * Imports TomoriBot's personality from a PNG or JSON file
  */
 
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
@@ -13,20 +13,32 @@ import { memoryGuard, IMPORT_LIMITS, reserveImportQuota } from "../../utils/secu
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { validatePresetFile, importPresetData } from "../../utils/db/presetImport";
 import type { PresetExportData } from "../../types/preset/presetExport";
-import { convertSillyTavernMetadataToPresetData } from "../../utils/db/sillyTavernImport";
+import {
+  convertSillyTavernJsonToPresetData,
+  convertSillyTavernMetadataToPresetData,
+  looksLikeSillyTavernCardJson,
+} from "../../utils/db/sillyTavernImport";
 import { extractMetadataFromPNG, extractSillyTavernMetadataFromPNG } from "../../utils/image/pngMetadata";
 import { validatePNGBuffer } from "../../utils/image/avatarHelper";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
 import { sql } from "../../utils/db/client";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
-import { uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
+import { resolvePersonaAvatarPublicUrl, uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
 /**
  * Maximum file size for imports (uses centralized constant)
  */
 const MAX_FILE_SIZE = IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB * 1024 * 1024;
 const MAX_SILLY_TAVERN_DEBUG_BYTES = 1_000_000;
+
+type PersonaImportSource = "tomori-png" | "tomori-json" | "sillytavern-png" | "sillytavern-json";
+
+type ResolvedImportFile = {
+  avatarImageBuffer: Buffer | null;
+  presetData: PresetExportData;
+  source: PersonaImportSource;
+};
 
 function truncateBufferForAttachment(buffer: Buffer, maxBytes: number, noticeText: string): Buffer {
   if (buffer.length <= maxBytes) {
@@ -38,34 +50,46 @@ function truncateBufferForAttachment(buffer: Buffer, maxBytes: number, noticeTex
   return Buffer.concat([buffer.subarray(0, safeMax), notice]);
 }
 
-function buildSillyTavernDebugText(
-  sillyTavernData: ReturnType<typeof extractSillyTavernMetadataFromPNG>,
-  conversionError?: string,
-): string {
-  if (!sillyTavernData) {
-    return "";
-  }
-
-  const parsedPretty = JSON.stringify(sillyTavernData.parsedJson, null, 2);
+function buildSillyTavernDebugText(options: {
+  conversionError?: string;
+  decodedFromBase64?: boolean;
+  decodedValueLength?: number;
+  metadataKey?: string;
+  parsedJson: unknown;
+  rawValueLength?: number;
+  sourceLabel: string;
+}): string {
+  const parsedPretty = JSON.stringify(options.parsedJson, null, 2) ?? String(options.parsedJson);
   const parsedRootKeys =
-    sillyTavernData.parsedJson &&
-    typeof sillyTavernData.parsedJson === "object" &&
-    !Array.isArray(sillyTavernData.parsedJson)
-      ? Object.keys(sillyTavernData.parsedJson as Record<string, unknown>)
+    options.parsedJson && typeof options.parsedJson === "object" && !Array.isArray(options.parsedJson)
+      ? Object.keys(options.parsedJson as Record<string, unknown>)
       : [];
 
   return [
     "TomoriBot Persona Import - SillyTavern Debug Decode",
-    `Detected metadata key: ${sillyTavernData.metadataKey}`,
-    `Decoded from base64: ${sillyTavernData.decodedFromBase64 ? "yes" : "no"}`,
-    ...(conversionError ? [`Conversion error: ${conversionError}`] : ["Conversion error: (none - decode only mode)"]),
-    `Raw metadata length: ${sillyTavernData.rawValue.length}`,
-    `Decoded text length: ${sillyTavernData.decodedValue.length}`,
+    `Source: ${options.sourceLabel}`,
+    ...(options.metadataKey ? [`Detected metadata key: ${options.metadataKey}`] : []),
+    ...(typeof options.decodedFromBase64 === "boolean"
+      ? [`Decoded from base64: ${options.decodedFromBase64 ? "yes" : "no"}`]
+      : []),
+    ...(options.conversionError
+      ? [`Conversion error: ${options.conversionError}`]
+      : ["Conversion error: (none - decode only mode)"]),
+    ...(typeof options.rawValueLength === "number" ? [`Raw metadata length: ${options.rawValueLength}`] : []),
+    ...(typeof options.decodedValueLength === "number" ? [`Decoded text length: ${options.decodedValueLength}`] : []),
     `Parsed root keys: ${parsedRootKeys.length > 0 ? parsedRootKeys.join(", ") : "(none/object not detected)"}`,
     "",
     "=== Parsed JSON ===",
     parsedPretty,
   ].join("\n");
+}
+
+function parseJsonAttachment(buffer: Buffer): unknown {
+  const rawText = buffer
+    .toString("utf8")
+    .replace(/^\uFEFF/, "")
+    .trim();
+  return JSON.parse(rawText);
 }
 
 function parseCommaSeparatedTriggers(input: string): string[] {
@@ -238,14 +262,14 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 
 /**
  * Executes the 'import' command
- * Imports TomoriBot's personality from an uploaded PNG file
+ * Imports TomoriBot's personality from an uploaded PNG or JSON file
  * @param client - The Discord client instance
  * @param interaction - The chat input command interaction
  * @param userData - The user data for the invoking user
  * @param locale - The user's preferred locale
  */
 export async function execute(
-  _client: Client,
+  client: Client,
   interaction: ChatInputCommandInteraction,
   _userData: UserRow,
   locale: string,
@@ -298,7 +322,11 @@ export async function execute(
     const attachment = interaction.options.getAttachment("file", true);
 
     // 5. Validate file type and size
-    if (!attachment.name.endsWith(".png")) {
+    const normalizedAttachmentName = attachment.name.toLowerCase();
+    const isPngImport = normalizedAttachmentName.endsWith(".png");
+    const isJsonImport = normalizedAttachmentName.endsWith(".json");
+
+    if (!isPngImport && !isJsonImport) {
       await replyInfoEmbed(
         interaction,
         locale,
@@ -363,8 +391,8 @@ export async function execute(
       return;
     }
 
-    // 7. Download the PNG file with timeout
-    let pngBuffer: Buffer;
+    // 7. Download the import file with timeout
+    let importFileBuffer: Buffer;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for larger files
 
@@ -379,7 +407,7 @@ export async function execute(
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      pngBuffer = Buffer.from(arrayBuffer);
+      importFileBuffer = Buffer.from(arrayBuffer);
     } catch (error) {
       clearTimeout(timeoutId);
 
@@ -409,30 +437,172 @@ export async function execute(
       return;
     }
 
-    // 8. Validate PNG buffer
-    const pngValidation = validatePNGBuffer(pngBuffer, MAX_FILE_SIZE);
-    if (!pngValidation.isValid) {
-      log.warn(`Invalid PNG buffer during preset import: ${pngValidation.error}`);
-      await interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.persona.import.invalid_png_title"))
-            .setDescription(localizer(locale, "commands.persona.import.invalid_png_description"))
-            .setColor(ColorCode.ERROR),
-        ],
-      });
-      return;
-    }
+    // 8. Parse supported import file
+    let resolvedImport: ResolvedImportFile | null = null;
 
-    // 9. Extract metadata from PNG
-    const metadata = extractMetadataFromPNG(pngBuffer);
-    let presetDataFromFile: PresetExportData | null = null;
+    if (isPngImport) {
+      const pngValidation = validatePNGBuffer(importFileBuffer, MAX_FILE_SIZE);
+      if (!pngValidation.isValid) {
+        log.warn(`Invalid PNG buffer during preset import: ${pngValidation.error}`);
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(localizer(locale, "commands.persona.import.invalid_png_title"))
+              .setDescription(localizer(locale, "commands.persona.import.invalid_png_description"))
+              .setColor(ColorCode.ERROR),
+          ],
+        });
+        return;
+      }
 
-    if (metadata) {
-      // 10. Validate Tomori preset file structure
-      const validation = validatePresetFile(metadata);
+      const metadata = extractMetadataFromPNG(importFileBuffer);
+      if (metadata) {
+        const validation = validatePresetFile(metadata);
 
-      if (!validation.valid || !validation.data) {
+        if (!validation.valid || !validation.data) {
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(localizer(locale, "commands.persona.import.invalid_file_title"))
+                .setDescription(
+                  validation.error
+                    ? localizeError(locale, validation.error)
+                    : localizer(locale, "commands.persona.import.invalid_file_description"),
+                )
+                .setColor(ColorCode.ERROR),
+            ],
+          });
+          return;
+        }
+
+        resolvedImport = {
+          avatarImageBuffer: importFileBuffer,
+          presetData: validation.data,
+          source: "tomori-png",
+        };
+      } else {
+        const sillyTavernData = extractSillyTavernMetadataFromPNG(importFileBuffer);
+        if (!sillyTavernData) {
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(localizer(locale, "commands.persona.import.no_metadata_title"))
+                .setDescription(localizer(locale, "commands.persona.import.no_metadata_description"))
+                .setColor(ColorCode.ERROR),
+            ],
+          });
+          return;
+        }
+
+        const conversion = convertSillyTavernMetadataToPresetData(sillyTavernData);
+        if (!conversion.success) {
+          const debugText = buildSillyTavernDebugText({
+            conversionError: conversion.error,
+            decodedFromBase64: sillyTavernData.decodedFromBase64,
+            decodedValueLength: sillyTavernData.decodedValue.length,
+            metadataKey: sillyTavernData.metadataKey,
+            parsedJson: sillyTavernData.parsedJson,
+            rawValueLength: sillyTavernData.rawValue.length,
+            sourceLabel: "PNG metadata",
+          });
+          const debugBuffer = truncateBufferForAttachment(
+            Buffer.from(debugText, "utf8"),
+            MAX_SILLY_TAVERN_DEBUG_BYTES,
+            "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
+          );
+          const debugFilename = `sillytavern-decode-${Date.now()}.txt`;
+          const debugAttachment = new AttachmentBuilder(debugBuffer, {
+            name: debugFilename,
+          });
+
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("SillyTavern card detected (conversion failed)")
+                .setDescription(
+                  "SillyTavern-style `chara` metadata was decoded, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
+                )
+                .setColor(ColorCode.WARN),
+            ],
+            files: [debugAttachment],
+          });
+          return;
+        }
+
+        resolvedImport = {
+          avatarImageBuffer: importFileBuffer,
+          presetData: conversion.data,
+          source: "sillytavern-png",
+        };
+        log.info(
+          `[Persona Import] Converted SillyTavern PNG card to preset format for "${conversion.data.tomori_nickname}"`,
+        );
+      }
+    } else {
+      let parsedJson: unknown;
+      try {
+        parsedJson = parseJsonAttachment(importFileBuffer);
+      } catch (error) {
+        log.warn("Persona import JSON parse failed", error);
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(localizer(locale, "commands.persona.import.invalid_file_title"))
+              .setDescription(localizeError(locale, "commands.persona.import.error_not_json"))
+              .setColor(ColorCode.ERROR),
+          ],
+        });
+        return;
+      }
+
+      const validation = validatePresetFile(parsedJson);
+      if (validation.valid && validation.data) {
+        resolvedImport = {
+          avatarImageBuffer: null,
+          presetData: validation.data,
+          source: "tomori-json",
+        };
+      } else if (looksLikeSillyTavernCardJson(parsedJson)) {
+        const conversion = convertSillyTavernJsonToPresetData(parsedJson);
+        if (!conversion.success) {
+          const debugText = buildSillyTavernDebugText({
+            conversionError: conversion.error,
+            parsedJson,
+            sourceLabel: "JSON attachment",
+          });
+          const debugBuffer = truncateBufferForAttachment(
+            Buffer.from(debugText, "utf8"),
+            MAX_SILLY_TAVERN_DEBUG_BYTES,
+            "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
+          );
+          const debugFilename = `sillytavern-json-decode-${Date.now()}.txt`;
+          const debugAttachment = new AttachmentBuilder(debugBuffer, {
+            name: debugFilename,
+          });
+
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("SillyTavern JSON card detected (conversion failed)")
+                .setDescription(
+                  "SillyTavern-style JSON was detected, but conversion to Tomori format failed. The parsed payload is attached for inspection.",
+                )
+                .setColor(ColorCode.WARN),
+            ],
+            files: [debugAttachment],
+          });
+          return;
+        }
+
+        resolvedImport = {
+          avatarImageBuffer: null,
+          presetData: conversion.data,
+          source: "sillytavern-json",
+        };
+        log.info(
+          `[Persona Import] Converted SillyTavern JSON card to preset format for "${conversion.data.tomori_nickname}"`,
+        );
+      } else {
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
@@ -447,57 +617,12 @@ export async function execute(
         });
         return;
       }
-
-      presetDataFromFile = validation.data as PresetExportData;
-    } else {
-      // 10b. Fallback: parse SillyTavern card data from `chara` metadata.
-      const sillyTavernData = extractSillyTavernMetadataFromPNG(pngBuffer);
-      if (!sillyTavernData) {
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(localizer(locale, "commands.persona.import.no_metadata_title"))
-              .setDescription(localizer(locale, "commands.persona.import.no_metadata_description"))
-              .setColor(ColorCode.ERROR),
-          ],
-        });
-        return;
-      }
-
-      const conversion = convertSillyTavernMetadataToPresetData(sillyTavernData);
-      if (!conversion.success) {
-        const debugText = buildSillyTavernDebugText(sillyTavernData, conversion.error);
-        const debugBuffer = truncateBufferForAttachment(
-          Buffer.from(debugText, "utf8"),
-          MAX_SILLY_TAVERN_DEBUG_BYTES,
-          "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
-        );
-        const debugFilename = `sillytavern-decode-${Date.now()}.txt`;
-        const debugAttachment = new AttachmentBuilder(debugBuffer, {
-          name: debugFilename,
-        });
-
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("SillyTavern card detected (conversion failed)")
-              .setDescription(
-                "SillyTavern-style `chara` metadata was decoded, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
-              )
-              .setColor(ColorCode.WARN),
-          ],
-          files: [debugAttachment],
-        });
-        return;
-      }
-
-      presetDataFromFile = conversion.data;
-      log.info(
-        `[Persona Import] Converted SillyTavern card to preset format for "${presetDataFromFile.tomori_nickname}"`,
-      );
     }
 
-    if (!presetDataFromFile) {
+    const presetDataFromFile = resolvedImport?.presetData ?? null;
+    const avatarImageBuffer = resolvedImport?.avatarImageBuffer ?? null;
+
+    if (!presetDataFromFile || !resolvedImport) {
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
@@ -545,6 +670,7 @@ export async function execute(
       let avatarUpdateSucceeded = false;
       let avatarUpdateRateLimited = false;
       let avatarUpdateFailed = false;
+      let avatarUpdateSkippedNoImage = false;
       let nicknameUpdateSucceeded = false;
       let nicknameUpdateRateLimited = false;
       let nicknameUpdateFailed = false;
@@ -588,42 +714,43 @@ export async function execute(
           }
         }
 
-        try {
-          // Convert PNG buffer to base64 data URI
-          const base64 = pngBuffer.toString("base64");
-          const avatarDataUri = `data:image/png;base64,${base64}`;
+        if (!avatarImageBuffer) {
+          avatarUpdateSkippedNoImage = true;
+        } else {
+          try {
+            const base64 = avatarImageBuffer.toString("base64");
+            const avatarDataUri = `data:image/png;base64,${base64}`;
 
-          // Use Discord API to set bot's guild avatar
-          const avatarResponse = await fetch(endpoint, {
-            method: "PATCH",
-            headers: {
-              Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              avatar: avatarDataUri,
-            }),
-          });
+            const avatarResponse = await fetch(endpoint, {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                avatar: avatarDataUri,
+              }),
+            });
 
-          if (avatarResponse.ok) {
-            avatarUpdateSucceeded = true;
-            log.success(`Successfully updated TomoriBot's server avatar for ${serverDiscId} during preset import`);
-          } else {
-            const errorText = await avatarResponse.text();
-            if (isAvatarUpdateRateLimited(avatarResponse.status, errorText)) {
-              avatarUpdateRateLimited = true;
+            if (avatarResponse.ok) {
+              avatarUpdateSucceeded = true;
+              log.success(`Successfully updated TomoriBot's server avatar for ${serverDiscId} during preset import`);
+            } else {
+              const errorText = await avatarResponse.text();
+              if (isAvatarUpdateRateLimited(avatarResponse.status, errorText)) {
+                avatarUpdateRateLimited = true;
+              }
+              avatarUpdateFailed = true;
+              log.warn(
+                `Failed to update bot's server avatar (non-fatal): ${avatarResponse.status} ${avatarResponse.statusText} - ${errorText}`,
+              );
             }
+          } catch (avatarError) {
             avatarUpdateFailed = true;
             log.warn(
-              `Failed to update bot's server avatar (non-fatal): ${avatarResponse.status} ${avatarResponse.statusText} - ${errorText}`,
+              `Failed to update bot's server avatar during preset import (non-fatal): ${avatarError instanceof Error ? avatarError.message : "Unknown error"}`,
             );
           }
-        } catch (avatarError) {
-          // Non-fatal error - personality was imported successfully
-          avatarUpdateFailed = true;
-          log.warn(
-            `Failed to update bot's server avatar during preset import (non-fatal): ${avatarError instanceof Error ? avatarError.message : "Unknown error"}`,
-          );
         }
       }
 
@@ -659,7 +786,9 @@ export async function execute(
         descriptionLines.push(localizer(locale, "commands.persona.import.nickname_update_success"));
       }
 
-      if (avatarUpdateRateLimited) {
+      if (avatarUpdateSkippedNoImage) {
+        descriptionLines.push(localizer(locale, "commands.persona.import.avatar_update_skipped_no_image"));
+      } else if (avatarUpdateRateLimited) {
         descriptionLines.push(localizer(locale, "commands.persona.import.avatar_update_rate_limited"));
       } else if (avatarUpdateSucceeded) {
         descriptionLines.push(localizer(locale, "commands.persona.import.avatar_update_success"));
@@ -671,7 +800,12 @@ export async function execute(
         .setTitle(localizer(locale, "commands.persona.import.success_title"))
         .setDescription(descriptionLines.join("\n\n"))
         .setColor(
-          isDM || avatarUpdateRateLimited || avatarUpdateFailed || nicknameUpdateRateLimited || nicknameUpdateFailed
+          isDM ||
+            avatarUpdateSkippedNoImage ||
+            avatarUpdateRateLimited ||
+            avatarUpdateFailed ||
+            nicknameUpdateRateLimited ||
+            nicknameUpdateFailed
             ? ColorCode.WARN
             : ColorCode.SUCCESS,
         );
@@ -683,19 +817,6 @@ export async function execute(
       }
       footerParts.push(localizer(locale, "commands.persona.import.refresh_reminder"));
       successEmbed.setFooter({ text: footerParts.join(" • ") });
-
-      const sanitizedNickname = sanitizeAttachmentFilenamePart(itemsImported.nickname, {
-        fallback: "persona",
-        maxLength: 50,
-      });
-      const timestamp = Date.now();
-      const avatarFilename = `persona-import-${sanitizedNickname}-${timestamp}.png`;
-
-      // Attach avatar as image (higher quality than thumbnail)
-      const avatarAttachment = new AttachmentBuilder(pngBuffer, {
-        name: avatarFilename,
-      });
-      successEmbed.setImage(`attachment://${avatarFilename}`);
 
       // Send public message to channel with avatar (for URL extraction)
       if (!interaction.channel || !("send" in interaction.channel)) {
@@ -711,10 +832,26 @@ export async function execute(
         return;
       }
 
-      await interaction.channel.send({
-        embeds: [successEmbed],
-        files: [avatarAttachment],
-      });
+      if (avatarImageBuffer) {
+        const sanitizedNickname = sanitizeAttachmentFilenamePart(itemsImported.nickname, {
+          fallback: "persona",
+          maxLength: 50,
+        });
+        const timestamp = Date.now();
+        const avatarFilename = `persona-import-${sanitizedNickname}-${timestamp}.png`;
+        const avatarAttachment = new AttachmentBuilder(avatarImageBuffer, {
+          name: avatarFilename,
+        });
+        successEmbed.setImage(`attachment://${avatarFilename}`);
+        await interaction.channel.send({
+          embeds: [successEmbed],
+          files: [avatarAttachment],
+        });
+      } else {
+        await interaction.channel.send({
+          embeds: [successEmbed],
+        });
+      }
 
       // Send ephemeral confirmation to user
       await interaction.editReply({
@@ -726,7 +863,15 @@ export async function execute(
                 nickname: itemsImported.nickname,
               }),
             )
-            .setColor(ColorCode.SUCCESS),
+            .setColor(
+              avatarUpdateSkippedNoImage ||
+                avatarUpdateRateLimited ||
+                avatarUpdateFailed ||
+                nicknameUpdateRateLimited ||
+                nicknameUpdateFailed
+                ? ColorCode.WARN
+                : ColorCode.SUCCESS,
+            ),
         ],
       });
 
@@ -807,6 +952,25 @@ export async function execute(
         });
         return;
       }
+
+      const fallbackAvatarReference =
+        interaction.guild?.members.me?.displayAvatarURL({
+          extension: "png",
+          size: 1024,
+          forceStatic: true,
+        }) ??
+        mainPersona.webhook_avatar_url ??
+        client.user?.displayAvatarURL({ extension: "png", size: 1024, forceStatic: true }) ??
+        null;
+      const fallbackAvatarDisplayUrl =
+        interaction.guild?.members.me?.displayAvatarURL({
+          extension: "png",
+          size: 1024,
+          forceStatic: true,
+        }) ??
+        resolvePersonaAvatarPublicUrl(mainPersona.webhook_avatar_url) ??
+        client.user?.displayAvatarURL({ extension: "png", size: 1024, forceStatic: true }) ??
+        null;
 
       // 11g. Format arrays as PostgreSQL array literals for safe insertion
       const attributeArrayLiteral = `{${presetData.attribute_list
@@ -951,19 +1115,9 @@ export async function execute(
 					persona_prompt = EXCLUDED.persona_prompt
 			`;
 
-      const sanitizedNickname = sanitizeAttachmentFilenamePart(presetData.tomori_nickname, {
-        fallback: "persona",
-        maxLength: 50,
-      });
-      const timestamp = Date.now();
-      const avatarFilename = `persona-import-alter-${sanitizedNickname}-${timestamp}.png`;
+      const usedMainAvatarFallback = !avatarImageBuffer && Boolean(fallbackAvatarReference);
 
-      // 11i. Send success embed with avatar image
-      const alterAvatarAttachment = new AttachmentBuilder(pngBuffer, {
-        name: avatarFilename,
-      });
-
-      // Build description with conditional warning for no triggers
+      // 11i. Send success embed with avatar image or fallback note
       const descriptionParts = [
         localizer(locale, "commands.persona.import.alter_success_description", {
           nickname: presetData.tomori_nickname,
@@ -972,6 +1126,14 @@ export async function execute(
         }),
       ];
 
+      if (usedMainAvatarFallback) {
+        descriptionParts.push(
+          `\n\n${localizer(locale, "commands.persona.import.alter_avatar_fallback_main", {
+            nickname: mainPersona.tomori_nickname,
+          })}`,
+        );
+      }
+
       if (hasNoTriggers) {
         descriptionParts.push(`\n\n${localizer(locale, "commands.persona.import.alter_no_triggers_warning")}`);
       }
@@ -979,11 +1141,11 @@ export async function execute(
       const alterSuccessEmbed = new EmbedBuilder()
         .setTitle(localizer(locale, "commands.persona.import.alter_success_title"))
         .setDescription(descriptionParts.join(""))
-        .setColor(hasNoTriggers ? ColorCode.WARN : ColorCode.SUCCESS)
-        .setImage(`attachment://${avatarFilename}`)
-        .setFooter({
-          text: localizer(locale, "commands.persona.import.alter_avatar_warning"),
-        });
+        .setColor(hasNoTriggers || usedMainAvatarFallback ? ColorCode.WARN : ColorCode.SUCCESS);
+
+      if (usedMainAvatarFallback && fallbackAvatarDisplayUrl) {
+        alterSuccessEmbed.setThumbnail(fallbackAvatarDisplayUrl);
+      }
 
       // Send public message to channel with avatar (for URL extraction)
       if (!interaction.channel || !("send" in interaction.channel)) {
@@ -999,18 +1161,40 @@ export async function execute(
         return;
       }
 
-      await interaction.channel.send({
-        embeds: [alterSuccessEmbed],
-        files: [alterAvatarAttachment],
-      });
+      let avatarUrl: string | null = null;
 
-      const s3AvatarUrl = await uploadPersonaAvatarToS3({
-        personaId: newTomoriId,
-        serverDiscId: serverDiscId,
-        label: "alter import",
-        buffer: pngBuffer,
-      });
-      const avatarUrl = s3AvatarUrl;
+      if (avatarImageBuffer) {
+        const sanitizedNickname = sanitizeAttachmentFilenamePart(presetData.tomori_nickname, {
+          fallback: "persona",
+          maxLength: 50,
+        });
+        const timestamp = Date.now();
+        const avatarFilename = `persona-import-alter-${sanitizedNickname}-${timestamp}.png`;
+        const alterAvatarAttachment = new AttachmentBuilder(avatarImageBuffer, {
+          name: avatarFilename,
+        });
+        alterSuccessEmbed.setImage(`attachment://${avatarFilename}`);
+        alterSuccessEmbed.setFooter({
+          text: localizer(locale, "commands.persona.import.alter_avatar_warning"),
+        });
+
+        await interaction.channel.send({
+          embeds: [alterSuccessEmbed],
+          files: [alterAvatarAttachment],
+        });
+
+        avatarUrl = await uploadPersonaAvatarToS3({
+          personaId: newTomoriId,
+          serverDiscId: serverDiscId,
+          label: "alter import",
+          buffer: avatarImageBuffer,
+        });
+      } else {
+        await interaction.channel.send({
+          embeds: [alterSuccessEmbed],
+        });
+        avatarUrl = fallbackAvatarReference;
+      }
 
       // 11k. Store avatar URL in webhook_avatar_url column
       if (avatarUrl) {
@@ -1037,7 +1221,7 @@ export async function execute(
                 trigger_count: uniqueTriggers.length,
               }),
             )
-            .setColor(hasNoTriggers ? ColorCode.WARN : ColorCode.SUCCESS),
+            .setColor(hasNoTriggers || usedMainAvatarFallback ? ColorCode.WARN : ColorCode.SUCCESS),
         ],
       });
 

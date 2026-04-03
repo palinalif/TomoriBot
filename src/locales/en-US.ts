@@ -1132,8 +1132,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         error_export_failed: `Failed to export persona data`,
       },
       import: {
-        description: `Import a personality from a PNG file`,
-        file_description: `PNG file containing persona data`,
+        description: `Import a persona from a PNG or JSON file`,
+        file_description: `PNG or JSON file containing persona data`,
         type_description: `Import as main persona or alter persona`,
         triggers_description: `Optional extra triggers, comma-separated ("," or "、")`,
         memories_description: `Preserve this persona's user and server memories?`,
@@ -1150,19 +1150,21 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         nickname_update_success: `Server nickname has been updated.`,
         nickname_update_failed: `🟡 Server nickname could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
         avatar_update_success: `Server avatar has been updated.`,
+        avatar_update_skipped_no_image: `🟡 The imported file did not include an avatar image, so the current main persona avatar was kept.`,
         avatar_update_rate_limited: `🟡 Server avatar was not updated due to Discord rate limits. Please change it manually instead.`,
         avatar_update_failed: `🟡 Server avatar could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
         alter_success_title: `🟢 Alter Persona Imported Successfully`,
         alter_success_description: `Successfully imported alter persona **{nickname}**!\nUnique Trigger Words: {trigger_count}\nTriggers: {triggers}\n\nThis persona will respond when these triggers appear in messages.`,
         alter_success_confirmation: `Successfully imported alter persona **{nickname}** with {trigger_count} unique trigger words! The detailed import information has been posted in the channel.`,
+        alter_avatar_fallback_main: `🟡 This import did not include an avatar image, so this alter is using **{nickname}**'s current main persona avatar as a fallback. You can use \`/server avatar\` to change it.`,
         alter_avatar_warning: `⚠️ Do not delete the avatar image embed above, or the alter persona avatar will be lost.`,
         alter_dm_not_allowed_title: `🔴 Alter Personas Not Allowed in DMs`,
         alter_dm_not_allowed_description: `Alter personas can only be imported in servers, not in Direct Messages. Please run this command in a server.`,
         alter_no_triggers_error_title: `🔴 No Unique Triggers`,
-        alter_no_triggers_error_description: `All trigger words in this persona already exist in other personas.\nOverlapping triggers: {overlap}\n\nPlease edit the PNG file to add unique trigger words, or remove conflicting personas using \`/persona remove\`.`,
+        alter_no_triggers_error_description: `All trigger words in this persona already exist in other personas.\nOverlapping triggers: {overlap}\n\nPlease edit the import file to add unique trigger words, or remove conflicting personas using \`/persona remove\`.`,
         alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/server trigger add\`.`,
         alter_name_conflict_title: `🔴 Persona Name Already Exists`,
-        alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.\n\nPlease edit the PNG file to use a different name, or remove the existing persona using \`/persona remove\`.`,
+        alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.\n\nPlease edit the import file to use a different name, or remove the existing persona using \`/persona remove\`.`,
         alter_limit_title: `🔴 Persona Limit Reached`,
         alter_limit_description: `This server already has {current} personas. The maximum allowed is {max}. Please remove an alter with \`/persona remove\` before importing a new one.`,
         failed_title: `🔴 Import Failed`,
@@ -1170,7 +1172,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         cancelled_title: `🔴 Import Cancelled`,
         cancelled_description: `The import has been cancelled. No changes were made to my persona.`,
         invalid_file_type_title: `🔴 Invalid File Type`,
-        invalid_file_type_description: `Please upload a valid .png file containing persona data.`,
+        invalid_file_type_description: `Please upload a valid .png or .json file containing persona data.`,
         file_too_large_title: `🔴 File Too Large`,
         file_too_large_description: `The file is too large. Maximum file size is 10MB.`,
         download_failed_title: `🔴 Download Failed`,
@@ -1178,7 +1180,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         invalid_png_title: `🔴 Invalid PNG File`,
         invalid_png_description: `The uploaded file is not a valid PNG image.`,
         no_metadata_title: `🔴 No Persona Data Found`,
-        no_metadata_description: `This PNG file doesn't contain persona data. Please use a file exported by \`/persona export\`.`,
+        no_metadata_description: `This file doesn't contain supported persona data. Use a file exported by \`/persona export\` or a supported SillyTavern character card.`,
         invalid_file_title: `🔴 Invalid Persona File`,
         invalid_file_description: `The persona file format is invalid or incompatible.`,
         no_permission_title: `🔴 Permission Denied`,
@@ -1195,11 +1197,11 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         error_no_server_data: `Server not found in database. Please run \`/config setup\` first.`,
         error_name_conflict: `A persona with the name **{name}** already exists on this server. Please use a different name.`,
         error_import_failed: `Failed to import persona data`,
-        error_not_json: `Preset file must contain valid JSON data`,
+        error_not_json: `The imported file must contain valid JSON data`,
         error_incompatible_version: `Incompatible preset version. Expected {expected}, got {actual}`,
         error_invalid_format: `Invalid persona file format`,
-        error_invalid_type: `Invalid persona type: {type}. Expected "persona"`,
-        avatar_update_skipped_dm: `Preset was imported successfully, except avatar and nickname updates which are not available in Direct Messages`,
+        error_invalid_type: `Invalid persona type: {type}. Expected "preset"`,
+        avatar_update_skipped_dm: `Persona was imported successfully, except avatar and nickname updates which are not available in Direct Messages`,
         refresh_reminder: `Run \`/tool refresh\` to apply persona update in this chat`,
       },
       remove: {
@@ -1658,10 +1660,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         google_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // DeepSeek
         deepseek_title: `Setting Up DeepSeek API Key`,
-        deepseek_description: `DeepSeek provides direct access to its own chat and reasoning models on a cheap pay-as-you-go basis.
-- Supports DeepSeek chat and reasoning models
-- Supports tool-capable and structured-output-capable text models
-- Native image generation and embeddings are not currently available
+        deepseek_description: `DeepSeek is a pay-as-you-go text provider.
 - [DeepSeek API Docs](https://api-docs.deepseek.com/)`,
         deepseek_getting_key_title: `Getting Your API Key:`,
         deepseek_getting_key_description: `1. Visit [DeepSeek API Keys](https://platform.deepseek.com/api_keys)
@@ -1669,10 +1668,6 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 3. Create a new API key
 4. If needed, add credits in your DeepSeek platform account before use
 5. Copy this API key into {configSetup} or {configApikeySet}`,
-        deepseek_model_notes_title: `Model Notes:`,
-        deepseek_model_notes_description: `- \`deepseek-chat\` is the general chat model
-- \`deepseek-reasoner\` is the thinking/reasoning model and may respond more slowly
-- You can switch between available DeepSeek text models after setup`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // Custom Provider
         custom_title: `Custom Provider Setup`,
@@ -1694,53 +1689,34 @@ If set, it is sent as \`Authorization: Bearer {token}\`.
 Leave unset for endpoints that require no authentication.`,
         // NVIDIA NIM
         nvidia_title: `Setting Up NVIDIA NIM API Key`,
-        nvidia_description: `NVIDIA NIM provides free hosted chat, embeddings, and image generation through NVIDIA's API catalog.
-- Chat and embeddings use NVIDIA's hosted \`integrate.api.nvidia.com\` surface
-- Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint
-- Structured output and history extraction are available only on supported NVIDIA text models`,
+        nvidia_description: `NVIDIA NIM provides hosted text, embedding, and image APIs through NVIDIA Build.`,
         nvidia_getting_key_title: `Getting Your API Key:`,
         nvidia_getting_key_description: `1. Visit [NVIDIA Build](https://build.nvidia.com/)
 2. Sign in or create an NVIDIA developer account
 3. Create or manage your API keys from the [API Keys page](https://build.nvidia.com/settings/api-keys)
 4. Copy this API key into {configSetup} or {configApikeySet}`,
-        nvidia_model_notes_title: `Model Notes:`,
-        nvidia_model_notes_description: `- \`deepseek-ai/deepseek-v3.2\` is the default general chat model
-- \`nv-embed-v1\` is the default embedding model
-- \`stabilityai/stable-diffusion-3-medium\` is the default NVIDIA image model`,
+        nvidia_important_title: `Important Notes:`,
+        nvidia_important_description: `- Text and embeddings use NVIDIA's hosted \`integrate.api.nvidia.com\` surface
+- Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint`,
         nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
         // Z.ai
         zai_title: `Setting Up Z.ai API Key`,
-        zai_description: `Z.ai provides access to the GLM model family with both general API and a dedicated coding endpoint.
-- Supports chat, reasoning, image generation, and coding workflows
-- GLM models include vision and reasoning variants
-- Native image generation via \`glm-image\`
-- Tool calling and structured output on all chat models
-- Optional MCP add-ons available via \`/config mcp add\` for extra image/video workflows`,
-        zai_general_endpoint_title: `General API Endpoint:`,
-        zai_general_endpoint_description: `The general Z.ai endpoint provides access to chat, reasoning, and image generation.
-- Best for general AI usage and broad compatibility
-- Supports all GLM chat models with vision and reasoning capabilities`,
-        zai_coding_endpoint_title: `Coding Endpoint:`,
-        zai_coding_endpoint_description: `The dedicated Coding endpoint is optimized for GLM Coding Plan and coding-tool workflows.
-- Uses a separate endpoint with potentially different billing and access patterns
-- If you need standard API billing and broader general usage, use the general endpoint`,
+        zai_description: `Z.ai provides access to the GLM family through a general API and a separate coding endpoint.`,
         zai_getting_key_title: `Getting Your API Key:`,
         zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
 2. Sign in or create an account
 3. Navigate to API Keys in your dashboard
 4. Create a new API key
 5. Copy this API key into {configSetup} or {configApikeySet}`,
-        zai_model_notes_title: `Model Notes:`,
-        zai_model_notes_description: `- \`glm-5.1\` is the most capable model with advanced reasoning
-- \`glm-4.7-flash\` is a free alternative to the default
-- \`glm-4.6v\` is the vision-capable model that can see images
-- \`glm-image\` generates images from text prompts`,
+        zai_important_title: `Important Notes:`,
+        zai_important_description: `- Use the general endpoint for normal chat, reasoning, and image generation
+- The dedicated Coding endpoint is separate and intended for coding-specific workflows`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // NovelAI
         novelai_title: `Setting Up NovelAI API Key`,
         novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
-- Unlimited uncensored messages
-- Currently only supports text generation (no vision or assistant features)
+ - Unlimited uncensored messages
+ - Currently only supports text generation (no vision or assistant features)
 - [NovelAI Terms of Service](https://novelai.net/terms)`,
         novelai_getting_key_title: `Getting Your API Key:`,
         novelai_getting_key_description: `1. Visit [NovelAI](https://novelai.net/stories)
@@ -1752,29 +1728,17 @@ Leave unset for endpoints that require no authentication.`,
         // OpenRouter
         openrouter_title: `Setting Up OpenRouter API Key`,
         openrouter_description: `OpenRouter provides access to multiple AI models from different providers on a pay-as-you-go basis.
-- Access to latest and most powerful AI models (some are free)
-- [OpenRouter Terms of Service](https://openrouter.ai/terms)`,
+ - Access to latest and most powerful AI models (some are free)
+ - [OpenRouter Terms of Service](https://openrouter.ai/terms)`,
         openrouter_getting_key_title: `Getting Your API Key:`,
         openrouter_getting_key_description: `1. Visit [OpenRouter](https://openrouter.ai/settings/keys)
 2. Click \`Create API Key\`
 3. Copy this API key {configSetup} or {configApikeySet}`,
-        openrouter_model_selection_title: `Choosing Models:`,
-        openrouter_model_selection_description: `OpenRouter offers access to many different AI models.
-- Currently available models are based on popularity and performance, with tags for distinction:
-  - (TOOLS) = Supports tool usage (web search, self-learning, stickers, etc.)
-  - (IMG) = Sees images
-  - (VID) = Sees videos
-  - (STRUCT) = Supports structured output (needed for persona generation and expression initialization)
-  - (REASON) = Reasoning / thinking-focused model
-  - (FREE) = No cost, but may have rate limits
-- If you can't find what you want, try using the \`other-model\` provider option
-- Suggest additional models in {supportServer}`,
-        openrouter_pricing_title: `Important Pricing Notes:`,
-        openrouter_pricing_description: `- **Free models have strict rate limits** - paid models are recommended for better reliability
-- **Always check pricing** on OpenRouter before selecting a model to avoid unexpected costs
-- Costs vary significantly between models`,
-        openrouter_settings_title: `OpenRouter Account Settings:`,
-        openrouter_settings_description: `Settings configured in your OpenRouter account (such as model preferences, rate limits, etc.)`,
+        openrouter_important_title: `Important Notes:`,
+        openrouter_important_description: `- **Free models have strict rate limits**; paid models are usually more reliable
+- **Always check pricing** before selecting a model
+- Your OpenRouter account settings still apply here
+- If you need a model that is not listed, suggest it in {supportServer}`,
         openrouter_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // Vertex AI
         vertex_title: `Setting Up Google Vertex AI`,
@@ -1826,25 +1790,20 @@ Leave unset for endpoints that require no authentication.`,
         description: `Learn how to set up ElevenLabs text-to-speech`,
         title: `Setting Up ElevenLabs TTS`,
         what_is_title: `What is ElevenLabs?`,
-        what_is_description: `ElevenLabs is an optional text-to-speech (TTS) provider that lets me speak to you using realistic AI-generated voices.
-- High-quality voice synthesis with many voice options
-- Works alongside any main AI provider
-- Free tier available with monthly character limits
-- [ElevenLabs Pricing](https://elevenlabs.io/pricing)`,
+        what_is_description: `ElevenLabs is an optional text-to-speech (TTS) provider.`,
         getting_key_title: `Getting Your API Key:`,
         getting_key_description: `1. Visit [ElevenLabs](https://elevenlabs.io/app/settings/api-keys)
 2. Sign up or sign in to your account
 3. Create a new API key
 4. Copy this API key using {optionalkeyElevenlabsSet}`,
         choosing_voice_title: `Choosing a Voice:`,
-        choosing_voice_description: `After setting up your API key, you can select which voice I use.
-- Use {configVoiceElevenlabs} to browse and select from available voices
-- Add more voices in your account through their [Voice Library](https://elevenlabs.io/app/voice-library) where you can also clone your own voices.`,
+        choosing_voice_description: `After setting up your API key, use {configVoiceElevenlabs} to browse available voices.
+- Add more voices from the [Voice Library](https://elevenlabs.io/app/voice-library), where you can also clone your own voices.`,
         free_voices_title: `Premade Voices (Free Tier):`,
         free_voices_description: `Only premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
         important_notes_title: `Important Notes:`,
         important_notes_description: `- Characters are counted when I generate and read voice messages
-- Free tier has monthly limits - check your usage on ElevenLabs dashboard
+- Free tier has monthly limits; check your usage on the ElevenLabs dashboard
 - Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
         footer: `Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
       },
@@ -3428,16 +3387,16 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           description: `Set a custom system prompt to guide my behavior`,
           modal_title: `Set Custom System Prompt`,
           part1_label: `System Prompt (Part 1/4)`,
-          part1_description: `Main instructions. Use {bot} for my name, {user} for the triggering user`,
+          part1_description: `Main instructions. Split into 4 inputs because Discord limits each modal text field. Use {bot} for my name, {user} for the triggering user`,
           part1_placeholder: `e.g., {bot} is friendly and helpful...`,
           part2_label: `System Prompt (Part 2/4) - Optional`,
-          part2_description: `Continuation of instructions (optional)`,
+          part2_description: `Continuation of instructions because Discord modal text inputs have length limits (optional)`,
           part2_placeholder: `Additional instructions...`,
           part3_label: `System Prompt (Part 3/4) - Optional`,
-          part3_description: `Continuation of instructions (optional)`,
+          part3_description: `Continuation of instructions because Discord modal text inputs have length limits (optional)`,
           part3_placeholder: `More instructions...`,
           part4_label: `System Prompt (Part 4/4) - Optional`,
-          part4_description: `Continuation of instructions (optional)`,
+          part4_description: `Continuation of instructions because Discord modal text inputs have length limits (optional)`,
           part4_placeholder: `Final instructions...`,
           empty_prompt_title: `Empty System Prompt`,
           empty_prompt_description: `The system prompt cannot be empty. Please provide at least some instructions in Part 1.`,
@@ -4510,9 +4469,18 @@ You can change this anytime using \`/personal privacy\`.`,
         main_persona_description: `Main Persona`,
         alter_persona_description: `Alter Persona`,
         modal_title: `Set Persona Prompt`,
-        prompt_label: `Persona Prompt`,
-        prompt_description: `This is appended after the system prompt for this persona.`,
-        prompt_placeholder: `Example: Speak like a veteran tactician, concise and calm.`,
+        part1_label: `Persona Prompt (Part 1/4)`,
+        part1_description: `This is appended after the system prompt for this persona. Split into 4 inputs because Discord limits each modal text field.`,
+        part1_placeholder: `Example: Speak like a veteran tactician, concise and calm.`,
+        part2_label: `Persona Prompt (Part 2/4) - Optional`,
+        part2_description: `Continuation of this persona prompt because Discord modal text inputs have length limits (optional).`,
+        part2_placeholder: `Additional persona instructions...`,
+        part3_label: `Persona Prompt (Part 3/4) - Optional`,
+        part3_description: `Continuation of this persona prompt because Discord modal text inputs have length limits (optional).`,
+        part3_placeholder: `More persona instructions...`,
+        part4_label: `Persona Prompt (Part 4/4) - Optional`,
+        part4_description: `Continuation of this persona prompt because Discord modal text inputs have length limits (optional).`,
+        part4_placeholder: `Final persona instructions...`,
         success_title: `Persona Prompt Updated`,
         success_description: `Updated persona prompt for "{persona_name}".`,
       },

@@ -157,11 +157,6 @@ export async function execute(
               }),
               inline: false,
             },
-            {
-              nameKey: "commands.help.apikey.deepseek_model_notes_title",
-              value: localizer(locale, "commands.help.apikey.deepseek_model_notes_description"),
-              inline: false,
-            },
           ],
           footerKey: "commands.help.apikey.deepseek_footer",
           footerVars: {
@@ -194,8 +189,8 @@ export async function execute(
               inline: false,
             },
             {
-              nameKey: "commands.help.apikey.nvidia_model_notes_title",
-              value: localizer(locale, "commands.help.apikey.nvidia_model_notes_description"),
+              nameKey: "commands.help.apikey.nvidia_important_title",
+              value: localizer(locale, "commands.help.apikey.nvidia_important_description"),
               inline: false,
             },
           ],
@@ -245,20 +240,10 @@ export async function execute(
               inline: false,
             },
             {
-              nameKey: "commands.help.apikey.openrouter_model_selection_title",
-              value: localizer(locale, "commands.help.apikey.openrouter_model_selection_description", {
+              nameKey: "commands.help.apikey.openrouter_important_title",
+              value: localizer(locale, "commands.help.apikey.openrouter_important_description", {
                 supportServer: supportServerMention,
               }),
-              inline: false,
-            },
-            {
-              nameKey: "commands.help.apikey.openrouter_pricing_title",
-              value: localizer(locale, "commands.help.apikey.openrouter_pricing_description"),
-              inline: false,
-            },
-            {
-              nameKey: "commands.help.apikey.openrouter_settings_title",
-              value: localizer(locale, "commands.help.apikey.openrouter_settings_description"),
               inline: false,
             },
           ],
@@ -276,16 +261,6 @@ export async function execute(
           color: ColorCode.INFO,
           fields: [
             {
-              nameKey: "commands.help.apikey.zai_general_endpoint_title",
-              value: localizer(locale, "commands.help.apikey.zai_general_endpoint_description"),
-              inline: false,
-            },
-            {
-              nameKey: "commands.help.apikey.zai_coding_endpoint_title",
-              value: localizer(locale, "commands.help.apikey.zai_coding_endpoint_description"),
-              inline: false,
-            },
-            {
               nameKey: "commands.help.apikey.zai_getting_key_title",
               value: localizer(locale, "commands.help.apikey.zai_getting_key_description", {
                 configSetup: configSetupMention,
@@ -294,8 +269,8 @@ export async function execute(
               inline: false,
             },
             {
-              nameKey: "commands.help.apikey.zai_model_notes_title",
-              value: localizer(locale, "commands.help.apikey.zai_model_notes_description"),
+              nameKey: "commands.help.apikey.zai_important_title",
+              value: localizer(locale, "commands.help.apikey.zai_important_description"),
               inline: false,
             },
           ],
@@ -339,11 +314,6 @@ export async function execute(
           descriptionKey: "commands.help.elevenlabs.description",
           color: ColorCode.INFO,
           fields: [
-            {
-              nameKey: "commands.help.elevenlabs.what_is_title",
-              value: localizer(locale, "commands.help.elevenlabs.what_is_description"),
-              inline: false,
-            },
             {
               nameKey: "commands.help.elevenlabs.getting_key_title",
               value: localizer(locale, "commands.help.elevenlabs.getting_key_description", {
