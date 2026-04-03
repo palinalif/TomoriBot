@@ -132,7 +132,7 @@ function detectToolSupport(model: OpenRouterModel): boolean {
     normalizedDescription.includes("function calling") || normalizedDescription.includes("tool calling");
 
   if (descriptionAdvertisesToolUse) {
-    log.warn(
+    log.info(
       `[OpenRouter capability cache] ${model.id} advertises tool use in its description but does not list tools in supported_parameters; treating it as tool-capable.`,
     );
     return true;

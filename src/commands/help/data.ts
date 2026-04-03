@@ -30,9 +30,18 @@ export async function execute(
 ): Promise<void> {
   try {
     // Get command mentions for cross-references
-    const dataExportMention = commandRegistry.getCommandMention("data", "export");
-    const dataImportMention = commandRegistry.getCommandMention("data", "import");
-    const dataDeleteMention = commandRegistry.getCommandMention("data", "delete");
+    const memoryPersonalExportMention = commandRegistry.getCommandMention("memory", "personal", "export");
+    const memoryServerExportMention = commandRegistry.getCommandMention("memory", "server", "export");
+    const personalConfigExportMention = commandRegistry.getCommandMention("personal", "config", "export");
+    const serverConfigExportMention = commandRegistry.getCommandMention("server", "config", "export");
+    const memoryPersonalImportMention = commandRegistry.getCommandMention("memory", "personal", "import");
+    const memoryServerImportMention = commandRegistry.getCommandMention("memory", "server", "import");
+    const personalConfigImportMention = commandRegistry.getCommandMention("personal", "config", "import");
+    const serverConfigImportMention = commandRegistry.getCommandMention("server", "config", "import");
+    const memoryPersonalRemoveMention = commandRegistry.getCommandMention("memory", "personal", "remove");
+    const memoryServerRemoveMention = commandRegistry.getCommandMention("memory", "server", "remove");
+    const personalConfigRemoveMention = commandRegistry.getCommandMention("personal", "config", "remove");
+    const serverConfigRemoveMention = commandRegistry.getCommandMention("server", "config", "remove");
     const personaExportMention = commandRegistry.getCommandMention("persona", "export");
     const personalPrivacyMention = commandRegistry.getCommandMention("personal", "privacy");
     const configPermissionsMention = commandRegistry.getCommandMention("config", "bot-permissions");
@@ -49,7 +58,10 @@ export async function execute(
           {
             nameKey: "commands.help.data.export_title",
             value: localizer(locale, "commands.help.data.export_description", {
-              dataExport: dataExportMention,
+              memoryPersonalExport: memoryPersonalExportMention,
+              memoryServerExport: memoryServerExportMention,
+              personalConfigExport: personalConfigExportMention,
+              serverConfigExport: serverConfigExportMention,
               personaExport: personaExportMention,
             }),
             inline: false,
@@ -57,14 +69,20 @@ export async function execute(
           {
             nameKey: "commands.help.data.import_title",
             value: localizer(locale, "commands.help.data.import_description", {
-              dataImport: dataImportMention,
+              memoryPersonalImport: memoryPersonalImportMention,
+              memoryServerImport: memoryServerImportMention,
+              personalConfigImport: personalConfigImportMention,
+              serverConfigImport: serverConfigImportMention,
             }),
             inline: false,
           },
           {
             nameKey: "commands.help.data.delete_title",
             value: localizer(locale, "commands.help.data.delete_description", {
-              dataDelete: dataDeleteMention,
+              memoryPersonalRemove: memoryPersonalRemoveMention,
+              memoryServerRemove: memoryServerRemoveMention,
+              personalConfigRemove: personalConfigRemoveMention,
+              serverConfigRemove: serverConfigRemoveMention,
             }),
             inline: false,
           },

@@ -389,7 +389,7 @@ This section documents what our implementation supports versus what native Silly
 |-------|--------|-------|
 | `{{user}}` | Supported | Deferred to `convertMentions()` |
 | `{{char}}` / `{{bot}}` | Supported | Deferred to `convertMentions()` |
-| `{{personality}}` | Supported | Maps to `/teach attribute` values |
+| `{{personality}}` | Supported | Maps to `/persona attribute add` values |
 | `{{description}}` | Supported | Maps to persona prompt |
 | `{{mesExamples}}` | Supported | Maps to sample dialogues |
 | `{{lastChatMessage}}` | Supported | Most recent user message |

@@ -7,24 +7,20 @@ import type {
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { isBlacklisted, loadAllPersonasForServer, loadEmbeddingModelById } from "../../utils/db/dbRead";
-import { getMemoryLimits } from "../../utils/db/memoryLimits";
-import { safeDownload } from "../../utils/security/safeDownload";
-import { memoryGuard, reserveDocumentQuota } from "../../utils/security/rateLimiter";
-import { decryptApiKey } from "../../utils/security/crypto";
-import {
-  chunkDocumentText,
-  insertDocumentWithChunks,
-  normalizeDocumentText,
-} from "../../utils/documents/documentService";
-import { extractTextFromBuffer } from "../../utils/documents/textExtractor";
-import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "../../utils/embeddings/embeddingProvider";
-import type { ErrorContext, TomoriState, UserRow } from "../../types/db/schema";
-import type { SelectOption } from "../../types/discord/modal";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { isBlacklisted, loadAllPersonasForServer, loadEmbeddingModelById } from "@/utils/db/dbRead";
+import { getMemoryLimits } from "@/utils/db/memoryLimits";
+import { safeDownload } from "@/utils/security/safeDownload";
+import { memoryGuard, reserveDocumentQuota } from "@/utils/security/rateLimiter";
+import { decryptApiKey } from "@/utils/security/crypto";
+import { chunkDocumentText, insertDocumentWithChunks, normalizeDocumentText } from "@/utils/documents/documentService";
+import { extractTextFromBuffer } from "@/utils/documents/textExtractor";
+import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "@/utils/embeddings/embeddingProvider";
+import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
+import type { SelectOption } from "@/types/discord/modal";
 
 const MAX_DOCUMENT_NAME_LENGTH = 64;
 type DocumentScope = "persona" | "serverwide";
@@ -35,32 +31,32 @@ const DOCUMENT_PERSONA_SELECT_ID = "persona_select";
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("document")
-    .setDescription(localizer("en-US", "commands.teach.document.description"))
+    .setName("add")
+    .setDescription(localizer("en-US", "commands.memory.document.add.description"))
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(localizer("en-US", "commands.teach.document.name_description"))
+        .setDescription(localizer("en-US", "commands.memory.document.add.name_description"))
         .setRequired(true)
         .setMaxLength(MAX_DOCUMENT_NAME_LENGTH),
     )
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(localizer("en-US", "commands.teach.document.file_description"))
+        .setDescription(localizer("en-US", "commands.memory.document.add.file_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(localizer("en-US", "commands.teach.document.scope_description"))
+        .setDescription(localizer("en-US", "commands.memory.document.add.scope_description"))
         .addChoices(
           {
-            name: localizer("en-US", "commands.teach.document.scope_choice_persona"),
+            name: localizer("en-US", "commands.memory.document.add.scope_choice_persona"),
             value: "persona",
           },
           {
-            name: localizer("en-US", "commands.teach.document.scope_choice_serverwide"),
+            name: localizer("en-US", "commands.memory.document.add.scope_choice_serverwide"),
             value: "serverwide",
           },
         )

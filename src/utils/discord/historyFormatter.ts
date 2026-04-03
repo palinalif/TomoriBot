@@ -1,7 +1,7 @@
 /**
  * Formats Discord messages into a text representation suitable for LLM fact extraction.
  * Also detects which bot personas participated (via webhook author matching)
- * for the "automatic" scope in /teach history.
+ * for the "automatic" scope in /memory history import.
  */
 
 import type { Message } from "discord.js";

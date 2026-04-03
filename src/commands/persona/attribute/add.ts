@@ -6,20 +6,20 @@ import {
   type UserRow,
   type ErrorContext,
   type TomoriState,
-} from "../../types/db/schema";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
-import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "../../utils/discord/interactionHelper";
-import { isBlacklisted, loadAllPersonasForServer } from "../../utils/db/dbRead";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import type { ModalResult, SelectOption } from "../../types/discord/modal";
-import { checkAttributeLimit, getMemoryLimits, validateAttribute } from "../../utils/db/memoryLimits";
+} from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { isBlacklisted, loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import type { ModalResult, SelectOption } from "@/types/discord/modal";
+import { checkAttributeLimit, getMemoryLimits, validateAttribute } from "@/utils/db/memoryLimits";
 import {
   dedupeCaseInsensitive,
   formatTextArrayLiteral,
   getNonEmptyNumberedLines,
   readTxtUpload,
-} from "../../utils/teach/batchUploadUtils";
+} from "@/utils/teach/batchUploadUtils";
 
 // Get memory limits from environment variables
 const memoryLimits = getMemoryLimits();
@@ -32,7 +32,7 @@ const ATTRIBUTE_FILE_UPLOAD_ID = "attribute_file_upload";
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("attribute").setDescription(localizer("en-US", "commands.teach.attribute.description"));
+  subcommand.setName("add").setDescription(localizer("en-US", "commands.persona.attribute.add.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function

@@ -6,17 +6,17 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
 import {
   replyInfoEmbed,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { type UserRow, type ErrorContext, tomoriSchema, type TomoriState } from "../../types/db/schema";
-import type { SelectOption } from "../../types/discord/modal";
+} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { type UserRow, type ErrorContext, tomoriSchema, type TomoriState } from "@/types/db/schema";
+import type { SelectOption } from "@/types/discord/modal";
 import { sql } from "@/utils/db/client";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
@@ -102,7 +102,7 @@ async function performAttributeRemoval(
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("attribute").setDescription(localizer("en-US", "commands.forget.attribute.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.persona.attribute.remove.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function

@@ -32,27 +32,23 @@ Grouped commands are represented by folders:
 - `conditioning`
 - `config`
 - `contribute`
-- `data`
 - `donate`
-- `forget`
 - `generate`
 - `help`
 - `legal`
+- `memory`
 - `novelai`
 - `persona`
 - `personal`
-- `punish`
-- `reward`
 - `server`
 - `support`
-- `teach`
 - `tool`
 
 ## Category Restrictions
 
 Defined in `commandLoader.ts`:
 
-- Guild-only categories: `server`, `reward`, `punish`, `conditioning`
+- Guild-only categories: `server`, `conditioning`
 - Manage Guild required by default: `config`, `server`
 
 ## Localization Strategy for Command Metadata
@@ -70,8 +66,8 @@ Key pattern:
 
 Example path:
 
-- file: `src/commands/forget/memory/personal.ts`
-- command path: `forget.memory.personal`
+- file: `src/commands/memory/personal/remove.ts`
+- command path: `memory.personal.remove`
 
 ## Interaction Timing Rules (Important)
 
@@ -276,10 +272,10 @@ Rules:
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
 - `novelai`: attg, image(model/params/generate), image-tags(style/me/character/negative), character-reference
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
-- `persona`: create, generate, import, export, default, swap, remove
-- `conditioning`: manage
-- `punish`: spank, pinch, bite, squeeze
-- `reward`: headpat, hug, kiss, tickle
+- `persona`: create, generate, import, export, default, swap, remove, attribute(add/remove), sample-dialogue(add/remove), prompt(set/remove), history(import/remove)
+- `memory`: document(add/remove), personal(add/remove/import/export), server(add/remove/import/export)
+- `personal`: privacy, language, nickname, cache, config(import/export/remove), reminder(remove), impersonate(prompt)
+- `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)
 - `tool`: ping, status, refresh, compact, comment
 
 `/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.

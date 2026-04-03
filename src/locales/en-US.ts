@@ -264,7 +264,7 @@ export default {
       prohibited_content_description: "The response was blocked due to prohibited content detection.",
       prohibited_content_admin_notice_title: "Admin Notice",
       prohibited_content_admin_notice_description:
-        "Check: messages (`/tool refresh`), personality/memories (`/data export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
+        "Check: messages (`/tool refresh`), memories/config (`/memory personal export`, `/memory server export`, `/server config export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
       streaming_failed_description: "An issue while trying to stream the response.",
 
       // Error interaction messages
@@ -284,7 +284,7 @@ export default {
 
       content_blocked_title: "🔴️ Provider Content Filter",
       content_blocked_tip:
-        "Tip: You can turn on `/config jailbreaks` to help prevent this error. You may also check messages (`/tool refresh`), personality/memories (`/data export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
+        "Tip: You can turn on `/config jailbreaks` to help prevent this error. You may also check messages (`/tool refresh`), memories/config (`/memory personal export`, `/memory server export`, `/server config export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
 
       timeout_title: "🟡️ Provider Request Timeout",
       timeout_tip: "Try shortening your message or try again",
@@ -561,13 +561,13 @@ export default {
       personal_memory_updated_description:
         "A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
       server_memory_footer:
-        "Server managers can manage this memory using `/teach` and `/forget` commands. Use `/data export` to view the full text.",
+        "Server managers can manage this memory using `/memory server add`, `/memory server remove`, and `/memory server export`.",
       personal_memory_footer_manage:
-        "You can manage your personal memories using `/teach` and `/forget` commands. Use `/data export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
+        "You can manage your personal memories using `/memory personal add`, `/memory personal remove`, and `/memory personal export`. Opt out of personal memory storage with `/personal privacy`.",
       personal_memory_footer_personalization_disabled:
-        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/data export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
+        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/memory personal export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
       personal_memory_footer_user_blacklisted:
-        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use `/data export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
+        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use `/memory personal export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
     },
   },
 
@@ -880,14 +880,14 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         disabled: `Disabled`,
         unknown_channel: `Unknown Channel ID:`,
         not_available: `N/A`,
-        see_all_memories_prompt: `Please use the \`/data export\` command to see all memories`,
+        see_all_memories_prompt: `Please use \`/memory personal export\` or \`/memory server export\` to see all memories`,
         memories_omitted: `...and {count} more memories omitted`,
-        export_footer: `Use the \`/data export\` command to see full, non-truncated memories`,
-        export_footer_full: `Use the \`/data export\` command to see full details on everything`,
-        export_footer_global_personal_memories: `Use \`/data export type:global_personal_memories\` to view full values`,
-        export_footer_persona_memories: `Use \`/data export type:persona_personal_memories\` and \`/data export type:persona_server_memories\` to view full values`,
+        export_footer: `Use \`/memory personal export\` or \`/memory server export\` to see full, non-truncated memories`,
+        export_footer_full: `Use \`/memory personal export\`, \`/memory server export\`, or \`/server config export\` to see full details`,
+        export_footer_global_personal_memories: `Use \`/memory personal export scope:global\` to view full values`,
+        export_footer_persona_memories: `Use \`/memory personal export scope:persona\` and \`/memory server export\` to view full values`,
         export_footer_persona_attributes_and_dialogues: `Use \`/persona export\` to view full attributes and sample dialogues`,
-        export_footer_server_config: `Use \`/data export type:server_config\` to view full values`,
+        export_footer_server_config: `Use \`/server config export\` to view full values`,
         field_personal_memories_with_count: `Personal Memories ({current} out of {max} slots used)`,
         field_global_personal_memories_with_count: `Global Personal Memory ({current} out of {max} slots used)`,
         field_trigger_words_with_count: `Trigger Words ({current} out of {max} slots used)`,
@@ -1100,6 +1100,24 @@ I have built-in features to help reduce costs from abusers or spammers in your s
     // Preset commands
     persona: {
       description: `Manage personality presets`,
+      attribute: {
+        description: `Manage persona attributes.`,
+        add: {
+          description: `Add an attribute to a persona.`,
+        },
+        remove: {
+          description: `Remove an attribute from a persona.`,
+        },
+      },
+      prompt: {
+        description: `Manage persona prompt instructions.`,
+        set: {
+          description: `Set a persona prompt.`,
+        },
+        remove: {
+          description: `Remove a persona prompt.`,
+        },
+      },
       name_conflict_title: `🔴 Persona Name Conflict`,
       name_conflict_description: `A persona named **{name}** already exists on this server. Persona names must be unique within a server.`,
       export: {
@@ -1340,7 +1358,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           character_desc_label: `Character Description`,
           character_desc_placeholder: `Describe your character (personality, appearance, backstory, etc.)`,
           example_user_label: `Example User Message`,
-          example_user_description: `Tip: Add more using /teach sampledialogue after`,
+          example_user_description: `Tip: Add more using /persona sample-dialogue add after`,
           example_user_placeholder: `Hi {bot}!`,
           example_bot_label: `Example Bot Reply`,
           example_bot_placeholder: `Hello {user}! You doing good?`,
@@ -1405,7 +1423,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         personality_description: `- I can change my name and avatar using \`/config rename\` and \`/server avatar\`
 - I can switch between different personas using \`/persona\` (you can also share and save personas using \`/persona export\`!)
 - Multiple characters can coexist as alter personas, each with their own triggers and webhook avatar
-- My behavior and tone can be tweaked with \`/teach\`
+- My behavior and tone can be tweaked with \`/persona attribute add\`, \`/persona sample-dialogue add\`, and \`/persona prompt set\`
 - A custom system prompt can be set with \`/config system-prompt\` to further shape my behavior
 - Learn more with \`/help customization\``,
         memory_title: `Memory & Personalization`,
@@ -1413,7 +1431,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Personal memories persist across servers (try talking to me in another server!)
 - I also keep STM (short-term memory) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal stm\`)
 - Change what I call you using \`/personal nickname\`
-- Use \`/teach\` to manually help me remember things, \`/forget\` to remove them
+- Use \`/memory\` and \`/persona\` commands to manually add or remove memories and persona data
 - I can use server emojis and stickers more accurately after registration with \`/server initialize expressions\`
 - Full invisibility is available via \`/personal privacy\` if you want to be completely unseen by me
 - Learn more with \`/help memory\``,
@@ -1434,11 +1452,12 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - I can react to messages with relevant emojis
 - Register emojis and stickers with \`/server initialize expressions\` for higher accuracy`,
         documents_title: `Document Knowledge Base`,
-        documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/teach document\`
+        documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/memory document add\`
+- Extract channel history into searchable knowledge with \`/memory history import\`
 - I retrieve and reference relevant document content when answering questions
 - I can also read document attachments (PDF, TXT, MD) shared directly in chat, just ask me to read it!
 - Requires an embedding model (configure with \`/config model embedding\`)
-- Remove documents with \`/forget document\``,
+- Remove uploaded or history-extracted documents with \`/memory document remove\` and \`/memory history remove\``,
         impersonation_title: `Impersonation & Tools`,
         impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
 - Set a reusable user-impersonation persona prompt with \`/personal impersonate prompt\`
@@ -1526,8 +1545,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Set up auto-trigger with {serverAutotrigger} to chat without mentioning me`,
         step4_title: `Optional: Customize Me`,
         step4_description: `- Use {persona} commands to completely change my personality (including alter personas!)
-- Configure my settings with {server}, {personal}, and {config} commands
-- You can also manually teach me things with {teach}
+- Configure my settings with {server}, {personal}, {memory}, and {config} commands
+- Use {memory} for memories/documents and {persona} for behavior shaping
 - Explore advanced features like document uploads, API key rotation, and uncensored mode`,
         need_help_title: `Need Help?`,
         need_help_description: `- {helpFeatures} - See what I can do
@@ -1578,21 +1597,21 @@ After the bot accepts an invite, it now posts a short reminder in the Matrix roo
         title: `Managing Your Data`,
         embed_description: `How you can manage your data and what I store:`,
         export_title: `Export Your Data`,
-        export_description: `Use {dataExport} to download your data:
-- **Personal Memories of Persona**: Personal memories for one selected persona scope
-- **Server Memories of Persona**: Server memories for one selected persona
-- **Personal Settings**: Your nickname/language preferences
-- **Server Config**: Server configuration values (no API keys/triggers)
-- **Global Personal Memories**: Global personal memory scope
+        export_description: `Use {memoryPersonalExport}, {memoryServerExport}, {personalConfigExport}, and {serverConfigExport} to download your data:
+- **Personal Memories of Persona / Global Personal Memories**: Export one persona scope or your global memory scope
+- **Server Memories of Persona**: Export server memories for one selected persona
+- **Personal Settings**: Export your nickname, language, and other personal config
+- **Server Config**: Export server configuration values (no API keys/triggers)
+- **Personas**: Use {personaExport} to export full persona definitions separately
 - Data is sent to your DMs as a JSON file`,
         import_title: `Import Your Data`,
-        import_description: `Use {dataImport} to restore previously exported data:
+        import_description: `Use {memoryPersonalImport}, {memoryServerImport}, {personalConfigImport}, and {serverConfigImport} to restore previously exported data:
 - File type is auto-detected from the export file
 - For memory files, you'll choose a target persona or Global scope
 - Server-related imports require \`Manage Server\` in guilds
 - Simply attach your exported file when using the command`,
         delete_title: `Delete Your Data`,
-        delete_description: `Use {dataDelete} to permanently remove your data:
+        delete_description: `Use {memoryPersonalRemove}, {memoryServerRemove}, {personalConfigRemove}, and {serverConfigRemove} to permanently remove or reset your data:
 - **Personal Memories of Persona** / **Global Personal Memories**
 - **Server Memories of Persona**
 - **Personal Settings** / **Server Config reset**
@@ -1814,32 +1833,33 @@ Leave unset for endpoints that require no authentication.`,
         title: `How My Memory Works`,
         embed_description: `I have a persistent memory system that helps me remember facts and information about users and servers across conversations. This is about **what I know** (facts, context, information). For **how I behave** (personality, tone, settings), see {helpCustomization} instead!`,
         teaching_title: `Teaching Me Things`,
-        teaching_description: `Use {teach} to help me remember **facts and information**:
-- **Personal memories** ({teachMemoryPersonal}): Facts about individual users
+        teaching_description: `Use {memoryPersonalAdd} and {memoryServerAdd} to help me remember **facts and information**:
+- **Personal memories** ({memoryPersonalAdd}): Facts about individual users
   - Example: "Amaori loves cats", "Prefers dark mode", "Is allergic to peanuts"
-- **Server memories** ({teachMemoryServer}): Information relevant to the whole server
+- **Server memories** ({memoryServerAdd}): Information relevant to the whole server
   - Example: "Game night is every Friday at 8 PM", "No posting of NSFW", "We use #general for announcements"`,
         forgetting_title: `Forgetting Things`,
-        forgetting_description: `Use {forget} to make me forget memories:
-- {forgetMemoryPersonal} - Remove personal facts about users
-- {forgetMemoryServer} - Remove server-wide information`,
+        forgetting_description: `Use {memoryPersonalRemove} and {memoryServerRemove} to make me forget memories:
+- {memoryPersonalRemove} - Remove personal facts about users
+- {memoryServerRemove} - Remove server-wide information`,
         how_it_works_title: `How It Works:`,
         how_it_works_description: `- **Personal memories** are tied to you specifically across all servers which I only keep in mind when replying in conversations you are actively participating in
 - **Server memories** only stay within the server, I always keep them in mind when replying in a conversation within the server
-- Memories persist until you use the \`/forget\` command on them`,
+- Memories persist until you remove them with the relevant \`/memory ... remove\` command`,
         tips_title: `Memory Tips:`,
         tips_description: `- Teach me your preferences, nicknames, and important facts
 - Use server memories for shared information, inside jokes, or server rules
-- Review your memories periodically with {dataExport} or {status}
+- Review your memories periodically with {memoryPersonalExport}, {memoryServerExport}, or {status}
 - Keep memories concise and clear for best results
 
 **Privacy:** See \`/legal privacy\` for full data handling details`,
         documents_title: `Document Knowledge Base`,
         documents_description: `Server administrators can upload documents for me to reference:
-- Use \`/teach document\` to upload text, PDF, or Markdown files
+- Use \`/memory document add\` to upload text, PDF, or Markdown files
+- Use \`/memory history import\` to extract channel history into document memories
 - Documents are chunked and stored as searchable embeddings
 - I automatically retrieve relevant content based on the conversation
-- Use \`/forget document\` to remove uploaded documents
+- Use \`/memory document remove\` or \`/memory history remove\` to remove stored documents
 - Requires an embedding model configured via \`/config model embedding\``,
         shortterm_title: `Short-Term Memory`,
         shortterm_description: `In addition to persistent memories, I keep STM (short-term memory) of recent conversations:
@@ -1866,7 +1886,7 @@ Leave unset for endpoints that require no authentication.`,
 - {personaExport} - Export your persona to share or backup
 - {personaImport} - Import a persona from a file (supports importing as an alter persona with its own triggers and webhook avatar)
 - {personaRemove} - Remove an alter persona
-- {teach} - Teach me on how I should talk and act
+- {personaAttributeAdd} / {personaSampleDialogueAdd} - Teach me how I should talk and act
 - {serverAvatar} - Change my profile picture`,
         embed1_what_personas_include_title: `What Personas Include:`,
         embed1_what_personas_include_description: `- Personality attributes (traits, characteristics, and quirks)
@@ -1880,8 +1900,8 @@ Leave unset for endpoints that require no authentication.`,
         embed2_description: `Fine-tune my personality and knowledge:
 
 **Personality Shaping:**
-- {teachAttribute} - Add personality traits or physical characteristics (e.g., "friendly", "red hair", "ends sentences with *Nya~*")
-- {teachSampledialogue} - Add example conversations to shape how I talk
+- {personaAttributeAdd} - Add personality traits or physical characteristics (e.g., "friendly", "red hair", "ends sentences with *Nya~*")
+- {personaSampleDialogueAdd} - Add example conversations to shape how I talk
 - {configRename} - Set what I should call myself
 
 **Writing Sample Dialogues:**
@@ -1905,8 +1925,8 @@ Use \`{user}\` and \`{bot}\` placeholders in your examples:
         // Embed 3: Configuration & Management
         embed3_title: `Configuration & Management`,
         embed3_description: `**Remove personality customizations:**
-- {forgetAttribute} - Remove specific personality attributes
-- {forgetSampledialogue} - Remove sample dialogue examples
+- {personaAttributeRemove} - Remove specific personality attributes
+- {personaSampleDialogueRemove} - Remove sample dialogue examples
 
 **Server-wide settings and behavior:**
 Learning & Privacy:
@@ -1930,8 +1950,8 @@ Channel Whitelist & Cooldowns:
 - Whitelisted channels inherit the global cooldown unless you set a channel-specific override
 
 Documents:
-- {teachDocument} - Upload a document for me to reference
-- {forgetDocument} - Remove an uploaded document`,
+- {memoryDocumentAdd} - Upload a document for me to reference
+- {memoryDocumentRemove} - Remove an uploaded document`,
         embed3_footer: `Next: Bot Settings`,
         // Embed 4: Advanced Settings
         embed4_title: `Advanced Settings`,
@@ -1971,7 +1991,7 @@ Document Knowledge Base:
         // Embed 5: Pro Tips
         embed5_title: `Pro Tips`,
         embed5_description: `- Start with a persona (default or generated) as a foundation
-- Use \`/teach attribute\` for quick personality tweaks
+- Use \`/persona attribute add\` for quick personality tweaks
 - For Sample Dialogues, using examples that exhibit their attributes and traits as well is effective:
 \`\`\`
 User message: {user}: What's your favorite hobby?
@@ -2421,6 +2441,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
     conditioning: {
       description: `Manage persistent reward and punishment conditioning memories.`,
+      reward: {
+        description: `Reward me with fun interactions.`,
+      },
+      punish: {
+        description: `Punish me with disciplinary interactions.`,
+      },
       shared: {
         select_persona_title: `Select a persona to manage`,
         reason_line: `Reason: \`\`{reason}\`\``,
@@ -2443,20 +2469,19 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         disabled_success_description: `Disabled stored {type_label} prompt injection for all {persona_count} personas in this server. New records will still be stored.`,
       },
       manage: {
-        description: `Manage stored conditioning history across all personas in this server.`,
+        description: `Manage injected conditioning history across all personas in this server.`,
         marker_reward: `❤️`,
         marker_punish: `💀`,
         none_title: `Nothing to Manage`,
-        none_description: `There are no stored conditioning entries to manage in this server.`,
+        none_description: `There are no injected conditioning entries to manage in this server.`,
         too_many_title: `Too Many Entries`,
         too_many_description: `Found {total_entries} entries across {total_pages} pages. The current limit is {max_pages} pages.`,
         select_page_title: `Select a Conditioning Page`,
-        select_page_description: `Select which page of conditioning entries to manage.\nEntries: {total_entries}\nPages: {total_pages}\nEach entry shows the persona and whether it is a reward or punishment record.`,
+        select_page_description: `Select which page of injected conditioning entries to manage.\nEntries: {total_entries}\nPages: {total_pages}\nEach entry shows the persona and whether it is a reward or punishment record.`,
         checkbox_label: `Conditioning Entries`,
         checkbox_label_continued: `Conditioning Entries (Continued)`,
-        checkbox_description: `Leave an entry checked to keep it. Uncheck it to delete that stored conditioning group.`,
+        checkbox_description: `Leave an entry checked to keep it. Uncheck it to delete that injected conditioning group.`,
         option_reason_description: `{count} total • due to: "{reason}"`,
-        option_stored_only_description: `{count} total • stored only (no prompt injection)`,
         option_label: `{type_marker} {persona_name} • {action}`,
         modal_title: `Manage Conditioning`,
         done_button: `Done`,
@@ -3149,10 +3174,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         provider_invalid: `Error: Invalid API provider selected. Please choose from the available options.`,
         preset_not_found: `Error: The selected preset was not found in the database. Please try again.`,
         success_title: `🟢 Setup Complete!`,
-        success_desc: `I am now configured for this server! To modify my configuration, use my \`/config\` and \`/server\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also manage or delete your data anytime with \`/data\`. Here's a summary:`,
-        success_desc_with_model: `I am now configured for this server! I will use the \`{model_name}\` model (the default for this provider). To modify my configuration, use my \`/config\` and \`/server\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also manage or delete your data anytime with \`/data\`. Here's a summary:`,
-        success_desc_dm: `I am now configured for this Direct Message. You can manage or delete your data anytime with \`/data\`. Here's a summary:`,
-        success_desc_dm_with_model: `I am now configured for this Direct Message. I will use the \`{model_name}\` model (the default for this provider). You can manage or delete your data anytime with \`/data\`. Here's a summary:`,
+        success_desc: `I am now configured for this server! To modify my configuration, use my \`/config\`, \`/server\`, \`/persona\`, and \`/memory\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also export or reset data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, or \`/server config\`. Here's a summary:`,
+        success_desc_with_model: `I am now configured for this server! I will use the \`{model_name}\` model (the default for this provider). To modify my configuration, use my \`/config\`, \`/server\`, \`/persona\`, and \`/memory\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also export or reset data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, or \`/server config\`. Here's a summary:`,
+        success_desc_dm: `I am now configured for this Direct Message. You can export or reset your data anytime with \`/memory personal export\` and \`/personal config\`. Here's a summary:`,
+        success_desc_dm_with_model: `I am now configured for this Direct Message. I will use the \`{model_name}\` model (the default for this provider). You can export or reset your data anytime with \`/memory personal export\` and \`/personal config\`. Here's a summary:`,
         next_steps_title: `🟢 What Can I Do?`,
         next_steps_description: `Use {helpFeatures} to see all my features, or just ask me in chat! I can also tell you what slash commands are available.`,
         novelai_expressions_warning_field: `⚠️ Expressions Disabled`,
@@ -3162,7 +3187,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         dm_context_explanation_title: `About Direct Messages`,
         dm_context_explanation: `I will still refer to this Direct Message as a "server". Meaning all "server" features work the same way, just privately here between us! Think of this Direct Message as a 1-on-1 server with me, therefore its server memories are my memories within here only.`,
         already_setup_title: `Already SeWt Up`,
-        already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/teach\`, etc.
+        already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/persona\`, \`/memory\`, and \`/server\`.
 
 				If you wish to swap my provider, use the \`/config api-key set\` command.`,
       },
@@ -3708,6 +3733,25 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
     // Server configuration commands (admin-only)
     server: {
+      config: {
+        description: `Manage server configuration data.`,
+        export: {
+          description: `Export this server's configuration to JSON.`,
+        },
+        import: {
+          description: `Import this server's configuration from JSON.`,
+          file_description: `Server configuration JSON file.`,
+          confirmation_description: `Confirm that you want to import this file.`,
+          confirmation_choice_yes: `Yes, import it`,
+          confirmation_choice_no: `No, cancel`,
+        },
+        remove: {
+          description: `Reset this server's configuration.`,
+          confirmation_description: `Confirm that you want to reset this server's configuration.`,
+          confirmation_choice_yes: `Yes, reset it`,
+          confirmation_choice_no: `No, cancel`,
+        },
+      },
       stm: {
         description: `Manage server-shared STM entries for all personas`,
         manage: {
@@ -4207,6 +4251,31 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
     // Personal user configuration commands
     personal: {
       description: `Manage your personal settings`,
+      config: {
+        description: `Manage your personal configuration data.`,
+        export: {
+          description: `Export your personal configuration to JSON.`,
+        },
+        import: {
+          description: `Import your personal configuration from JSON.`,
+          file_description: `Personal configuration JSON file.`,
+          confirmation_description: `Confirm that you want to import this file.`,
+          confirmation_choice_yes: `Yes, import it`,
+          confirmation_choice_no: `No, cancel`,
+        },
+        remove: {
+          description: `Reset your personal configuration.`,
+          confirmation_description: `Confirm that you want to reset your personal configuration.`,
+          confirmation_choice_yes: `Yes, reset it`,
+          confirmation_choice_no: `No, cancel`,
+        },
+      },
+      reminder: {
+        description: `Manage your personal reminders.`,
+        remove: {
+          description: `Remove one of your reminders.`,
+        },
+      },
       privacy: {
         description: `Control personal memory storage and privacy settings`,
 
@@ -4303,12 +4372,140 @@ You can change this anytime using \`/personal privacy\`.`,
       },
     },
 
+    memory: {
+      description: `Manage stored memories and documents.`,
+      document: {
+        description: `Manage document memories.`,
+        add: {
+          description: `Add a document to memory.`,
+          name_description: `Unique name for this document within the selected scope.`,
+          file_description: `Document file to upload (.txt, .md, or .pdf).`,
+          scope_description: `Choose whether the document belongs to a persona or the whole server.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_serverwide: `Serverwide`,
+        },
+        remove: {
+          description: `Remove a document from memory.`,
+          scope_description: `Choose whether to remove from a persona scope or the whole server.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_serverwide: `Serverwide`,
+        },
+      },
+      history: {
+        description: `Manage history-extracted document memories.`,
+        import: {
+          description: `Extract knowledge from this channel's message history using AI.`,
+          name_description: `Name for the generated document (must be unique within the selected scope).`,
+          scope_description: `Choose knowledge scope: persona (default), automatic (detect personas), or global.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_automatic: `Automatic`,
+          scope_choice_global: `Global`,
+          rag_disabled_title: `Document RAG Disabled`,
+          rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
+          no_permission_title: `Permission Denied`,
+          no_permission_description: `You need the **Manage Server** permission to extract channel history.`,
+          model_incompatible_title: `Model Incompatible`,
+          model_incompatible_description: `The current model does not support structured output, which is required for history extraction. Please switch to a compatible model using \`/config model text\`.`,
+          no_embedding_model_title: `No Embedding Model Set`,
+          no_embedding_model_description: `An embedding model is not configured. Please set one using \`/config model embedding\`.`,
+          no_api_key_title: `No API Key Set`,
+          no_api_key_description: `An API key is required to extract and embed history. Please use \`/config api-key set\`.`,
+          no_messages_title: `No Messages Found`,
+          no_messages_description: `No messages were found in this channel to extract knowledge from.`,
+          no_facts_extracted_title: `No Facts Extracted`,
+          no_facts_extracted_description: `The AI could not extract any meaningful facts from the channel history. This can happen if the conversation is too short or consists only of trivial messages.`,
+          duplicate_title: `Document Name Already Exists`,
+          duplicate_description: `A document named \`{name}\` already exists in this scope. Please choose a different name.`,
+          limit_exceeded_title: `Document Limit Reached`,
+          limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memory document remove\` or \`/memory history remove\` before adding new ones.`,
+          server_chunk_limit_title: `Server Chunk Limit Reached`,
+          server_chunk_limit_description: `This scope ({scope}) would exceed the chunk limit of {max_chunks}. Remove some documents first.`,
+          progress_fetching: `Fetching channel messages...`,
+          progress_extracting: `Extracting knowledge from {message_count} messages (window {current}/{total})...`,
+          progress_embedding: `Generating embeddings for {fact_count} facts...`,
+          success_title: `History Extracted`,
+          success_description: `Extracted **{fact_count}** facts from **{message_count}** messages and stored as **{name}** ({chunk_count} chunks) for {scope}.`,
+          success_automatic_description: `Extracted **{fact_count}** facts from **{message_count}** messages.\n\n{persona_list}`,
+          success_automatic_persona_line: `**{persona_name}**: stored as **{doc_name}** ({chunk_count} chunks)`,
+          success_automatic_global_fallback: `No personas detected. Stored as **{name}** for serverwide scope.`,
+          scope_label_persona: `persona "{persona_name}"`,
+          scope_label_global: `serverwide scope`,
+        },
+        remove: {
+          description: `Remove a history-extracted document from memory.`,
+          scope_description: `Choose whether to remove from a persona scope or serverwide scope.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_serverwide: `Serverwide`,
+          modal_title: `Remove History Document`,
+          select_label: `Document to Remove`,
+          select_description: `Choose which history document to remove`,
+          select_placeholder: `Select a document...`,
+          rag_disabled_title: `Document RAG Disabled`,
+          rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
+          none_title: `No History Documents`,
+          none_description: `There are no history-extracted documents to remove in this scope. Extract some with \`/memory history import\`.`,
+          success_title: `History Document Removed`,
+          success_description: `Successfully removed the history document: "{name}"`,
+        },
+      },
+      personal: {
+        description: `Manage personal memories.`,
+        add: {
+          description: `Add a personal memory.`,
+          scope_description: `Choose whether the memory is persona-scoped or global.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_global: `Global`,
+        },
+        export: {
+          description: `Export personal memories to JSON.`,
+          scope_description: `Choose whether to export persona-scoped or global memories.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_global: `Global`,
+        },
+        import: {
+          description: `Import personal memories from JSON.`,
+          file_description: `Personal memories JSON file.`,
+          target_description: `Choose whether to import into a persona or the global memory scope.`,
+          target_choice_global: `Global`,
+          target_choice_persona: `Persona`,
+          confirmation_description: `Confirm that you want to import this file.`,
+          confirmation_choice_yes: `Yes, import it`,
+          confirmation_choice_no: `No, cancel`,
+        },
+        remove: {
+          description: `Remove a personal memory.`,
+          scope_description: `Choose whether to remove persona-scoped or global memories.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_global: `Global`,
+        },
+      },
+      server: {
+        description: `Manage server memories.`,
+        add: {
+          description: `Add a server memory.`,
+        },
+        export: {
+          description: `Export server memories to JSON.`,
+        },
+        import: {
+          description: `Import server memories from JSON.`,
+          file_description: `Server memories JSON file.`,
+          confirmation_description: `Confirm that you want to import this file.`,
+          confirmation_choice_yes: `Yes, import it`,
+          confirmation_choice_no: `No, cancel`,
+        },
+        remove: {
+          description: `Remove a server memory.`,
+        },
+      },
+    },
+
     // Commands for teaching Tomori
     teach: {
       sampledialogue: {
         description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
         teaching_disabled_title: `Sample Dialogue Teaching Disabled`,
-        teaching_disabled_description: `Members are currently not allowed to teach/forget sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+        teaching_disabled_description: `Members are currently not allowed to add or remove sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         modal_title: `Add Sample Dialogue`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this dialogue is for.`,
@@ -4335,7 +4532,7 @@ You can change this anytime using \`/personal privacy\`.`,
         duplicate_title: `No New Dialogues`,
         duplicate_description: `All provided dialogue pairs already exist.`,
         limit_exceeded_title: `Sample Dialogue Limit Exceeded`,
-        limit_exceeded_description: `This server has reached its sample dialogue limit of {max_allowed} dialogues (currently has {current_count}). Please remove some sample dialogues with \`/forget sampledialogue\` before adding new ones.`,
+        limit_exceeded_description: `This server has reached its sample dialogue limit of {max_allowed} dialogues (currently has {current_count}). Please remove some sample dialogues with \`/persona sample-dialogue remove\` before adding new ones.`,
         batch_limit_exceeded_title: `Batch Import Exceeds Limit`,
         batch_limit_exceeded_description: `Import needs {import_count} slots, but only {max_allowed} total ({current_count} used). Remove {remove_count} sample dialogues and try again.`,
         user_input_too_long_title: `User Input Too Long`,
@@ -4356,7 +4553,7 @@ You can change this anytime using \`/personal privacy\`.`,
       attribute: {
         description: `Add a personality attribute describing me for this server.`,
         teaching_disabled_title: `Attribute Teaching Disabled`,
-        teaching_disabled_description: `Members are not currently allowed to teach/forget personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+        teaching_disabled_description: `Members are not currently allowed to add or remove personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         modal_title: `Add Personality Attribute`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this attribute is for.`,
@@ -4378,7 +4575,7 @@ You can change this anytime using \`/personal privacy\`.`,
         duplicate_title: `Duplicate Attribute`,
         duplicate_description: `This attribute '{attribute}' is already in my attribute list.`,
         limit_exceeded_title: `Attribute Limit Exceeded`,
-        limit_exceeded_description: `This server has reached its attribute limit of {max_allowed} attributes (currently has {current_count}). Please remove some attributes with \`/forget attribute\` before adding new ones.`,
+        limit_exceeded_description: `This server has reached its attribute limit of {max_allowed} attributes (currently has {current_count}). Please remove some attributes with \`/persona attribute remove\` before adding new ones.`,
         batch_limit_exceeded_title: `Batch Import Exceeds Limit`,
         batch_limit_exceeded_description: `Import needs {import_count} slots, but only {max_allowed} total ({current_count} used). Remove {remove_count} attributes and try again.`,
         content_too_long_title: `Attribute Content Too Long`,
@@ -4405,7 +4602,7 @@ You can change this anytime using \`/personal privacy\`.`,
         rag_disabled_title: `Document RAG Disabled`,
         rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
         teaching_disabled_title: `Document Teaching Disabled`,
-        teaching_disabled_description: `Members are not currently allowed to teach/forget documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+        teaching_disabled_description: `Members are not currently allowed to add or remove documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         no_embedding_model_title: `No Embedding Model Set`,
         no_embedding_model_description: `An embedding model is not configured for this provider. Please set one using \`/config model embedding\`.`,
         no_api_key_title: `No API Key Set`,
@@ -4415,7 +4612,7 @@ You can change this anytime using \`/personal privacy\`.`,
         duplicate_title: `Document Name Already Exists`,
         duplicate_description: `A document named \`{name}\` already exists. Please choose a different name.`,
         limit_exceeded_title: `Document Limit Reached`,
-        limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/forget document\` before adding new ones.`,
+        limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memory document remove\` before adding new ones.`,
         invalid_file_title: `Invalid File`,
         invalid_format: `Please upload a .txt, .md, or .pdf file.`,
         file_too_large_title: `File Too Large`,
@@ -4460,7 +4657,7 @@ You can change this anytime using \`/personal privacy\`.`,
         duplicate_title: `Document Name Already Exists`,
         duplicate_description: `A document named \`{name}\` already exists in this scope. Please choose a different name.`,
         limit_exceeded_title: `Document Limit Reached`,
-        limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/forget document\` or \`/forget history\` before adding new ones.`,
+        limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memory document remove\` or \`/memory history remove\` before adding new ones.`,
         server_chunk_limit_title: `Server Chunk Limit Reached`,
         server_chunk_limit_description: `This scope ({scope}) would exceed the chunk limit of {max_chunks}. Remove some documents first.`,
         progress_fetching: `Fetching channel messages...`,
@@ -4527,7 +4724,7 @@ You can change this anytime using \`/personal privacy\`.`,
           duplicate_title: `Duplicate Personal Memory`,
           duplicate_description: `This memory '{memory}' is already in your personal memories.`,
           limit_exceeded_title: `Personal Memory Limit Reached`,
-          limit_exceeded_description: `You have reached your personal memory limit of {max_allowed} memories (currently have {current_count}). Please remove some memories with \`/forget memory personal\` before adding new ones.`,
+          limit_exceeded_description: `You have reached your personal memory limit of {max_allowed} memories (currently have {current_count}). Please remove some memories with \`/memory personal remove\` before adding new ones.`,
           batch_limit_exceeded_title: `Batch Import Exceeds Limit`,
           batch_limit_exceeded_description: `Import needs {import_count} slots, but only {max_allowed} total ({current_count} used). Remove {remove_count} memories and try again.`,
           content_too_long_title: `Memory Content Too Long`,
@@ -4576,7 +4773,7 @@ You can change this anytime using \`/personal privacy\`.`,
           duplicate_title: `Duplicate Memory`,
           duplicate_description: `This memory '{memory}' is already in my memories for this server.`,
           limit_exceeded_title: `Server Memory Limit Reached`,
-          limit_exceeded_description: `This server has reached its memory limit of {max_allowed} memories (currently has {current_count}). Please remove some memories with \`/forget memory server\` before adding new ones.`,
+          limit_exceeded_description: `This server has reached its memory limit of {max_allowed} memories (currently has {current_count}). Please remove some memories with \`/memory server remove\` before adding new ones.`,
           batch_limit_exceeded_title: `Batch Import Exceeds Limit`,
           batch_limit_exceeded_description: `Import needs {import_count} slots, but only {max_allowed} total ({current_count} used). Remove {remove_count} memories and try again.`,
           content_too_long_title: `Memory Content Too Long`,
@@ -4598,7 +4795,7 @@ You can change this anytime using \`/personal privacy\`.`,
         select_description: `Choose which dialogue pair to remove`,
         select_placeholder: `Select a dialogue...`,
         no_dialogues_title: `No Sample Dialogues`,
-        no_dialogues: `There are no sample dialogues stored to remove. Add some with \`/teach sampledialogue\`.`,
+        no_dialogues: `There are no sample dialogues stored to remove. Add some with \`/persona sample-dialogue add\`.`,
         select_title: `Remove Sample Dialogue`,
         dialogue_label: `Dialogue Pair`,
         success_title: `Sample Dialogue Removed`,
@@ -4611,7 +4808,7 @@ You can change this anytime using \`/personal privacy\`.`,
         select_description: `Choose which attribute to remove from my personality`,
         select_placeholder: `Select an attribute...`,
         no_attributes_title: `No Attributes`,
-        no_attributes: `There are no personality attributes to remove. Add some with \`/teach attribute\`.`,
+        no_attributes: `There are no personality attributes to remove. Add some with \`/persona attribute add\`.`,
         select_title: `Remove Attribute`,
         attribute_label: `Attribute`,
         success_title: `Attribute Removed`,
@@ -4629,7 +4826,7 @@ You can change this anytime using \`/personal privacy\`.`,
         rag_disabled_title: `Document RAG Disabled`,
         rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
         none_title: `No Documents`,
-        none_description: `There are no documents to remove in this scope. Add one with \`/teach document\`.`,
+        none_description: `There are no documents to remove in this scope. Add one with \`/memory document add\`.`,
         success_title: `Document Removed`,
         success_description: `Successfully removed the document: "{name}"`,
       },
@@ -4645,7 +4842,7 @@ You can change this anytime using \`/personal privacy\`.`,
         rag_disabled_title: `Document RAG Disabled`,
         rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
         none_title: `No History Documents`,
-        none_description: `There are no history-extracted documents to remove in this scope. Extract some with \`/teach history\`.`,
+        none_description: `There are no history-extracted documents to remove in this scope. Extract some with \`/memory history import\`.`,
         success_title: `History Document Removed`,
         success_description: `Successfully removed the history document: "{name}"`,
       },
@@ -4679,7 +4876,7 @@ You can change this anytime using \`/personal privacy\`.`,
           select_description: `Choose which personal memory to remove`,
           select_placeholder: `Select a memory...`,
           no_memories_title: `No Personal Memories`,
-          no_memories: `You don't have any personal memories stored. Add some with \`/teach memory personal\`.`,
+          no_memories: `You don't have any personal memories stored. Add some with \`/memory personal add\`.`,
           select_title: `Remove Personal Memory`,
           memory_label: `Personal Memory`,
           success_title: `Personal Memory Removed`,
@@ -4696,7 +4893,7 @@ You can change this anytime using \`/personal privacy\`.`,
           select_description: `Choose which server memory to remove`,
           select_placeholder: `Select a memory...`,
           no_memories_title: `No Server Memories`,
-          no_memories: `There are no server memories stored for this server. Add some with \`/teach memory server\`.`,
+          no_memories: `There are no server memories stored for this server. Add some with \`/memory server add\`.`,
           no_owned_memories: `You don't own any server memories that can be removed.`,
           memory_not_found: `The selected memory could not be found.`,
           select_title: `Remove Server Memory`,
@@ -4780,13 +4977,13 @@ You can change this anytime using \`/personal privacy\`.`,
     // Messages for when the bot is added to a server
     addBot: {
       rejoin_title: `I'm Back!`,
-      rejoin_description: `Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/config\`, \`/teach\`, and \`forget\` commands. You can also manage or delete your data anytime with \`/data\`.
+      rejoin_description: `Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/config\`, \`/persona\`, \`/memory\`, and \`/server\` commands. You can also export or reset your data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, and \`/server config\`.
 
 			If you wish to swap my provider, use the \`/config api-key set\` command.
 
 			**By using me, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
       setup_prompt_title: `Successfully Added`,
-      setup_prompt_description: `Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/config setup\` command to choose my initial personality and configure my AI features. You can also manage or delete your data anytime with \`/data\`.
+      setup_prompt_description: `Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/config setup\` command to choose my initial personality and configure my AI features. You can also export or reset your data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, and \`/server config\`.
 
 			Use the \`/help api-key\` command if you are unsure on how to create an API key for your chosen AI provider. API keys will be kept encrypted but if you are still wary of giving it to a public Discord bot, feel free to run your own TomoriBot using the [repository's guide](https://github.com/Bredrumb/TomoriBot) instead.
 
@@ -4799,18 +4996,18 @@ You can change this anytime using \`/personal privacy\`.`,
     // Confirmation embed when reminder is set
     reminder_set_title: `⏰ {persona_nickname} Set a Reminder`,
     reminder_set_description: `I'll remind {user_nickname} about "**{reminder_purpose}**" at \`{reminder_time}\``,
-    reminder_set_footer: `A mention will be sent after {time_remaining} from now. Delete reminders with \`/forget reminder\`.`,
-    reminder_set_footer_recurring: `First mention in {time_remaining}. Repeats every {repetition_interval_hours} hour(s). Delete reminders with \`/forget reminder\`.`,
+    reminder_set_footer: `A mention will be sent after {time_remaining} from now. Delete reminders with \`/personal reminder remove\`.`,
+    reminder_set_footer_recurring: `First mention in {time_remaining}. Repeats every {repetition_interval_hours} hour(s). Delete reminders with \`/personal reminder remove\`.`,
 
     // Recurring task setup (self reminders)
     recurring_task_set_title: `🔁 {persona_nickname} Set Up a Recurring Task`,
     recurring_task_set_description: `I'll run "**{reminder_purpose}**" starting at \`{reminder_time}\`, then repeat every {repetition_interval_hours} hour(s).`,
-    recurring_task_set_footer: `You can delete reminders using \`/forget reminder\`.`,
+    recurring_task_set_footer: `You can delete reminders using \`/personal reminder remove\`.`,
 
     // One-time task setup (self reminders, non-recurring)
     task_set_title: `✅ {persona_nickname} Set Up a Task`,
     task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
-    task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/forget reminder\`.`,
+    task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/personal reminder remove\`.`,
 
     // Fallback info embed when AI generation fails - shows the raw reminder/task content
     reminder_triggered_title: `🔵 Reminder Triggered`,

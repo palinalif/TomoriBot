@@ -41,20 +41,20 @@ const memoryLimits = getMemoryLimits();
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("personal")
-    .setDescription(localizer("en-US", "commands.teach.memory.personal.description"))
+    .setName("add")
+    .setDescription(localizer("en-US", "commands.memory.personal.add.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(localizer("en-US", "commands.teach.memory.personal.scope_description"))
+        .setDescription(localizer("en-US", "commands.memory.personal.add.scope_description"))
         .setRequired(false)
         .addChoices(
           {
-            name: localizer("en-US", "commands.teach.memory.personal.scope_choice_persona"),
+            name: localizer("en-US", "commands.memory.personal.add.scope_choice_persona"),
             value: PERSONAL_SCOPE_VALUE,
           },
           {
-            name: localizer("en-US", "commands.teach.memory.personal.scope_choice_global"),
+            name: localizer("en-US", "commands.memory.personal.add.scope_choice_global"),
             value: GLOBAL_SCOPE_VALUE,
           },
         ),

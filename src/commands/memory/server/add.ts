@@ -31,7 +31,7 @@ const memoryLimits = getMemoryLimits();
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("server").setDescription(localizer("en-US", "commands.teach.memory.server.description"));
+  subcommand.setName("add").setDescription(localizer("en-US", "commands.memory.server.add.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function

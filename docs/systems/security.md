@@ -120,8 +120,14 @@ Blacklisted users:
 ## Data Export and Deletion (Current Behavior)
 
 Primary files:
-- `src/commands/data/export.ts`
-- `src/commands/data/delete.ts`
+- `src/commands/memory/personal/export.ts`
+- `src/commands/memory/personal/remove.ts`
+- `src/commands/memory/server/export.ts`
+- `src/commands/memory/server/remove.ts`
+- `src/commands/personal/config/export.ts`
+- `src/commands/personal/config/remove.ts`
+- `src/commands/server/config/export.ts`
+- `src/commands/server/config/remove.ts`
 - `src/utils/db/dataExport.ts`
 
 Export is granular by type (JSON file via DM), including:
@@ -138,7 +144,7 @@ Delete is also type-scoped and requires confirmation choice:
 - server config reset
 - global personal memories
 
-Important: current `/data delete` does not implement a blanket user-row/account hard delete path in this command implementation.
+Important: the current reset/remove commands do not implement a blanket user-row/account hard delete path in these command implementations.
 
 ## SQL Injection Protections
 

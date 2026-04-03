@@ -6,18 +6,18 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
 import {
   replyInfoEmbed,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { type UserRow, type ErrorContext, tomoriSchema, type TomoriState } from "../../types/db/schema";
+} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { type UserRow, type ErrorContext, tomoriSchema, type TomoriState } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
-import type { SelectOption } from "../../types/discord/modal";
+import type { SelectOption } from "@/types/discord/modal";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Rule 20: Constants for static values at the top
@@ -169,7 +169,9 @@ async function performSampleDialogueRemoval(
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("sampledialogue").setDescription(localizer("en-US", "commands.forget.sampledialogue.description"));
+  subcommand
+    .setName("remove")
+    .setDescription(localizer("en-US", "commands.persona.sample-dialogue.remove.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function

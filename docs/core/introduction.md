@@ -32,9 +32,9 @@ TomoriBot is a TypeScript + Bun Discord AI chatbot focused on configurable perso
 
 ## Current Command Surface
 
-Commands are loaded from folders under `src/commands/` (currently 19 top-level categories):
+Commands are loaded from folders under `src/commands/` (currently 17 top-level categories):
 
-- `bot`, `conditioning`, `config`, `contribute`, `data`, `donate`, `forget`, `generate`, `help`, `legal`, `novelai`, `persona`, `personal`, `punish`, `reward`, `server`, `support`, `teach`, `tool`
+- `bot`, `conditioning`, `config`, `contribute`, `donate`, `generate`, `help`, `legal`, `memory`, `novelai`, `optional-key`, `persona`, `personal`, `server`, `st-preset`, `support`, `tool`
 
 ## Documentation Layout
 

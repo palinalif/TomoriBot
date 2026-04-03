@@ -119,21 +119,37 @@ async function performPersonalMemoryRemoval(
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("personal")
-    .setDescription(localizer("en-US", "commands.forget.memory.personal.description"))
+    .setName("remove")
+    .setDescription(localizer("en-US", "commands.memory.personal.remove.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(localizer("en-US", "commands.forget.memory.personal.scope_description"))
+        .setDescription(localizer("en-US", "commands.memory.personal.remove.scope_description"))
         .setRequired(false)
         .addChoices(
           {
-            name: localizer("en-US", "commands.forget.memory.personal.scope_choice_persona"),
+            name: localizer("en-US", "commands.memory.personal.remove.scope_choice_persona"),
             value: PERSONAL_SCOPE_VALUE,
           },
           {
-            name: localizer("en-US", "commands.forget.memory.personal.scope_choice_global"),
+            name: localizer("en-US", "commands.memory.personal.remove.scope_choice_global"),
             value: GLOBAL_SCOPE_VALUE,
+          },
+        ),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("confirmation")
+        .setDescription(localizer("en-US", "commands.data.delete.confirmation_description"))
+        .setRequired(false)
+        .addChoices(
+          {
+            name: localizer("en-US", "commands.data.delete.confirmation_yes"),
+            value: "yes",
+          },
+          {
+            name: localizer("en-US", "commands.data.delete.confirmation_no"),
+            value: "no",
           },
         ),
     );
@@ -175,6 +191,7 @@ export async function execute(
     const memoryScope =
       (interaction.options.getString("scope") as typeof PERSONAL_SCOPE_VALUE | typeof GLOBAL_SCOPE_VALUE | null) ??
       PERSONAL_SCOPE_VALUE;
+    const confirmation = interaction.options.getString("confirmation");
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title", // Corrected key
@@ -240,6 +257,39 @@ export async function execute(
             titleKey: "general.errors.operation_failed_title",
             descriptionKey: "general.errors.operation_failed_description",
             color: ColorCode.ERROR,
+          });
+          return;
+        }
+
+        if (confirmation === "yes") {
+          const deletedMemories = await sql<Array<{ personal_memory_id: number }>>`
+            DELETE FROM personal_memories
+            WHERE user_id = ${userData.user_id}
+              AND persona_lineage_id = ${targetLineageId}
+            RETURNING personal_memory_id
+          `;
+
+          if (deletedMemories.length === 0) {
+            await replyInfoEmbed(selectionInteraction, locale, {
+              titleKey: "commands.data.delete.no_data_title",
+              descriptionKey: "commands.data.delete.no_persona_memories_description",
+              descriptionVars: {
+                persona_name: selectedPersona.tomori_nickname ?? "persona",
+              },
+              color: ColorCode.WARN,
+            });
+            return;
+          }
+
+          invalidateUserCache(userData.user_disc_id);
+          await replyInfoEmbed(selectionInteraction, locale, {
+            titleKey: "commands.data.delete.success_memory_scope_title",
+            descriptionKey: "commands.data.delete.success_persona_memories_description",
+            descriptionVars: {
+              persona_name: selectedPersona.tomori_nickname ?? "persona",
+              memory_count: deletedMemories.length.toString(),
+            },
+            color: ColorCode.SUCCESS,
           });
           return;
         }
@@ -341,6 +391,35 @@ export async function execute(
           titleKey: "commands.forget.memory.personal.no_memories_title",
           descriptionKey: "commands.forget.memory.personal.no_memories",
           color: ColorCode.WARN,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (confirmation === "yes") {
+        const deletedMemories = await sql<Array<{ personal_memory_id: number }>>`
+          DELETE FROM personal_memories
+          WHERE user_id = ${userData.user_id}
+            AND persona_lineage_id = ${GLOBAL_PERSONAL_MEMORY_LINEAGE_ID}
+          RETURNING personal_memory_id
+        `;
+
+        if (deletedMemories.length === 0) {
+          await replyInfoEmbed(interaction, locale, {
+            titleKey: "commands.data.delete.no_data_title",
+            descriptionKey: "commands.data.delete.no_global_memories_description",
+            color: ColorCode.WARN,
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        invalidateUserCache(userData.user_disc_id);
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.data.delete.success_memory_scope_title",
+          descriptionKey: "commands.data.delete.success_global_memories_description",
+          descriptionVars: { memory_count: deletedMemories.length.toString() },
+          color: ColorCode.SUCCESS,
           flags: MessageFlags.Ephemeral,
         });
         return;

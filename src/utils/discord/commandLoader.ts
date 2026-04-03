@@ -44,9 +44,49 @@ export type CommandExecutionMap = Map<string, Map<string, CommandExecuteFunction
  */
 export type CommandCooldownMap = Map<string, number>;
 // Categories that are completely restricted to guilds only
-const GUILD_ONLY_CATEGORIES: string[] = ["server", "reward", "punish", "conditioning"];
+const GUILD_ONLY_CATEGORIES: string[] = ["server", "conditioning"];
 // Categories that require manage permissions in guild context
 const MANAGER_ONLY_CATEGORIES = ["config", "optional-key", "server"];
+
+const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
+  "commands.memory.description": "commands.teach.memory.description",
+  "commands.conditioning.reward.description": "commands.reward.description",
+  "commands.conditioning.punish.description": "commands.punish.description",
+  "commands.persona.attribute.description": "commands.teach.attribute.description",
+  "commands.persona.sample-dialogue.description": "commands.teach.sampledialogue.description",
+  "commands.persona.prompt.description": "commands.teach.personaprompt.description",
+  "commands.memory.document.description": "commands.teach.document.description",
+  "commands.memory.personal.description": "commands.teach.memory.personal.description",
+  "commands.memory.server.description": "commands.teach.memory.server.description",
+  "commands.personal.reminder.description": "commands.forget.reminder.description",
+  "commands.persona.attribute.add.description": "commands.teach.attribute.description",
+  "commands.persona.attribute.remove.description": "commands.forget.attribute.description",
+  "commands.persona.sample-dialogue.add.description": "commands.teach.sampledialogue.description",
+  "commands.persona.sample-dialogue.remove.description": "commands.forget.sampledialogue.description",
+  "commands.persona.prompt.set.description": "commands.teach.personaprompt.description",
+  "commands.persona.prompt.remove.description": "commands.forget.personaprompt.description",
+  "commands.memory.document.add.description": "commands.teach.document.description",
+  "commands.memory.document.remove.description": "commands.forget.document.description",
+  "commands.memory.personal.add.description": "commands.teach.memory.personal.description",
+  "commands.memory.personal.remove.description": "commands.forget.memory.personal.description",
+  "commands.memory.server.add.description": "commands.teach.memory.server.description",
+  "commands.memory.server.remove.description": "commands.forget.memory.server.description",
+  "commands.personal.reminder.remove.description": "commands.forget.reminder.description",
+};
+
+function localizeWithAliases(locale: string, key: string): string {
+  const directValue = localizer(locale, key);
+  if (directValue && directValue !== key) {
+    return directValue;
+  }
+
+  const aliasKey = COMMAND_LOCALIZATION_ALIASES[key];
+  if (!aliasKey) {
+    return directValue;
+  }
+
+  return localizer(locale, aliasKey);
+}
 
 // Note: Individual subcommand restrictions are no longer needed.
 // Guild-only commands are now in the "server" category which is entirely guild-restricted.
@@ -69,7 +109,7 @@ function applySubcommandLocalizations(
   const subcommandLocalizationsMap: { [key: string]: string } = {};
 
   for (const locale of availableLocales) {
-    const localizedDesc = localizer(locale, localizationKey);
+    const localizedDesc = localizeWithAliases(locale, localizationKey);
     if (localizedDesc && localizedDesc !== localizationKey) {
       subcommandLocalizationsMap[locale] = localizedDesc;
     }
@@ -88,12 +128,12 @@ function applySubcommandLocalizations(
         const optionLocalizationsMap: { [key: string]: string } = {};
 
         for (const locale of availableLocales) {
-          let localizedDesc = localizer(locale, optionLocalizationKey);
+          let localizedDesc = localizeWithAliases(locale, optionLocalizationKey);
           const fallbackKey = `commands.${categoryName}.${subcommandPath}.option_description`;
 
           // Fallback to generic 'option_description' for backwards compatibility
           if (!localizedDesc || localizedDesc === optionLocalizationKey) {
-            localizedDesc = localizer(locale, fallbackKey);
+            localizedDesc = localizeWithAliases(locale, fallbackKey);
           }
 
           // Apply if valid translation found (not the key itself)
@@ -128,6 +168,12 @@ function applySubcommandLocalizations(
                 const candidate = localizer(locale, localizationKey);
                 if (candidate && candidate !== localizationKey) {
                   localizedChoice = candidate;
+                  break;
+                }
+
+                const aliasedCandidate = localizeWithAliases(locale, localizationKey);
+                if (aliasedCandidate && aliasedCandidate !== localizationKey) {
+                  localizedChoice = aliasedCandidate;
                   break;
                 }
               }
@@ -182,12 +228,12 @@ export async function loadCommandData(): Promise<{
         // Initialize a new builder for this category
         // Get category description from localizations (try to find 'commands.<category>.description')
         const categoryDescription =
-          localizer("en-US", `commands.${categoryName}.description`) || `${categoryName} commands`; // Fallback if no localization exists
+          localizeWithAliases("en-US", `commands.${categoryName}.description`) || `${categoryName} commands`; // Fallback if no localization exists
 
         const categoryLocalizationsMap: { [key: string]: string } = {};
         // Check all available locales for category description
         for (const locale of availableLocales) {
-          const localizedDesc = localizer(locale, `commands.${categoryName}.description`);
+          const localizedDesc = localizeWithAliases(locale, `commands.${categoryName}.description`);
           if (localizedDesc && localizedDesc !== `commands.${categoryName}.description`) {
             categoryLocalizationsMap[locale] = localizedDesc;
           }
@@ -234,14 +280,14 @@ export async function loadCommandData(): Promise<{
             categoryBuilder.addSubcommandGroup((group: SlashCommandSubcommandGroupBuilder) => {
               // Get group description from localizations
               const groupLocalizationKey = `commands.${categoryName}.${groupName}.description`;
-              const groupDescription = localizer("en-US", groupLocalizationKey) || `${groupName} commands`;
+              const groupDescription = localizeWithAliases("en-US", groupLocalizationKey) || `${groupName} commands`;
 
               group.setName(groupName).setDescription(groupDescription);
 
               // Apply group description localizations
               const groupLocalizationsMap: { [key: string]: string } = {};
               for (const locale of availableLocales) {
-                const localizedDesc = localizer(locale, groupLocalizationKey);
+                const localizedDesc = localizeWithAliases(locale, groupLocalizationKey);
                 if (localizedDesc && localizedDesc !== groupLocalizationKey) {
                   groupLocalizationsMap[locale] = localizedDesc;
                 }

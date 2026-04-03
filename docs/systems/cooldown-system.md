@@ -30,7 +30,7 @@ Handler: `src/events/interactionCreate/handleCommands.ts`
 
 - Cooldown type: `CooldownType.COMMAND_CATEGORY`
 - Key shape: `user_disc_id + command_category`
-- Durations come from env (`DEFAULT_COMMAND_COOLDOWN`, `COOLDOWN_CONFIG`, `COOLDOWN_TEACH`, etc.)
+- Durations come from env (`DEFAULT_COMMAND_COOLDOWN`, `COOLDOWN_CONFIG`, `COOLDOWN_PERSONA`, `COOLDOWN_MEMORY`, `COOLDOWN_SERVER`, `COOLDOWN_PERSONAL`, `COOLDOWN_CONDITIONING`)
 - Cooldown warning uses localized `general.cooldown*` keys
 
 ## Message Trigger Cooldowns

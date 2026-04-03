@@ -72,16 +72,16 @@ The `metadataTag` is a stable interface between the native builder and the prese
 | Tag | Block # | Description | Configured via |
 |-----|---------|-------------|---------------|
 | `SYSTEM_HUMANIZER_RULES` | 1 | System prompt + persona prompt | `/sysprompt`, `/persona` |
-| `SYSTEM_PERSONALITY` | 2 | Personality attributes | `/teach attribute`, `/forget attribute` |
+| `SYSTEM_PERSONALITY` | 2 | Personality attributes | `/persona attribute add`, `/persona attribute remove` |
 | `KNOWLEDGE_SERVER_INFO` | 3 | Server name, description, channel info | Automatic (Discord metadata) |
-| `KNOWLEDGE_SERVER_MEMORIES` | 4 | Server-level memories | `/teach memory server`, `/forget memory server` |
+| `KNOWLEDGE_SERVER_MEMORIES` | 4 | Server-level memories | `/memory server add`, `/memory server remove` |
 | `KNOWLEDGE_SERVER_EMOJIS` | 5 | Available custom emojis | `/server initialize expressions` |
 | `KNOWLEDGE_SERVER_STICKERS` | 6 | Available stickers | `/server initialize expressions` |
-| `KNOWLEDGE_USERS_IN_CONVERSATION` | 7 | User list + personal memories + status + reminders + time/channel info | `/teach memory personal`, `/forget memory personal` |
+| `KNOWLEDGE_USERS_IN_CONVERSATION` | 7 | User list + personal memories + status + reminders + time/channel info | `/memory personal add`, `/memory personal remove` |
 | `KNOWLEDGE_SHORT_TERM_MEMORY` | 8 | Recent conversation summaries from other channels (STM) | `/personal cache` |
-| `KNOWLEDGE_SERVER_DOCUMENTS` | 9 | RAG document chunks | `/teach document`, `/teach history`, `/forget document` |
-| `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/reward`, `/punish`, `/conditioning manage` |
-| `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/teach sampledialogue`, `/forget sampledialogue` |
+| `KNOWLEDGE_SERVER_DOCUMENTS` | 9 | RAG document chunks | `/memory document add`, `/memory history import`, `/memory document remove` |
+| `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/conditioning reward`, `/conditioning punish`, `/conditioning manage` |
+| `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/persona sample-dialogue add`, `/persona sample-dialogue remove` |
 | `DIALOGUE_HISTORY` | 12 | Actual conversation history | `/config message-fetch-limit` |
 
 ## Native Assembly Order
@@ -92,9 +92,9 @@ All blocks marked with `*` are conditional (only included when enabled/available
 ```text
  1.  System prompt (/sysprompt)                          [SYSTEM_HUMANIZER_RULES]
  2.  Persona prompt (/persona)*                          [SYSTEM_HUMANIZER_RULES]
- 3.  Personality attributes (/teach attribute)*           [SYSTEM_PERSONALITY]
+ 3.  Personality attributes (/persona attribute add)*     [SYSTEM_PERSONALITY]
  4.  Server info = server name + description              [KNOWLEDGE_SERVER_INFO]
- 5.  Server memories (/teach memory server)*              [KNOWLEDGE_SERVER_MEMORIES]
+ 5.  Server memories (/memory server add)*                [KNOWLEDGE_SERVER_MEMORIES]
  6.  Server emojis*                                       [KNOWLEDGE_SERVER_EMOJIS]
  7.  Server stickers*                                     [KNOWLEDGE_SERVER_STICKERS]
  8.  Users in conversation = user list + personal         [KNOWLEDGE_USERS_IN_CONVERSATION]
@@ -122,7 +122,7 @@ When a SillyTavern preset is active, the system uses a **Build-Then-Rearrange** 
 5. Merge depth-injected nodes into dialogue history items
 6. Flush any remaining TomoriBot-only blocks at anchor points
 
-This avoids refactoring the native builder while gaining full preset control over prompt ordering. The native blocks still contain the same content (system prompt from `/sysprompt`, personality from `/teach attribute`, etc.) — the preset only controls **where** each block appears and **what additional content** is injected around them.
+This avoids refactoring the native builder while gaining full preset control over prompt ordering. The native blocks still contain the same content (system prompt from `/sysprompt`, personality from `/persona attribute add`, etc.) — the preset only controls **where** each block appears and **what additional content** is injected around them.
 
 If the preset is deactivated or deleted, context assembly immediately reverts to the native fixed order above. No data is lost — `/sysprompt`, personality attributes, memories, and all other settings are stored independently from the preset.
 

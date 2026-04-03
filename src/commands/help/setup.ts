@@ -39,8 +39,8 @@ export async function execute(
     const personaMention = commandRegistry.getCommandMention("persona");
     const serverMention = commandRegistry.getCommandMention("server");
     const personalMention = commandRegistry.getCommandMention("personal");
+    const memoryMention = commandRegistry.getCommandMention("memory");
     const configMention = commandRegistry.getCommandMention("config");
-    const teachMention = commandRegistry.getCommandMention("teach");
     const helpFeaturesMention = commandRegistry.getCommandMention("help", "features");
     const helpMemoryMention = commandRegistry.getCommandMention("help", "memory");
     const helpCustomizationMention = commandRegistry.getCommandMention("help", "customization");
@@ -85,8 +85,8 @@ export async function execute(
               persona: personaMention,
               server: serverMention,
               personal: personalMention,
+              memory: memoryMention,
               config: configMention,
-              teach: teachMention,
             }),
             inline: false,
           },

@@ -339,7 +339,7 @@ Current command examples:
 - `src/commands/server/initialize/expressions.ts`
 - `src/commands/persona/generate.ts`
 - `src/commands/tool/compact.ts`
-- `src/commands/teach/history.ts`
+- `src/commands/memory/history/import.ts`
 
 ## Intentional Exceptions
 

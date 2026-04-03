@@ -418,11 +418,11 @@ These commands still remove one dynamic item at a time, but the data shape is a 
 
 | Command                    | File                               | Current Input         | Why Checkbox Groups Fit                                                   | Notes                                                                 |
 | -------------------------- | ---------------------------------- | --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `/forget attribute`        | `forget/attribute.ts`              | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
-| `/forget reminder`         | `forget/reminder.ts`               | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
-| `/forget document`         | `forget/document.ts`               | Persona picker + single paginated select | Document cleanup is an obvious multi-select management flow              | Large lists should keep paginated fallback                             |
-| `/forget history`          | `forget/history.ts`                | Persona picker + single paginated select | History entries are frequently pruned in groups                          | Large lists should keep paginated fallback                             |
-| `/forget sampledialogue`   | `forget/sampledialogue.ts`         | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
+| `/persona attribute remove` | `persona/attribute/remove.ts`      | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
+| `/personal reminder remove` | `personal/reminder/remove.ts`      | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
+| `/memory document remove`   | `memory/document/remove.ts`        | Persona picker + single paginated select | Document cleanup is an obvious multi-select management flow              | Large lists should keep paginated fallback                             |
+| `/memory history remove`    | `memory/history/remove.ts`         | Persona picker + single paginated select | History entries are frequently pruned in groups                          | Large lists should keep paginated fallback                             |
+| `/persona sample-dialogue remove` | `persona/sample-dialogue/remove.ts` | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
 | `/persona remove`          | `persona/remove.ts`                | Single paginated select | Alter persona cleanup could be batch-managed                             | Should pair the bulk UI with stronger destructive-action messaging     |
 
 ### Not Candidates — Keep String Select
@@ -439,14 +439,14 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
 | `/config system-prompt preset`       | `config/system-prompt/preset.ts`     | Dynamic preset list from DB                               |
 | `/config api-key set`             | `config/api-key/set.ts`           | Provider select + text input combo; list may grow         |
-| `/teach personaprompt`           | `teach/personaprompt.ts`         | Dynamic persona list + free-form prompt (up to 16000 chars, 4 fields) |
-| `/teach attribute`               | `teach/attribute.ts`             | Dynamic persona list, uses pagination                     |
-| `/teach sampledialogue`          | `teach/sampledialogue.ts`        | Dynamic persona list, uses pagination                     |
-| `/teach memory personal`         | `teach/memory/personal.ts`       | Dynamic memory list                                       |
-| `/teach memory server`           | `teach/memory/server.ts`         | Dynamic memory list                                       |
+| `/persona prompt set`            | `persona/prompt/set.ts`         | Dynamic persona list + free-form prompt (up to 16000 chars, 4 fields) |
+| `/persona attribute add`         | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
+| `/persona sample-dialogue add`   | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |
+| `/memory personal add`           | `memory/personal/add.ts`        | Dynamic memory list                                       |
+| `/memory server add`             | `memory/server/add.ts`          | Dynamic memory list                                       |
 | `/novelai image-tags character`        | `novelai/tags/character.ts`      | Dynamic persona list                                      |
-| `/forget attribute`              | `forget/attribute.ts`            | Dynamic attribute list, uses pagination                   |
-| `/forget reminder`               | `forget/reminder.ts`             | Dynamic reminder list                                     |
+| `/persona attribute remove`      | `persona/attribute/remove.ts`   | Dynamic attribute list, uses pagination                   |
+| `/personal reminder remove`      | `personal/reminder/remove.ts`   | Dynamic reminder list                                     |
 | `/server welcome-channel set`    | `server/welcome-channel/set.ts`  | Channel option + dynamic persona list                     |
 
 ### Not Candidates — Keep Text Input
@@ -466,7 +466,7 @@ These modals collect free-form text and have no structured option set:
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
 | `/server avatar`           | `server/avatar.ts`            | File upload only                                        |
 | `/tool comment`            | `tool/comment.ts`             | Free-form paragraph text                                |
-| `/data import`             | `data/import.ts`              | File upload only                                        |
+| `/memory personal import`  | `memory/personal/import.ts`   | File upload only                                        |
 
 ---
 

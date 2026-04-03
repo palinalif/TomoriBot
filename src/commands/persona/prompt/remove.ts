@@ -9,7 +9,7 @@ import { sql } from "@/utils/db/client";
 import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("personaprompt").setDescription(localizer("en-US", "commands.forget.personaprompt.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.persona.prompt.remove.description"));
 
 export async function execute(
   _client: Client,

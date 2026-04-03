@@ -340,7 +340,7 @@ Matrix users can be set as reminder targets. Since they have no row in the `user
 
 1. **`reminderTool.ts`**: Skips BigInt fuzzy-matching (Matrix IDs are not numeric), skips `users` table lookup, and trusts the AI-provided nickname directly.
 2. **`reminderTimer.ts`**: After delivering the reminder, calls `sendMatrixReminderMention()` instead of the Discord mention path. This sends a direct Matrix mention to the linked room if the AI response didn't already include the `@{localpart}` placeholder.
-3. **`forget/reminder.ts`**: Displays Matrix reminders with `(Matrix)` suffix and `for {nickname}` instead of `created by {nickname}` so server managers can identify them.
+3. **`personal/reminder/remove.ts`**: Displays Matrix reminders with `(Matrix)` suffix and `for {nickname}` instead of `created by {nickname}` so server managers can identify them.
 
 Matrix user IDs are stored as-is in the `user_discord_id` TEXT column of the `reminders` table (which already accepts arbitrary strings). No schema changes were needed for reminder support.
 

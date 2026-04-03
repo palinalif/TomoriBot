@@ -28,7 +28,7 @@ function splitPromptIntoModalParts(prompt: string | null | undefined): string[] 
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("personaprompt").setDescription(localizer("en-US", "commands.teach.personaprompt.description"));
+  subcommand.setName("set").setDescription(localizer("en-US", "commands.persona.prompt.set.description"));
 
 export async function execute(
   _client: Client,

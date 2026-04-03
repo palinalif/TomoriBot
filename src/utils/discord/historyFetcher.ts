@@ -1,5 +1,5 @@
 /**
- * Channel history fetcher for the /teach history command.
+ * Channel history fetcher for the /memory history import command.
  * Fetches messages backward from the latest message in a channel,
  * stopping at a refresh marker or the configured message limit.
  */

@@ -16,12 +16,12 @@ ACTIVATE_LOCAL_RAG=true
 
 This gate affects both schema initialization and runtime behavior:
 - The pgvector extension and document tables are not created locally unless RAG is enabled.
-- `/teach document` and `/forget document` are blocked locally unless RAG is enabled.
+- `/memory document add` and `/memory document remove` are blocked locally unless RAG is enabled.
 - Automatic retrieval is skipped locally unless RAG is enabled.
 
 ## End-to-End Flow (Detailed)
 
-### 1) Upload (`/teach document`)
+### 1) Upload (`/memory document add`)
 Input:
 - `name` (string, unique per server)
 - `file` (attachment: .txt, .md, .pdf)
@@ -114,11 +114,11 @@ This block is injected as a system context item tagged:
   - If the model family changes, documents are re-embedded.
   - If RAG is disabled locally, re-embedding is skipped.
 
-- `/teach document`
+- `/memory document add`
   - Upload + parse + chunk + embed + store.
   - Blocked when RAG is disabled locally.
 
-- `/forget document`
+- `/memory document remove`
   - Deletes the selected document and cascades its chunks.
   - Blocked when RAG is disabled locally.
 
@@ -170,9 +170,9 @@ pgvector requirement:
 ## Code Pointers (Primary Paths)
 
 - Upload + parse + chunk + embed:
-  - `src/commands/teach/document.ts`
+  - `src/commands/memory/document/add.ts`
 - Delete:
-  - `src/commands/forget/document.ts`
+  - `src/commands/memory/document/remove.ts`
 - Model selection + optional re-embed:
   - `src/commands/config/model/embedding.ts`
 - Embedding requests:

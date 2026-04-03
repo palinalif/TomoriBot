@@ -183,7 +183,7 @@ export class YouTubeVideoTool extends BaseTool {
         parts: [
           {
             type: "text",
-            text: "[This message contains video content from a previous YouTube processing request you made]",
+            text: "[System: This message contains video content from a previous YouTube processing request you made]",
           },
           {
             type: "video",

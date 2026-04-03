@@ -237,11 +237,11 @@ export class PeekProfilePictureTool extends BaseTool {
       const hasBanner = preparedImages.some((image) => image.kind === "banner");
       const contextText = isBotSelf
         ? hasBanner
-          ? "[This message contains profile picture and profile banner content from a previous avatar analysis request you made for yourself]"
-          : "[This message contains profile picture content from a previous avatar analysis request you made for yourself]"
+          ? "[System: This message contains profile picture and profile banner content from a previous avatar analysis request you made for yourself]"
+          : "[System: This message contains profile picture content from a previous avatar analysis request you made for yourself]"
         : hasBanner
-          ? `[This message contains profile picture and profile banner content from a previous avatar analysis request you made for ${targetTypeLabel}: ${userDisplayText}]`
-          : `[This message contains profile picture content from a previous avatar analysis request you made for ${targetTypeLabel}: ${userDisplayText}]`;
+          ? `[System: This message contains profile picture and profile banner content from a previous avatar analysis request you made for ${targetTypeLabel}: ${userDisplayText}]`
+          : `[System: This message contains profile picture content from a previous avatar analysis request you made for ${targetTypeLabel}: ${userDisplayText}]`;
 
       // Create artificial user message containing the profile picture Part
       // This will be added to the context for the restart

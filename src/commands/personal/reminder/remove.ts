@@ -7,20 +7,20 @@ import type {
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import { localizer } from "../../utils/text/localizer";
-import { log, ColorCode } from "../../utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
 import {
   replyInfoEmbed,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
-} from "../../utils/discord/interactionHelper";
-import { getCachedTomoriState } from "../../utils/cache/tomoriStateCache";
-import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
-import type { SelectOption } from "../../types/discord/modal";
-import { deleteReminderById, loadAllPersonasForServer } from "../../utils/db/dbRead";
-import { formatTimeWithOffset, formatUTCOffset } from "../../utils/text/timezoneHelper";
-import { isBridgeUserId } from "../../utils/bridge";
+} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import type { UserRow, ErrorContext, TomoriState } from "@/types/db/schema";
+import type { SelectOption } from "@/types/discord/modal";
+import { deleteReminderById, loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { formatTimeWithOffset, formatUTCOffset } from "@/utils/text/timezoneHelper";
+import { isBridgeUserId } from "@/utils/bridge";
 
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_reminder_modal";
@@ -78,7 +78,7 @@ async function performReminderRemoval(
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("reminder").setDescription(localizer("en-US", "commands.forget.reminder.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.personal.reminder.remove.description"));
 
 /**
  * Removes a reminder for the user using a paginated modal.

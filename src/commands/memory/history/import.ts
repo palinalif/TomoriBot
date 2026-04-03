@@ -1,5 +1,5 @@
 /**
- * /teach history - Extract atomic facts from channel message history using an LLM
+ * /memory history import - Extract atomic facts from channel message history using an LLM
  * and store them as document chunks for RAG retrieval.
  *
  * Inspired by SimpleMem's "Semantic Structured Compression" approach:
@@ -53,34 +53,34 @@ const DEDUP_CONTEXT_COUNT = 3;
 type HistoryScope = "persona" | "automatic" | "global";
 
 /**
- * Configures the /teach history subcommand options.
+ * Configures the /memory history import subcommand options.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("history")
-    .setDescription(localizer("en-US", "commands.teach.history.description"))
+    .setName("import")
+    .setDescription(localizer("en-US", "commands.memory.history.import.description"))
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(localizer("en-US", "commands.teach.history.name_description"))
+        .setDescription(localizer("en-US", "commands.memory.history.import.name_description"))
         .setRequired(true)
         .setMaxLength(MAX_DOCUMENT_NAME_LENGTH),
     )
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(localizer("en-US", "commands.teach.history.scope_description"))
+        .setDescription(localizer("en-US", "commands.memory.history.import.scope_description"))
         .addChoices(
           {
-            name: localizer("en-US", "commands.teach.history.scope_choice_persona"),
+            name: localizer("en-US", "commands.memory.history.import.scope_choice_persona"),
             value: "persona",
           },
           {
-            name: localizer("en-US", "commands.teach.history.scope_choice_automatic"),
+            name: localizer("en-US", "commands.memory.history.import.scope_choice_automatic"),
             value: "automatic",
           },
           {
-            name: localizer("en-US", "commands.teach.history.scope_choice_global"),
+            name: localizer("en-US", "commands.memory.history.import.scope_choice_global"),
             value: "global",
           },
         )
@@ -162,7 +162,7 @@ async function runExtractionPipeline(params: {
   await replyInteraction.editReply({
     embeds: [
       new EmbedBuilder()
-        .setDescription(localizer(locale, "commands.teach.history.progress_fetching"))
+        .setDescription(localizer(locale, "commands.memory.history.import.progress_fetching"))
         .setColor(ColorCode.INFO),
     ],
   });
@@ -173,8 +173,8 @@ async function runExtractionPipeline(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.teach.history.no_messages_title"))
-          .setDescription(localizer(locale, "commands.teach.history.no_messages_description"))
+          .setTitle(localizer(locale, "commands.memory.history.import.no_messages_title"))
+          .setDescription(localizer(locale, "commands.memory.history.import.no_messages_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -187,8 +187,8 @@ async function runExtractionPipeline(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.teach.history.no_messages_title"))
-          .setDescription(localizer(locale, "commands.teach.history.no_messages_description"))
+          .setTitle(localizer(locale, "commands.memory.history.import.no_messages_title"))
+          .setDescription(localizer(locale, "commands.memory.history.import.no_messages_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -209,7 +209,7 @@ async function runExtractionPipeline(params: {
       embeds: [
         new EmbedBuilder()
           .setDescription(
-            localizer(locale, "commands.teach.history.progress_extracting", {
+            localizer(locale, "commands.memory.history.import.progress_extracting", {
               message_count: formattedResult.messageCount.toString(),
               current: (i + 1).toString(),
               total: windows.length.toString(),
@@ -234,8 +234,8 @@ async function runExtractionPipeline(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.teach.history.no_facts_extracted_title"))
-          .setDescription(localizer(locale, "commands.teach.history.no_facts_extracted_description"))
+          .setTitle(localizer(locale, "commands.memory.history.import.no_facts_extracted_title"))
+          .setDescription(localizer(locale, "commands.memory.history.import.no_facts_extracted_description"))
           .setColor(ColorCode.ERROR),
       ],
     });
@@ -309,9 +309,9 @@ async function storeExtractedFacts(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.teach.history.limit_exceeded_title"))
+          .setTitle(localizer(locale, "commands.memory.history.import.limit_exceeded_title"))
           .setDescription(
-            localizer(locale, "commands.teach.history.limit_exceeded_description", {
+            localizer(locale, "commands.memory.history.import.limit_exceeded_description", {
               current_count: docCount.toString(),
               max_allowed: memoryLimits.maxDocumentsPerServer.toString(),
               scope: scopeLabel,
@@ -345,9 +345,9 @@ async function storeExtractedFacts(params: {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.teach.history.server_chunk_limit_title"))
+          .setTitle(localizer(locale, "commands.memory.history.import.server_chunk_limit_title"))
           .setDescription(
-            localizer(locale, "commands.teach.history.server_chunk_limit_description", {
+            localizer(locale, "commands.memory.history.import.server_chunk_limit_description", {
               max_chunks: memoryLimits.maxDocumentChunksPerServer.toString(),
               scope: scopeLabel,
             }),
@@ -363,7 +363,7 @@ async function storeExtractedFacts(params: {
     embeds: [
       new EmbedBuilder()
         .setDescription(
-          localizer(locale, "commands.teach.history.progress_embedding", {
+          localizer(locale, "commands.memory.history.import.progress_embedding", {
             fact_count: chunks.length.toString(),
           }),
         )
@@ -405,7 +405,7 @@ async function storeExtractedFacts(params: {
 }
 
 /**
- * Executes the /teach history command.
+ * Executes the /memory history import command.
  * Extracts atomic facts from channel history using an LLM and stores them for RAG retrieval.
  */
 export async function execute(
@@ -434,8 +434,8 @@ export async function execute(
     // 2. Check RAG is enabled
     if (!ragEnabled) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.history.rag_disabled_title",
-        descriptionKey: "commands.teach.history.rag_disabled_description",
+        titleKey: "commands.memory.history.import.rag_disabled_title",
+        descriptionKey: "commands.memory.history.import.rag_disabled_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -475,8 +475,8 @@ export async function execute(
     const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
     if (!hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.history.no_permission_title",
-        descriptionKey: "commands.teach.history.no_permission_description",
+        titleKey: "commands.memory.history.import.no_permission_title",
+        descriptionKey: "commands.memory.history.import.no_permission_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -499,8 +499,8 @@ export async function execute(
     // 7. Check model supports structured output
     if (!tomoriState.llm.supports_structoutput) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.history.model_incompatible_title",
-        descriptionKey: "commands.teach.history.model_incompatible_description",
+        titleKey: "commands.memory.history.import.model_incompatible_title",
+        descriptionKey: "commands.memory.history.import.model_incompatible_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -521,8 +521,8 @@ export async function execute(
     const embeddingModelId = tomoriState.config.embedding_model_id;
     if (!embeddingModelId) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.history.no_embedding_model_title",
-        descriptionKey: "commands.teach.history.no_embedding_model_description",
+        titleKey: "commands.memory.history.import.no_embedding_model_title",
+        descriptionKey: "commands.memory.history.import.no_embedding_model_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -531,8 +531,8 @@ export async function execute(
 
     if (!tomoriState.config.api_key) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.history.no_api_key_title",
-        descriptionKey: "commands.teach.history.no_api_key_description",
+        titleKey: "commands.memory.history.import.no_api_key_title",
+        descriptionKey: "commands.memory.history.import.no_api_key_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -542,8 +542,8 @@ export async function execute(
     const embeddingModel = await loadEmbeddingModelById(embeddingModelId);
     if (!embeddingModel) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.history.no_embedding_model_title",
-        descriptionKey: "commands.teach.history.no_embedding_model_description",
+        titleKey: "commands.memory.history.import.no_embedding_model_title",
+        descriptionKey: "commands.memory.history.import.no_embedding_model_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -605,7 +605,7 @@ export async function execute(
       }
 
       const targetTomoriId = selectedPersona.tomori_id;
-      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_persona", {
+      const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_persona", {
         persona_name: selectedPersona.tomori_nickname,
       });
 
@@ -626,8 +626,10 @@ export async function execute(
         await personaSelectionInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(localizer(locale, "commands.teach.history.duplicate_title"))
-              .setDescription(localizer(locale, "commands.teach.history.duplicate_description", { name: nameInput }))
+              .setTitle(localizer(locale, "commands.memory.history.import.duplicate_title"))
+              .setDescription(
+                localizer(locale, "commands.memory.history.import.duplicate_description", { name: nameInput }),
+              )
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -672,9 +674,9 @@ export async function execute(
       await personaSelectionInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.teach.history.success_title"))
+            .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
             .setDescription(
-              localizer(locale, "commands.teach.history.success_description", {
+              localizer(locale, "commands.memory.history.import.success_description", {
                 fact_count: pipelineResult.entries.length.toString(),
                 message_count: pipelineResult.formattedResult.messageCount.toString(),
                 name: nameInput,
@@ -694,7 +696,7 @@ export async function execute(
     if (scope === "global") {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_global");
+      const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_global");
 
       // Check duplicate name (serverwide scope = tomori_id IS NULL)
       const existing = await sql`
@@ -708,8 +710,10 @@ export async function execute(
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(localizer(locale, "commands.teach.history.duplicate_title"))
-              .setDescription(localizer(locale, "commands.teach.history.duplicate_description", { name: nameInput }))
+              .setTitle(localizer(locale, "commands.memory.history.import.duplicate_title"))
+              .setDescription(
+                localizer(locale, "commands.memory.history.import.duplicate_description", { name: nameInput }),
+              )
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -754,9 +758,9 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.teach.history.success_title"))
+            .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
             .setDescription(
-              localizer(locale, "commands.teach.history.success_description", {
+              localizer(locale, "commands.memory.history.import.success_description", {
                 fact_count: pipelineResult.entries.length.toString(),
                 message_count: pipelineResult.formattedResult.messageCount.toString(),
                 name: nameInput,
@@ -796,7 +800,7 @@ export async function execute(
 
     // If no personas detected, fallback to global
     if (detectedTomoriIds.length === 0) {
-      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_global");
+      const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_global");
 
       // Check duplicate name in global scope
       const existing = await sql`
@@ -810,8 +814,10 @@ export async function execute(
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(localizer(locale, "commands.teach.history.duplicate_title"))
-              .setDescription(localizer(locale, "commands.teach.history.duplicate_description", { name: nameInput }))
+              .setTitle(localizer(locale, "commands.memory.history.import.duplicate_title"))
+              .setDescription(
+                localizer(locale, "commands.memory.history.import.duplicate_description", { name: nameInput }),
+              )
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -839,9 +845,11 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.teach.history.success_title"))
+            .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
             .setDescription(
-              localizer(locale, "commands.teach.history.success_automatic_global_fallback", { name: nameInput }),
+              localizer(locale, "commands.memory.history.import.success_automatic_global_fallback", {
+                name: nameInput,
+              }),
             )
             .setColor(ColorCode.SUCCESS),
         ],
@@ -857,7 +865,7 @@ export async function execute(
       if (!persona) continue;
 
       const docName = `${nameInput} (${persona.tomori_nickname})`;
-      const scopeLabel = localizer(locale, "commands.teach.history.scope_label_persona", {
+      const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_persona", {
         persona_name: persona.tomori_nickname,
       });
 
@@ -893,7 +901,7 @@ export async function execute(
 
       if (storeResult) {
         personaResults.push(
-          localizer(locale, "commands.teach.history.success_automatic_persona_line", {
+          localizer(locale, "commands.memory.history.import.success_automatic_persona_line", {
             persona_name: persona.tomori_nickname,
             doc_name: docName,
             chunk_count: storeResult.chunkCount.toString(),
@@ -906,9 +914,9 @@ export async function execute(
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.teach.history.success_title"))
+          .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
           .setDescription(
-            localizer(locale, "commands.teach.history.success_automatic_description", {
+            localizer(locale, "commands.memory.history.import.success_automatic_description", {
               fact_count: entries.length.toString(),
               message_count: formattedResult.messageCount.toString(),
               persona_list: personaResults.join("\n"),
@@ -924,12 +932,12 @@ export async function execute(
       tomoriId: tomoriState?.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "teach history",
+        command: "memory history import",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error in /teach history command", error, context);
+    await log.error("Error in /memory history import command", error, context);
 
     const errorReplyTarget =
       personaSelectionInteraction && (personaSelectionInteraction.deferred || personaSelectionInteraction.replied)

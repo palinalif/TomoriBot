@@ -37,13 +37,16 @@ export async function execute(
     const personaDefaultMention = commandRegistry.getCommandMention("persona", "default");
     const personaExportMention = commandRegistry.getCommandMention("persona", "export");
     const personaImportMention = commandRegistry.getCommandMention("persona", "import");
-    const teachMention = commandRegistry.getCommandMention("teach");
+    const personaAttributeAddMention = commandRegistry.getCommandMention("persona", "attribute", "add");
+    const personaSampleDialogueAddMention = commandRegistry.getCommandMention("persona", "sample-dialogue", "add");
     const serverAvatarMention = commandRegistry.getCommandMention("server", "avatar");
-    const teachAttributeMention = commandRegistry.getCommandMention("teach", "attribute");
-    const teachSampledialogueMention = commandRegistry.getCommandMention("teach", "sampledialogue");
     const configRenameMention = commandRegistry.getCommandMention("config", "rename");
-    const forgetAttributeMention = commandRegistry.getCommandMention("forget", "attribute");
-    const forgetSampledialogueMention = commandRegistry.getCommandMention("forget", "sampledialogue");
+    const personaAttributeRemoveMention = commandRegistry.getCommandMention("persona", "attribute", "remove");
+    const personaSampleDialogueRemoveMention = commandRegistry.getCommandMention(
+      "persona",
+      "sample-dialogue",
+      "remove",
+    );
     const serverMemberpermissionsMention = commandRegistry.getCommandMention("server", "member-permissions");
     const serverBlacklistMention = commandRegistry.getCommandMention("server", "blacklist");
     const serverAutotriggerChannelsMention = commandRegistry.getCommandMention("server", "auto-trigger", "channels");
@@ -63,8 +66,8 @@ export async function execute(
     const serverWhitelistChannelMention = commandRegistry.getCommandMention("server", "whitelist", "channel");
     const serverWhitelistRoleMention = commandRegistry.getCommandMention("server", "whitelist", "role");
     const serverWhitelistRemoveMention = commandRegistry.getCommandMention("server", "whitelist", "remove");
-    const teachDocumentMention = commandRegistry.getCommandMention("teach", "document");
-    const forgetDocumentMention = commandRegistry.getCommandMention("forget", "document");
+    const memoryDocumentAddMention = commandRegistry.getCommandMention("memory", "document", "add");
+    const memoryDocumentRemoveMention = commandRegistry.getCommandMention("memory", "document", "remove");
     const configApikeyRotationMention = commandRegistry.getCommandMention("config", "api-key", "rotation");
     const configUncensorsMention = commandRegistry.getCommandMention("config", "jailbreaks");
     const configModelEmbeddingMention = commandRegistry.getCommandMention("config", "model", "embedding");
@@ -98,7 +101,8 @@ export async function execute(
               personaExport: personaExportMention,
               personaImport: personaImportMention,
               personaRemove: personaRemoveMention,
-              teach: teachMention,
+              personaAttributeAdd: personaAttributeAddMention,
+              personaSampleDialogueAdd: personaSampleDialogueAddMention,
               serverAvatar: serverAvatarMention,
             }),
             inline: false,
@@ -132,8 +136,8 @@ export async function execute(
       titleKey: "commands.help.customization.embed2_title",
       descriptionKey: "commands.help.customization.embed2_description",
       descriptionVars: {
-        teachAttribute: teachAttributeMention,
-        teachSampledialogue: teachSampledialogueMention,
+        personaAttributeAdd: personaAttributeAddMention,
+        personaSampleDialogueAdd: personaSampleDialogueAddMention,
         configRename: configRenameMention,
       },
       color: ColorCode.INFO,
@@ -145,8 +149,8 @@ export async function execute(
       titleKey: "commands.help.customization.embed3_title",
       descriptionKey: "commands.help.customization.embed3_description",
       descriptionVars: {
-        forgetAttribute: forgetAttributeMention,
-        forgetSampledialogue: forgetSampledialogueMention,
+        personaAttributeRemove: personaAttributeRemoveMention,
+        personaSampleDialogueRemove: personaSampleDialogueRemoveMention,
         serverMemberpermissions: serverMemberpermissionsMention,
         serverBlacklist: serverBlacklistMention,
         serverAutotriggerChannels: serverAutotriggerChannelsMention,
@@ -157,8 +161,8 @@ export async function execute(
         serverWhitelistChannel: serverWhitelistChannelMention,
         serverWhitelistRole: serverWhitelistRoleMention,
         serverWhitelistRemove: serverWhitelistRemoveMention,
-        teachDocument: teachDocumentMention,
-        forgetDocument: forgetDocumentMention,
+        memoryDocumentAdd: memoryDocumentAddMention,
+        memoryDocumentRemove: memoryDocumentRemoveMention,
         configCooldown: configCooldownMention,
       },
       color: ColorCode.INFO,

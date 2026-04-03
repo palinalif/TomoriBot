@@ -12,12 +12,17 @@ const DEFAULT_COOLDOWN = Number.parseInt(process.env.DEFAULT_COMMAND_COOLDOWN ||
 
 const COOLDOWN_MAP = new Map<string, number>([
   ["config", Number.parseInt(process.env.COOLDOWN_CONFIG || "3000", 10)],
-  ["teach", Number.parseInt(process.env.COOLDOWN_TEACH || "3000", 10)],
-  ["data", Number.parseInt(process.env.COOLDOWN_DATA || "3000", 10)],
-  ["forget", Number.parseInt(process.env.COOLDOWN_FORGET || "3000", 10)],
   ["persona", Number.parseInt(process.env.COOLDOWN_PERSONA || "10000", 10)],
+  [
+    "memory",
+    Number.parseInt(
+      process.env.COOLDOWN_MEMORY || process.env.COOLDOWN_TEACH || process.env.COOLDOWN_FORGET || "3000",
+      10,
+    ),
+  ],
   ["server", Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10)],
   ["personal", Number.parseInt(process.env.COOLDOWN_PERSONAL || "3000", 10)],
+  ["conditioning", Number.parseInt(process.env.COOLDOWN_CONDITIONING || process.env.COOLDOWN_SERVER || "3000", 10)],
 ]);
 
 // Cache for command execution maps - stored at module level

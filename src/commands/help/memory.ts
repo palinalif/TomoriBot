@@ -9,7 +9,7 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
 
 /**
  * Configure the /help memory subcommand
- * Explains the teach/forget memory system
+ * Explains the memory command system
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("memory").setDescription(localizer("en-US", "commands.help.memory.description"));
@@ -30,13 +30,12 @@ export async function execute(
 ): Promise<void> {
   try {
     // Get command mentions for cross-references
-    const teachMention = commandRegistry.getCommandMention("teach");
-    const teachMemoryPersonalMention = commandRegistry.getCommandMention("teach", "memory", "personal");
-    const teachMemoryServerMention = commandRegistry.getCommandMention("teach", "memory", "server");
-    const forgetMention = commandRegistry.getCommandMention("forget");
-    const forgetMemoryPersonalMention = commandRegistry.getCommandMention("forget", "memory", "personal");
-    const forgetMemoryServerMention = commandRegistry.getCommandMention("forget", "memory", "server");
-    const dataExportMention = commandRegistry.getCommandMention("data", "export");
+    const memoryPersonalAddMention = commandRegistry.getCommandMention("memory", "personal", "add");
+    const memoryPersonalRemoveMention = commandRegistry.getCommandMention("memory", "personal", "remove");
+    const memoryPersonalExportMention = commandRegistry.getCommandMention("memory", "personal", "export");
+    const memoryServerAddMention = commandRegistry.getCommandMention("memory", "server", "add");
+    const memoryServerRemoveMention = commandRegistry.getCommandMention("memory", "server", "remove");
+    const memoryServerExportMention = commandRegistry.getCommandMention("memory", "server", "export");
     const statusMention = commandRegistry.getCommandMention("tool", "status");
     const helpCustomizationMention = commandRegistry.getCommandMention("help", "customization");
     const personalStmMention = commandRegistry.getCommandMention("personal", "stm");
@@ -56,18 +55,16 @@ export async function execute(
           {
             nameKey: "commands.help.memory.teaching_title",
             value: localizer(locale, "commands.help.memory.teaching_description", {
-              teach: teachMention,
-              teachMemoryPersonal: teachMemoryPersonalMention,
-              teachMemoryServer: teachMemoryServerMention,
+              memoryPersonalAdd: memoryPersonalAddMention,
+              memoryServerAdd: memoryServerAddMention,
             }),
             inline: false,
           },
           {
             nameKey: "commands.help.memory.forgetting_title",
             value: localizer(locale, "commands.help.memory.forgetting_description", {
-              forget: forgetMention,
-              forgetMemoryPersonal: forgetMemoryPersonalMention,
-              forgetMemoryServer: forgetMemoryServerMention,
+              memoryPersonalRemove: memoryPersonalRemoveMention,
+              memoryServerRemove: memoryServerRemoveMention,
             }),
             inline: false,
           },
@@ -79,7 +76,8 @@ export async function execute(
           {
             nameKey: "commands.help.memory.tips_title",
             value: localizer(locale, "commands.help.memory.tips_description", {
-              dataExport: dataExportMention,
+              memoryPersonalExport: memoryPersonalExportMention,
+              memoryServerExport: memoryServerExportMention,
               status: statusMention,
             }),
             inline: false,

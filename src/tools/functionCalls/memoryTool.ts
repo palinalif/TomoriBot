@@ -284,7 +284,7 @@ export class MemoryTool extends BaseTool {
               scope: "server_wide",
               current_count: serverLimitCheck.currentCount,
               max_allowed: serverLimitCheck.maxAllowed,
-              reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/forget servermemory' to remove some memories before I can learn new ones.`,
+              reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/memory server remove' to remove some memories before I can learn new ones.`,
             },
           };
         }
@@ -437,7 +437,7 @@ export class MemoryTool extends BaseTool {
               target_user: targetUserDisplayName,
               current_count: personalLimitCheck.currentCount,
               max_allowed: personalLimitCheck.maxAllowed,
-              reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/forget personalmemory' to remove some of their memories before I can learn new ones about them.`,
+              reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/memory personal remove' to remove some of their memories before I can learn new ones about them.`,
             },
           };
         }

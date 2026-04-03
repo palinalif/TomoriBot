@@ -37,6 +37,14 @@ type ConditioningManageEntry = ConditioningGroup & {
   punishEnabled: boolean;
 };
 
+function isInjectedManageEntry(entry: ConditioningManageEntry): boolean {
+  if (entry.reasonText.trim().length === 0) {
+    return false;
+  }
+
+  return entry.conditioningType === "reward" ? entry.rewardEnabled : entry.punishEnabled;
+}
+
 function truncateOptionLabel(value: string): string {
   return value.length > 100 ? `${value.slice(0, 97)}...` : value;
 }
@@ -137,11 +145,14 @@ async function loadManageEntries(personas: TomoriState[]): Promise<ConditioningM
     }),
   );
 
-  return personaEntries.flat().sort((a, b) => {
-    const timeDiff = b.updatedAt.getTime() - a.updatedAt.getTime();
-    if (timeDiff !== 0) return timeDiff;
-    return a.personaName.localeCompare(b.personaName);
-  });
+  return personaEntries
+    .flat()
+    .filter(isInjectedManageEntry)
+    .sort((a, b) => {
+      const timeDiff = b.updatedAt.getTime() - a.updatedAt.getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return a.personaName.localeCompare(b.personaName);
+    });
 }
 
 async function executeSinglePage(
@@ -253,15 +264,10 @@ function buildCheckboxGroups(entries: ConditioningManageEntry[], locale: string)
     const options: CheckboxGroupOption[] = chunk.map((entry, index) => {
       const effectiveIndex = i + index;
       const actionLabel = localizer(locale, `commands.${entry.conditioningType}.${entry.actionKey}.history_label`);
-      const injectionEnabled = entry.conditioningType === "reward" ? entry.rewardEnabled : entry.punishEnabled;
-      const description = injectionEnabled
-        ? localizer(locale, "commands.conditioning.manage.option_reason_description", {
-            count: entry.totalCount.toString(),
-            reason: entry.reasonText,
-          })
-        : localizer(locale, "commands.conditioning.manage.option_stored_only_description", {
-            count: entry.totalCount.toString(),
-          });
+      const description = localizer(locale, "commands.conditioning.manage.option_reason_description", {
+        count: entry.totalCount.toString(),
+        reason: entry.reasonText,
+      });
 
       return {
         label: truncateOptionLabel(

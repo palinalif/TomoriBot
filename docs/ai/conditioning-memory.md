@@ -14,25 +14,25 @@ This means a persona can accumulate different reward/punish patterns in differen
 
 ## User Commands
 
-### `/reward`
+### `/conditioning reward`
 
 Reward actions remain direct interaction commands:
 
-- `/reward headpat`
-- `/reward hug`
-- `/reward kiss`
-- `/reward tickle`
+- `/conditioning reward headpat`
+- `/conditioning reward hug`
+- `/conditioning reward kiss`
+- `/conditioning reward tickle`
 
 Each subcommand now accepts an optional `reason` string.
 
-### `/punish`
+### `/conditioning punish`
 
 Punishment uses the parallel interaction surface:
 
-- `/punish spank`
-- `/punish pinch`
-- `/punish bite`
-- `/punish squeeze`
+- `/conditioning punish spank`
+- `/conditioning punish pinch`
+- `/conditioning punish bite`
+- `/conditioning punish squeeze`
 
 Each subcommand also accepts an optional `reason` string.
 
@@ -47,9 +47,11 @@ Management is centralized under `/conditioning`:
 `/conditioning manage` is now server-wide:
 
 - it does not require picking a persona first
-- it shows stored reward and punishment entries from every persona in the server
+- it shows only injected reward and punishment entries from every persona in the server
 - each checklist entry includes the persona name plus a ❤️ reward or 💀 punishment marker
 - lists beyond one modal use a page-selection step and page-scoped checkbox modals
+
+Entries that are stored but not currently injectable stay in the database but are hidden from `/conditioning manage`.
 
 ## Storage Rules
 
@@ -137,6 +139,6 @@ These are documented in `.env.example`.
 - `src/utils/conditioning/conditioning.ts`
 - `src/utils/text/contextBuilder.ts`
 - `src/utils/text/presetContextBuilder.ts`
-- `src/commands/reward/*`
-- `src/commands/punish/*`
+- `src/commands/conditioning/reward/*`
+- `src/commands/conditioning/punish/*`
 - `src/commands/conditioning/*`
