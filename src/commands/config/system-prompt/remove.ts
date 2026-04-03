@@ -19,7 +19,7 @@ import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 export function configureSubcommand(): SlashCommandSubcommandBuilder {
   return new SlashCommandSubcommandBuilder()
     .setName("remove")
-    .setDescription("Remove custom system prompt and use default humanizer instruction")
+    .setDescription("Remove the custom system prompt and use the default prompt")
     .setDescriptionLocalizations({
       // Add localizations as needed
     });

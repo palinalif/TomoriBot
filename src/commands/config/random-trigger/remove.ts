@@ -339,4 +339,3 @@ function formatRemovedSummaries(summaries: string[]): string {
   const suffix = summaries.length > maxVisible ? "\n..." : "";
   return visibleSummaries.join("\n") + suffix;
 }
-

@@ -1,4 +1,4 @@
-﻿// locales/en.ts (or your desired file name)
+// locales/en.ts (or your desired file name)
 
 // Export the entire locale structure as a default object
 export default {
@@ -594,7 +594,7 @@ export default {
     },
 
     // SillyTavern preset management
-    stpreset: {
+    "st-preset": {
       description: `Manage SillyTavern presets`,
       upload: {
         description: `Upload a SillyTavern preset JSON file`,
@@ -1616,7 +1616,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
       },
 
       // /help api-key
-      apikey: {
+      "api-key": {
         description: `Learn how to set up API keys for AI providers`,
         provider_description: `Choose your AI provider`,
         provider_choice_brave: `Brave Search`,
@@ -2032,7 +2032,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 
     // NovelAI image generation commands
     novelai: {
-      charreference: {
+      "character-reference": {
         description: `Upload or clear a NovelAI character reference image for yourself or a persona.`,
         target_description: `Choose whether to update your own profile or a server persona.`,
         target_choice_me: `Me`,
@@ -2569,7 +2569,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         disable: `Disable`,
       },
       // API Key management (subcommand group)
-      apikey: {
+      "api-key": {
         description: `Manage AI provider API keys`,
         set: {
           description: `Set the API key for your chosen AI provider.`,
@@ -2737,7 +2737,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           confirm_description: `Are you sure you want to remove the saved configuration for **{provider}**? This will delete the stored API key and model selections.`,
         },
       },
-      toolnotices: {
+      "tool-notices": {
         description: `Manage which tool notice embeds stay visible in chat.`,
         visibility: {
           description: `Choose which tool notice embeds remain visible in chat.`,
@@ -2855,7 +2855,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           invalid_range_description: `Duration must be between {min} and {max} seconds (24 hours).`,
         },
       },
-      selfreply: {
+      "self-reply-limit": {
         description: `Manage self-reply chains for persona triggering (default: 3).`,
         limit_description: `Number of self replies allowed (0-10, 0 disables, default: 3).`,
         limit: {
@@ -2883,7 +2883,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_disabled_title: `Send Limit Disabled`,
         success_disabled_description: `Send message limit removed. Responses will no longer be capped.`,
       },
-      selfdebug: {
+      "self-debug": {
         description: `Toggle whether I load my own diagnostic embeds into context.`,
         set_description: `Enable or disable self-debug embed ingestion.`,
         already_set_title: `Self-Debug Already Set`,
@@ -2893,7 +2893,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         enabled_success: `Self-debug is now **enabled**. I will load my error and diagnostic embeds into context as [System: ...] messages.`,
         disabled_success: `Self-debug is now **disabled**. My error and diagnostic embeds will no longer be loaded into context.`,
       },
-      maxmsgfetch: {
+      "message-fetch-limit": {
         description: `Set recent messages fetched for context (20-100, default: 80).`,
         limit_description: `Recent messages to fetch for context (20-100, default: 80).`,
         limit: {
@@ -2907,7 +2907,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_description: `I will now fetch up to **{limit}** recent messages for context.`,
         },
       },
-      multitrigger: {
+      "persona-trigger-limit": {
         description: `Manage personas triggered per message (default: 3).`,
         limit_description: `Max triggered personas per message (1-10, default: 3).`,
         limit: {
@@ -3229,7 +3229,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
         },
       },
-      logitbias: {
+      "logit-bias": {
         description: `Manage saved logit bias entries for supported models.`,
         add: {
           description: `Add comma-separated logit bias entries with one shared bias value.`,
@@ -3366,8 +3366,14 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
 
       // System prompt management
-      sysprompt: {
+      "system-prompt": {
         description: `Manage custom system prompt for personality instructions`,
+        set: {
+          description: `Set a custom system prompt to guide my behavior`,
+        },
+        remove: {
+          description: `Remove custom system prompt and use default system prompt`,
+        },
         change: {
           description: `Set a custom system prompt to guide my behavior`,
         },
@@ -3422,7 +3428,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
 
       // Random Trigger management (timer-based probabilistic auto-trigger)
-      randomtrigger: {
+      "random-trigger": {
         add: {
           description: `Add a probabilistic timer-based auto-trigger for a channel.`,
           channel_description: `The channel where spontaneous messages will be sent.`,
@@ -3503,6 +3509,18 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_removals_description: `No fallback models were unchecked. The fallback chain remains unchanged.`,
           success_title: `Fallback Chain Updated`,
           success_description: `Removed the following fallback model(s): {models_removed}\n{remaining_count} fallback(s) remaining.`,
+        },
+      },
+      "model-override": {
+        description: `Manage channel and persona model overrides.`,
+        remove: {
+          description: `Remove channel and persona model overrides.`,
+        },
+      },
+      "model-fallback": {
+        description: `Manage fallback chain models.`,
+        remove: {
+          description: `Remove models from the fallback chain.`,
         },
       },
       mcp: {
@@ -3593,7 +3611,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
     },
 
-    optionalkey: {
+    "optional-key": {
       description: `Manage optional service API keys`,
       brave: {
         description: `Manage Brave Search API key`,
@@ -3914,7 +3932,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           not_configured_description: `This server does not currently have a welcome channel configured.`,
         },
       },
-      thoughtlogs: {
+      "thought-logs-channel": {
         description: `Set or clear the server's thought-log channel.`,
         channel_description: `Text channel for reasoning summaries. Pick the same channel again to disable it.`,
         invalid_channel_title: `Invalid Channel`,
@@ -4061,7 +4079,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_server_textgen_description: `Reset the server-wide text generation trigger quota pool.`,
         },
       },
-      memberpermissions: {
+      "member-permissions": {
         description: `Configure what non-admin members can teach me.`,
         option_description: `The type of memory members can teach.`,
         servermemories_option: `Server Memories`,

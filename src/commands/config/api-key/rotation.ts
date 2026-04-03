@@ -303,4 +303,3 @@ async function handlePurgeAction(
 
   log.success(`Purged ${deletedCount} rotation key(s) for server ${tomoriState.server_id}`);
 }
-

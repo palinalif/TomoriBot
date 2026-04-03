@@ -143,4 +143,3 @@ export async function execute(
     // Avoid using replyInfoEmbed here to prevent potential double-reply issues
   }
 }
-

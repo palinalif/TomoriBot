@@ -13,7 +13,9 @@ import { localizer } from "@/utils/text/localizer";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.optional-key.elevenlabs.remove.description"));
+  subcommand
+    .setName("remove")
+    .setDescription(localizer("en-US", "commands.optional-key.elevenlabs.remove.description"));
 
 export async function execute(
   _client: Client,
@@ -119,4 +121,3 @@ export async function execute(
     });
   }
 }
-

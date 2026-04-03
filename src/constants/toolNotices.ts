@@ -87,4 +87,3 @@ export const TOOL_NOTICE_DEFINITIONS: ToolNoticeDefinition[] = [
     descriptionKey: "commands.config.tool-notices.visibility.notice_mcp_tool_call_description",
   },
 ];
-

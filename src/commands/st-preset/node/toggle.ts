@@ -583,4 +583,3 @@ function processToggleResults(
     totalCount: pageNodes.length,
   };
 }
-

@@ -246,4 +246,3 @@ function formatTextArrayLiteral(items: string[]): string {
 function formatNoticeList(items: string[], locale: string): string {
   return items.length > 0 ? items.map((item) => `\`${item}\``).join(", ") : localizer(locale, "commands.choices.none");
 }
-
