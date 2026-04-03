@@ -77,6 +77,8 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
 - Key: `llm_codename`
 - Warmed at startup from OpenRouter models API
 - Stores tools/vision/structured-output capability + token limits
+- Tool capability is derived primarily from the reported `tools` parameter, with a fallback for models whose OpenRouter description explicitly advertises native function/tool calling even when the metadata is incomplete.
+- `tool_choice` is tracked separately through cached `supported_parameters` and only sent when supported.
 - No runtime TTL/invalidation
 
 ### 8) Gemini token-limit map (`geminiCapabilityCache.ts`)

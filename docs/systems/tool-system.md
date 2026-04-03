@@ -82,6 +82,58 @@ Current `update_short_term_memory` runtime notes:
 - the tool is hidden for a turn when the triggering user message explicitly asks the bot to remember something for future use
 - this suppression currently uses a shared English/Japanese phrase detector so direct long-term-memory requests do not compete with STM summary nudges in the same turn
 
+## Stable Prompt Macros
+
+Prompt-like text that flows through context assembly can use stable `{..._tool}` macros instead of hardcoding function names. This currently applies to:
+
+- `/sysprompt`
+- persona prompts
+- personality attribute lines
+- SillyTavern preset custom nodes and depth injections
+- Tomori's own built-in tool hints inside context assembly
+
+Static built-in macros always expand to the current canonical built-in tool name, wrapped in backticks:
+
+| Macro | Expands to | Notes |
+|---|---|---|
+| `{capabilities_tool}` | `review_capabilities` | Inspect current tool/runtime availability first. |
+| `{memory_tool}` | `create_long_term_memory` | Save a new long-term memory. |
+| `{memory_update_tool}` | `update_long_term_memory` | Update an existing long-term memory by ID. |
+| `{short_term_memory_tool}` | `update_short_term_memory` | Update the current conversation's STM. |
+| `{task_tool}` | `create_task` | Create reminders or scheduled self-tasks. |
+| `{cross_channel_tool}` | `cross_channel_message` | Send an immediate message to another channel/thread. |
+| `{sticker_tool}` | `select_sticker_for_response` | Attach a Discord sticker to the response. |
+| `{pin_tool}` | `pin_selected_message` | Pin a recent message. |
+| `{profile_picture_tool}` | `peek_profile_picture` | Inspect an avatar or banner. |
+| `{document_tool}` | `read_document` | Read PDF/TXT/MD attachments. |
+| `{timestamp_refresh_tool}` | `refresh_message_timestamps` | Rebuild recent context with exact timestamps. |
+| `{media_context_tool}` | `increase_media_context` | Bring older hidden images/videos back into context. |
+| `{gif_tool}` | `process_gif` | Extract GIF frames for analysis. |
+| `{youtube_tool}` | `process_youtube_video` | Analyze a YouTube video. |
+| `{image_analysis_tool}` | `analyze_image` | Delegate image understanding to the vision model. |
+| `{image_generation_tool}` | `generate_image` | Generate/edit images with the active provider. |
+| `{anime_image_generation_tool}` | `generate_image_nai` | Generate/edit anime-styled images with NovelAI. |
+| `{voice_message_tool}` | `generate_voice_message` | Send a spoken Discord voice reply. |
+
+Search/fetch macros are family-level and availability-aware instead of hardcoded:
+
+| Macro | Resolves to | Notes |
+|---|---|---|
+| `{web_search_tool}` | Best available exact web-search tool name | Prefers bundled Brave/DuckDuckGo search, or a discovered guild MCP `web_search` replacement. |
+| `{image_search_tool}` | Best available exact image-search tool name | Falls back to `{web_search_tool}` when only general search is available. |
+| `{video_search_tool}` | Best available exact video-search tool name | Falls back to `{web_search_tool}` when only general search is available. |
+| `{news_search_tool}` | Best available exact news-search tool name | Falls back to `{web_search_tool}` when only general search is available. |
+| `{url_fetch_tool}` | Best available exact URL-fetch tool name | Prefers bundled `fetch`, or a discovered guild MCP `url_fetcher` replacement. |
+| `{url_metadata_tool}` | Best available exact metadata/fetch tool name | Prefers metadata-specific fetchers, then falls back to a compatible fetch tool. |
+
+Behavior notes:
+
+- static macros do not depend on feature flags or provider availability; they are stable aliases for the canonical built-in tool names
+- dynamic family macros resolve at context-build time against the current provider/configuration
+- when a macro resolves to an exact tool/function name, the expansion is wrapped in backticks (for example, `` `create_long_term_memory` ``)
+- if a guild MCP server with `server_type = web_search` or `server_type = url_fetcher` replaces the bundled tools, the macro resolver uses that server's discovered function names
+- if no exact search/fetch function name can be discovered, the macro expands to plain-language fallback text rather than a stale hardcoded tool name
+
 ## REST API Tools
 
 - Brave REST tool classes in `src/tools/restAPIs/brave/braveTools.ts`:

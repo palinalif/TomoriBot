@@ -104,6 +104,8 @@ Rule:
 - Startup cache fetch from `https://openrouter.ai/api/v1/models`
 - cache module: `src/utils/cache/openrouterCapabilityCache.ts`
 - OpenRouter provider can override stale DB capability flags with API capabilities at runtime.
+- Tool support primarily follows the OpenRouter `tools` parameter, with a fallback for models whose OpenRouter description explicitly advertises native function/tool calling even when `supported_parameters` is incomplete.
+- `tool_choice` is treated as optional and is only sent when the OpenRouter capability cache says the active model supports it.
 - `supported_parameters` from the OpenRouter cache is also used to gate optional request params such as `logit_bias`.
 - `/config logitbias` now stores raw text as the source of truth and caches tokenizer-specific token IDs per model family.
 - Model changes refresh those cached tokenizations instead of forcing users to re-enter the same words.

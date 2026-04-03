@@ -20,6 +20,7 @@ import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
 import {
+  getOpenRouterCapabilities,
   getOpenRouterSupportedParameters,
   getOpenRouterTokenLimits,
   isOpenRouterCapabilityCacheReady,
@@ -531,9 +532,14 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
 
-      // Only include tools if defined and has items
+      // Only include tools if defined and has items.
+      // Keep the request payload aligned with the effective capability decision:
+      // some OpenRouter model entries are missing `tools` in supported_parameters
+      // even though the capability cache treats them as tool-capable.
       if (config.tools && config.tools.length > 0) {
-        if (this.isOpenRouterParamSupported(supportedParameters, "tools")) {
+        const capabilityAllowsTools =
+          config.model !== "other-model" ? (getOpenRouterCapabilities(config.model)?.hasTools ?? false) : false;
+        if (this.isOpenRouterParamSupported(supportedParameters, "tools") || capabilityAllowsTools) {
           requestBody.tools = config.tools;
         } else {
           skippedUnsupportedParams.push("tools");

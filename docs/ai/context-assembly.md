@@ -143,9 +143,20 @@ Tail directives are short instructions appended to the very last dialogue histor
 
 These pass through unchanged in both native and preset modes.
 
+### Tool Prompt Macros
+
+Prompt-owned text can use stable `{..._tool}` macros instead of hardcoding exact function names. During context assembly, Tomori expands these macros before mention conversion.
+
+- static built-in macros expand to the canonical built-in tool names
+- search/fetch family macros resolve to the best currently available exact tool name for the active provider/configuration
+- if a guild MCP server replaces bundled web search or URL fetching, the resolver uses that server's discovered function names
+- if no exact family match can be discovered, the macro falls back to plain-language guidance instead of a stale bundled tool name
+
+This applies to `/sysprompt`, persona prompts, personality attributes, native tool hints, and SillyTavern preset custom/depth-injected nodes.
+
 ### convertMentions()
 
-All text content passes through `convertMentions()` before being added to context items. This function:
+After tool prompt macro expansion, text content passes through `convertMentions()` before being added to context items. This function:
 - Resolves `{bot}` → bot's display name
 - Resolves `{user}` → triggerer's display name
 - Resolves Discord mention syntax (`<@id>`) → display names

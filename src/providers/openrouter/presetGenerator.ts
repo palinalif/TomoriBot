@@ -8,6 +8,7 @@ import { sanitizeSampleDialogueText } from "@/providers/google/presetGenerator";
 import type { GeneratePresetParams, PresetGenerationResult } from "@/types/provider/featureInterfaces";
 import type { ToolContext } from "@/types/tool/interfaces";
 import { executeTool } from "@/tools/toolRegistry";
+import { getOpenRouterSupportedParameters } from "@/utils/cache/openrouterCapabilityCache";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
 import {
   buildPresetResponseSchema,
@@ -101,7 +102,14 @@ export async function generatePresetFromPromptOpenrouter(
 
     if (toolsEnabled) {
       body.tools = tools;
-      body.tool_choice = "auto";
+
+      // OpenRouter defaults tool_choice to automatic selection when omitted.
+      // Only send it when the model explicitly advertises support.
+      const supportedParameters =
+        options.model !== "other-model" ? getOpenRouterSupportedParameters(options.model) : undefined;
+      if (supportedParameters?.has("tool_choice")) {
+        body.tool_choice = "auto";
+      }
     }
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {

@@ -13,6 +13,7 @@ import {
   BaseGuildTextChannel,
   ChannelType,
   DMChannel,
+  EmbedBuilder,
   MessageReferenceType,
   MessageType,
   TextChannel,
@@ -1762,7 +1763,14 @@ export default async function tomoriChat(
 
   // Easter egg: Respond to "$whoami" as the main persona
   if (message.content === "$whoami" && "send" in channel) {
-    await channel.send("I'm Tomowi!");
+    const whoAmIEmbed = new EmbedBuilder()
+      .setTitle("トモリですよ！")
+      .setURL("https://github.com/Bredrumb/TomoriBot/")
+      .setColor(ColorCode.INFO);
+
+    await channel.send({
+      embeds: [whoAmIEmbed],
+    });
     return;
   }
 
@@ -4619,9 +4627,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 "Tomori";
               const continuationText = usePrefillContinuationDirective
                 ? isFromSelectedPersona && !isEmbedMessage
-                  ? `[Continue your last message. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
+                  ? `[Continue your last message without repeating it. Begin exactly with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
                   : `[Begin your next reply with: "${botName}: ${trimmedPrefill}". Continue directly after it without repeating the prefix.]`
-                : "[Continue your last message]";
+                : "[Continue your last message without repeating it]";
 
               manualContinuationDirective = continuationText;
               log.info(`Captured continuation directive for ${selectedPersona?.tomori_nickname} response`);
@@ -4630,7 +4638,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
           // 11. Build Context
           // The `buildContext` function will be refactored in a subsequent step to accept
-          // `simplifiedMessages` and produce `StructuredContextItem[]`.
+          // `simplifiedMessages` and produce `StructuredContxtItem[]`.
           // For now, its signature and output type (ContextSegment[]) remain, but we pass the new data.
           let contextSegments: StructuredContextItem[] = [];
 

@@ -101,23 +101,44 @@ let cacheReady = false;
  * Determines if a model supports function calling
  *
  * Requirements:
- * - Must have BOTH "tools" AND "tool_choice" in supported_parameters
- * - OpenRouter requires both for full function calling support
+ * - Prefer explicit "tools" in supported_parameters
+ * - Fall back to description-based detection when OpenRouter metadata is inconsistent
+ *
+ * Rationale:
+ * - OpenRouter tool calling works when the model accepts the `tools` parameter.
+ * - `tool_choice` is optional for our chat path because OpenRouter defaults it to
+ *   automatic selection when omitted.
+ * - Some models expose native function calling but do not advertise `tool_choice`.
+ * - Some models also advertise native function calling in the description while
+ *   omitting `tools` from supported_parameters, so we need a fallback to avoid
+ *   incorrectly disabling working tools.
  *
  * @param model - OpenRouter model object from API
  * @returns True if model supports function calling
  */
 function detectToolSupport(model: OpenRouterModel): boolean {
   // 1. Check if supported_parameters exists and is an array
-  if (!model.supported_parameters || !Array.isArray(model.supported_parameters)) {
-    return false;
+  if (model.supported_parameters && Array.isArray(model.supported_parameters)) {
+    // 2. `tools` is the primary capability gate for function calling.
+    if (model.supported_parameters.includes("tools")) {
+      return true;
+    }
   }
 
-  // 2. Both "tools" AND "tool_choice" must be present for full tool support
-  const hasTools = model.supported_parameters.includes("tools");
-  const hasToolChoice = model.supported_parameters.includes("tool_choice");
+  // 3. OpenRouter metadata is occasionally contradictory: the model description can
+  // advertise native function/tool calling even when supported_parameters omits `tools`.
+  const normalizedDescription = model.description?.toLowerCase() ?? "";
+  const descriptionAdvertisesToolUse =
+    normalizedDescription.includes("function calling") || normalizedDescription.includes("tool calling");
 
-  return hasTools && hasToolChoice;
+  if (descriptionAdvertisesToolUse) {
+    log.warn(
+      `[OpenRouter capability cache] ${model.id} advertises tool use in its description but does not list tools in supported_parameters; treating it as tool-capable.`,
+    );
+    return true;
+  }
+
+  return false;
 }
 
 /**

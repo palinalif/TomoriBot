@@ -144,48 +144,51 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 
 ## Built-In Tool Reference for Prompt Customization
 
-If you customize TomoriBot's system prompt, persona instructions, or external provider prompt templates, use the exact function names below.
+If you customize TomoriBot's system prompt, persona instructions, or external provider prompt templates, prefer the stable prompt macros below instead of hardcoding tool names.
 
+- Prompt macros like `{memory_tool}` are expanded during context assembly. Exact tool names are emitted wrapped in backticks, while unresolved search/fetch families fall back to plain-language text. Static macros always map to the current canonical built-in tool name. Search/fetch family macros resolve to the best currently available exact tool name for the active provider/configuration.
 - `Base Tool` means the tool is part of TomoriBot's normal built-in tool set. It may still depend on the current provider/model supporting tool calling.
 - Other requirements below are additional gates such as server feature flags, Discord permissions, model capabilities, or optional API keys.
 - Admin-added MCP tools are intentionally not listed here because their names depend on each server's configuration.
 
 ### Built-In Function Tools
 
-| Tool name | Requirements | Purpose |
-|---|---|---|
-| `review_capabilities` | Base Tool | Check current chat abilities, slash commands, or runtime settings before answering. |
-| `create_long_term_memory` | `self_teaching_enabled` | Save a new stable server fact or user-specific preference for future conversations. |
-| `update_long_term_memory` | `self_teaching_enabled` | Replace an outdated long-term memory by ID. |
-| `update_short_term_memory` | Base Tool; unavailable on NovelAI | Save temporary working memory for the current channel/story arc without making it permanent. |
-| `create_task` | Base Tool | Schedule one-time or recurring reminders and self-tasks. |
-| `cross_channel_message` | Base Tool; unavailable on NovelAI; target channel permissions and cross-channel blocklist still apply | Instantly act in another channel or thread, with optional boomerang report-back. |
-| `select_sticker_for_response` | `sticker_usage_enabled`; `USE_EXTERNAL_STICKERS` | Pick a matching server sticker to accompany the response. |
-| `pin_selected_message` | `pin_message_enabled`; `MANAGE_MESSAGES` | Pin an important recent message in the current channel. |
-| `peek_profile_picture` | Base Tool; requires either a vision-capable chat model or a configured `vision_llm` | Inspect a user's avatar or the active persona avatar. |
-| `read_document` | Base Tool | Extract text from a PDF, TXT, or MD attachment in a recent message. |
-| `refresh_message_timestamps` | Base Tool | Rebuild recent context with exact timestamps on every message. |
-| `increase_media_context` | Base Tool; requires a vision-capable chat model | Pull older hidden images/videos back into context when media was windowed out for optimization. |
-| `process_gif` | Base Tool; development only; requires a vision-capable chat model | Extract keyframes from a GIF for analysis. |
-| `process_youtube_video` | Base Tool; requires a model with YouTube/video support | Analyze a specific YouTube link on demand. |
-| `analyze_image` | Base Tool; requires a configured `vision_llm`; only shown when the current chat model cannot already see images | Delegate image understanding to a separate vision model. |
-| `generate_image` | `imagegen_enabled`; active provider must support native image generation | Generate or edit an image with the current provider. |
-| `generate_image_nai` | `imagegen_enabled`; NovelAI provider or NovelAI optional API key | Generate or edit anime-styled images with NovelAI. |
-| `generate_voice_message` | ElevenLabs optional API key; active persona needs an ElevenLabs voice; `voice_message_enabled` | Send a spoken Discord voice reply instead of plain text. |
+| Tool name | Prompt macro | Requirements | Purpose |
+|---|---|---|---|
+| `review_capabilities` | `{capabilities_tool}` | Base Tool | Check current chat abilities, slash commands, or runtime settings before answering. |
+| `create_long_term_memory` | `{memory_tool}` | `self_teaching_enabled` | Save a new stable server fact or user-specific preference for future conversations. |
+| `update_long_term_memory` | `{memory_update_tool}` | `self_teaching_enabled` | Replace an outdated long-term memory by ID. |
+| `update_short_term_memory` | `{short_term_memory_tool}` | Base Tool; unavailable on NovelAI | Save temporary working memory for the current channel/story arc without making it permanent. |
+| `create_task` | `{task_tool}` | Base Tool | Schedule one-time or recurring reminders and self-tasks. |
+| `cross_channel_message` | `{cross_channel_tool}` | Base Tool; unavailable on NovelAI; target channel permissions and cross-channel blocklist still apply | Instantly act in another channel or thread, with optional boomerang report-back. |
+| `select_sticker_for_response` | `{sticker_tool}` | `sticker_usage_enabled`; `USE_EXTERNAL_STICKERS` | Pick a matching server sticker to accompany the response. |
+| `pin_selected_message` | `{pin_tool}` | `pin_message_enabled`; `MANAGE_MESSAGES` | Pin an important recent message in the current channel. |
+| `peek_profile_picture` | `{profile_picture_tool}` | Base Tool; requires either a vision-capable chat model or a configured `vision_llm` | Inspect a user's avatar or the active persona avatar. |
+| `read_document` | `{document_tool}` | Base Tool | Extract text from a PDF, TXT, or MD attachment in a recent message. |
+| `refresh_message_timestamps` | `{timestamp_refresh_tool}` | Base Tool | Rebuild recent context with exact timestamps on every message. |
+| `increase_media_context` | `{media_context_tool}` | Base Tool; requires a vision-capable chat model | Pull older hidden images/videos back into context when media was windowed out for optimization. |
+| `process_gif` | `{gif_tool}` | Base Tool; development only; requires a vision-capable chat model | Extract keyframes from a GIF for analysis. |
+| `process_youtube_video` | `{youtube_tool}` | Base Tool; requires a model with YouTube/video support | Analyze a specific YouTube link on demand. |
+| `analyze_image` | `{image_analysis_tool}` | Base Tool; requires a configured `vision_llm`; only shown when the current chat model cannot already see images | Delegate image understanding to a separate vision model. |
+| `generate_image` | `{image_generation_tool}` | `imagegen_enabled`; active provider must support native image generation | Generate or edit an image with the current provider. |
+| `generate_image_nai` | `{anime_image_generation_tool}` | `imagegen_enabled`; NovelAI provider or NovelAI optional API key | Generate or edit anime-styled images with NovelAI. |
+| `generate_voice_message` | `{voice_message_tool}` | ElevenLabs optional API key; active persona needs an ElevenLabs voice; `voice_message_enabled` | Send a spoken Discord voice reply instead of plain text. |
 
 ### Default Search / Web Extras
 
 These are the common built-in or bundled web tools Tomori can expose when web access is enabled. Exact availability depends on provider support, server config, API keys, and which MCP servers are active.
 
-| Tool name | Requirements | Purpose |
-|---|---|---|
-| `brave_web_search` | `web_search_enabled`; Brave API available | Search the web for general information. |
-| `brave_image_search` | `web_search_enabled`; Brave API available | Search for relevant images on the web. |
-| `brave_video_search` | `web_search_enabled`; Brave API available | Search for relevant videos on the web. |
-| `brave_news_search` | `web_search_enabled`; Brave API available | Search specifically for current news coverage. |
-| `fetch` | Active bundled fetch MCP server | Read a specific web page or URL in more detail. |
-| `web-search` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Free web search fallback when Brave is unavailable. |
-| `url-metadata` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Retrieve page metadata for a URL. |
+Family macros below may resolve to the listed bundled tools or to compatible guild MCP replacements when admins register their own `web_search` or `url_fetcher` servers.
+
+| Tool name | Prompt macro | Requirements | Purpose |
+|---|---|---|---|
+| `brave_web_search` | `{web_search_tool}` | `web_search_enabled`; Brave API available | Search the web for general information. |
+| `brave_image_search` | `{image_search_tool}` | `web_search_enabled`; Brave API available | Search for relevant images on the web. |
+| `brave_video_search` | `{video_search_tool}` | `web_search_enabled`; Brave API available | Search for relevant videos on the web. |
+| `brave_news_search` | `{news_search_tool}` | `web_search_enabled`; Brave API available | Search specifically for current news coverage. |
+| `fetch` | `{url_fetch_tool}` | Active bundled fetch MCP server | Read a specific web page or URL in more detail. |
+| `web-search` | `{web_search_tool}` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Free web search fallback when Brave is unavailable. |
+| `url-metadata` | `{url_metadata_tool}` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Retrieve page metadata for a URL when a metadata-specific fetcher is available. |
 
 ### Sample System Prompts with Tools
 
@@ -195,37 +198,37 @@ These are short examples of the kind of system-prompt instructions that make goo
 
 ```text
 You are the server's support archivist.
-When users report issues, ask clarifying questions, keep replies concise, and use update_short_term_memory to retain the current support situation in this channel.
-When a stable fix, preference, or repeated pain point becomes clear, use remember_this_fact to store it.
-At 08:00 server time, use create_task self-reminders to post a short digest in the designated digest channel summarizing recurring issues, unresolved blockers, and anything moderators should notice.
-If a question must be asked in another channel, use cross_channel_message and return with a concise report.
+When users report issues, ask clarifying questions, keep replies concise, and use {short_term_memory_tool} to retain the current support situation in this channel.
+When a stable fix, preference, or repeated pain point becomes clear, use {memory_tool} to store it.
+At 08:00 server time, use {task_tool} self-reminders to post a short digest in the designated digest channel summarizing recurring issues, unresolved blockers, and anything moderators should notice.
+If a question must be asked in another channel, use {cross_channel_tool} and return with a concise report.
 ```
 
-Likely chain: `update_short_term_memory` -> `remember_this_fact` -> `create_task` -> `cross_channel_message`
+Likely chain: `{short_term_memory_tool}` -> `{memory_tool}` -> `{task_tool}` -> `{cross_channel_tool}`
 
 #### 2. Community Event Host
 
 ```text
 You are the server's event host and hype manager.
-For upcoming events, schedule reminders ahead of time with create_task.
-When promoting an event, generate one clean banner with generate_image or generate_image_nai if the server prefers anime-styled art.
-If the moment calls for extra flair, add a matching sticker with select_sticker_for_response or send a short voiced announcement with generate_voice_message.
-Pin finalized event info with pin_selected_message when it becomes the canonical post.
+For upcoming events, schedule reminders ahead of time with {task_tool}.
+When promoting an event, generate one clean banner with {image_generation_tool} or {anime_image_generation_tool} if the server prefers anime-styled art.
+If the moment calls for extra flair, add a matching sticker with {sticker_tool} or send a short voiced announcement with {voice_message_tool}.
+Pin finalized event info with {pin_tool} when it becomes the canonical post.
 ```
 
-Likely chain: `create_task` -> `generate_image` or `generate_image_nai` -> `select_sticker_for_response` or `generate_voice_message` -> `pin_selected_message`
+Likely chain: `{task_tool}` -> `{image_generation_tool}` or `{anime_image_generation_tool}` -> `{sticker_tool}` or `{voice_message_tool}` -> `{pin_tool}`
 
 #### 3. Fact-Checking Archivist
 
 ```text
 You are the server's research librarian.
 If a user asks about a current event, external fact, or something likely to have changed, search first instead of guessing.
-Use brave_web_search or web-search to find sources, use fetch to read the most relevant page, and use read_document when a shared PDF or text attachment matters.
-If the conversation depends on exactly when something was said in-channel, use refresh_message_timestamps.
-When a verified server-specific rule, preference, or standing answer becomes stable, store it with remember_this_fact.
+Use {web_search_tool} to find sources, use {url_fetch_tool} to read the most relevant page, and use {document_tool} when a shared PDF or text attachment matters.
+If the conversation depends on exactly when something was said in-channel, use {timestamp_refresh_tool}.
+When a verified server-specific rule, preference, or standing answer becomes stable, store it with {memory_tool}.
 ```
 
-Likely chain: `brave_web_search` or `web-search` -> `fetch` -> `read_document` -> `refresh_message_timestamps` -> `remember_this_fact`
+Likely chain: `{web_search_tool}` -> `{url_fetch_tool}` -> `{document_tool}` -> `{timestamp_refresh_tool}` -> `{memory_tool}`
 
 <!-- GETTING STARTED -->
 ## Self-Hosting

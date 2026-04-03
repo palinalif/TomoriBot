@@ -53,6 +53,7 @@ import {
   CONDITIONING_CONTEXT_MAX_GROUPS_PER_TYPE,
   getConditioningContextPastParticiple,
 } from "@/utils/conditioning/conditioning";
+import { createToolPromptMacroResolver, type ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -563,12 +564,15 @@ async function buildShortTermMemoryContext(
   client: Client,
   isUserImpersonation: boolean,
   explicitLongTermMemoryIntent = false,
+  toolPromptMacroResolver?: ToolPromptMacroResolver,
 ): Promise<{
   memoryItems: StructuredContextItem[];
   createPromptText?: string;
 }> {
   const memoryItems: StructuredContextItem[] = [];
   let createPromptText: string | undefined;
+  const expandPromptToolText = (macroText: string, fallbackText: string) =>
+    toolPromptMacroResolver ? toolPromptMacroResolver.expand(macroText) : Promise.resolve(fallbackText);
 
   try {
     // 1. Check if user has cross-server opt-in enabled
@@ -721,7 +725,10 @@ async function buildShortTermMemoryContext(
         // Add the HINT immediately after the summary (not at the end)
         // Only when the STM tool is available for this provider
         if (isStmToolAvailable) {
-          const hintText = `[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use create_long_term_memory or update_long_term_memory instead.]`;
+          const hintText = await expandPromptToolText(
+            "[System: HINT: Use the {short_term_memory_tool} tool to update this information AFTER you respond if the conversation has greatly changed its topic. Do NOT use {short_term_memory_tool} when a user explicitly asks you to remember/save/store something for future conversations; use {memory_tool} or {memory_update_tool} instead.]",
+            "[System: HINT: Use the update_short_term_memory tool to update this information AFTER you respond if the conversation has greatly changed its topic. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use create_long_term_memory or update_long_term_memory instead.]",
+          );
 
           memoryItems.push({
             role: "user",
@@ -748,8 +755,10 @@ async function buildShortTermMemoryContext(
       ) {
         // NO SUMMARY but enough messages - Create prompt at end
         // Only when the STM tool is available for this provider
-        const createText =
-          "You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use create_long_term_memory or update_long_term_memory instead.";
+        const createText = await expandPromptToolText(
+          "You currently do not have short term memory saved for this conversation. Use the {short_term_memory_tool} tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels. Do NOT use {short_term_memory_tool} when a user explicitly asks you to remember/save/store something for future conversations; use {memory_tool} or {memory_update_tool} instead.",
+          "You currently do not have short term memory saved for this conversation. Use the update_short_term_memory tool to create a short term memory about the current story or conversation's topic AFTER you respond in order to help you cross-reference this in different channels. Do NOT use update_short_term_memory when a user explicitly asks you to remember/save/store something for future conversations; use create_long_term_memory or update_long_term_memory instead.",
+        );
 
         createPromptText = await convertMentions(
           createText,
@@ -994,6 +1003,26 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
           params.simplifiedMessageHistory.filter((m) => m.authorType === "user").at(-1)?.content ?? "";
 
         const tomoriStateForPreset = params.snapshot?.tomoriState ?? (await loadTomoriState(params.guildId));
+        const presetToolPromptMacroResolver = createToolPromptMacroResolver({
+          provider: tomoriStateForPreset?.llm?.llm_provider,
+          stateForContext:
+            tomoriStateForPreset?.server_id && tomoriStateForPreset.llm
+              ? {
+                  server_id: tomoriStateForPreset.server_id.toString(),
+                  activePersonaHasElevenlabsVoice: false,
+                  llm: tomoriStateForPreset.llm,
+                  config: {
+                    sticker_usage_enabled: params.tomoriConfig.sticker_usage_enabled,
+                    web_search_enabled: params.tomoriConfig.web_search_enabled,
+                    self_teaching_enabled: params.tomoriConfig.self_teaching_enabled,
+                    pin_message_enabled: params.tomoriConfig.pin_message_enabled,
+                    imagegen_enabled: params.tomoriConfig.imagegen_enabled,
+                    nai_exclusive_imggen: params.tomoriConfig.nai_exclusive_imggen,
+                    voice_message_enabled: params.tomoriConfig.voice_message_enabled,
+                  },
+                }
+              : undefined,
+        });
 
         // 3. Rearrange native output according to preset node order
         return reassembleWithPreset(
@@ -1014,6 +1043,7 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
             triggererName: params.triggererName,
             botName: params.tomoriNickname,
             personalMemoriesEnabled: params.tomoriConfig.personal_memories_enabled ?? true,
+            toolPromptMacroResolver: presetToolPromptMacroResolver,
           },
         );
       }
@@ -1084,6 +1114,27 @@ async function buildContextNative({
     unicodeSpacesEnabled: tomoriConfig.uncensor_unicode_space_enabled,
     sanitizeEnabled: tomoriConfig.uncensor_sanitize_enabled,
   };
+  const tomoriState = snapshot?.tomoriState ?? (await loadTomoriState(guildId));
+  const toolPromptMacroResolver = createToolPromptMacroResolver({
+    provider: tomoriState?.llm?.llm_provider,
+    stateForContext:
+      tomoriState?.server_id && tomoriState.llm
+        ? {
+            server_id: tomoriState.server_id.toString(),
+            activePersonaHasElevenlabsVoice: false,
+            llm: tomoriState.llm,
+            config: {
+              sticker_usage_enabled: tomoriConfig.sticker_usage_enabled,
+              web_search_enabled: tomoriConfig.web_search_enabled,
+              self_teaching_enabled: tomoriConfig.self_teaching_enabled,
+              pin_message_enabled: tomoriConfig.pin_message_enabled,
+              imagegen_enabled: tomoriConfig.imagegen_enabled,
+              nai_exclusive_imggen: tomoriConfig.nai_exclusive_imggen,
+              voice_message_enabled: tomoriConfig.voice_message_enabled,
+            },
+          }
+        : undefined,
+  });
   const explicitLongTermMemoryIntent =
     explicitLongTermMemoryIntentOverride ??
     hasExplicitLongTermMemoryIntent(
@@ -1099,7 +1150,7 @@ async function buildContextNative({
       tomoriConfig.system_prompt?.trim() || (suppressDefaultSystemPrompt ? null : DEFAULT_SYSTEM_PROMPT);
 
     if (systemPrompt) {
-      let humanizerText = systemPrompt;
+      let humanizerText = await toolPromptMacroResolver.expand(systemPrompt);
 
       // CRITICAL: Use stable "User" placeholder for system instruction to prevent cache invalidation across different users
       humanizerText = await convertMentions(
@@ -1124,7 +1175,7 @@ async function buildContextNative({
   // Skip persona prompt for user impersonation (bot-specific personality should not leak)
   if (!isUserImpersonation && personaPrompt?.trim()) {
     const promptText = await convertMentions(
-      personaPrompt.trim(),
+      await toolPromptMacroResolver.expand(personaPrompt.trim()),
       client,
       guildId,
       "User",
@@ -1142,7 +1193,7 @@ async function buildContextNative({
   // 1.6. User-owned impersonation prompt
   if (isUserImpersonation && impersonatedUserPrompt?.trim()) {
     const promptText = await convertMentions(
-      impersonatedUserPrompt.trim(),
+      await toolPromptMacroResolver.expand(impersonatedUserPrompt.trim()),
       client,
       guildId,
       impersonatedIdentityName || "User",
@@ -1160,7 +1211,7 @@ async function buildContextNative({
   // 2. Personality attributes (SECOND - separated from humanizer for better organization)
   // Skip personality attributes for user impersonation (bot-specific traits should not leak)
   if (!isUserImpersonation) {
-    let personalityText = tomoriAttributes.join("\n");
+    let personalityText = await toolPromptMacroResolver.expand(tomoriAttributes.join("\n"));
 
     // CRITICAL: Use stable "User" placeholder for system instruction to prevent cache invalidation across different users
     personalityText = await convertMentions(
@@ -1225,8 +1276,6 @@ async function buildContextNative({
 
   // 4. Server Memories / Conversation Memories
   // Skip server memories for user impersonation (bot-specific knowledge should not leak)
-  // Use snapshot if available, otherwise load from DB
-  const tomoriState = snapshot?.tomoriState ?? (await loadTomoriState(guildId));
   if (
     !isUserImpersonation &&
     tomoriState?.server_memories &&
@@ -1499,7 +1548,7 @@ async function buildContextNative({
       });
 
       // 5. Build sticker list with descriptions and emotion keys
-      let stickerContent = `## ${serverName}'s Stickers\nThis server has the following stickers available for ${botName} to use with the 'select_sticker_for_response' function:\n`;
+      let stickerContent = `## ${serverName}'s Stickers\nThis server has the following stickers available for ${botName} to use with the '{sticker_tool}' function:\n`;
 
       for (const sticker of dedupedStickers) {
         if (!sticker.name) continue;
@@ -1528,8 +1577,8 @@ async function buildContextNative({
         stickerContent += stickerEntry;
       }
 
-      stickerContent +=
-        "To use a sticker, call 'select_sticker_for_response' with the sticker's name (case-insensitive).\n";
+      stickerContent += "To use a sticker, call '{sticker_tool}' with the sticker's name (case-insensitive).\n";
+      stickerContent = await toolPromptMacroResolver.expand(stickerContent);
 
       // 5. Add as "system" role (stays in system instruction for caching)
       contextItems.push({
@@ -1979,6 +2028,7 @@ async function buildContextNative({
         client,
         isUserImpersonation,
         explicitLongTermMemoryIntent,
+        toolPromptMacroResolver,
       );
       // Push memory items now (goes in middle of context)
       // Includes: other-channel memories + same-channel summary (if exists)
@@ -2359,7 +2409,9 @@ async function buildContextNative({
             // Vision tool available — prompt the model to use it instead of guessing
             detachedSystemParts.push({
               type: "text",
-              text: `[System: This message contains ${imageDescription}. Do not guess the image contents. Use the analyze_image tool only if the user explicitly asks about the image or if unseen visual details are necessary to answer correctly.]`,
+              text: await toolPromptMacroResolver.expand(
+                `[System: This message contains ${imageDescription}. Do not guess the image contents. Use the {image_analysis_tool} tool only if the user explicitly asks about the image or if unseen visual details are necessary to answer correctly.]`,
+              ),
             });
           } else {
             // No vision tool — instruct the model to not pretend it can see

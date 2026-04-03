@@ -21,7 +21,7 @@ import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import type { ModalComponent } from "@/types/discord/modal";
 import { escapeRegExp } from "@/utils/text/stringHelper";
 import type { CompactRoleplaySummary, CompactSummaryMode } from "@/types/misc/compact";
-import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import { MAX_MESSAGE_FETCH_LIMIT } from "@/utils/discord/messageFetchLimit";
 import {
   generateConversationSummaryForProvider,
   generateRoleplaySummaryForProvider,
@@ -796,8 +796,6 @@ export async function execute(
 
   const providerName = tomoriState.llm.llm_provider.toLowerCase();
   const effectiveModelName = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
-  const messageFetchLimit = normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit);
-
   if (!providerSupportsFeature(providerName, "conversationCompaction")) {
     await submitInteraction.editReply({
       embeds: [
@@ -918,7 +916,7 @@ export async function execute(
   const { conversationText, imageReferences, userIds } = await buildConversationContext({
     channel: textChannel,
     includeImages: analyzeImages,
-    maxMessages: messageFetchLimit,
+    maxMessages: MAX_MESSAGE_FETCH_LIMIT,
   });
 
   const supplementaryContext = await buildSupplementaryContext({

@@ -144,6 +144,37 @@ class GuildMcpManager {
   }
 
   /**
+   * Get discovered function names for only the guild MCP servers that advertise
+   * a specific `server_type`. This is used by prompt-macro resolution so
+   * capability families like web search and URL fetching can point at the
+   * exact replacement tool names provided by guild MCP servers.
+   *
+   * @param serverId - Internal server_id
+   * @param serverType - Capability family label such as "web_search" or "url_fetcher"
+   * @returns Array of function name strings for matching servers
+   */
+  async getGuildMCPFunctionNamesByServerType(serverId: number, serverType: string): Promise<string[]> {
+    const configs = await getCachedEnabledGuildMcpConfigs(serverId);
+    if (configs.length === 0) return [];
+
+    const matchingConfigs = configs.filter((config) => config.server_type === serverType);
+    if (matchingConfigs.length === 0) return [];
+
+    const names: string[] = [];
+
+    for (const config of matchingConfigs) {
+      const key = this.poolKey(serverId, config.name);
+      const existing = this.pool.get(key);
+      const conn = existing ?? (await this.connectServer(config));
+      if (!conn) continue;
+
+      names.push(...conn.functionNames);
+    }
+
+    return Array.from(new Set(names));
+  }
+
+  /**
    * Check if a function name belongs to a guild MCP server for this guild.
    *
    * @param serverId - Internal server_id

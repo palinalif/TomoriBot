@@ -21,6 +21,7 @@ import { resolvePresetMacros, type MacroContext, type ResolvedNode } from "./stP
 import { convertMentions } from "./contextBuilder";
 import { log } from "@/utils/misc/logger";
 import type { Client } from "discord.js";
+import type { ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ interface MentionParams {
   triggererName: string;
   botName: string;
   personalMemoriesEnabled: boolean;
+  toolPromptMacroResolver?: ToolPromptMacroResolver;
 }
 
 // ─── Marker → MetadataTag Mapping ───────────────────────────────────────
@@ -444,8 +446,10 @@ export async function reassembleWithPreset(
     } else if (node.content.length > 0) {
       // ── Custom node: create a new StructuredContextItem ──
       // Resolve identity macros ({{user}}, {{char}}) via convertMentions
+      const toolMacroExpandedContent = await (mentionParams.toolPromptMacroResolver?.expand(node.content) ??
+        Promise.resolve(node.content));
       const resolvedContent = await convertMentions(
-        node.content,
+        toolMacroExpandedContent,
         mentionParams.client,
         mentionParams.guildId,
         mentionParams.triggererName, // Preset custom nodes should resolve {{user}} to the actual triggerer
@@ -488,8 +492,10 @@ export async function reassembleWithPreset(
     if (depthNode.content.length === 0) continue;
 
     // Resolve identity macros in depth-injected content
+    const toolMacroExpandedContent = await (mentionParams.toolPromptMacroResolver?.expand(depthNode.content) ??
+      Promise.resolve(depthNode.content));
     const resolvedContent = await convertMentions(
-      depthNode.content,
+      toolMacroExpandedContent,
       mentionParams.client,
       mentionParams.guildId,
       mentionParams.triggererName,
