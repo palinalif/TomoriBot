@@ -289,6 +289,26 @@ Before running TomoriBot, ensure you have the following installed:
   ```
   - Don't forget to set `ACTIVATE_LOCAL_RAG` as true in your .env
 
+  **pg_cron (Optional for periodic cleanup jobs):**
+  - Use this only for optional database maintenance jobs such as cooldown/reminder cleanup. Reminder delivery and random triggers run in the app, not in `pg_cron`.
+  - If you use Docker Compose from this repo, `pg_cron` is already configured.
+  - To find the active PostgreSQL config file path for `postgresql.conf`, run:
+  ```sql
+  SHOW config_file;
+  ```
+  - If you use your own PostgreSQL server, enable it in `postgresql.conf`:
+  ```conf
+  shared_preload_libraries = 'pg_cron'
+  cron.database_name = 'your_dbname'
+  ```
+  - If `shared_preload_libraries` already has other values, append `pg_cron` instead of replacing them, for example:
+  ```conf
+  shared_preload_libraries = 'pg_stat_statements,pg_cron'
+  ```
+  - Restart PostgreSQL, then run:
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS pg_cron;
+  ```
 * **Tokenizer assets** (Optional, for logit bias) - Required for model-aware logit bias (emoji/word repetition penalties)
   ```sh
   bun run setup:tokenizers

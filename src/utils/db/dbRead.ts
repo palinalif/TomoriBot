@@ -35,6 +35,7 @@ import {
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
 import { DatabaseUnavailableError } from "@/types/errors";
+import { emitScheduledWorkNudge } from "@/timers/scheduledWorkSignals";
 
 type TomoriConfigJsonResult = {
   config: unknown;
@@ -1826,6 +1827,34 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
   }, "load due reminders");
 }
 
+export async function getNextReminderTime(): Promise<Date | null> {
+  return await withCachedPlanRetry(async () => {
+    try {
+      const [result] = await sql<{ next_reminder_time: Date | string | null }[]>`
+				SELECT reminder_time AS next_reminder_time
+				FROM reminders
+				ORDER BY reminder_time ASC
+				LIMIT 1
+			`;
+
+      const nextReminderTime = result?.next_reminder_time;
+      if (!nextReminderTime) {
+        return null;
+      }
+
+      if (nextReminderTime instanceof Date) {
+        return nextReminderTime;
+      }
+
+      const parsedReminderTime = new Date(nextReminderTime);
+      return Number.isNaN(parsedReminderTime.getTime()) ? null : parsedReminderTime;
+    } catch (error) {
+      log.error("Error loading next reminder time from database:", error);
+      return null;
+    }
+  }, "load next reminder time");
+}
+
 /**
  * Loads a specific reminder by its ID
  * @param reminderId - The ID of the reminder to load
@@ -1896,6 +1925,7 @@ export async function deleteReminderById(reminderId: number): Promise<boolean> {
 
     if (result && result.length > 0) {
       log.success(`Reminder deleted successfully (ID: ${reminderId})`);
+      emitScheduledWorkNudge(`reminder-delete:${reminderId}`);
       return true;
     } else {
       log.warn(`No reminder found to delete with ID: ${reminderId}`);
@@ -2028,7 +2058,7 @@ export async function getBlacklistedMemberIds(serverId: number): Promise<string[
 
 /**
  * Fetches all random triggers whose next_trigger_at has passed (due for execution).
- * Called by the RandomTriggerTimer every minute.
+ * Called by the shared scheduled work coordinator when due work is processed.
  *
  * @returns Array of due RandomTriggerRow records, or empty array on error.
  */
@@ -2057,6 +2087,32 @@ export async function getDueRandomTriggers(): Promise<RandomTriggerRow[]> {
   } catch (error) {
     log.error("Error fetching due random triggers:", error);
     return [];
+  }
+}
+
+export async function getNextRandomTriggerTime(): Promise<Date | null> {
+  try {
+    const [result] = await sql<{ next_trigger_time: Date | string | null }[]>`
+			SELECT next_trigger_at AS next_trigger_time
+			FROM random_triggers
+			ORDER BY next_trigger_at ASC
+			LIMIT 1
+		`;
+
+    const nextTriggerTime = result?.next_trigger_time;
+    if (!nextTriggerTime) {
+      return null;
+    }
+
+    if (nextTriggerTime instanceof Date) {
+      return nextTriggerTime;
+    }
+
+    const parsedTriggerTime = new Date(nextTriggerTime);
+    return Number.isNaN(parsedTriggerTime.getTime()) ? null : parsedTriggerTime;
+  } catch (error) {
+    log.error("Error fetching next random trigger time:", error);
+    return null;
   }
 }
 

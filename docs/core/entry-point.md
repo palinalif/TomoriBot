@@ -29,7 +29,7 @@ This document reflects the current `src/index.ts` startup pipeline.
 14. Attach all event listeners (`eventHandler(client)`).
 15. Register post-ready startup hooks:
     - health tracker init
-    - reminder timer init
+    - scheduled work coordinator init (reminders + random triggers; next-due wakeups with reconcile fallback)
     - memory monitor init
 16. Initialize upload quota cleanup scheduler.
 17. In production only, start health HTTP server on `127.0.0.1:3000/health`.
@@ -45,7 +45,7 @@ This document reflects the current `src/index.ts` startup pipeline.
   - pg_cron setup failures
   - matrix init failure
   - cooldown cleanup failure
-  - reminder/memory monitor/quota cleanup init failures
+  - scheduled work/memory monitor/quota cleanup init failures
 
 ## Discord Client Configuration Notes
 
@@ -61,7 +61,7 @@ This document reflects the current `src/index.ts` startup pipeline.
 - command registry initialization
 - status/presence setup
 
-Additional `client.once("clientReady")` hooks in `index.ts` initialize health tracking, reminders, and memory monitoring.
+Additional `client.once("clientReady")` hooks in `index.ts` initialize health tracking, scheduled work, and memory monitoring.
 
 ## Production Health Endpoint
 

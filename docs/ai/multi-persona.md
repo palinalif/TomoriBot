@@ -377,7 +377,7 @@ Main persona uses normal sticker sends.
 Reminder tool now stores the creating persona:
 
 - `create_task` saves `persona_id` in the `reminders` table.
-- Reminder timer passes `selectedPersonaId` into `tomoriChat`.
+- Reminder execution passes `selectedPersonaId` into `tomoriChat`.
 
 Behavior:
 - If the persona still exists, that persona responds.

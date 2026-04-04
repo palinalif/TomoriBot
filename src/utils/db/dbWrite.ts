@@ -27,6 +27,7 @@ import type { Guild } from "discord.js";
 import { validateMemoryContent, checkPersonalMemoryLimit, checkServerMemoryLimit } from "./memoryLimits";
 import type { ServerMemoryRow, PersonalMemoryRow, SetupConfig, SetupResult } from "../../types/db/schema";
 import { setupConfigSchema, setupResultSchema } from "../../types/db/schema";
+import { emitScheduledWorkNudge } from "@/timers/scheduledWorkSignals";
 
 const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
   (process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
@@ -1306,6 +1307,7 @@ export async function addReminder(reminderData: {
       `Reminder successfully created (ID: ${validatedReminder.data.reminder_id}) ` +
         `for ${reminderData.user_nickname} at ${reminderData.reminder_time.toISOString()}`,
     );
+    emitScheduledWorkNudge(`reminder-create:${validatedReminder.data.reminder_id ?? "unknown"}`);
     return validatedReminder.data;
   } catch (error) {
     const context: ErrorContext = {
@@ -1363,6 +1365,7 @@ export async function rescheduleReminder(reminderId: number, nextReminderTime: D
     }
 
     log.success(`Reminder rescheduled (ID: ${reminderId}) to ${nextReminderTime.toISOString()}`);
+    emitScheduledWorkNudge(`reminder-reschedule:${reminderId}`);
     return validatedReminder.data;
   } catch (error) {
     const context: ErrorContext = {
@@ -1450,6 +1453,7 @@ export async function insertRandomTrigger(data: RandomTriggerData): Promise<Rand
     }
 
     log.success(`Random trigger created (id=${parsed.data.trigger_id}) for channel ${data.channelDiscId}`);
+    emitScheduledWorkNudge(`random-trigger-create:${parsed.data.trigger_id ?? "unknown"}`);
     return parsed.data;
   } catch (error) {
     const context: ErrorContext = {
@@ -1504,6 +1508,7 @@ export async function upsertRandomTrigger(
     }
 
     log.success(`Random trigger updated (id=${triggerId})`);
+    emitScheduledWorkNudge(`random-trigger-update:${triggerId}`);
     return parsed.data;
   } catch (error) {
     const context: ErrorContext = {
@@ -1530,6 +1535,7 @@ export async function deleteRandomTrigger(triggerId: number): Promise<boolean> {
 			WHERE trigger_id = ${triggerId}
 		`;
     log.success(`Random trigger deleted (id=${triggerId})`);
+    emitScheduledWorkNudge(`random-trigger-delete:${triggerId}`);
     return true;
   } catch (error) {
     const context: ErrorContext = {
@@ -1576,6 +1582,7 @@ export async function rescheduleRandomTrigger(
       log.warn(`rescheduleRandomTrigger: no row found for trigger_id=${triggerId}`);
       return false;
     }
+    emitScheduledWorkNudge(`random-trigger-reschedule:${triggerId}`);
     return true;
   } catch (error) {
     const context: ErrorContext = {

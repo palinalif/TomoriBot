@@ -76,6 +76,8 @@ chat pipeline
 - Optional Matrix bridge: `src/utils/matrix/*`
 - Optional production health endpoint: `127.0.0.1:3000/health`
 - Optional pg_cron scheduling for cooldown cleanup
+- Shared in-app scheduled work coordinator for reminder delivery and random triggers
+  - Uses next-due `setTimeout` scheduling plus DB-write nudges and a periodic reconcile backstop
 
 ## Why This Shape Works
 

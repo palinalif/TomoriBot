@@ -398,34 +398,19 @@ client.once("clientReady", () => {
   log.success("Health tracker initialized");
 });
 
-// Initialize reminder timer system (fallback for when pg_cron is not available)
-log.section("Initializing Reminder System...");
+// Initialize shared scheduled work coordinator for reminders and random triggers
+log.section("Initializing Scheduled Work Coordinator...");
 try {
-  const { initializeReminderTimer } = await import("./timers/reminderTimer");
+  const { initializeScheduledWorkCoordinator } = await import("./timers/scheduledWorkCoordinator");
 
-  // Start reminder timer after client is ready
+  // Start scheduled work after client is ready
   client.once("clientReady", () => {
-    initializeReminderTimer(client);
-    log.success("Reminder system initialized with 1-minute polling");
+    initializeScheduledWorkCoordinator(client);
+    log.success("Scheduled work coordinator initialized");
   });
 } catch (error) {
-  log.error("Failed to initialize reminder system", error as Error);
-  // Non-critical error - reminders won't work but bot can still function
-}
-
-// Initialize random trigger timer system
-log.section("Initializing Random Trigger System...");
-try {
-  const { initializeRandomTriggerTimer } = await import("./timers/randomTriggerTimer");
-
-  // Start random trigger timer after client is ready
-  client.once("clientReady", () => {
-    initializeRandomTriggerTimer(client);
-    log.success("Random trigger system initialized with 1-minute polling");
-  });
-} catch (error) {
-  log.error("Failed to initialize random trigger system", error as Error);
-  // Non-critical error - random triggers won't fire but bot can still function
+  log.error("Failed to initialize scheduled work coordinator", error as Error);
+  // Non-critical error - reminders and random triggers won't work but bot can still function
 }
 
 // Initialize memory monitoring system
