@@ -19,7 +19,7 @@ import {
   MAX_TAGS,
   parseAndValidateNaiTags,
   TAGS_MODAL_MAX_LENGTH,
-} from "./tagHelpers";
+} from "@/utils/novelai/tagHelpers";
 
 const MODAL_CUSTOM_ID = "novelai_tags_negative_modal";
 const TAGS_INPUT_ID = "negative_tags_input";

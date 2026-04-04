@@ -137,12 +137,11 @@ Export is granular by type (JSON file via DM), including:
 - server config
 - global personal memories
 
-Delete is also type-scoped and requires confirmation choice:
-- persona personal memories
-- persona server memories
+Delete/reset remains type-scoped. Commands that currently require confirmation choice are:
 - personal settings reset
 - server config reset
-- global personal memories
+
+Personal memory removal remains type-scoped by persona/global scope, and server memory removal remains type-scoped by persona scope, but both now remove a single selected memory per invocation instead of bulk-deleting a scope.
 
 Important: the current reset/remove commands do not implement a blanket user-row/account hard delete path in these command implementations.
 

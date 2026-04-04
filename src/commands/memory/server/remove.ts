@@ -107,25 +107,7 @@ async function performServerMemoryRemoval(
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("remove")
-    .setDescription(localizer("en-US", "commands.memory.server.remove.description"))
-    .addStringOption((option) =>
-      option
-        .setName("confirmation")
-        .setDescription(localizer("en-US", "commands.data.delete.confirmation_description"))
-        .setRequired(false)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.data.delete.confirmation_yes"),
-            value: "yes",
-          },
-          {
-            name: localizer("en-US", "commands.data.delete.confirmation_no"),
-            value: "no",
-          },
-        ),
-    );
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.memory.server.remove.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -211,7 +193,6 @@ export async function execute(
 
       // 4. Check permissions and if teaching is enabled
       const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
-      const confirmation = interaction.options.getString("confirmation");
       // NOTE: Check the correct config key name from tomori_configs table
       if (
         !tomoriState.config.server_memteaching_enabled && // Assuming this is the correct key
@@ -226,51 +207,8 @@ export async function execute(
         return;
       }
 
-      if (confirmation === "yes" && !hasManagePermission) {
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.data.delete.no_permission_title",
-          descriptionKey: "commands.data.delete.no_permission_description",
-          color: ColorCode.ERROR,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-
       // 5. Fetch lineage-scoped server memories for the selected persona.
       const targetPersonaLineageId = selectedPersona.persona_lineage_id ?? 0;
-      if (confirmation === "yes") {
-        const deletedMemories = await sql<Array<{ server_memory_id: number }>>`
-          DELETE FROM server_memories
-          WHERE server_id = ${tomoriState.server_id}
-            AND persona_lineage_id = ${targetPersonaLineageId}
-          RETURNING server_memory_id
-        `;
-
-        if (deletedMemories.length === 0) {
-          await replyInfoEmbed(personaSelectionInteraction, locale, {
-            titleKey: "commands.data.delete.no_server_data_title",
-            descriptionKey: "commands.data.delete.no_persona_server_memories_description",
-            descriptionVars: {
-              persona_name: selectedPersona.tomori_nickname ?? "persona",
-            },
-            color: ColorCode.WARN,
-          });
-          return;
-        }
-
-        invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "commands.data.delete.success_memory_scope_title",
-          descriptionKey: "commands.data.delete.success_persona_server_memories_description",
-          descriptionVars: {
-            persona_name: selectedPersona.tomori_nickname ?? "persona",
-            memory_count: deletedMemories.length.toString(),
-          },
-          color: ColorCode.SUCCESS,
-        });
-        return;
-      }
-
       let memoriesQuery = sql`
 				SELECT server_memory_id, content, user_id
 				FROM server_memories
