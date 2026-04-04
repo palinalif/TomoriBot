@@ -58,7 +58,6 @@ const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.document.description": "commands.teach.document.description",
   "commands.memory.personal.description": "commands.teach.memory.personal.description",
   "commands.memory.server.description": "commands.teach.memory.server.description",
-  "commands.personal.reminder.description": "commands.forget.reminder.description",
   "commands.persona.attribute.add.description": "commands.teach.attribute.description",
   "commands.persona.attribute.remove.description": "commands.forget.attribute.description",
   "commands.persona.sample-dialogue.add.description": "commands.teach.sampledialogue.description",
@@ -71,7 +70,6 @@ const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.personal.remove.description": "commands.forget.memory.personal.description",
   "commands.memory.server.add.description": "commands.teach.memory.server.description",
   "commands.memory.server.remove.description": "commands.forget.memory.server.description",
-  "commands.personal.reminder.remove.description": "commands.forget.reminder.description",
 };
 
 function localizeWithAliases(locale: string, key: string): string {

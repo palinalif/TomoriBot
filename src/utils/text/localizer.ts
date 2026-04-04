@@ -15,7 +15,7 @@ let isInitialized = false; // Track initialization state
  */
 function dedent(str: string): string {
   // If string is empty or has only one line, return it as is
-  if (!str || !str.includes("\n")) return str;
+  if (!str?.includes("\n")) return str;
 
   // Split into lines
   const lines = str.split("\n");

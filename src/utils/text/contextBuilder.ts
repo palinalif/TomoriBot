@@ -2050,8 +2050,7 @@ async function buildContextNative({
     if (
       (IS_PRODUCTION || ENABLE_LOCAL_RAG) &&
       memoryGuard.getStatus() !== "critical" &&
-      tomoriState &&
-      tomoriState.server_id &&
+      tomoriState?.server_id &&
       tomoriState.config.embedding_model_id &&
       tomoriState.config.api_key
     ) {

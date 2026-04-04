@@ -419,7 +419,7 @@ These commands still remove one dynamic item at a time, but the data shape is a 
 | Command                    | File                               | Current Input         | Why Checkbox Groups Fit                                                   | Notes                                                                 |
 | -------------------------- | ---------------------------------- | --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `/persona attribute remove` | `persona/attribute/remove.ts`      | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
-| `/personal reminder remove` | `personal/reminder/remove.ts`      | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
+| `/scheduled-task remove` | `scheduled-task/remove.ts`      | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
 | `/memory document remove`   | `memory/document/remove.ts`        | Persona picker + single paginated select | Document cleanup is an obvious multi-select management flow              | Large lists should keep paginated fallback                             |
 | `/memory history remove`    | `memory/history/remove.ts`         | Persona picker + single paginated select | History entries are frequently pruned in groups                          | Large lists should keep paginated fallback                             |
 | `/persona sample-dialogue remove` | `persona/sample-dialogue/remove.ts` | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
@@ -446,7 +446,7 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/memory server add`             | `memory/server/add.ts`          | Dynamic memory list                                       |
 | `/novelai image-tags character`        | `novelai/tags/character.ts`      | Dynamic persona list                                      |
 | `/persona attribute remove`      | `persona/attribute/remove.ts`   | Dynamic attribute list, uses pagination                   |
-| `/personal reminder remove`      | `personal/reminder/remove.ts`   | Dynamic reminder list                                     |
+| `/scheduled-task remove`      | `scheduled-task/remove.ts`   | Dynamic reminder list                                     |
 | `/server welcome-channel set`    | `server/welcome-channel/set.ts`  | Channel option + dynamic persona list                     |
 
 ### Not Candidates — Keep Text Input

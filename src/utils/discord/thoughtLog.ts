@@ -238,6 +238,7 @@ export async function sendThoughtLogEmbed({
     const payloads = embeds.map((embed) => ({
       embeds: [embed],
       allowedMentions: { parse: [] as [] },
+      flags: ["SuppressNotifications"] as const,
     }));
     const shouldUseWebhook =
       owner && owner.type !== "default" && "fetchWebhooks" in thoughtLogChannel && "createWebhook" in thoughtLogChannel;

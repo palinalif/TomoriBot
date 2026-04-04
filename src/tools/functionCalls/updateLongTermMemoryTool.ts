@@ -289,7 +289,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
 
       const targetUserRow = await loadUserRow(resolvedTargetUserId as string);
-      if (!targetUserRow || !targetUserRow.user_id) {
+      if (!targetUserRow?.user_id) {
         return {
           success: false,
           error: `Tomori doesn't know ${resolvedTargetUserLabel} yet, so this personal memory cannot be updated.`,

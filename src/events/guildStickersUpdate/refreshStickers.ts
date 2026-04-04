@@ -34,7 +34,7 @@ const handleGuildStickersUpdate: EventFunction = async (_client: Client, ...args
             LIMIT 1
         `;
 
-    if (!serverRow || !serverRow.server_id) {
+    if (!serverRow?.server_id) {
       log.warn(`Received sticker update for guild ${guild.id} but server is not registered in DB. Skipping refresh.`);
       return; // Server not setup, nothing to refresh
     }

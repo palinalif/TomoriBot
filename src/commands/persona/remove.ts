@@ -128,7 +128,7 @@ export async function execute(
       10,
     );
     const personaToRemove = removablePersonas[selectedIndex];
-    if (!personaToRemove || !personaToRemove.tomori_id) {
+    if (!personaToRemove?.tomori_id) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.unknown_error_title",
         descriptionKey: "general.errors.unknown_error_description",

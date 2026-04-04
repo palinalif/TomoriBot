@@ -1519,7 +1519,7 @@ export async function execute(
 
     const serverDiscId = interaction.guild?.id ?? interaction.user.id;
     const tomoriState = await getCachedTomoriState(serverDiscId);
-    if (!tomoriState || !tomoriState.config.api_key) {
+    if (!tomoriState?.config.api_key) {
       await sendLegacyEstimateEmbed(interaction, locale, true);
       return;
     }

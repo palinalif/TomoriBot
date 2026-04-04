@@ -589,12 +589,7 @@ export async function execute(
       }
 
       // Custom provider post-processing: update config with endpoint URL and LLM ID
-      if (
-        isCustomProvider(normalizedProvider) &&
-        customCapabilitiesResult &&
-        customCapabilitiesResult.llmId &&
-        customEndpointUrl
-      ) {
+      if (isCustomProvider(normalizedProvider) && customCapabilitiesResult?.llmId && customEndpointUrl) {
         // Non-null assertion is safe here - we've verified llmId is truthy in the if condition
         const customLlmId = customCapabilitiesResult.llmId as number;
         try {

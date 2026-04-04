@@ -1593,7 +1593,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       // Get the first accumulated tool call (we only support one at a time currently)
       const accumulated = this.toolCallAccumulator.get(0);
 
-      if (!accumulated || !accumulated.functionName) {
+      if (!accumulated?.functionName) {
         log.warn("OpenRouter: finish_reason is 'tool_calls' but no tool call was accumulated!");
         // Return done to avoid infinite retry
         return {

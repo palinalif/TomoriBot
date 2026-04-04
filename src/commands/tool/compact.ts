@@ -423,7 +423,7 @@ async function buildSupplementaryContext(params: {
       if (userPrivacyLevel !== PrivacyLevel.MINIMAL) continue;
 
       const userRow = await getCachedUserRow(userId);
-      if (!userRow || !userRow.user_id) {
+      if (!userRow?.user_id) {
         continue;
       }
 

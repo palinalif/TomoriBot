@@ -211,7 +211,7 @@ async function handlePersonaImpersonation(
   const messageContent = modalResult.values.message_content || "";
 
   const selectedPersona = allPersonas[selectedIndex];
-  if (!selectedPersona || !selectedPersona.tomori_id) {
+  if (!selectedPersona?.tomori_id) {
     log.error(`Selected persona at index ${selectedIndex} not found in persona list`);
     await replyInfoEmbed(modalResult.interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

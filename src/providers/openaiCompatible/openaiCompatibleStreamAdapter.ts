@@ -360,7 +360,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       }
 
       const accumulated = this.toolCallAccumulator.get(0);
-      if (!accumulated || !accumulated.functionName) {
+      if (!accumulated?.functionName) {
         log.warn(`${this.options.adapterName}: finish_reason was 'tool_calls' but no tool call was accumulated`);
         return this.attachPendingThoughts({
           type: "done",

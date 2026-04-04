@@ -338,7 +338,7 @@ export async function execute(
         log.info(`Provider changed from ${currentProvider} to ${newProvider}, loading default model`);
         const defaultModel = await loadDefaultModelForProvider(newProvider);
 
-        if (!defaultModel || !defaultModel.llm_id) {
+        if (!defaultModel?.llm_id) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.api-key.set.no_default_model_title",
             descriptionKey: "commands.config.api-key.set.no_default_model_description",

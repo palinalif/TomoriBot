@@ -274,7 +274,8 @@ Rules:
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, attribute(add/remove), sample-dialogue(add/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/remove/import/export), server(add/remove/import/export)
-- `personal`: privacy, language, nickname, cache, config(import/export/remove), reminder(remove), impersonate(prompt)
+- `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt)
+- `scheduled-task`: remove
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)
 - `tool`: ping, status, refresh, compact, comment
 

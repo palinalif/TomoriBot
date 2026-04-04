@@ -4270,12 +4270,6 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           confirmation_choice_no: `No, cancel`,
         },
       },
-      reminder: {
-        description: `Manage your personal reminders.`,
-        remove: {
-          description: `Remove one of your reminders.`,
-        },
-      },
       privacy: {
         description: `Control personal memory storage and privacy settings`,
 
@@ -4369,6 +4363,21 @@ You can change this anytime using \`/personal privacy\`.`,
           title: `STM Cleared`,
           success: `Your user-specific STM has been cleared across all channels.`,
         },
+      },
+    },
+
+    "scheduled-task": {
+      description: `Manage scheduled tasks and reminders.`,
+      remove: {
+        description: `Remove a scheduled task or reminder.`,
+        modal_title: `Remove Scheduled Task`,
+        select_label: `Scheduled Task to Remove`,
+        select_description: `Choose which scheduled task or reminder to remove`,
+        select_placeholder: `Select a scheduled task...`,
+        no_entries_title: `No Scheduled Tasks`,
+        no_entries: `There are no scheduled tasks or reminders to remove. Set one by asking me to remind you or schedule a task.`,
+        success_title: `Scheduled Task Removed`,
+        success_description: `Successfully removed: "{reminder_purpose}"`,
       },
     },
 
@@ -4996,18 +5005,18 @@ You can change this anytime using \`/personal privacy\`.`,
     // Confirmation embed when reminder is set
     reminder_set_title: `⏰ {persona_nickname} Set a Reminder`,
     reminder_set_description: `I'll remind {user_nickname} about "**{reminder_purpose}**" at \`{reminder_time}\``,
-    reminder_set_footer: `A mention will be sent after {time_remaining} from now. Delete reminders with \`/personal reminder remove\`.`,
-    reminder_set_footer_recurring: `First mention in {time_remaining}. Repeats every {repetition_interval_hours} hour(s). Delete reminders with \`/personal reminder remove\`.`,
+    reminder_set_footer: `A mention will be sent after {time_remaining} from now. Delete reminders with \`/scheduled-task remove\`.`,
+    reminder_set_footer_recurring: `First mention in {time_remaining}. Repeats every {repetition_interval_hours} hour(s). Delete reminders with \`/scheduled-task remove\`.`,
 
     // Recurring task setup (self reminders)
     recurring_task_set_title: `🔁 {persona_nickname} Set Up a Recurring Task`,
     recurring_task_set_description: `I'll run "**{reminder_purpose}**" starting at \`{reminder_time}\`, then repeat every {repetition_interval_hours} hour(s).`,
-    recurring_task_set_footer: `You can delete reminders using \`/personal reminder remove\`.`,
+    recurring_task_set_footer: `You can delete reminders using \`/scheduled-task remove\`.`,
 
     // One-time task setup (self reminders, non-recurring)
     task_set_title: `✅ {persona_nickname} Set Up a Task`,
     task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
-    task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/personal reminder remove\`.`,
+    task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/scheduled-task remove\`.`,
 
     // Fallback info embed when AI generation fails - shows the raw reminder/task content
     reminder_triggered_title: `🔵 Reminder Triggered`,

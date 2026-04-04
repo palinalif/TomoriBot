@@ -1735,7 +1735,7 @@ export async function loadServerStickers(serverDiscId: string): Promise<ServerSt
             SELECT server_id FROM servers WHERE server_disc_id = ${serverDiscId} LIMIT 1
         `;
 
-    if (!server || !server.server_id) {
+    if (!server?.server_id) {
       log.warn(`Server not found in DB with Discord ID: ${serverDiscId} when trying to load stickers.`);
       return null; // Server itself not found
     }

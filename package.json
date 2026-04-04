@@ -15,7 +15,7 @@
     "restore-backup": "bun run scripts/backupData.ts --restore",
     "backup:personas": "bun run scripts/backupPersonas.ts",
     "backup:memories": "bun run scripts/backupMemories.ts",
-    "lint": "bunx @biomejs/biome check --fix",
+    "lint": "biome check --fix",
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/checkLocalizationKeys.ts",
     "check-limits": "bun run scripts/checkDiscordLimits.ts",

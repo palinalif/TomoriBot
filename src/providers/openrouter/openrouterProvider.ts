@@ -67,6 +67,7 @@ import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 import { openrouterProviderInfo } from "./providerInfo";
 import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
+import { resolveEffectiveOpenRouterSeesYouTube } from "@/utils/provider/openrouterModelCapabilities";
 
 /**
  * Gets the default OpenRouter model with a robust fallback chain:
@@ -352,7 +353,7 @@ export class OpenrouterProvider
         has_tools: request.tomoriState.llm.has_tools,
         sees_images: request.tomoriState.llm.sees_images,
         sees_videos: request.tomoriState.llm.sees_videos,
-        sees_youtube: request.tomoriState.llm.sees_youtube,
+        sees_youtube: resolveEffectiveOpenRouterSeesYouTube(request.tomoriState),
         supports_structoutput: request.tomoriState.llm.supports_structoutput,
       },
       config: {
@@ -421,7 +422,7 @@ export class OpenrouterProvider
           has_tools: tomoriState.llm.has_tools,
           sees_images: tomoriState.llm.sees_images,
           sees_videos: tomoriState.llm.sees_videos,
-          sees_youtube: tomoriState.llm.sees_youtube,
+          sees_youtube: resolveEffectiveOpenRouterSeesYouTube(tomoriState),
           supports_structoutput: tomoriState.llm.supports_structoutput,
         },
         config: {

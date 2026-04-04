@@ -495,7 +495,7 @@ export function validateMemoryContent(content: string): MemoryValidationResult {
   const limits = getMemoryLimits();
 
   // Check if content is empty or just whitespace
-  if (!content || !content.trim()) {
+  if (!content?.trim()) {
     return {
       isValid: false,
       error: "CONTENT_EMPTY",
@@ -525,7 +525,7 @@ export function validateAttribute(content: string): MemoryValidationResult {
   const limits = getMemoryLimits();
 
   // Check if content is empty or just whitespace
-  if (!content || !content.trim()) {
+  if (!content?.trim()) {
     return {
       isValid: false,
       error: "CONTENT_EMPTY",
@@ -555,7 +555,7 @@ export function validateSampleDialogue(content: string): MemoryValidationResult 
   const limits = getMemoryLimits();
 
   // Check if content is empty or just whitespace
-  if (!content || !content.trim()) {
+  if (!content?.trim()) {
     return {
       isValid: false,
       error: "CONTENT_EMPTY",

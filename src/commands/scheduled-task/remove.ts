@@ -23,7 +23,7 @@ import { formatTimeWithOffset, formatUTCOffset } from "@/utils/text/timezoneHelp
 import { isBridgeUserId } from "@/utils/bridge";
 
 // Rule 20: Constants for static values at the top
-const MODAL_CUSTOM_ID = "forget_reminder_modal";
+const MODAL_CUSTOM_ID = "scheduled_task_remove_modal";
 const REMINDER_SELECT_ID = "reminder_select";
 type ReminderSelectionRow = {
   reminder_id: number;
@@ -64,8 +64,8 @@ async function performReminderRemoval(
   );
 
   await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.forget.reminder.success_title",
-    descriptionKey: "commands.forget.reminder.success_description",
+    titleKey: "commands.scheduled-task.remove.success_title",
+    descriptionKey: "commands.scheduled-task.remove.success_description",
     descriptionVars: {
       reminder_purpose:
         reminderToRemove.reminder_purpose.length > 80
@@ -78,7 +78,7 @@ async function performReminderRemoval(
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("remove").setDescription(localizer("en-US", "commands.personal.reminder.remove.description"));
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.scheduled-task.remove.description"));
 
 /**
  * Removes a reminder for the user using a paginated modal.
@@ -194,8 +194,8 @@ export async function execute(
 
       if (!reminders || reminders.length === 0) {
         await replyInfoEmbed(selectionInteraction, locale, {
-          titleKey: "commands.forget.reminder.no_reminders_title",
-          descriptionKey: "commands.forget.reminder.no_reminders",
+          titleKey: "commands.scheduled-task.remove.no_entries_title",
+          descriptionKey: "commands.scheduled-task.remove.no_entries",
           color: ColorCode.WARN,
         });
         return;
@@ -242,13 +242,13 @@ export async function execute(
 
       const modalResult = await promptWithPaginatedModal(selectionInteraction, locale, {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.forget.reminder.modal_title",
+        modalTitleKey: "commands.scheduled-task.remove.modal_title",
         components: [
           {
             customId: REMINDER_SELECT_ID,
-            labelKey: "commands.forget.reminder.select_label",
-            descriptionKey: "commands.forget.reminder.select_description",
-            placeholder: "commands.forget.reminder.select_placeholder",
+            labelKey: "commands.scheduled-task.remove.select_label",
+            descriptionKey: "commands.scheduled-task.remove.select_description",
+            placeholder: "commands.scheduled-task.remove.select_placeholder",
             required: true,
             options: reminderSelectOptions,
           },
@@ -289,12 +289,16 @@ export async function execute(
       tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "forget reminder",
+        command: "scheduled-task remove",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(`Unexpected error in /forget reminder for user ${userData.user_disc_id}`, error as Error, context);
+    await log.error(
+      `Unexpected error in /scheduled-task remove for user ${userData.user_disc_id}`,
+      error as Error,
+      context,
+    );
 
     const errorReplyTarget =
       personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied

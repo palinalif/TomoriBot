@@ -31,7 +31,7 @@ export const encryptApiKey = async (apiKey: string): Promise<{ encrypted: Buffer
       ) AS encrypted_key
     `;
 
-    if (!result || !result.encrypted_key) {
+    if (!result?.encrypted_key) {
       throw new Error("Encryption failed");
     }
 
@@ -70,7 +70,7 @@ export const decryptApiKey = async (encryptedKey: Buffer, keyVersion: number = 1
       SELECT pgp_sym_decrypt(${encryptedKey}, ${key}) AS decrypted_key
     `;
 
-    if (!result || !result.decrypted_key) {
+    if (!result?.decrypted_key) {
       throw new Error("Decryption failed");
     }
 
@@ -169,7 +169,7 @@ export const getOptApiKey = async (serverId: number, serviceName: string): Promi
 			WHERE server_id = ${serverId} AND service_name = ${serviceName}
 		`;
 
-    if (!result || !result.api_key) {
+    if (!result?.api_key) {
       log.info(`No optional API key found for ${serviceName} on server ${serverId}`);
       return null;
     }

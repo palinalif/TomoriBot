@@ -583,7 +583,7 @@ export async function execute(
       } else {
         // Fresh provider switch — load default models
         const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
-        if (!defaultModel || !defaultModel.llm_id) {
+        if (!defaultModel?.llm_id) {
           await replyInfoEmbed(modalSubmitInteraction, locale, {
             titleKey: "commands.config.api-key.set.no_default_model_title",
             descriptionKey: "commands.config.api-key.set.no_default_model_description",

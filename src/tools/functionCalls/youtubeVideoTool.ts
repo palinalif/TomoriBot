@@ -9,6 +9,10 @@ import type { EnhancedVideoContent } from "@/types/tool/enhancedContextTypes";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
+import {
+  resolveEffectiveOpenRouterModelCodename,
+  resolveEffectiveOpenRouterSeesYouTube,
+} from "@/utils/provider/openrouterModelCapabilities";
 
 /**
  * Tool for processing YouTube videos on-demand using Google's Gemini API
@@ -79,12 +83,13 @@ export class YouTubeVideoTool extends BaseTool {
       return false;
     }
 
-    // Check if model has YouTube processing capabilities (Google-specific feature)
-    const hasYouTube = context.tomoriState.llm.sees_youtube;
+    // OpenRouter Gemini models can use YouTube URLs even when the local DB flag is stale.
+    const hasYouTube = resolveEffectiveOpenRouterSeesYouTube(context.tomoriState);
 
     if (!hasYouTube) {
+      const effectiveModelCodename = resolveEffectiveOpenRouterModelCodename(context.tomoriState);
       log.info(
-        `YouTubeVideoTool: Model ${context.tomoriState.llm.llm_codename} does not support YouTube processing (sees_youtube=false). Tool disabled.`,
+        `YouTubeVideoTool: Model ${effectiveModelCodename} does not support YouTube processing (effective sees_youtube=false). Tool disabled.`,
       );
       return false;
     }

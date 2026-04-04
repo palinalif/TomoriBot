@@ -99,7 +99,7 @@ Providers may emit displayable reasoning separately from visible reply text.
 
 On successful streamed turns, `StreamOrchestrator` returns the merged reasoning payload in `StreamResult.thoughtLog`, along with the first visible reply URL when one exists.
 
-`tomoriChat` merges thought logs across successful tool-call iterations and posts one final embed to the configured `tomori_configs.thought_log_channel_disc_id` channel after the full turn completes. If the configured channel is missing, inaccessible, or deleted, the main reply still succeeds and the thought-log post is skipped with a warning.
+`tomoriChat` merges thought logs across successful tool-call iterations and posts one final embed to the configured `tomori_configs.thought_log_channel_disc_id` channel after the full turn completes. Thought-log embeds are sent with suppressed notifications so they do not ping channel subscribers. If the configured channel is missing, inaccessible, or deleted, the main reply still succeeds and the thought-log post is skipped with a warning.
 
 Normal message triggers are disabled inside the configured thought-log channel so provider reasoning echoes cannot recursively trigger new chats there. Slash commands still work because they do not use `messageCreate`.
 

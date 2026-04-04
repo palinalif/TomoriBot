@@ -121,14 +121,7 @@ export class MemoryTool extends BaseTool {
     const resolvedUserId = context.message?.author?.id || context.userId;
     const userRow = resolvedUserId ? await loadUserRow(resolvedUserId) : null;
 
-    if (
-      !tomoriState ||
-      !userRow ||
-      !userRow.user_id ||
-      !tomoriState.server_id ||
-      !tomoriState.tomori_id ||
-      !resolvedUserId
-    ) {
+    if (!tomoriState || !userRow?.user_id || !tomoriState.server_id || !tomoriState.tomori_id || !resolvedUserId) {
       // Log which specific value is missing for diagnostics
       const missing = [
         !tomoriState && "tomoriState",
@@ -386,7 +379,7 @@ export class MemoryTool extends BaseTool {
         // Load target user (from tomoriChat.ts:1204-1206)
         const targetUserRow = await loadUserRow(resolvedTargetUserId as string);
 
-        if (!targetUserRow || !targetUserRow.user_id) {
+        if (!targetUserRow?.user_id) {
           log.warn(`Self-teach: Resolved target user ${resolvedTargetUserId} not found in Tomori records`);
           return {
             success: false,

@@ -854,7 +854,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       throw new Error(`Tool '${tool.name}' must have a category`);
     }
 
-    if (!tool.parameters || !tool.parameters.properties || !Array.isArray(tool.parameters.required)) {
+    if (!tool.parameters?.properties || !Array.isArray(tool.parameters.required)) {
       throw new Error(`Tool '${tool.name}' must have valid parameter schema`);
     }
 

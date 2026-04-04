@@ -230,7 +230,7 @@ export async function execute(
       preset = allPresets[0] ?? null;
     }
 
-    if (!preset || !preset.preset_id) {
+    if (!preset?.preset_id) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.st-preset.node.toggle.no_preset_title",
         descriptionKey: "commands.st-preset.node.toggle.no_preset_description",

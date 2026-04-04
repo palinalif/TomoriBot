@@ -445,7 +445,7 @@ export class ReminderTool extends BaseTool {
           // Load target user to verify they exist
           const targetUserRow = await loadUserRow(resolvedTargetUserId);
 
-          if (!targetUserRow || !targetUserRow.user_id) {
+          if (!targetUserRow?.user_id) {
             log.warn(`Reminder: Resolved target user ${resolvedTargetUserId} is unknown to TomoriBot`);
             return {
               success: false,
