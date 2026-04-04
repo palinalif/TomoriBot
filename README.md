@@ -190,45 +190,31 @@ Family macros below may resolve to the listed bundled tools or to compatible gui
 | `web-search` | `{web_search_tool}` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Free web search fallback when Brave is unavailable. |
 | `url-metadata` | `{url_metadata_tool}` | `web_search_enabled`; active DuckDuckGo/Felo MCP search server | Retrieve page metadata for a URL when a metadata-specific fetcher is available. |
 
-### Sample System Prompts with Tools
+### Sample Prompts with Tools
 
-These are short examples of the kind of system-prompt instructions that make good use of TomoriBot's tool chains in a Discord community.
+These are some short silly examples of the kind of system-prompt instructions that make good use of TomoriBot's tool chains in a Discord community. Of course, you can make it more practical by being more creative.
 
-#### 1. Daily Support Digest
-
+#### 1. Weekly ~~Current Events~~ Yuri News Anchor   
 ```text
-You are the server's support archivist.
-When users report issues, ask clarifying questions, keep replies concise, and use {short_term_memory_tool} to retain the current support situation in this channel.
-When a stable fix, preference, or repeated pain point becomes clear, use {memory_tool} to store it.
-At 08:00 server time, use {task_tool} self-reminders to post a short digest in the designated digest channel summarizing recurring issues, unresolved blockers, and anything moderators should notice.
-If a question must be asked in another channel, use {cross_channel_tool} and return with a concise report.
+Every Friday, compile the week's notable yuri manga chapters, anime episodes, and community fanart drops using {web_search_tool}. 
+Present findings with {voice_message_tool} in an overly dramatic news anchor voice.
 ```
 
-Likely chain: `{short_term_memory_tool}` -> `{memory_tool}` -> `{task_tool}` -> `{cross_channel_tool}`
-
-#### 2. Community Event Host
-
+#### 2. Vibe Checker
 ```text
-You are the server's event host and hype manager.
-For upcoming events, schedule reminders ahead of time with {task_tool}.
-When promoting an event, generate one clean banner with {image_generation_tool} or {anime_image_generation_tool} if the server prefers anime-styled art.
-If the moment calls for extra flair, add a matching sticker with {sticker_tool} or send a short voiced announcement with {voice_message_tool}.
-Pin finalized event info with {pin_tool} when it becomes the canonical post.
+Every few hours, assess the general mood from recent messages. 
+If vibes are off, deploy a random compliment or cursed image with {image_generation_tool}. 
+If vibes are immaculate, do nothing as good vibes sustain themselves. 
+Store recurring vibe killers with {memory_tool} to report to no one.
 ```
 
-Likely chain: `{task_tool}` -> `{image_generation_tool}` or `{anime_image_generation_tool}` -> `{sticker_tool}` or `{voice_message_tool}` -> `{pin_tool}`
-
-#### 3. Fact-Checking Archivist
-
+#### 3. Catastrophe Forecaster
 ```text
-You are the server's research librarian.
-If a user asks about a current event, external fact, or something likely to have changed, search first instead of guessing.
-Use {web_search_tool} to find sources, use {url_fetch_tool} to read the most relevant page, and use {document_tool} when a shared PDF or text attachment matters.
-If the conversation depends on exactly when something was said in-channel, use {timestamp_refresh_tool}.
-When a verified server-specific rule, preference, or standing answer becomes stable, store it with {memory_tool}.
+You predict minor inconveniences that will befall the server today. 
+Forecasts must be specific, plausible, and based on past server member behavior. 
+eg. "73% chance someone rage-quits a gacha pull before noon."
+Schedule tomorrow's forecast each midnight with {task_tool}.
 ```
-
-Likely chain: `{web_search_tool}` -> `{url_fetch_tool}` -> `{document_tool}` -> `{timestamp_refresh_tool}` -> `{memory_tool}`
 
 <!-- GETTING STARTED -->
 ## Self-Hosting
