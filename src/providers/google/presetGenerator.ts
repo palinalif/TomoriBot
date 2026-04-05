@@ -1,7 +1,8 @@
 /**
  * AI-Powered Preset Generation for TomoriBot
- * Uses Google Gemini 3 Flash for structured personality generation with optional web search
- * in a single API call.
+ * Uses a dual-agent approach: gemini-2.5-flash handles Google Search Grounding
+ * when web search is requested, then the user's configured model generates the
+ * structured persona JSON.
  */
 
 import { GoogleGenAI, type Content, type GenerateContentConfig } from "@google/genai";
@@ -13,17 +14,6 @@ export type {
   GeneratePresetParams,
   PresetGenerationResult,
 } from "@/types/provider/featureInterfaces";
-
-/**
- * USE_HARDCODED_DUAL_AGENT_MODELS
- *
- * When TRUE: For non-Gemini-3 dual-agent approach, use hardcoded models:
- *   - Search agent: gemini-2.5-flash (fast search)
- *   - Generation agent: gemini-2.5-pro (high quality structured output)
- *
- * When FALSE: Use the user's configured model for both search and generation agents
- */
-const USE_HARDCODED_DUAL_AGENT_MODELS = true;
 
 /**
  * Additional context for character search
@@ -425,41 +415,25 @@ export async function generatePresetFromPrompt(
     // 2. Initialize Gemini client (use pre-built if provided)
     const genAI = client ?? new GoogleGenAI({ apiKey });
 
-    // 3. Determine which approach to use based on model
-    const configuredModel = params.modelName || "gemini-3-flash-preview";
+    // 3. Resolve generation model; Gemini 3 uses flash-preview with a fallback
+    const configuredModel = params.modelName || "gemini-2.5-flash";
     const isGemini3 = configuredModel.startsWith("gemini-3");
 
-    // 4. Determine models to use for dual-agent approach
-    let searchAgentModel: string;
-    let generationAgentModel: string;
-
-    if (USE_HARDCODED_DUAL_AGENT_MODELS) {
-      // Hardcoded: Flash for search, Pro for generation
-      searchAgentModel = "gemini-2.5-flash";
-      generationAgentModel = "gemini-2.5-pro";
-    } else {
-      // User-configured: Same model for both agents
-      searchAgentModel = configuredModel;
-      generationAgentModel = configuredModel;
-    }
-
-    // 5. For non-Gemini 3 models with web search enabled, use dual-agent approach
+    // 4. Run search sub-agent when web search is requested.
+    //    gemini-2.5-flash is hardcoded for the search step across all models —
+    //    it supports Google Search Grounding on the free AI Studio tier and is
+    //    fast enough that it doesn't meaningfully delay generation.
+    const SEARCH_AGENT_MODEL = "gemini-2.5-flash";
     let searchInfo: string | undefined;
-    if (!isGemini3 && params.useWebSearch) {
-      if (USE_HARDCODED_DUAL_AGENT_MODELS) {
-        log.info(
-          `🔍 Using dual-agent approach: Search with ${searchAgentModel}, generate with ${generationAgentModel}`,
-        );
-      } else {
-        log.info(`🔍 Using dual-agent approach: Search and generate with ${configuredModel}`);
-      }
+    if (params.useWebSearch) {
+      log.info(`Running search sub-agent (${SEARCH_AGENT_MODEL}) for "${params.characterName}"`);
 
-      // 5a. Call search agent first
+      // 4a. Call search agent
       const searchResult = await searchCharacterInfo(
         apiKey,
         params.characterName,
         locale,
-        searchAgentModel,
+        SEARCH_AGENT_MODEL,
         {
           description: params.characterDescription,
           speechExamples: params.speechExamples,
@@ -468,7 +442,7 @@ export async function generatePresetFromPrompt(
         client,
       );
 
-      // 5b. Handle search errors
+      // 4b. Propagate hard errors (API key, rate limit, etc.)
       if (searchResult.error) {
         return {
           error: searchResult.error,
@@ -476,31 +450,21 @@ export async function generatePresetFromPrompt(
         };
       }
 
-      // 5c. Store search results for generation prompt
+      // 4c. Store results for injection into the generation prompt
       searchInfo = searchResult.characterInfo;
-      log.info(`Search completed, proceeding to generation stage`);
-    } else if (isGemini3) {
-      log.info(
-        `Using single-agent approach with Gemini 3 (web search: ${params.useWebSearch ? "enabled" : "disabled"})`,
-      );
-    } else {
-      log.info(`Using configured model ${configuredModel} for generation (no web search)`);
+      log.info("Search sub-agent completed, proceeding to generation");
     }
 
-    // 6. Set up model with fallback for Gemini 3, or use appropriate model for dual/single agent
+    // 5. Set up generation model; always uses the user's configured model so
+    //    free-tier users aren't silently upgraded to a paid model.
     let MODEL_NAME: string;
     let FALLBACK_MODEL: string | undefined;
 
     if (isGemini3) {
-      // For Gemini 3, use flash-preview with fallback to flash
+      // Gemini 3 preview models may not be stable; fall back to the GA flash release
       MODEL_NAME = "gemini-3-flash-preview";
       FALLBACK_MODEL = "gemini-3-flash";
-    } else if (!isGemini3 && params.useWebSearch) {
-      // For dual-agent approach, use the generation agent model
-      MODEL_NAME = generationAgentModel;
-      FALLBACK_MODEL = undefined;
     } else {
-      // For single-agent non-Gemini-3 (no web search), use configured model
       MODEL_NAME = configuredModel;
       FALLBACK_MODEL = undefined;
     }
@@ -555,12 +519,7 @@ export async function generatePresetFromPrompt(
       responseJsonSchema: responseJsonSchema,
     };
 
-    // 9. Only add web search tools for Gemini 3 models (dual-agent approach handles search separately)
-    if (isGemini3 && params.useWebSearch) {
-      generationConfig.tools = [{ googleSearch: {} }, { urlContext: {} }];
-    }
-
-    // 10. Build generation prompt
+    // 9. Build generation prompt
     let prompt = `You are an expert character creator for a Discord chatbot. Create a detailed character profile based on the following information.
 
 Character Name: ${params.characterName}
@@ -619,23 +578,16 @@ The sample_dialogues_in and sample_dialogues_out MUST follow this structure (exa
    - Avoid repeating patterns from previous dialogues
    - Could be humor, vulnerability, expertise, philosophical musings, or anything that adds dimension`;
 
-    // 9. Add web search information based on approach
+    // 9. Inject search results from the search sub-agent (if web search was requested)
     if (searchInfo) {
-      // Dual-agent approach: Include search results from first agent
       if (!searchInfo.includes("None found")) {
-        prompt += `\n\nWeb Search Results from search agent (use this information to create an authentic character profile):
+        prompt += `\n\nWeb Search Results (use this information to create an authentic character profile):
 ${searchInfo}
 
 Use the web search information to accurately represent the character's personality, background, and speaking style from their source material.`;
       } else {
         prompt += `\n\nNote: This is an original character. Create a unique profile based on the provided description and image (if any).`;
       }
-    } else if (isGemini3 && params.useWebSearch) {
-      // Single-agent approach: Instruct Gemini 3 to use its web search tools
-      prompt += `\n\nWeb Search Instructions:
-- Use Google Search and URL context tools to gather accurate, up-to-date details when helpful
-- If you cannot find reliable information, treat the character as original and rely on the user's description and image
-- Do not include citations, URLs, or sources in the JSON output`;
     }
 
     // 10. Add additional instructions if provided

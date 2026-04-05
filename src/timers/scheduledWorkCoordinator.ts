@@ -145,7 +145,9 @@ export class ScheduledWorkCoordinator {
     try {
       do {
         this.rerunRequested = false;
-        log.info(`Running scheduled work cycle (${reason})`);
+        if (reason !== "reconcile") {
+          log.info(`Running scheduled work cycle (${reason})`);
+        }
         await this.reminderProcessor.processDueReminders();
         await this.randomTriggerProcessor.processDueRandomTriggers();
         this.lastRunAt = new Date();
@@ -171,7 +173,6 @@ export class ScheduledWorkCoordinator {
 
     if (!nextDueTime) {
       this.nextWakeAt = null;
-      log.info("Scheduled work coordinator is idle; waiting for nudges or reconcile");
       return;
     }
 

@@ -620,6 +620,7 @@ export async function execute(
         provider: generationProviderName,
         userId: interaction.user.id,
         guildId: interaction.guild?.id,
+        suppressProgressNotices: true, // Search runs in background during generation; don't leak tool embeds into chat
       };
     } else if (useWebSearch) {
       log.warn("Preset generation web search skipped: no channel context available.");

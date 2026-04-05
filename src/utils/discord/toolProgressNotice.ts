@@ -99,6 +99,7 @@ export async function sendToolNotice(
   options: StandardEmbedOptions,
   logLabel: string,
 ): Promise<void> {
+  if (context.suppressProgressNotices) return;
   try {
     const finalOptions = buildToolNoticeOptions(context.locale, options);
     if (isToolNoticeVisible(context.tomoriState.config, noticeKey)) {
