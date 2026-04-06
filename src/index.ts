@@ -91,6 +91,11 @@ if (secrets.TOPGG_TOKEN) {
   process.env.TOPGG_TOKEN = secrets.TOPGG_TOKEN;
 }
 
+// Optional infrastructure config — must be set before any module reads MEMORY_PROTECTION()
+if (secrets.CONTAINER_MEMORY_LIMIT_MB) {
+  process.env.CONTAINER_MEMORY_LIMIT_MB = secrets.CONTAINER_MEMORY_LIMIT_MB;
+}
+
 log.success(
   `Secrets loaded successfully from ${(process.env.RUN_ENV || "development") === "production" && process.env.TEST_PRODUCTION !== "true" ? "AWS Secrets Manager" : ".env file"}`,
 );

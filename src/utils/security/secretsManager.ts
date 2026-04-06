@@ -41,6 +41,7 @@ export interface TomoriSecrets {
   MATRIX_HS_TOKEN?: string; // Homeserver token (hs_token) — homeserver sends this to verify its identity
   MATRIX_APPSERVICE_PUBLIC_URL?: string; // Optional callback URL used in appservice registration for remote homeservers
   TOPGG_TOKEN?: string; // Optional: Top.gg API token for posting server stats
+  CONTAINER_MEMORY_LIMIT_MB?: string; // Optional: AWS instance memory limit in MB (default: 1024)
   [key: string]: string | undefined; // Allow dynamic CRYPTO_SECRET_V* keys
 }
 
@@ -170,6 +171,11 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
       secrets.TOPGG_TOKEN = process.env.TOPGG_TOKEN;
     }
 
+    // Optional infrastructure config
+    if (process.env.CONTAINER_MEMORY_LIMIT_MB) {
+      secrets.CONTAINER_MEMORY_LIMIT_MB = process.env.CONTAINER_MEMORY_LIMIT_MB;
+    }
+
     // Validate required fields
     validateRequiredSecrets(secrets);
 
@@ -271,6 +277,11 @@ export async function getAppSecrets(): Promise<TomoriSecrets> {
     // Optional Top.gg integration token
     if (rawSecrets.TOPGG_TOKEN) {
       secrets.TOPGG_TOKEN = rawSecrets.TOPGG_TOKEN;
+    }
+
+    // Optional infrastructure config
+    if (rawSecrets.CONTAINER_MEMORY_LIMIT_MB) {
+      secrets.CONTAINER_MEMORY_LIMIT_MB = rawSecrets.CONTAINER_MEMORY_LIMIT_MB;
     }
 
     // 7. Validate required fields

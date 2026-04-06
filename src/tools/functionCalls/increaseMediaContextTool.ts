@@ -142,8 +142,8 @@ export class IncreaseMediaContextTool extends BaseTool {
         message: "Cannot expand media context right now due to high memory usage. Please try again in a moment.",
         data: {
           memory_status: memoryStatus.status,
-          memory_used_mb: memoryStatus.heapUsedMB,
-          memory_limit_mb: memoryStatus.heapLimitMB,
+          memory_used_mb: memoryStatus.rssUsedMB,
+          memory_limit_mb: memoryStatus.memoryLimitMB,
         },
       };
     }

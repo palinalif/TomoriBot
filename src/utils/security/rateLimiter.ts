@@ -192,34 +192,42 @@ export const STREAMING_LIMITS = {
 // -----------------------------------------------------------------------------
 // MEMORY PROTECTION (Global Process Memory)
 // -----------------------------------------------------------------------------
-export const MEMORY_PROTECTION = {
-  /**
-   * Total container memory limit in MB (AWS ECS limit)
-   * @default 512 MB
-   */
-  CONTAINER_MEMORY_LIMIT_MB: Number.parseInt(process.env.CONTAINER_MEMORY_LIMIT_MB || "512", 10),
+/**
+ * Returns memory protection configuration, read lazily from process.env.
+ * Must be a function (not a const) so values are read after secrets are
+ * loaded in index.ts — module-level consts evaluate before getAppSecrets() runs.
+ */
+export function MEMORY_PROTECTION() {
+  return {
+    /**
+     * Total container memory limit in MB (AWS instance/ECS task limit).
+     * Set CONTAINER_MEMORY_LIMIT_MB in your environment to match actual allocation.
+     * @default 1024 MB
+     */
+    CONTAINER_MEMORY_LIMIT_MB: Number.parseInt(process.env.CONTAINER_MEMORY_LIMIT_MB || "1024", 10),
 
-  /**
-   * Warning threshold as percentage of total memory (0.0 - 1.0)
-   * When exceeded, reduce media processing aggressiveness
-   * @default 0.75 (75% = 384 MB)
-   */
-  MEMORY_WARNING_THRESHOLD: Number.parseFloat(process.env.MEMORY_WARNING_THRESHOLD || "0.75"),
+    /**
+     * Warning threshold as a fraction of total RSS (0.0 - 1.0).
+     * When exceeded, reduce media processing aggressiveness.
+     * @default 0.75 (75%)
+     */
+    MEMORY_WARNING_THRESHOLD: Number.parseFloat(process.env.MEMORY_WARNING_THRESHOLD || "0.75"),
 
-  /**
-   * Critical threshold as percentage of total memory (0.0 - 1.0)
-   * When exceeded, enter emergency mode (text-only, force GC)
-   * @default 0.85 (85% = 435 MB)
-   */
-  MEMORY_CRITICAL_THRESHOLD: Number.parseFloat(process.env.MEMORY_CRITICAL_THRESHOLD || "0.85"),
+    /**
+     * Critical threshold as a fraction of total RSS (0.0 - 1.0).
+     * When exceeded, enter emergency mode (text-only, force GC).
+     * @default 0.85 (85%)
+     */
+    MEMORY_CRITICAL_THRESHOLD: Number.parseFloat(process.env.MEMORY_CRITICAL_THRESHOLD || "0.85"),
 
-  /**
-   * Emergency cooldown period in milliseconds after entering critical mode
-   * During this time, all media processing is disabled
-   * @default 60000 (1 minute)
-   */
-  EMERGENCY_COOLDOWN_MS: Number.parseInt(process.env.EMERGENCY_COOLDOWN_MS || "60000", 10),
-} as const;
+    /**
+     * Emergency cooldown period in milliseconds after entering critical mode.
+     * During this time, all media processing is disabled.
+     * @default 60000 (1 minute)
+     */
+    EMERGENCY_COOLDOWN_MS: Number.parseInt(process.env.EMERGENCY_COOLDOWN_MS || "60000", 10),
+  };
+}
 
 /**
  * ============================================================================
@@ -231,8 +239,8 @@ export type MemoryStatus = "safe" | "warning" | "critical";
 
 interface MemoryCheckResult {
   status: MemoryStatus;
-  heapUsedMB: number;
-  heapLimitMB: number;
+  rssUsedMB: number;
+  memoryLimitMB: number;
   percentUsed: number;
   shouldProcessMedia: boolean;
   reducedMediaWindow?: number; // Suggested reduced media window during warning
@@ -248,36 +256,40 @@ class MemoryGuard {
    * @returns Memory status and recommendations
    */
   checkMemory(): MemoryCheckResult {
+    const protection = MEMORY_PROTECTION();
+
     // Disabled in development
     if (!GUARDS_ENABLED) {
       return {
         status: "safe",
-        heapUsedMB: 0,
-        heapLimitMB: MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB,
+        rssUsedMB: 0,
+        memoryLimitMB: protection.CONTAINER_MEMORY_LIMIT_MB,
         percentUsed: 0,
         shouldProcessMedia: true,
       };
     }
 
-    const memUsage = process.memoryUsage();
-    const heapUsedBytes = memUsage.heapUsed;
-    const heapLimitBytes = MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB * 1024 * 1024;
+    // Use RSS (Resident Set Size) — the total memory the OS has allocated to this
+    // process, including heap, native buffers, and shared libraries. This is what
+    // the kernel's OOM killer tracks, so it's the correct metric for preventing crashes.
+    const rssBytes = process.memoryUsage().rss;
+    const limitBytes = protection.CONTAINER_MEMORY_LIMIT_MB * 1024 * 1024;
 
-    const heapUsedMB = heapUsedBytes / (1024 * 1024);
-    const percentUsed = heapUsedBytes / heapLimitBytes;
+    const rssUsedMB = rssBytes / (1024 * 1024);
+    const percentUsed = rssBytes / limitBytes;
 
     // Check if we're in emergency cooldown period
     if (this.isInEmergencyMode) {
       const timeSinceEmergency = Date.now() - this.emergencyModeEnteredAt;
 
-      if (timeSinceEmergency < MEMORY_PROTECTION.EMERGENCY_COOLDOWN_MS) {
+      if (timeSinceEmergency < protection.EMERGENCY_COOLDOWN_MS) {
         log.warn(
-          `Still in emergency cooldown (${Math.round(timeSinceEmergency / 1000)}s / ${MEMORY_PROTECTION.EMERGENCY_COOLDOWN_MS / 1000}s). Media processing disabled.`,
+          `Still in emergency cooldown (${Math.round(timeSinceEmergency / 1000)}s / ${protection.EMERGENCY_COOLDOWN_MS / 1000}s). Media processing disabled.`,
         );
         return {
           status: "critical",
-          heapUsedMB,
-          heapLimitMB: MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB,
+          rssUsedMB,
+          memoryLimitMB: protection.CONTAINER_MEMORY_LIMIT_MB,
           percentUsed,
           shouldProcessMedia: false,
         };
@@ -289,31 +301,31 @@ class MemoryGuard {
     }
 
     // Determine memory status
-    if (percentUsed >= MEMORY_PROTECTION.MEMORY_CRITICAL_THRESHOLD) {
+    if (percentUsed >= protection.MEMORY_CRITICAL_THRESHOLD) {
       // CRITICAL: Emergency mode activated
       if (!this.isInEmergencyMode) {
-        this.enterEmergencyMode(heapUsedMB, percentUsed);
+        this.enterEmergencyMode(rssUsedMB, percentUsed);
       }
 
       return {
         status: "critical",
-        heapUsedMB,
-        heapLimitMB: MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB,
+        rssUsedMB,
+        memoryLimitMB: protection.CONTAINER_MEMORY_LIMIT_MB,
         percentUsed,
         shouldProcessMedia: false,
       };
     }
 
-    if (percentUsed >= MEMORY_PROTECTION.MEMORY_WARNING_THRESHOLD) {
+    if (percentUsed >= protection.MEMORY_WARNING_THRESHOLD) {
       // WARNING: Reduce media processing
       log.warn(
-        `Memory warning: ${heapUsedMB.toFixed(2)} MB / ${MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB} MB (${(percentUsed * 100).toFixed(1)}%)`,
+        `Memory warning: ${rssUsedMB.toFixed(2)} MB / ${protection.CONTAINER_MEMORY_LIMIT_MB} MB (${(percentUsed * 100).toFixed(1)}%)`,
       );
 
       return {
         status: "warning",
-        heapUsedMB,
-        heapLimitMB: MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB,
+        rssUsedMB,
+        memoryLimitMB: protection.CONTAINER_MEMORY_LIMIT_MB,
         percentUsed,
         shouldProcessMedia: true,
         reducedMediaWindow: 5, // Reduce to only last 5 messages
@@ -323,29 +335,30 @@ class MemoryGuard {
     // SAFE: Normal operation
     return {
       status: "safe",
-      heapUsedMB,
-      heapLimitMB: MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB,
+      rssUsedMB,
+      memoryLimitMB: protection.CONTAINER_MEMORY_LIMIT_MB,
       percentUsed,
       shouldProcessMedia: true,
     };
   }
 
   /**
-   * Enters emergency mode when critical memory threshold is exceeded
-   * Triggers garbage collection and sets cooldown timer
+   * Enters emergency mode when critical RSS threshold is exceeded.
+   * Triggers garbage collection and sets cooldown timer.
    */
-  private enterEmergencyMode(heapUsedMB: number, percentUsed: number): void {
+  private enterEmergencyMode(rssUsedMB: number, percentUsed: number): void {
+    const protection = MEMORY_PROTECTION();
     this.isInEmergencyMode = true;
     this.emergencyModeEnteredAt = Date.now();
 
     log.error(
-      `CRITICAL MEMORY PRESSURE: ${heapUsedMB.toFixed(2)} MB / ${MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB} MB (${(percentUsed * 100).toFixed(1)}%). Entering emergency mode.`,
+      `CRITICAL MEMORY PRESSURE: ${rssUsedMB.toFixed(2)} MB / ${protection.CONTAINER_MEMORY_LIMIT_MB} MB RSS (${(percentUsed * 100).toFixed(1)}%). Entering emergency mode.`,
       {
         errorType: "memory_critical",
         metadata: {
-          heapUsedMB,
+          rssUsedMB,
           percentUsed: percentUsed * 100,
-          cooldownMs: MEMORY_PROTECTION.EMERGENCY_COOLDOWN_MS,
+          cooldownMs: protection.EMERGENCY_COOLDOWN_MS,
         },
       },
     );
@@ -742,11 +755,12 @@ export function logGuardConfiguration(): void {
   );
   log.info("\n--- Streaming Limits ---");
   log.info(`Max Flush Count: ${STREAMING_LIMITS.MAX_FLUSH_COUNT}`);
+  const protection = MEMORY_PROTECTION();
   log.info("\n--- Memory Protection ---");
-  log.info(`Container Memory Limit: ${MEMORY_PROTECTION.CONTAINER_MEMORY_LIMIT_MB} MB`);
-  log.info(`Warning Threshold: ${MEMORY_PROTECTION.MEMORY_WARNING_THRESHOLD * 100}%`);
-  log.info(`Critical Threshold: ${MEMORY_PROTECTION.MEMORY_CRITICAL_THRESHOLD * 100}%`);
-  log.info(`Emergency Cooldown: ${MEMORY_PROTECTION.EMERGENCY_COOLDOWN_MS / 1000}s`);
+  log.info(`Container Memory Limit: ${protection.CONTAINER_MEMORY_LIMIT_MB} MB (RSS)`);
+  log.info(`Warning Threshold: ${protection.MEMORY_WARNING_THRESHOLD * 100}%`);
+  log.info(`Critical Threshold: ${protection.MEMORY_CRITICAL_THRESHOLD * 100}%`);
+  log.info(`Emergency Cooldown: ${protection.EMERGENCY_COOLDOWN_MS / 1000}s`);
   log.info("===================================");
 }
 
@@ -755,7 +769,7 @@ export function logGuardConfiguration(): void {
  */
 export function getMemoryStatusSummary(): string {
   const check = memoryGuard.checkMemory();
-  return `Memory: ${check.heapUsedMB.toFixed(2)} MB / ${check.heapLimitMB} MB (${(check.percentUsed * 100).toFixed(1)}%) - Status: ${check.status.toUpperCase()}`;
+  return `Memory (RSS): ${check.rssUsedMB.toFixed(2)} MB / ${check.memoryLimitMB} MB (${(check.percentUsed * 100).toFixed(1)}%) - Status: ${check.status.toUpperCase()}`;
 }
 
 /**
