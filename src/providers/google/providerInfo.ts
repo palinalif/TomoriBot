@@ -13,6 +13,7 @@ export const googleProviderInfo: ProviderInfo = {
   apiFamily: "google-genai",
   featureSupport: {
     nativeImageGeneration: true,
+    nativeVideoGeneration: true,
     embeddings: true,
     structuredOutput: true,
     presetGeneration: true,

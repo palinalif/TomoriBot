@@ -130,6 +130,20 @@ export const diffusionModelSchema = z.object({
 });
 export type DiffusionModelRow = z.infer<typeof diffusionModelSchema>;
 
+export const videoGenerationModelSchema = z.object({
+  video_model_id: z.number().optional(),
+  provider: z.string(),
+  codename: z.string(),
+  model_description: z.string().nullable().optional(),
+  ja_description: z.string().nullable().optional(),
+  is_default: z.boolean().default(false),
+  is_deprecated: z.boolean().default(false),
+  is_free: z.boolean().default(false),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+});
+export type VideoGenerationModelRow = z.infer<typeof videoGenerationModelSchema>;
+
 export const embeddingModelSchema = z.object({
   embedding_model_id: z.number().optional(),
   provider: z.string(),
@@ -213,6 +227,7 @@ export const tomoriConfigSchema = z.object({
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
   diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
   vision_llm_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated vision model for non-vision chat models (FK to llms)
+  video_model_id: z.number().int().nullable().optional(), // Added April 2026 - Video generation model
   nai_diffusion_model_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated NovelAI image model override for generate_image_nai
   nai_style_tags: z.array(z.string()).default([...DEFAULT_NAI_STYLE_TAGS]), // Added March 2026 - Server-wide NovelAI style/quality tags
   nai_negative_tags: z.array(z.string()).default([...DEFAULT_NAI_NEGATIVE_TAGS]), // Added March 2026 - Server-wide NovelAI negative prompt tags
@@ -729,6 +744,49 @@ export const textServerwideQuotaSchema = z.object({
 export type TextServerwideQuotaRow = z.infer<typeof textServerwideQuotaSchema>;
 
 /**
+ * Schema for video quota configuration (per-server settings)
+ * Controls daily user quotas and server-wide quota pools for video generation
+ * Lower defaults than image quotas since video generation is more expensive
+ */
+export const videoQuotaConfigSchema = z.object({
+  server_id: z.number(), // Foreign key to servers table
+  daily_user_quota: z.number().int().min(0).max(100).default(3), // Per-user daily limit (0 = unlimited)
+  serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
+  serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
+  enabled: z.boolean().default(true), // Master toggle for quota system
+  created_at: z.date().optional(), // Handled by DB default
+  updated_at: z.date().optional(), // Handled by DB default/trigger
+});
+export type VideoQuotaConfigRow = z.infer<typeof videoQuotaConfigSchema>;
+
+/**
+ * Schema for per-user daily video quota tracking
+ * Resets daily at midnight (server timezone)
+ */
+export const videoQuotaSchema = z.object({
+  quota_id: z.number().optional(), // Primary key, auto-generated
+  server_id: z.number(), // Foreign key to servers table
+  user_disc_id: z.string(), // User's Discord ID
+  usage_count: z.number().int().min(0).default(0), // Videos generated today
+  quota_date: z.date(), // Date this quota is for (YYYY-MM-DD)
+  last_reset: z.date().optional(), // Handled by DB default
+});
+export type VideoQuotaRow = z.infer<typeof videoQuotaSchema>;
+
+/**
+ * Schema for server-wide video quota tracking
+ * Resets based on serverwide_quota_resets_in configuration
+ */
+export const videoServerwideQuotaSchema = z.object({
+  server_id: z.number(), // Primary key, foreign key to servers table
+  usage_count: z.number().int().min(0).default(0), // Total videos generated this period
+  quota_period_start: z.date(), // When this quota period started
+  quota_period_end: z.date(), // When this quota period ends (calculated from config)
+  updated_at: z.date().optional(), // Handled by DB default
+});
+export type VideoServerwideQuotaRow = z.infer<typeof videoServerwideQuotaSchema>;
+
+/**
  * Schema for Matrix ↔ Discord channel bridge links.
  * Enforces strict 1-to-1 mapping: one Discord channel per Matrix room and vice versa.
  */
@@ -857,6 +915,7 @@ export const savedProviderConfigSchema = z.object({
   diffusion_model_id: z.number().nullable(),
   embedding_model_id: z.number().nullable(),
   nai_diffusion_model_id: z.number().nullable(),
+  video_model_id: z.number().nullable().optional(), // Added April 2026 - Video model snapshot
   vision_llm_id: z.number().nullable().optional(), // Added March 2026 - Vision model snapshot
   nai_preset_name: z.string().nullable(),
   llm_temperature: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot

@@ -22,6 +22,7 @@ export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "ope
 
 export interface ProviderFeatureSupport {
   nativeImageGeneration: boolean;
+  nativeVideoGeneration: boolean;
   embeddings: boolean;
   structuredOutput: boolean;
   presetGeneration: boolean;

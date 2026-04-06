@@ -13,6 +13,7 @@ export const nvidiaProviderInfo: ProviderInfo = {
   apiFamily: "openai-compatible",
   featureSupport: {
     nativeImageGeneration: true,
+    nativeVideoGeneration: false,
     embeddings: true,
     structuredOutput: true,
     presetGeneration: true,

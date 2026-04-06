@@ -13,6 +13,7 @@ export const zaiProviderInfo: ProviderInfo = {
   apiFamily: "openai-compatible",
   featureSupport: {
     nativeImageGeneration: true,
+    nativeVideoGeneration: true,
     embeddings: false,
     structuredOutput: true,
     presetGeneration: true,

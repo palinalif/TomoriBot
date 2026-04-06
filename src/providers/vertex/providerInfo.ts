@@ -24,6 +24,7 @@ export const vertexProviderInfo: ProviderInfo = {
   apiFamily: "google-genai",
   featureSupport: {
     nativeImageGeneration: false,
+    nativeVideoGeneration: false,
     embeddings: true,
     structuredOutput: true,
     presetGeneration: true,

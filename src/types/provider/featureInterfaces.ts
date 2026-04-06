@@ -165,6 +165,33 @@ export interface SupportsNativeImageGeneration {
   generateNativeImage(request: ProviderNativeImageGenerationRequest): Promise<ProviderNativeImageGenerationResult>;
 }
 
+/** Reference image input for image-to-video generation */
+export interface ProviderNativeVideoReference {
+  mimeType: string;
+  data: string; // Base64-encoded image data
+}
+
+/** Request parameters for native video generation across all providers */
+export interface ProviderNativeVideoGenerationRequest {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  aspectRatio?: string;
+  endpointUrl?: string;
+  referenceImages?: ProviderNativeVideoReference[];
+}
+
+/** Result of a native video generation operation */
+export interface ProviderNativeVideoGenerationResult {
+  videoData: Buffer | null; // Raw MP4 bytes (not base64 — videos are too large)
+  mimeType: string | null;
+  durationSeconds?: number;
+}
+
+export interface SupportsNativeVideoGeneration {
+  generateNativeVideo(request: ProviderNativeVideoGenerationRequest): Promise<ProviderNativeVideoGenerationResult>;
+}
+
 export interface ProviderCapabilityMap {
   embeddings: SupportsEmbeddings;
   structuredOutput: SupportsStructuredOutput;
@@ -172,6 +199,7 @@ export interface ProviderCapabilityMap {
   conversationCompaction: SupportsConversationCompaction;
   liveTokenCounting: SupportsLiveTokenCounting;
   nativeImageGeneration: SupportsNativeImageGeneration;
+  nativeVideoGeneration: SupportsNativeVideoGeneration;
 }
 
 export type ProviderCapabilityName = keyof ProviderCapabilityMap;

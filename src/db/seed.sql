@@ -423,6 +423,58 @@ JOIN image_diffusion_models dm ON dm.provider = l.llm_provider AND dm.is_default
 WHERE tc.llm_id = l.llm_id
   AND tc.diffusion_model_id IS NULL;
 
+-- ============================================================================
+-- VIDEO GENERATION MODELS (April 2026)
+-- ============================================================================
+
+-- Insert Video Generation Models with conflict resolution
+INSERT INTO video_generation_models (provider, codename, is_default, is_deprecated, is_free, model_description, ja_description)
+VALUES
+  -- Google Veo Video Generation Models
+  ('google', 'veo-3.1-generate-preview', true, false, false,
+   'Google Veo 3.1 — 8-second 720p/1080p/4K videos with native audio generation',
+   'Google Veo 3.1 — ネイティブオーディオ生成付き8秒の720p/1080p/4K動画'),
+  ('google', 'veo-3.1-fast-generate-preview', false, false, false,
+   'Google Veo 3.1 Fast — faster video generation with reduced quality',
+   'Google Veo 3.1 Fast — 品質を抑えた高速動画生成'),
+  ('google', 'veo-3.1-lite-generate-preview', false, false, false,
+   'Google Veo 3.1 Lite — lightweight video generation (no 4K support)',
+   'Google Veo 3.1 Lite — 軽量な動画生成（4K非対応）'),
+  -- OpenRouter Video Generation Models
+  ('openrouter', 'bytedance/seedance-1-5-pro', true, false, false,
+   'ByteDance Seedance 1.5 Pro — high-quality video generation with 4-12s duration',
+   'ByteDance Seedance 1.5 Pro — 4〜12秒の高品質動画生成'),
+  ('openrouter', 'google/veo-3.1', false, false, false,
+   'Google Veo 3.1 via OpenRouter — 8-second videos with native audio',
+   'OpenRouter経由のGoogle Veo 3.1 — ネイティブオーディオ付き8秒動画'),
+  ('openrouter', 'alibaba/wan-2.6', false, false, false,
+   'Alibaba Wan 2.6 — versatile video generation with multiple resolutions',
+   'Alibaba Wan 2.6 — 複数解像度対応の多機能動画生成'),
+  ('openrouter', 'openai/sora-2-pro', false, false, false,
+   'OpenAI Sora 2 Pro — high-fidelity video generation up to 20 seconds',
+   'OpenAI Sora 2 Pro — 最大20秒の高忠実度動画生成'),
+  -- Z.ai Video Generation Models
+  ('zai', 'cogvideox-3', true, false, false,
+   'CogVideoX-3 — Z.ai video generation with up to 4K resolution and audio support',
+   'CogVideoX-3 — 最大4K解像度とオーディオ対応のZ.ai動画生成')
+ON CONFLICT (codename) DO UPDATE SET
+  model_description = EXCLUDED.model_description,
+  ja_description = EXCLUDED.ja_description,
+  is_default = EXCLUDED.is_default,
+  is_deprecated = EXCLUDED.is_deprecated,
+  is_free = EXCLUDED.is_free,
+  provider = EXCLUDED.provider,
+  updated_at = CURRENT_TIMESTAMP;
+
+-- Backfill NULL video_model_id with the provider's default video model.
+-- This ensures existing servers automatically get a default video model.
+UPDATE tomori_configs tc
+SET video_model_id = vm.video_model_id
+FROM llms l
+JOIN video_generation_models vm ON vm.provider = l.llm_provider AND vm.is_default = true
+WHERE tc.llm_id = l.llm_id
+  AND tc.video_model_id IS NULL;
+
 -- Ensure all required columns exist in embedding_models table
 SELECT add_column_if_not_exists('embedding_models', 'model_family', 'TEXT');
 SELECT add_column_if_not_exists('embedding_models', 'model_description', 'TEXT');

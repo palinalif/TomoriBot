@@ -13,6 +13,7 @@ export const openrouterProviderInfo: ProviderInfo = {
   apiFamily: "openrouter",
   featureSupport: {
     nativeImageGeneration: true,
+    nativeVideoGeneration: true,
     embeddings: true,
     structuredOutput: true,
     presetGeneration: true,

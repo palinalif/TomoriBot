@@ -269,6 +269,27 @@ DROP TRIGGER IF EXISTS update_image_diffusion_models_timestamp ON image_diffusio
 CREATE INDEX IF NOT EXISTS idx_image_diffusion_models_provider ON image_diffusion_models(provider);
 CREATE INDEX IF NOT EXISTS idx_image_diffusion_models_default ON image_diffusion_models(is_default, is_deprecated);
 
+-- Video Generation Models table for video generation models
+CREATE TABLE IF NOT EXISTS video_generation_models (
+  video_model_id SERIAL PRIMARY KEY,
+  provider TEXT NOT NULL,
+  codename TEXT NOT NULL UNIQUE,
+  model_description TEXT,
+  ja_description TEXT,
+  is_default BOOLEAN DEFAULT false,
+  is_deprecated BOOLEAN DEFAULT false,
+  is_free BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Removed updated_at trigger for video_generation_models table (static metadata, rarely changes)
+DROP TRIGGER IF EXISTS update_video_generation_models_timestamp ON video_generation_models;
+
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_video_generation_models_provider ON video_generation_models(provider);
+CREATE INDEX IF NOT EXISTS idx_video_generation_models_default ON video_generation_models(is_default, is_deprecated);
+
 -- Embedding Models table for document embedding/search
 CREATE TABLE IF NOT EXISTS embedding_models (
   embedding_model_id SERIAL PRIMARY KEY,
@@ -487,8 +508,11 @@ SELECT add_column_if_not_exists('tomori_configs', 'uncensor_injection_enabled', 
 SELECT add_column_if_not_exists('tomori_configs', 'uncensor_unicode_space_enabled', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'uncensor_sanitize_enabled', 'BOOLEAN', 'false');
 
--- Add video generation permission (future use)
+-- Add video generation permission
 SELECT add_column_if_not_exists('tomori_configs', 'videogen_enabled', 'BOOLEAN', 'true');
+
+-- Add video model reference for video generation
+SELECT add_column_if_not_exists('tomori_configs', 'video_model_id', 'INTEGER');
 
 -- Add diffusion model reference for image generation 
 SELECT add_column_if_not_exists('tomori_configs', 'diffusion_model_id', 'INTEGER');
@@ -612,6 +636,21 @@ BEGIN
         ADD CONSTRAINT tomori_configs_diffusion_model_id_fkey
         FOREIGN KEY (diffusion_model_id)
         REFERENCES image_diffusion_models(diffusion_model_id)
+        ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- Add foreign key constraint for video model if not exists
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'tomori_configs_video_model_id_fkey'
+    ) THEN
+        ALTER TABLE tomori_configs
+        ADD CONSTRAINT tomori_configs_video_model_id_fkey
+        FOREIGN KEY (video_model_id)
+        REFERENCES video_generation_models(video_model_id)
         ON DELETE SET NULL;
     END IF;
 END $$;
@@ -1627,6 +1666,87 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ============================================================================
+-- VIDEO QUOTA SYSTEM (April 2026)
+-- Prevents video generation abuse with per-user daily and server-wide quotas
+-- Lower defaults than image quotas (video generation is more expensive)
+-- ============================================================================
+
+-- Server-level video quota configuration
+CREATE TABLE IF NOT EXISTS video_quota_configs (
+	server_id INT PRIMARY KEY,
+	daily_user_quota INT NOT NULL DEFAULT 3,                 -- Per-user daily limit (0 = unlimited)
+	serverwide_quota INT NOT NULL DEFAULT 0,                 -- Total server quota (0 = unlimited)
+	serverwide_quota_resets_in INT NOT NULL DEFAULT 365,     -- Days before server quota resets (1-365)
+	enabled BOOLEAN NOT NULL DEFAULT true,                   -- Master toggle for quota system
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for video_quota_configs table
+DROP TRIGGER IF EXISTS update_video_quota_configs_timestamp ON video_quota_configs;
+CREATE TRIGGER update_video_quota_configs_timestamp
+BEFORE UPDATE ON video_quota_configs
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- User video quota usage tracking (resets daily at midnight server timezone)
+CREATE TABLE IF NOT EXISTS video_quotas (
+	quota_id SERIAL PRIMARY KEY,
+	server_id INT NOT NULL,
+	user_disc_id TEXT NOT NULL,                              -- User's Discord ID
+	usage_count INT NOT NULL DEFAULT 0,                      -- Videos generated today
+	quota_date DATE NOT NULL,                                -- Date this quota is for (YYYY-MM-DD)
+	last_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(server_id, user_disc_id, quota_date),
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Index for efficient quota lookups
+CREATE INDEX IF NOT EXISTS idx_video_quotas_lookup
+	ON video_quotas(server_id, user_disc_id, quota_date);
+
+-- Index for cleanup queries (find old quota records)
+CREATE INDEX IF NOT EXISTS idx_video_quotas_date
+	ON video_quotas(quota_date);
+
+-- Server-wide video quota tracking (resets based on serverwide_quota_resets_in)
+CREATE TABLE IF NOT EXISTS video_serverwide_quotas (
+	server_id INT PRIMARY KEY,
+	usage_count INT NOT NULL DEFAULT 0,                      -- Total videos generated this period
+	quota_period_start TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	quota_period_end TIMESTAMP NOT NULL,                     -- Calculated from period_start + resets_in days
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for video_serverwide_quotas table
+DROP TRIGGER IF EXISTS update_video_serverwide_quotas_timestamp ON video_serverwide_quotas;
+CREATE TRIGGER update_video_serverwide_quotas_timestamp
+BEFORE UPDATE ON video_serverwide_quotas
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Index for cleanup queries (find expired quota periods)
+CREATE INDEX IF NOT EXISTS idx_video_serverwide_quotas_period_end
+	ON video_serverwide_quotas(quota_period_end);
+
+-- Function to clean up old video quota records (older than 7 days)
+CREATE OR REPLACE FUNCTION cleanup_old_video_quotas()
+RETURNS INTEGER AS $$
+DECLARE
+	deleted_count INTEGER;
+BEGIN
+	DELETE FROM video_quotas
+	WHERE quota_date < CURRENT_DATE - INTERVAL '7 days';
+
+	GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+	RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Example usage - This shows how to add columns to existing tables
 -- You can add these calls whenever you need to introduce schema changes
 -- SELECT add_column_if_not_exists('tomori_configs', 'new_feature_flag', 'BOOLEAN', 'false');
@@ -1933,6 +2053,9 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'llm_frequency_penalty
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_presence_penalty', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
+
+-- Migration: add video_model_id column to saved_provider_configs (April 2026)
+SELECT add_column_if_not_exists('saved_provider_configs', 'video_model_id', 'INTEGER', 'NULL');
 
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;

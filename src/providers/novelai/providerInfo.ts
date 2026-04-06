@@ -13,6 +13,7 @@ export const novelaiProviderInfo: ProviderInfo = {
   apiFamily: "novelai",
   featureSupport: {
     nativeImageGeneration: false,
+    nativeVideoGeneration: false,
     embeddings: false,
     structuredOutput: false,
     presetGeneration: false,

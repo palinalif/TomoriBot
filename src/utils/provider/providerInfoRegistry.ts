@@ -57,6 +57,11 @@ const providerFeatureImplementations: Partial<
     zai: "zai",
     nvidia: "nvidia",
   },
+  nativeVideoGeneration: {
+    google: "google",
+    openrouter: "openrouter",
+    zai: "zai",
+  },
   liveTokenCounting: {
     google: "google",
     openrouter: "openrouter",
