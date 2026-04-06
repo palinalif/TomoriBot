@@ -269,9 +269,9 @@ Rules:
 - `bot`: respond, generate(image), kill, impersonate
 - `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), params(*), timezone, message-fetch-limit, bot-permissions, jailbreaks
 - `optional-key`: google/set/remove, brave/set/remove, elevenlabs/set/remove, novelai/set/remove
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
 - `novelai`: attg, image(model/params/generate), image-tags(style/me/character/negative), character-reference
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
+- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, attribute(add/remove), sample-dialogue(add/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/remove/import/export), server(add/remove/import/export)
 - `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt)
@@ -282,6 +282,8 @@ Rules:
 `/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. Removing a channel disables auto-trigger behavior for that channel.
 
 `/bot generate image` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available.
+
+`/generate video` is a modal-driven async generation command. It validates `videogen_enabled`, provider capability, API key, configured `video_model_id`, and server quota before polling the selected provider until the MP4 result is ready.
 
 Forward-looking command rewrite guidance lives in `docs/commands-v2/`. Those docs define target UX and naming conventions only; the runtime loader and current implementation still use the existing `src/commands/` structure.
 

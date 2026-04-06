@@ -223,6 +223,7 @@ export async function execute(
         llm_id: tomoriState.config.llm_id,
         diffusion_model_id: tomoriState.config.diffusion_model_id ?? null,
         embedding_model_id: tomoriState.config.embedding_model_id ?? null,
+        video_model_id: tomoriState.config.video_model_id ?? null,
         nai_diffusion_model_id: tomoriState.config.nai_diffusion_model_id ?? null,
         vision_llm_id: tomoriState.config.vision_llm_id ?? null,
         nai_preset_name: tomoriState.config.nai_preset_name ?? null,
@@ -271,6 +272,7 @@ export async function execute(
     let newLlmId = tomoriState.config.llm_id;
     let newDiffusionModelId = tomoriState.config.diffusion_model_id;
     let newEmbeddingModelId = tomoriState.config.embedding_model_id;
+    let newVideoModelId = tomoriState.config.video_model_id ?? null;
     let newNaiDiffusionModelId = tomoriState.config.nai_diffusion_model_id;
     let newVisionLlmId = tomoriState.config.vision_llm_id;
     let newNaiPresetName = tomoriState.config.nai_preset_name;
@@ -363,6 +365,7 @@ export async function execute(
 
         newDiffusionModelId = null;
         newEmbeddingModelId = null;
+        newVideoModelId = null;
         newNaiDiffusionModelId = null;
         newVisionLlmId = null;
         newNaiPresetName = null;
@@ -371,6 +374,7 @@ export async function execute(
         newLlmId = savedConfig.llm_id ?? newLlmId;
         newDiffusionModelId = savedConfig.diffusion_model_id;
         newEmbeddingModelId = savedConfig.embedding_model_id;
+        newVideoModelId = savedConfig.video_model_id ?? null;
         newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
         newVisionLlmId = savedConfig.vision_llm_id ?? null;
         newNaiPresetName = savedConfig.nai_preset_name;
@@ -437,6 +441,7 @@ export async function execute(
       }
       newDiffusionModelId = null;
       newEmbeddingModelId = null;
+      newVideoModelId = null;
       newNaiDiffusionModelId = null;
       newVisionLlmId = null;
       newNaiPresetName = null;
@@ -568,6 +573,7 @@ export async function execute(
         newLlmId = savedConfig.llm_id ?? newLlmId;
         newDiffusionModelId = savedConfig.diffusion_model_id;
         newEmbeddingModelId = savedConfig.embedding_model_id;
+        newVideoModelId = savedConfig.video_model_id ?? null;
         newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
         newVisionLlmId = savedConfig.vision_llm_id ?? null;
         newNaiPresetName = savedConfig.nai_preset_name;
@@ -658,6 +664,7 @@ export async function execute(
 
         // Reset provider-specific fields for fresh switch
         newNaiDiffusionModelId = null;
+        newVideoModelId = null;
         newNaiPresetName = null;
         newFallbackLlmIds = [];
       }
@@ -674,6 +681,7 @@ export async function execute(
 			    llm_id = ${newLlmId},
 			    diffusion_model_id = ${newDiffusionModelId},
 			    embedding_model_id = ${newEmbeddingModelId},
+			    video_model_id = ${newVideoModelId},
 			    nai_diffusion_model_id = ${newNaiDiffusionModelId},
 			    vision_llm_id = ${newVisionLlmId},
 			    nai_preset_name = ${newNaiPresetName},

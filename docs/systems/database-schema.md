@@ -21,6 +21,7 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 
 - `llms`
 - `image_diffusion_models`
+- `video_generation_models`
 - `embedding_models`
 
 ### Presets and prompts
@@ -59,6 +60,9 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 - `text_quota_configs`
 - `text_quotas`
 - `text_serverwide_quotas`
+- `video_quota_configs`
+- `video_quotas`
+- `video_serverwide_quotas`
 
 ### Bridge integration
 
@@ -98,6 +102,8 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.nai_sampler`, `nai_steps`, `nai_scale`, `nai_noise_schedule`, and `nai_cfg_rescale` store optional server overrides for NovelAI image generation params; `NULL` means use the env fallback.
 - `tomori_configs.vision_llm_id` stores the dedicated vision model for non-vision chat models; `NULL` means no vision tool is available. When set, the `analyze_image` tool is exposed so non-vision models can delegate image analysis to this model.
 - `tomori_configs.llm_logit_biases` stores server-wide logit-bias entries as raw text/token-ID input plus tokenizer-specific cached resolutions. Raw text stays canonical so entries can be refreshed when `llm_id` changes.
+- `tomori_configs.videogen_enabled` gates both slash-command and tool-driven video generation exposure.
+- `tomori_configs.video_model_id` stores the active server-scoped video generation model selection.
 
 ### NovelAI profile tags
 
@@ -153,6 +159,10 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 - `saved_provider_configs.llm_logit_biases` mirrors `tomori_configs.llm_logit_biases` so provider snapshots can restore both the original text entries and any cached tokenizer-family resolutions.
 - This keeps `/config provider switch` and `/config api-key set` compatible with text-first logit-bias UX across model changes.
 
+### Provider snapshot model storage
+
+- `saved_provider_configs.video_model_id` mirrors `tomori_configs.video_model_id` so provider switching can restore the previously saved video model along with the other provider-specific settings.
+
 ## Migration Style
 
 Schema is idempotent and startup-safe:
@@ -177,5 +187,5 @@ One-off `scripts/add*.ts` migration scripts are **not necessary** for column add
 ## Operational Notes
 
 - `cleanup_expired_cooldowns()` is defined in schema and used by startup cleanup + optional pg_cron.
-- Quota cleanup helpers exist for old image/text quota rows (`cleanup_old_image_quotas()`, `cleanup_old_text_quotas()`).
+- Quota cleanup helpers exist for old image/text/video quota rows (`cleanup_old_image_quotas()`, `cleanup_old_text_quotas()`, `cleanup_old_video_quotas()`).
 - RAG tables are intentionally separate so local development can run without pgvector unless enabled.

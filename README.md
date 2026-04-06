@@ -127,6 +127,14 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 | **Nvidia** | ✅ | ✅ | - | - |
 | **Z.ai** | ✅ | - | - | - |
 
+### Video Generation
+
+| Provider | Text-to-Video | Image-to-Video | Notes |
+|----------|---------------|----------------|-------|
+| **Google** | ✅ | ✅ | Async polling workflow |
+| **OpenRouter** | ✅ | ✅ | Async polling workflow |
+| **Z.ai** | ✅ | ✅ | Async polling workflow |
+
 ### Voice & Audio
 
 | Provider | Text-to-Speech | Speech-to-Text |

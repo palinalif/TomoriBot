@@ -124,6 +124,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const isReasoning = llm.is_reasoning ?? false;
       const isUncensored = llm.is_uncensored ?? false;
       const supportsImageGen = providerSupportsFeature(provider, "nativeImageGeneration");
+      const supportsVideoGen = providerSupportsFeature(provider, "nativeVideoGeneration");
 
       // 2. Build dynamic capabilities markdown with model information
       let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";
@@ -221,6 +222,25 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent += "Image generation is not available with the current provider.\n\n";
       }
 
+      // 5c-2. Video Generation section (conditional on provider and configuration)
+      capabilitiesContent += "## Video Generation\n\n";
+      if (supportsVideoGen && config.videogen_enabled && config.video_model_id) {
+        capabilitiesContent += "You CAN generate short videos:\n";
+        capabilitiesContent += "- **Text-to-Video**: Generate short videos from detailed text prompts\n";
+        capabilitiesContent += "- **Image-to-Video**: Animate or extend reference images into short videos\n";
+        capabilitiesContent +=
+          "- Users can ask you to generate a video (triggers the generate_video tool), or use `/generate video` directly\n";
+        capabilitiesContent += "- When generating, describe in detail: scene, motion, camera movement, and mood\n\n";
+      } else if (supportsVideoGen && config.videogen_enabled && !config.video_model_id) {
+        capabilitiesContent +=
+          "Video generation is enabled but no video model is configured. An admin needs to set one with `/config model video`.\n\n";
+      } else if (supportsVideoGen && !config.videogen_enabled) {
+        capabilitiesContent +=
+          "Video generation is available for this provider but **disabled** by server configuration.\n\n";
+      } else {
+        capabilitiesContent += "Video generation is not available with the current provider.\n\n";
+      }
+
       // 5d. Voice System section (conditional on ElevenLabs voice assignment + server permission)
       const elevenlabsVoiceId = context.tomoriState.elevenlabs_voice_id?.trim();
       const voiceEnabled = config.voice_message_enabled ?? true;
@@ -314,6 +334,12 @@ export class ReviewCapabilitiesTool extends BaseTool {
             : "disabled by server configuration"
           : "unavailable with current provider";
         capabilitiesContent += `- **generate_image** (${imageGenNote})\n`;
+        const videoGenNote = supportsVideoGen
+          ? config.videogen_enabled
+            ? "generate short videos from text prompts"
+            : "disabled by server configuration"
+          : "unavailable with current provider";
+        capabilitiesContent += `- **generate_video** (${videoGenNote})\n`;
         if (seesYouTube) {
           capabilitiesContent += "- **process_youtube_video** (analyze YouTube videos)\n";
         }
@@ -408,6 +434,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
         disabledFeatures.push({
           feature: "image generation",
           command: "/config bot-permissions (permission: imagegen)",
+        });
+      if (!config.videogen_enabled)
+        disabledFeatures.push({
+          feature: "video generation",
+          command: "/config bot-permissions (permission: videogen)",
         });
       if (!config.sticker_usage_enabled)
         disabledFeatures.push({
@@ -570,6 +601,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           note: !braveApiKeySet ? " (No Brave API key - DuckDuckGo MCP used instead)" : "",
         },
         { name: "Image Generation", value: config.imagegen_enabled },
+        { name: "Video Generation", value: config.videogen_enabled },
         { name: "Sticker Usage", value: config.sticker_usage_enabled },
         { name: "Emoji Usage", value: config.emoji_usage_enabled },
         { name: "Personal Memories", value: config.personal_memories_enabled },
@@ -615,6 +647,19 @@ export class ReviewCapabilitiesTool extends BaseTool {
         settingsContent += "- Configure with `/config model image` to activate\n\n";
       } else {
         settingsContent += "Image generation is **disabled**. Enable with `/config bot-permissions`.\n\n";
+      }
+
+      // 6b-1b. Video Generation Configuration
+      settingsContent += "## Video Generation\n\n";
+      if (config.videogen_enabled && config.video_model_id) {
+        settingsContent += "Video generation is **enabled** and configured.\n";
+        settingsContent += "- Supports Text2Video and Image2Video\n";
+        settingsContent += "- Users can ask you to generate videos, or use `/generate video` directly\n\n";
+      } else if (config.videogen_enabled && !config.video_model_id) {
+        settingsContent += "Video generation is enabled but no video model is set.\n";
+        settingsContent += "- Configure with `/config model video` to activate\n\n";
+      } else {
+        settingsContent += "Video generation is **disabled**. Enable with `/config bot-permissions`.\n\n";
       }
 
       // 6b-2. Voice System Configuration
@@ -823,6 +868,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const disabledFeatures: string[] = [];
       if (!config.web_search_enabled) disabledFeatures.push("web search");
       if (!config.imagegen_enabled) disabledFeatures.push("image generation");
+      if (!config.videogen_enabled) disabledFeatures.push("video generation");
       if (!config.sticker_usage_enabled) disabledFeatures.push("sticker usage");
       if (!config.emoji_usage_enabled) disabledFeatures.push("emoji usage");
       if (!config.self_teaching_enabled) disabledFeatures.push("self teaching");

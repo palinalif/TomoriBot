@@ -71,6 +71,12 @@ This is a current map of shared utility modules under `src/utils/`.
 - `rateLimiter.ts`: upload quota cleanup scheduler
 - `safeDownload.ts`: constrained external content download
 
+### `utils/quota`
+
+- `imageQuotaManager.ts`: per-user and server-wide image generation quotas
+- `textQuotaManager.ts`: per-user and server-wide text trigger quotas
+- `videoQuotaManager.ts`: per-user and server-wide video generation quotas
+
 ### `utils/provider`
 
 - `providerFactory.ts`: provider auto-discovery and instance resolution

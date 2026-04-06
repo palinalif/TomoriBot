@@ -1474,6 +1474,12 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Use \`/generate image\` or just ask me to generate an image
 - Reference images can come from message attachments, stickers, emojis, or user avatars
 - Available on Google, OpenRouter, Z.ai, and NVIDIA NIM providers (configure with \`/config model image\`)`,
+        videogen_title: `Video Generation`,
+        videogen_description: `- I can generate short videos from text prompts or by animating reference images
+- Supports Text2Video and Image2Video with customizable aspect ratios
+- Use \`/generate video\` or just ask me to generate a video
+- Reference images can come from message attachments or user avatars
+- Available on Google, OpenRouter, and Z.ai providers (configure with \`/config model video\`)`,
         footer: `Not all features are available for all AI providers. Recommended: Google Gemini. You can also just ask me what I can do!`,
       },
 
@@ -3361,6 +3367,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         websearch_option: "Web Search Permission",
         pinmessage_option: "Pin Messages",
         imagegen_option: "Image Generation",
+        videogen_option: "Video Generation",
         hiderespondembed_option: "Hide Response Embeds",
         hideimpersonationembeds_option: "Hide Impersonation Embeds",
         voicemessage_option: "Voice Messages (ElevenLabs)",
@@ -3371,6 +3378,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         permission_choice_websearch: "Web Search Permission",
         permission_choice_pinmessage: "Pin Messages",
         permission_choice_imagegen: "Image Generation",
+        permission_choice_videogen: "Video Generation",
         permission_choice_hiderespondembed: "Hide Response Embeds",
         // Short option descriptions shown inside the select menu dropdown
         selfteaching_desc: "Learn from server conversations",
@@ -3380,6 +3388,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         websearch_desc: "Browse the web for information",
         pinmessage_desc: "Pin important messages",
         imagegen_desc: "Generate images on request",
+        videogen_desc: "Generate short videos on request",
         hiderespondembed_desc: "Hide /bot respond success embed",
         hideimpersonationembeds_desc: "Hide persona impersonation notices",
         voicemessage_desc: "Send ElevenLabs TTS voice messages",
@@ -4129,22 +4138,41 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
           serverwide_quota_resets_in_success_description: `Server-wide text quota will now reset every **{days}** days.`,
         },
+        videogen: {
+          description: `Configure video generation quotas for this server.`,
+          unlimited: `Unlimited`,
+          daily_user_quota_description: `Set the daily video generation limit per user.`,
+          daily_user_quota_limit_description: `Daily videos per user (0=unlimited, 1-100, default: 3).`,
+          daily_user_quota_success_title: `User Quota Updated`,
+          daily_user_quota_success_description: `Daily user quota set to **{limit}** videos per day.`,
+          serverwide_quota_description: `Set the total server-wide video generation limit.`,
+          serverwide_quota_limit_description: `Total server videos (0=unlimited, 1-99999, default: 0).`,
+          serverwide_quota_success_title: `Server-wide Quota Updated`,
+          serverwide_quota_success_description: `Server-wide quota set to **{limit}** videos per period.`,
+          serverwide_quota_resets_in_description: `Set how many days before server-wide video quota resets.`,
+          serverwide_quota_resets_in_days_description: `Days before reset (1-365, default: 365).`,
+          serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
+          serverwide_quota_resets_in_success_description: `Server-wide video quota will now reset every **{days}** days.`,
+        },
         reset: {
-          description: `Reset a quota pool for image/text generation.`,
+          description: `Reset a quota pool for image, text, or video generation.`,
           scope_description: `Choose whether to reset a user's daily quota or the server-wide quota.`,
           scope_choice_user: `User`,
           scope_choice_server: `Server`,
           quota_type_description: `Choose which quota pool type to reset.`,
           quota_type_choice_imagegen: `Image Generation`,
           quota_type_choice_textgen: `Text Generation`,
+          quota_type_choice_videogen: `Video Generation`,
           user_select_title: `Select a User`,
           user_select_description: `Pick a user whose daily quota should be reset.`,
           user_select_placeholder: `Select a user...`,
           success_title: `Quota Reset`,
           success_user_imagegen_description: `Reset daily image generation quota usage for {user}.`,
           success_user_textgen_description: `Reset daily text generation trigger quota usage for {user}.`,
+          success_user_videogen_description: `Reset daily video generation quota usage for {user}.`,
           success_server_imagegen_description: `Reset the server-wide image generation quota pool.`,
           success_server_textgen_description: `Reset the server-wide text generation trigger quota pool.`,
+          success_server_videogen_description: `Reset the server-wide video generation quota pool.`,
         },
       },
       "member-permissions": {

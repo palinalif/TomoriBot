@@ -96,6 +96,13 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     getState: (c) => c.imagegen_enabled,
   },
   {
+    value: "videogen",
+    dbColumn: "videogen_enabled",
+    labelKey: "commands.config.permissions.videogen_option",
+    descKey: "commands.config.permissions.videogen_desc",
+    getState: (c) => c.videogen_enabled,
+  },
+  {
     value: "hiderespondembed",
     dbColumn: "hide_respond_embed",
     labelKey: "commands.config.permissions.hiderespondembed_option",

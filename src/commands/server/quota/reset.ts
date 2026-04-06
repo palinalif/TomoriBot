@@ -9,13 +9,14 @@ import { ActionRowBuilder, ComponentType, EmbedBuilder, MessageFlags, UserSelect
 import { sql } from "@/utils/db/client";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
 import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
+import { getVideoQuotaConfig } from "@/utils/quota/videoQuotaManager";
 import type { UserRow } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 
 type QuotaResetScope = "user" | "server";
-type QuotaResetType = "imagegen" | "textgen";
+type QuotaResetType = "imagegen" | "textgen" | "videogen";
 
 /**
  * Configure /server quota reset subcommand.
@@ -55,6 +56,10 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
             name: localizer("en-US", "commands.server.quota.reset.quota_type_choice_textgen"),
             value: "textgen",
           },
+          {
+            name: localizer("en-US", "commands.server.quota.reset.quota_type_choice_videogen"),
+            value: "videogen",
+          },
         ),
     );
 
@@ -88,7 +93,10 @@ export async function execute(
   const rawScope = interaction.options.getString("scope", true);
   const rawQuotaType = interaction.options.getString("quota_type", true);
 
-  if ((rawScope !== "user" && rawScope !== "server") || (rawQuotaType !== "imagegen" && rawQuotaType !== "textgen")) {
+  if (
+    (rawScope !== "user" && rawScope !== "server") ||
+    (rawQuotaType !== "imagegen" && rawQuotaType !== "textgen" && rawQuotaType !== "videogen")
+  ) {
     await replyInfoEmbed(interaction, userData.language_pref, {
       titleKey: "general.errors.generic_error_title",
       descriptionKey: "general.errors.generic_error_description",
@@ -128,7 +136,9 @@ export async function execute(
         descriptionKey:
           quotaType === "imagegen"
             ? "commands.server.quota.reset.success_user_imagegen_description"
-            : "commands.server.quota.reset.success_user_textgen_description",
+            : quotaType === "textgen"
+              ? "commands.server.quota.reset.success_user_textgen_description"
+              : "commands.server.quota.reset.success_user_videogen_description",
         descriptionVars: {
           user: `<@${targetUser.id}>`,
         },
@@ -152,7 +162,9 @@ export async function execute(
       descriptionKey:
         quotaType === "imagegen"
           ? "commands.server.quota.reset.success_server_imagegen_description"
-          : "commands.server.quota.reset.success_server_textgen_description",
+          : quotaType === "textgen"
+            ? "commands.server.quota.reset.success_server_textgen_description"
+            : "commands.server.quota.reset.success_server_videogen_description",
       color: ColorCode.SUCCESS,
     });
 
@@ -236,8 +248,18 @@ async function resetUserDailyQuota(serverId: number, userDiscId: string, quotaTy
     return;
   }
 
-  await sql`
+  if (quotaType === "textgen") {
+    await sql`
 		INSERT INTO text_quotas (server_id, user_disc_id, usage_count, quota_date)
+		VALUES (${serverId}, ${userDiscId}, 0, ${today}::date)
+		ON CONFLICT (server_id, user_disc_id, quota_date)
+		DO UPDATE SET usage_count = 0
+	`;
+    return;
+  }
+
+  await sql`
+		INSERT INTO video_quotas (server_id, user_disc_id, usage_count, quota_date)
 		VALUES (${serverId}, ${userDiscId}, 0, ${today}::date)
 		ON CONFLICT (server_id, user_disc_id, quota_date)
 		DO UPDATE SET usage_count = 0
@@ -264,9 +286,28 @@ async function resetServerwideQuotaPool(serverId: number, quotaType: QuotaResetT
     return;
   }
 
-  const config = await getTextQuotaConfig(serverId);
-  await sql`
+  if (quotaType === "textgen") {
+    const config = await getTextQuotaConfig(serverId);
+    await sql`
 		INSERT INTO text_serverwide_quotas (server_id, usage_count, quota_period_start, quota_period_end)
+		VALUES (
+			${serverId},
+			0,
+			CURRENT_TIMESTAMP,
+			CURRENT_TIMESTAMP + (${config.serverwide_quota_resets_in} || ' days')::interval
+		)
+		ON CONFLICT (server_id)
+		DO UPDATE SET
+			usage_count = 0,
+			quota_period_start = CURRENT_TIMESTAMP,
+			quota_period_end = CURRENT_TIMESTAMP + (${config.serverwide_quota_resets_in} || ' days')::interval
+	`;
+    return;
+  }
+
+  const config = await getVideoQuotaConfig(serverId);
+  await sql`
+		INSERT INTO video_serverwide_quotas (server_id, usage_count, quota_period_start, quota_period_end)
 		VALUES (
 			${serverId},
 			0,

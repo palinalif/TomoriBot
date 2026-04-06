@@ -1800,6 +1800,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 			INSERT INTO saved_provider_configs (
 				server_id, provider, api_key, key_version,
 				llm_id, diffusion_model_id, embedding_model_id,
+				video_model_id,
 				nai_diffusion_model_id, vision_llm_id, nai_preset_name,
 				custom_endpoint_url, custom_model_name,
 				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
@@ -1809,6 +1810,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 			) VALUES (
 				${serverId}, ${provider}, ${config.api_key}, ${config.key_version},
 				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
+				${config.video_model_id ?? null},
 				${config.nai_diffusion_model_id}, ${config.vision_llm_id ?? null}, ${config.nai_preset_name},
 				${config.custom_endpoint_url}, ${config.custom_model_name},
 				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb,
@@ -1822,6 +1824,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				llm_id = EXCLUDED.llm_id,
 				diffusion_model_id = EXCLUDED.diffusion_model_id,
 				embedding_model_id = EXCLUDED.embedding_model_id,
+				video_model_id = EXCLUDED.video_model_id,
 				nai_diffusion_model_id = EXCLUDED.nai_diffusion_model_id,
 				vision_llm_id = EXCLUDED.vision_llm_id,
 				nai_preset_name = EXCLUDED.nai_preset_name,

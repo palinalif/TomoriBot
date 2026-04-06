@@ -20,6 +20,7 @@ This folder is organized by topic instead of numeric filenames.
 - [`systems/security.md`](./systems/security.md)
 - [`systems/caching.md`](./systems/caching.md)
 - [`systems/cooldown-system.md`](./systems/cooldown-system.md)
+- [`systems/video-generation.md`](./systems/video-generation.md)
 
 ## Commands V2
 

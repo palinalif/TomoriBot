@@ -89,6 +89,11 @@ export async function execute(
             value: localizer(locale, "commands.help.features.imagegen_description"),
             inline: false,
           },
+          {
+            nameKey: "commands.help.features.videogen_title",
+            value: localizer(locale, "commands.help.features.videogen_description"),
+            inline: false,
+          },
         ],
         footerKey: "commands.help.features.footer",
       },
