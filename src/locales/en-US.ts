@@ -562,7 +562,7 @@ export default {
       personal_memory_learned_title: "💡 {persona_nickname} Learned Something New about {user_nickname}!",
       personal_memory_learned_description:
         "A personal memory about {user_nickname} has been saved:\n`{memory_content}`",
-      personal_memory_updated_title: "📝 {persona_nickname} Updated Memory about {user_nickname}!",
+      personal_memory_updated_title: "📝 {persona_nickname} Updated a Memory about {user_nickname}!",
       personal_memory_updated_description:
         "A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
       server_memory_footer:

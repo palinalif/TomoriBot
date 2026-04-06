@@ -43,13 +43,18 @@ Current native video implementations live in:
 
 OpenRouter's video generation API is currently in alpha (`/api/alpha/videos`). The endpoint, request/response shapes, and supported models are expected to change as it moves toward a stable release. When that happens, `openrouterVideoGeneration.ts` will need to be updated to match the new contract.
 
-### OpenRouter: curl-based HTTP (TLS fingerprint bypass)
+### OpenRouter: external HTTP backends (TLS/HTTP fingerprint bypass)
 
-OpenRouter's API sits behind Cloudflare, which uses JA3/JA4 TLS fingerprinting to identify HTTP clients. Bun's BoringSSL stack produces a non-standard fingerprint that Cloudflare serves a cached HTML page to (HTTP 200 with HTML body) instead of routing to the API origin. Both `fetch()` and Bun's `node:https` compatibility shim share this same fingerprint.
+OpenRouter's API sits behind Cloudflare, which uses TLS fingerprinting (JA3/JA4) and HTTP/2 fingerprinting (SETTINGS frames, ALPN negotiation) to identify HTTP clients. Bun's BoringSSL stack produces a non-standard fingerprint that Cloudflare serves a cached HTML page to (HTTP 200 with HTML body) instead of routing to the API origin. Both `fetch()` and Bun's `node:https` compatibility shim share this same fingerprint.
 
-To work around this, `openrouterVideoGeneration.ts` uses a `curlRequest()` helper that spawns `curl` as a child process via `Bun.spawn`. `curl` uses the system's native TLS stack (OpenSSL on Linux, Schannel on Windows), which produces a standard fingerprint that Cloudflare allows through.
+To work around this, `openrouterVideoGeneration.ts` uses `externalHttpRequest()` — a platform-aware dispatcher that spawns an external process for HTTP requests:
 
-**Deployment requirement**: The host environment must have `curl` available on `PATH`. This is standard on all major Linux distributions and Windows 10+.
+- **Windows (development)**: PowerShell 7 (`pwsh`) with `Invoke-WebRequest`. Uses .NET's Schannel TLS with proper HTTP/2 negotiation. Request data is piped via stdin as JSON; response body is base64-encoded for binary safety. Windows system curl lacks HTTP/2 support, so it cannot be used.
+- **Linux / Docker (production)**: `curl` with HTTP/2 via `nghttp2` (standard on Alpine/Debian). Response headers and body are parsed from curl's `-i` output. Key flags: `--proto =https` (protocol restriction), `--data-raw` (no `@filename` expansion), `-H "Expect:"` (suppresses 100-Continue).
+
+**Deployment requirements**:
+- Windows: `pwsh` (PowerShell 7+) on `PATH`
+- Linux/Docker: `curl` with HTTP/2 support on `PATH` (already in the Dockerfile via `apk add curl`)
 
 The Google and Z.ai providers use Bun's native `fetch()` directly since their APIs are not affected by TLS fingerprinting.
 

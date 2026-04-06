@@ -6,24 +6,37 @@ import type {
 import { log } from "@/utils/misc/logger";
 import { pollForCompletion } from "@/utils/async/pollForCompletion";
 
-/** Shape returned by the external HTTP helper */
+// ─── External HTTP helpers ──────────────────────────────────────────────────────
+//
+// Bun's BoringSSL stack produces a non-standard TLS/HTTP fingerprint that Cloudflare
+// identifies and serves cached HTML to, rather than routing to the API origin.
+// Both fetch() and Bun's node:https shim share this same fingerprint.
+//
+// We bypass this by spawning an external process for HTTP requests:
+//   - Windows: PowerShell 7 (pwsh) with Invoke-WebRequest — uses .NET's Schannel TLS
+//     and proper HTTP/2 negotiation, confirmed to bypass Cloudflare.
+//   - Linux/Docker: curl with HTTP/2 support (via nghttp2, standard on Alpine/Debian).
+//     Linux curl produces a different TLS fingerprint than Bun and negotiates HTTP/2
+//     correctly, which Cloudflare allows through.
+
+/** Shape returned by the external HTTP helpers */
 interface ExternalHttpResponse {
   status: number;
   headers: Record<string, string>;
   bodyBuffer: Buffer;
 }
 
+/** Whether the current platform is Windows (determines which HTTP backend to use) */
+const IS_WINDOWS = process.platform === "win32";
+
+// ─── PowerShell 7 backend (Windows) ─────────────────────────────────────────────
+
 /**
- * PowerShell 7 (pwsh) inline script that reads a JSON request envelope from stdin and
- * performs the HTTP request using Invoke-WebRequest.
+ * Inline pwsh script that reads a JSON request envelope from stdin and performs
+ * the HTTP request using Invoke-WebRequest.
  *
- * Why Invoke-WebRequest instead of .NET HttpClient?
- *   HttpClient in pwsh still triggers Cloudflare's bot detection for reasons unclear
- *   (possibly different HTTP/2 SETTINGS or missing default headers). Invoke-WebRequest
- *   uses a different code path internally and is confirmed to bypass Cloudflare consistently.
- *
- * Input (stdin JSON): { url: string, method: string, headers: Record<string,string>, body?: string }
- * Output (stdout JSON): { status: number, bodyBase64: string }
+ * Input (stdin JSON): { url, method, headers, body? }
+ * Output (stdout JSON): { status, bodyBase64 }
  *
  * The response body is base64-encoded so binary content (MP4 video) survives the text pipe.
  * -SkipHttpErrorCheck prevents throwing on non-2xx status codes (PowerShell 7+ feature).
@@ -58,25 +71,159 @@ $out = @{ status = [int]$resp.StatusCode; bodyBase64 = $bodyB64 }
 `;
 
 /**
- * HTTP helper that spawns PowerShell 7 (pwsh) to make requests using Invoke-WebRequest.
+ * HTTP request via PowerShell 7's Invoke-WebRequest.
+ * Used on Windows where system curl lacks HTTP/2 support.
+ */
+async function pwshHttpRequest(
+  url: string,
+  method: "GET" | "POST",
+  headers: Record<string, string>,
+  body?: string,
+): Promise<ExternalHttpResponse> {
+  // 1. Build the request envelope that pwsh reads from stdin
+  const requestEnvelope = JSON.stringify({ url, method, headers, body });
+
+  // 2. Spawn pwsh with the inline HTTP script
+  //    -NoProfile: skip user profile loading for faster startup
+  //    -NonInteractive: no prompts — fail immediately on errors
+  const proc = Bun.spawn(["pwsh", "-NoProfile", "-NonInteractive", "-Command", PWSH_HTTP_SCRIPT], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  // 3. Write the request envelope to stdin and close it
+  proc.stdin.write(requestEnvelope);
+  proc.stdin.end();
+
+  // 4. Collect stdout and stderr in parallel
+  const [rawOutput, rawStderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  const exitCode = await proc.exited;
+
+  if (exitCode !== 0) {
+    throw new Error(`pwsh HTTP request failed (exit ${exitCode}): ${rawStderr.slice(0, 500)}`);
+  }
+
+  // 5. Parse the JSON response envelope from pwsh
+  let envelope: { status: number; bodyBase64: string };
+  try {
+    envelope = JSON.parse(rawOutput) as typeof envelope;
+  } catch {
+    throw new Error(`pwsh HTTP response is not valid JSON: ${rawOutput.slice(0, 300)}`);
+  }
+
+  // 6. Decode the base64 body back to a Buffer (handles both JSON and binary MP4 content)
+  const bodyBuffer = Buffer.from(envelope.bodyBase64, "base64");
+
+  return { status: envelope.status, headers: {}, bodyBuffer };
+}
+
+// ─── curl backend (Linux / Docker) ──────────────────────────────────────────────
+
+/**
+ * HTTP request via curl subprocess.
+ * Used on Linux where curl has HTTP/2 support (via nghttp2) and produces a standard
+ * TLS fingerprint that Cloudflare allows through.
  *
- * Why not use Bun's fetch or node:https?
- *   Bun's BoringSSL stack produces a non-standard TLS/HTTP fingerprint that Cloudflare
- *   identifies and serves cached HTML to, rather than routing to the API origin.
- *   Bun's node:https shim shares the same fingerprint. Even system curl on Windows lacks
- *   HTTP/2 support, which Cloudflare also uses for bot detection.
- *
- * Why PowerShell 7's Invoke-WebRequest?
- *   It uses .NET's built-in HTTP stack with Schannel TLS and proper HTTP/2 negotiation,
- *   producing a fingerprint that Cloudflare allows through consistently. Request data is
- *   piped via stdin as JSON (no shell escaping issues), and the response body is
- *   base64-encoded so binary content (MP4 video) survives the text pipe.
+ * Key curl flags for correctness and security:
+ *   --proto =https — restricts to HTTPS only (blocks file://, ftp://, gopher://, etc.)
+ *   --data-raw — prevents @filename expansion in the body
+ *   -H "Expect:" — suppresses 100-Continue which breaks the -i header/body parser
+ */
+async function curlHttpRequest(
+  url: string,
+  method: "GET" | "POST",
+  headers: Record<string, string>,
+  body?: string,
+): Promise<ExternalHttpResponse> {
+  // 1. Build curl arguments
+  const args: string[] = ["-s", "-S", "--max-time", "120", "--proto", "=https", "-X", method];
+
+  // 2. Suppress Expect: 100-continue — curl sends this for POST bodies over ~1KB,
+  //    which inserts an intermediate "HTTP/1.1 100 Continue" block before the real response.
+  //    Our -i parser splits on the first \r\n\r\n, so 100-Continue would break parsing.
+  args.push("-H", "Expect:");
+
+  // 3. Add each header, stripping CRLF to prevent header injection
+  for (const [key, value] of Object.entries(headers)) {
+    args.push("-H", `${key}: ${value}`);
+  }
+
+  // 4. Add request body via --data-raw (no @filename expansion)
+  if (body !== undefined) {
+    args.push("--data-raw", body);
+  }
+
+  // 5. Include response headers in output via -i
+  args.push("-i");
+
+  // 6. Target URL last
+  args.push(url);
+
+  // 7. Spawn curl
+  const proc = Bun.spawn(["curl", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [rawOutput, rawStderr] = await Promise.all([
+    new Response(proc.stdout).arrayBuffer(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  const exitCode = await proc.exited;
+
+  if (exitCode !== 0) {
+    throw new Error(`curl exited with code ${exitCode}: ${rawStderr.slice(0, 500)}`);
+  }
+
+  // 8. Parse the -i output: headers separated from body by \r\n\r\n
+  const fullBuffer = Buffer.from(rawOutput);
+  const headerEndIndex = fullBuffer.indexOf("\r\n\r\n");
+
+  if (headerEndIndex === -1) {
+    throw new Error(`curl response missing header/body separator: ${fullBuffer.toString("utf8").slice(0, 200)}`);
+  }
+
+  const headerSection = fullBuffer.subarray(0, headerEndIndex).toString("utf8");
+  const bodyBuffer = fullBuffer.subarray(headerEndIndex + 4);
+
+  // 9. Parse status line (e.g. "HTTP/1.1 200 OK" or "HTTP/2 200")
+  const headerLines = headerSection.split("\r\n");
+  const statusMatch = headerLines[0]?.match(/HTTP\/[\d.]+ (\d+)/);
+  const status = statusMatch ? Number.parseInt(statusMatch[1], 10) : 0;
+
+  // 10. Parse response headers into lowercase key-value map
+  const responseHeaders: Record<string, string> = {};
+  for (let i = 1; i < headerLines.length; i++) {
+    const colonIdx = headerLines[i].indexOf(":");
+    if (colonIdx > 0) {
+      const key = headerLines[i].substring(0, colonIdx).trim().toLowerCase();
+      const value = headerLines[i].substring(colonIdx + 1).trim();
+      responseHeaders[key] = value;
+    }
+  }
+
+  return { status, headers: responseHeaders, bodyBuffer };
+}
+
+// ─── Platform dispatcher ────────────────────────────────────────────────────────
+
+/**
+ * Makes an HTTP request via an external process to bypass Bun's TLS fingerprint.
+ * Dispatches to the appropriate backend based on the current platform:
+ *   - Windows: PowerShell 7 (pwsh) with Invoke-WebRequest
+ *   - Linux/Docker: curl with HTTP/2 support
  *
  * @param url - The full URL to request (must be HTTPS)
  * @param method - HTTP method (GET or POST)
  * @param headers - HTTP headers to include in the request
  * @param body - Optional JSON body string for POST requests
- * @returns Object with HTTP status code, response headers (empty), and raw body as a Buffer
+ * @returns Object with HTTP status code, response headers, and raw body as a Buffer
  */
 async function externalHttpRequest(
   url: string,
@@ -95,46 +242,10 @@ async function externalHttpRequest(
     sanitizedHeaders[key] = value.replace(/[\r\n]/g, "");
   }
 
-  // 3. Build the request envelope that pwsh reads from stdin
-  const requestEnvelope = JSON.stringify({ url, method, headers: sanitizedHeaders, body });
-
-  // 4. Spawn pwsh (PowerShell 7) with the inline HTTP script
-  //    -NoProfile: skip user profile loading for faster startup
-  //    -NonInteractive: no prompts — fail immediately on errors
-  const proc = Bun.spawn(["pwsh", "-NoProfile", "-NonInteractive", "-Command", PWSH_HTTP_SCRIPT], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  // 5. Write the request envelope to stdin and close it
-  proc.stdin.write(requestEnvelope);
-  proc.stdin.end();
-
-  // 6. Collect stdout and stderr in parallel
-  const [rawOutput, rawStderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    throw new Error(`pwsh HTTP request failed (exit ${exitCode}): ${rawStderr.slice(0, 500)}`);
-  }
-
-  // 7. Parse the JSON response envelope from pwsh
-  let envelope: { status: number; bodyBase64: string };
-  try {
-    envelope = JSON.parse(rawOutput) as typeof envelope;
-  } catch {
-    throw new Error(`pwsh HTTP response is not valid JSON: ${rawOutput.slice(0, 300)}`);
-  }
-
-  // 8. Decode the base64 body back to a Buffer (handles both JSON and binary MP4 content)
-  const bodyBuffer = Buffer.from(envelope.bodyBase64, "base64");
-
-  return { status: envelope.status, headers: {}, bodyBuffer };
+  // 3. Dispatch to platform-appropriate backend
+  return IS_WINDOWS
+    ? pwshHttpRequest(url, method, sanitizedHeaders, body)
+    : curlHttpRequest(url, method, sanitizedHeaders, body);
 }
 
 /** OpenRouter alpha video generation endpoint */
@@ -378,11 +489,17 @@ export async function generateOpenRouterNativeVideo(
   //    due to eventual consistency in OpenRouter's storage — retry a few times on 404.
   const videoUrl = completedJob.unsigned_urls?.[0] ?? `${OPENROUTER_VIDEO_URL}/${jobId}/content?index=0`;
 
+  // Security: only send the Authorization header if the download URL is on OpenRouter's domain.
+  // unsigned_urls could theoretically point to a third-party CDN — avoid leaking the API key to it.
+  const downloadUrlOrigin = new URL(videoUrl).origin;
+  const openRouterOrigin = new URL(OPENROUTER_VIDEO_URL).origin;
+  const downloadHeaders: Record<string, string> =
+    downloadUrlOrigin === openRouterOrigin ? { Authorization: `Bearer ${request.apiKey}` } : {};
+
   log.info(`OpenRouter video generation: downloading video (jobId: ${jobId}, url: ${videoUrl.slice(0, 80)})`);
 
   const maxDownloadAttempts = 4;
   const downloadRetryDelayMs = 5_000;
-  const downloadHeaders = { Authorization: `Bearer ${request.apiKey}` };
 
   let videoRaw = await externalHttpRequest(videoUrl, "GET", downloadHeaders);
 
