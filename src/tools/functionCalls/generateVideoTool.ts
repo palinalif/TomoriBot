@@ -1,7 +1,7 @@
 /**
  * Video Generation Tool
  * Allows TomoriBot to generate videos using the active provider's native video API.
- * Supports text-to-video and image-to-video (via message_id reference).
+ * Supports text-to-video and image-to-video (via media_id reference).
  *
  * Key difference from image generation: all video APIs are async with polling,
  * so the execute() method blocks for 30s–5min while the video renders.
@@ -17,9 +17,13 @@ import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
 
 /** Discord file size limit for non-boosted servers (25 MB) */
 const DISCORD_FILE_SIZE_LIMIT = 25 * 1024 * 1024;
+const DEFAULT_VIDEO_DURATION_SECONDS = 5;
+const MAX_VIDEO_DURATION_SECONDS = 20;
+const DEFAULT_VIDEO_RESOLUTION: ProviderNativeVideoResolution = "480p";
 
 /**
  * Tool for generating videos using the active provider's native video API.
@@ -40,19 +44,56 @@ export class GenerateVideoTool extends BaseTool {
         description:
           "A detailed text description of the video you want to generate. Describe the scene, camera movement, action, style, and any dialogue or sound effects. For image-to-video, describe the desired motion and changes from the reference image.",
       },
-      message_id: {
+      media_id: {
         type: "string",
         description:
-          "Optional: The Discord message ID containing an image to use as the starting frame for image-to-video generation. The first image from this message will be used as the initial frame. If not provided, generates a video from scratch (text-to-video).",
+          "Optional: The Discord media ID containing an image to use as the starting frame for image-to-video generation. The first image from this message will be used as the initial frame. If not provided, generates a video from scratch (text-to-video).",
       },
       aspect_ratio: {
         type: "string",
-        description: "Optional: The aspect ratio for the generated video. Default is '16:9' (landscape).",
+        description: "Optional: The aspect ratio for the generated video. Default is '1:1' (square).",
         enum: ["16:9", "9:16", "1:1"],
+      },
+      duration: {
+        type: "number",
+        description:
+          "Optional: Target video duration in seconds. Defaults to 5. Maximum is 20 seconds. Providers may fall back to the nearest supported duration.",
+      },
+      resolution: {
+        type: "string",
+        description:
+          "Optional: Target video resolution. Defaults to '480p'. Supported values are '480p' (SD), '720p' (HD), and '1080p' (FHD). Providers may fall back to the nearest supported resolution.",
+        enum: ["480p", "720p", "1080p"],
+      },
+      generate_audio: {
+        type: "boolean",
+        description:
+          "Optional: Whether to generate audio alongside the video. Defaults to false. Only supported by some providers and models (e.g. Seedance). Enable when the scene involves speech, music, or sound effects.",
       },
     },
     required: ["prompt"],
   };
+
+  private normalizeDuration(rawDuration: unknown): number {
+    if (typeof rawDuration !== "number" || !Number.isFinite(rawDuration)) {
+      return DEFAULT_VIDEO_DURATION_SECONDS;
+    }
+
+    const normalized = Math.trunc(rawDuration);
+    if (normalized < 1) {
+      return 1;
+    }
+
+    return Math.min(normalized, MAX_VIDEO_DURATION_SECONDS);
+  }
+
+  private normalizeResolution(rawResolution: unknown): ProviderNativeVideoResolution {
+    if (rawResolution === "480p" || rawResolution === "720p" || rawResolution === "1080p") {
+      return rawResolution;
+    }
+
+    return DEFAULT_VIDEO_RESOLUTION;
+  }
 
   /**
    * Check if video generation is available for the given provider.
@@ -132,14 +173,15 @@ export class GenerateVideoTool extends BaseTool {
 
   /**
    * Extract the first image from a Discord message for image-to-video generation.
+   * Returns the source URL directly — providers that need base64 can fetch it themselves.
    * @param messageId - Discord message ID to fetch image from
    * @param context - Tool execution context
-   * @returns Reference image as { mimeType, data (base64) }, or null if no image found
+   * @returns Reference image with url and mimeType, or null if no image found
    */
   private async extractReferenceImageFromMessage(
     messageId: string,
     context: ToolContext,
-  ): Promise<{ mimeType: string; data: string } | null> {
+  ): Promise<{ mimeType: string; data: string; url: string } | null> {
     try {
       const message = await context.channel.messages.fetch(messageId);
       if (!message) return null;
@@ -164,20 +206,12 @@ export class GenerateVideoTool extends BaseTool {
         return null;
       }
 
-      // Fetch and convert to base64
-      const imageResponse = await fetch(imageUrl);
-      if (!imageResponse.ok) {
-        log.warn(`Failed to fetch image from message ${messageId}: HTTP ${imageResponse.status}`);
-        return null;
-      }
-
-      const contentType = imageResponse.headers.get("Content-Type") ?? mimeType;
-      const arrayBuffer = await imageResponse.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
-
+      // Return the URL directly — embedding large images as base64 in the request body
+      // can exceed provider body size limits. Providers fetch the URL themselves.
       return {
-        mimeType: contentType.split(";")[0].trim(),
-        data: base64,
+        url: imageUrl,
+        mimeType,
+        data: "", // Empty — providers that need base64 must fetch the url themselves
       };
     } catch (error) {
       log.error(`Failed to extract reference image from message ${messageId}`, error as Error);
@@ -267,9 +301,22 @@ export class GenerateVideoTool extends BaseTool {
 
     // 4. Extract arguments
     const prompt = args.prompt as string;
-    const messageId = args.message_id as string | undefined;
-    const aspectRatio = (args.aspect_ratio as string) || "16:9";
+    const messageId = args.media_id as string | undefined;
+    const aspectRatio = (args.aspect_ratio as string) || "1:1";
+    const durationSeconds = this.normalizeDuration(args.duration);
+    const resolution = this.normalizeResolution(args.resolution);
+    const generateAudio = args.generate_audio === true;
     const usesReference = !!messageId;
+
+    if (
+      typeof args.duration === "number" &&
+      (!Number.isFinite(args.duration) || args.duration < 1 || args.duration > 20)
+    ) {
+      return {
+        success: false,
+        error: "Duration must be an integer between 1 and 20 seconds.",
+      };
+    }
 
     try {
       // 5. Get the video model codename from database
@@ -316,7 +363,7 @@ export class GenerateVideoTool extends BaseTool {
         );
       }
 
-      // 8. Extract reference image if message_id provided
+      // 8. Extract reference image if media_id provided
       let referenceImages: Array<{ mimeType: string; data: string }> | undefined;
 
       if (messageId) {
@@ -332,7 +379,7 @@ export class GenerateVideoTool extends BaseTool {
 
       // 9. Route to appropriate provider implementation
       log.info(
-        `Generating video with ${context.provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
+        `Generating video with ${context.provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, duration: ${durationSeconds}s, resolution: ${resolution})`,
       );
 
       let videoData: Buffer | null = null;
@@ -345,7 +392,10 @@ export class GenerateVideoTool extends BaseTool {
           model: modelCodename,
           prompt,
           aspectRatio,
+          durationSeconds,
+          resolution,
           referenceImages,
+          generateAudio,
         });
         videoData = result.videoData;
       } else if (videoImplementation === "openrouter") {
@@ -355,7 +405,10 @@ export class GenerateVideoTool extends BaseTool {
           model: modelCodename,
           prompt,
           aspectRatio,
+          durationSeconds,
+          resolution,
           referenceImages,
+          generateAudio,
         });
         videoData = result.videoData;
       } else if (videoImplementation === "zai") {
@@ -365,7 +418,10 @@ export class GenerateVideoTool extends BaseTool {
           model: modelCodename,
           prompt,
           aspectRatio,
+          durationSeconds,
+          resolution,
           referenceImages,
+          generateAudio,
         });
         videoData = result.videoData;
       } else {
@@ -409,7 +465,7 @@ export class GenerateVideoTool extends BaseTool {
       // 14. Build success message
       let successMessage = `Successfully generated and sent video to Discord (message ID: ${sentMessage.id}). The video has been created based on your prompt${
         referenceImages ? " and the reference image" : ""
-      }.`;
+      } at ${resolution} for approximately ${durationSeconds} second(s).`;
 
       if (quotaCheck.userRemaining !== undefined) {
         const remainingText = localizer(context.locale, "tools.generate_video.quota_remaining", {

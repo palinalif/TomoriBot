@@ -57,7 +57,7 @@ export class AnalyzeImageTool extends BaseTool {
   parameters: ToolParameterSchema = {
     type: "object",
     properties: {
-      message_id: {
+      media_id: {
         type: "string",
         description:
           "The Discord message ID containing the image(s) to analyze. Use the message ID provided in the [System: Media message ID for tool use: ...] hint.",
@@ -68,7 +68,7 @@ export class AnalyzeImageTool extends BaseTool {
           "Optional question or instruction for the vision model (e.g., 'What text is in this image?' or 'Describe the mood of this photo'). Ask only for the specific visual detail needed. If omitted, a general description is returned.",
       },
     },
-    required: ["message_id"],
+    required: ["media_id"],
   };
 
   /**
@@ -102,14 +102,14 @@ export class AnalyzeImageTool extends BaseTool {
    * 5. Return the analysis result
    */
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    const messageId = args.message_id as string;
+    const messageId = args.media_id as string;
     const prompt = (args.prompt as string) || DEFAULT_VISION_PROMPT;
 
-    // 1. Validate message_id format
+    // 1. Validate media_id format
     if (!messageId || !DISCORD_ID_PATTERN.test(messageId)) {
       return {
         success: false,
-        error: `Invalid message_id: "${messageId}". Expected a Discord message ID (17-19 digit number).`,
+        error: `Invalid media_id: "${messageId}". Expected a Discord message ID (17-19 digit number).`,
       };
     }
 

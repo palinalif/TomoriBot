@@ -30,7 +30,7 @@ export class ReadDocumentTool extends BaseTool {
   parameters: ToolParameterSchema = {
     type: "object",
     properties: {
-      message_id: {
+      media_id: {
         type: "string",
         description:
           "The Discord message ID containing the document attachment to read. This message must be within the last 100 messages in the channel.",
@@ -41,7 +41,7 @@ export class ReadDocumentTool extends BaseTool {
           "Optional filename to select when a message has multiple document attachments. If omitted, the first document found is used.",
       },
     },
-    required: ["message_id"],
+    required: ["media_id"],
   };
 
   /**
@@ -58,28 +58,28 @@ export class ReadDocumentTool extends BaseTool {
    * Execute document reading
    *
    * Algorithm:
-   * 1. Validate parameters (message_id is required)
+   * 1. Validate parameters (media_id is required)
    * 2. Fetch recent messages from channel (last 100)
-   * 3. Find target message by message_id
+   * 3. Find target message by media_id
    * 4. Find document attachment by extension/MIME type (filter by filename if provided)
    * 5. Send "Reading document..." embed indicator
    * 6. Download and extract text via extractTextFromUrl()
    * 7. Return extracted text in tool result
    *
-   * @param args - Arguments containing message_id and optional filename
+   * @param args - Arguments containing media_id and optional filename
    * @param context - Tool execution context with Discord client access
    * @returns Promise resolving to tool result with extracted text
    */
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // 1. Validate required parameters
-    const messageId = args.message_id as string;
+    const messageId = args.media_id as string;
     const filenameFilter = args.filename as string | undefined;
 
     if (!messageId) {
-      log.warn("ReadDocumentTool: Missing required parameter 'message_id'");
+      log.warn("ReadDocumentTool: Missing required parameter 'media_id'");
       return {
         success: false,
-        error: "Missing required parameter: message_id",
+        error: "Missing required parameter: media_id",
         message:
           "I need a message ID to read a document. Please provide the message ID containing the document attachment.",
       };
@@ -104,7 +104,7 @@ export class ReadDocumentTool extends BaseTool {
           error: "Message not found",
           message:
             "I couldn't find that message in the recent conversation (last 100 messages). The message might be too old or the ID might be incorrect.",
-          data: { status: "message_not_found", message_id: messageId },
+          data: { status: "message_not_found", media_id: messageId },
         };
       }
 
@@ -147,7 +147,7 @@ export class ReadDocumentTool extends BaseTool {
           message: `That message doesn't contain a document attachment (PDF, TXT, or MD)${filterNote}. Please provide a message ID with a document file.`,
           data: {
             status: "no_document_found",
-            message_id: messageId,
+            media_id: messageId,
             filename_filter: filenameFilter,
           },
         };
@@ -198,7 +198,7 @@ export class ReadDocumentTool extends BaseTool {
           message: errorMessage,
           data: {
             status: result.error,
-            message_id: messageId,
+            media_id: messageId,
             filename: docAttachment.name,
           },
         };
@@ -244,7 +244,7 @@ export class ReadDocumentTool extends BaseTool {
         message: "Failed to read the document due to an unexpected error. Please try again.",
         data: {
           status: "read_document_failed",
-          message_id: messageId,
+          media_id: messageId,
         },
       };
     }

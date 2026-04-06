@@ -224,7 +224,7 @@ export default {
       generating_description: "Creating a video from the current prompt. This may take 1-3 minutes.",
       generating_with_references_description:
         "Creating a video from the current prompt and reference image. This may take 1-3 minutes.",
-      generating_footer: "Video generation is asynchronous — please be patient",
+      generating_footer: "Video generation takes longer, please be patient",
     },
 
     // Inline document reading messages (read_document tool)

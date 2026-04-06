@@ -1,7 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
+import type { GenerateVideosOperation, GenerateVideosParameters } from "@google/genai";
 import type {
   ProviderNativeVideoGenerationRequest,
   ProviderNativeVideoGenerationResult,
+  ProviderNativeVideoResolution,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { pollForCompletion } from "@/utils/async/pollForCompletion";
@@ -11,6 +13,25 @@ const POLL_INTERVAL_MS = 10_000;
 
 /** Maximum poll attempts before timeout (~5 minutes at 10s intervals) */
 const MAX_POLL_ATTEMPTS = 30;
+
+function selectClosestSupportedDuration(
+  requestedDuration: number | undefined,
+  supportedDurations: readonly number[],
+  preferredDuration?: number,
+): number {
+  if (preferredDuration !== undefined && supportedDurations.includes(preferredDuration)) {
+    return preferredDuration;
+  }
+
+  const fallbackTarget = requestedDuration ?? supportedDurations[0];
+  return supportedDurations.reduce((best, current) =>
+    Math.abs(current - fallbackTarget) < Math.abs(best - fallbackTarget) ? current : best,
+  );
+}
+
+function normalizeGoogleResolution(requestedResolution: ProviderNativeVideoResolution | undefined): "720p" | "1080p" {
+  return requestedResolution === "1080p" ? "1080p" : "720p";
+}
 
 /**
  * Generate a video using Google's Veo API via the @google/genai SDK.
@@ -32,18 +53,27 @@ export async function generateGoogleNativeVideo(
   request: ProviderNativeVideoGenerationRequest,
 ): Promise<ProviderNativeVideoGenerationResult> {
   const ai = new GoogleGenAI({ apiKey: request.apiKey });
+  const normalizedResolution = normalizeGoogleResolution(request.resolution);
+  const requiresEightSecondOutput = normalizedResolution === "1080p" || !!request.referenceImages?.length;
+  const normalizedDurationSeconds = selectClosestSupportedDuration(
+    request.durationSeconds,
+    [4, 6, 8],
+    requiresEightSecondOutput ? 8 : undefined,
+  );
 
   // 1. Build generation parameters
-  const generateParams: Record<string, unknown> = {
+  const generateParams: GenerateVideosParameters = {
     model: request.model,
     prompt: request.prompt,
   };
 
   // 2. Add config (aspect ratio)
-  const config: Record<string, unknown> = {};
+  const config: NonNullable<GenerateVideosParameters["config"]> = {};
   if (request.aspectRatio) {
     config.aspectRatio = request.aspectRatio;
   }
+  config.durationSeconds = normalizedDurationSeconds;
+  config.resolution = normalizedResolution;
   if (Object.keys(config).length > 0) {
     generateParams.config = config;
   }
@@ -58,12 +88,11 @@ export async function generateGoogleNativeVideo(
   }
 
   log.info(
-    `Google video generation: submitting request (model: ${request.model}, aspectRatio: ${request.aspectRatio ?? "16:9"}, hasReferenceImage: ${!!(request.referenceImages && request.referenceImages.length > 0)})`,
+    `Google video generation: submitting request (model: ${request.model}, aspectRatio: ${request.aspectRatio ?? "16:9"}, durationSeconds: ${normalizedDurationSeconds}, resolution: ${normalizedResolution}, hasReferenceImage: ${!!(request.referenceImages && request.referenceImages.length > 0)})`,
   );
 
   // 4. Submit the generation request
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let operation = await (ai.models as any).generateVideos(generateParams);
+  let operation: GenerateVideosOperation = await ai.models.generateVideos(generateParams);
 
   // 5. Poll for completion
   const completedOp = await pollForCompletion<typeof operation>({
@@ -72,8 +101,7 @@ export async function generateGoogleNativeVideo(
         return { done: true, result: operation };
       }
       // Poll for updated status
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      operation = await (ai.operations as any).getVideosOperation({ operation });
+      operation = await ai.operations.getVideosOperation({ operation });
       if (operation.done) {
         return { done: true, result: operation };
       }
@@ -101,25 +129,15 @@ export async function generateGoogleNativeVideo(
     log.info(
       `Google video generation: got inline video bytes (model: ${request.model}, sizeBytes: ${videoData.length})`,
     );
-    return { videoData, mimeType: "video/mp4" };
+    return { videoData, mimeType: "video/mp4", durationSeconds: normalizedDurationSeconds };
   }
 
-  // Fallback: download from URI using the SDK's files.download
+  // Fallback: download from the returned URI directly.
+  // The SDK's files.download API is for file downloads to disk and requires a download path.
   if (video?.uri) {
     log.info(`Google video generation: downloading from URI (model: ${request.model}, uri: ${video.uri.slice(0, 80)})`);
 
     try {
-      // Use SDK download method
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (ai.files as any).download({ file: video });
-
-      // After download, videoBytes should be populated
-      if (video.videoBytes) {
-        const videoData = Buffer.from(video.videoBytes);
-        return { videoData, mimeType: "video/mp4" };
-      }
-
-      // If SDK download didn't populate bytes, fetch directly with API key
       const downloadResponse = await fetch(video.uri, {
         headers: { "x-goog-api-key": request.apiKey },
       });
@@ -130,7 +148,7 @@ export async function generateGoogleNativeVideo(
 
       const arrayBuffer = await downloadResponse.arrayBuffer();
       const videoData = Buffer.from(arrayBuffer);
-      return { videoData, mimeType: "video/mp4" };
+      return { videoData, mimeType: "video/mp4", durationSeconds: normalizedDurationSeconds };
     } catch (downloadError) {
       log.error("Failed to download Google video", downloadError as Error, {
         errorType: "GoogleVideoDownloadError",

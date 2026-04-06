@@ -401,7 +401,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             if (tool.name !== "generate_image_nai") return tool;
 
             // Create a shallow proxy that hides inpainting-only parameters
-            const { message_id: _msgId, edit_target: _editTarget, ...baseProps } = tool.parameters.properties;
+            const { media_id: _msgId, edit_target: _editTarget, ...baseProps } = tool.parameters.properties;
 
             const strippedDescription = tool.description.replace(
               / For editing\/inpainting:.*?The image will be sent directly to the Discord channel\./,

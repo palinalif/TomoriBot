@@ -168,8 +168,11 @@ export interface SupportsNativeImageGeneration {
 /** Reference image input for image-to-video generation */
 export interface ProviderNativeVideoReference {
   mimeType: string;
-  data: string; // Base64-encoded image data
+  data: string; // Base64-encoded image data (used when url is not available)
+  url?: string; // Original source URL — preferred over base64 for remote APIs to avoid body size limits
 }
+
+export type ProviderNativeVideoResolution = "480p" | "720p" | "1080p";
 
 /** Request parameters for native video generation across all providers */
 export interface ProviderNativeVideoGenerationRequest {
@@ -177,8 +180,12 @@ export interface ProviderNativeVideoGenerationRequest {
   model: string;
   prompt: string;
   aspectRatio?: string;
+  durationSeconds?: number;
+  resolution?: ProviderNativeVideoResolution;
   endpointUrl?: string;
   referenceImages?: ProviderNativeVideoReference[];
+  /** Whether the provider should generate audio alongside the video. Defaults to false. */
+  generateAudio?: boolean;
 }
 
 /** Result of a native video generation operation */

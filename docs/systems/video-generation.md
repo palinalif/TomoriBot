@@ -39,11 +39,37 @@ Current native video implementations live in:
 - `src/providers/openrouter/openrouterVideoGeneration.ts`
 - `src/providers/zai/zaiVideoGeneration.ts`
 
+### OpenRouter: alpha API (subject to change)
+
+OpenRouter's video generation API is currently in alpha (`/api/alpha/videos`). The endpoint, request/response shapes, and supported models are expected to change as it moves toward a stable release. When that happens, `openrouterVideoGeneration.ts` will need to be updated to match the new contract.
+
+### OpenRouter: curl-based HTTP (TLS fingerprint bypass)
+
+OpenRouter's API sits behind Cloudflare, which uses JA3/JA4 TLS fingerprinting to identify HTTP clients. Bun's BoringSSL stack produces a non-standard fingerprint that Cloudflare serves a cached HTML page to (HTTP 200 with HTML body) instead of routing to the API origin. Both `fetch()` and Bun's `node:https` compatibility shim share this same fingerprint.
+
+To work around this, `openrouterVideoGeneration.ts` uses a `curlRequest()` helper that spawns `curl` as a child process via `Bun.spawn`. `curl` uses the system's native TLS stack (OpenSSL on Linux, Schannel on Windows), which produces a standard fingerprint that Cloudflare allows through.
+
+**Deployment requirement**: The host environment must have `curl` available on `PATH`. This is standard on all major Linux distributions and Windows 10+.
+
+The Google and Z.ai providers use Bun's native `fetch()` directly since their APIs are not affected by TLS fingerprinting.
+
 The command supports:
 
 - Text-to-video
 - Image-to-video through an optional uploaded reference image
 - Aspect ratio selection
+
+The built-in `generate_video` tool also supports:
+
+- `duration` in seconds
+- `resolution` as `480p`, `720p`, or `1080p`
+
+Tool defaults are:
+
+- `duration = 5`
+- `resolution = 720p`
+
+Provider adapters normalize unsupported values to the nearest supported provider/model combination instead of blindly passing invalid values through.
 
 ## Configuration and State
 

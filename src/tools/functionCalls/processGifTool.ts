@@ -36,7 +36,7 @@ export class ProcessGifTool extends BaseTool {
   parameters: ToolParameterSchema = {
     type: "object",
     properties: {
-      message_id: {
+      media_id: {
         type: "string",
         description:
           "Discord message ID containing the GIF attachment to process. This message must be within the last 100 messages in the channel.",
@@ -47,7 +47,7 @@ export class ProcessGifTool extends BaseTool {
           "Optional brief explanation of why you need to process this GIF. Helps with debugging and understanding AI decision-making.",
       },
     },
-    required: ["message_id"],
+    required: ["media_id"],
   };
 
   /**
@@ -111,7 +111,7 @@ export class ProcessGifTool extends BaseTool {
    * Execute GIF processing
    *
    * Algorithm:
-   * 1. Validate parameters (message_id is required)
+   * 1. Validate parameters (media_id is required)
    * 2. Fetch recent messages from channel (last 100)
    * 3. Find target message by ID
    * 4. Extract GIF attachment from message
@@ -121,20 +121,20 @@ export class ProcessGifTool extends BaseTool {
    * 8. Store in static map for enhanced context restart
    * 9. Return success signal to trigger context restart
    *
-   * @param args - Arguments containing message_id and optional reason
+   * @param args - Arguments containing media_id and optional reason
    * @param context - Tool execution context with Discord client access
    * @returns Promise resolving to tool result with restart signal
    */
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     // 1. Extract and validate parameters
-    const messageId = args.message_id as string;
+    const messageId = args.media_id as string;
     const reason = (args.reason as string | undefined) || "No reason provided";
 
     if (!messageId) {
-      log.warn("ProcessGifTool: Missing required parameter 'message_id'");
+      log.warn("ProcessGifTool: Missing required parameter 'media_id'");
       return {
         success: false,
-        error: "Missing required parameter: message_id",
+        error: "Missing required parameter: media_id",
         message: "I need a message ID to process a GIF. Please provide the message ID containing the GIF.",
       };
     }
@@ -159,7 +159,7 @@ export class ProcessGifTool extends BaseTool {
             "I couldn't find that message in the recent conversation (last 100 messages). The message might be too old or the ID might be incorrect.",
           data: {
             status: "message_not_found",
-            message_id: messageId,
+            media_id: messageId,
           },
         };
       }
@@ -189,7 +189,7 @@ export class ProcessGifTool extends BaseTool {
           message: "That message doesn't contain a GIF attachment. Please provide a message ID with a GIF.",
           data: {
             status: "no_gif_found",
-            message_id: messageId,
+            media_id: messageId,
           },
         };
       }
@@ -205,7 +205,7 @@ export class ProcessGifTool extends BaseTool {
           message: `That GIF is too large to process (${sizeMB} MB). Maximum size is ${MEDIA_LIMITS.MAX_GIF_SIZE_MB} MB.`,
           data: {
             status: "gif_too_large",
-            message_id: messageId,
+            media_id: messageId,
             size_mb: Number.parseFloat(sizeMB),
             max_size_mb: MEDIA_LIMITS.MAX_GIF_SIZE_MB,
           },
@@ -291,7 +291,7 @@ export class ProcessGifTool extends BaseTool {
         message: `Successfully processed GIF with ${processedFrames.length} keyframes from message ${messageId}. Processing took ${processingTime}ms.`,
         data: {
           type: "context_restart_with_gif",
-          message_id: messageId,
+          media_id: messageId,
           frame_count: processedFrames.length,
           processing_time_ms: processingTime,
           has_pending_context: true,
@@ -328,7 +328,7 @@ export class ProcessGifTool extends BaseTool {
         message: errorMessage,
         data: {
           status: errorStatus,
-          message_id: messageId,
+          media_id: messageId,
           reason: reason,
         },
       };

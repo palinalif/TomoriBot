@@ -1,6 +1,7 @@
 import type {
   ProviderNativeVideoGenerationRequest,
   ProviderNativeVideoGenerationResult,
+  ProviderNativeVideoResolution,
 } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { pollForCompletion } from "@/utils/async/pollForCompletion";
@@ -17,18 +18,87 @@ const POLL_INTERVAL_MS = 10_000;
 /** Maximum poll attempts before timeout (~5 minutes at 10s intervals) */
 const MAX_POLL_ATTEMPTS = 30;
 
-/**
- * Aspect ratio to pixel size mapping for Z.ai CogVideoX-3.
- * Supported resolutions: 1280x720, 720x1280, 1024x1024, 1920x1080, 1080x1920, 2048x1080, 3840x2160
- */
-const ASPECT_RATIO_TO_SIZE: Record<string, string> = {
-  "16:9": "1920x1080",
-  "9:16": "1080x1920",
-  "1:1": "1024x1024",
-  "21:9": "2048x1080",
-};
+function selectClosestSupportedDuration(
+  requestedDuration: number | undefined,
+  supportedDurations: readonly number[],
+): number {
+  const fallbackTarget = requestedDuration ?? supportedDurations[0];
+  return supportedDurations.reduce((best, current) =>
+    Math.abs(current - fallbackTarget) < Math.abs(best - fallbackTarget) ? current : best,
+  );
+}
 
-const DEFAULT_SIZE = "1920x1080";
+function mapResolutionAndAspectToSize(
+  resolution: ProviderNativeVideoResolution,
+  aspectRatio: string | undefined,
+): string {
+  const targetAspectRatio = aspectRatio ?? "16:9";
+
+  if (targetAspectRatio === "9:16") {
+    if (resolution === "480p") return "480x854";
+    if (resolution === "720p") return "720x1280";
+    return "1080x1920";
+  }
+
+  if (targetAspectRatio === "1:1") {
+    if (resolution === "480p") return "480x480";
+    if (resolution === "720p") return "720x720";
+    return "1024x1024";
+  }
+
+  if (targetAspectRatio === "21:9") {
+    if (resolution === "480p") return "854x366";
+    if (resolution === "720p") return "1280x548";
+    return "2048x1080";
+  }
+
+  if (resolution === "480p") return "854x480";
+  if (resolution === "720p") return "1280x720";
+  return "1920x1080";
+}
+
+function normalizeZaiOptions(
+  model: string,
+  aspectRatio: string | undefined,
+  requestedDuration: number | undefined,
+  requestedResolution: ProviderNativeVideoResolution | undefined,
+): { duration: number; resolution: ProviderNativeVideoResolution; size: string } {
+  const normalizedModel = model.toLowerCase();
+
+  if (normalizedModel.startsWith("cogvideox-3")) {
+    const resolution = requestedResolution === "1080p" ? "1080p" : "720p";
+    const duration = selectClosestSupportedDuration(requestedDuration, [5, 10]);
+    return {
+      duration,
+      resolution,
+      size: mapResolutionAndAspectToSize(resolution, aspectRatio),
+    };
+  }
+
+  if (normalizedModel.startsWith("viduq1")) {
+    return {
+      duration: 5,
+      resolution: "1080p",
+      size: "1920x1080",
+    };
+  }
+
+  if (normalizedModel.startsWith("vidu2")) {
+    return {
+      duration: 4,
+      resolution: "720p",
+      size: "1280x720",
+    };
+  }
+
+  const resolution = requestedResolution === "1080p" ? "1080p" : requestedResolution === "480p" ? "480p" : "720p";
+  const duration = selectClosestSupportedDuration(requestedDuration, [5, 10]);
+  return {
+    duration,
+    resolution,
+    size: mapResolutionAndAspectToSize(resolution, aspectRatio),
+  };
+}
 
 /** Shape of the Z.ai video generation response */
 interface ZaiVideoResponse {
@@ -57,17 +127,22 @@ interface ZaiVideoResponse {
 export async function generateZaiNativeVideo(
   request: ProviderNativeVideoGenerationRequest,
 ): Promise<ProviderNativeVideoGenerationResult> {
-  const size = ASPECT_RATIO_TO_SIZE[request.aspectRatio ?? "16:9"] ?? DEFAULT_SIZE;
+  const normalizedOptions = normalizeZaiOptions(
+    request.model,
+    request.aspectRatio,
+    request.durationSeconds,
+    request.resolution,
+  );
 
   // 1. Build request body
   const body: Record<string, unknown> = {
     model: request.model,
     prompt: request.prompt,
-    size,
+    size: normalizedOptions.size,
     quality: "quality",
     with_audio: true,
     fps: 30,
-    duration: 5,
+    duration: normalizedOptions.duration,
   };
 
   // 2. Add reference image for image-to-video if provided
@@ -78,7 +153,7 @@ export async function generateZaiNativeVideo(
 
   // 3. Submit generation request
   log.info(
-    `Z.ai video generation: submitting request (model: ${request.model}, size: ${size}, hasReferenceImage: ${!!(request.referenceImages && request.referenceImages.length > 0)})`,
+    `Z.ai video generation: submitting request (model: ${request.model}, size: ${normalizedOptions.size}, durationSeconds: ${normalizedOptions.duration}, resolution: ${normalizedOptions.resolution}, hasReferenceImage: ${!!(request.referenceImages && request.referenceImages.length > 0)})`,
   );
 
   const response = await fetch(request.endpointUrl || ZAI_VIDEO_GENERATIONS_URL, {
@@ -162,5 +237,6 @@ export async function generateZaiNativeVideo(
   return {
     videoData,
     mimeType: "video/mp4",
+    durationSeconds: normalizedOptions.duration,
   };
 }

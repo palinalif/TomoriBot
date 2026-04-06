@@ -24,7 +24,7 @@ import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL }
 export class GenerateImageTool extends BaseTool {
   name = "generate_image";
   description =
-    "Generate an AI image using the active provider's native image model. Provide a detailed text prompt describing what image you want to create. If you provide a message_id or target_identity reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
+    "Generate an AI image using the active provider's native image model. Provide a detailed text prompt describing what image you want to create. If you provide a media_id or target_identity reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
 
@@ -36,15 +36,15 @@ export class GenerateImageTool extends BaseTool {
         description:
           "A detailed text description of the image you want to generate. Be specific about style, composition, colors, mood, and any important details. For image-to-image, describe only the modifications or additions you want and avoid re-describing the reference image.",
       },
-      message_id: {
+      media_id: {
         type: "string",
         description:
-          "Optional: The Discord message ID containing images to use as reference for image-to-image generation. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
+          "Optional: The Discord media ID containing images to use as reference for image-to-image generation. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
       },
       target_identity: {
         type: "string",
         description:
-          "Optional: User or persona identity whose profile picture/avatar should be used as a reference image. Accepts 'self', an exact persona nickname, or a natural user name from the current conversation or server. Deprecated raw IDs are still accepted at execution time for compatibility. Can be combined with message_id references.",
+          "Optional: User or persona identity whose profile picture/avatar should be used as a reference image. Accepts 'self', an exact persona nickname, or a natural user name from the current conversation or server. Deprecated raw IDs are still accepted at execution time for compatibility. Can be combined with media_id references.",
       },
       aspect_ratio: {
         type: "string",
@@ -478,7 +478,7 @@ export class GenerateImageTool extends BaseTool {
 
   /**
    * Execute image generation
-   * @param args - Arguments containing prompt, optional message_id, and optional aspect_ratio
+   * @param args - Arguments containing prompt, optional media_id, and optional aspect_ratio
    * @param context - Tool execution context
    * @returns Promise resolving to tool result with generated image
    */
@@ -553,7 +553,7 @@ export class GenerateImageTool extends BaseTool {
 
     // Extract arguments
     const prompt = args.prompt as string;
-    const messageId = args.message_id as string | undefined;
+    const messageId = args.media_id as string | undefined;
     const targetIdentity = (args.target_identity as string | undefined) ?? (args.user_id as string | undefined);
     const aspectRatio = (args.aspect_ratio as string) || "1:1";
     const usesReferences = !!(messageId || targetIdentity);

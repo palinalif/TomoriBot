@@ -4,7 +4,7 @@
  * Supports positioned multi-character generation for V4 models via `characters[]`.
  *
  * Inpainting mode (Phase 2):
- * When `message_id` + `edit_target` are provided, the tool enters inpaint mode:
+ * When `media_id` + `edit_target` are provided, the tool enters inpaint mode:
  * 1. Extracts the image from the referenced Discord message
  * 2. Calls Gemini segmentation to identify the edit target region
  * 3. Generates a mask (white = redraw, black = preserve)
@@ -165,15 +165,15 @@ export class GenerateImageNaiTool extends BaseTool {
           required: ["tags", "x", "y"],
         },
       },
-      message_id: {
+      media_id: {
         type: "string",
         description:
-          "Optional: Discord message ID containing the image to edit. When provided with edit_target, enables inpainting mode. The first image found in the message (attachment, embed, sticker, or emoji) will be used as the source.",
+          "Optional: Discord media ID containing the image to edit. When provided with edit_target, enables inpainting mode. The first image found in the message (attachment, embed, sticker, or emoji) will be used as the source.",
       },
       edit_target: {
         type: "string",
         description:
-          "Optional: Natural language description of the region to edit (e.g. 'background', 'hair', 'cat'). Required when message_id is provided. Gemini AI will segment this region to create an inpainting mask.",
+          "Optional: Natural language description of the region to edit (e.g. 'background', 'hair', 'cat'). Required when media_id is provided. Gemini AI will segment this region to create an inpainting mask.",
       },
     },
     required: ["prompt"],
@@ -913,7 +913,7 @@ export class GenerateImageNaiTool extends BaseTool {
     const artistRaw = (args.artist as string | undefined)?.trim();
     const locationRaw = (args.location as string | undefined)?.trim();
     const characters = Array.isArray(args.characters) ? (args.characters as GenerateImageNaiCharacterArg[]) : [];
-    const messageId = args.message_id as string | undefined;
+    const messageId = args.media_id as string | undefined;
     const editTarget = args.edit_target as string | undefined;
 
     // Determine if this is an inpainting request
